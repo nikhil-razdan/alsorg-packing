@@ -1406,6 +1406,9 @@ const INVENTORY_TABLE_COLUMNS = [
   },
 ];
 
+const INVENTORY_CLS_ROW_HEIGHT = 72;
+const INVENTORY_CLS_RESERVED_ROWS = 8;
+
 const createDefaultInventoryColumnWidths =
   () => {
     return Object.fromEntries(
@@ -1421,7 +1424,7 @@ const createDefaultInventoryColumnWidths =
 function ZohoItemsPage() {
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const inventoryRequestIdRef =
     useRef(0);
   const inventoryAbortControllerRef =
@@ -2661,88 +2664,41 @@ function ZohoItemsPage() {
         isAdmin ||
         isHardwarePacking
       ) {
-        let loadedNormalRows = [];
-        let loadedHardwareRows = [];
-
-        const publishRows = () => {
-          if (
-            controller.signal.aborted ||
-            requestId !==
-            inventoryRequestIdRef.current
-          ) {
-            return;
-          }
-
-          const mergedRows =
-            mergeInventoryRowSources(
-              loadedNormalRows,
-              loadedHardwareRows
-            );
-
-          setRows(mergedRows);
-          setRowCount(
-            mergedRows.length
-          );
-        };
-
-        const normalPromise =
-          fetchInventoryRowsFromPath(
-            "/api/packets/items",
-            controller.signal
-          )
-            .then((normalRows) => {
-              loadedNormalRows =
-                normalRows.map(
-                  normalizeNormalInventoryRow
-                );
-
-              /*
-               * Publish normal rows immediately.
-               */
-              publishRows();
-
-              return loadedNormalRows;
-            });
-
-        const hardwarePromise =
-          fetchInventoryRowsFromPath(
-            "/api/hardware-packets",
-            controller.signal
-          )
-            .then((hardwareRows) => {
-              loadedHardwareRows =
-                hardwareRows.map(
-                  normalizeHardwarePacketRow
-                );
-
-              /*
-               * Merge hardware rows whenever they finish.
-               */
-              publishRows();
-
-              return loadedHardwareRows;
-            });
-
+        /*
+         * CLS FIX:
+         * Fetch normal + hardware inventory concurrently,
+         * but publish them to React only ONCE.
+         *
+         * Previously:
+         *   normal response   -> setRows()
+         *   hardware response -> setRows()
+         *   final merge       -> setRows()
+         *
+         * That generated multiple visible table layouts during
+         * the same initial page load.
+         */
         const [
           normalResult,
           hardwareResult,
-        ] =
-          await Promise.allSettled([
-            normalPromise,
-            hardwarePromise,
-          ]);
+        ] = await Promise.allSettled([
+          fetchInventoryRowsFromPath(
+            "/api/packets/items",
+            controller.signal
+          ),
 
-        if (
-          controller.signal.aborted
-        ) {
+          fetchInventoryRowsFromPath(
+            "/api/hardware-packets",
+            controller.signal
+          ),
+        ]);
+
+        if (controller.signal.aborted) {
           return [];
         }
 
         if (
-          normalResult.status ===
-          "rejected" &&
-          hardwareResult.status ===
-          "rejected"
+          normalResult.status === "rejected" &&
+          hardwareResult.status === "rejected"
         ) {
           throw (
             normalResult.reason ||
@@ -2753,10 +2709,24 @@ function ZohoItemsPage() {
           );
         }
 
+        let loadedNormalRows = [];
+        let loadedHardwareRows = [];
+
         if (
           normalResult.status ===
-          "rejected"
+          "fulfilled"
         ) {
+          loadedNormalRows =
+            (
+              Array.isArray(
+                normalResult.value
+              )
+                ? normalResult.value
+                : []
+            ).map(
+              normalizeNormalInventoryRow
+            );
+        } else {
           console.error(
             "Normal inventory fetch failed:",
             normalResult.reason
@@ -2764,16 +2734,26 @@ function ZohoItemsPage() {
 
           showUiAlert(
             "error",
-            normalResult.reason
-              ?.message ||
+            normalResult.reason?.message ||
             "Normal inventory could not be loaded"
           );
         }
 
         if (
           hardwareResult.status ===
-          "rejected"
+          "fulfilled"
         ) {
+          loadedHardwareRows =
+            (
+              Array.isArray(
+                hardwareResult.value
+              )
+                ? hardwareResult.value
+                : []
+            ).map(
+              normalizeHardwarePacketRow
+            );
+        } else {
           console.error(
             "Hardware inventory fetch failed:",
             hardwareResult.reason
@@ -2781,12 +2761,18 @@ function ZohoItemsPage() {
 
           showUiAlert(
             "error",
-            hardwareResult.reason
-              ?.message ||
+            hardwareResult.reason?.message ||
             "Hardware inventory could not be loaded"
           );
         }
 
+        /*
+         * IMPORTANT:
+         * Do not call setRows() here.
+         *
+         * The common setRows(finalRows) below this branch
+         * will commit the complete inventory once.
+         */
         finalRows =
           mergeInventoryRowSources(
             loadedNormalRows,
@@ -6157,7 +6143,19 @@ function ZohoItemsPage() {
   }, [uiAlert]);
   /* ===================== RENDER ===================== */
   return (
-    <div style={page}>
+    <div
+      style={{
+        ...page,
+
+        /*
+         * CLS FIX:
+         * Reserve the browser scrollbar gutter from first paint.
+         * This prevents the complete PackFlow content from shifting
+         * horizontally when the inventory table makes the page tall.
+         */
+        scrollbarGutter: "stable",
+      }}
+    >
       <div style={content}>
         <div style={headerRow}>
           <Box
@@ -6201,7 +6199,23 @@ function ZohoItemsPage() {
             sx={{
               display: "flex",
               alignItems: "center",
+              justifyContent: "flex-end",
               gap: 1.5,
+
+              /*
+               * CLS FIX:
+               * This box exists with stable geometry even while AuthContext
+               * is resolving. Permission-based actions are revealed only
+               * after auth is ready, without changing the header footprint.
+               */
+              flex: "1 1 0",
+              minWidth: 0,
+              minHeight: 42,
+              flexWrap: "nowrap",
+              visibility:
+                authLoading
+                  ? "hidden"
+                  : "visible",
             }}
           >
             {canUseMasterWorkbench && (
@@ -6234,6 +6248,8 @@ function ZohoItemsPage() {
                 style={{
                   color: "#60a5fa",
                   fontWeight: 900,
+                  fontVariantNumeric:
+                    "tabular-nums",
                 }}
               >
                 {filteredRows.length}
@@ -6346,7 +6362,34 @@ function ZohoItemsPage() {
             <MenuItem value="SKU">Group by SKU</MenuItem>
             <MenuItem value="NAME">Group by Name</MenuItem>
           </TextField>
-          {isAdmin && (
+          <Box
+            sx={{
+              width: 180,
+              minWidth: 180,
+              flex: "0 0 180px",
+
+              /*
+               * CLS FIX:
+               * Keep the admin-filter slot reserved from first paint.
+               * Non-admin users do not receive an interactive control; the
+               * reserved slot simply prevents the toolbar from reflowing
+               * when role resolution completes.
+               */
+              visibility:
+                !authLoading && isAdmin
+                  ? "visible"
+                  : "hidden",
+              pointerEvents:
+                !authLoading && isAdmin
+                  ? "auto"
+                  : "none",
+            }}
+            aria-hidden={
+              !authLoading && isAdmin
+                ? undefined
+                : true
+            }
+          >
             <TextField
               select
               size="small"
@@ -6355,14 +6398,17 @@ function ZohoItemsPage() {
                 setStatusFilter(e.target.value);
                 setPageNo(1);
               }}
-              sx={selectFieldSx}
+              sx={{
+                ...selectFieldSx,
+                width: "100%",
+              }}
               slotProps={selectMenuSlotProps}
             >
               <MenuItem value="ALL">All Status</MenuItem>
               <MenuItem value="CREATED">Created</MenuItem>
               <MenuItem value="STICKER_PRINTED">Sticker Printed</MenuItem>
             </TextField>
-          )}
+          </Box>
           <Button
             size="small"
             onClick={() =>
@@ -6410,12 +6456,21 @@ function ZohoItemsPage() {
 
 
         <div style={wrap}>
-          {loading &&
-            rows.length > 0 && (
+          <Box
+            sx={{
+              height: 3,
+              mb: 1.2,
+              overflow: "hidden",
+              borderRadius: 999,
+              flexShrink: 0,
+            }}
+            aria-hidden="true"
+          >
+            {(authLoading || loading) && (
               <LinearProgress
                 sx={{
-                  mb: 1.2,
                   height: 3,
+                  m: 0,
                   borderRadius: 999,
 
                   background:
@@ -6424,12 +6479,14 @@ function ZohoItemsPage() {
                   "& .MuiLinearProgress-bar":
                   {
                     borderRadius: 999,
+
                     background:
                       "linear-gradient(90deg,#2563eb,#60a5fa)",
                   },
                 }}
               />
             )}
+          </Box>
           <Box
             sx={{
               ...tableWrapper,
@@ -6570,7 +6627,18 @@ function ZohoItemsPage() {
                 )}
               </div>
 
-              <div style={tableBody}>
+              <div
+                style={{
+                  ...tableBody,
+
+                  minHeight:
+                    Math.min(
+                      pageSize,
+                      INVENTORY_CLS_RESERVED_ROWS
+                    ) *
+                    INVENTORY_CLS_ROW_HEIGHT,
+                }}
+              >
                 {loading &&
                   rows.length === 0 && (
                     <div style={emptyTableState}>
@@ -9912,6 +9980,8 @@ const content = {
   display: "flex",
   flexDirection: "column",
   gap: 24,
+  width: "100%",
+  boxSizing: "border-box",
 };
 
 const headerRow = {
@@ -9939,6 +10009,12 @@ const countBadgeSx = {
   fontWeight: 700,
   px: 2,
   py: 1,
+  minWidth: 112,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
   borderRadius: "12px",
   background: "rgba(255,255,255,.035)",
   border: "1px solid rgba(255,255,255,.06)",
