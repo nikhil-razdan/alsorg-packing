@@ -229,6 +229,8 @@ export function MatFlowStoreDetailPage() {
     const [working, setWorking] = useState(false);
     const [workingId, setWorkingId] = useState("");
     const [error, setError] = useState("");
+    const [dispatchTarget, setDispatchTarget] = useState(null);
+    const [dispatchForm, setDispatchForm] = useState({ quantity: "", batchNo: "", remarks: "" });
 
     const load = useCallback(async () => {
         if (!requisitionId) return;
@@ -263,9 +265,49 @@ export function MatFlowStoreDetailPage() {
     const availabilityByLine = useMemo(() => new Map(availability.map((entry) => [String(entry.requisitionLineId), entry])), [availability]);
     const reviewable = REVIEWABLE.has(normalize(requisition?.status)) && requisition?.rowVersion != null;
 
+    const transfersByReservation = useMemo(() => {
+        const grouped = new Map();
+
+        transfers.forEach((transfer) => {
+            const key = String(transfer?.reservationId || "");
+            if (!key) return;
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(transfer);
+        });
+
+        grouped.forEach((route) => route.sort((left, right) =>
+            numeric(left?.routeSequenceNo) - numeric(right?.routeSequenceNo)
+        ));
+
+        return grouped;
+    }, [transfers]);
+
+    const routeForReservation = (reservation) =>
+        transfersByReservation.get(String(reservation?.id || "")) || [];
+
+    const currentTransferForReservation = (reservation) => {
+        const route = routeForReservation(reservation);
+        return route.find((transfer) => !["RECEIVED", "COMPLETED", "CANCELLED"].includes(normalize(transfer?.status)))
+            || route[route.length - 1]
+            || null;
+    };
+
+    const storeDispatchForReservation = (reservation) => routeForReservation(reservation).find((transfer) => {
+        const status = normalize(transfer?.status);
+        const remaining = numeric(transfer?.plannedQty) - numeric(transfer?.dispatchedQty);
+        return normalize(transfer?.fromLocationType) === "STORE"
+            && ["READY", "PARTIALLY_DISPATCHED", "PARTIALLY_RECEIVED"].includes(status)
+            && remaining > 0.0005;
+    }) || null;
+
     const totals = useMemo(() => lines.reduce((sum, line) => ({
         requested: sum.requested + numeric(line.requestedQty), reserved: sum.reserved + numeric(line.reservedQty), shortage: sum.shortage + numeric(line.shortageQty), issued: sum.issued + numeric(line.issuedQty),
     }), { requested: 0, reserved: 0, shortage: 0, issued: 0 }), [lines]);
+
+    const storeActionsReady = reservations.filter((reservation) =>
+        (reservation?.issueReady && numeric(reservation?.remainingIssueQty) > 0)
+        || Boolean(storeDispatchForReservation(reservation))
+    ).length;
 
     const confirmReview = async () => {
         if (!reviewable) return;
@@ -337,6 +379,54 @@ export function MatFlowStoreDetailPage() {
         finally { setWorkingId(""); }
     };
 
+    const openDispatch = (transfer) => {
+        const pending = Math.max(0, numeric(transfer?.plannedQty) - numeric(transfer?.dispatchedQty));
+        setDispatchTarget(transfer);
+        setDispatchForm({
+            quantity: pending > 0 ? String(pending) : "",
+            batchNo: "",
+            remarks: `Store dispatch ${transfer?.fromLocationCode || "Store"} → ${transfer?.toLocationCode || "next route location"}.`,
+        });
+        setError("");
+    };
+
+    const closeDispatch = () => {
+        if (workingId) return;
+        setDispatchTarget(null);
+        setDispatchForm({ quantity: "", batchNo: "", remarks: "" });
+    };
+
+    const dispatchReservedMaterial = async () => {
+        if (!dispatchTarget?.id) return;
+
+        const pending = Math.max(0, numeric(dispatchTarget.plannedQty) - numeric(dispatchTarget.dispatchedQty));
+        const quantity = numeric(dispatchForm.quantity);
+
+        if (quantity <= 0 || quantity > pending + 0.0005) {
+            setError(`Dispatch quantity must be greater than zero and not exceed ${formatQty(pending)}.`);
+            return;
+        }
+
+        setWorkingId(String(dispatchTarget.id));
+        setError("");
+
+        try {
+            await matflowApi.dispatchTransfer(dispatchTarget.id, {
+                rowVersion: dispatchTarget.rowVersion,
+                quantity,
+                batchNo: clean(dispatchForm.batchNo) || null,
+                remarks: clean(dispatchForm.remarks) || "Reserved Store material dispatched into approved MatFlow route.",
+            });
+            setDispatchTarget(null);
+            setDispatchForm({ quantity: "", batchNo: "", remarks: "" });
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to dispatch reserved Store material."));
+        } finally {
+            setWorkingId("");
+        }
+    };
+
     const submitIndent = async (indent) => {
         setWorkingId(String(indent.id)); setError("");
         try { await matflowApi.submitIndent(indent.id, { rowVersion: indent.rowVersion, remarks: "Shortage confirmed by Store and submitted to Purchase." }); await load(); }
@@ -349,7 +439,7 @@ export function MatFlowStoreDetailPage() {
         <PageHero badge="STORE MATERIAL WORKBENCH" title={requisition?.requisitionNumber || "Store Review"} subtitle={`${requisition?.projectCode || "-"} · ${requisition?.drawingNo || "-"} · ${requisition?.bomNumber || "-"}`} actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<ArrowBackOutlinedIcon />} onClick={() => navigate("/matflow/store")} sx={secondaryBtnSx}>Back</Button></>} />
         <ErrorBox>{error}</ErrorBox>
         {requisition && <>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /></Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" value={storeActionsReady} /></Box>
             <Card sx={panelSx}><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}><Detail label="Status" value={<MatFlowStatusChip status={requisition.status} />} /><Detail label="Destination" value={requisition.destinationLocationName || requisition.destinationLocationCode} /><Detail label="Plant" value={requisition.destinationPlantCode} /><Detail label="Partial Availability" value={<MatFlowStatusChip status={requisition.partialAvailabilityDecision || "UNDECIDED"} />} /><Detail label="Production Decision By" value={requisition.partialDecisionBy || "-"} /><Detail label="Submitted" value={formatDate(requisition.submittedAt)} /><Detail label="Reservations" value={reservations.length} /><Detail label="Transfers" value={transfers.length} /><Detail label="Indents" value={indents.length} /></Box></Card>
 
             {reviewable && <Card sx={panelSx}>
@@ -367,9 +457,77 @@ export function MatFlowStoreDetailPage() {
             </Card>}
 
             {totals.shortage > 0 && totals.reserved > 0 && <Card sx={panelSx}><Typography sx={mainTextSx}>Production partial-availability decision</Typography><Typography sx={subTextSx}>{normalize(requisition.partialAvailabilityDecision) === "ISSUE_AVAILABLE_NOW" ? "Production has authorized available quantity to continue through QC/Processing and be issued when route-complete." : normalize(requisition.partialAvailabilityDecision) === "HOLD_UNTIL_SHORTAGE_COMPLETE" ? "Production has instructed Store to hold the available quantity until shortage procurement is completed." : "Production decision is pending. Store can reserve and procure shortage, but final issue is blocked until Production decides."}</Typography></Card>}
-            <Card sx={panelSx}><Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>Reservations & Issue</Typography><Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 150px 110px 160px 150px 120px" }}>{["Material", "Source", "Reserved", "Status", "Next", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{reservations.length === 0 ? <EmptyState>No reservations created yet.</EmptyState> : reservations.map((reservation) => <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 150px 110px 160px 150px 120px" }}><Box sx={tableCellSx}>{reservation.materialCode || "-"}</Box><Box sx={tableCellSx}>{reservation.sourceLocationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(reservation.reservedQty)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={reservation.status} /></Box><Box sx={tableCellSx}>{reservation.nextAction || (reservation.issueReady ? "ISSUE_TO_PRODUCTION" : "COMPLETE_ROUTE")}</Box><Box sx={tableCellSx}>{reservation.issueReady && numeric(reservation.remainingIssueQty) > 0 ? <Button startIcon={<OutputOutlinedIcon />} disabled={workingId === String(reservation.id)} onClick={() => issue(reservation)} sx={primaryBtnSx}>Issue</Button> : "-"}</Box></Box>)}</Box></Card>
+            <Card sx={panelSx}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap", mb: 1 }}>
+                    <Box>
+                        <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Reservations & Route Control</Typography>
+                        <Typography sx={subTextSx}>Store owns the first physical hand-off. Dispatch READY Store stock into the approved QC/Processing route; final Store Issue appears only after the route reaches Production staging.</Typography>
+                    </Box>
+                    <Button onClick={() => navigate("/matflow/transfers")} sx={secondaryBtnSx}>Open Transfer Desk</Button>
+                </Box>
+                <Box sx={tableShellSx}>
+                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 135px 105px minmax(280px,1fr) 155px 175px" }}>{["Material", "Source", "Reserved", "Approved Route", "Next Owner", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
+                    {reservations.length === 0 ? <EmptyState>No reservations created yet.</EmptyState> : reservations.map((reservation) => {
+                        const route = routeForReservation(reservation);
+                        const currentTransfer = currentTransferForReservation(reservation);
+                        const dispatchableTransfer = storeDispatchForReservation(reservation);
+                        const remainingIssue = numeric(reservation?.remainingIssueQty);
+                        const nextOwner = reservation?.issueReady
+                            ? "STORE · ISSUE"
+                            : currentTransfer?.responsibleDepartment || reservation?.responsibleDepartment || "ROUTE";
+
+                        return <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 135px 105px minmax(280px,1fr) 155px 175px", alignItems: "center" }}>
+                            <Box sx={tableCellSx}>
+                                <Typography sx={mainTextSx}>{reservation.materialCode || "-"}</Typography>
+                                <MatFlowStatusChip status={reservation.status} />
+                            </Box>
+                            <Box sx={tableCellSx}>{reservation.sourceLocationCode || "-"}</Box>
+                            <Box sx={tableCellSx}>{formatQty(reservation.reservedQty)}</Box>
+                            <Box sx={tableCellSx}>
+                                {route.length === 0 ? <Typography sx={subTextSx}>Route not generated.</Typography> : <Box sx={{ display: "flex", gap: .7, alignItems: "stretch", flexWrap: "wrap" }}>
+                                    <Box sx={{ px: 1, py: .65, border: "1px solid rgba(148,163,184,.22)", borderRadius: 1.5, minWidth: 88 }}>
+                                        <Typography sx={{ ...subTextSx, fontSize: 10 }}>SOURCE</Typography>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 12 }}>{reservation.sourceLocationCode || "STORE"}</Typography>
+                                    </Box>
+                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid rgba(148,163,184,.22)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "rgba(14,165,233,.08)" : "transparent" }}>
+                                        <Typography sx={{ ...subTextSx, fontSize: 10 }}>→ {transfer.toLocationCode || "NEXT"}</Typography>
+                                        <Box sx={{ mt: .35 }}><MatFlowStatusChip status={transfer.status} /></Box>
+                                    </Box>)}
+                                </Box>}
+                            </Box>
+                            <Box sx={tableCellSx}>
+                                <Typography sx={mainTextSx}>{nextOwner}</Typography>
+                                <Typography sx={subTextSx}>{reservation.nextAction || currentTransfer?.nextAction || (reservation.issueReady ? "ISSUE_TO_PRODUCTION" : "COMPLETE_ROUTE")}</Typography>
+                            </Box>
+                            <Box sx={tableCellSx}>
+                                {reservation.issueReady && remainingIssue > 0 ? <Button startIcon={<OutputOutlinedIcon />} disabled={workingId === String(reservation.id)} onClick={() => issue(reservation)} sx={primaryBtnSx}>Issue</Button>
+                                    : dispatchableTransfer ? <Button startIcon={<OutputOutlinedIcon />} disabled={workingId === String(dispatchableTransfer.id)} onClick={() => openDispatch(dispatchableTransfer)} sx={primaryBtnSx}>Dispatch to {dispatchableTransfer.toLocationCode || "Route"}</Button>
+                                        : currentTransfer ? <Button onClick={() => navigate(`/matflow/transfers/${currentTransfer.id}`)} sx={secondaryBtnSx}>View Route</Button>
+                                            : <Typography sx={subTextSx}>Waiting for route</Typography>}
+                            </Box>
+                        </Box>;
+                    })}
+                </Box>
+            </Card>
 
             <Card sx={panelSx}><Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>Shortage Indents</Typography><Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}>{["Indent", "Deliver To", "Status", "Lines", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{indents.length === 0 ? <EmptyState>No shortage indent exists.</EmptyState> : indents.map((indent) => <Box key={indent.id} sx={{ ...tableRowSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}><Box sx={tableCellSx}>{indent.indentNumber || "-"}</Box><Box sx={tableCellSx}>{indent.deliveryLocationCode || "-"}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={indent.status} /></Box><Box sx={tableCellSx}>{(indent.lines || []).map((line) => `${line.materialCode}: ${formatQty(line.requiredQty)}`).join(" · ") || "-"}</Box><Box sx={tableCellSx}>{["AUTO_CREATED", "DRAFT", "RETURNED"].includes(normalize(indent.status)) ? <Button startIcon={<ShoppingCartOutlinedIcon />} disabled={workingId === String(indent.id)} onClick={() => submitIndent(indent)} sx={primaryBtnSx}>Send to Purchase</Button> : "-"}</Box></Box>)}</Box></Card>
         </>}
+
+        <Dialog open={Boolean(dispatchTarget)} onClose={closeDispatch} PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}>Dispatch Reserved Material</DialogTitle>
+            <DialogContent sx={dialogContentSx}>
+                <Typography sx={mainTextSx}>{dispatchTarget?.transferNumber || "Transfer"}</Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.5 }}>{dispatchTarget?.materialCode || "Material"} · {dispatchTarget?.fromLocationCode || "Store"} → {dispatchTarget?.toLocationCode || "Next route location"}</Typography>
+                <Box sx={{ display: "grid", gap: 1.25 }}>
+                    <TextField type="number" label="Dispatch Quantity" value={dispatchForm.quantity} onChange={(e) => setDispatchForm((current) => ({ ...current, quantity: e.target.value }))} sx={fieldSx} />
+                    <TextField label="Batch / Lot (optional)" value={dispatchForm.batchNo} onChange={(e) => setDispatchForm((current) => ({ ...current, batchNo: e.target.value }))} sx={fieldSx} />
+                    <TextField multiline minRows={2} label="Dispatch Remarks" value={dispatchForm.remarks} onChange={(e) => setDispatchForm((current) => ({ ...current, remarks: e.target.value }))} sx={fieldSx} />
+                </Box>
+            </DialogContent>
+            <DialogActions sx={dialogActionsSx}>
+                <Button onClick={closeDispatch} disabled={Boolean(workingId)} sx={secondaryBtnSx}>Cancel</Button>
+                <Button startIcon={<OutputOutlinedIcon />} onClick={dispatchReservedMaterial} disabled={!dispatchTarget || Boolean(workingId)} sx={primaryBtnSx}>{workingId ? "Dispatching..." : `Dispatch to ${dispatchTarget?.toLocationCode || "Route"}`}</Button>
+            </DialogActions>
+        </Dialog>
     </Box>;
 }

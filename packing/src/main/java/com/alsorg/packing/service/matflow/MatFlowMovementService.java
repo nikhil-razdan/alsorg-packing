@@ -19,9 +19,13 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +38,8 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class MatFlowMovementService {
+
+        private static final Logger LOG = LoggerFactory.getLogger(MatFlowMovementService.class);
 
         private final TransferModule transfers;
         private final ReturnModule returns;
@@ -180,28 +186,71 @@ public class MatFlowMovementService {
                         return transferRepository
                                         .findAllByOrderByUpdatedAtDesc()
                                         .stream()
-                                        .filter(transfer -> accessService.canAccessPlant(
-                                                        transfer.fromLocation
-                                                                        .getPlantCode())
-                                                        ||
-                                                        accessService.canAccessPlant(
-                                                                        transfer.toLocation
-                                                                                        .getPlantCode()))
                                         .filter(transfer -> status == null ||
                                                         transfer.status == status)
-                                        .filter(transfer -> normalizedPlant == null
-                                                        ||
-                                                        transfer.fromLocation
-                                                                        .getPlantCode()
-                                                                        .equalsIgnoreCase(
-                                                                                        normalizedPlant)
-                                                        ||
-                                                        transfer.toLocation
-                                                                        .getPlantCode()
-                                                                        .equalsIgnoreCase(
-                                                                                        normalizedPlant))
-                                        .map(this::toResponse)
+                                        .map(transfer -> toVisibleListResponse(
+                                                        transfer,
+                                                        normalizedPlant))
+                                        .filter(Objects::nonNull)
                                         .toList();
+                }
+
+                /**
+                 * List views are operational queues. A single malformed historical row
+                 * must not blank the entire Transfer desk. We therefore validate and
+                 * convert each visible transfer independently. Explicit GET /transfers/{id}
+                 * remains strict and still returns the integrity error for the bad row.
+                 */
+                private TransferResponse toVisibleListResponse(
+                                MatFlowTransferOrder transfer,
+                                String normalizedPlant) {
+
+                        try {
+                                if (transfer == null || transfer.getId() == null) {
+                                        throw conflict(
+                                                        "Transfer order is missing its identity");
+                                }
+
+                                if (transfer.fromLocation == null ||
+                                                transfer.toLocation == null) {
+                                        throw conflict(
+                                                        "Transfer source or destination is missing");
+                                }
+
+                                String fromPlant = cleanUpper(
+                                                transfer.fromLocation.getPlantCode());
+
+                                String toPlant = cleanUpper(
+                                                transfer.toLocation.getPlantCode());
+
+                                boolean readable = (fromPlant != null &&
+                                                accessService.canAccessPlant(fromPlant))
+                                                ||
+                                                (toPlant != null &&
+                                                                accessService.canAccessPlant(toPlant));
+
+                                if (!readable) {
+                                        return null;
+                                }
+
+                                if (normalizedPlant != null &&
+                                                !normalizedPlant.equals(fromPlant) &&
+                                                !normalizedPlant.equals(toPlant)) {
+                                        return null;
+                                }
+
+                                return toResponse(
+                                                transfer);
+
+                        } catch (ResponseStatusException integrityFailure) {
+                                LOG.warn(
+                                                "Skipping invalid MatFlow transfer {} ({}) from list response: {}",
+                                                transfer == null ? null : transfer.getId(),
+                                                transfer == null ? null : transfer.transferNumber,
+                                                integrityFailure.getReason());
+
+                                return null;
+                        }
                 }
 
                 @Transactional(readOnly = true)
@@ -961,10 +1010,20 @@ public class MatFlowMovementService {
 
                         UUID requisitionId = transfer.requisition.getId();
 
-                        MatFlowMaterialRequisition requisition = requisitionRepository
+                        MatFlowMaterialRequisition loadedRequisition = requisitionRepository
                                         .findDetailById(requisitionId)
                                         .orElseThrow(() -> conflict(
                                                         "Transfer requisition no longer exists: " + requisitionId));
+
+                        /*
+                         * findDetailById(...) can resolve to the same managed Hibernate proxy
+                         * already referenced by transfer.requisition. Direct reads of public
+                         * backing fields on that proxy (requisitionNumber, projectDrawing, bom)
+                         * bypass Hibernate's getter interception and can therefore look null.
+                         * Always unwrap to the target entity before reading those fields.
+                         */
+                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                        loadedRequisition);
 
                         if (requisition.projectDrawing == null) {
                                 throw conflict(
@@ -1163,6 +1222,11 @@ public class MatFlowMovementService {
                                                 "Transfer reservation is missing");
                         }
 
+                        MatFlowReservation reservation = (MatFlowReservation) Hibernate.unproxy(
+                                        transfer.reservation);
+
+                        transfer.reservation = reservation;
+
                         if (transfer.fromLocation == null ||
                                         transfer.toLocation == null) {
 
@@ -1177,6 +1241,9 @@ public class MatFlowMovementService {
                                 throw conflict(
                                                 "Transfer material is missing");
                         }
+
+                        line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                        line.material);
 
                         MatFlowProjectDrawing project = requisition.projectDrawing;
 
@@ -2463,11 +2530,14 @@ public class MatFlowMovementService {
 
                         UUID requisitionId = materialReturn.requisition.getId();
 
-                        MatFlowMaterialRequisition requisition = requisitionRepository
+                        MatFlowMaterialRequisition loadedRequisition = requisitionRepository
                                         .findDetailById(requisitionId)
                                         .orElseThrow(() -> conflict(
                                                         "Material return requisition no longer exists: "
                                                                         + requisitionId));
+
+                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                        loadedRequisition);
 
                         validateReturnRequisition(requisition);
 

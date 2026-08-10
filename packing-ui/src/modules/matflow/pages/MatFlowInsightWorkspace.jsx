@@ -49,6 +49,125 @@ const STAGES = [
     ["Processing", "Input/output processing jobs", "/matflow/processing"],
 ];
 
+const TRACKER_FLOW = [
+    { key: "DEMAND", label: "Demand", caption: "Production requisition" },
+    { key: "STORE", label: "Store", caption: "Review & reserve" },
+    { key: "PURCHASE", label: "Purchase", caption: "Only when short" },
+    { key: "ROUTE", label: "Route", caption: "QC / Processing" },
+    { key: "PRODUCTION", label: "Production", caption: "Issue & consume" },
+    { key: "COMPLETE", label: "Complete", caption: "Finished product" },
+];
+
+const TRACKER_STAGE_BUCKET = {
+    DRAFT: "DEMAND",
+    AWAITING_STORE_PLANNING: "STORE",
+    SHORTAGE_PENDING: "PURCHASE",
+    MATERIAL_RESERVED: "ROUTE",
+    TRANSFER_IN_PROGRESS: "ROUTE",
+    READY_TO_ISSUE: "ROUTE",
+    PRODUCTION_ISSUE: "PRODUCTION",
+    PRODUCTION_IN_PROGRESS: "PRODUCTION",
+    PRODUCTION_COMPLETED: "COMPLETE",
+};
+
+const trackerStageIndex = (stage) => {
+    if (normalize(stage) === "CANCELLED") return -1;
+    const bucket = TRACKER_STAGE_BUCKET[normalize(stage)] || "DEMAND";
+    return Math.max(0, TRACKER_FLOW.findIndex((item) => item.key === bucket));
+};
+
+const trackerHealth = (row) => {
+    const currentStage = normalize(row?.currentStage);
+    if (currentStage === "PRODUCTION_COMPLETED") return { label: "Completed", tone: "success" };
+    if (currentStage === "CANCELLED") return { label: "Cancelled", tone: "muted" };
+
+    const age = Math.max(0, Number(row?.ageHours || 0));
+    if (age >= 72) return { label: "Ageing 72h+", tone: "danger" };
+    if (age >= 24) return { label: "Ageing 24h+", tone: "warning" };
+    return { label: "Fresh <24h", tone: "success" };
+};
+
+const healthSx = (tone) => ({
+    px: 1.1,
+    py: .45,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: .35,
+    border: tone === "danger"
+        ? "1px solid rgba(248,113,113,.45)"
+        : tone === "warning"
+            ? "1px solid rgba(251,191,36,.4)"
+            : tone === "muted"
+                ? "1px solid rgba(148,163,184,.3)"
+                : "1px solid rgba(52,211,153,.35)",
+    color: tone === "danger"
+        ? "#fca5a5"
+        : tone === "warning"
+            ? "#fcd34d"
+            : tone === "muted"
+                ? "#94a3b8"
+                : "#6ee7b7",
+    background: tone === "danger"
+        ? "rgba(127,29,29,.16)"
+        : tone === "warning"
+            ? "rgba(120,53,15,.16)"
+            : tone === "muted"
+                ? "rgba(51,65,85,.18)"
+                : "rgba(6,78,59,.16)",
+});
+
+const trackerNextAction = (row) => {
+    switch (normalize(row?.currentStage)) {
+        case "DRAFT": return "Complete and submit the Production material requisition.";
+        case "AWAITING_STORE_PLANNING": return "Store must review availability and reserve verified stock.";
+        case "SHORTAGE_PENDING": return "Close shortage procurement while available stock follows the Production decision.";
+        case "MATERIAL_RESERVED": return "Dispatch reserved Store stock into the approved QC / Processing route.";
+        case "TRANSFER_IN_PROGRESS": return "Execute the next route hand-off, receipt, QC or Processing action.";
+        case "READY_TO_ISSUE": return "Route is complete. Store must explicitly issue material to Production.";
+        case "PRODUCTION_ISSUE": return "Complete the Production hand-off and start execution.";
+        case "PRODUCTION_IN_PROGRESS": return "Record consumption / returns and complete the finished product.";
+        case "PRODUCTION_COMPLETED": return "Material execution is complete and fully traceable.";
+        case "CANCELLED": return "This requisition is cancelled.";
+        default: return "Open the workflow to inspect the current operational action.";
+    }
+};
+
+const trackerActionTarget = (row) => {
+    const id = row?.requisitionId || row?.id;
+    switch (normalize(row?.currentStage)) {
+        case "AWAITING_STORE_PLANNING":
+        case "MATERIAL_RESERVED":
+        case "SHORTAGE_PENDING":
+        case "READY_TO_ISSUE":
+            return { label: "Open Store Workbench", path: `/matflow/store/requisitions/${id}` };
+        case "TRANSFER_IN_PROGRESS":
+            return { label: "Open Transfer Desk", path: "/matflow/transfers" };
+        case "PRODUCTION_ISSUE":
+        case "PRODUCTION_IN_PROGRESS":
+            return { label: "Open Production Execution", path: "/matflow/production-execution" };
+        default:
+            return { label: "Open Workflow", path: `/matflow/requisitions/${id}` };
+    }
+};
+
+const trackerLaneState = (row, laneIndex) => {
+    if (normalize(row?.currentStage) === "CANCELLED") return "SKIPPED";
+    const currentIndex = trackerStageIndex(row?.currentStage);
+    const hasShortagePath = Number(row?.shortageQty || 0) > 0 || Number(row?.openIndentCount || 0) > 0;
+
+    if (laneIndex === 2 && !hasShortagePath) return "SKIPPED";
+    if (laneIndex < currentIndex) return "DONE";
+    if (laneIndex === currentIndex) return "CURRENT";
+    return "NEXT";
+};
+
+const trackerLaneCount = (rows, key) => rows.filter((row) => {
+    const stage = normalize(row?.currentStage);
+    return stage !== "CANCELLED"
+        && (TRACKER_STAGE_BUCKET[stage] || "DEMAND") === key;
+}).length;
+
 export function MatFlowDashboardPage() {
     const navigate = useNavigate();
     const { selectedPlantParam } = useMatFlow();
@@ -72,12 +191,158 @@ export function MatFlowTrackerPage() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [stage, setStage] = useState("");
-    const load = useCallback(async () => { setLoading(true); setError(""); try { setData((await matflowApi.getTracker({ search: clean(search) || undefined, plantCode: selectedPlantParam, stage: stage || undefined }))?.data || null); } catch (e) { setError(readMatFlowError(e, "Unable to load MatFlow tracker.")); } finally { setLoading(false); } }, [search, stage, selectedPlantParam]);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            setData((await matflowApi.getTracker({
+                search: clean(search) || undefined,
+                plantCode: selectedPlantParam,
+                stage: stage || undefined,
+            }))?.data || null);
+        } catch (e) {
+            setError(readMatFlowError(e, "Unable to load MatFlow tracker."));
+        } finally {
+            setLoading(false);
+        }
+    }, [search, stage, selectedPlantParam]);
+
     useEffect(() => { load(); }, [load]);
+
     const rows = Array.isArray(data?.rows) ? data.rows : [];
     const k = data?.kpis || {};
-    const stages = useMemo(() => ["", ...Array.from(new Set(rows.map(r => r.currentStage).filter(Boolean))).sort()], [rows]);
-    return <Box sx={pageSx}><PageHero badge="SERVER-SIDE CONTROL TOWER" title="Project & Material Tracker" subtitle="Workflow stage, ownership, ageing and material coverage are calculated by MatFlowInsightService—not re-derived in React." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Active Requisitions" value={k.activeRequisitions ?? rows.length} /><SummaryCard label="Awaiting Store" value={k.awaitingStorePlanning ?? 0} /><SummaryCard label="Shortage Pending" value={k.shortagePending ?? 0} /><SummaryCard label="Material Reserved" value={k.materialReserved ?? 0} /><SummaryCard label="Transfers in Progress" value={k.transfersInProgress ?? 0} /><SummaryCard label="Production in Progress" value={k.productionInProgress ?? 0} /><SummaryCard label="Open Indents" value={k.openIndents ?? 0} /></Box><Card sx={panelSx}><Box sx={{ display: "grid", gridTemplateColumns: "1fr 230px", gap: 1 }}><TextField label="Search" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === "Enter" && load()} sx={fieldSx} /><TextField select label="Stage" value={stage} onChange={e => setStage(e.target.value)} sx={fieldSx}>{stages.map(v => <MenuItem key={v || "ALL"} value={v}>{v ? readable(v) : "All Stages"}</MenuItem>)}</TextField></Box></Card><Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 170px 150px 180px 160px 160px 100px" }}>{["Requisition", "Project / Drawing", "BOM", "Stage / Desk", "Material Coverage", "Updated / Age", "Action"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{rows.length === 0 ? <EmptyState /> : rows.map(row => <Box key={row.requisitionId || row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 170px 150px 180px 160px 160px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><MatFlowStatusChip status={row.requisitionStatus} /></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"} · Rev {row.bomRevisionNo ?? "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentStage)}</Typography><Typography sx={subTextSx}>{row.responsibleDesk || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={subTextSx}>Req {formatQty(row.requestedQty)} · Res {formatQty(row.reservedQty)} · Short {formatQty(row.shortageQty)}</Typography><LinearProgress variant="determinate" value={Math.max(0, Math.min(100, Number(row.progressPercent || 0)))} sx={{ mt: .6, height: 6, borderRadius: 999 }} /></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatDate(row.updatedAt)}</Typography><Typography sx={subTextSx}>{row.ageHours ?? 0} hr</Typography></Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/requisitions/${row.requisitionId || row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}</Box>}</Card></Box>;
+    const stages = useMemo(() => ["", ...Array.from(new Set(rows.map((row) => row.currentStage).filter(Boolean))).sort()], [rows]);
+    const pipeline = useMemo(() => TRACKER_FLOW.map((lane) => ({
+        ...lane,
+        count: trackerLaneCount(rows, lane.key),
+    })), [rows]);
+
+    return <Box sx={pageSx}>
+        <PageHero
+            badge="MATFLOW LIVE CONTROL TOWER"
+            title="Project & Material Tracker"
+            subtitle="A live project-material control board: current desk, route progress, shortage exposure, ageing, ownership and the next operational action are visible in one place."
+            actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>}
+        />
+        <ErrorBox>{error}</ErrorBox>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 1 }}>
+            <SummaryCard label="Active Requisitions" value={k.activeRequisitions ?? rows.length} />
+            <SummaryCard label="Awaiting Store" value={k.awaitingStorePlanning ?? 0} />
+            <SummaryCard label="Shortage Pending" value={k.shortagePending ?? 0} />
+            <SummaryCard label="Material Reserved" value={k.materialReserved ?? 0} />
+            <SummaryCard label="Transfers Running" value={k.transfersInProgress ?? 0} />
+            <SummaryCard label="Production Running" value={k.productionInProgress ?? 0} />
+            <SummaryCard label="Open Indents" value={k.openIndents ?? 0} />
+        </Box>
+
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+            <Box sx={{ px: 1.8, pt: 1.6, pb: 1.2, borderBottom: "1px solid rgba(148,163,184,.16)" }}>
+                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Flow Pipeline</Typography>
+                <Typography sx={subTextSx}>Where every active requisition currently sits in the material lifecycle.</Typography>
+            </Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(6,minmax(0,1fr))" } }}>
+                {pipeline.map((lane, index) => <Box key={lane.key} sx={{ px: 1.5, py: 1.45, borderRight: { xs: "none", md: index < pipeline.length - 1 ? "1px solid rgba(148,163,184,.12)" : "none" }, borderBottom: { xs: "1px solid rgba(148,163,184,.1)", md: "none" } }}>
+                    <Typography sx={{ ...subTextSx, fontSize: 10 }}>0{index + 1} · {lane.label.toUpperCase()}</Typography>
+                    <Typography sx={{ fontSize: 24, fontWeight: 950, lineHeight: 1.15, mt: .35 }}>{lane.count}</Typography>
+                    <Typography sx={{ ...subTextSx, mt: .2 }}>{lane.caption}</Typography>
+                </Box>)}
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 230px" }, gap: 1 }}>
+                <TextField label="Search Project / Drawing / Requisition / BOM" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+                <TextField select label="Current Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
+                    {stages.map((value) => <MenuItem key={value || "ALL"} value={value}>{value ? readable(value) : "All Stages"}</MenuItem>)}
+                </TextField>
+            </Box>
+        </Card>
+
+        {loading ? <LoadingBlock /> : rows.length === 0 ? <Card sx={panelSx}><EmptyState>No project-material workflows match the selected filters.</EmptyState></Card> : <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "repeat(2,minmax(0,1fr))" }, gap: 1.25 }}>
+            {rows.map((row) => {
+                const id = row.requisitionId || row.id;
+                const health = trackerHealth(row);
+                const action = trackerActionTarget(row);
+                const progress = Math.max(0, Math.min(100, Number(row.progressPercent || 0)));
+
+                return <Card key={id} sx={{ ...panelSx, p: 0, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 390 }}>
+                    <Box sx={{ px: 1.7, py: 1.5, background: "linear-gradient(105deg, rgba(14,165,233,.12), rgba(15,23,42,.08) 55%, rgba(59,130,246,.06))", borderBottom: "1px solid rgba(148,163,184,.16)" }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+                            <Box>
+                                <Typography sx={{ ...subTextSx, fontSize: 10, letterSpacing: .55 }}>PROJECT / DRAWING</Typography>
+                                <Typography sx={{ fontSize: 20, fontWeight: 950, lineHeight: 1.2 }}>{row.projectCode || "Unassigned Project"}</Typography>
+                                <Typography sx={{ ...mainTextSx, mt: .25 }}>{row.drawingNo || "No Drawing"}</Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                <MatFlowStatusChip status={row.requisitionStatus} />
+                                <Box sx={healthSx(health.tone)}>{health.label}</Box>
+                            </Box>
+                        </Box>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", mt: 1.15 }}>
+                            <Box><Typography sx={subTextSx}>REQUISITION</Typography><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography></Box>
+                            <Box><Typography sx={subTextSx}>BOM</Typography><Typography sx={mainTextSx}>{row.bomNumber || "-"} · Rev {row.bomRevisionNo ?? "-"}</Typography></Box>
+                            <Box><Typography sx={subTextSx}>DESTINATION</Typography><Typography sx={mainTextSx}>{row.destinationLocationCode || row.destinationLocationName || "-"}</Typography></Box>
+                        </Box>
+                    </Box>
+
+                    <Box sx={{ px: 1.7, py: 1.45 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .75, overflowX: "auto", pb: .35 }}>
+                            {TRACKER_FLOW.map((lane, laneIndex) => {
+                                const state = trackerLaneState(row, laneIndex);
+                                return <Box key={lane.key} sx={{ minWidth: 78, flex: 1, position: "relative" }}>
+                                    <Box sx={{ height: 5, borderRadius: 999, background: state === "DONE" ? "rgba(52,211,153,.75)" : state === "CURRENT" ? "rgba(56,189,248,.9)" : state === "SKIPPED" ? "rgba(100,116,139,.22)" : "rgba(51,65,85,.55)" }} />
+                                    <Typography sx={{ fontSize: 10.5, fontWeight: state === "CURRENT" ? 950 : 800, mt: .6, color: state === "CURRENT" ? "#7dd3fc" : state === "DONE" ? "#a7f3d0" : "text.secondary" }}>{lane.label}</Typography>
+                                    <Typography sx={{ ...subTextSx, fontSize: 9 }}>{state === "SKIPPED" ? "Not required" : state === "DONE" ? "Done" : state === "CURRENT" ? "Current" : "Next"}</Typography>
+                                </Box>;
+                            })}
+                        </Box>
+
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(5,minmax(0,1fr))" }, gap: .7, mt: 1.45 }}>
+                            {[
+                                ["Requested", row.requestedQty],
+                                ["Reserved", row.reservedQty],
+                                ["Shortage", row.shortageQty],
+                                ["Issued", row.issuedQty],
+                                ["Consumed", row.consumedQty],
+                            ].map(([label, value]) => <Box key={label} sx={{ p: .9, border: "1px solid rgba(148,163,184,.14)", borderRadius: 1.5, minWidth: 0 }}>
+                                <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>{label}</Typography>
+                                <Typography sx={{ fontSize: 16, fontWeight: 950, mt: .2 }}>{formatQty(value)}</Typography>
+                            </Box>)}
+                        </Box>
+
+                        <Box sx={{ mt: 1.4 }}>
+                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+                                <Box>
+                                    <Typography sx={{ ...subTextSx, fontSize: 10 }}>CURRENT CONTROL POINT</Typography>
+                                    <Typography sx={{ fontSize: 17, fontWeight: 950 }}>{readable(row.currentStage)}</Typography>
+                                    <Typography sx={subTextSx}>Owner: {row.responsibleDesk || "MATFLOW CONTROL"}</Typography>
+                                </Box>
+                                <Typography sx={{ fontSize: 22, fontWeight: 950 }}>{progress}%</Typography>
+                            </Box>
+                            <LinearProgress variant="determinate" value={progress} sx={{ mt: .8, height: 7, borderRadius: 999 }} />
+                        </Box>
+
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "minmax(0,1fr) auto" }, gap: 1, mt: 1.35, alignItems: "center", p: 1.1, borderRadius: 1.5, border: "1px solid rgba(56,189,248,.16)", background: "rgba(14,165,233,.045)" }}>
+                            <Box>
+                                <Typography sx={{ ...subTextSx, fontSize: 10 }}>NEXT OPERATIONAL ACTION</Typography>
+                                <Typography sx={{ ...mainTextSx, mt: .25 }}>{trackerNextAction(row)}</Typography>
+                            </Box>
+                            <Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(action.path)} sx={primaryBtnSx}>{action.label}</Button>
+                        </Box>
+                    </Box>
+
+                    <Box sx={{ mt: "auto", px: 1.7, py: 1.1, borderTop: "1px solid rgba(148,163,184,.12)", display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(4,minmax(0,1fr))" }, gap: .8 }}>
+                        <Box><Typography sx={subTextSx}>Reservations</Typography><Typography sx={mainTextSx}>{row.reservationCount ?? 0}</Typography></Box>
+                        <Box><Typography sx={subTextSx}>Open Indents</Typography><Typography sx={mainTextSx}>{row.openIndentCount ?? 0}</Typography></Box>
+                        <Box><Typography sx={subTextSx}>Open Transfers</Typography><Typography sx={mainTextSx}>{row.openTransferCount ?? 0}</Typography></Box>
+                        <Box><Typography sx={subTextSx}>Updated / Age</Typography><Typography sx={{ ...mainTextSx, fontSize: 11 }}>{formatDate(row.updatedAt)}</Typography><Typography sx={subTextSx}>{row.ageHours ?? 0} hr at current flow</Typography></Box>
+                    </Box>
+                </Card>;
+            })}
+        </Box>}
+    </Box>;
 }
 
 export function MatFlowLedgerPage() {
