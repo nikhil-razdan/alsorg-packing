@@ -441,6 +441,17 @@ export function MatFlowStoreDetailPage() {
         <ErrorBox>{error}</ErrorBox>
         {requisition && <>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" value={storeActionsReady} /></Box>
+
+            {normalize(requisition.status) === "ISSUED_TO_PRODUCTION" && <Card sx={{ ...panelSx, border: "1px solid var(--mf-success-border)", background: "var(--mf-success-soft)" }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+                    <Box>
+                        <Typography sx={{ ...mainTextSx, color: "var(--mf-success-text)", fontSize: 16 }}>Material hand-off complete</Typography>
+                        <Typography sx={subTextSx}>All requisition quantities have been explicitly issued to the Production destination. Store control is complete; Production can now start execution, record consumption and complete the finished product.</Typography>
+                    </Box>
+                    <Button onClick={() => navigate("/matflow/production-execution")} sx={primaryBtnSx}>Open Production Execution</Button>
+                </Box>
+            </Card>}
+
             <Card sx={panelSx}><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}><Detail label="Status" value={<MatFlowStatusChip status={requisition.status} />} /><Detail label="Destination" value={requisition.destinationLocationName || requisition.destinationLocationCode} /><Detail label="Plant" value={requisition.destinationPlantCode} /><Detail label="Partial Availability" value={<MatFlowStatusChip status={requisition.partialAvailabilityDecision || "UNDECIDED"} />} /><Detail label="Production Decision By" value={requisition.partialDecisionBy || "-"} /><Detail label="Submitted" value={formatDate(requisition.submittedAt)} /><Detail label="Reservations" value={reservations.length} /><Detail label="Transfers" value={transfers.length} /><Detail label="Indents" value={indents.length} /></Box></Card>
 
             {reviewable && <Card sx={panelSx}>

@@ -86,6 +86,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.Hibernate;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -186,6 +188,7 @@ public class MatFlowRequisitionService {
 
                 this.issueModule = new IssueModule(
                                 reservationRepository,
+                                requisitionRepository,
                                 requisitionLineRepository,
                                 transferRepository,
                                 stockRepository,
@@ -3393,6 +3396,8 @@ public class MatFlowRequisitionService {
 
                 private final MatFlowReservationRepository reservationRepository;
 
+                private final MatFlowMaterialRequisitionRepository requisitionRepository;
+
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
 
                 private final MatFlowTransferOrderRepository transferRepository;
@@ -3409,6 +3414,7 @@ public class MatFlowRequisitionService {
 
                 IssueModule(
                                 MatFlowReservationRepository reservationRepository,
+                                MatFlowMaterialRequisitionRepository requisitionRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
                                 MatFlowTransferOrderRepository transferRepository,
                                 MatFlowStockBalanceRepository stockRepository,
@@ -3418,6 +3424,8 @@ public class MatFlowRequisitionService {
                                 MatFlowAuditService auditService) {
 
                         this.reservationRepository = reservationRepository;
+
+                        this.requisitionRepository = requisitionRepository;
 
                         this.requisitionLineRepository = requisitionLineRepository;
 
@@ -3471,16 +3479,52 @@ public class MatFlowRequisitionService {
                                         .orElseThrow(() -> conflict(
                                                         "Requisition line no longer exists"));
 
+                        /*
+                         * RequisitionLine.requisition is LAZY. Because MatFlow entities use
+                         * public backing fields, reading line.requisition.destinationLocation
+                         * directly from a Hibernate proxy can incorrectly look null even when
+                         * mf_requisitions.destination_location_id is populated.
+                         *
+                         * Lock the authoritative requisition root and explicitly unproxy it
+                         * before reading workflow-critical fields. This is the same defensive
+                         * hydration pattern used by MatFlowMovementService for transfer
+                         * requisitions and also serializes the final Store issue against the
+                         * requisition state transition.
+                         */
                         if (line.requisition == null ||
-                                        line.requisition.destinationLocation == null) {
+                                        line.requisition.getId() == null) {
+
+                                throw conflict(
+                                                "Reservation is not linked to a requisition");
+                        }
+
+                        UUID requisitionId = line.requisition.getId();
+
+                        MatFlowMaterialRequisition lockedRequisition = requisitionRepository
+                                        .lockById(
+                                                        requisitionId)
+                                        .orElseThrow(() -> conflict(
+                                                        "Requisition no longer exists for this reservation: " +
+                                                                        requisitionId));
+
+                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                        lockedRequisition);
+
+                        if (requisition.destinationLocation == null) {
 
                                 throw conflict(
                                                 "Requisition Production destination is missing");
                         }
 
-                        MatFlowMaterialRequisition requisition = line.requisition;
-
                         MatFlowLocation issueLocation = requisition.destinationLocation;
+
+                        if (issueLocation.getLocationType() != LocationType.PRODUCTION) {
+                                throw conflict(
+                                                "Requisition destination is not a Production location");
+                        }
+
+                        // Keep the locked line aligned with the fully hydrated parent aggregate.
+                        line.requisition = requisition;
 
                         accessService.requirePlantAccess(
                                         issueLocation.getPlantCode());
