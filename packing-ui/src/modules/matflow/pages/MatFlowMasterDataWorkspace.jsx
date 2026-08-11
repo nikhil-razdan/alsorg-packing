@@ -12,10 +12,11 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
 import {
     MATFLOW_ROLES, useMatFlow, ErrorBox, EmptyState, LoadingBlock,
-    MATFLOW_MATERIAL_CATEGORIES, MatFlowStatusChip, PageHero, clean,
+    MATFLOW_MATERIAL_CATEGORIES, MatFlowStatusChip, MatFlowPagination, PageHero, clean,
     dialogActionsSx, dialogContentSx, dialogPaperSx, dialogTitleSx, fieldSx,
     formatDate, mainTextSx, normalize, pageSx, panelSx, primaryBtnSx, secondaryBtnSx, SummaryCard,
     subTextSx, tableCellSx, tableHeaderSx, tableRowSx, tableShellSx,
+    scrollAreaSx, useMatFlowPagination,
 } from "../matflowUi";
 import { useNavigate } from "react-router-dom";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
@@ -107,6 +108,7 @@ function MasterPage({ type }) {
     const [dialog, setDialog] = useState(null), [approval, setApproval] = useState(null), [approvalRemarks, setApprovalRemarks] = useState("");
     const [form, setForm] = useState(type === "materials" ? emptyMaterial : type === "projects" ? emptyProject : emptyLocation);
     const [metadata, setMetadata] = useState({ locationTypes: FALLBACK_LOCATION_TYPES, ownershipTypes: FALLBACK_OWNERSHIP_TYPES });
+    const masterPagination = useMatFlowPagination(rows, 20);
 
     const canManage = type === "materials"
         ? hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE)
@@ -329,8 +331,17 @@ function MasterPage({ type }) {
         <ErrorBox>{error}</ErrorBox>
         <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: grid }}>{columns.map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-            {rows.length === 0 ? <EmptyState /> : rows.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: grid }}>{rowCells(row).map((cell, i) => <Box key={i} sx={tableCellSx}>{cell}</Box>)}</Box>)}
-        </Box>}</Card>
+            {rows.length === 0 ? <EmptyState /> : masterPagination.pageItems.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: grid }}>{rowCells(row).map((cell, i) => <Box key={i} sx={tableCellSx}>{cell}</Box>)}</Box>)}
+        </Box>}
+            {!loading && (
+                <MatFlowPagination
+                    {...masterPagination}
+                    onPageChange={masterPagination.setPage}
+                    onPageSizeChange={masterPagination.setPageSize}
+                    label={type === "materials" ? "Materials" : type === "locations" ? "Locations" : "Project Products"}
+                />
+            )}
+        </Card>
         <MasterDialog type={type} open={Boolean(dialog)} row={dialog?.row} form={form} setForm={setForm} saving={saving} availablePlants={availablePlants} metadata={metadata} onClose={() => setDialog(null)} onSave={save} />
         <Dialog open={Boolean(approval)} onClose={() => !saving && setApproval(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>{approval?.type === "APPROVE" ? <><ApprovalOutlinedIcon /> Director Product Approval</> : <><UndoOutlinedIcon /> Return Product to Engineering</>}</DialogTitle>
@@ -533,6 +544,8 @@ export function MatFlowProjectsPage() {
             return projectMatch || productMatch;
         });
     }, [rows, search, statusFilter, priorityFilter, approvalFilter]);
+
+    const directoryPagination = useMatFlowPagination(filteredRows, 10);
 
     useEffect(() => {
         if (filteredRows.length === 0) {
@@ -772,6 +785,7 @@ export function MatFlowProjectsPage() {
     const selectedProducts = Array.isArray(selectedProject?.products)
         ? selectedProject.products
         : [];
+    const productPagination = useMatFlowPagination(selectedProducts, 10);
     const selectedApprovedCount = selectedProducts.filter(
         (product) => normalize(product.approvalStatus) === "APPROVED"
     ).length;
@@ -923,11 +937,14 @@ export function MatFlowProjectsPage() {
                                 p: 1,
                                 display: "grid",
                                 gap: .75,
-                                maxHeight: { lg: "calc(100vh - 330px)" },
+                                ...scrollAreaSx,
+                                maxHeight: { lg: "calc(100vh - 390px)" },
                                 overflowY: "auto",
+                                overflowX: "hidden",
+                                scrollbarGutter: "stable",
                             }}
                         >
-                            {filteredRows.map((project) => {
+                            {directoryPagination.pageItems.map((project) => {
                                 const selected = String(project.id) === String(selectedProjectId);
                                 const count = Number(project.productCount || 0);
                                 const approved = Number(project.approvedProductCount || 0);
@@ -966,6 +983,16 @@ export function MatFlowProjectsPage() {
                                     </Box>
                                 );
                             })}
+                        </Box>
+                        <Box sx={{ px: 1, pb: 1 }}>
+                            <MatFlowPagination
+                                {...directoryPagination}
+                                onPageChange={directoryPagination.setPage}
+                                onPageSizeChange={directoryPagination.setPageSize}
+                                pageSizeOptions={[5, 10, 20]}
+                                label="Projects"
+                                compact
+                            />
                         </Box>
                     </Card>
 
@@ -1146,7 +1173,7 @@ export function MatFlowProjectsPage() {
 
                                     {selectedProducts.length === 0 ? (
                                         <EmptyState>No Products have been registered under this Project.</EmptyState>
-                                    ) : selectedProducts.map((product) => {
+                                    ) : productPagination.pageItems.map((product) => {
                                         const executionLocked = productHasExecutionHistory(product);
                                         const deleteReason = executionLocked
                                             ? "This Product already owns a BOM or material requisition. Deactivate it instead to preserve traceability."
@@ -1285,6 +1312,14 @@ export function MatFlowProjectsPage() {
                                             </Box>
                                         );
                                     })}
+                                </Box>
+                                <Box sx={{ px: 1.2, pb: 1.2 }}>
+                                    <MatFlowPagination
+                                        {...productPagination}
+                                        onPageChange={productPagination.setPage}
+                                        onPageSizeChange={productPagination.setPageSize}
+                                        label="Products / Drawings"
+                                    />
                                 </Box>
                             </Card>
                         </Box>

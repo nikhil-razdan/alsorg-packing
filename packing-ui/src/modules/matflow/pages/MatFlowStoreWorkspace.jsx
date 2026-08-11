@@ -26,6 +26,7 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
+    MatFlowPagination,
     PageHero,
     SummaryCard,
     clean,
@@ -49,6 +50,7 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    useMatFlowPagination,
 } from "../matflowUi";
 
 const REVIEWABLE = new Set(["SUBMITTED_TO_STORE", "STORE_REVIEW_IN_PROGRESS"]);
@@ -113,6 +115,8 @@ export function MatFlowStoreQueuePage() {
         return rows.filter((row) => [row.requisitionNumber, row.projectCode, row.drawingNo, row.bomNumber, row.destinationLocationCode, row.status].some((value) => clean(value).toLowerCase().includes(term)));
     }, [rows, search]);
 
+    const queuePagination = useMatFlowPagination(filtered, 20);
+
     const counts = useMemo(() => ({
         review: rows.filter((row) => REVIEWABLE.has(normalize(row.status))).length,
         shortage: rows.filter((row) => normalize(row.status) === "SHORTAGE_PENDING").length,
@@ -123,6 +127,8 @@ export function MatFlowStoreQueuePage() {
         const locationIds = new Set(stockLocations.map((location) => String(location.id)));
         return stockRows.filter((row) => locationIds.has(String(row.locationId)));
     }, [stockRows, stockLocations]);
+
+    const stockPagination = useMatFlowPagination(storeStockRows, 20);
 
     const openStockAdjustment = () => {
         setStockForm({
@@ -184,14 +190,29 @@ export function MatFlowStoreQueuePage() {
             </Box>
             <Box sx={tableShellSx}>
                 <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}>{["Material", "Store", "On Hand", "Reserved", "Blocked", "Available"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-                {storeStockRows.length === 0 ? <EmptyState>No Store stock balances are recorded for this plant. Use Opening / Adjustment to enter the verified physical opening stock before Store review.</EmptyState> : storeStockRows.map((row) => <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography><Typography sx={subTextSx}>{row.materialName || "-"}</Typography></Box><Box sx={tableCellSx}>{row.locationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box></Box>)}
+                {storeStockRows.length === 0 ? <EmptyState>No Store stock balances are recorded for this plant. Use Opening / Adjustment to enter the verified physical opening stock before Store review.</EmptyState> : stockPagination.pageItems.map((row) => <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography><Typography sx={subTextSx}>{row.materialName || "-"}</Typography></Box><Box sx={tableCellSx}>{row.locationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box></Box>)}
             </Box>
+            <MatFlowPagination
+                {...stockPagination}
+                onPageChange={stockPagination.setPage}
+                onPageSizeChange={stockPagination.setPageSize}
+                label="Store Inventory"
+            />
         </Card>
         <Card sx={panelSx}><TextField label="Search Queue" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Requisition, project, drawing or BOM" sx={{ ...fieldSx, minWidth: 340 }} /></Card>
         <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}>{["Requisition", "Project / Drawing", "BOM", "Destination", "Status", "Updated", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-            {filtered.length === 0 ? <EmptyState /> : filtered.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography></Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={tableCellSx}>{formatDate(row.plannedAt || row.submittedAt || row.requestedAt)}</Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}
-        </Box>}</Card>
+            {filtered.length === 0 ? <EmptyState /> : queuePagination.pageItems.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography></Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={tableCellSx}>{formatDate(row.plannedAt || row.submittedAt || row.requestedAt)}</Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}
+        </Box>}
+            {!loading && (
+                <MatFlowPagination
+                    {...queuePagination}
+                    onPageChange={queuePagination.setPage}
+                    onPageSizeChange={queuePagination.setPageSize}
+                    label="Store Requisition Queue"
+                />
+            )}
+        </Card>
         <Dialog open={stockDialog} onClose={() => !stockWorking && setStockDialog(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>Store Opening / Stock Adjustment</DialogTitle>
             <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>

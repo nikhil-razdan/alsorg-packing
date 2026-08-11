@@ -42,6 +42,7 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
+    MatFlowPagination,
     PageHero,
     SummaryCard,
     clean,
@@ -64,6 +65,7 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    useMatFlowPagination,
 } from "../matflowUi";
 
 /*
@@ -77,8 +79,6 @@ const CREATE_ROLES = [
     MATFLOW_ROLES.MANAGER,
     MATFLOW_ROLES.PRODUCTION,
 ];
-
-const PAGE_SIZE = 25;
 
 /*
  * ============================================================
@@ -162,9 +162,6 @@ export function MatFlowRequisitionListPage() {
 
     const [status, setStatus] =
         useState("");
-
-    const [page, setPage] =
-        useState(0);
 
     const load = useCallback(
         async () => {
@@ -296,29 +293,7 @@ export function MatFlowRequisitionListPage() {
             ]
         );
 
-    const totalPages =
-        filtered.length
-            ? Math.ceil(
-                filtered.length /
-                PAGE_SIZE
-            )
-            : 0;
-
-    const safePage =
-        Math.min(
-            page,
-            Math.max(
-                totalPages - 1,
-                0
-            )
-        );
-
-    const displayed =
-        filtered.slice(
-            safePage * PAGE_SIZE,
-            safePage * PAGE_SIZE +
-            PAGE_SIZE
-        );
+    const requisitionPagination = useMatFlowPagination(filtered, 20);
 
     return (
         <Box sx={pageSx}>
@@ -374,7 +349,6 @@ export function MatFlowRequisitionListPage() {
                             setSearch(
                                 event.target.value
                             );
-                            setPage(0);
                         }}
                         sx={fieldSx}
                     />
@@ -387,7 +361,6 @@ export function MatFlowRequisitionListPage() {
                             setStatus(
                                 event.target.value
                             );
-                            setPage(0);
                         }}
                         sx={fieldSx}
                     >
@@ -459,11 +432,11 @@ export function MatFlowRequisitionListPage() {
                             )}
                         </Box>
 
-                        {displayed.length ===
+                        {requisitionPagination.pageItems.length ===
                             0 ? (
                             <EmptyState />
                         ) : (
-                            displayed.map(
+                            requisitionPagination.pageItems.map(
                                 (row) => (
                                     <Box
                                         key={
@@ -621,64 +594,12 @@ export function MatFlowRequisitionListPage() {
                     </Box>
                 )}
 
-                <Box
-                    sx={{
-                        mt: 1,
-                        display: "flex",
-                        justifyContent:
-                            "space-between",
-                        alignItems:
-                            "center",
-                        gap: 1,
-                    }}
-                >
-                    <Button
-                        disabled={
-                            safePage <= 0
-                        }
-                        onClick={() =>
-                            setPage(
-                                (current) =>
-                                    Math.max(
-                                        0,
-                                        current -
-                                        1
-                                    )
-                            )
-                        }
-                        sx={secondaryBtnSx}
-                    >
-                        Previous
-                    </Button>
-
-                    <Typography
-                        sx={subTextSx}
-                    >
-                        Page{" "}
-                        {safePage + 1} of{" "}
-                        {Math.max(
-                            totalPages,
-                            1
-                        )}
-                    </Typography>
-
-                    <Button
-                        disabled={
-                            safePage + 1 >=
-                            totalPages
-                        }
-                        onClick={() =>
-                            setPage(
-                                (current) =>
-                                    current +
-                                    1
-                            )
-                        }
-                        sx={secondaryBtnSx}
-                    >
-                        Next
-                    </Button>
-                </Box>
+                <MatFlowPagination
+                    {...requisitionPagination}
+                    onPageChange={requisitionPagination.setPage}
+                    onPageSizeChange={requisitionPagination.setPageSize}
+                    label="Production Requisitions"
+                />
             </Card>
         </Box>
     );

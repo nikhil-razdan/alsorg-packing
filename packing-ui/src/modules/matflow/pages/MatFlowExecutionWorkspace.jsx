@@ -23,6 +23,7 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
+    MatFlowPagination,
     PageHero,
     SummaryCard,
     clean,
@@ -46,6 +47,7 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    useMatFlowPagination,
 } from "../matflowUi";
 
 export function MatFlowQcPage() {
@@ -72,6 +74,7 @@ export function MatFlowQcPage() {
         routingDecision: "DIRECT_TO_PRODUCTION",
         processingRouteStepId: "",
     });
+    const qcPagination = useMatFlowPagination(rows, 20);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -269,7 +272,7 @@ export function MatFlowQcPage() {
             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 135px 180px 130px 80px 90px 90px 125px minmax(280px,1fr)" }}>
                 {["Inspection", "Source", "Material", "QC Location", "Qty", "Accepted", "Rejected", "Status", "QC Route / Control"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}
             </Box>
-            {rows.length === 0 ? <EmptyState /> : rows.map(row => {
+            {rows.length === 0 ? <EmptyState /> : qcPagination.pageItems.map(row => {
                 const pending = normalize(row.status) === "PENDING";
                 const transferReceipt = normalize(row.sourceType) === "TRANSFER_RECEIPT";
                 const completedAccepted = normalize(row.status) === "COMPLETED" && numeric(row.acceptedQty) > 0;
@@ -302,7 +305,16 @@ export function MatFlowQcPage() {
                     </Box>
                 </Box>;
             })}
-        </Box>}</Card>
+        </Box>}
+            {!loading && (
+                <MatFlowPagination
+                    {...qcPagination}
+                    onPageChange={qcPagination.setPage}
+                    onPageSizeChange={qcPagination.setPageSize}
+                    label="QC Inspections"
+                />
+            )}
+        </Card>
 
         <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>
@@ -464,6 +476,7 @@ export function MatFlowProcessingPage() {
     const [error, setError] = useState("");
     const [dialog, setDialog] = useState(null);
     const [form, setForm] = useState({ candidateKey: "", plannedInputQty: "", outputMaterialId: "", actualInputQty: "", outputQty: "", wastageQty: "0", batchNo: "", remarks: "" });
+    const jobPagination = useMatFlowPagination(jobs, 20);
     const load = useCallback(async () => {
         setLoading(true); setError("");
         try {
@@ -488,7 +501,16 @@ export function MatFlowProcessingPage() {
     const create = async () => { if (!candidate) { setError("Select a reservation and approved processing route step."); return; } const plannedInputQty = Number(form.plannedInputQty || candidate.reservation.reservedQty); if (!Number.isFinite(plannedInputQty) || plannedInputQty <= 0) { setError("Planned input quantity must be greater than zero."); return; } setWorking(true); setError(""); try { await matflowApi.createProcessingJob({ reservationId: candidate.reservation.id, routeStepId: candidate.step.id, outputMaterialId: form.outputMaterialId || null, plannedInputQty, remarks: clean(form.remarks) || null }); setDialog(null); await load(); } catch (e) { setError(readMatFlowError(e, "Unable to create processing job.")); } finally { setWorking(false); } };
     const act = async (job, type) => { setDialog({ type, job }); setForm({ candidateKey: "", plannedInputQty: "", outputMaterialId: "", actualInputQty: String(job.plannedInputQty ?? ""), outputQty: String(job.actualInputQty ?? job.plannedInputQty ?? ""), wastageQty: "0", batchNo: "", remarks: "" }); };
     const execute = async () => { const job = dialog?.job; if (!job) return; setWorking(true); setError(""); try { if (dialog.type === "START") await matflowApi.startProcessingJob(job.id, { rowVersion: job.rowVersion, actualInputQty: Number(form.actualInputQty), batchNo: clean(form.batchNo) || null, remarks: clean(form.remarks) || null }); else await matflowApi.completeProcessingJob(job.id, { rowVersion: job.rowVersion, outputQty: Number(form.outputQty), wastageQty: Number(form.wastageQty || 0), batchNo: clean(form.batchNo) || null, remarks: clean(form.remarks) || null }); setDialog(null); await load(); } catch (e) { setError(readMatFlowError(e, "Unable to update processing job.")); } finally { setWorking(false); } };
-    return <Box sx={pageSx}><PageHero badge="MATERIAL PROCESSING" title="Processing Jobs" subtitle="Execute only Processing Units explicitly selected by QC for an accepted material lot. Materials not selected for Processing bypass this desk and route directly to Production." actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddIcon />} onClick={() => setDialog({ type: "CREATE" })} sx={primaryBtnSx}>Create Job</Button></>} /><ErrorBox>{error}</ErrorBox><Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 170px 150px 150px 110px 110px 150px 160px" }}>{["Job", "Requisition", "Process", "Material", "Input", "Output", "Status", "Action"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{jobs.length === 0 ? <EmptyState /> : jobs.map(job => <Box key={job.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 170px 150px 150px 110px 110px 150px 160px" }}><Box sx={tableCellSx}>{job.jobNumber}</Box><Box sx={tableCellSx}>{job.requisitionNumber}</Box><Box sx={tableCellSx}>{job.processCode || job.locationCode}</Box><Box sx={tableCellSx}>{job.inputMaterialCode} → {job.outputMaterialCode}</Box><Box sx={tableCellSx}>{formatQty(job.actualInputQty ?? job.plannedInputQty)}</Box><Box sx={tableCellSx}>{formatQty(job.outputQty)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={job.status} /></Box><Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>{normalize(job.status) === "PENDING" && <Button onClick={() => act(job, "START")} sx={primaryBtnSx}>Start</Button>}{normalize(job.status) === "IN_PROGRESS" && <Button onClick={() => act(job, "COMPLETE")} sx={primaryBtnSx}>Complete</Button>}</Box></Box>)}</Box>}</Card><Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{dialog?.type === "CREATE" ? "Create Processing Job" : dialog?.type === "START" ? "Start Processing Job" : "Complete Processing Job"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>{dialog?.type === "CREATE" ? <><TextField select label="Reservation / Route *" value={form.candidateKey} onChange={e => { const key = e.target.value; const found = candidates.find(c => `${c.reservation.id}:${c.step.id}` === key); setForm(c => ({ ...c, candidateKey: key, plannedInputQty: String(found?.reservation?.reservedQty ?? ""), outputMaterialId: "" })); }} sx={fieldSx}>{candidates.map(c => <MenuItem key={`${c.reservation.id}:${c.step.id}`} value={`${c.reservation.id}:${c.step.id}`}>{c.requisition.requisitionNumber} · {c.reservation.materialCode} · {c.step.locationCode} · {c.step.processCode}</MenuItem>)}</TextField><TextField type="number" label="Reserved Input Qty" value={form.plannedInputQty} disabled helperText="This candidate exists only because QC routed the accepted reserved lot to this approved Processing Unit." sx={fieldSx} /><TextField select label="Output Material" value={form.outputMaterialId} onChange={e => setForm(c => ({ ...c, outputMaterialId: e.target.value }))} helperText="Leave as Same as Input when processing does not change the material master identity." sx={fieldSx}><MenuItem value="">Same as Input · {candidate?.reservation?.materialCode || candidate?.line?.materialCode || "Material"}</MenuItem>{materials.filter(material => !candidate?.line?.uom || String(material.uom || "").toUpperCase() === String(candidate.line.uom || "").toUpperCase()).map(material => <MenuItem key={material.id} value={material.id}>{material.materialCode} · {material.materialName} · {material.uom}</MenuItem>)}</TextField></> : dialog?.type === "START" ? <><TextField type="number" label="Actual Input Qty" value={form.actualInputQty} onChange={e => setForm(c => ({ ...c, actualInputQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch No." value={form.batchNo} onChange={e => setForm(c => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} /></> : <><TextField type="number" label="Output Qty" value={form.outputQty} onChange={e => setForm(c => ({ ...c, outputQty: e.target.value }))} sx={fieldSx} /><TextField type="number" label="Wastage Qty" value={form.wastageQty} onChange={e => setForm(c => ({ ...c, wastageQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch No." value={form.batchNo} onChange={e => setForm(c => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} /></>}<TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={e => setForm(c => ({ ...c, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={dialog?.type === "CREATE" ? create : execute} disabled={working} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog></Box>;
+    return <Box sx={pageSx}><PageHero badge="MATERIAL PROCESSING" title="Processing Jobs" subtitle="Execute only Processing Units explicitly selected by QC for an accepted material lot. Materials not selected for Processing bypass this desk and route directly to Production." actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddIcon />} onClick={() => setDialog({ type: "CREATE" })} sx={primaryBtnSx}>Create Job</Button></>} /><ErrorBox>{error}</ErrorBox><Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 170px 150px 150px 110px 110px 150px 160px" }}>{["Job", "Requisition", "Process", "Material", "Input", "Output", "Status", "Action"].map(h => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{jobs.length === 0 ? <EmptyState /> : jobPagination.pageItems.map(job => <Box key={job.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 170px 150px 150px 110px 110px 150px 160px" }}><Box sx={tableCellSx}>{job.jobNumber}</Box><Box sx={tableCellSx}>{job.requisitionNumber}</Box><Box sx={tableCellSx}>{job.processCode || job.locationCode}</Box><Box sx={tableCellSx}>{job.inputMaterialCode} → {job.outputMaterialCode}</Box><Box sx={tableCellSx}>{formatQty(job.actualInputQty ?? job.plannedInputQty)}</Box><Box sx={tableCellSx}>{formatQty(job.outputQty)}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={job.status} /></Box><Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>{normalize(job.status) === "PENDING" && <Button onClick={() => act(job, "START")} sx={primaryBtnSx}>Start</Button>}{normalize(job.status) === "IN_PROGRESS" && <Button onClick={() => act(job, "COMPLETE")} sx={primaryBtnSx}>Complete</Button>}</Box></Box>)}</Box>}
+        {!loading && (
+            <MatFlowPagination
+                {...jobPagination}
+                onPageChange={jobPagination.setPage}
+                onPageSizeChange={jobPagination.setPageSize}
+                label="Processing Jobs"
+            />
+        )}
+    </Card><Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{dialog?.type === "CREATE" ? "Create Processing Job" : dialog?.type === "START" ? "Start Processing Job" : "Complete Processing Job"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>{dialog?.type === "CREATE" ? <><TextField select label="Reservation / Route *" value={form.candidateKey} onChange={e => { const key = e.target.value; const found = candidates.find(c => `${c.reservation.id}:${c.step.id}` === key); setForm(c => ({ ...c, candidateKey: key, plannedInputQty: String(found?.reservation?.reservedQty ?? ""), outputMaterialId: "" })); }} sx={fieldSx}>{candidates.map(c => <MenuItem key={`${c.reservation.id}:${c.step.id}`} value={`${c.reservation.id}:${c.step.id}`}>{c.requisition.requisitionNumber} · {c.reservation.materialCode} · {c.step.locationCode} · {c.step.processCode}</MenuItem>)}</TextField><TextField type="number" label="Reserved Input Qty" value={form.plannedInputQty} disabled helperText="This candidate exists only because QC routed the accepted reserved lot to this approved Processing Unit." sx={fieldSx} /><TextField select label="Output Material" value={form.outputMaterialId} onChange={e => setForm(c => ({ ...c, outputMaterialId: e.target.value }))} helperText="Leave as Same as Input when processing does not change the material master identity." sx={fieldSx}><MenuItem value="">Same as Input · {candidate?.reservation?.materialCode || candidate?.line?.materialCode || "Material"}</MenuItem>{materials.filter(material => !candidate?.line?.uom || String(material.uom || "").toUpperCase() === String(candidate.line.uom || "").toUpperCase()).map(material => <MenuItem key={material.id} value={material.id}>{material.materialCode} · {material.materialName} · {material.uom}</MenuItem>)}</TextField></> : dialog?.type === "START" ? <><TextField type="number" label="Actual Input Qty" value={form.actualInputQty} onChange={e => setForm(c => ({ ...c, actualInputQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch No." value={form.batchNo} onChange={e => setForm(c => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} /></> : <><TextField type="number" label="Output Qty" value={form.outputQty} onChange={e => setForm(c => ({ ...c, outputQty: e.target.value }))} sx={fieldSx} /><TextField type="number" label="Wastage Qty" value={form.wastageQty} onChange={e => setForm(c => ({ ...c, wastageQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch No." value={form.batchNo} onChange={e => setForm(c => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} /></>}<TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={e => setForm(c => ({ ...c, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={dialog?.type === "CREATE" ? create : execute} disabled={working} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog></Box>;
 }
 
 export function MatFlowProductionExecutionPage() {
@@ -597,6 +619,9 @@ export function MatFlowProductionExecutionPage() {
             ),
         [requisitions]
     );
+
+    const executionPagination = useMatFlowPagination(executionRows, 20);
+    const consumptionPagination = useMatFlowPagination(consumptions, 20);
 
     const completedCount = useMemo(
         () =>
@@ -842,7 +867,7 @@ export function MatFlowProductionExecutionPage() {
                                 No requisition is currently awaiting Production start or Production completion.
                             </EmptyState>
                         ) : (
-                            executionRows.map((row) => {
+                            executionPagination.pageItems.map((row) => {
                                 const position = accounting(row);
                                 const status = normalize(row.status);
                                 const busy = workingId === String(row.id);
@@ -970,6 +995,14 @@ export function MatFlowProductionExecutionPage() {
                         )}
                     </Box>
                 )}
+                {!loading && (
+                    <MatFlowPagination
+                        {...executionPagination}
+                        onPageChange={executionPagination.setPage}
+                        onPageSizeChange={executionPagination.setPageSize}
+                        label="Production Queue"
+                    />
+                )}
             </Card>
 
             <Card sx={panelSx}>
@@ -1002,7 +1035,7 @@ export function MatFlowProductionExecutionPage() {
                         {consumptions.length === 0 ? (
                             <EmptyState>No Production consumption has been recorded.</EmptyState>
                         ) : (
-                            consumptions.map((row) => (
+                            consumptionPagination.pageItems.map((row) => (
                                 <Box
                                     key={row.id}
                                     sx={{
@@ -1026,6 +1059,14 @@ export function MatFlowProductionExecutionPage() {
                             ))
                         )}
                     </Box>
+                )}
+                {!loading && (
+                    <MatFlowPagination
+                        {...consumptionPagination}
+                        onPageChange={consumptionPagination.setPage}
+                        onPageSizeChange={consumptionPagination.setPageSize}
+                        label="Consumption Register"
+                    />
                 )}
             </Card>
 

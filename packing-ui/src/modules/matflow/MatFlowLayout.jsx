@@ -132,7 +132,7 @@ export default function MatFlowLayout() {
                     )}
                 </Box>
                 <Divider sx={{ borderColor: "var(--mf-border)" }} />
-                <Box component="nav" sx={{ py: .9, overflowY: "auto", flex: 1 }}>
+                <Box component="nav" className="mf-sidebar-scroll" sx={{ py: .9, px: .15, overflowY: "auto", overflowX: "hidden", flex: 1, scrollbarGutter: "stable" }}>
                     {items.map((item) => (
                         <Tooltip key={item.path} title={collapsed ? item.label : ""} placement="right">
                             <NavLink to={item.path} style={({ isActive }) => linkStyle(isActive, collapsed)}>

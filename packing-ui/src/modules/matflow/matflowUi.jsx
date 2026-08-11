@@ -4,7 +4,10 @@ import {
   Card,
   Chip,
   CircularProgress,
+  MenuItem,
+  Pagination,
   ScopedCssBaseline,
+  TextField,
   ThemeProvider,
   Typography,
   createTheme,
@@ -84,6 +87,13 @@ const variables = (mode) => {
     "--mf-table-head": dark ? "rgba(2,6,23,.58)" : "#f7f9fc",
     "--mf-table-row": dark ? "rgba(15,23,42,.90)" : "#ffffff",
     "--mf-table-hover": dark ? "rgba(14,165,233,.10)" : "#f7faff",
+
+    // Scrollbar / pagination chrome
+    "--mf-scroll-track": dark ? "rgba(255,255,255,.025)" : "rgba(15,23,42,.035)",
+    "--mf-scroll-thumb": dark ? "rgba(96,165,250,.46)" : "rgba(59,130,246,.42)",
+    "--mf-scroll-thumb-hover": dark ? "rgba(125,211,252,.78)" : "rgba(37,99,235,.68)",
+    "--mf-scroll-corner": dark ? "#081424" : "#eef3f9",
+    "--mf-pagination-bg": dark ? "rgba(2,6,23,.30)" : "#f8fafd",
   };
 };
 
@@ -197,7 +207,55 @@ export function MatFlowThemeProvider({ children }) {
             minHeight: "100vh",
             background: "var(--mf-page-bg)",
             color: "var(--mf-text)",
-            "& *": { boxSizing: "border-box", scrollbarWidth: "thin" },
+            "& *": {
+              boxSizing: "border-box",
+              scrollbarWidth: "thin",
+              scrollbarColor: "var(--mf-scroll-thumb) var(--mf-scroll-track)",
+            },
+            "& *::-webkit-scrollbar": {
+              width: 10,
+              height: 10,
+            },
+            "& *::-webkit-scrollbar-track": {
+              background: "var(--mf-scroll-track)",
+              borderRadius: 999,
+            },
+            "& *::-webkit-scrollbar-thumb": {
+              minHeight: 42,
+              border: "2px solid transparent",
+              borderRadius: 999,
+              background: "var(--mf-scroll-thumb)",
+              backgroundClip: "padding-box",
+              transition: "background .16s ease",
+            },
+            "& *::-webkit-scrollbar-thumb:hover": {
+              background: "var(--mf-scroll-thumb-hover)",
+              backgroundClip: "padding-box",
+            },
+            "& *::-webkit-scrollbar-corner": {
+              background: "var(--mf-scroll-corner)",
+            },
+            "& .mf-sidebar-scroll": {
+              scrollbarWidth: "thin",
+              scrollbarColor: "var(--mf-scroll-thumb) transparent",
+              scrollbarGutter: "stable",
+            },
+            "& .mf-sidebar-scroll::-webkit-scrollbar": {
+              width: 8,
+            },
+            "& .mf-sidebar-scroll::-webkit-scrollbar-track": {
+              background: "transparent",
+              marginBlock: 6,
+            },
+            "& .mf-sidebar-scroll::-webkit-scrollbar-thumb": {
+              border: "2px solid transparent",
+              background: "var(--mf-scroll-thumb)",
+              backgroundClip: "padding-box",
+            },
+            "& .mf-sidebar-scroll::-webkit-scrollbar-thumb:hover": {
+              background: "var(--mf-scroll-thumb-hover)",
+              backgroundClip: "padding-box",
+            },
           }}
         >
           {children}
@@ -563,6 +621,188 @@ export function SummaryCard({ label, value, helper, tone, colorful = false }) {
   );
 }
 
+
+export function useMatFlowPagination(items, initialPageSize = 20) {
+  const source = Array.isArray(items) ? items : [];
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSizeState] = useState(
+    Math.max(1, Number(initialPageSize) || 20)
+  );
+
+  const totalItems = source.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+
+  useEffect(() => {
+    // New filters / refreshed datasets should always reopen on page one.
+    setPage(0);
+  }, [items]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  const pageItems = useMemo(() => {
+    const start = safePage * pageSize;
+    return source.slice(start, start + pageSize);
+  }, [source, safePage, pageSize]);
+
+  const setPageSize = useCallback((value) => {
+    const next = Math.max(1, Number(value) || 20);
+    setPageSizeState(next);
+    setPage(0);
+  }, []);
+
+  return {
+    page: safePage,
+    pageSize,
+    pageItems,
+    totalItems,
+    totalPages,
+    setPage,
+    setPageSize,
+  };
+}
+
+export function MatFlowPagination({
+  page = 0,
+  pageSize = 20,
+  totalItems = 0,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 20, 50],
+  label = "Records",
+  compact = false,
+}) {
+  const count = Math.max(
+    1,
+    Number(totalPages) || Math.ceil(Number(totalItems || 0) / Math.max(1, Number(pageSize) || 20))
+  );
+  const safePage = Math.min(Math.max(0, Number(page) || 0), count - 1);
+  const start = Number(totalItems || 0) === 0 ? 0 : safePage * pageSize + 1;
+  const end = Math.min(Number(totalItems || 0), (safePage + 1) * pageSize);
+
+  if (Number(totalItems || 0) <= 0) return null;
+
+  return (
+    <Box
+      sx={{
+        mt: 1.15,
+        px: compact ? 1 : 1.2,
+        py: compact ? .75 : .9,
+        display: "grid",
+        gridTemplateColumns: {
+          xs: "1fr",
+          md: compact ? "auto 1fr" : "minmax(170px,.7fr) minmax(280px,1fr) auto",
+        },
+        alignItems: "center",
+        gap: .9,
+        border: "1px solid var(--mf-border)",
+        borderRadius: "10px",
+        background: "var(--mf-pagination-bg)",
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          sx={{
+            color: "var(--mf-text)",
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: ".01em",
+          }}
+        >
+          {label}
+        </Typography>
+        <Typography sx={{ ...subTextSx, mt: .15 }}>
+          Showing {start.toLocaleString()}–{end.toLocaleString()} of{" "}
+          {Number(totalItems || 0).toLocaleString()}
+        </Typography>
+      </Box>
+
+      <Pagination
+        count={count}
+        page={safePage + 1}
+        onChange={(_, value) => onPageChange?.(value - 1)}
+        showFirstButton
+        showLastButton
+        siblingCount={compact ? 0 : 1}
+        boundaryCount={1}
+        size="small"
+        shape="rounded"
+        sx={{
+          justifySelf: { xs: "start", md: "center" },
+          "& .MuiPagination-ul": { flexWrap: "nowrap" },
+          "& .MuiPaginationItem-root": {
+            minWidth: 31,
+            height: 31,
+            borderRadius: "8px",
+            color: "var(--mf-text-secondary)",
+            border: "1px solid transparent",
+            fontSize: 11,
+            fontWeight: 850,
+            transition: "all .14s ease",
+            "&:hover": {
+              color: "var(--mf-primary-text)",
+              background: "var(--mf-primary-soft)",
+              borderColor: "var(--mf-primary-border)",
+            },
+            "&.Mui-selected": {
+              color: "#fff",
+              background: "var(--mf-primary)",
+              borderColor: "var(--mf-primary)",
+              boxShadow: "0 4px 12px rgba(59,130,246,.20)",
+              "&:hover": { background: "var(--mf-primary-hover)" },
+            },
+          },
+        }}
+      />
+
+      {!compact && (
+        <TextField
+          select
+          size="small"
+          label="Rows"
+          value={pageSize}
+          onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
+          sx={{
+            ...fieldSx,
+            minWidth: 94,
+            justifySelf: { xs: "start", md: "end" },
+            "& .MuiOutlinedInput-root": { ...fieldSx["& .MuiOutlinedInput-root"], minHeight: 34, height: 34 },
+            "& .MuiSelect-select": { py: .7, pr: "30px !important" },
+          }}
+        >
+          {pageSizeOptions.map((size) => (
+            <MenuItem key={size} value={size}>{size}</MenuItem>
+          ))}
+        </TextField>
+      )}
+    </Box>
+  );
+}
+
+export const scrollAreaSx = {
+  scrollbarWidth: "thin",
+  scrollbarColor: "var(--mf-scroll-thumb) var(--mf-scroll-track)",
+  scrollbarGutter: "stable",
+  "&::-webkit-scrollbar": { width: 10, height: 10 },
+  "&::-webkit-scrollbar-track": {
+    background: "var(--mf-scroll-track)",
+    borderRadius: 999,
+  },
+  "&::-webkit-scrollbar-thumb": {
+    border: "2px solid transparent",
+    borderRadius: 999,
+    background: "var(--mf-scroll-thumb)",
+    backgroundClip: "padding-box",
+  },
+  "&::-webkit-scrollbar-thumb:hover": {
+    background: "var(--mf-scroll-thumb-hover)",
+    backgroundClip: "padding-box",
+  },
+};
+
 export const pageSx = {
   width: "100%",
   display: "flex",
@@ -678,8 +918,10 @@ export const secondaryBtnSx = {
   "&:hover": { background: "var(--mf-hover)", borderColor: "var(--mf-border-strong)", boxShadow: "none" },
 };
 export const tableShellSx = {
+  ...scrollAreaSx,
   width: "100%",
   overflowX: "auto",
+  scrollbarGutter: "stable",
   borderRadius: "10px",
   border: "1px solid var(--mf-border)",
   background: "var(--mf-panel-solid)",

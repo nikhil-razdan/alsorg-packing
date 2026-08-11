@@ -31,6 +31,7 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
+    MatFlowPagination,
     PageHero,
     clean,
     dialogActionsSx,
@@ -53,6 +54,7 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
+    useMatFlowPagination,
 } from "../matflowUi";
 
 const BOM_STATUSES = ["", "DRAFT", "SUBMITTED", "APPROVED", "RETURNED", "SUPERSEDED"];
@@ -126,6 +128,7 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState(submittedOnly ? "SUBMITTED" : "");
+    const bomPagination = useMatFlowPagination(rows, 20);
 
     const load = useCallback(async () => {
         setLoading(true); setError("");
@@ -167,7 +170,7 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 100px" }}>
                             {["BOM / Revision", "Project / Product", "Drawing", "Plant", "Status", "Responsible / Next", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
                         </Box>
-                        {rows.length === 0 ? <EmptyState>No BOM records match the current view.</EmptyState> : rows.map((row) => {
+                        {rows.length === 0 ? <EmptyState>No BOM records match the current view.</EmptyState> : bomPagination.pageItems.map((row) => {
                             const flow = workflowFor(row);
                             return (
                                 <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 100px" }}>
@@ -182,6 +185,14 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
                             );
                         })}
                     </Box>
+                )}
+                {!loading && (
+                    <MatFlowPagination
+                        {...bomPagination}
+                        onPageChange={bomPagination.setPage}
+                        onPageSizeChange={bomPagination.setPageSize}
+                        label={submittedOnly ? "Submitted BOMs" : "Operational BOMs"}
+                    />
                 )}
             </Card>
         </Box>
