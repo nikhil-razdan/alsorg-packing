@@ -550,7 +550,7 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}><Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>Shortage Indents</Typography><Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}>{["Indent", "Deliver To", "Status", "Lines", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{indents.length === 0 ? <EmptyState>No shortage indent exists.</EmptyState> : indents.map((indent) => <Box key={indent.id} sx={{ ...tableRowSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}><Box sx={tableCellSx}>{indent.indentNumber || "-"}</Box><Box sx={tableCellSx}>{indent.deliverToLocationCode || "-"}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={indent.status} /></Box><Box sx={tableCellSx}>{(indent.lines || []).map((line) => `${line.materialCode}: ${formatQty(line.requiredQty)}`).join(" · ") || "-"}</Box><Box sx={tableCellSx}>{["AUTO_CREATED", "DRAFT", "RETURNED"].includes(normalize(indent.status)) ? <Button startIcon={<ShoppingCartOutlinedIcon />} disabled={workingId === String(indent.id)} onClick={() => submitIndent(indent)} sx={primaryBtnSx}>Send to Purchase</Button> : "-"}</Box></Box>)}</Box></Card>
         </>}
 
-        <Dialog open={Boolean(dispatchTarget)} onClose={closeDispatch} PaperProps={{ sx: dialogPaperSx }}>
+        <Dialog open={Boolean(dispatchTarget)} onClose={closeDispatch} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>Dispatch Reserved Material</DialogTitle>
             <DialogContent sx={dialogContentSx}>
                 <Typography sx={mainTextSx}>{dispatchTarget?.transferNumber || "Transfer"}</Typography>

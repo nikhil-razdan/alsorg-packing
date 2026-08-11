@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  GlobalStyles,
   MenuItem,
   Pagination,
   ScopedCssBaseline,
@@ -92,6 +93,20 @@ const variables = (mode) => {
     "--mf-table-row": dark ? "rgba(15,23,42,.90)" : "#ffffff",
     "--mf-table-hover": dark ? "rgba(14,165,233,.10)" : "#f7faff",
 
+    // Portal / modal chrome.
+    // These variables are also promoted to :root by MatFlowThemeProvider so
+    // MUI Dialog/Menu/Popover/Drawer portals inherit the same MatFlow theme.
+    "--mf-overlay": dark ? "rgba(2,6,23,.76)" : "rgba(15,23,42,.42)",
+    "--mf-modal-title-bg": dark
+      ? "linear-gradient(180deg,rgba(30,41,59,.98),rgba(15,23,42,.98))"
+      : "linear-gradient(180deg,#ffffff 0%,#f8fbff 100%)",
+    "--mf-modal-shadow": dark
+      ? "0 28px 80px rgba(0,0,0,.52),0 8px 26px rgba(2,6,23,.32)"
+      : "0 28px 80px rgba(15,23,42,.22),0 8px 24px rgba(39,71,117,.10)",
+    "--mf-popover-shadow": dark
+      ? "0 18px 48px rgba(0,0,0,.38)"
+      : "0 16px 38px rgba(15,23,42,.15)",
+
     // Scrollbar / pagination chrome
     "--mf-scroll-track": dark ? "rgba(255,255,255,.025)" : "rgba(15,23,42,.035)",
     "--mf-scroll-thumb": dark ? "rgba(96,165,250,.46)" : "rgba(59,130,246,.42)",
@@ -163,19 +178,114 @@ const buildTheme = (mode) => {
           root: dark ? {} : { color: "#7b879b" },
         },
       },
-      MuiMenu: {
+      MuiBackdrop: {
         styleOverrides: {
-          paper: dark ? {} : {
-            border: "1px solid #e5ebf4",
-            boxShadow: "0 12px 30px rgba(39,71,117,.12)",
+          root: {
+            backgroundColor: dark ? "rgba(2,6,23,.76)" : "rgba(15,23,42,.42)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+          },
+        },
+      },
+      MuiMenu: {
+        defaultProps: {
+          elevation: 0,
+        },
+        styleOverrides: {
+          paper: {
+            color: dark ? "#f8fafc" : "#172033",
+            backgroundColor: dark ? "#0f172a" : "#ffffff",
+            backgroundImage: "none",
+            border: `1px solid ${dark ? "rgba(255,255,255,.14)" : "#dbe5f2"}`,
+            borderRadius: 12,
+            boxShadow: dark
+              ? "0 18px 48px rgba(0,0,0,.38)"
+              : "0 16px 38px rgba(15,23,42,.15)",
+          },
+          list: {
+            padding: 6,
+          },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: {
+          root: {
+            minHeight: 36,
+            borderRadius: 8,
+            marginBlock: 2,
+            fontSize: 13,
+            "&.Mui-selected": {
+              backgroundColor: dark ? "rgba(14,165,233,.16)" : "#edf4ff",
+            },
+            "&.Mui-selected:hover": {
+              backgroundColor: dark ? "rgba(14,165,233,.22)" : "#e2eeff",
+            },
+          },
+        },
+      },
+      MuiPopover: {
+        styleOverrides: {
+          paper: {
+            color: dark ? "#f8fafc" : "#172033",
+            backgroundColor: dark ? "#0f172a" : "#ffffff",
+            backgroundImage: "none",
+            border: `1px solid ${dark ? "rgba(255,255,255,.14)" : "#dbe5f2"}`,
+            boxShadow: dark
+              ? "0 18px 48px rgba(0,0,0,.38)"
+              : "0 16px 38px rgba(15,23,42,.15)",
           },
         },
       },
       MuiDialog: {
+        defaultProps: {
+          scroll: "paper",
+        },
         styleOverrides: {
-          paper: dark ? {} : {
-            border: "1px solid #e5ebf4",
-            boxShadow: "0 24px 60px rgba(39,71,117,.16)",
+          paper: {
+            borderRadius: 20,
+            overflow: "hidden",
+            color: dark ? "#f8fafc" : "#172033",
+            backgroundColor: dark ? "#0f172a" : "#ffffff",
+            backgroundImage: "none",
+            border: `1px solid ${dark ? "rgba(255,255,255,.16)" : "#d6e0ee"}`,
+            boxShadow: dark
+              ? "0 28px 80px rgba(0,0,0,.52),0 8px 26px rgba(2,6,23,.32)"
+              : "0 28px 80px rgba(15,23,42,.22),0 8px 24px rgba(39,71,117,.10)",
+            opacity: 1,
+          },
+          paperScrollPaper: {
+            maxHeight: "calc(100dvh - 40px)",
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          root: {
+            zIndex: 1300,
+          },
+          paper: {
+            color: dark ? "#f8fafc" : "#172033",
+            backgroundColor: dark ? "#0b1628" : "#ffffff",
+            backgroundImage: "none",
+            borderColor: dark ? "rgba(255,255,255,.10)" : "#dbe5f2",
+            boxShadow: dark
+              ? "18px 0 48px rgba(0,0,0,.34)"
+              : "18px 0 48px rgba(15,23,42,.12)",
+            opacity: 1,
+          },
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: {
+            color: dark ? "#f8fafc" : "#172033",
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            color: dark ? "#f8fafc" : "#172033",
           },
         },
       },
@@ -205,6 +315,38 @@ export function MatFlowThemeProvider({ children }) {
   return (
     <ThemeContext.Provider value={value}>
       <ThemeProvider theme={theme}>
+        <GlobalStyles
+          styles={{
+            ":root": cssVars,
+            body: {
+              backgroundColor: "var(--mf-page-bg)",
+            },
+            ".MuiDialog-root .MuiDialog-paper": {
+              color: "var(--mf-text) !important",
+              backgroundColor: "var(--mf-panel-solid) !important",
+              backgroundImage: "none !important",
+              borderColor: "var(--mf-border-strong) !important",
+              opacity: "1 !important",
+            },
+            ".MuiDrawer-root .MuiDrawer-paper": {
+              color: "var(--mf-text) !important",
+              backgroundColor: "var(--mf-panel-solid) !important",
+              backgroundImage: "none !important",
+              borderColor: "var(--mf-border-strong) !important",
+              opacity: "1 !important",
+            },
+            ".MuiPopover-root .MuiPaper-root, .MuiMenu-root .MuiPaper-root": {
+              color: "var(--mf-text) !important",
+              backgroundColor: "var(--mf-panel-solid) !important",
+              backgroundImage: "none !important",
+              borderColor: "var(--mf-border-strong) !important",
+              opacity: "1 !important",
+            },
+            ".MuiBackdrop-root": {
+              backgroundColor: "var(--mf-overlay) !important",
+            },
+          }}
+        />
         <ScopedCssBaseline
           sx={{
             ...cssVars,
@@ -996,10 +1138,84 @@ export const tableCellSx = {
   whiteSpace: "nowrap",
 };
 export const emptySx = { minHeight: 160, display: "grid", placeItems: "center", textAlign: "center", p: 2.5, color: "var(--mf-text-muted)", fontSize: 12, fontWeight: 750 };
-export const dialogPaperSx = { borderRadius: "14px", background: "var(--mf-panel-solid)", backgroundImage: "none", border: "1px solid var(--mf-border)" };
-export const dialogTitleSx = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5, fontWeight: 950, color: "var(--mf-text)", borderBottom: "1px solid var(--mf-border)" };
-export const dialogContentSx = { pt: "18px !important", background: "var(--mf-panel-solid)" };
-export const dialogActionsSx = { p: "14px 24px 20px", borderTop: "1px solid var(--mf-border)", background: "var(--mf-panel-solid)" };
+export const dialogPaperSx = {
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: { xs: "16px", sm: "20px" },
+  color: "var(--mf-text)",
+  backgroundColor: "var(--mf-panel-solid)",
+  backgroundImage: "none",
+  border: "1px solid var(--mf-border-strong)",
+  boxShadow: "var(--mf-modal-shadow)",
+  opacity: 1,
+  isolation: "isolate",
+  maxHeight: "calc(100dvh - 40px)",
+  "&::before": {
+    content: '""',
+    position: "absolute",
+    inset: "0 0 auto 0",
+    height: 3,
+    background: "linear-gradient(90deg,var(--mf-primary),#8b5cf6,var(--mf-primary))",
+    zIndex: 4,
+    pointerEvents: "none",
+  },
+};
+
+export const dialogTitleSx = {
+  minHeight: 64,
+  px: { xs: 2, sm: 2.5 },
+  py: 1.8,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 1.5,
+  fontWeight: 950,
+  fontSize: { xs: 16, sm: 17 },
+  lineHeight: 1.25,
+  color: "var(--mf-text)",
+  background: "var(--mf-modal-title-bg)",
+  borderBottom: "1px solid var(--mf-border)",
+  "& .MuiSvgIcon-root": {
+    color: "var(--mf-primary-text)",
+  },
+};
+
+export const dialogContentSx = {
+  px: { xs: 2, sm: 2.5 },
+  pt: "22px !important",
+  pb: "22px !important",
+  color: "var(--mf-text)",
+  backgroundColor: "var(--mf-panel-solid)",
+  backgroundImage: "none",
+  overflowY: "auto",
+  scrollbarGutter: "stable",
+};
+
+export const dialogActionsSx = {
+  minHeight: 66,
+  px: { xs: 2, sm: 2.5 },
+  py: 1.5,
+  gap: 1,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  borderTop: "1px solid var(--mf-border)",
+  background: "var(--mf-modal-title-bg)",
+};
+
+export const dialogBackdropSx = {
+  backgroundColor: "var(--mf-overlay) !important",
+  backdropFilter: "blur(6px)",
+  WebkitBackdropFilter: "blur(6px)",
+};
+
+export const drawerPaperSx = {
+  color: "var(--mf-text)",
+  backgroundColor: "var(--mf-panel-solid)",
+  backgroundImage: "none",
+  borderColor: "var(--mf-border-strong)",
+  boxShadow: "var(--mf-modal-shadow)",
+  opacity: 1,
+};
 
 /**
  * Consistent MatFlow destructive-action confirmation. Hard deletion is used
