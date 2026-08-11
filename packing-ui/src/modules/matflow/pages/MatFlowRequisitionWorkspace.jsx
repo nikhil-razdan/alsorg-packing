@@ -18,6 +18,8 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 
 import {
     useNavigate,
@@ -43,6 +45,7 @@ import {
     LoadingBlock,
     MatFlowStatusChip,
     MatFlowPagination,
+    MatFlowDeleteDialog,
     PageHero,
     SummaryCard,
     clean,
@@ -50,6 +53,7 @@ import {
     dialogContentSx,
     dialogPaperSx,
     dialogTitleSx,
+    dangerBtnSx,
     fieldSx,
     formatDate,
     formatQty,
@@ -162,6 +166,12 @@ export function MatFlowRequisitionListPage() {
 
     const [status, setStatus] =
         useState("");
+
+    const [deleteTarget, setDeleteTarget] =
+        useState(null);
+
+    const [deleteWorking, setDeleteWorking] =
+        useState(false);
 
     const load = useCallback(
         async () => {
@@ -295,6 +305,30 @@ export function MatFlowRequisitionListPage() {
 
     const requisitionPagination = useMatFlowPagination(filtered, 20);
 
+    const confirmDeleteDraft = async () => {
+        if (!deleteTarget?.id || deleteTarget.rowVersion == null) return;
+
+        setDeleteWorking(true);
+        setError("");
+        try {
+            await matflowApi.deleteDraftRequisition(
+                deleteTarget.id,
+                deleteTarget.rowVersion
+            );
+            setDeleteTarget(null);
+            await load();
+        } catch (requestError) {
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to delete the Draft requisition."
+                )
+            );
+        } finally {
+            setDeleteWorking(false);
+        }
+    };
+
     return (
         <Box sx={pageSx}>
             <PageHero
@@ -403,7 +437,7 @@ export function MatFlowRequisitionListPage() {
                                 ...tableHeaderSx,
 
                                 gridTemplateColumns:
-                                    "170px 170px 150px 170px 180px 140px 100px",
+                                    "170px 170px 150px 170px 180px 140px 190px",
                             }}
                         >
                             {[
@@ -446,7 +480,7 @@ export function MatFlowRequisitionListPage() {
                                             ...tableRowSx,
 
                                             gridTemplateColumns:
-                                                "170px 170px 150px 170px 180px 140px 100px",
+                                                "170px 170px 150px 170px 180px 140px 190px",
                                         }}
                                     >
                                         <Box
@@ -570,9 +604,12 @@ export function MatFlowRequisitionListPage() {
                                         </Box>
 
                                         <Box
-                                            sx={
-                                                tableCellSx
-                                            }
+                                            sx={{
+                                                ...tableCellSx,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: .65,
+                                            }}
                                         >
                                             <Button
                                                 onClick={() =>
@@ -580,12 +617,22 @@ export function MatFlowRequisitionListPage() {
                                                         `/matflow/requisitions/${row.id}`
                                                     )
                                                 }
-                                                sx={
-                                                    secondaryBtnSx
-                                                }
+                                                sx={secondaryBtnSx}
                                             >
                                                 Open
                                             </Button>
+
+                                            {canCreate &&
+                                                normalize(row.status) === "DRAFT" &&
+                                                row.rowVersion != null && (
+                                                    <Button
+                                                        startIcon={<DeleteOutlineIcon />}
+                                                        onClick={() => setDeleteTarget(row)}
+                                                        sx={dangerBtnSx}
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                )}
                                         </Box>
                                     </Box>
                                 )
@@ -601,6 +648,16 @@ export function MatFlowRequisitionListPage() {
                     label="Production Requisitions"
                 />
             </Card>
+
+            <MatFlowDeleteDialog
+                open={Boolean(deleteTarget)}
+                title="Delete Draft Requisition?"
+                subject={deleteTarget?.requisitionNumber || "Draft requisition"}
+                description="This permanently removes only this Draft requisition and its Draft material lines. Once a requisition is submitted, MatFlow keeps it as workflow history and uses Cancel Requisition instead."
+                working={deleteWorking}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={confirmDeleteDraft}
+            />
         </Box>
     );
 }
@@ -1690,6 +1747,9 @@ export function MatFlowRequisitionDetailPage() {
     const [remarks, setRemarks] =
         useState("");
 
+    const [deleteTarget, setDeleteTarget] =
+        useState(null);
+
     const load = useCallback(
         async () => {
             if (
@@ -1823,6 +1883,25 @@ export function MatFlowRequisitionDetailPage() {
         hasRole(
             CREATE_ROLES
         );
+
+    const canDeleteDraft =
+        productionRole &&
+        status === "DRAFT" &&
+        requisition?.rowVersion != null;
+
+    const canCancelRequisition =
+        productionRole &&
+        requisition?.rowVersion != null &&
+        ![
+            "DRAFT",
+            "CANCELLED",
+            "ISSUED",
+            "PARTIALLY_ISSUED",
+            "ISSUED_TO_PRODUCTION",
+            "PRODUCTION_STARTED",
+            "PRODUCTION_COMPLETED",
+            "COMPLETED",
+        ].includes(status);
 
     const canSubmit =
         productionRole &&
@@ -1988,6 +2067,20 @@ export function MatFlowRequisitionDetailPage() {
                     );
                 }
 
+                if (action === "CANCEL") {
+                    const reason = clean(remarks);
+                    if (!reason) {
+                        throw new Error("Cancellation reason is required.");
+                    }
+                    await matflowApi.cancelRequisition(
+                        requisition.id,
+                        {
+                            rowVersion: requisition.rowVersion,
+                            reason,
+                        }
+                    );
+                }
+
                 setAction(null);
                 setRemarks("");
 
@@ -2005,6 +2098,30 @@ export function MatFlowRequisitionDetailPage() {
                 setWorking(false);
             }
         };
+
+    const confirmDeleteDraft = async () => {
+        if (!deleteTarget?.id || deleteTarget.rowVersion == null) return;
+
+        setWorking(true);
+        setError("");
+        try {
+            await matflowApi.deleteDraftRequisition(
+                deleteTarget.id,
+                deleteTarget.rowVersion
+            );
+            setDeleteTarget(null);
+            navigate("/matflow/production", { replace: true });
+        } catch (requestError) {
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to delete the Draft requisition."
+                )
+            );
+        } finally {
+            setWorking(false);
+        }
+    };
 
     if (loading) {
         return <LoadingBlock />;
@@ -2032,6 +2149,16 @@ export function MatFlowRequisitionDetailPage() {
                         >
                             Refresh
                         </Button>
+
+                        {canDeleteDraft && (
+                            <Button
+                                startIcon={<DeleteOutlineIcon />}
+                                onClick={() => setDeleteTarget(requisition)}
+                                sx={dangerBtnSx}
+                            >
+                                Delete Draft
+                            </Button>
+                        )}
 
                         <Button
                             startIcon={
@@ -2299,6 +2426,19 @@ export function MatFlowRequisitionDetailPage() {
                                     Hold Until
                                     Shortage
                                     Complete
+                                </Button>
+                            )}
+
+                            {canCancelRequisition && (
+                                <Button
+                                    startIcon={<CancelOutlinedIcon />}
+                                    onClick={() => {
+                                        setRemarks("");
+                                        setAction("CANCEL");
+                                    }}
+                                    sx={dangerBtnSx}
+                                >
+                                    Cancel Requisition
                                 </Button>
                             )}
 
@@ -2599,7 +2739,9 @@ export function MatFlowRequisitionDetailPage() {
                                 : action ===
                                     "PARTIAL_ISSUE"
                                     ? "Issue Available Quantity Now"
-                                    : "Hold Available Quantity"}
+                                    : action === "CANCEL"
+                                        ? "Cancel Requisition"
+                                        : "Hold Available Quantity"}
                 </DialogTitle>
 
                 <DialogContent
@@ -2645,11 +2787,24 @@ export function MatFlowRequisitionDetailPage() {
                             </Typography>
                         )}
 
+                    {action === "CANCEL" && (
+                        <Typography
+                            sx={{
+                                ...subTextSx,
+                                mb: 1.5,
+                                color: "var(--mf-danger-text)",
+                                fontWeight: 850,
+                            }}
+                        >
+                            Cancellation preserves the requisition and all workflow history. MatFlow releases/cancels only downstream records that are still safe to unwind; physical execution cannot be cancelled.
+                        </Typography>
+                    )}
+
                     <TextField
                         fullWidth
                         multiline
                         minRows={3}
-                        label="Remarks"
+                        label={action === "CANCEL" ? "Cancellation Reason *" : "Remarks"}
                         value={
                             remarks
                         }
@@ -2702,6 +2857,16 @@ export function MatFlowRequisitionDetailPage() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <MatFlowDeleteDialog
+                open={Boolean(deleteTarget)}
+                title="Delete Draft Requisition?"
+                subject={deleteTarget?.requisitionNumber || "Draft requisition"}
+                description="This permanently removes only the Draft requisition and its material-demand lines. Submitted or executed requisitions must be cancelled instead so Store, Purchase and material history remain traceable."
+                working={working}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={confirmDeleteDraft}
+            />
         </Box>
     );
 }

@@ -357,6 +357,12 @@ export const matflowApi = {
 			body
 		),
 
+	deleteDraftBom: (id, rowVersion) =>
+		API.delete(
+			`${BASE}/boms/${requiredId(id, "BOM ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
+
 	addBomLine: (id, body) =>
 		API.post(
 			`${BASE}/boms/${requiredId(id, "BOM ID")}/lines`,
@@ -528,6 +534,12 @@ export const matflowApi = {
 	createRequisition: (body) =>
 		API.post(`${BASE}/requisitions`, body),
 
+	deleteDraftRequisition: (id, rowVersion) =>
+		API.delete(
+			`${BASE}/requisitions/${requiredId(id, "Requisition ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
+
 	submitRequisition: (id, body) =>
 		API.post(
 			`${BASE}/requisitions/${requiredId(
@@ -623,6 +635,12 @@ export const matflowApi = {
 
 	createPurchaseOrder: (body) =>
 		API.post(`${BASE}/purchase-orders`, body),
+
+	deleteDraftPurchaseOrder: (id, rowVersion) =>
+		API.delete(
+			`${BASE}/purchase-orders/${requiredId(id, "Purchase order ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
 
 	approvePurchaseOrder: (id, body) =>
 		API.post(
@@ -737,6 +755,12 @@ export const matflowApi = {
 	createMaterialReturn: (body) =>
 		API.post(`${BASE}/material-returns`, body),
 
+	deleteDraftMaterialReturn: (id, rowVersion) =>
+		API.delete(
+			`${BASE}/material-returns/${requiredId(id, "Material return ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
+
 	dispatchMaterialReturn: (id, body) =>
 		API.post(
 			`${BASE}/material-returns/${requiredId(
@@ -766,6 +790,12 @@ export const matflowApi = {
 
 	createProcessingJob: (body) =>
 		API.post(`${BASE}/processing-jobs`, body),
+
+	deletePendingProcessingJob: (id, rowVersion) =>
+		API.delete(
+			`${BASE}/processing-jobs/${requiredId(id, "Processing job ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
 
 	startProcessingJob: (id, body) =>
 		API.post(

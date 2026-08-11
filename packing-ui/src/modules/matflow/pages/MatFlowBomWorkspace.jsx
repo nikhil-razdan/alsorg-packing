@@ -32,12 +32,14 @@ import {
     LoadingBlock,
     MatFlowStatusChip,
     MatFlowPagination,
+    MatFlowDeleteDialog,
     PageHero,
     clean,
     dialogActionsSx,
     dialogContentSx,
     dialogPaperSx,
     dialogTitleSx,
+    dangerBtnSx,
     fieldSx,
     formatQty,
     mainTextSx,
@@ -128,6 +130,8 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState(submittedOnly ? "SUBMITTED" : "");
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleteWorking, setDeleteWorking] = useState(false);
     const bomPagination = useMatFlowPagination(rows, 20);
 
     const load = useCallback(async () => {
@@ -145,6 +149,21 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
     }, [search, status, submittedOnly]);
 
     useEffect(() => { load(); }, [load]);
+
+    const confirmDeleteDraft = async () => {
+        if (!deleteTarget?.id || deleteTarget.rowVersion == null) return;
+        setDeleteWorking(true);
+        setError("");
+        try {
+            await matflowApi.deleteDraftBom(deleteTarget.id, deleteTarget.rowVersion);
+            setDeleteTarget(null);
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to delete the Draft BOM."));
+        } finally {
+            setDeleteWorking(false);
+        }
+    };
 
     return (
         <Box sx={pageSx}>
@@ -167,20 +186,20 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 100px" }}>
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 190px" }}>
                             {["BOM / Revision", "Project / Product", "Drawing", "Plant", "Status", "Responsible / Next", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
                         </Box>
                         {rows.length === 0 ? <EmptyState>No BOM records match the current view.</EmptyState> : bomPagination.pageItems.map((row) => {
                             const flow = workflowFor(row);
                             return (
-                                <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 100px" }}>
+                                <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px minmax(220px,1fr) 140px 120px 170px 200px 190px" }}>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.bomNumber || "-"}</Typography><Typography sx={subTextSx}>Revision {row.revisionNo ?? "-"}{row.effective ? " · Effective" : ""}</Typography></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.productName || row.clientName || "-"}</Typography></Box>
                                     <Box sx={tableCellSx}>{row.drawingNo || "-"}</Box>
                                     <Box sx={tableCellSx}>{row.plantCode || "-"}</Box>
                                     <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{flow[0]}</Typography><Typography sx={subTextSx}>{flow[1]}</Typography></Box>
-                                    <Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/boms/${row.id}`)} sx={secondaryBtnSx}>{normalize(row.status) === "SUBMITTED" ? "Review" : "Open"}</Button></Box>
+                                    <Box sx={{ ...tableCellSx, display: "flex", gap: .65, alignItems: "center" }}><Button onClick={() => navigate(`/matflow/boms/${row.id}`)} sx={secondaryBtnSx}>{normalize(row.status) === "SUBMITTED" ? "Review" : "Open"}</Button>{!submittedOnly && canCreate && normalize(row.status) === "DRAFT" && row.latestRevision === true && row.effective !== true && row.rowVersion != null && <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} sx={dangerBtnSx}>Delete</Button>}</Box>
                                 </Box>
                             );
                         })}
@@ -195,6 +214,15 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
                     />
                 )}
             </Card>
+            <MatFlowDeleteDialog
+                open={Boolean(deleteTarget)}
+                title="Delete Draft BOM?"
+                subject={deleteTarget ? `${deleteTarget.bomNumber || "BOM"} · Revision ${deleteTarget.revisionNo ?? "-"}` : "Draft BOM"}
+                description="Only the latest non-effective Draft BOM can be permanently removed. Submitted, returned and approved revisions remain in MatFlow as product engineering and approval history."
+                working={deleteWorking}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={confirmDeleteDraft}
+            />
         </Box>
     );
 }
@@ -419,6 +447,7 @@ export function MatFlowBomDetailPage() {
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [action, setAction] = useState(null);
     const [remarks, setRemarks] = useState("");
     const [lineDialog, setLineDialog] = useState(null);
@@ -443,6 +472,7 @@ export function MatFlowBomDetailPage() {
     const project = useMemo(() => projectOf(bom), [bom]);
     const status = normalize(bom?.status);
     const canEdit = hasRole(EDIT_ROLES) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
+    const canDeleteDraft = hasRole(EDIT_ROLES) && status === "DRAFT" && bom?.latestRevision === true && bom?.effective !== true && bom?.rowVersion != null;
     const productionReviewComplete = productionApproved(bom);
     const canProductionReview = hasRole(PRODUCTION_REVIEW_ROLES) && status === "SUBMITTED" && !productionReviewComplete && bom?.rowVersion != null;
     const canDirectorReview = hasRole(DIRECTOR_REVIEW_ROLES) && status === "SUBMITTED" && productionReviewComplete && bom?.rowVersion != null;
@@ -1018,10 +1048,25 @@ export function MatFlowBomDetailPage() {
         catch (requestError) { setError(readMatFlowError(requestError, "Unable to delete route step.")); }
     };
 
+    const confirmDeleteDraft = async () => {
+        if (!deleteTarget?.id || deleteTarget.rowVersion == null) return;
+        setWorking(true);
+        setError("");
+        try {
+            await matflowApi.deleteDraftBom(deleteTarget.id, deleteTarget.rowVersion);
+            setDeleteTarget(null);
+            navigate("/matflow/boms", { replace: true });
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to delete the Draft BOM."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
     if (loading) return <LoadingBlock />;
     return (
         <Box sx={pageSx}>
-            <PageHero badge="OPERATIONAL BOM" title={bom?.bomNumber || "BOM"} subtitle={`${project.projectCode || "-"} · ${project.drawingNo || "-"} · Revision ${bom?.revisionNo ?? "-"}`} actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/matflow/boms")} sx={secondaryBtnSx}>Back</Button></>} />
+            <PageHero badge="OPERATIONAL BOM" title={bom?.bomNumber || "BOM"} subtitle={`${project.projectCode || "-"} · ${project.drawingNo || "-"} · Revision ${bom?.revisionNo ?? "-"}`} actions={<><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>{canDeleteDraft && <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(bom)} sx={dangerBtnSx}>Delete Draft</Button>}<Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/matflow/boms")} sx={secondaryBtnSx}>Back</Button></>} />
             <ErrorBox>{error}</ErrorBox>
             {locationLoadError && (
                 <Alert severity="error" sx={{ borderRadius: 2 }}>
@@ -1233,6 +1278,15 @@ export function MatFlowBomDetailPage() {
                 </Box></DialogContent>
                 <DialogActions sx={dialogActionsSx}><Button onClick={() => setRouteDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={saveRoute} disabled={working} sx={primaryBtnSx}>Save Route</Button></DialogActions>
             </Dialog>
+            <MatFlowDeleteDialog
+                open={Boolean(deleteTarget)}
+                title="Delete Draft BOM?"
+                subject={deleteTarget ? `${deleteTarget.bomNumber || "BOM"} · Revision ${deleteTarget.revisionNo ?? "-"}` : "Draft BOM"}
+                description="This permanently removes only the latest non-effective Draft BOM revision, its Draft material lines and route setup. Historical approved/submitted revisions cannot be deleted."
+                working={working}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={confirmDeleteDraft}
+            />
         </Box>
     );
 }

@@ -4,6 +4,10 @@ import {
   Card,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Pagination,
   ScopedCssBaseline,
@@ -917,6 +921,41 @@ export const secondaryBtnSx = {
   boxShadow: "none",
   "&:hover": { background: "var(--mf-hover)", borderColor: "var(--mf-border-strong)", boxShadow: "none" },
 };
+export const dangerBtnSx = {
+  minHeight: 36,
+  borderRadius: "8px",
+  px: 1.25,
+  textTransform: "none",
+  fontWeight: 900,
+  color: "var(--mf-danger-text)",
+  background: "var(--mf-danger-soft)",
+  border: "1px solid var(--mf-danger-border)",
+  boxShadow: "none",
+  "&:hover": {
+    background: "var(--mf-danger-soft)",
+    borderColor: "var(--mf-danger-text)",
+    boxShadow: "0 0 0 2px var(--mf-danger-soft)",
+  },
+  "&.Mui-disabled": {
+    color: "var(--mf-text-muted)",
+    borderColor: "var(--mf-border)",
+    background: "var(--mf-surface)",
+  },
+};
+
+export const dangerSolidBtnSx = {
+  minHeight: 38,
+  borderRadius: "8px",
+  px: 1.5,
+  textTransform: "none",
+  fontWeight: 950,
+  color: "#fff",
+  background: "#dc2626",
+  border: "1px solid #dc2626",
+  boxShadow: "none",
+  "&:hover": { background: "#b91c1c", borderColor: "#b91c1c", boxShadow: "none" },
+  "&.Mui-disabled": { color: "rgba(255,255,255,.65)", background: "#7f1d1d", borderColor: "#7f1d1d" },
+};
 export const tableShellSx = {
   ...scrollAreaSx,
   width: "100%",
@@ -961,6 +1000,64 @@ export const dialogPaperSx = { borderRadius: "14px", background: "var(--mf-panel
 export const dialogTitleSx = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5, fontWeight: 950, color: "var(--mf-text)", borderBottom: "1px solid var(--mf-border)" };
 export const dialogContentSx = { pt: "18px !important", background: "var(--mf-panel-solid)" };
 export const dialogActionsSx = { p: "14px 24px 20px", borderTop: "1px solid var(--mf-border)", background: "var(--mf-panel-solid)" };
+
+/**
+ * Consistent MatFlow destructive-action confirmation. Hard deletion is used
+ * only for lifecycle states explicitly allowed by the backend.
+ */
+export function MatFlowDeleteDialog({
+  open,
+  title = "Delete record?",
+  subject,
+  description,
+  working = false,
+  confirmLabel = "Delete permanently",
+  onClose,
+  onConfirm,
+}) {
+  return (
+    <Dialog
+      open={Boolean(open)}
+      onClose={() => !working && onClose?.()}
+      fullWidth
+      maxWidth="sm"
+      PaperProps={{ sx: dialogPaperSx }}
+    >
+      <DialogTitle sx={dialogTitleSx}>
+        <Box>
+          <Typography sx={{ fontSize: 16, fontWeight: 950, color: "var(--mf-text)" }}>
+            {title}
+          </Typography>
+          <Typography sx={{ mt: .25, fontSize: 10.5, fontWeight: 850, color: "var(--mf-danger-text)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Controlled permanent deletion
+          </Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent sx={dialogContentSx}>
+        {subject && (
+          <Box sx={{ mb: 1.25, p: 1.25, borderRadius: "10px", background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 950, color: "var(--mf-text)" }}>
+              {subject}
+            </Typography>
+          </Box>
+        )}
+        <Box sx={{ p: 1.35, borderRadius: "10px", background: "var(--mf-danger-soft)", border: "1px solid var(--mf-danger-border)" }}>
+          <Typography sx={{ fontSize: 11.5, lineHeight: 1.6, fontWeight: 750, color: "var(--mf-danger-text)" }}>
+            {description || "This setup record will be permanently removed. This action cannot be undone."}
+          </Typography>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={dialogActionsSx}>
+        <Button disabled={working} onClick={() => onClose?.()} sx={secondaryBtnSx}>
+          Keep record
+        </Button>
+        <Button disabled={working} onClick={() => onConfirm?.()} sx={dangerSolidBtnSx}>
+          {working ? "Deleting..." : confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 export const MATFLOW_MATERIAL_CATEGORIES = Object.freeze([
   ["RAW_MATERIAL", "Raw Material", "#64748b"],
