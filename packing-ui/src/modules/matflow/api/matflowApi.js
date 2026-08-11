@@ -76,6 +76,121 @@ export const readMatFlowError = (
 		: message;
 };
 
+
+/**
+ * Compatibility adapter for screens that still consume the historical
+ * "ProjectDrawing" flat list (most importantly Operational BOM creation).
+ *
+ * The authoritative project API is now:
+ *     Project -> Products
+ *     GET /matflow/project-portfolio
+ *
+ * Do not call the removed /matflow/projects endpoint. Instead, flatten each
+ * Product child into the legacy shape while retaining the real Product UUID as
+ * `id` / `projectDrawingId`, because BOMs are owned by Product/Drawing records.
+ */
+const flattenProjectPortfolioProducts = (portfolio, params = {}) => {
+	const projects = Array.isArray(portfolio) ? portfolio : [];
+	const requestedActive =
+		typeof params?.active === "boolean" ? params.active : undefined;
+
+	return projects.flatMap((project) => {
+		const products = Array.isArray(project?.products) ? project.products : [];
+
+		return products
+			.filter(
+				(product) =>
+					requestedActive === undefined ||
+					Boolean(product?.active) === requestedActive
+			)
+			.map((product) => ({
+				// IMPORTANT: the Product/Drawing UUID, not the parent Project UUID.
+				id: product?.id ?? null,
+				projectDrawingId: product?.id ?? null,
+
+				// Parent Project ownership/snapshot fields.
+				projectId: project?.id ?? null,
+				projectCode: project?.projectCode ?? "",
+				projectName: project?.projectName ?? "",
+				clientName: project?.clientName ?? "",
+				plantCode: project?.plantCode ?? "",
+				priority: project?.priority ?? null,
+				projectManager: project?.projectManager ?? null,
+
+				// Product / Drawing fields.
+				productName: product?.productName ?? "",
+				drawingNo: product?.drawingNo ?? "",
+				drawingRevision: product?.drawingRevision ?? "0",
+				requiredDate:
+					product?.requiredDate ?? project?.requiredDate ?? null,
+				active: product?.active !== false,
+
+				// Director approval state.
+				productApprovalStatus:
+					product?.approvalStatus ?? null,
+				approvalStatus:
+					product?.approvalStatus ?? null,
+				productApprovedBy:
+					product?.approvedBy ?? null,
+				approvedBy:
+					product?.approvedBy ?? null,
+				productApprovedAt:
+					product?.approvedAt ?? null,
+				approvedAt:
+					product?.approvedAt ?? null,
+				productReturnedBy:
+					product?.returnedBy ?? null,
+				returnedBy:
+					product?.returnedBy ?? null,
+				productReturnedAt:
+					product?.returnedAt ?? null,
+				returnedAt:
+					product?.returnedAt ?? null,
+				productApprovalRemarks:
+					product?.approvalRemarks ?? null,
+				approvalRemarks:
+					product?.approvalRemarks ?? null,
+
+				// Latest BOM readiness, useful to callers that already display it.
+				latestBomId: product?.latestBomId ?? null,
+				latestBomNumber: product?.latestBomNumber ?? null,
+				latestBomRevision: product?.latestBomRevision ?? null,
+				latestBomStatus: product?.latestBomStatus ?? null,
+				latestBomEffective: product?.latestBomEffective === true,
+
+				// Concurrency/audit fields.
+				rowVersion: product?.rowVersion ?? null,
+				createdAt: product?.createdAt ?? null,
+				updatedAt: product?.updatedAt ?? null,
+			}));
+	});
+};
+
+/**
+ * Historical `listProjects()` compatibility contract.
+ *
+ * It intentionally returns an Axios-like response object so every existing
+ * caller can keep doing `response?.data` without changes.
+ */
+const listProjectProductsCompat = async (params = {}) => {
+	const requestParams = cleanParams({
+		search: params?.search,
+		plantCode: params?.plantCode,
+		// Parent active state is still useful server-side. Product active state is
+		// filtered again after flattening.
+		active: params?.active,
+	});
+
+	const response = await API.get(`${BASE}/project-portfolio`, {
+		params: requestParams,
+	});
+
+	return {
+		...response,
+		data: flattenProjectPortfolioProducts(response?.data, params),
+	};
+};
+
 export const matflowApi = {
 	/* ============================================================
 	 * MASTER DATA
@@ -143,10 +258,15 @@ export const matflowApi = {
 			body
 		),
 
+	/*
+	 * Backward-compatible flat Product/Drawing list.
+	 *
+	 * IMPORTANT:
+	 * /api/matflow/projects no longer exists in the vNext hierarchy.
+	 * Read the authoritative Project Portfolio and flatten Product children.
+	 */
 	listProjects: (params = {}) =>
-		API.get(`${BASE}/projects`, {
-			params: cleanParams(params),
-		}),
+		listProjectProductsCompat(params),
 
 	createProject: (body) =>
 		API.post(`${BASE}/projects`, body),
