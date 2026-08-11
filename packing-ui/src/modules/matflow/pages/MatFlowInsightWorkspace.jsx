@@ -325,7 +325,10 @@ export function MatFlowDashboardPage() {
     const cards = [
         ["Active Projects", totals.activeProjects], ["Effective BOMs", totals.effectiveBoms], ["Open Requisitions", totals.openRequisitions], ["Shortage Requisitions", totals.shortageRequisitions], ["Ready Transfers", totals.readyOutboundTransfers], ["Pending QC", totals.pendingQcInspections], ["Processing Jobs", totals.activeProcessingJobs], ["Open Purchase Orders", totals.openPurchaseOrders]
     ];
-    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Products → Engineering BOM → Production + Director approval → Production requisition → Store → Purchase shortage branch → QC → optional Processing → Production completion, with one stock ledger and audit trail." actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
+    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Products → Engineering BOM → Production + Director approval → Production requisition → Store → Purchase shortage branch → QC → optional Processing → Production completion, with one stock ledger and audit trail." actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+        <Button onClick={() => navigate("/matflow/tracker/materials")} sx={primaryBtnSx}>Material Control Tower</Button>
+        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+    </Box>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
 }
 
 export function MatFlowTrackerPage() {
@@ -613,7 +616,10 @@ export function MatFlowTrackerPage() {
             badge="PROJECT → PRODUCT → MATERIAL CONTROL TOWER"
             title="Project Material Tracker"
             subtitle="The primary MatFlow tracker is project-centric: each client Project contains its Products/Drawings, and every Product expands to its live material positions, department custody, elapsed stage time, shortage/procurement exposure and next operational action."
-            actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>}
+            actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                <Button onClick={() => navigate("/matflow/tracker/materials")} sx={primaryBtnSx}>Material Control Tower</Button>
+                <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+            </Box>}
         />
         <ErrorBox>{error}</ErrorBox>
 
@@ -810,10 +816,10 @@ export function MatFlowTrackerPage() {
                                                 <Typography sx={subTextSx}>{materials.length} tracked material position(s) · {detail?.requisitionCount || requisitionCount} requisition(s)</Typography>
                                             </Box>
                                             <Box sx={tableShellSx}>
-                                                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
-                                                    {["Requisition", "Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                                <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px 110px" }}>
+                                                    {["Requisition", "Material", "Req", "Res", "Short", "Current Department", "Location", "Movement", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                                 </Box>
-                                                {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material, materialIndex) => <Box key={`${material.requisitionId || "req"}:${material.requisitionLineId || material.materialId || materialIndex}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px" }}>
+                                                {materials.length === 0 ? <EmptyState>No material position rows are available.</EmptyState> : materials.map((material, materialIndex) => <Box key={`${material.requisitionId || "req"}:${material.requisitionLineId || material.materialId || materialIndex}:${material.reservationId || "none"}`} sx={{ ...tableRowSx, gridTemplateColumns: "145px 170px 80px 80px 80px 160px 145px 145px 140px 110px" }}>
                                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.requisitionNumber || "-"}</Typography></Box>
                                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{material.currentMaterialCode || material.bomMaterialCode || "-"}</Typography><Typography sx={subTextSx}>{material.materialName || "-"}{material.materialCategory ? ` · ${readable(material.materialCategory)}` : ""} · {material.uom || ""}</Typography></Box>
                                                     <Box sx={tableCellSx}>{formatQty(material.requestedQty)}</Box>
@@ -823,6 +829,7 @@ export function MatFlowTrackerPage() {
                                                     <Box sx={tableCellSx}>{material.currentLocationCode || material.currentLocationName || "-"}</Box>
                                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(material.movementState)}</Typography><Typography sx={subTextSx}>{material.lastMovedAt ? formatDate(material.lastMovedAt) : "-"}</Typography></Box>
                                                     <Box sx={tableCellSx}>{material.nextDepartment || "-"}{material.nextLocationCode ? ` / ${material.nextLocationCode}` : ""}</Box>
+                                                    <Box sx={tableCellSx}>{material.materialId ? <Button onClick={() => navigate(`/matflow/tracker/materials/${material.materialId}`)} sx={secondaryBtnSx}>Track</Button> : "-"}</Box>
                                                 </Box>)}
                                             </Box>
                                         </>}
@@ -1173,3 +1180,485 @@ export function MatFlowReportsPage() {
     );
 }
 
+
+
+const materialTowerLocation = (code, name, department, state) => {
+    if (code || name) return [code, name].filter(Boolean).join(" · ");
+    const normalizedState = normalize(state);
+    if (["DEMAND_RAISED", "STORE_REVIEW", "STORE_PLANNED_AWAITING_ALLOCATION"].includes(normalizedState)) {
+        return "Administrative stage · physical custody not started";
+    }
+    if (normalizedState === "SUPPLIER_ORDERED") return "Vendor / Supplier";
+    if (normalize(department) === "IN_TRANSIT" || normalizedState === "IN_TRANSIT") return "In transit";
+    return readable(department || state || "Location pending");
+};
+
+const materialTowerMatches = (lot, query) => {
+    const q = clean(query).toLowerCase();
+    if (!q) return true;
+    return [
+        lot.projectCode, lot.projectName, lot.clientName, lot.productName, lot.drawingNo,
+        lot.bomNumber, lot.requisitionNumber, lot.currentMaterialCode, lot.currentMaterialName,
+        lot.currentStage, lot.currentDepartment, lot.currentLocationCode, lot.currentLocationName,
+        lot.movementState, lot.previousLocationCode, lot.previousLocationName,
+        lot.nextDepartment, lot.nextLocationCode, lot.nextLocationName, lot.activeReferenceNumber,
+    ].some((value) => String(value || "").toLowerCase().includes(q));
+};
+
+export function MatFlowMaterialTrackerPage() {
+    const navigate = useNavigate();
+    const { materialId } = useParams();
+    const { selectedPlantParam } = useMatFlow();
+
+    const [materials, setMaterials] = useState([]);
+    const [selectedId, setSelectedId] = useState(materialId || "");
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [materialLoading, setMaterialLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [activeOnly, setActiveOnly] = useState(false);
+    const [search, setSearch] = useState("");
+    const [expandedLots, setExpandedLots] = useState({});
+
+    useEffect(() => {
+        setSelectedId(materialId || "");
+    }, [materialId]);
+
+    const loadMaterials = useCallback(async () => {
+        setMaterialLoading(true);
+        try {
+            const response = await matflowApi.listMaterials({});
+            setMaterials(extractMatFlowPage(response?.data).rows);
+        } catch (requestError) {
+            setMaterials([]);
+            setError(readMatFlowError(requestError, "Unable to load the Material Master."));
+        } finally {
+            setMaterialLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadMaterials();
+    }, [loadMaterials]);
+
+    const loadTracker = useCallback(async () => {
+        if (!selectedId) {
+            setData(null);
+            return;
+        }
+        setLoading(true);
+        setError("");
+        try {
+            const response = await matflowApi.getMaterialTracker(selectedId, {
+                plantCode: selectedPlantParam || undefined,
+                activeOnly,
+            });
+            setData(response?.data || null);
+        } catch (requestError) {
+            setData(null);
+            setError(readMatFlowError(requestError, "Unable to load the Material Control Tower."));
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedId, selectedPlantParam, activeOnly]);
+
+    useEffect(() => {
+        loadTracker();
+    }, [loadTracker]);
+
+    const lots = Array.isArray(data?.lots) ? data.lots : [];
+    const filteredLots = useMemo(
+        () => lots.filter((lot) => materialTowerMatches(lot, search)),
+        [lots, search]
+    );
+    const lotPagination = useMatFlowPagination(filteredLots, 10);
+    const movementRows = Array.isArray(data?.movementHistory) ? data.movementHistory : [];
+    const movementPagination = useMatFlowPagination(movementRows, 20);
+
+    const projectGroups = useMemo(() => {
+        const projects = new Map();
+        lotPagination.pageItems.forEach((lot) => {
+            const projectKey = String(lot.projectId || lot.projectCode || "UNASSIGNED");
+            if (!projects.has(projectKey)) {
+                projects.set(projectKey, {
+                    key: projectKey,
+                    projectId: lot.projectId,
+                    projectCode: lot.projectCode,
+                    projectName: lot.projectName,
+                    clientName: lot.clientName,
+                    plantCode: lot.plantCode,
+                    products: new Map(),
+                });
+            }
+            const project = projects.get(projectKey);
+            const productKey = String(lot.productId || `${lot.productName || "-"}:${lot.drawingNo || "-"}`);
+            if (!project.products.has(productKey)) {
+                project.products.set(productKey, {
+                    key: productKey,
+                    productId: lot.productId,
+                    productName: lot.productName,
+                    drawingNo: lot.drawingNo,
+                    drawingRevision: lot.drawingRevision,
+                    lots: [],
+                });
+            }
+            project.products.get(productKey).lots.push(lot);
+        });
+        return Array.from(projects.values()).map((project) => ({
+            ...project,
+            products: Array.from(project.products.values()),
+        }));
+    }, [lotPagination.pageItems]);
+
+    const kpis = data?.kpis || {};
+    const identity = data?.material || {};
+    const inventory = Array.isArray(data?.inventory) ? data.inventory : [];
+
+    const changeMaterial = (event) => {
+        const nextId = event.target.value;
+        setSelectedId(nextId);
+        setExpandedLots({});
+        if (nextId) navigate(`/matflow/tracker/materials/${nextId}`);
+        else navigate("/matflow/tracker/materials");
+    };
+
+    const toggleLot = (lotKey) => {
+        setExpandedLots((current) => ({
+            ...current,
+            [lotKey]: !current[lotKey],
+        }));
+    };
+
+    return (
+        <Box sx={pageSx}>
+            <PageHero
+                badge="DIRECTOR MATERIAL CUSTODY CONTROL"
+                title="Material Control Tower"
+                subtitle="Track one material across every Project → Product → Requisition allocation: exact current custody, previous location, next hand-off, quantity, elapsed dwell time, SLA health, actors, references and the complete physical/procurement history."
+                actions={
+                    <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                        <Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>Project Tracker</Button>
+                        <Button startIcon={<RefreshIcon />} disabled={!selectedId || loading} onClick={loadTracker} sx={secondaryBtnSx}>Refresh</Button>
+                    </Box>
+                }
+            />
+
+            <ErrorBox>{error}</ErrorBox>
+
+            <Card sx={panelSx}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(260px,1.2fr) 220px minmax(260px,1fr)" }, gap: 1 }}>
+                    <TextField
+                        select
+                        label="Material to Track"
+                        value={selectedId}
+                        onChange={changeMaterial}
+                        disabled={materialLoading}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="">Select Material</MenuItem>
+                        {materials.map((material) => (
+                            <MenuItem key={material.id} value={material.id}>
+                                {material.materialCode} · {material.materialName}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <TextField
+                        select
+                        label="Tracking Scope"
+                        value={activeOnly ? "LIVE" : "ALL"}
+                        onChange={(event) => setActiveOnly(event.target.value === "LIVE")}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="ALL">Live + Historical Lots</MenuItem>
+                        <MenuItem value="LIVE">Live Lots Only</MenuItem>
+                    </TextField>
+                    <TextField
+                        label="Filter Project / Product / Requisition / Location"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        sx={fieldSx}
+                    />
+                </Box>
+            </Card>
+
+            {!selectedId ? (
+                <Card sx={panelSx}>
+                    <EmptyState>Select a material such as Veneer, Wood, Stone, Hardware or Upholstery to open its end-to-end custody trace.</EmptyState>
+                </Card>
+            ) : loading ? (
+                <LoadingBlock />
+            ) : !data ? (
+                <Card sx={panelSx}><EmptyState>No material tracking data is available.</EmptyState></Card>
+            ) : (
+                <>
+                    <Card sx={{ ...panelSx, overflow: "hidden" }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.2, alignItems: "flex-start", flexWrap: "wrap" }}>
+                            <Box>
+                                <Typography sx={{ ...subTextSx, fontSize: 10 }}>TRACKING MATERIAL</Typography>
+                                <Typography sx={{ fontSize: 22, fontWeight: 950 }}>{identity.materialCode || "-"} · {identity.materialName || "-"}</Typography>
+                                <Typography sx={subTextSx}>
+                                    {readable(identity.category)} · {identity.specification || "No specification"} · {identity.uom || "-"}
+                                    {identity.preferredSupplier ? ` · Preferred supplier: ${identity.preferredSupplier}` : ""}
+                                </Typography>
+                            </Box>
+                            <MatFlowStatusChip status={identity.active === false ? "INACTIVE" : "ACTIVE"} />
+                        </Box>
+                    </Card>
+
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 1 }}>
+                        <SummaryCard label="Projects" value={kpis.projectCount || 0} colorful />
+                        <SummaryCard label="Products / Drawings" value={kpis.productCount || 0} colorful />
+                        <SummaryCard label="Tracked Lots / Branches" value={kpis.trackedLotCount || 0} colorful />
+                        <SummaryCard label="Live Lots" value={kpis.liveLotCount || 0} colorful />
+                        <SummaryCard label="Delayed / SLA Breach" value={kpis.delayedLotCount || 0} colorful />
+                        <SummaryCard label="Requested" value={`${formatQty(kpis.requestedQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Current Shortage" value={`${formatQty(kpis.shortageQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="On Hand" value={`${formatQty(kpis.onHandQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Available" value={`${formatQty(kpis.availableQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Avg Live Dwell" value={formatDurationMinutes(kpis.averageCurrentDwellMinutes || 0)} colorful />
+                        <SummaryCard label="Longest Live Dwell" value={formatDurationMinutes(kpis.longestCurrentDwellMinutes || 0)} colorful />
+                    </Box>
+
+                    <Card sx={panelSx}>
+                        <Box sx={{ mb: 1 }}>
+                            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Physical Inventory Position</Typography>
+                            <Typography sx={subTextSx}>All accessible stock locations for this material. This is physical inventory truth; Project/Product allocation lots are shown separately below.</Typography>
+                        </Box>
+                        <Box sx={tableShellSx}>
+                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 190px 130px 105px 105px 105px 105px 105px 165px" }}>
+                                {["Plant", "Location", "Type", "On Hand", "Reserved", "Blocked", "Transit", "Available", "Updated"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            </Box>
+                            {inventory.length === 0 ? <EmptyState>No stock balance exists for the selected material in the accessible plant scope.</EmptyState> : inventory.map((row) => (
+                                <Box key={`${row.locationId}:${row.plantCode}`} sx={{ ...tableRowSx, gridTemplateColumns: "150px 190px 130px 105px 105px 105px 105px 105px 165px" }}>
+                                    <Box sx={tableCellSx}>{row.plantCode || "-"}</Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography><Typography sx={subTextSx}>{row.locationName || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}>{readable(row.locationType)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.inTransitQty)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box>
+                                    <Box sx={tableCellSx}>{formatDate(row.updatedAt)}</Box>
+                                </Box>
+                            ))}
+                        </Box>
+                    </Card>
+
+                    <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                        <Box sx={{ p: 1.6, borderBottom: "1px solid var(--mf-border)" }}>
+                            <Typography sx={{ fontSize: 18, fontWeight: 950 }}>Project / Product Material Custody</Typography>
+                            <Typography sx={subTextSx}>
+                                Each row is a live material trace branch: pre-allocation demand/Store review, a reservation-backed physical lot, or an open Purchase-shortage branch. Current, previous and next positions are derived from the actual Requisition, Store, PO/GRN, QC, Transfer, Processing, Production and Return records.
+                            </Typography>
+                        </Box>
+
+                        {filteredLots.length === 0 ? (
+                            <Box sx={{ p: 1.5 }}><EmptyState>No Project/Product material lots match the selected scope.</EmptyState></Box>
+                        ) : projectGroups.map((project) => (
+                            <Box key={project.key} sx={{ borderBottom: "1px solid var(--mf-border)" }}>
+                                <Box sx={{ px: 1.6, py: 1.25, background: "var(--mf-surface)" }}>
+                                    <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>CLIENT PROJECT</Typography>
+                                    <Typography sx={{ fontSize: 17, fontWeight: 950 }}>
+                                        {project.projectCode || "UNASSIGNED"} · {project.projectName || "Project"}
+                                    </Typography>
+                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
+                                </Box>
+
+                                {project.products.map((product) => (
+                                    <Box key={product.key} sx={{ px: 1.35, py: 1.15, borderTop: "1px solid var(--mf-border)" }}>
+                                        <Box sx={{ mb: 1 }}>
+                                            <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>PRODUCT / DRAWING</Typography>
+                                            <Typography sx={{ fontSize: 15.5, fontWeight: 950 }}>{product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}</Typography>
+                                        </Box>
+
+                                        <Box sx={{ display: "grid", gap: 1 }}>
+                                            {product.lots.map((lot) => {
+                                                const expanded = expandedLots[lot.lotKey] === true;
+                                                const currentLocation = materialTowerLocation(
+                                                    lot.currentLocationCode,
+                                                    lot.currentLocationName,
+                                                    lot.currentDepartment,
+                                                    lot.movementState
+                                                );
+                                                const previousLocation = materialTowerLocation(
+                                                    lot.previousLocationCode,
+                                                    lot.previousLocationName,
+                                                    lot.previousDepartment,
+                                                    lot.previousState
+                                                );
+                                                const nextLocation = materialTowerLocation(
+                                                    lot.nextLocationCode,
+                                                    lot.nextLocationName,
+                                                    lot.nextDepartment,
+                                                    "NEXT"
+                                                );
+                                                const history = Array.isArray(lot.history) ? lot.history : [];
+
+                                                return (
+                                                    <Box key={lot.lotKey} sx={{ border: "1px solid var(--mf-border)", borderRadius: 2, overflow: "hidden", background: "var(--mf-panel-solid)" }}>
+                                                        <Box sx={{ p: 1.15, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+                                                            <Box>
+                                                                <Typography sx={{ fontSize: 14.5, fontWeight: 950 }}>
+                                                                    {lot.requisitionNumber || "-"} · {lot.currentMaterialCode || identity.materialCode}
+                                                                </Typography>
+                                                                <Typography sx={subTextSx}>
+                                                                    {lot.sourceBranch === "PURCHASE_SHORTAGE" ? "Open Purchase shortage" : "Reservation lot"}
+                                                                    {lot.reservationId ? ` · ${String(lot.reservationId).slice(0, 8)}` : ""}
+                                                                    {lot.activeReferenceNumber ? ` · Ref ${lot.activeReferenceNumber}` : ""}
+                                                                </Typography>
+                                                            </Box>
+                                                            <Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
+                                                                <MatFlowStatusChip status={lot.movementState || lot.currentStage} />
+                                                                <TimingHealthChip health={lot.timingHealth} />
+                                                                <Button onClick={() => navigate(`/matflow/tracker/${lot.requisitionId}`)} sx={secondaryBtnSx}>Requisition Trace</Button>
+                                                            </Box>
+                                                        </Box>
+
+                                                        <Box sx={{ px: 1.15, pb: 1.05, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,minmax(0,1fr))" }, gap: .75 }}>
+                                                            <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+                                                                <Typography sx={{ ...subTextSx, fontSize: 9 }}>PREVIOUS CUSTODY</Typography>
+                                                                <Typography sx={mainTextSx}>{readable(lot.previousDepartment || "Start")}</Typography>
+                                                                <Typography sx={subTextSx}>{previousLocation}</Typography>
+                                                                <Typography sx={subTextSx}>{lot.previousState ? readable(lot.previousState) : "No earlier custody event"}</Typography>
+                                                            </Box>
+                                                            <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+                                                                <Typography sx={{ ...subTextSx, fontSize: 9 }}>CURRENT CUSTODY</Typography>
+                                                                <Typography sx={mainTextSx}>{readable(lot.currentDepartment || "-")}</Typography>
+                                                                <Typography sx={subTextSx}>{currentLocation}</Typography>
+                                                                <Typography sx={subTextSx}>Since {lot.enteredCurrentStateAt ? formatDate(lot.enteredCurrentStateAt) : "-"}</Typography>
+                                                            </Box>
+                                                            <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+                                                                <Typography sx={{ ...subTextSx, fontSize: 9 }}>NEXT HAND-OFF</Typography>
+                                                                <Typography sx={mainTextSx}>{readable(lot.nextDepartment || "None")}</Typography>
+                                                                <Typography sx={subTextSx}>{nextLocation}</Typography>
+                                                                <Typography sx={subTextSx}>{lot.nextAction || "No pending action."}</Typography>
+                                                            </Box>
+                                                            <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+                                                                <Typography sx={{ ...subTextSx, fontSize: 9 }}>TIME IN CURRENT STATE</Typography>
+                                                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>{lot.completed ? "Closed" : formatDurationMinutes(lot.currentDwellMinutes || 0)}</Typography>
+                                                                {Number(lot.currentTargetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(lot.currentTargetMinutes)}</Typography>}
+                                                                {!lot.completed && Number(lot.currentVarianceMinutes || 0) > 0 && <Typography sx={subTextSx}>Over target by {formatDurationMinutes(lot.currentVarianceMinutes)}</Typography>}
+                                                            </Box>
+                                                        </Box>
+
+                                                        <Box sx={{ px: 1.15, pb: 1.05 }}>
+                                                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(7,minmax(0,1fr))" }, gap: .6 }}>
+                                                                {[
+                                                                    ["Tracked", lot.trackedQty],
+                                                                    ["Requested", lot.lineRequestedQty],
+                                                                    ["Reserved", lot.lineReservedQty],
+                                                                    ["Shortage", lot.lineShortageQty],
+                                                                    ["Issued", lot.lineIssuedQty],
+                                                                    ["Consumed", lot.lineConsumedQty],
+                                                                    ["Returned", lot.lineReturnedQty],
+                                                                ].map(([label, value]) => (
+                                                                    <Box key={label} sx={{ p: .65, borderRadius: 1.3, border: "1px solid var(--mf-border)" }}>
+                                                                        <Typography sx={{ ...subTextSx, fontSize: 8.5 }}>{label}</Typography>
+                                                                        <Typography sx={{ fontSize: 13, fontWeight: 950 }}>{formatQty(value)} {lot.uom || ""}</Typography>
+                                                                    </Box>
+                                                                ))}
+                                                            </Box>
+
+                                                            {lot.lineLevelPostIssueAggregation && (
+                                                                <Box sx={{ mt: .75, p: .8, borderRadius: 1.5, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
+                                                                    <Typography sx={{ fontSize: 11.5, fontWeight: 900 }}>Traceability note</Typography>
+                                                                    <Typography sx={subTextSx}>
+                                                                        Multiple reservations feed this requisition line. Store issue remains reservation-specific, but current Production consumption/return records are line-level. MatFlow therefore labels the post-issue section as aggregated instead of assigning consumption to the wrong physical reservation.
+                                                                    </Typography>
+                                                                </Box>
+                                                            )}
+
+                                                            <Box sx={{ mt: .8, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                                                <Typography sx={subTextSx}>{history.length} custody event(s) recorded for this branch.</Typography>
+                                                                <Button onClick={() => toggleLot(lot.lotKey)} sx={secondaryBtnSx}>
+                                                                    {expanded ? "Hide Custody Timeline" : "Full Custody Timeline"}
+                                                                </Button>
+                                                            </Box>
+                                                        </Box>
+
+                                                        <Collapse in={expanded}>
+                                                            <Box sx={{ borderTop: "1px solid var(--mf-border)", p: 1.05, background: "var(--mf-surface)" }}>
+                                                                <Typography sx={{ fontSize: 14, fontWeight: 950, mb: .75 }}>Custody & Stage-Time Timeline</Typography>
+                                                                <Box sx={tableShellSx}>
+                                                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px" }}>
+                                                                        {["#", "State / Event", "Department / Location", "Entered", "Exited", "Duration", "SLA", "Actor", "Reference"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                                                    </Box>
+                                                                    {history.length === 0 ? <EmptyState>No custody events have been created for this branch yet.</EmptyState> : history.map((event) => (
+                                                                        <Box key={`${lot.lotKey}:${event.sequence}`} sx={{ ...tableRowSx, gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px" }}>
+                                                                            <Box sx={tableCellSx}>{event.sequence}</Box>
+                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{event.label || readable(event.state)}</Typography><Typography sx={subTextSx}>{readable(event.state)} · {formatQty(event.quantity)} {lot.uom || ""}</Typography></Box>
+                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(event.department || "-")}</Typography><Typography sx={subTextSx}>{materialTowerLocation(event.locationCode, event.locationName, event.department, event.state)}</Typography></Box>
+                                                                            <Box sx={tableCellSx}>{formatDate(event.enteredAt)}</Box>
+                                                                            <Box sx={tableCellSx}>{event.exitedAt ? formatDate(event.exitedAt) : "Current"}</Box>
+                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatDurationMinutes(event.durationMinutes || 0)}</Typography>{Number(event.targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(event.targetMinutes)}</Typography>}</Box>
+                                                                            <Box sx={tableCellSx}><TimingHealthChip health={event.timingHealth} /></Box>
+                                                                            <Box sx={tableCellSx}>{event.actor || "-"}</Box>
+                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{event.referenceNumber || event.referenceType || "-"}</Typography><Typography sx={subTextSx}>{event.scope ? readable(event.scope) : ""}</Typography></Box>
+                                                                        </Box>
+                                                                    ))}
+                                                                </Box>
+                                                                {history.some((event) => event.note) && (
+                                                                    <Box sx={{ mt: .8 }}>
+                                                                        {history.filter((event) => event.note).map((event) => (
+                                                                            <Typography key={`note:${event.sequence}`} sx={subTextSx}>#{event.sequence} · {event.note}</Typography>
+                                                                        ))}
+                                                                    </Box>
+                                                                )}
+                                                            </Box>
+                                                        </Collapse>
+                                                    </Box>
+                                                );
+                                            })}
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Box>
+                        ))}
+
+                        <Box sx={{ px: 1.2, pb: 1.2 }}>
+                            <MatFlowPagination
+                                {...lotPagination}
+                                onPageChange={lotPagination.setPage}
+                                onPageSizeChange={lotPagination.setPageSize}
+                                pageSizeOptions={[5, 10, 20, 50]}
+                                label="Material Lots / Branches"
+                            />
+                        </Box>
+                    </Card>
+
+                    <Card sx={panelSx}>
+                        <Box sx={{ mb: 1 }}>
+                            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Immutable Material Movement Ledger</Typography>
+                            <Typography sx={subTextSx}>Latest stock-ledger movements for this material across the accessible plant scope. Use this as the quantity-level physical audit corroboration for the custody timeline.</Typography>
+                        </Box>
+                        <Box sx={tableShellSx}>
+                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px" }}>
+                                {["Time", "Movement", "Location", "Qty Δ", "Reserved Δ", "Blocked Δ", "Transit Δ", "Project / Drawing", "Reference", "Actor"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            </Box>
+                            {movementRows.length === 0 ? <EmptyState>No stock-ledger movement exists for the selected material.</EmptyState> : movementPagination.pageItems.map((row) => (
+                                <Box key={row.ledgerId} sx={{ ...tableRowSx, gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px" }}>
+                                    <Box sx={tableCellSx}>{formatDate(row.actionAt)}</Box>
+                                    <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography><Typography sx={subTextSx}>{row.locationName || row.plantCode || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.quantityChange)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.reservedChange)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.blockedChange)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(row.inTransitChange)}</Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.referenceNumber || row.referenceType || "-"}</Typography><Typography sx={subTextSx}>{row.batchNo || ""}</Typography></Box>
+                                    <Box sx={tableCellSx}>{row.actor || "-"}</Box>
+                                </Box>
+                            ))}
+                        </Box>
+                        <MatFlowPagination
+                            {...movementPagination}
+                            onPageChange={movementPagination.setPage}
+                            onPageSizeChange={movementPagination.setPageSize}
+                            label="Movement Ledger Events"
+                        />
+                    </Card>
+                </>
+            )}
+        </Box>
+    );
+}

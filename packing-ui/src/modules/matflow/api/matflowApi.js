@@ -911,6 +911,20 @@ export const matflowApi = {
 			)}`
 		),
 
+	/*
+	 * Executive material-centric custody control tower.
+	 *
+	 * GET /api/matflow/tracker/materials/{materialId}
+	 */
+	getMaterialTracker: (materialId, params = {}) =>
+		API.get(
+			`${BASE}/tracker/materials/${requiredId(
+				materialId,
+				"Material ID"
+			)}`,
+			{ params: cleanParams(params) }
+		),
+
 	integrity: (params = {}) =>
 		API.get(`${BASE}/admin/integrity`, {
 			params: cleanParams(params),

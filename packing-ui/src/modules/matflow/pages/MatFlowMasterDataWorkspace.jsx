@@ -102,6 +102,7 @@ function MasterDialog({ type, open, row, form, setForm, saving, availablePlants,
 }
 
 function MasterPage({ type }) {
+    const navigate = useNavigate();
     const { availablePlants, hasRole } = useMatFlow();
     const [rows, setRows] = useState([]), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
     const [error, setError] = useState(""), [search, setSearch] = useState("");
@@ -308,7 +309,16 @@ function MasterPage({ type }) {
         if (type === "materials") return [
             <Box><Typography sx={mainTextSx}>{row.materialCode}</Typography><Typography sx={subTextSx}>{row.materialName}</Typography></Box>, row.category, row.uom,
             `${row.minimumStock ?? 0} / ${row.reorderLevel ?? 0}`, <MatFlowStatusChip status={row.active ? "ACTIVE" : "INACTIVE"} />,
-            canManage ? <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button> : "-",
+            <Box sx={{ display: "flex", gap: .55, flexWrap: "wrap" }}>
+                <Button
+                    startIcon={<TrackChangesOutlinedIcon />}
+                    onClick={() => navigate(`/matflow/tracker/materials/${row.id}`)}
+                    sx={primaryBtnSx}
+                >
+                    Track
+                </Button>
+                {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
+            </Box>,
         ];
         if (type === "projects") return [
             <Box><Typography sx={mainTextSx}>{row.projectCode}</Typography><Typography sx={subTextSx}>{row.projectName}</Typography></Box>,
@@ -325,7 +335,7 @@ function MasterPage({ type }) {
 
     return <Box sx={pageSx}>
         <PageHero badge={type === "projects" ? "PROJECT / PRODUCT APPROVAL" : "MATFLOW MASTER DATA"} title={title}
-            subtitle={type === "projects" ? "Create one or more products/drawings under a client project. Director approval is mandatory before Engineering can create its operational BOM." : "Maintain MatFlow operational reference data."}
+            subtitle={type === "projects" ? "Create one or more products/drawings under a client project. Director approval is mandatory before Engineering can create its operational BOM." : type === "materials" ? "Maintain standardized material records and open the Material Control Tower to trace current custody, prior locations, next hand-off and time spent at every stage." : "Maintain MatFlow operational reference data."}
             actions={canManage ? <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>{type === "projects" ? "Add Product" : "Add"}</Button> : null} />
         <Card sx={panelSx}><Box sx={{ display: "flex", gap: 1 }}><TextField label="Search" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={{ ...fieldSx, flex: 1 }} /><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button></Box></Card>
         <ErrorBox>{error}</ErrorBox>

@@ -48,6 +48,7 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
     ["Project Material Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
+    ["Material Control Tower", "/matflow/tracker/materials", "tracking", <Inventory2OutlinedIcon />],
     ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
@@ -80,6 +81,7 @@ const HEADER = [
     ["/matflow/qc", "Quality Control", "Inspect material and decide Direct-to-Production vs optional Processing routing"],
     ["/matflow/processing", "Material Processing", "Processing inputs, outputs, yield and wastage"],
     ["/matflow/returns", "Material Returns", "Controlled return movements"],
+    ["/matflow/tracker/materials", "Material Control Tower", "Material → Project/Product allocations → current custody → previous location → next hand-off → dwell time"],
     ["/matflow/tracker", "Project Material Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
     ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
     ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
@@ -135,7 +137,7 @@ export default function MatFlowLayout() {
                 <Box component="nav" className="mf-sidebar-scroll" sx={{ py: .9, px: .15, overflowY: "auto", overflowX: "hidden", flex: 1, scrollbarGutter: "stable" }}>
                     {items.map((item) => (
                         <Tooltip key={item.path} title={collapsed ? item.label : ""} placement="right">
-                            <NavLink to={item.path} style={({ isActive }) => linkStyle(isActive, collapsed)}>
+                            <NavLink to={item.path} end={item.path === "/matflow/tracker"} style={({ isActive }) => linkStyle(isActive, collapsed)}>
                                 <span style={{ display: "grid", placeItems: "center" }}>{item.icon}</span>
                                 {!collapsed && <span>{item.label}</span>}
                             </NavLink>
