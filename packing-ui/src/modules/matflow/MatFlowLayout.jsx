@@ -69,6 +69,7 @@ const NAV = [
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const HEADER = [
+    ["/matflow/dashboard", "MatFlow Operations Command Center", "Project → Product → Material state, custody, timing, actor/reason and intervention control"],
     ["/matflow/production-execution", "Production Execution", "Production start → consumption/returns → finished-product completion"],
     ["/matflow/bom-approvals", "BOM Review & Approval", "Production technical review followed by Director final approval"],
     ["/matflow/boms", "Operational BOMs", "Engineering material structure and approved route control"],

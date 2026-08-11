@@ -313,23 +313,1353 @@ const trackerLaneCount = (rows, key) => rows.filter((row) => {
         && (TRACKER_STAGE_BUCKET[stage] || "DEMAND") === key;
 }).length;
 
+
+const DASHBOARD_DECISION_REASON_KEYS = [
+    "reason",
+    "remarks",
+    "remark",
+    "comments",
+    "comment",
+    "decisionReason",
+    "decisionRemarks",
+    "returnReason",
+    "rejectionReason",
+    "cancelReason",
+    "cancellationReason",
+    "releaseReason",
+    "deleteReason",
+    "adjustmentReason",
+    "holdReason",
+    "note",
+    "notes",
+];
+
+const dashboardAuditDetails = (detailsJson) => {
+    if (!detailsJson) return {};
+    if (typeof detailsJson === "object") return detailsJson;
+    try {
+        const parsed = JSON.parse(String(detailsJson));
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+        return {};
+    }
+};
+
+const dashboardReasonFromDetails = (details, depth = 0) => {
+    if (!details || typeof details !== "object" || depth > 2) return "";
+
+    for (const key of DASHBOARD_DECISION_REASON_KEYS) {
+        const value = details?.[key];
+        if (value != null && typeof value !== "object" && clean(value)) {
+            return clean(value);
+        }
+    }
+
+    for (const [key, value] of Object.entries(details)) {
+        if (value == null || typeof value === "object") continue;
+        const normalizedKey = normalize(key);
+        if (
+            normalizedKey.includes("REASON") ||
+            normalizedKey.includes("REMARK") ||
+            normalizedKey.includes("COMMENT") ||
+            normalizedKey.includes("NOTE")
+        ) {
+            const cleaned = clean(value);
+            if (cleaned) return cleaned;
+        }
+    }
+
+    for (const value of Object.values(details)) {
+        if (value && typeof value === "object") {
+            const nested = dashboardReasonFromDetails(value, depth + 1);
+            if (nested) return nested;
+        }
+    }
+
+    return "";
+};
+
+const dashboardReasonForAudit = (audit) =>
+    dashboardReasonFromDetails(dashboardAuditDetails(audit?.detailsJson));
+
+const dashboardDecisionNeedsReason = (action) => {
+    const value = normalize(action);
+    return [
+        "RETURN",
+        "REJECT",
+        "CANCEL",
+        "DELETE",
+        "RELEASE",
+        "ADJUST",
+        "HOLD",
+        "OVERRIDE",
+        "REOPEN",
+        "VOID",
+    ].some((token) => value.includes(token));
+};
+
+const dashboardTimestamp = (value) => {
+    if (!value) return 0;
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const dashboardPercent = (value, total) =>
+    total > 0 ? `${Math.round((value / total) * 100)}%` : "—";
+
+const dashboardScopeKey = (projectCode, drawingNo) =>
+    `${clean(projectCode).toUpperCase()}|${clean(drawingNo).toUpperCase()}`;
+
+const dashboardTrackerSeverity = (row) => {
+    const health = normalize(row?.timingHealth);
+    if (["BREACHED", "COMPLETED_LATE"].includes(health)) return 1000;
+    if (numeric(row?.shortageQty) > 0) return 900;
+    if (health === "WATCH") return 800;
+    if (numeric(row?.openIndentCount) > 0) return 700;
+    if (numeric(row?.openTransferCount) > 0) return 600;
+    return Math.min(500, numeric(row?.ageHours));
+};
+
+const dashboardTrackerIsLive = (row) => {
+    const stage = normalize(row?.currentStage || row?.requisitionStatus);
+    return !["CANCELLED", "PRODUCTION_COMPLETED", "COMPLETED", "CLOSED"].includes(stage);
+};
+
+const dashboardLocationLabel = (row) => {
+    const code = clean(row?.currentLocationCode);
+    const name = clean(row?.currentLocationName);
+    if (code || name) return [code, name].filter(Boolean).join(" · ");
+    const department = clean(row?.currentDepartment || row?.responsibleDesk);
+    return department ? readable(department) : "Custody pending";
+};
+
+const dashboardNextLabel = (row) => {
+    const department = clean(row?.nextDepartment);
+    const code = clean(row?.nextLocationCode);
+    const name = clean(row?.nextLocationName);
+    const place = [code, name].filter(Boolean).join(" · ");
+    if (department && place) return `${readable(department)} · ${place}`;
+    if (department) return readable(department);
+    if (place) return place;
+    return "No pending hand-off";
+};
+
+const dashboardAccentForTone = (tone) => ({
+    red: "#ef4444",
+    amber: "#f59e0b",
+    orange: "#f97316",
+    green: "#22c55e",
+    blue: "#3b82f6",
+    indigo: "#6366f1",
+    sky: "#0ea5e9",
+    purple: "#8b5cf6",
+}[tone] || "#3b82f6");
+
+function DashboardSectionHeading({ eyebrow, title, subtitle, action }) {
+    return (
+        <Box sx={{
+            mb: 1.1,
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 1.5,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+        }}>
+            <Box sx={{ minWidth: 0 }}>
+                {eyebrow && (
+                    <Typography sx={{
+                        ...subTextSx,
+                        fontSize: 9.5,
+                        fontWeight: 950,
+                        letterSpacing: ".085em",
+                        textTransform: "uppercase",
+                    }}>
+                        {eyebrow}
+                    </Typography>
+                )}
+                <Typography sx={{ fontSize: 17.5, fontWeight: 950, mt: eyebrow ? .2 : 0 }}>
+                    {title}
+                </Typography>
+                {subtitle && (
+                    <Typography sx={{ ...subTextSx, mt: .25, maxWidth: 900 }}>
+                        {subtitle}
+                    </Typography>
+                )}
+            </Box>
+            {action}
+        </Box>
+    );
+}
+
+function DashboardTraceStandard() {
+    const items = [
+        ["STATE", "Where the Project / Product / Material is right now"],
+        ["TIME", "When it entered the state and how long it has remained there"],
+        ["ACTOR", "Who performed the recorded business action"],
+        ["REASON", "Why a return, reject, hold, cancel, release or adjustment happened"],
+        ["NEXT", "The controlled next department / physical hand-off"],
+    ];
+
+    return (
+        <Card sx={{
+            ...panelSx,
+            p: 0,
+            overflow: "hidden",
+            borderTop: "3px solid var(--mf-primary)",
+        }}>
+            <Box sx={{
+                px: 1.5,
+                py: 1.05,
+                borderBottom: "1px solid var(--mf-border)",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 1,
+                flexWrap: "wrap",
+                alignItems: "center",
+            }}>
+                <Box>
+                    <Typography sx={{ fontSize: 13.5, fontWeight: 950 }}>
+                        MatFlow Traceability Standard
+                    </Typography>
+                    <Typography sx={subTextSx}>
+                        Every execution state should answer these five questions without reconstructing the story manually.
+                    </Typography>
+                </Box>
+                <MatFlowStatusChip status="AUDIT_READY" />
+            </Box>
+
+            <Box sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2,minmax(0,1fr))", xl: "repeat(5,minmax(0,1fr))" },
+            }}>
+                {items.map(([label, description], index) => (
+                    <Box
+                        key={label}
+                        sx={{
+                            px: 1.35,
+                            py: 1.05,
+                            borderRight: { xl: index === items.length - 1 ? 0 : "1px solid var(--mf-border)" },
+                            borderBottom: { xs: index === items.length - 1 ? 0 : "1px solid var(--mf-border)", xl: 0 },
+                            minHeight: 76,
+                        }}
+                    >
+                        <Typography sx={{
+                            color: "var(--mf-primary-text)",
+                            fontSize: 9.5,
+                            fontWeight: 950,
+                            letterSpacing: ".08em",
+                        }}>
+                            {label}
+                        </Typography>
+                        <Typography sx={{ ...subTextSx, mt: .45, lineHeight: 1.45 }}>
+                            {description}
+                        </Typography>
+                    </Box>
+                ))}
+            </Box>
+        </Card>
+    );
+}
+
+function DashboardFlowCard({ item, onOpen }) {
+    const accent = dashboardAccentForTone(item.tone);
+    return (
+        <Card sx={{
+            ...panelSx,
+            minHeight: 174,
+            display: "flex",
+            flexDirection: "column",
+            position: "relative",
+            overflow: "hidden",
+            borderTop: `3px solid ${accent}`,
+            "&::after": {
+                content: '""',
+                position: "absolute",
+                width: 94,
+                height: 94,
+                borderRadius: "50%",
+                right: -34,
+                top: -44,
+                background: `${accent}18`,
+                pointerEvents: "none",
+            },
+        }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, position: "relative", zIndex: 1 }}>
+                <Box>
+                    <Typography sx={{ ...subTextSx, fontSize: 9, fontWeight: 950, letterSpacing: ".07em" }}>
+                        STEP {item.step}
+                    </Typography>
+                    <Typography sx={{ fontSize: 16, fontWeight: 950, mt: .35 }}>{item.title}</Typography>
+                </Box>
+                <Box sx={{ textAlign: "right" }}>
+                    <Typography sx={{ fontSize: 21, lineHeight: 1, fontWeight: 950 }}>{item.value}</Typography>
+                    <Typography sx={{ ...subTextSx, fontSize: 9, mt: .3 }}>{item.metricLabel}</Typography>
+                </Box>
+            </Box>
+            <Typography sx={{ ...subTextSx, mt: .75, lineHeight: 1.45, flex: 1 }}>
+                {item.subtitle}
+            </Typography>
+            <Typography sx={{
+                color: accent,
+                fontWeight: 900,
+                fontSize: 10.5,
+                mt: .7,
+                minHeight: 30,
+            }}>
+                {item.helper}
+            </Typography>
+            <Button
+                fullWidth
+                endIcon={<ArrowForwardIcon />}
+                onClick={() => onOpen(item.path)}
+                sx={{ ...secondaryBtnSx, mt: .7 }}
+            >
+                Open Control Desk
+            </Button>
+        </Card>
+    );
+}
+
 export function MatFlowDashboardPage() {
     const navigate = useNavigate();
     const { selectedPlantParam } = useMatFlow();
+
     const [data, setData] = useState(null);
+    const [portfolio, setPortfolio] = useState([]);
+    const [tracker, setTracker] = useState(null);
+    const [shortages, setShortages] = useState([]);
+    const [audits, setAudits] = useState([]);
+    const [ledger, setLedger] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const load = useCallback(async () => { setLoading(true); setError(""); try { setData((await matflowApi.dashboardReport({ plantCode: selectedPlantParam }))?.data || null); } catch (e) { setError(readMatFlowError(e, "Unable to load MatFlow dashboard.")); } finally { setLoading(false); } }, [selectedPlantParam]);
-    useEffect(() => { load(); }, [load]);
+    const [warning, setWarning] = useState("");
+    const [refreshedAt, setRefreshedAt] = useState(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        setWarning("");
+
+        /*
+         * Clear every previously scoped feed before issuing the new plant-scoped
+         * request set. A partial failure must never leave data from the prior
+         * plant selection visible under the newly selected scope.
+         */
+        setData(null);
+        setPortfolio([]);
+        setTracker(null);
+        setShortages([]);
+        setAudits([]);
+        setLedger([]);
+
+        const requests = [
+            ["dashboard", matflowApi.dashboardReport({ plantCode: selectedPlantParam || undefined })],
+            ["projects", matflowApi.listProjectPortfolio({
+                active: true,
+                plantCode: selectedPlantParam || undefined,
+            })],
+            ["tracker", matflowApi.getTracker({ plantCode: selectedPlantParam || undefined })],
+            ["shortages", matflowApi.shortageReport({
+                plantCode: selectedPlantParam || undefined,
+                minimumAgeDays: 0,
+            })],
+            ["audit", matflowApi.auditLogs({
+                plantCode: selectedPlantParam || undefined,
+                page: 0,
+                size: 100,
+            })],
+            ["ledger", matflowApi.stockLedger({
+                plantCode: selectedPlantParam || undefined,
+                page: 0,
+                size: 100,
+            })],
+        ];
+
+        try {
+            const settled = await Promise.allSettled(requests.map(([, promise]) => promise));
+            const failures = [];
+
+            settled.forEach((result, index) => {
+                const key = requests[index][0];
+                if (result.status === "rejected") {
+                    failures.push(`${key}: ${readMatFlowError(result.reason, "feed unavailable")}`);
+                    return;
+                }
+
+                const payload = result.value?.data;
+                if (key === "dashboard") setData(payload || null);
+                if (key === "projects") setPortfolio(Array.isArray(payload) ? payload : []);
+                if (key === "tracker") setTracker(payload || null);
+                if (key === "shortages") {
+                    setShortages(
+                        Array.isArray(payload)
+                            ? payload
+                            : extractMatFlowPage(payload).rows
+                    );
+                }
+                if (key === "audit") setAudits(extractMatFlowPage(payload).rows);
+                if (key === "ledger") setLedger(extractMatFlowPage(payload).rows);
+            });
+
+            if (failures.length === requests.length) {
+                throw new Error("All MatFlow dashboard feeds are unavailable.");
+            }
+
+            if (failures.length > 0) {
+                setWarning(
+                    `Dashboard loaded with partial supporting data (${requests.length - failures.length}/${requests.length} feeds available). Refresh after the unavailable service recovers.`
+                );
+            }
+
+            setRefreshedAt(new Date().toISOString());
+        } catch (requestError) {
+            setData(null);
+            setPortfolio([]);
+            setTracker(null);
+            setShortages([]);
+            setAudits([]);
+            setLedger([]);
+            setError(readMatFlowError(requestError, "Unable to load MatFlow Operations Command Center."));
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedPlantParam]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
     const totals = data?.totals || {};
-    const cards = [
-        ["Active Projects", totals.activeProjects], ["Effective BOMs", totals.effectiveBoms], ["Open Requisitions", totals.openRequisitions], ["Shortage Requisitions", totals.shortageRequisitions], ["Ready Transfers", totals.readyOutboundTransfers], ["Pending QC", totals.pendingQcInspections], ["Processing Jobs", totals.activeProcessingJobs], ["Open Purchase Orders", totals.openPurchaseOrders]
+    const plantRows = Array.isArray(data?.rows) ? data.rows : [];
+    const trackerRows = Array.isArray(tracker?.rows) ? tracker.rows : [];
+
+    const portfolioContext = useMemo(() => {
+        const byProductId = new Map();
+        const byScope = new Map();
+        const products = [];
+
+        portfolio.forEach((project) => {
+            (Array.isArray(project?.products) ? project.products : []).forEach((product) => {
+                const context = { project, product };
+                products.push(context);
+                if (product?.id != null) {
+                    byProductId.set(String(product.id), context);
+                }
+                const scopeKey = dashboardScopeKey(project?.projectCode, product?.drawingNo);
+                if (scopeKey !== "|") byScope.set(scopeKey, context);
+            });
+        });
+
+        return { byProductId, byScope, products };
+    }, [portfolio]);
+
+    const productCount = portfolioContext.products.length;
+    const awaitingDirector = portfolioContext.products.filter(
+        ({ product }) => product?.active !== false && normalize(product?.approvalStatus) !== "APPROVED"
+    ).length;
+    const productsWithoutBom = portfolioContext.products.filter(
+        ({ product }) => product?.active !== false && !product?.latestBomId
+    ).length;
+    const approvedProducts = portfolioContext.products.filter(
+        ({ product }) => normalize(product?.approvalStatus) === "APPROVED"
+    ).length;
+
+    const sortedAudits = useMemo(
+        () => [...audits].sort((a, b) => dashboardTimestamp(b?.actionAt) - dashboardTimestamp(a?.actionAt)),
+        [audits]
+    );
+
+    const sortedLedger = useMemo(
+        () => [...ledger].sort((a, b) => dashboardTimestamp(b?.actionAt) - dashboardTimestamp(a?.actionAt)),
+        [ledger]
+    );
+
+    const latestAuditByEntity = useMemo(() => {
+        const map = new Map();
+        sortedAudits.forEach((audit) => {
+            if (audit?.entityId != null && !map.has(String(audit.entityId))) {
+                map.set(String(audit.entityId), audit);
+            }
+        });
+        return map;
+    }, [sortedAudits]);
+
+    const latestAuditByScope = useMemo(() => {
+        const map = new Map();
+        sortedAudits.forEach((audit) => {
+            const key = dashboardScopeKey(audit?.projectCode, audit?.drawingNo);
+            if (key !== "|" && !map.has(key)) map.set(key, audit);
+        });
+        return map;
+    }, [sortedAudits]);
+
+    const liveTrackerRows = useMemo(
+        () => trackerRows.filter(dashboardTrackerIsLive),
+        [trackerRows]
+    );
+
+    const trackerStats = useMemo(() => {
+        const breach = liveTrackerRows.filter((row) =>
+            ["BREACHED", "COMPLETED_LATE"].includes(normalize(row?.timingHealth))
+        ).length;
+        const watch = liveTrackerRows.filter((row) => normalize(row?.timingHealth) === "WATCH").length;
+        const inTransit = liveTrackerRows.filter((row) =>
+            normalize(row?.currentDepartment) === "IN_TRANSIT" ||
+            normalize(row?.currentStage).includes("TRANSFER")
+        ).length;
+        const production = liveTrackerRows.filter((row) =>
+            normalize(row?.currentDepartment).includes("PRODUCTION") ||
+            normalize(row?.currentStage).includes("PRODUCTION")
+        ).length;
+        const materialControls = liveTrackerRows.reduce(
+            (total, row) =>
+                total + numeric(row?.reservationCount) + numeric(row?.openIndentCount),
+            0
+        );
+        return { breach, watch, inTransit, production, materialControls };
+    }, [liveTrackerRows]);
+
+    const shortageMaterialCount = useMemo(
+        () => new Set(
+            shortages
+                .map((row) => row?.materialId || clean(row?.materialCode).toUpperCase())
+                .filter(Boolean)
+        ).size,
+        [shortages]
+    );
+
+    const latestAudit = sortedAudits[0] || null;
+    const last24Hours = Date.now() - 24 * 60 * 60 * 1000;
+    const recentAuditCount = sortedAudits.filter(
+        (audit) => dashboardTimestamp(audit?.actionAt) >= last24Hours
+    ).length;
+
+    const attentionRows = useMemo(() => {
+        return liveTrackerRows
+            .map((row) => {
+                const productContext =
+                    portfolioContext.byProductId.get(String(row?.projectDrawingId || "")) ||
+                    portfolioContext.byScope.get(dashboardScopeKey(row?.projectCode, row?.drawingNo)) ||
+                    null;
+
+                const audit =
+                    latestAuditByEntity.get(String(row?.requisitionId || row?.id || "")) ||
+                    latestAuditByScope.get(dashboardScopeKey(row?.projectCode, row?.drawingNo)) ||
+                    null;
+
+                return {
+                    row,
+                    project: productContext?.project || null,
+                    product: productContext?.product || null,
+                    audit,
+                    severity: dashboardTrackerSeverity(row),
+                };
+            })
+            .sort((left, right) =>
+                right.severity - left.severity ||
+                dashboardTimestamp(right.row?.updatedAt) - dashboardTimestamp(left.row?.updatedAt)
+            )
+            .slice(0, 10);
+    }, [
+        liveTrackerRows,
+        portfolioContext,
+        latestAuditByEntity,
+        latestAuditByScope,
+    ]);
+
+    const shortagePriority = useMemo(
+        () => [...shortages]
+            .sort((a, b) =>
+                numeric(b?.ageDays) - numeric(a?.ageDays) ||
+                numeric(b?.shortageQty) - numeric(a?.shortageQty)
+            )
+            .slice(0, 10),
+        [shortages]
+    );
+
+    const traceability = useMemo(() => {
+        const total = sortedAudits.length;
+        const actor = sortedAudits.filter((row) => clean(row?.actor)).length;
+        const timestamp = sortedAudits.filter((row) => row?.actionAt).length;
+        const context = sortedAudits.filter(
+            (row) => clean(row?.projectCode) || clean(row?.drawingNo)
+        ).length;
+        const decisions = sortedAudits.filter((row) => dashboardDecisionNeedsReason(row?.action));
+        const missingReasons = decisions.filter((row) => !dashboardReasonForAudit(row)).length;
+
+        return {
+            total,
+            actor,
+            timestamp,
+            context,
+            decisions: decisions.length,
+            missingReasons,
+        };
+    }, [sortedAudits]);
+
+    const primaryCards = [
+        {
+            label: "Active Projects",
+            value: totals.activeProjects ?? portfolio.length,
+            helper: `${productCount} Product / Drawing records in scope`,
+            tone: "blue",
+        },
+        {
+            label: "Products / Drawings",
+            value: productCount,
+            helper: `${approvedProducts} Director-approved · ${awaitingDirector} awaiting`,
+            tone: "indigo",
+        },
+        {
+            label: "Effective BOMs",
+            value: totals.effectiveBoms ?? 0,
+            helper: `${productsWithoutBom} Product(s) currently without a BOM`,
+            tone: "purple",
+        },
+        {
+            label: "Live Requisitions",
+            value: totals.openRequisitions ?? liveTrackerRows.length,
+            helper: `${trackerStats.materialControls} active reservation / shortage controls`,
+            tone: "sky",
+        },
+        {
+            label: "Shortage Exposure",
+            value: totals.shortageRequisitions ?? 0,
+            helper: `${shortages.length} shortage line(s) · ${shortageMaterialCount} material(s)`,
+            tone: "red",
+        },
+        {
+            label: "SLA Risk / Breach",
+            value: trackerStats.breach + trackerStats.watch,
+            helper: `${trackerStats.breach} breached · ${trackerStats.watch} on watch`,
+            tone: trackerStats.breach > 0 ? "red" : "amber",
+        },
+        {
+            label: "Pending QC",
+            value: totals.pendingQcInspections ?? 0,
+            helper: `${totals.readyOutboundTransfers ?? 0} route hand-off(s) ready`,
+            tone: "amber",
+        },
+        {
+            label: "Open Purchase Orders",
+            value: totals.openPurchaseOrders ?? 0,
+            helper: `${totals.openIndents ?? 0} open shortage indent(s)`,
+            tone: "orange",
+        },
     ];
-    return <Box sx={pageSx}><PageHero badge="MATFLOW CONTROL CENTER" title="Material Planning & Execution" subtitle="Project → Products → Engineering BOM → Production + Director approval → Production requisition → Store → Purchase shortage branch → QC → optional Processing → Production completion, with one stock ledger and audit trail." actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-        <Button onClick={() => navigate("/matflow/tracker/materials")} sx={primaryBtnSx}>Material Control Tower</Button>
-        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-    </Box>} /><ErrorBox>{error}</ErrorBox>{loading ? <LoadingBlock /> : <><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>{cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} colorful />)}</Box><Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: 1 }}>{STAGES.map(([title, subtitle, path], index) => <Card key={title} sx={panelSx}><Typography sx={subTextSx}>STEP {index + 1}</Typography><Typography sx={{ fontSize: 17, fontWeight: 950, mt: .5 }}>{title}</Typography><Typography sx={{ ...subTextSx, minHeight: 32 }}>{subtitle}</Typography><Button fullWidth endIcon={<ArrowForwardIcon />} onClick={() => navigate(path)} sx={{ ...primaryBtnSx, mt: 1.5 }}>Open</Button></Card>)}</Box></>}</Box>;
+
+    const secondaryCards = [
+        ["Director Approval Pending", awaitingDirector, "amber"],
+        ["Transfers Ready", totals.readyOutboundTransfers ?? 0, "green"],
+        ["Transfers In Transit", totals.inTransitOutboundTransfers ?? 0, "sky"],
+        ["Processing Jobs", totals.activeProcessingJobs ?? 0, "purple"],
+        ["Low Stock Lines", totals.lowStockLines ?? 0, "amber"],
+        ["Blocked Stock Lines", totals.blockedStockLines ?? 0, "red"],
+    ];
+
+    const flowCards = [
+        {
+            step: 1,
+            title: "Project Portfolio",
+            subtitle: "Project ownership, Product / Drawing register and Director Product approval.",
+            path: "/matflow/projects",
+            value: totals.activeProjects ?? portfolio.length,
+            metricLabel: "ACTIVE PROJECTS",
+            helper: `${productCount} products · ${awaitingDirector} awaiting Director`,
+            tone: "blue",
+        },
+        {
+            step: 2,
+            title: "Operational BOMs",
+            subtitle: "Engineering material structure → Production technical review → Director final approval.",
+            path: "/matflow/boms",
+            value: totals.effectiveBoms ?? 0,
+            metricLabel: "EFFECTIVE BOMS",
+            helper: productsWithoutBom > 0 ? `${productsWithoutBom} Product(s) need BOM coverage` : "All active Products have BOM coverage",
+            tone: "purple",
+        },
+        {
+            step: 3,
+            title: "Production Requisitions",
+            subtitle: "Product/BOM material demand becomes an accountable execution request.",
+            path: "/matflow/production",
+            value: totals.openRequisitions ?? liveTrackerRows.length,
+            metricLabel: "OPEN REQUESTS",
+            helper: `${trackerStats.materialControls} material control branch(es) currently live`,
+            tone: "sky",
+        },
+        {
+            step: 4,
+            title: "Store",
+            subtitle: "Availability review, reservation, shortage declaration and first controlled hand-off.",
+            path: "/matflow/store",
+            value: totals.shortageRequisitions ?? 0,
+            metricLabel: "SHORTAGE REQS",
+            helper: `${totals.readyOutboundTransfers ?? 0} transfer(s) ready · ${totals.lowStockLines ?? 0} low-stock lines`,
+            tone: "green",
+        },
+        {
+            step: 5,
+            title: "Purchase",
+            subtitle: "Shortage-only procurement: Indent → PO → approval → GRN / receiving.",
+            path: "/matflow/purchase",
+            value: totals.openPurchaseOrders ?? 0,
+            metricLabel: "OPEN POS",
+            helper: `${totals.openIndents ?? 0} open indent(s)`,
+            tone: "orange",
+        },
+        {
+            step: 6,
+            title: "Quality Control",
+            subtitle: "Inspect received material and explicitly decide Direct-to-Production or approved Processing.",
+            path: "/matflow/qc",
+            value: totals.pendingQcInspections ?? 0,
+            metricLabel: "PENDING QC",
+            helper: `${totals.expectedInboundTransfers ?? 0} expected inbound transfer(s)`,
+            tone: "amber",
+        },
+        {
+            step: 7,
+            title: "Processing",
+            subtitle: "Optional preprocessing only when the QC-controlled route explicitly requires it.",
+            path: "/matflow/processing",
+            value: totals.activeProcessingJobs ?? 0,
+            metricLabel: "ACTIVE JOBS",
+            helper: "Input → Processing Unit → output material lineage",
+            tone: "purple",
+        },
+        {
+            step: 8,
+            title: "Production",
+            subtitle: "Controlled issue → Production start → consumption / returns → finished Product completion.",
+            path: "/matflow/production-execution",
+            value: trackerStats.production,
+            metricLabel: "LIVE IN PRODUCTION",
+            helper: `${trackerStats.inTransit} material control(s) currently in transit`,
+            tone: "green",
+        },
+        {
+            step: 9,
+            title: "Ledger & Audit",
+            subtitle: "Immutable material movement evidence plus who / when / why business-action trace.",
+            path: "/matflow/ledger",
+            value: recentAuditCount,
+            metricLabel: "AUDIT EVENTS · 24H",
+            helper: `${sortedAudits.length} recent audit records loaded`,
+            tone: "indigo",
+        },
+    ];
+
+    const topLedger = sortedLedger.slice(0, 10);
+    const topAudits = sortedAudits.slice(0, 10);
+
+    return (
+        <Box sx={pageSx}>
+            <PageHero
+                badge="MATFLOW EXECUTIVE OPERATIONS CONTROL"
+                title="MatFlow Operations Command Center"
+                subtitle="Project → Product → Material execution with current state, custody, entered-at time, dwell/SLA, responsible actor, recorded reason/remarks, next hand-off, shortage exposure and immutable movement/audit evidence."
+                actions={
+                    <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                        <Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>
+                            Project Tracker
+                        </Button>
+                        <Button onClick={() => navigate("/matflow/tracker/materials")} sx={primaryBtnSx}>
+                            Material Control Tower
+                        </Button>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            onClick={load}
+                            disabled={loading}
+                            sx={secondaryBtnSx}
+                        >
+                            Refresh
+                        </Button>
+                    </Box>
+                }
+            />
+
+            <ErrorBox>{error}</ErrorBox>
+
+            {warning && (
+                <Box sx={{
+                    px: 1.35,
+                    py: 1,
+                    borderRadius: 1.7,
+                    border: "1px solid var(--mf-warning-border)",
+                    background: "var(--mf-warning-soft)",
+                    color: "var(--mf-warning-text)",
+                    fontSize: 11,
+                    fontWeight: 800,
+                }}>
+                    {warning}
+                </Box>
+            )}
+
+            {loading ? (
+                <LoadingBlock />
+            ) : (
+                <>
+                    <Card sx={{
+                        ...panelSx,
+                        py: 1,
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", md: "repeat(4,minmax(0,1fr))" },
+                        gap: .75,
+                    }}>
+                        {[
+                            ["SCOPE", selectedPlantParam || "All accessible plants", "Backend plant authorization remains authoritative."],
+                            ["LAST REFRESH", formatDate(refreshedAt), `${plantRows.length || data?.plants?.length || 0} plant scope(s) summarized.`],
+                            ["LAST RECORDED ACTION", latestAudit ? readable(latestAudit.action) : "No audit event", latestAudit ? `${latestAudit.projectCode || "-"} · ${latestAudit.drawingNo || "-"}` : "No audit record loaded."],
+                            ["LAST ACTOR / TIME", latestAudit?.actor || "-", latestAudit?.actionAt ? formatDate(latestAudit.actionAt) : "No timestamp recorded."],
+                        ].map(([label, value, helper]) => (
+                            <Box
+                                key={label}
+                                sx={{
+                                    minWidth: 0,
+                                    px: 1,
+                                    py: .8,
+                                    borderRadius: 1.5,
+                                    border: "1px solid var(--mf-border)",
+                                    background: "var(--mf-surface)",
+                                }}
+                            >
+                                <Typography sx={{ ...subTextSx, fontSize: 8.8, fontWeight: 950, letterSpacing: ".07em" }}>
+                                    {label}
+                                </Typography>
+                                <Typography sx={{ ...mainTextSx, mt: .35, overflowWrap: "anywhere" }}>{value}</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .25 }}>{helper}</Typography>
+                            </Box>
+                        ))}
+                    </Card>
+
+                    <DashboardTraceStandard />
+
+                    <Box sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit,minmax(165px,1fr))",
+                        gap: 1,
+                    }}>
+                        {primaryCards.map((card) => (
+                            <SummaryCard
+                                key={card.label}
+                                label={card.label}
+                                value={card.value ?? 0}
+                                helper={card.helper}
+                                tone={card.tone}
+                                colorful
+                            />
+                        ))}
+                    </Box>
+
+                    <Box sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
+                        gap: .8,
+                    }}>
+                        {secondaryCards.map(([label, value, tone]) => (
+                            <SummaryCard
+                                key={label}
+                                label={label}
+                                value={value}
+                                tone={tone}
+                            />
+                        ))}
+                    </Box>
+
+                    <Box sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.7fr) minmax(320px,.7fr)" },
+                        gap: 1,
+                        alignItems: "start",
+                    }}>
+                        <Card sx={panelSx}>
+                            <DashboardSectionHeading
+                                eyebrow="Executive Intervention Queue"
+                                title="What Needs Attention Now"
+                                subtitle="Highest-risk live Project → Product → Requisition control points. The queue combines state, custody, time-in-state, SLA, shortage, next hand-off and the latest recorded actor/reason context."
+                                action={
+                                    <Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>
+                                        Full Project Tracker
+                                    </Button>
+                                }
+                            />
+
+                            <Box sx={tableShellSx}>
+                                <Box sx={{
+                                    ...tableHeaderSx,
+                                    gridTemplateColumns: "minmax(205px,1.35fr) 165px minmax(180px,1fr) 165px minmax(190px,1fr) minmax(190px,1fr) 110px",
+                                }}>
+                                    {[
+                                        "Project → Product → Requisition",
+                                        "Current State / Owner",
+                                        "Current Custody",
+                                        "Entered / Dwell",
+                                        "Next Hand-off",
+                                        "Last Actor / Reason",
+                                        "Trace",
+                                    ].map((heading) => (
+                                        <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                    ))}
+                                </Box>
+
+                                {attentionRows.length === 0 ? (
+                                    <EmptyState>No live Project/Product execution requires intervention in the selected scope.</EmptyState>
+                                ) : attentionRows.map(({ row, project, product, audit }) => {
+                                    const reason = dashboardReasonForAudit(audit);
+                                    const duration = numeric(row?.stageDurationMinutes) > 0
+                                        ? numeric(row.stageDurationMinutes)
+                                        : numeric(row?.ageHours) * 60;
+                                    const target = numeric(row?.targetMinutes);
+                                    const requisitionId = row?.requisitionId || row?.id;
+
+                                    return (
+                                        <Box
+                                            key={requisitionId || `${row?.projectCode}:${row?.drawingNo}`}
+                                            sx={{
+                                                ...tableRowSx,
+                                                gridTemplateColumns: "minmax(205px,1.35fr) 165px minmax(180px,1fr) 165px minmax(190px,1fr) minmax(190px,1fr) 110px",
+                                            }}
+                                        >
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>
+                                                    {project?.projectCode || row?.projectCode || "-"} · {project?.projectName || "Project"}
+                                                </Typography>
+                                                <Typography sx={subTextSx}>
+                                                    {product?.productName || "Product"} · {product?.drawingNo || row?.drawingNo || "-"}
+                                                </Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .2 }}>
+                                                    {row?.requisitionNumber || "-"}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <MatFlowStatusChip status={row?.currentStage || row?.requisitionStatus} />
+                                                <Typography sx={{ ...subTextSx, mt: .45 }}>
+                                                    Owner: {readable(row?.currentDepartment || row?.responsibleDesk || "-")}
+                                                </Typography>
+                                                <Box sx={{ mt: .35 }}>
+                                                    <TimingHealthChip health={row?.timingHealth} />
+                                                </Box>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{dashboardLocationLabel(row)}</Typography>
+                                                <Typography sx={subTextSx}>
+                                                    Shortage: {formatQty(row?.shortageQty)}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{formatDate(row?.stageStartedAt)}</Typography>
+                                                <Typography sx={subTextSx}>
+                                                    {formatDurationMinutes(duration)}
+                                                    {target > 0 ? ` / target ${formatDurationMinutes(target)}` : ""}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{dashboardNextLabel(row)}</Typography>
+                                                <Typography sx={subTextSx}>
+                                                    {trackerNextAction(row)}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{audit?.actor || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{formatDate(audit?.actionAt)}</Typography>
+                                                <Typography sx={{
+                                                    ...subTextSx,
+                                                    mt: .3,
+                                                    color: reason
+                                                        ? "var(--mf-text-secondary)"
+                                                        : dashboardDecisionNeedsReason(audit?.action)
+                                                            ? "var(--mf-warning-text)"
+                                                            : "var(--mf-text-muted)",
+                                                }}>
+                                                    {reason || row?.bottleneckHint || (
+                                                        dashboardDecisionNeedsReason(audit?.action)
+                                                            ? "No reason / remarks recorded on this decision event."
+                                                            : "No exception reason required on the latest event."
+                                                    )}
+                                                </Typography>
+                                            </Box>
+
+                                            <Box sx={tableCellSx}>
+                                                <Button
+                                                    disabled={!requisitionId}
+                                                    onClick={() => navigate(`/matflow/tracker/${requisitionId}`)}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    Trace
+                                                </Button>
+                                            </Box>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Card>
+
+                        <Card sx={panelSx}>
+                            <DashboardSectionHeading
+                                eyebrow="Audit Completeness"
+                                title="Traceability Integrity"
+                                subtitle="Quick control on whether recent backend audit evidence answers who / when / context / why."
+                                action={
+                                    <Button onClick={() => navigate("/matflow/reports")} sx={secondaryBtnSx}>
+                                        Reports
+                                    </Button>
+                                }
+                            />
+
+                            <Box sx={{ display: "grid", gap: .7 }}>
+                                {[
+                                    ["Actor Coverage", dashboardPercent(traceability.actor, traceability.total), `${traceability.actor}/${traceability.total} audit events identify an actor`, "green"],
+                                    ["Timestamp Coverage", dashboardPercent(traceability.timestamp, traceability.total), `${traceability.timestamp}/${traceability.total} audit events have action time`, "blue"],
+                                    ["Project / Drawing Context", dashboardPercent(traceability.context, traceability.total), `${traceability.context}/${traceability.total} events carry Project/Drawing context`, "indigo"],
+                                    ["Exception Decisions", traceability.decisions, "Return / reject / cancel / release / adjust / hold etc.", "amber"],
+                                    ["Missing Recorded Reason", traceability.missingReasons, traceability.missingReasons > 0 ? "Review exception actions without reason/remarks." : "No missing reason detected in the loaded exception decisions.", traceability.missingReasons > 0 ? "red" : "green"],
+                                ].map(([label, value, helper, tone]) => {
+                                    const accent = dashboardAccentForTone(tone);
+                                    return (
+                                        <Box
+                                            key={label}
+                                            sx={{
+                                                p: .9,
+                                                borderRadius: 1.5,
+                                                border: "1px solid var(--mf-border)",
+                                                borderLeft: `3px solid ${accent}`,
+                                                background: "var(--mf-surface)",
+                                            }}
+                                        >
+                                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+                                                <Typography sx={{ ...subTextSx, fontWeight: 900 }}>{label}</Typography>
+                                                <Typography sx={{ fontSize: 15, fontWeight: 950, color: accent }}>{value}</Typography>
+                                            </Box>
+                                            <Typography sx={{ ...subTextSx, mt: .25 }}>{helper}</Typography>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+
+                            <Box sx={{
+                                mt: 1,
+                                p: .9,
+                                borderRadius: 1.5,
+                                border: "1px solid var(--mf-border)",
+                                background: "var(--mf-panel-bg)",
+                            }}>
+                                <Typography sx={{ ...subTextSx, fontSize: 9, fontWeight: 950 }}>DIRECTOR CONTROL PRINCIPLE</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .4, lineHeight: 1.5 }}>
+                                    A status without timestamp, actor and exception reason is not a complete operational trace. This panel highlights gaps from the loaded audit evidence instead of hiding them.
+                                </Typography>
+                            </Box>
+                        </Card>
+                    </Box>
+
+                    <Card sx={panelSx}>
+                        <DashboardSectionHeading
+                            eyebrow="End-to-End Module"
+                            title="Live Process Control Desks"
+                            subtitle="The MatFlow lifecycle remains Project → Product → Materials, but each desk now carries a live operational signal instead of being a static navigation card."
+                        />
+                        <Box sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit,minmax(225px,1fr))",
+                            gap: 1,
+                        }}>
+                            {flowCards.map((item) => (
+                                <DashboardFlowCard
+                                    key={item.title}
+                                    item={item}
+                                    onOpen={navigate}
+                                />
+                            ))}
+                        </Box>
+                    </Card>
+
+                    <Card sx={panelSx}>
+                        <DashboardSectionHeading
+                            eyebrow="Material Risk"
+                            title="Priority Material Shortages"
+                            subtitle="Oldest and highest-quantity open shortage lines across the accessible Project/Product scope. Material identity is kept explicit so the user can move directly into material-centric tracking."
+                            action={
+                                <Button onClick={() => navigate("/matflow/reports")} sx={secondaryBtnSx}>
+                                    Full Shortage Report
+                                </Button>
+                            }
+                        />
+                        <Box sx={tableShellSx}>
+                            <Box sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns: "150px minmax(200px,1fr) minmax(170px,.8fr) 155px 120px 100px 125px",
+                            }}>
+                                {[
+                                    "Material",
+                                    "Material Name",
+                                    "Project / Drawing",
+                                    "Requisition",
+                                    "Shortage",
+                                    "Age",
+                                    "Tracking",
+                                ].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            </Box>
+
+                            {shortagePriority.length === 0 ? (
+                                <EmptyState>No open material shortages exist in the selected scope.</EmptyState>
+                            ) : shortagePriority.map((row, index) => {
+                                const context =
+                                    portfolioContext.byScope.get(dashboardScopeKey(row?.projectCode, row?.drawingNo)) ||
+                                    null;
+                                return (
+                                    <Box
+                                        key={row?.requisitionLineId || `${row?.materialId}:${index}`}
+                                        sx={{
+                                            ...tableRowSx,
+                                            gridTemplateColumns: "150px minmax(200px,1fr) minmax(170px,.8fr) 155px 120px 100px 125px",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{row?.materialCode || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{row?.uom || ""}</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>{row?.materialName || "-"}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {row?.projectCode || "-"} · {context?.product?.productName || "Product"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>{row?.drawingNo || "-"}</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>{row?.requisitionNumber || "-"}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={{ fontWeight: 950, color: "var(--mf-danger-text)" }}>
+                                                {formatQty(row?.shortageQty)} {row?.uom || ""}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <MatFlowStatusChip status={numeric(row?.ageDays) >= 3 ? "BREACHED" : numeric(row?.ageDays) >= 1 ? "WATCH" : "OPEN"} />
+                                            <Typography sx={{ ...subTextSx, mt: .25 }}>{numeric(row?.ageDays)}d</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Button
+                                                disabled={!row?.materialId}
+                                                onClick={() => navigate(`/matflow/tracker/materials/${row.materialId}`)}
+                                                sx={secondaryBtnSx}
+                                            >
+                                                Material
+                                            </Button>
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
+                        </Box>
+                    </Card>
+
+                    <Box sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" },
+                        gap: 1,
+                        alignItems: "start",
+                    }}>
+                        <Card sx={panelSx}>
+                            <DashboardSectionHeading
+                                eyebrow="Physical Material Evidence"
+                                title="Latest Material Movements"
+                                subtitle="Immutable stock-ledger events: material, physical location, Project/Drawing context, quantity delta, actor, timestamp and movement remarks."
+                                action={
+                                    <Button onClick={() => navigate("/matflow/ledger")} sx={secondaryBtnSx}>
+                                        Full Ledger
+                                    </Button>
+                                }
+                            />
+
+                            <Box sx={tableShellSx}>
+                                <Box sx={{
+                                    ...tableHeaderSx,
+                                    gridTemplateColumns: "155px 145px 145px 105px minmax(165px,1fr) minmax(180px,1fr)",
+                                }}>
+                                    {["Material", "Movement", "Location", "Qty Δ", "Project / Reference", "Actor / Time / Reason"].map((heading) => (
+                                        <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                    ))}
+                                </Box>
+
+                                {topLedger.length === 0 ? (
+                                    <EmptyState>No material movement has been recorded in the selected scope.</EmptyState>
+                                ) : topLedger.map((row, index) => (
+                                    <Box
+                                        key={row?.id || row?.ledgerId || index}
+                                        sx={{
+                                            ...tableRowSx,
+                                            gridTemplateColumns: "155px 145px 145px 105px minmax(165px,1fr) minmax(180px,1fr)",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{row?.materialCode || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{row?.materialName || "-"}</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}><MatFlowStatusChip status={row?.movementType} /></Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{row?.locationCode || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{row?.plantCode || "-"}</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            {formatQty(row?.quantityChange)} {row?.uom || ""}
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{row?.projectCode || "-"} · {row?.drawingNo || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{row?.referenceNumber || row?.referenceType || "-"}</Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{row?.actor || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{formatDate(row?.actionAt)}</Typography>
+                                            <Typography sx={{ ...subTextSx, mt: .2 }}>{row?.remarks || "No movement remarks recorded."}</Typography>
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Box>
+                        </Card>
+
+                        <Card sx={panelSx}>
+                            <DashboardSectionHeading
+                                eyebrow="Who / When / Why"
+                                title="Latest Business Decisions & Audit"
+                                subtitle="Central backend audit evidence. Exception actions explicitly expose recorded reason/remarks when present and flag the absence when a reason should exist."
+                                action={
+                                    <Button onClick={() => navigate("/matflow/reports")} sx={secondaryBtnSx}>
+                                        Full Audit
+                                    </Button>
+                                }
+                            />
+
+                            <Box sx={tableShellSx}>
+                                <Box sx={{
+                                    ...tableHeaderSx,
+                                    gridTemplateColumns: "155px minmax(160px,1fr) 160px 150px minmax(190px,1fr)",
+                                }}>
+                                    {["Entity", "Action", "Project / Drawing", "Actor / Time", "Reason / Recorded Detail"].map((heading) => (
+                                        <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                    ))}
+                                </Box>
+
+                                {topAudits.length === 0 ? (
+                                    <EmptyState>No audit event is available in the selected scope.</EmptyState>
+                                ) : topAudits.map((row, index) => {
+                                    const reason = dashboardReasonForAudit(row);
+                                    const needsReason = dashboardDecisionNeedsReason(row?.action);
+                                    return (
+                                        <Box
+                                            key={row?.id || index}
+                                            sx={{
+                                                ...tableRowSx,
+                                                gridTemplateColumns: "155px minmax(160px,1fr) 160px 150px minmax(190px,1fr)",
+                                            }}
+                                        >
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{readable(row?.entityType || "-")}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}>
+                                                <MatFlowStatusChip status={row?.action} />
+                                            </Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{row?.projectCode || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row?.drawingNo || "-"}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{row?.actor || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{formatDate(row?.actionAt)}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={{
+                                                    ...subTextSx,
+                                                    color: reason
+                                                        ? "var(--mf-text-secondary)"
+                                                        : needsReason
+                                                            ? "var(--mf-warning-text)"
+                                                            : "var(--mf-text-muted)",
+                                                    fontWeight: needsReason && !reason ? 850 : 600,
+                                                }}>
+                                                    {reason || (needsReason
+                                                        ? "No reason / remarks recorded for this exception decision."
+                                                        : "No exception reason required / recorded.")}
+                                                </Typography>
+                                            </Box>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Card>
+                    </Box>
+
+                    <Card sx={panelSx}>
+                        <DashboardSectionHeading
+                            eyebrow="Plant-Level Operating Picture"
+                            title="Plant Operations Matrix"
+                            subtitle="Backend-authorized roll-up by accessible plant. Use it to identify where Project demand, shortages, material routing, QC, processing, purchase or stock risk is concentrated."
+                        />
+
+                        <Box sx={tableShellSx}>
+                            <Box sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns: "120px 90px 90px 95px 95px 110px 100px 100px 105px 105px 105px",
+                            }}>
+                                {[
+                                    "Plant",
+                                    "Projects",
+                                    "Open Reqs",
+                                    "Shortage",
+                                    "Ready Xfer",
+                                    "Transit Out",
+                                    "Inbound",
+                                    "Pending QC",
+                                    "Processing",
+                                    "Open PO",
+                                    "Stock Risk",
+                                ].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            </Box>
+
+                            {plantRows.length === 0 ? (
+                                <EmptyState>No plant roll-up is available for the current access scope.</EmptyState>
+                            ) : plantRows.map((row) => (
+                                <Box
+                                    key={row?.plantCode || row?.plant || "plant"}
+                                    sx={{
+                                        ...tableRowSx,
+                                        gridTemplateColumns: "120px 90px 90px 95px 95px 110px 100px 100px 105px 105px 105px",
+                                    }}
+                                >
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row?.plantCode || row?.plant || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}>{row?.activeProjects ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.openRequisitions ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.shortageRequisitions ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.readyOutboundTransfers ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.inTransitOutboundTransfers ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.expectedInboundTransfers ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.pendingQcInspections ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.activeProcessingJobs ?? 0}</Box>
+                                    <Box sx={tableCellSx}>{row?.openPurchaseOrders ?? 0}</Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={{
+                                            fontWeight: 950,
+                                            color: numeric(row?.lowStockLines) + numeric(row?.blockedStockLines) > 0
+                                                ? "var(--mf-warning-text)"
+                                                : "var(--mf-success-text)",
+                                        }}>
+                                            {numeric(row?.lowStockLines) + numeric(row?.blockedStockLines)}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row?.lowStockLines ?? 0} low · {row?.blockedStockLines ?? 0} blocked
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            ))}
+                        </Box>
+                    </Card>
+                </>
+            )}
+        </Box>
+    );
 }
+
 
 export function MatFlowTrackerPage() {
     const navigate = useNavigate();
@@ -614,7 +1944,7 @@ export function MatFlowTrackerPage() {
     return <Box sx={pageSx}>
         <PageHero
             badge="PROJECT → PRODUCT → MATERIAL CONTROL TOWER"
-            title="Project Material Tracker"
+            title="Project Tracker"
             subtitle="The primary MatFlow tracker is project-centric: each client Project contains its Products/Drawings, and every Product expands to its live material positions, department custody, elapsed stage time, shortage/procurement exposure and next operational action."
             actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
                 <Button onClick={() => navigate("/matflow/tracker/materials")} sx={primaryBtnSx}>Material Control Tower</Button>
@@ -2189,7 +3519,7 @@ export function MatFlowMaterialTrackerPage() {
 
                         <Card sx={panelSx}>
                             <Box sx={{ mb: 1 }}>
-                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Live Material Stage Snapshot</Typography>
+                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Live Material Stages</Typography>
                                 <Typography sx={subTextSx}>
                                     Current material-control ownership for {scopeLabel}. These are live Requisition-level control points; choose a specific Material above for reservation/lot-level custody timing.
                                 </Typography>
