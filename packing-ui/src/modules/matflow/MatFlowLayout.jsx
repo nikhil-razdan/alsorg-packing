@@ -47,7 +47,7 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
-    ["Project Material Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
+    ["Project Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
     ["Material Control Tower", "/matflow/tracker/materials", "tracking", <Inventory2OutlinedIcon />],
     ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
@@ -82,7 +82,7 @@ const HEADER = [
     ["/matflow/processing", "Material Processing", "Processing inputs, outputs, yield and wastage"],
     ["/matflow/returns", "Material Returns", "Controlled return movements"],
     ["/matflow/tracker/materials", "Material Control Tower", "Material → Project/Product allocations → current custody → previous location → next hand-off → dwell time"],
-    ["/matflow/tracker", "Project Material Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
+    ["/matflow/tracker", "Project Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
     ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
     ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
     ["/matflow/projects", "Projects & Products", "Portfolio setup, Product / Drawing register, Director approvals and lifecycle administration"],

@@ -1211,9 +1211,21 @@ export function MatFlowMaterialTrackerPage() {
     const { selectedPlantParam } = useMatFlow();
 
     const [materials, setMaterials] = useState([]);
+    const [portfolio, setPortfolio] = useState([]);
+    const [overviewTracker, setOverviewTracker] = useState(null);
+    const [overviewLedger, setOverviewLedger] = useState([]);
+    const [overviewShortages, setOverviewShortages] = useState([]);
+
+    const [selectedProjectId, setSelectedProjectId] = useState("");
+    const [selectedProductId, setSelectedProductId] = useState("");
     const [selectedId, setSelectedId] = useState(materialId || "");
+
+    const [bomScopeMaterials, setBomScopeMaterials] = useState([]);
+    const [scopeMaterialLoading, setScopeMaterialLoading] = useState(false);
+
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [overviewLoading, setOverviewLoading] = useState(true);
     const [materialLoading, setMaterialLoading] = useState(true);
     const [error, setError] = useState("");
     const [activeOnly, setActiveOnly] = useState(false);
@@ -1237,9 +1249,373 @@ export function MatFlowMaterialTrackerPage() {
         }
     }, []);
 
+    const loadOverview = useCallback(async () => {
+        setOverviewLoading(true);
+        setError("");
+        try {
+            const [projectResponse, trackerResponse, ledgerResponse, shortageResponse] = await Promise.all([
+                matflowApi.listProjectPortfolio({
+                    active: true,
+                    plantCode: selectedPlantParam || undefined,
+                }),
+                matflowApi.getTracker({
+                    plantCode: selectedPlantParam || undefined,
+                }),
+                matflowApi.stockLedger({
+                    plantCode: selectedPlantParam || undefined,
+                    page: 0,
+                    size: 250,
+                }),
+                matflowApi.shortageReport({
+                    plantCode: selectedPlantParam || undefined,
+                    minimumAgeDays: 0,
+                }),
+            ]);
+
+            setPortfolio(Array.isArray(projectResponse?.data) ? projectResponse.data : []);
+            setOverviewTracker(trackerResponse?.data || null);
+            setOverviewLedger(extractMatFlowPage(ledgerResponse?.data).rows);
+            setOverviewShortages(
+                Array.isArray(shortageResponse?.data)
+                    ? shortageResponse.data
+                    : extractMatFlowPage(shortageResponse?.data).rows
+            );
+        } catch (requestError) {
+            setPortfolio([]);
+            setOverviewTracker(null);
+            setOverviewLedger([]);
+            setOverviewShortages([]);
+            setError(readMatFlowError(requestError, "Unable to load the Material Control Tower overview."));
+        } finally {
+            setOverviewLoading(false);
+        }
+    }, [selectedPlantParam]);
+
     useEffect(() => {
         loadMaterials();
-    }, [loadMaterials]);
+        loadOverview();
+    }, [loadMaterials, loadOverview]);
+
+    const projects = useMemo(
+        () => portfolio.filter((project) => project?.active !== false),
+        [portfolio]
+    );
+
+    const selectedProject = useMemo(
+        () => projects.find((project) => String(project?.id) === String(selectedProjectId)) || null,
+        [projects, selectedProjectId]
+    );
+
+    const projectProducts = useMemo(
+        () => (Array.isArray(selectedProject?.products) ? selectedProject.products : [])
+            .filter((product) => product?.active !== false),
+        [selectedProject]
+    );
+
+    const selectedProduct = useMemo(
+        () => projectProducts.find((product) => String(product?.id) === String(selectedProductId)) || null,
+        [projectProducts, selectedProductId]
+    );
+
+    const productsInScope = useMemo(() => {
+        if (!selectedProject) {
+            return projects.flatMap((project) =>
+                (Array.isArray(project?.products) ? project.products : [])
+                    .filter((product) => product?.active !== false)
+                    .map((product) => ({
+                        ...product,
+                        _projectId: project.id,
+                        _projectCode: project.projectCode,
+                        _projectName: project.projectName,
+                        _clientName: project.clientName,
+                    }))
+            );
+        }
+
+        if (selectedProduct) {
+            return [{
+                ...selectedProduct,
+                _projectId: selectedProject.id,
+                _projectCode: selectedProject.projectCode,
+                _projectName: selectedProject.projectName,
+                _clientName: selectedProject.clientName,
+            }];
+        }
+
+        return projectProducts.map((product) => ({
+            ...product,
+            _projectId: selectedProject.id,
+            _projectCode: selectedProject.projectCode,
+            _projectName: selectedProject.projectName,
+            _clientName: selectedProject.clientName,
+        }));
+    }, [projects, selectedProject, selectedProduct, projectProducts]);
+
+    const overviewRows = Array.isArray(overviewTracker?.rows) ? overviewTracker.rows : [];
+
+    const rowMatchesScope = useCallback((row) => {
+        if (!row) return false;
+
+        if (selectedProductId) {
+            return String(row.projectDrawingId || row.productId || "") === String(selectedProductId);
+        }
+
+        if (selectedProject) {
+            if (row.projectId && String(row.projectId) === String(selectedProject.id)) {
+                return true;
+            }
+            return clean(row.projectCode).toUpperCase() === clean(selectedProject.projectCode).toUpperCase();
+        }
+
+        return true;
+    }, [selectedProject, selectedProductId]);
+
+    const ledgerMatchesScope = useCallback((row) => {
+        if (!row) return false;
+
+        if (selectedProject) {
+            const projectMatches =
+                (row.projectId && String(row.projectId) === String(selectedProject.id)) ||
+                clean(row.projectCode).toUpperCase() === clean(selectedProject.projectCode).toUpperCase();
+
+            if (!projectMatches) return false;
+        }
+
+        if (selectedProduct) {
+            const productIdMatches =
+                row.projectDrawingId &&
+                String(row.projectDrawingId) === String(selectedProduct.id);
+
+            const drawingMatches =
+                clean(row.drawingNo).toUpperCase() ===
+                clean(selectedProduct.drawingNo).toUpperCase();
+
+            if (!productIdMatches && !drawingMatches) return false;
+        }
+
+        return true;
+    }, [selectedProject, selectedProduct]);
+
+    const shortageMatchesScope = useCallback((row) => {
+        if (!row) return false;
+
+        if (selectedProject) {
+            const projectMatches =
+                (row.projectId && String(row.projectId) === String(selectedProject.id)) ||
+                clean(row.projectCode).toUpperCase() === clean(selectedProject.projectCode).toUpperCase();
+
+            if (!projectMatches) return false;
+        }
+
+        if (selectedProduct) {
+            const productIdMatches =
+                row.projectDrawingId &&
+                String(row.projectDrawingId) === String(selectedProduct.id);
+
+            const drawingMatches =
+                clean(row.drawingNo).toUpperCase() ===
+                clean(selectedProduct.drawingNo).toUpperCase();
+
+            if (!productIdMatches && !drawingMatches) return false;
+        }
+
+        return true;
+    }, [selectedProject, selectedProduct]);
+
+    const scopedOverviewRows = useMemo(
+        () => overviewRows.filter(rowMatchesScope),
+        [overviewRows, rowMatchesScope]
+    );
+
+    const scopedLedgerRows = useMemo(
+        () => overviewLedger.filter(ledgerMatchesScope),
+        [overviewLedger, ledgerMatchesScope]
+    );
+
+    const scopedShortages = useMemo(
+        () => overviewShortages.filter(shortageMatchesScope),
+        [overviewShortages, shortageMatchesScope]
+    );
+
+    /*
+     * Product-aware material discovery.
+     *
+     * Project Portfolio owns the Project -> Product hierarchy and exposes the
+     * latest BOM for each Product. Read those BOMs only when the user narrows
+     * the Control Tower to a Project/Product. This keeps the normal global
+     * Material dropdown fast while ensuring a selected Product only offers the
+     * materials that actually belong to its BOM/execution history.
+     */
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadScopeMaterials = async () => {
+            if (!selectedProject) {
+                setBomScopeMaterials([]);
+                setScopeMaterialLoading(false);
+                return;
+            }
+
+            setScopeMaterialLoading(true);
+
+            const productsToLoad = selectedProduct
+                ? [selectedProduct]
+                : projectProducts;
+
+            try {
+                const responses = await Promise.all(
+                    productsToLoad
+                        .filter((product) => product?.latestBomId)
+                        .map(async (product) => {
+                            try {
+                                return (await matflowApi.getBom(product.latestBomId))?.data || null;
+                            } catch {
+                                return null;
+                            }
+                        })
+                );
+
+                if (cancelled) return;
+
+                const materialMap = new Map();
+
+                responses.filter(Boolean).forEach((bom) => {
+                    const lines = [bom?.lines, bom?.bomLines, bom?.items].find(Array.isArray) || [];
+
+                    lines.forEach((line) => {
+                        const id = line?.materialId || line?.material?.id || null;
+                        const code =
+                            line?.materialCodeSnapshot ||
+                            line?.materialCode ||
+                            line?.material?.materialCode ||
+                            "";
+                        const name =
+                            line?.materialNameSnapshot ||
+                            line?.materialName ||
+                            line?.material?.materialName ||
+                            "";
+                        const uom =
+                            line?.uomSnapshot ||
+                            line?.uom ||
+                            line?.material?.uom ||
+                            "";
+
+                        const key = id ? `ID:${id}` : `CODE:${clean(code).toUpperCase()}`;
+                        if (key === "CODE:") return;
+
+                        materialMap.set(key, {
+                            id,
+                            materialCode: code,
+                            materialName: name,
+                            uom,
+                        });
+                    });
+                });
+
+                setBomScopeMaterials(Array.from(materialMap.values()));
+            } finally {
+                if (!cancelled) setScopeMaterialLoading(false);
+            }
+        };
+
+        loadScopeMaterials();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedProject, selectedProduct, projectProducts]);
+
+    const masterMaterialById = useMemo(
+        () => new Map(materials.map((material) => [String(material.id), material])),
+        [materials]
+    );
+
+    const masterMaterialByCode = useMemo(
+        () => new Map(
+            materials
+                .filter((material) => clean(material.materialCode))
+                .map((material) => [clean(material.materialCode).toUpperCase(), material])
+        ),
+        [materials]
+    );
+
+    const materialOptions = useMemo(() => {
+        if (!selectedProject) {
+            return materials
+                .filter((material) => material?.active !== false)
+                .sort((a, b) =>
+                    `${a.materialCode || ""} ${a.materialName || ""}`.localeCompare(
+                        `${b.materialCode || ""} ${b.materialName || ""}`
+                    )
+                );
+        }
+
+        const map = new Map();
+
+        const addMaterial = (candidate) => {
+            if (!candidate) return;
+
+            const direct =
+                candidate.id != null
+                    ? masterMaterialById.get(String(candidate.id))
+                    : null;
+
+            const byCode = masterMaterialByCode.get(
+                clean(candidate.materialCode).toUpperCase()
+            );
+
+            const resolved = direct || byCode || candidate;
+            const id = resolved?.id || candidate?.id;
+            const code = resolved?.materialCode || candidate?.materialCode || "";
+            const name = resolved?.materialName || candidate?.materialName || "";
+            if (!id && !code) return;
+
+            const key = id ? `ID:${id}` : `CODE:${clean(code).toUpperCase()}`;
+            map.set(key, {
+                ...resolved,
+                id: id || null,
+                materialCode: code,
+                materialName: name,
+                uom: resolved?.uom || candidate?.uom || "",
+            });
+        };
+
+        bomScopeMaterials.forEach(addMaterial);
+
+        scopedLedgerRows.forEach((row) =>
+            addMaterial({
+                id: row.materialId,
+                materialCode: row.materialCode,
+                materialName: row.materialName,
+                uom: row.uom,
+            })
+        );
+
+        scopedShortages.forEach((row) =>
+            addMaterial({
+                id: row.materialId,
+                materialCode: row.materialCode,
+                materialName: row.materialName,
+                uom: row.uom,
+            })
+        );
+
+        return Array.from(map.values())
+            .filter((material) => material?.active !== false)
+            .sort((a, b) =>
+                `${a.materialCode || ""} ${a.materialName || ""}`.localeCompare(
+                    `${b.materialCode || ""} ${b.materialName || ""}`
+                )
+            );
+    }, [
+        selectedProject,
+        materials,
+        masterMaterialById,
+        masterMaterialByCode,
+        bomScopeMaterials,
+        scopedLedgerRows,
+        scopedShortages,
+    ]);
 
     const loadTracker = useCallback(async () => {
         if (!selectedId) {
@@ -1266,21 +1642,57 @@ export function MatFlowMaterialTrackerPage() {
         loadTracker();
     }, [loadTracker]);
 
+    const materialLotMatchesScope = useCallback((lot) => {
+        if (!lot) return false;
+
+        if (selectedProject) {
+            const projectMatches =
+                (lot.projectId && String(lot.projectId) === String(selectedProject.id)) ||
+                clean(lot.projectCode).toUpperCase() === clean(selectedProject.projectCode).toUpperCase();
+
+            if (!projectMatches) return false;
+        }
+
+        if (selectedProduct) {
+            const productMatches =
+                (lot.productId && String(lot.productId) === String(selectedProduct.id)) ||
+                clean(lot.drawingNo).toUpperCase() === clean(selectedProduct.drawingNo).toUpperCase();
+
+            if (!productMatches) return false;
+        }
+
+        return true;
+    }, [selectedProject, selectedProduct]);
+
     const lots = Array.isArray(data?.lots) ? data.lots : [];
-    const filteredLots = useMemo(
-        () => lots.filter((lot) => materialTowerMatches(lot, search)),
-        [lots, search]
+
+    const scopedLots = useMemo(
+        () => lots.filter(materialLotMatchesScope),
+        [lots, materialLotMatchesScope]
     );
+
+    const filteredLots = useMemo(
+        () => scopedLots.filter((lot) => materialTowerMatches(lot, search)),
+        [scopedLots, search]
+    );
+
     const lotPagination = useMatFlowPagination(filteredLots, 10);
-    const movementRows = Array.isArray(data?.movementHistory) ? data.movementHistory : [];
+
+    const rawMovementRows = Array.isArray(data?.movementHistory) ? data.movementHistory : [];
+    const movementRows = useMemo(
+        () => rawMovementRows.filter(ledgerMatchesScope),
+        [rawMovementRows, ledgerMatchesScope]
+    );
     const movementPagination = useMatFlowPagination(movementRows, 20);
 
     const projectGroups = useMemo(() => {
-        const projects = new Map();
+        const groupedProjects = new Map();
+
         lotPagination.pageItems.forEach((lot) => {
             const projectKey = String(lot.projectId || lot.projectCode || "UNASSIGNED");
-            if (!projects.has(projectKey)) {
-                projects.set(projectKey, {
+
+            if (!groupedProjects.has(projectKey)) {
+                groupedProjects.set(projectKey, {
                     key: projectKey,
                     projectId: lot.projectId,
                     projectCode: lot.projectCode,
@@ -1290,8 +1702,12 @@ export function MatFlowMaterialTrackerPage() {
                     products: new Map(),
                 });
             }
-            const project = projects.get(projectKey);
-            const productKey = String(lot.productId || `${lot.productName || "-"}:${lot.drawingNo || "-"}`);
+
+            const project = groupedProjects.get(projectKey);
+            const productKey = String(
+                lot.productId || `${lot.productName || "-"}:${lot.drawingNo || "-"}`
+            );
+
             if (!project.products.has(productKey)) {
                 project.products.set(productKey, {
                     key: productKey,
@@ -1302,24 +1718,152 @@ export function MatFlowMaterialTrackerPage() {
                     lots: [],
                 });
             }
+
             project.products.get(productKey).lots.push(lot);
         });
-        return Array.from(projects.values()).map((project) => ({
+
+        return Array.from(groupedProjects.values()).map((project) => ({
             ...project,
             products: Array.from(project.products.values()),
         }));
     }, [lotPagination.pageItems]);
 
-    const kpis = data?.kpis || {};
+    const backendKpis = data?.kpis || {};
     const identity = data?.material || {};
     const inventory = Array.isArray(data?.inventory) ? data.inventory : [];
+
+    /*
+     * The backend KPI is authoritative for global material tracking.
+     * When Project/Product scope is selected, calculate line totals once per
+     * requisition line so multiple reservation lots never double-count demand.
+     * Physical inventory remains plant/material-wide because stock on hand is
+     * not owned by a Project until it is reserved.
+     */
+    const displayKpis = useMemo(() => {
+        if (!selectedProject && !selectedProduct) return backendKpis;
+
+        const lineMap = new Map();
+
+        scopedLots.forEach((lot) => {
+            const key = String(
+                lot.requisitionLineId ||
+                `${lot.requisitionId || ""}:${lot.currentMaterialId || lot.currentMaterialCode || ""}`
+            );
+
+            const current = lineMap.get(key) || {
+                requestedQty: 0,
+                reservedQty: 0,
+                shortageQty: 0,
+                issuedQty: 0,
+                consumedQty: 0,
+                returnedQty: 0,
+            };
+
+            current.requestedQty = Math.max(current.requestedQty, numeric(lot.lineRequestedQty));
+            current.reservedQty = Math.max(current.reservedQty, numeric(lot.lineReservedQty));
+            current.shortageQty = Math.max(current.shortageQty, numeric(lot.lineShortageQty));
+            current.issuedQty = Math.max(current.issuedQty, numeric(lot.lineIssuedQty));
+            current.consumedQty = Math.max(current.consumedQty, numeric(lot.lineConsumedQty));
+            current.returnedQty = Math.max(current.returnedQty, numeric(lot.lineReturnedQty));
+
+            lineMap.set(key, current);
+        });
+
+        const lineRows = Array.from(lineMap.values());
+        const liveLots = scopedLots.filter((lot) => !lot.completed);
+        const projectCount = new Set(
+            scopedLots.map((lot) => lot.projectId || lot.projectCode).filter(Boolean)
+        ).size;
+        const productCount = new Set(
+            scopedLots.map((lot) => lot.productId || `${lot.productName || ""}:${lot.drawingNo || ""}`).filter(Boolean)
+        ).size;
+        const delayedLotCount = liveLots.filter((lot) =>
+            ["BREACHED", "COMPLETED_LATE"].includes(normalize(lot.timingHealth))
+        ).length;
+
+        const averageCurrentDwellMinutes = liveLots.length
+            ? Math.round(
+                liveLots.reduce((sum, lot) => sum + numeric(lot.currentDwellMinutes), 0) /
+                liveLots.length
+            )
+            : 0;
+
+        const longestCurrentDwellMinutes = liveLots.reduce(
+            (max, lot) => Math.max(max, numeric(lot.currentDwellMinutes)),
+            0
+        );
+
+        const sum = (field) =>
+            lineRows.reduce((total, row) => total + numeric(row[field]), 0);
+
+        return {
+            ...backendKpis,
+            projectCount,
+            productCount,
+            trackedLotCount: scopedLots.length,
+            liveLotCount: liveLots.length,
+            delayedLotCount,
+            requestedQty: sum("requestedQty"),
+            reservedQty: sum("reservedQty"),
+            shortageQty: sum("shortageQty"),
+            issuedQty: sum("issuedQty"),
+            consumedQty: sum("consumedQty"),
+            returnedQty: sum("returnedQty"),
+            averageCurrentDwellMinutes,
+            longestCurrentDwellMinutes,
+        };
+    }, [backendKpis, scopedLots, selectedProject, selectedProduct]);
+
+    const scopeLabel = useMemo(() => {
+        if (selectedProject && selectedProduct) {
+            return `${selectedProject.projectCode || selectedProject.projectName || "Project"} → ${selectedProduct.productName || "Product"} · ${selectedProduct.drawingNo || "-"}`;
+        }
+        if (selectedProject) {
+            return `${selectedProject.projectCode || selectedProject.projectName || "Project"} → All Products`;
+        }
+        return "All Accessible Projects / Products";
+    }, [selectedProject, selectedProduct]);
+
+    const changeProject = (event) => {
+        const nextProjectId = event.target.value;
+        setSelectedProjectId(nextProjectId);
+        setSelectedProductId("");
+        setSelectedId("");
+        setData(null);
+        setSearch("");
+        setExpandedLots({});
+        navigate("/matflow/tracker/materials");
+    };
+
+    const changeProduct = (event) => {
+        const nextProductId = event.target.value;
+        setSelectedProductId(nextProductId);
+        setSelectedId("");
+        setData(null);
+        setSearch("");
+        setExpandedLots({});
+        navigate("/matflow/tracker/materials");
+    };
 
     const changeMaterial = (event) => {
         const nextId = event.target.value;
         setSelectedId(nextId);
         setExpandedLots({});
-        if (nextId) navigate(`/matflow/tracker/materials/${nextId}`);
-        else navigate("/matflow/tracker/materials");
+        setSearch("");
+
+        if (nextId) {
+            navigate(`/matflow/tracker/materials/${nextId}`);
+        } else {
+            navigate("/matflow/tracker/materials");
+        }
+    };
+
+    const trackMaterial = (material) => {
+        if (!material?.id) return;
+        setSelectedId(String(material.id));
+        setExpandedLots({});
+        setSearch("");
+        navigate(`/matflow/tracker/materials/${material.id}`);
     };
 
     const toggleLot = (lotKey) => {
@@ -1329,16 +1873,196 @@ export function MatFlowMaterialTrackerPage() {
         }));
     };
 
+    const liveOverviewRows = useMemo(
+        () => scopedOverviewRows.filter((row) =>
+            !["CANCELLED", "PRODUCTION_COMPLETED", "COMPLETED", "CLOSED"].includes(
+                normalize(row.currentStage || row.requisitionStatus)
+            )
+        ),
+        [scopedOverviewRows]
+    );
+
+    const overviewStats = useMemo(() => {
+        const scopeProjects = selectedProject ? 1 : projects.length;
+        const scopeProducts = selectedProject
+            ? (selectedProduct ? 1 : projectProducts.length)
+            : productsInScope.length;
+
+        const activeControls = liveOverviewRows.reduce(
+            (total, row) =>
+                total +
+                Number(row.reservationCount || 0) +
+                Number(row.openIndentCount || 0),
+            0
+        );
+
+        const shortageMaterials = new Set(
+            scopedShortages
+                .map((row) => row.materialId || clean(row.materialCode).toUpperCase())
+                .filter(Boolean)
+        );
+
+        const delayed = liveOverviewRows.filter((row) =>
+            ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))
+        ).length;
+
+        const watching = liveOverviewRows.filter((row) =>
+            normalize(row.timingHealth) === "WATCH"
+        ).length;
+
+        const inTransit = liveOverviewRows.filter((row) =>
+            normalize(row.currentDepartment) === "IN_TRANSIT" ||
+            normalize(row.currentStage).includes("TRANSFER")
+        ).length;
+
+        const materialUniverse = selectedProject
+            ? materialOptions.length
+            : materials.filter((material) => material?.active !== false).length;
+
+        return {
+            projects: scopeProjects,
+            products: scopeProducts,
+            materials: materialUniverse,
+            liveRequisitions: liveOverviewRows.length,
+            activeControls,
+            shortageMaterials: shortageMaterials.size,
+            slaRisk: delayed + watching,
+            inTransit,
+        };
+    }, [
+        selectedProject,
+        selectedProduct,
+        projects,
+        projectProducts,
+        productsInScope,
+        liveOverviewRows,
+        scopedShortages,
+        materialOptions,
+        materials,
+    ]);
+
+    const stageSnapshot = useMemo(() => {
+        const buckets = [
+            ["Demand / Planning", "DEMAND", "blue"],
+            ["Store", "STORE", "indigo"],
+            ["Purchase", "PURCHASE", "amber"],
+            ["QC", "QC", "purple"],
+            ["Processing", "PROCESSING", "orange"],
+            ["In Transit", "IN_TRANSIT", "sky"],
+            ["Production", "PRODUCTION", "green"],
+        ];
+
+        return buckets.map(([label, key, tone]) => {
+            const count = liveOverviewRows.filter((row) => {
+                const department = normalize(row.currentDepartment);
+                const stage = normalize(row.currentStage);
+
+                if (key === "DEMAND") {
+                    return ["DRAFT", "DEMAND", "PRODUCTION_REQUISITION"].some(
+                        (value) => stage.includes(value)
+                    );
+                }
+
+                if (key === "IN_TRANSIT") {
+                    return department === "IN_TRANSIT" || stage.includes("TRANSFER");
+                }
+
+                return department.includes(key) || stage.includes(key);
+            }).length;
+
+            return { label, key, tone, count };
+        });
+    }, [liveOverviewRows]);
+
+    const latestActivities = useMemo(
+        () => [...scopedLedgerRows]
+            .sort((a, b) =>
+                new Date(b.actionAt || b.createdAt || 0).getTime() -
+                new Date(a.actionAt || a.createdAt || 0).getTime()
+            )
+            .slice(0, 12),
+        [scopedLedgerRows]
+    );
+
+    const attentionMaterials = useMemo(() => {
+        const map = new Map();
+
+        scopedShortages.forEach((row) => {
+            const key = row.materialId || clean(row.materialCode).toUpperCase() || row.materialName;
+            if (!key) return;
+
+            const current = map.get(key) || {
+                materialId: row.materialId || null,
+                materialCode: row.materialCode || "",
+                materialName: row.materialName || "",
+                shortageLines: 0,
+                maxAgeDays: 0,
+                projects: new Set(),
+            };
+
+            current.shortageLines += 1;
+            current.maxAgeDays = Math.max(current.maxAgeDays, Number(row.ageDays || 0));
+            if (row.projectCode) current.projects.add(row.projectCode);
+            map.set(key, current);
+        });
+
+        return Array.from(map.values())
+            .map((row) => ({
+                ...row,
+                projectCount: row.projects.size,
+            }))
+            .sort((a, b) => b.maxAgeDays - a.maxAgeDays)
+            .slice(0, 10);
+    }, [scopedShortages]);
+
+    const recentMaterials = useMemo(() => {
+        const map = new Map();
+
+        latestActivities.forEach((row) => {
+            const key = row.materialId || clean(row.materialCode).toUpperCase() || row.materialName;
+            if (!key) return;
+
+            if (!map.has(key)) {
+                map.set(key, {
+                    materialId: row.materialId || null,
+                    materialCode: row.materialCode || "",
+                    materialName: row.materialName || "",
+                    locationCode: row.locationCode || "",
+                    movementType: row.movementType || "",
+                    actionAt: row.actionAt || row.createdAt || null,
+                    actor: row.actor || "",
+                });
+            }
+        });
+
+        return Array.from(map.values()).slice(0, 8);
+    }, [latestActivities]);
+
+    const scopedMaterialCatalog = useMemo(
+        () => materialOptions.slice(0, 24),
+        [materialOptions]
+    );
+
     return (
         <Box sx={pageSx}>
             <PageHero
                 badge="DIRECTOR MATERIAL CUSTODY CONTROL"
                 title="Material Control Tower"
-                subtitle="Track one material across every Project → Product → Requisition allocation: exact current custody, previous location, next hand-off, quantity, elapsed dwell time, SLA health, actors, references and the complete physical/procurement history."
+                subtitle="Select Project → Product → Material for an exact product-owned custody trace. Leave Material blank to see the live material operations overview, recent activity, shortages, SLA risk and materials available in the selected Project/Product scope."
                 actions={
                     <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
                         <Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>Project Tracker</Button>
-                        <Button startIcon={<RefreshIcon />} disabled={!selectedId || loading} onClick={loadTracker} sx={secondaryBtnSx}>Refresh</Button>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            disabled={loading || overviewLoading}
+                            onClick={() => {
+                                loadOverview();
+                                if (selectedId) loadTracker();
+                            }}
+                            sx={secondaryBtnSx}
+                        >
+                            Refresh
+                        </Button>
                     </Box>
                 }
             />
@@ -1346,22 +2070,78 @@ export function MatFlowMaterialTrackerPage() {
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={panelSx}>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(260px,1.2fr) 220px minmax(260px,1fr)" }, gap: 1 }}>
+                <Box sx={{ mb: 1.15 }}>
+                    <Typography sx={{ fontSize: 16, fontWeight: 950 }}>Tracking Scope</Typography>
+                    <Typography sx={subTextSx}>
+                        {scopeLabel}. Choose a Project and Product to narrow the Material list to that Product's BOM and execution history. Keeping Project blank preserves the original global material tracking behavior.
+                    </Typography>
+                </Box>
+
+                <Box sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                        xs: "1fr",
+                        md: "repeat(2,minmax(0,1fr))",
+                        xl: "repeat(4,minmax(0,1fr))",
+                    },
+                    gap: 1,
+                }}>
+                    <TextField
+                        select
+                        label="Project"
+                        value={selectedProjectId}
+                        onChange={changeProject}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="">All Projects</MenuItem>
+                        {projects.map((project) => (
+                            <MenuItem key={project.id} value={project.id}>
+                                {project.projectCode || "-"} · {project.projectName || "Project"} · {project.clientName || "-"}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
+                    <TextField
+                        select
+                        label="Product / Drawing"
+                        value={selectedProductId}
+                        onChange={changeProduct}
+                        disabled={!selectedProject}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="">All Products in Project</MenuItem>
+                        {projectProducts.map((product) => (
+                            <MenuItem key={product.id} value={product.id}>
+                                {product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+
                     <TextField
                         select
                         label="Material to Track"
                         value={selectedId}
                         onChange={changeMaterial}
-                        disabled={materialLoading}
+                        disabled={materialLoading || scopeMaterialLoading}
                         sx={fieldSx}
                     >
-                        <MenuItem value="">Select Material</MenuItem>
-                        {materials.map((material) => (
-                            <MenuItem key={material.id} value={material.id}>
-                                {material.materialCode} · {material.materialName}
+                        <MenuItem value="">
+                            {selectedProject
+                                ? "Overview · Select a Material"
+                                : "Overview · Select Any Material"}
+                        </MenuItem>
+                        {materialOptions.map((material) => (
+                            <MenuItem
+                                key={material.id || `material:${material.materialCode}`}
+                                value={material.id || ""}
+                                disabled={!material.id}
+                            >
+                                {material.materialCode || "-"} · {material.materialName || "Material"}
+                                {material.uom ? ` · ${material.uom}` : ""}
                             </MenuItem>
                         ))}
                     </TextField>
+
                     <TextField
                         select
                         label="Tracking Scope"
@@ -1372,67 +2152,368 @@ export function MatFlowMaterialTrackerPage() {
                         <MenuItem value="ALL">Live + Historical Lots</MenuItem>
                         <MenuItem value="LIVE">Live Lots Only</MenuItem>
                     </TextField>
-                    <TextField
-                        label="Filter Project / Product / Requisition / Location"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        sx={fieldSx}
-                    />
                 </Box>
+
+                {selectedId && (
+                    <Box sx={{ mt: 1 }}>
+                        <TextField
+                            fullWidth
+                            label="Filter Project / Product / Requisition / Location"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            sx={fieldSx}
+                        />
+                    </Box>
+                )}
             </Card>
 
             {!selectedId ? (
-                <Card sx={panelSx}>
-                    <EmptyState>Select a material such as Veneer, Wood, Stone, Hardware or Upholstery to open its end-to-end custody trace.</EmptyState>
-                </Card>
+                overviewLoading || materialLoading ? (
+                    <LoadingBlock />
+                ) : (
+                    <>
+                        <Box sx={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
+                            gap: 1,
+                        }}>
+                            <SummaryCard label="Projects in Scope" tone="blue" value={overviewStats.projects} colorful />
+                            <SummaryCard label="Products / Drawings" tone="indigo" value={overviewStats.products} colorful />
+                            <SummaryCard label="Materials Available" tone="purple" value={overviewStats.materials} colorful />
+                            <SummaryCard label="Live Requisitions" tone="sky" value={overviewStats.liveRequisitions} colorful />
+                            <SummaryCard label="Live Material Controls" tone="indigo" value={overviewStats.activeControls} colorful />
+                            <SummaryCard label="Materials in Shortage" tone="red" value={overviewStats.shortageMaterials} colorful />
+                            <SummaryCard label="SLA Risk / Breach" tone="amber" value={overviewStats.slaRisk} colorful />
+                            <SummaryCard label="In Transit" tone="sky" value={overviewStats.inTransit} colorful />
+                        </Box>
+
+                        <Card sx={panelSx}>
+                            <Box sx={{ mb: 1 }}>
+                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Live Material Stage Snapshot</Typography>
+                                <Typography sx={subTextSx}>
+                                    Current material-control ownership for {scopeLabel}. These are live Requisition-level control points; choose a specific Material above for reservation/lot-level custody timing.
+                                </Typography>
+                            </Box>
+
+                            <Box sx={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit,minmax(135px,1fr))",
+                                gap: .85,
+                            }}>
+                                {stageSnapshot.map((stage) => (
+                                    <SummaryCard
+                                        key={stage.key}
+                                        label={stage.label}
+                                        tone={stage.tone}
+                                        value={stage.count}
+                                        colorful
+                                    />
+                                ))}
+                            </Box>
+                        </Card>
+
+                        {selectedProject && (
+                            <Card sx={panelSx}>
+                                <Box sx={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    gap: 1,
+                                    flexWrap: "wrap",
+                                    mb: 1,
+                                }}>
+                                    <Box>
+                                        <Typography sx={{ fontSize: 17, fontWeight: 950 }}>
+                                            Materials Available to Track
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            Derived from the selected Product's latest BOM plus material movement/shortage history in this Project scope.
+                                        </Typography>
+                                    </Box>
+                                    {scopeMaterialLoading && <Typography sx={subTextSx}>Loading Product BOM materials…</Typography>}
+                                </Box>
+
+                                {scopedMaterialCatalog.length === 0 ? (
+                                    <EmptyState>
+                                        No material could be resolved for this Project/Product scope yet. Create/approve the Product BOM or begin material execution and it will appear here.
+                                    </EmptyState>
+                                ) : (
+                                    <Box sx={tableShellSx}>
+                                        <Box sx={{
+                                            ...tableHeaderSx,
+                                            gridTemplateColumns: "180px minmax(240px,1fr) 110px 120px",
+                                        }}>
+                                            {["Material", "Name", "UOM", "Tracking"].map((heading) => (
+                                                <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                            ))}
+                                        </Box>
+
+                                        {scopedMaterialCatalog.map((material) => (
+                                            <Box
+                                                key={material.id || `catalog:${material.materialCode}`}
+                                                sx={{
+                                                    ...tableRowSx,
+                                                    gridTemplateColumns: "180px minmax(240px,1fr) 110px 120px",
+                                                }}
+                                            >
+                                                <Box sx={tableCellSx}>
+                                                    <Typography sx={mainTextSx}>{material.materialCode || "-"}</Typography>
+                                                </Box>
+                                                <Box sx={tableCellSx}>
+                                                    <Typography sx={mainTextSx}>{material.materialName || "-"}</Typography>
+                                                    <Typography sx={subTextSx}>{readable(material.category || "")}</Typography>
+                                                </Box>
+                                                <Box sx={tableCellSx}>{material.uom || "-"}</Box>
+                                                <Box sx={tableCellSx}>
+                                                    {material.id ? (
+                                                        <Button
+                                                            onClick={() => trackMaterial(material)}
+                                                            sx={primaryBtnSx}
+                                                        >
+                                                            Track
+                                                        </Button>
+                                                    ) : (
+                                                        <Typography sx={subTextSx}>Master ID unavailable</Typography>
+                                                    )}
+                                                </Box>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                )}
+                            </Card>
+                        )}
+
+                        <Box sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", xl: "1.25fr .75fr" },
+                            gap: 1,
+                            alignItems: "start",
+                        }}>
+                            <Card sx={panelSx}>
+                                <Box sx={{ mb: 1 }}>
+                                    <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Latest Material Activities</Typography>
+                                    <Typography sx={subTextSx}>
+                                        Latest immutable stock-ledger movements in {scopeLabel}. Select a Material to open its complete custody timeline.
+                                    </Typography>
+                                </Box>
+
+                                <Box sx={tableShellSx}>
+                                    <Box sx={{
+                                        ...tableHeaderSx,
+                                        gridTemplateColumns: "165px 170px 160px minmax(170px,1fr) 160px 145px",
+                                    }}>
+                                        {["Time", "Material", "Movement", "Location", "Project / Drawing", "Actor"].map((heading) => (
+                                            <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                        ))}
+                                    </Box>
+
+                                    {latestActivities.length === 0 ? (
+                                        <EmptyState>No material movement has been recorded in the selected scope.</EmptyState>
+                                    ) : latestActivities.map((row, index) => (
+                                        <Box
+                                            key={row.id || row.ledgerId || `${row.actionAt}:${index}`}
+                                            sx={{
+                                                ...tableRowSx,
+                                                gridTemplateColumns: "165px 170px 160px minmax(170px,1fr) 160px 145px",
+                                            }}
+                                        >
+                                            <Box sx={tableCellSx}>{formatDate(row.actionAt || row.createdAt)}</Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row.materialName || "-"}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row.locationName || row.plantCode || "-"}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}>
+                                                <Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography>
+                                            </Box>
+                                            <Box sx={tableCellSx}>{row.actor || "-"}</Box>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            </Card>
+
+                            <Card sx={panelSx}>
+                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Recently Active Materials</Typography>
+                                <Typography sx={{ ...subTextSx, mb: 1 }}>
+                                    Most recently moved material identities in the current scope.
+                                </Typography>
+
+                                <Box sx={{ display: "grid", gap: .7 }}>
+                                    {recentMaterials.length === 0 ? (
+                                        <EmptyState>No recent material activity.</EmptyState>
+                                    ) : recentMaterials.map((row, index) => {
+                                        const master =
+                                            (row.materialId && masterMaterialById.get(String(row.materialId))) ||
+                                            masterMaterialByCode.get(clean(row.materialCode).toUpperCase());
+
+                                        return (
+                                            <Box
+                                                key={row.materialId || row.materialCode || index}
+                                                sx={{
+                                                    p: .9,
+                                                    borderRadius: 1.6,
+                                                    border: "1px solid var(--mf-border)",
+                                                    background: "var(--mf-surface)",
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    gap: 1,
+                                                    alignItems: "center",
+                                                }}
+                                            >
+                                                <Box sx={{ minWidth: 0 }}>
+                                                    <Typography sx={mainTextSx}>
+                                                        {row.materialCode || "-"} · {row.materialName || "Material"}
+                                                    </Typography>
+                                                    <Typography sx={subTextSx}>
+                                                        {readable(row.movementType)} · {row.locationCode || "-"} · {formatDate(row.actionAt)}
+                                                    </Typography>
+                                                </Box>
+                                                {master?.id && (
+                                                    <Button
+                                                        onClick={() => trackMaterial(master)}
+                                                        sx={secondaryBtnSx}
+                                                    >
+                                                        Track
+                                                    </Button>
+                                                )}
+                                            </Box>
+                                        );
+                                    })}
+                                </Box>
+                            </Card>
+                        </Box>
+
+                        <Card sx={panelSx}>
+                            <Box sx={{ mb: 1 }}>
+                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Material Attention Queue</Typography>
+                                <Typography sx={subTextSx}>
+                                    Materials with open shortage exposure, ordered by the oldest shortage age. This is a count-based overview so quantities with different UOMs are never incorrectly added together.
+                                </Typography>
+                            </Box>
+
+                            <Box sx={tableShellSx}>
+                                <Box sx={{
+                                    ...tableHeaderSx,
+                                    gridTemplateColumns: "180px minmax(230px,1fr) 130px 130px 130px",
+                                }}>
+                                    {["Material", "Name", "Shortage Lines", "Projects", "Oldest Age"].map((heading) => (
+                                        <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                    ))}
+                                </Box>
+
+                                {attentionMaterials.length === 0 ? (
+                                    <EmptyState>No open material shortages exist in the selected scope.</EmptyState>
+                                ) : attentionMaterials.map((row, index) => (
+                                    <Box
+                                        key={row.materialId || row.materialCode || index}
+                                        sx={{
+                                            ...tableRowSx,
+                                            gridTemplateColumns: "180px minmax(230px,1fr) 130px 130px 130px",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>{row.materialCode || "-"}</Box>
+                                        <Box sx={tableCellSx}>{row.materialName || "-"}</Box>
+                                        <Box sx={tableCellSx}>{row.shortageLines}</Box>
+                                        <Box sx={tableCellSx}>{row.projectCount}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <MatFlowStatusChip status={row.maxAgeDays >= 3 ? "BREACHED" : row.maxAgeDays >= 1 ? "WATCH" : "OPEN"} />
+                                            <Typography sx={subTextSx}>{row.maxAgeDays}d</Typography>
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Box>
+                        </Card>
+                    </>
+                )
             ) : loading ? (
                 <LoadingBlock />
             ) : !data ? (
-                <Card sx={panelSx}><EmptyState>No material tracking data is available.</EmptyState></Card>
+                <Card sx={panelSx}>
+                    <EmptyState>No material tracking data is available.</EmptyState>
+                </Card>
             ) : (
                 <>
                     <Card sx={{ ...panelSx, overflow: "hidden" }}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.2, alignItems: "flex-start", flexWrap: "wrap" }}>
+                        <Box sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 1.2,
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                        }}>
                             <Box>
                                 <Typography sx={{ ...subTextSx, fontSize: 10 }}>TRACKING MATERIAL</Typography>
-                                <Typography sx={{ fontSize: 22, fontWeight: 950 }}>{identity.materialCode || "-"} · {identity.materialName || "-"}</Typography>
+                                <Typography sx={{ fontSize: 22, fontWeight: 950 }}>
+                                    {identity.materialCode || "-"} · {identity.materialName || "-"}
+                                </Typography>
                                 <Typography sx={subTextSx}>
                                     {readable(identity.category)} · {identity.specification || "No specification"} · {identity.uom || "-"}
                                     {identity.preferredSupplier ? ` · Preferred supplier: ${identity.preferredSupplier}` : ""}
+                                </Typography>
+                                <Typography sx={{ ...subTextSx, mt: .45 }}>
+                                    Scope: {scopeLabel}
                                 </Typography>
                             </Box>
                             <MatFlowStatusChip status={identity.active === false ? "INACTIVE" : "ACTIVE"} />
                         </Box>
                     </Card>
 
-                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 1 }}>
-                        <SummaryCard label="Projects" tone="blue" value={kpis.projectCount || 0} colorful />
-                        <SummaryCard label="Products / Drawings" tone="indigo" value={kpis.productCount || 0} colorful />
-                        <SummaryCard label="Tracked Lots / Branches" tone="purple" value={kpis.trackedLotCount || 0} colorful />
-                        <SummaryCard label="Live Lots" tone="sky" value={kpis.liveLotCount || 0} colorful />
-                        <SummaryCard label="Delayed / SLA Breach" tone="red" value={kpis.delayedLotCount || 0} colorful />
-                        <SummaryCard label="Requested" tone="blue" value={`${formatQty(kpis.requestedQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Current Shortage" tone="red" value={`${formatQty(kpis.shortageQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="On Hand" tone="indigo" value={`${formatQty(kpis.onHandQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Available" tone="green" value={`${formatQty(kpis.availableQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Avg Live Dwell" tone="amber" value={formatDurationMinutes(kpis.averageCurrentDwellMinutes || 0)} colorful />
-                        <SummaryCard label="Longest Live Dwell" tone="orange" value={formatDurationMinutes(kpis.longestCurrentDwellMinutes || 0)} colorful />
+                    <Box sx={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
+                        gap: 1,
+                    }}>
+                        <SummaryCard label="Projects" tone="blue" value={displayKpis.projectCount || 0} colorful />
+                        <SummaryCard label="Products / Drawings" tone="indigo" value={displayKpis.productCount || 0} colorful />
+                        <SummaryCard label="Tracked Lots / Branches" tone="purple" value={displayKpis.trackedLotCount || 0} colorful />
+                        <SummaryCard label="Live Lots" tone="sky" value={displayKpis.liveLotCount || 0} colorful />
+                        <SummaryCard label="Delayed / SLA Breach" tone="red" value={displayKpis.delayedLotCount || 0} colorful />
+                        <SummaryCard label="Requested" tone="blue" value={`${formatQty(displayKpis.requestedQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Current Shortage" tone="red" value={`${formatQty(displayKpis.shortageQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label={selectedProject ? "Plant On Hand" : "On Hand"} tone="indigo" value={`${formatQty(displayKpis.onHandQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label={selectedProject ? "Plant Available" : "Available"} tone="green" value={`${formatQty(displayKpis.availableQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Avg Live Dwell" tone="amber" value={formatDurationMinutes(displayKpis.averageCurrentDwellMinutes || 0)} colorful />
+                        <SummaryCard label="Longest Live Dwell" tone="orange" value={formatDurationMinutes(displayKpis.longestCurrentDwellMinutes || 0)} colorful />
                     </Box>
 
                     <Card sx={panelSx}>
                         <Box sx={{ mb: 1 }}>
-                            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Physical Inventory Position</Typography>
-                            <Typography sx={subTextSx}>All accessible stock locations for this material. This is physical inventory truth; Project/Product allocation lots are shown separately below.</Typography>
+                            <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Physical Stock Position</Typography>
+                            <Typography sx={subTextSx}>
+                                Inventory is physical plant/location stock for this material. Project/Product scope is applied to custody lots and movement history; unreserved stock is intentionally not falsely assigned to a Project.
+                            </Typography>
                         </Box>
+
                         <Box sx={tableShellSx}>
-                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 190px 130px 105px 105px 105px 105px 105px 165px" }}>
-                                {["Plant", "Location", "Type", "On Hand", "Reserved", "Blocked", "Transit", "Available", "Updated"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            <Box sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns: "170px 180px 120px 120px 120px 120px 120px 120px",
+                            }}>
+                                {["Plant", "Location", "On Hand", "Reserved", "Blocked", "In Transit", "Available", "Updated"].map((heading) => (
+                                    <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                ))}
                             </Box>
-                            {inventory.length === 0 ? <EmptyState>No stock balance exists for the selected material in the accessible plant scope.</EmptyState> : inventory.map((row) => (
-                                <Box key={`${row.locationId}:${row.plantCode}`} sx={{ ...tableRowSx, gridTemplateColumns: "150px 190px 130px 105px 105px 105px 105px 105px 165px" }}>
+
+                            {inventory.length === 0 ? (
+                                <EmptyState>No physical stock position exists for this material.</EmptyState>
+                            ) : inventory.map((row) => (
+                                <Box
+                                    key={`${row.locationId || row.locationCode}`}
+                                    sx={{
+                                        ...tableRowSx,
+                                        gridTemplateColumns: "170px 180px 120px 120px 120px 120px 120px 120px",
+                                    }}
+                                >
                                     <Box sx={tableCellSx}>{row.plantCode || "-"}</Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography><Typography sx={subTextSx}>{row.locationName || "-"}</Typography></Box>
-                                    <Box sx={tableCellSx}>{readable(row.locationType)}</Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.locationName || readable(row.locationType)}</Typography>
+                                    </Box>
                                     <Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box>
                                     <Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box>
                                     <Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box>
@@ -1445,7 +2526,7 @@ export function MatFlowMaterialTrackerPage() {
                     </Card>
 
                     <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                        <Box sx={{ p: 1.6, borderBottom: "1px solid var(--mf-border)" }}>
+                        <Box sx={{ px: 1.5, py: 1.25, borderBottom: "1px solid var(--mf-border)" }}>
                             <Typography sx={{ fontSize: 18, fontWeight: 950 }}>Project / Product Material Custody</Typography>
                             <Typography sx={subTextSx}>
                                 Each row is a live material trace branch: pre-allocation demand/Store review, a reservation-backed physical lot, or an open Purchase-shortage branch. Current, previous and next positions are derived from the actual Requisition, Store, PO/GRN, QC, Transfer, Processing, Production and Return records.
@@ -1453,7 +2534,9 @@ export function MatFlowMaterialTrackerPage() {
                         </Box>
 
                         {filteredLots.length === 0 ? (
-                            <Box sx={{ p: 1.5 }}><EmptyState>No Project/Product material lots match the selected scope.</EmptyState></Box>
+                            <Box sx={{ p: 1.5 }}>
+                                <EmptyState>No Project/Product material lots match the selected scope.</EmptyState>
+                            </Box>
                         ) : projectGroups.map((project) => (
                             <Box key={project.key} sx={{ borderBottom: "1px solid var(--mf-border)" }}>
                                 <Box sx={{ px: 1.6, py: 1.25, background: "var(--mf-surface)" }}>
@@ -1461,14 +2544,25 @@ export function MatFlowMaterialTrackerPage() {
                                     <Typography sx={{ fontSize: 17, fontWeight: 950 }}>
                                         {project.projectCode || "UNASSIGNED"} · {project.projectName || "Project"}
                                     </Typography>
-                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
+                                    <Typography sx={subTextSx}>
+                                        {project.clientName || "-"} · {project.plantCode || "-"}
+                                    </Typography>
                                 </Box>
 
                                 {project.products.map((product) => (
-                                    <Box key={product.key} sx={{ px: 1.35, py: 1.15, borderTop: "1px solid var(--mf-border)" }}>
+                                    <Box
+                                        key={product.key}
+                                        sx={{
+                                            px: 1.35,
+                                            py: 1.15,
+                                            borderTop: "1px solid var(--mf-border)",
+                                        }}
+                                    >
                                         <Box sx={{ mb: 1 }}>
                                             <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>PRODUCT / DRAWING</Typography>
-                                            <Typography sx={{ fontSize: 15.5, fontWeight: 950 }}>{product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}</Typography>
+                                            <Typography sx={{ fontSize: 15.5, fontWeight: 950 }}>
+                                                {product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}
+                                            </Typography>
                                         </Box>
 
                                         <Box sx={{ display: "grid", gap: 1 }}>
@@ -1495,54 +2589,105 @@ export function MatFlowMaterialTrackerPage() {
                                                 const history = Array.isArray(lot.history) ? lot.history : [];
 
                                                 return (
-                                                    <Box key={lot.lotKey} sx={{ border: "1px solid var(--mf-border)", borderRadius: 2, overflow: "hidden", background: "var(--mf-panel-solid)" }}>
-                                                        <Box sx={{ p: 1.15, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+                                                    <Box
+                                                        key={lot.lotKey}
+                                                        sx={{
+                                                            border: "1px solid var(--mf-border)",
+                                                            borderRadius: 2,
+                                                            overflow: "hidden",
+                                                            background: "var(--mf-panel-solid)",
+                                                        }}
+                                                    >
+                                                        <Box sx={{
+                                                            p: 1.15,
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            gap: 1,
+                                                            alignItems: "flex-start",
+                                                            flexWrap: "wrap",
+                                                        }}>
                                                             <Box>
                                                                 <Typography sx={{ fontSize: 14.5, fontWeight: 950 }}>
                                                                     {lot.requisitionNumber || "-"} · {lot.currentMaterialCode || identity.materialCode}
                                                                 </Typography>
                                                                 <Typography sx={subTextSx}>
-                                                                    {lot.sourceBranch === "PURCHASE_SHORTAGE" ? "Open Purchase shortage" : "Reservation lot"}
+                                                                    {lot.sourceBranch === "PURCHASE_SHORTAGE" ? "Open Purchase shortage" : lot.sourceBranch === "DEMAND" ? "Demand / Store planning" : "Reservation lot"}
                                                                     {lot.reservationId ? ` · ${String(lot.reservationId).slice(0, 8)}` : ""}
                                                                     {lot.activeReferenceNumber ? ` · Ref ${lot.activeReferenceNumber}` : ""}
                                                                 </Typography>
                                                             </Box>
-                                                            <Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
+
+                                                            <Box sx={{
+                                                                display: "flex",
+                                                                gap: .6,
+                                                                alignItems: "center",
+                                                                flexWrap: "wrap",
+                                                            }}>
                                                                 <MatFlowStatusChip status={lot.movementState || lot.currentStage} />
                                                                 <TimingHealthChip health={lot.timingHealth} />
-                                                                <Button onClick={() => navigate(`/matflow/tracker/${lot.requisitionId}`)} sx={secondaryBtnSx}>Requisition Trace</Button>
+                                                                <Button
+                                                                    onClick={() => navigate(`/matflow/tracker/${lot.requisitionId}`)}
+                                                                    sx={secondaryBtnSx}
+                                                                >
+                                                                    Requisition Trace
+                                                                </Button>
                                                             </Box>
                                                         </Box>
 
-                                                        <Box sx={{ px: 1.15, pb: 1.05, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,minmax(0,1fr))" }, gap: .75 }}>
+                                                        <Box sx={{
+                                                            px: 1.15,
+                                                            pb: 1.05,
+                                                            display: "grid",
+                                                            gridTemplateColumns: {
+                                                                xs: "1fr",
+                                                                md: "repeat(4,minmax(0,1fr))",
+                                                            },
+                                                            gap: .75,
+                                                        }}>
                                                             <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
                                                                 <Typography sx={{ ...subTextSx, fontSize: 9 }}>PREVIOUS CUSTODY</Typography>
                                                                 <Typography sx={mainTextSx}>{readable(lot.previousDepartment || "Start")}</Typography>
                                                                 <Typography sx={subTextSx}>{previousLocation}</Typography>
                                                                 <Typography sx={subTextSx}>{lot.previousState ? readable(lot.previousState) : "No earlier custody event"}</Typography>
                                                             </Box>
+
                                                             <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
                                                                 <Typography sx={{ ...subTextSx, fontSize: 9 }}>CURRENT CUSTODY</Typography>
                                                                 <Typography sx={mainTextSx}>{readable(lot.currentDepartment || "-")}</Typography>
                                                                 <Typography sx={subTextSx}>{currentLocation}</Typography>
                                                                 <Typography sx={subTextSx}>Since {lot.enteredCurrentStateAt ? formatDate(lot.enteredCurrentStateAt) : "-"}</Typography>
                                                             </Box>
+
                                                             <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
                                                                 <Typography sx={{ ...subTextSx, fontSize: 9 }}>NEXT HAND-OFF</Typography>
                                                                 <Typography sx={mainTextSx}>{readable(lot.nextDepartment || "None")}</Typography>
                                                                 <Typography sx={subTextSx}>{nextLocation}</Typography>
                                                                 <Typography sx={subTextSx}>{lot.nextAction || "No pending action."}</Typography>
                                                             </Box>
+
                                                             <Box sx={{ p: .9, borderRadius: 1.5, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
                                                                 <Typography sx={{ ...subTextSx, fontSize: 9 }}>TIME IN CURRENT STATE</Typography>
-                                                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>{lot.completed ? "Closed" : formatDurationMinutes(lot.currentDwellMinutes || 0)}</Typography>
-                                                                {Number(lot.currentTargetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(lot.currentTargetMinutes)}</Typography>}
-                                                                {!lot.completed && Number(lot.currentVarianceMinutes || 0) > 0 && <Typography sx={subTextSx}>Over target by {formatDurationMinutes(lot.currentVarianceMinutes)}</Typography>}
+                                                                <Typography sx={{ fontSize: 17, fontWeight: 950 }}>
+                                                                    {lot.completed ? "Closed" : formatDurationMinutes(lot.currentDwellMinutes || 0)}
+                                                                </Typography>
+                                                                {Number(lot.currentTargetMinutes || 0) > 0 && (
+                                                                    <Typography sx={subTextSx}>Target {formatDurationMinutes(lot.currentTargetMinutes)}</Typography>
+                                                                )}
+                                                                {!lot.completed && Number(lot.currentVarianceMinutes || 0) > 0 && (
+                                                                    <Typography sx={subTextSx}>Over target by {formatDurationMinutes(lot.currentVarianceMinutes)}</Typography>
+                                                                )}
                                                             </Box>
                                                         </Box>
 
                                                         <Box sx={{ px: 1.15, pb: 1.05 }}>
-                                                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(7,minmax(0,1fr))" }, gap: .6 }}>
+                                                            <Box sx={{
+                                                                display: "grid",
+                                                                gridTemplateColumns: {
+                                                                    xs: "repeat(2,minmax(0,1fr))",
+                                                                    md: "repeat(7,minmax(0,1fr))",
+                                                                },
+                                                                gap: .6,
+                                                            }}>
                                                                 {[
                                                                     ["Tracked", lot.trackedQty],
                                                                     ["Requested", lot.lineRequestedQty],
@@ -1552,15 +2697,30 @@ export function MatFlowMaterialTrackerPage() {
                                                                     ["Consumed", lot.lineConsumedQty],
                                                                     ["Returned", lot.lineReturnedQty],
                                                                 ].map(([label, value]) => (
-                                                                    <Box key={label} sx={{ p: .65, borderRadius: 1.3, border: "1px solid var(--mf-border)" }}>
+                                                                    <Box
+                                                                        key={label}
+                                                                        sx={{
+                                                                            p: .65,
+                                                                            borderRadius: 1.3,
+                                                                            border: "1px solid var(--mf-border)",
+                                                                        }}
+                                                                    >
                                                                         <Typography sx={{ ...subTextSx, fontSize: 8.5 }}>{label}</Typography>
-                                                                        <Typography sx={{ fontSize: 13, fontWeight: 950 }}>{formatQty(value)} {lot.uom || ""}</Typography>
+                                                                        <Typography sx={{ fontSize: 13, fontWeight: 950 }}>
+                                                                            {formatQty(value)} {lot.uom || ""}
+                                                                        </Typography>
                                                                     </Box>
                                                                 ))}
                                                             </Box>
 
                                                             {lot.lineLevelPostIssueAggregation && (
-                                                                <Box sx={{ mt: .75, p: .8, borderRadius: 1.5, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
+                                                                <Box sx={{
+                                                                    mt: .75,
+                                                                    p: .8,
+                                                                    borderRadius: 1.5,
+                                                                    border: "1px solid var(--mf-border)",
+                                                                    background: "var(--mf-surface)",
+                                                                }}>
                                                                     <Typography sx={{ fontSize: 11.5, fontWeight: 900 }}>Traceability note</Typography>
                                                                     <Typography sx={subTextSx}>
                                                                         Multiple reservations feed this requisition line. Store issue remains reservation-specific, but current Production consumption/return records are line-level. MatFlow therefore labels the post-issue section as aggregated instead of assigning consumption to the wrong physical reservation.
@@ -1568,39 +2728,93 @@ export function MatFlowMaterialTrackerPage() {
                                                                 </Box>
                                                             )}
 
-                                                            <Box sx={{ mt: .8, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                                                                <Typography sx={subTextSx}>{history.length} custody event(s) recorded for this branch.</Typography>
-                                                                <Button onClick={() => toggleLot(lot.lotKey)} sx={secondaryBtnSx}>
+                                                            <Box sx={{
+                                                                mt: .8,
+                                                                display: "flex",
+                                                                justifyContent: "space-between",
+                                                                gap: 1,
+                                                                alignItems: "center",
+                                                                flexWrap: "wrap",
+                                                            }}>
+                                                                <Typography sx={subTextSx}>
+                                                                    {history.length} custody event(s) recorded for this branch.
+                                                                </Typography>
+                                                                <Button
+                                                                    onClick={() => toggleLot(lot.lotKey)}
+                                                                    sx={secondaryBtnSx}
+                                                                >
                                                                     {expanded ? "Hide Custody Timeline" : "Full Custody Timeline"}
                                                                 </Button>
                                                             </Box>
                                                         </Box>
 
                                                         <Collapse in={expanded}>
-                                                            <Box sx={{ borderTop: "1px solid var(--mf-border)", p: 1.05, background: "var(--mf-surface)" }}>
-                                                                <Typography sx={{ fontSize: 14, fontWeight: 950, mb: .75 }}>Custody & Stage-Time Timeline</Typography>
+                                                            <Box sx={{
+                                                                borderTop: "1px solid var(--mf-border)",
+                                                                p: 1.05,
+                                                                background: "var(--mf-surface)",
+                                                            }}>
+                                                                <Typography sx={{ fontSize: 14, fontWeight: 950, mb: .75 }}>
+                                                                    Custody & Stage-Time Timeline
+                                                                </Typography>
+
                                                                 <Box sx={tableShellSx}>
-                                                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px" }}>
-                                                                        {["#", "State / Event", "Department / Location", "Entered", "Exited", "Duration", "SLA", "Actor", "Reference"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                                                    <Box sx={{
+                                                                        ...tableHeaderSx,
+                                                                        gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px",
+                                                                    }}>
+                                                                        {["#", "State / Event", "Department / Location", "Entered", "Exited", "Duration", "SLA", "Actor", "Reference"].map((heading) => (
+                                                                            <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                                                        ))}
                                                                     </Box>
-                                                                    {history.length === 0 ? <EmptyState>No custody events have been created for this branch yet.</EmptyState> : history.map((event) => (
-                                                                        <Box key={`${lot.lotKey}:${event.sequence}`} sx={{ ...tableRowSx, gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px" }}>
+
+                                                                    {history.length === 0 ? (
+                                                                        <EmptyState>No custody events have been created for this branch yet.</EmptyState>
+                                                                    ) : history.map((event) => (
+                                                                        <Box
+                                                                            key={`${lot.lotKey}:${event.sequence}`}
+                                                                            sx={{
+                                                                                ...tableRowSx,
+                                                                                gridTemplateColumns: "55px 170px 175px 155px 165px 165px 120px 130px 180px",
+                                                                            }}
+                                                                        >
                                                                             <Box sx={tableCellSx}>{event.sequence}</Box>
-                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{event.label || readable(event.state)}</Typography><Typography sx={subTextSx}>{readable(event.state)} · {formatQty(event.quantity)} {lot.uom || ""}</Typography></Box>
-                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(event.department || "-")}</Typography><Typography sx={subTextSx}>{materialTowerLocation(event.locationCode, event.locationName, event.department, event.state)}</Typography></Box>
+                                                                            <Box sx={tableCellSx}>
+                                                                                <Typography sx={mainTextSx}>{event.label || readable(event.state)}</Typography>
+                                                                                <Typography sx={subTextSx}>
+                                                                                    {readable(event.state)} · {formatQty(event.quantity)} {lot.uom || ""}
+                                                                                </Typography>
+                                                                            </Box>
+                                                                            <Box sx={tableCellSx}>
+                                                                                <Typography sx={mainTextSx}>{readable(event.department || "-")}</Typography>
+                                                                                <Typography sx={subTextSx}>
+                                                                                    {materialTowerLocation(event.locationCode, event.locationName, event.department, event.state)}
+                                                                                </Typography>
+                                                                            </Box>
                                                                             <Box sx={tableCellSx}>{formatDate(event.enteredAt)}</Box>
                                                                             <Box sx={tableCellSx}>{event.exitedAt ? formatDate(event.exitedAt) : "Current"}</Box>
-                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatDurationMinutes(event.durationMinutes || 0)}</Typography>{Number(event.targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(event.targetMinutes)}</Typography>}</Box>
+                                                                            <Box sx={tableCellSx}>
+                                                                                <Typography sx={mainTextSx}>{formatDurationMinutes(event.durationMinutes || 0)}</Typography>
+                                                                                {Number(event.targetMinutes || 0) > 0 && (
+                                                                                    <Typography sx={subTextSx}>Target {formatDurationMinutes(event.targetMinutes)}</Typography>
+                                                                                )}
+                                                                            </Box>
                                                                             <Box sx={tableCellSx}><TimingHealthChip health={event.timingHealth} /></Box>
                                                                             <Box sx={tableCellSx}>{event.actor || "-"}</Box>
-                                                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{event.referenceNumber || event.referenceType || "-"}</Typography><Typography sx={subTextSx}>{event.scope ? readable(event.scope) : ""}</Typography></Box>
+                                                                            <Box sx={tableCellSx}>
+                                                                                <Typography sx={mainTextSx}>{event.referenceNumber || event.referenceType || "-"}</Typography>
+                                                                                <Typography sx={subTextSx}>{event.scope ? readable(event.scope) : ""}</Typography>
+                                                                            </Box>
                                                                         </Box>
                                                                     ))}
                                                                 </Box>
+
                                                                 {history.some((event) => event.note) && (
                                                                     <Box sx={{ mt: .8 }}>
                                                                         {history.filter((event) => event.note).map((event) => (
-                                                                            <Typography key={`note:${event.sequence}`} sx={subTextSx}>#{event.sequence} · {event.note}</Typography>
+                                                                            <Typography key={`note:${event.sequence}`} sx={subTextSx}>
+                                                                                #{event.sequence} · {event.note}
+                                                                            </Typography>
                                                                         ))}
                                                                     </Box>
                                                                 )}
@@ -1629,27 +2843,54 @@ export function MatFlowMaterialTrackerPage() {
                     <Card sx={panelSx}>
                         <Box sx={{ mb: 1 }}>
                             <Typography sx={{ fontSize: 17, fontWeight: 950 }}>Immutable Material Movement Ledger</Typography>
-                            <Typography sx={subTextSx}>Latest stock-ledger movements for this material across the accessible plant scope. Use this as the quantity-level physical audit corroboration for the custody timeline.</Typography>
+                            <Typography sx={subTextSx}>
+                                Latest stock-ledger movements for this material in {scopeLabel}. Use this as the quantity-level physical audit corroboration for the custody timeline.
+                            </Typography>
                         </Box>
+
                         <Box sx={tableShellSx}>
-                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px" }}>
-                                {["Time", "Movement", "Location", "Qty Δ", "Reserved Δ", "Blocked Δ", "Transit Δ", "Project / Drawing", "Reference", "Actor"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            <Box sx={{
+                                ...tableHeaderSx,
+                                gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px",
+                            }}>
+                                {["Time", "Movement", "Location", "Qty Δ", "Reserved Δ", "Blocked Δ", "Transit Δ", "Project / Drawing", "Reference", "Actor"].map((heading) => (
+                                    <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                ))}
                             </Box>
-                            {movementRows.length === 0 ? <EmptyState>No stock-ledger movement exists for the selected material.</EmptyState> : movementPagination.pageItems.map((row) => (
-                                <Box key={row.ledgerId} sx={{ ...tableRowSx, gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px" }}>
+
+                            {movementRows.length === 0 ? (
+                                <EmptyState>No stock-ledger movement exists for the selected material and scope.</EmptyState>
+                            ) : movementPagination.pageItems.map((row) => (
+                                <Box
+                                    key={row.ledgerId || row.id}
+                                    sx={{
+                                        ...tableRowSx,
+                                        gridTemplateColumns: "165px 155px 165px 105px 105px 105px 105px 170px 165px 165px",
+                                    }}
+                                >
                                     <Box sx={tableCellSx}>{formatDate(row.actionAt)}</Box>
                                     <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography><Typography sx={subTextSx}>{row.locationName || row.plantCode || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.locationCode || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.locationName || row.plantCode || "-"}</Typography>
+                                    </Box>
                                     <Box sx={tableCellSx}>{formatQty(row.quantityChange)}</Box>
                                     <Box sx={tableCellSx}>{formatQty(row.reservedChange)}</Box>
                                     <Box sx={tableCellSx}>{formatQty(row.blockedChange)}</Box>
                                     <Box sx={tableCellSx}>{formatQty(row.inTransitChange)}</Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.referenceNumber || row.referenceType || "-"}</Typography><Typography sx={subTextSx}>{row.batchNo || ""}</Typography></Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.referenceNumber || row.referenceType || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.batchNo || ""}</Typography>
+                                    </Box>
                                     <Box sx={tableCellSx}>{row.actor || "-"}</Box>
                                 </Box>
                             ))}
                         </Box>
+
                         <MatFlowPagination
                             {...movementPagination}
                             onPageChange={movementPagination.setPage}

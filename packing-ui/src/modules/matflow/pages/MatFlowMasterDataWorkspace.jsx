@@ -455,7 +455,7 @@ const productHasExecutionHistory = (product) =>
  * - this page owns Project headers and Product/Drawing registry data;
  * - Director product approval and BOM hand-off live here;
  * - material custody, shortages, stage timing and next actions live only in
- *   the dedicated Project Material Tracker.
+ *   the dedicated Project Tracker.
  */
 export function MatFlowProjectsPage() {
     const navigate = useNavigate();
@@ -813,7 +813,7 @@ export function MatFlowProjectsPage() {
             <PageHero
                 badge="PROJECT PORTFOLIO ADMINISTRATION"
                 title="Projects & Products"
-                subtitle="Master the client Project structure here: create Project headers, maintain the Product / Drawing register, control Director approval, and hand approved Products to Engineering BOM. Live material custody, shortages, stage timing and execution remain exclusively in Project Material Tracker."
+                subtitle="Master the client Project structure here: create Project headers, maintain the Product / Drawing register, control Director approval, and hand approved Products to Engineering BOM. Live material custody, shortages, stage timing and execution remain exclusively in Project Tracker."
                 actions={
                     <>
                         <Button
