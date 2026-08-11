@@ -1278,12 +1278,25 @@ public class MatFlowInsightService {
                                         .filter(this::hasReadableProject)
                                         .filter(requisition -> accessService.canAccessPlant(
                                                         requisition.projectDrawing.getPlantCode()))
-                                        .map(this::toTrackerRow)
-                                        .filter(row -> requestedPlant == null || requestedPlant.equals(
-                                                        normalizeCode(row.destinationPlantCode())))
-                                        .filter(row -> requestedStage == null || requestedStage.equals(
-                                                        normalizeCode(row.currentStage())))
-                                        .filter(row -> query.isBlank() || matchesSearch(row, query))
+                                        /*
+                                         * Tracker plant selection follows the owning Project/Product plant,
+                                         * exactly like Project Portfolio. Destination plant remains a live
+                                         * movement/location attribute and must not decide whether a Product
+                                         * belongs to the selected Project portfolio.
+                                         */
+                                        .filter(requisition -> requestedPlant == null || requestedPlant.equals(
+                                                        normalizeCode(requisition.projectDrawing.getPlantCode())))
+                                        /*
+                                         * Keep both the entity and computed row long enough to let search
+                                         * match Client/Project/Product fields as well as live execution fields.
+                                         */
+                                        .map(requisition -> Map.entry(requisition, toTrackerRow(requisition)))
+                                        .filter(entry -> requestedStage == null || requestedStage.equals(
+                                                        normalizeCode(entry.getValue().currentStage())))
+                                        .filter(entry -> query.isBlank()
+                                                        || matchesProjectSearch(entry.getKey(), query)
+                                                        || matchesSearch(entry.getValue(), query))
+                                        .map(Map.Entry::getValue)
                                         .toList();
 
                         return new TrackerResponse(createKpis(rows), rows);
@@ -2519,6 +2532,23 @@ public class MatFlowInsightService {
                 private boolean hasReadableProject(MatFlowMaterialRequisition requisition) {
                         return requisition != null && requisition.projectDrawing != null
                                         && normalizeCode(requisition.projectDrawing.getPlantCode()) != null;
+                }
+
+                private boolean matchesProjectSearch(
+                                MatFlowMaterialRequisition requisition,
+                                String query) {
+                        if (requisition == null || requisition.projectDrawing == null) {
+                                return false;
+                        }
+
+                        MatFlowProjectDrawing product = requisition.projectDrawing;
+
+                        return contains(product.getProjectCode(), query)
+                                        || contains(product.getProjectName(), query)
+                                        || contains(product.getClientName(), query)
+                                        || contains(product.getProductName(), query)
+                                        || contains(product.getDrawingNo(), query)
+                                        || contains(product.getPlantCode(), query);
                 }
 
                 private boolean matchesSearch(TrackerRowResponse row, String query) {

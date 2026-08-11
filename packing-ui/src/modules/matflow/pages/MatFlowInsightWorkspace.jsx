@@ -101,6 +101,127 @@ const trackerHealth = (row) => {
     return { label: "Fresh <24h", tone: "success" };
 };
 
+
+const sumTrackerField = (rows, field) =>
+    rows.reduce((total, row) => total + numeric(row?.[field]), 0);
+
+const isCancelledTrackerRow = (row) =>
+    normalize(row?.currentStage) === "CANCELLED" ||
+    normalize(row?.requisitionStatus) === "CANCELLED";
+
+const productExecutionState = (product, trackerRowsByProduct) => {
+    const key = String(product?.id || "");
+    const allRows = key ? (trackerRowsByProduct.get(key) || []) : [];
+    const rows = allRows.filter((row) => !isCancelledTrackerRow(row));
+    const latest = rows[0] || allRows[0] || null;
+
+    const requestedQty = sumTrackerField(rows, "requestedQty");
+    const reservedQty = sumTrackerField(rows, "reservedQty");
+    const shortageQty = sumTrackerField(rows, "shortageQty");
+    const issuedQty = sumTrackerField(rows, "issuedQty");
+    const consumedQty = sumTrackerField(rows, "consumedQty");
+    const returnedQty = sumTrackerField(rows, "returnedQty");
+
+    const coveredQty = Math.max(reservedQty, issuedQty, consumedQty);
+    const materialCoveragePercent = requestedQty > 0
+        ? Math.min(100, Math.round((coveredQty / requestedQty) * 1000) / 10)
+        : 0;
+
+    const completed =
+        rows.length > 0 &&
+        rows.every((row) =>
+            normalize(row?.currentStage || row?.requisitionStatus) ===
+            "PRODUCTION_COMPLETED"
+        );
+
+    return {
+        ...product,
+        requestedQty,
+        reservedQty,
+        shortageQty,
+        issuedQty,
+        consumedQty,
+        returnedQty,
+        materialCoveragePercent,
+        requisitionCount: rows.length,
+        latestRequisitionId:
+            latest?.requisitionId || product?.latestRequisitionId || null,
+        latestRequisitionNumber:
+            latest?.requisitionNumber || product?.latestRequisitionNumber || null,
+        requisitionStatus:
+            latest?.requisitionStatus || product?.requisitionStatus || null,
+        currentStage:
+            latest?.currentStage || product?.currentStage || null,
+        currentDepartment:
+            latest?.currentDepartment ||
+            product?.currentDepartment ||
+            (normalize(product?.approvalStatus) !== "APPROVED"
+                ? "DIRECTOR APPROVAL"
+                : product?.latestBomId
+                    ? "READY FOR EXECUTION"
+                    : "ENGINEERING / BOM"),
+        _trackerRows: rows,
+        _latestTrackerRow: latest,
+        _completed: completed,
+    };
+};
+
+const projectDepartment = (products, fallback) => {
+    const departments = Array.from(
+        new Set(
+            products
+                .map((product) => clean(product?._latestTrackerRow?.currentDepartment))
+                .filter(Boolean)
+                .map((value) => normalize(value))
+        )
+    );
+
+    if (departments.length === 0) {
+        return fallback || "PROJECT SETUP";
+    }
+
+    if (departments.length === 1) {
+        return departments[0];
+    }
+
+    return `MULTI-DEPARTMENT (${departments.length})`;
+};
+
+const projectExecutionHealth = (project, products) => {
+    if (project?.active === false) return "INACTIVE";
+    if (products.length === 0) return "SETUP";
+
+    const completedCount = products.filter((product) => product._completed).length;
+    if (completedCount === products.length) return "COMPLETED";
+
+    if (products.some((product) => numeric(product.shortageQty) > 0)) {
+        return "SHORTAGE_RISK";
+    }
+
+    const timingRisk = products.some((product) =>
+        ["BREACHED", "COMPLETED_LATE"].includes(
+            normalize(product?._latestTrackerRow?.timingHealth)
+        )
+    );
+    if (timingRisk) return "SLA_RISK";
+
+    if (normalize(project?.health) === "OVERDUE") return "OVERDUE";
+
+    if (products.some((product) => normalize(product?.approvalStatus) !== "APPROVED")) {
+        return "APPROVAL_PENDING";
+    }
+
+    if (products.some((product) => !product?.latestBomId)) {
+        return "BOM_PENDING";
+    }
+
+    if (products.some((product) => product?._latestTrackerRow)) {
+        return "ON_TRACK";
+    }
+
+    return normalize(project?.health) || "READY";
+};
+
 const healthSx = (tone) => ({
     px: 1.05,
     py: .4,
@@ -245,10 +366,13 @@ export function MatFlowTrackerPage() {
         setError("");
         try {
             const [projectsResponse, trackerResponse] = await Promise.all([
-                matflowApi.listProjects({
+                // Canonical Project -> Products hierarchy.
+                // Do NOT use listProjects() here: that method is intentionally a
+                // flat Product/Drawing compatibility view for legacy consumers.
+                matflowApi.listProjectPortfolio({
                     search: clean(search) || undefined,
                     active: true,
-                    plantCode: selectedPlantParam,
+                    plantCode: selectedPlantParam || undefined,
                 }),
                 matflowApi.getTracker({
                     search: clean(search) || undefined,
@@ -303,30 +427,108 @@ export function MatFlowTrackerPage() {
         return latest;
     }, [trackerRowsByProduct]);
 
+    /*
+     * The portfolio owns structure; tracker rows own live execution.
+     * Merge them by the Product/Drawing UUID so setup-only Products remain
+     * visible even before their first requisition, while active Products show
+     * real quantities, custody and completion.
+     */
+    const livePortfolio = useMemo(() => {
+        return portfolio.map((project) => {
+            const products = (Array.isArray(project?.products) ? project.products : [])
+                .map((product) => productExecutionState(product, trackerRowsByProduct));
+
+            const productCount = products.length;
+            const completedProductCount = products.filter((product) => product._completed).length;
+            const shortageProductCount = products.filter(
+                (product) => numeric(product.shortageQty) > 0
+            ).length;
+
+            const requestedQty = products.reduce(
+                (total, product) => total + numeric(product.requestedQty),
+                0
+            );
+            const coveredQty = products.reduce(
+                (total, product) =>
+                    total +
+                    Math.max(
+                        numeric(product.reservedQty),
+                        numeric(product.issuedQty),
+                        numeric(product.consumedQty)
+                    ),
+                0
+            );
+            const materialCoveragePercent = requestedQty > 0
+                ? Math.min(100, Math.round((coveredQty / requestedQty) * 1000) / 10)
+                : 0;
+
+            return {
+                ...project,
+                products,
+                productCount,
+                approvedProductCount: products.filter(
+                    (product) => normalize(product.approvalStatus) === "APPROVED"
+                ).length,
+                completedProductCount,
+                shortageProductCount,
+                materialCoveragePercent,
+                currentDepartment: projectDepartment(
+                    products,
+                    project?.currentDepartment
+                ),
+                health: projectExecutionHealth(project, products),
+            };
+        });
+    }, [portfolio, trackerRowsByProduct]);
+
     const projects = useMemo(() => {
-        if (!health) return portfolio;
-        return portfolio.filter((project) => normalize(project.health) === normalize(health));
-    }, [portfolio, health]);
+        if (!health) return livePortfolio;
+        return livePortfolio.filter(
+            (project) => normalize(project.health) === normalize(health)
+        );
+    }, [livePortfolio, health]);
 
     const projectKpis = useMemo(() => {
-        const products = portfolio.flatMap((project) => Array.isArray(project.products) ? project.products : []);
-        const complete = products.filter((product) => normalize(product.requisitionStatus) === "PRODUCTION_COMPLETED").length;
-        const shortage = products.filter((product) => numeric(product.shortageQty) > 0).length;
-        const awaitingApproval = products.filter((product) => normalize(product.approvalStatus) !== "APPROVED").length;
-        const activeMaterials = trackerRows.reduce((total, row) => total + Number(row.reservationCount || 0) + Number(row.openIndentCount || 0), 0);
+        const products = livePortfolio.flatMap((project) =>
+            Array.isArray(project.products) ? project.products : []
+        );
+        const complete = products.filter((product) => product._completed).length;
+        const shortage = products.filter(
+            (product) => numeric(product.shortageQty) > 0
+        ).length;
+        const awaitingApproval = products.filter(
+            (product) => normalize(product.approvalStatus) !== "APPROVED"
+        ).length;
+        const activeMaterials = trackerRows.reduce(
+            (total, row) =>
+                total +
+                Number(row.reservationCount || 0) +
+                Number(row.openIndentCount || 0),
+            0
+        );
+
         return {
-            projects: portfolio.length,
+            projects: livePortfolio.length,
             products: products.length,
             complete,
             shortage,
             awaitingApproval,
             activeMaterials,
         };
-    }, [portfolio, trackerRows]);
+    }, [livePortfolio, trackerRows]);
 
     const healthOptions = useMemo(
-        () => ["", ...Array.from(new Set(portfolio.map((project) => normalize(project.health)).filter(Boolean))).sort()],
-        [portfolio]
+        () => [
+            "",
+            ...Array.from(
+                new Set(
+                    livePortfolio
+                        .map((project) => normalize(project.health))
+                        .filter(Boolean)
+                )
+            ).sort(),
+        ],
+        [livePortfolio]
     );
 
     const pipeline = useMemo(() => TRACKER_FLOW.map((lane) => ({
@@ -341,7 +543,11 @@ export function MatFlowTrackerPage() {
         setExpandedProducts((current) => ({ ...current, [key]: !current[key] }));
         if (materialDetails[key] || materialLoading[key]) return;
 
-        const productTrackerRows = trackerRowsByProduct.get(key) || [];
+        const productTrackerRows = Array.isArray(product?._trackerRows)
+            ? product._trackerRows
+            : (trackerRowsByProduct.get(key) || []).filter(
+                (row) => !isCancelledTrackerRow(row)
+            );
         const requisitionIds = Array.from(new Set([
             ...productTrackerRows.map((row) => row?.requisitionId).filter(Boolean),
             product?.latestRequisitionId,
@@ -491,9 +697,9 @@ export function MatFlowTrackerPage() {
                             </Box>
                             <Box><Typography sx={subTextSx}>PLANT</Typography><Typography sx={mainTextSx}>{project.plantCode || "-"}</Typography></Box>
                             <Box><Typography sx={subTextSx}>PRODUCTS</Typography><Typography sx={mainTextSx}>{project.completedProductCount || 0}/{project.productCount || 0} complete</Typography></Box>
-                            <Box><Typography sx={subTextSx}>CURRENT DEPARTMENT</Typography><Typography sx={mainTextSx}>{project.currentDepartment || "-"}</Typography></Box>
+                            <Box><Typography sx={subTextSx}>CURRENT DEPARTMENT</Typography><Typography sx={mainTextSx}>{readable(project.currentDepartment || "-")}</Typography></Box>
                             <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: .7, flexWrap: "wrap" }}>
-                                <Box sx={healthSx(healthTone)}>{readable(project.health)}</Box>
+                                <Box sx={healthSx(healthTone)}>{readable(project.health || "SETUP")}</Box>
                                 {projectExpanded && (
                                     <IconButton
                                         aria-label={`Collapse project ${project.projectCode || project.projectName || ""}`}
@@ -542,12 +748,20 @@ export function MatFlowTrackerPage() {
                         >
                             {productRows.length === 0 ? <EmptyState>No Products/Items have been added to this Project.</EmptyState> : productRows.map((product) => {
                                 const key = String(product.id);
-                                const productTrackerRows = trackerRowsByProduct.get(key) || [];
-                                const live = trackerByProduct.get(key);
+                                const productTrackerRows = Array.isArray(product._trackerRows)
+                                    ? product._trackerRows
+                                    : (trackerRowsByProduct.get(key) || []).filter(
+                                        (row) => !isCancelledTrackerRow(row)
+                                    );
+                                const live = product._latestTrackerRow || trackerByProduct.get(key);
                                 const detail = materialDetails[key];
                                 const materials = Array.isArray(detail?.materials) ? detail.materials : [];
-                                const requisitionCount = productTrackerRows.length || (product.latestRequisitionId ? 1 : 0);
-                                const stageProgress = live ? Math.max(0, Math.min(100, Number(live.actualProgressPercent ?? live.progressPercent ?? 0))) : normalize(product.requisitionStatus) === "PRODUCTION_COMPLETED" ? 100 : 0;
+                                const requisitionCount = Number(product.requisitionCount ?? productTrackerRows.length ?? 0);
+                                const stageProgress = product._completed
+                                    ? 100
+                                    : live
+                                        ? Math.max(0, Math.min(100, Number(live.actualProgressPercent ?? live.progressPercent ?? 0)))
+                                        : 0;
                                 const action = live ? trackerActionTarget(live) : null;
 
                                 return <Box key={product.id} sx={{ border: "1px solid var(--mf-border)", borderRadius: 2, overflow: "hidden", background: "var(--mf-panel-solid)" }}>
@@ -561,10 +775,10 @@ export function MatFlowTrackerPage() {
                                         <Box><Typography sx={subTextSx}>BOM</Typography><Typography sx={mainTextSx}>{product.latestBomNumber || "Not created"}</Typography><Typography sx={subTextSx}>{product.latestBomStatus ? `${readable(product.latestBomStatus)} · Rev ${product.latestBomRevision ?? "-"}` : "Engineering pending"}</Typography></Box>
                                         <Box>
                                             <Typography sx={subTextSx}>LIVE CONTROL POINT</Typography>
-                                            <Typography sx={mainTextSx}>{live?.currentDepartment || product.currentDepartment || "ENGINEERING / BOM"}</Typography>
+                                            <Typography sx={mainTextSx}>{readable(product.currentDepartment || live?.currentDepartment || "ENGINEERING / BOM")}</Typography>
                                             <Typography sx={subTextSx}>{live?.currentLocationCode || live?.currentLocationName || (live ? "Location pending" : "No material requisition yet")}</Typography>
                                         </Box>
-                                        <Box><Typography sx={subTextSx}>STATUS</Typography><MatFlowStatusChip status={live?.currentStage || live?.requisitionStatus || product.requisitionStatus || product.latestBomStatus || product.approvalStatus} /></Box>
+                                        <Box><Typography sx={subTextSx}>STATUS</Typography><MatFlowStatusChip status={product.currentStage || live?.currentStage || product.requisitionStatus || live?.requisitionStatus || product.latestBomStatus || product.approvalStatus} /></Box>
                                         <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: { xs: "flex-start", xl: "flex-end" } }}>
                                             {requisitionCount > 0 && <Button onClick={() => loadMaterialDetail(product)} sx={secondaryBtnSx}>{expandedProducts[key] ? "Hide Materials" : `Materials (${requisitionCount} req.)`}</Button>}
                                             {product.latestRequisitionId && <Button onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)} sx={secondaryBtnSx}>Latest Trace</Button>}
