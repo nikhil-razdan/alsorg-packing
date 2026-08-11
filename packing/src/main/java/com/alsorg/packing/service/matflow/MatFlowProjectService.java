@@ -14,7 +14,6 @@ import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
-import com.alsorg.packing.repository.matflow.MatFlowBomLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectProductRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
@@ -47,7 +46,6 @@ public class MatFlowProjectService {
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectProductRepository productRepository;
     private final MatFlowBomRepository bomRepository;
-    private final MatFlowBomLineRepository bomLineRepository;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
     private final MatFlowRequisitionLineRepository requisitionLineRepository;
     private final MatFlowAccessService accessService;
@@ -57,7 +55,6 @@ public class MatFlowProjectService {
             MatFlowProjectRepository projectRepository,
             MatFlowProjectProductRepository productRepository,
             MatFlowBomRepository bomRepository,
-            MatFlowBomLineRepository bomLineRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
             MatFlowRequisitionLineRepository requisitionLineRepository,
             MatFlowAccessService accessService,
@@ -65,7 +62,6 @@ public class MatFlowProjectService {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
         this.bomRepository = bomRepository;
-        this.bomLineRepository = bomLineRepository;
         this.requisitionRepository = requisitionRepository;
         this.requisitionLineRepository = requisitionLineRepository;
         this.accessService = accessService;
@@ -252,8 +248,9 @@ public class MatFlowProjectService {
                 || !same(product.getDrawingNo(), nextDrawing)
                 || !same(product.getDrawingRevision(), nextRevision);
 
-        boolean hasBom = bomRepository.findAll().stream().anyMatch(bom -> bom.getProjectDrawing() != null
-                && product.getId().equals(bom.getProjectDrawing().getId()));
+        boolean hasBom = !bomRepository
+                .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
+                .isEmpty();
 
         if (hasBom && identityChanged) {
             throw conflict(
@@ -362,6 +359,129 @@ public class MatFlowProjectService {
         return toPortfolio(project);
     }
 
+    /**
+     * Permanently removes a setup-only Project aggregate.
+     *
+     * Historical execution is deliberately protected: once any Product owns a
+     * BOM or material requisition, the Project must be deactivated instead of
+     * deleted so audit and material traceability remain intact.
+     */
+    @Transactional
+    public void deleteProject(UUID projectId, Long rowVersion) {
+        accessService.requireProjectWrite();
+
+        MatFlowProject project = requireProject(projectId);
+        assertVersion(rowVersion, project.getRowVersion(), "Project");
+
+        List<MatFlowProjectDrawing> products = productsOf(project);
+        for (MatFlowProjectDrawing product : products) {
+            assertProductCanBeDeleted(product);
+        }
+
+        String actor = accessService.actor();
+
+        for (MatFlowProjectDrawing product : products) {
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    product.getId(),
+                    "PROJECT_PRODUCT_DELETED",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    product.getDrawingNo(),
+                    auditService.details(
+                            "projectId", project.getId(),
+                            "productName", product.getProductName(),
+                            "drawingRevision", product.getDrawingRevision(),
+                            "deletedBy", actor));
+        }
+
+        auditService.record(
+                "PROJECT",
+                project.getId(),
+                "PROJECT_DELETED",
+                project.getPlantCode(),
+                project.getProjectCode(),
+                null,
+                auditService.details(
+                        "projectName", project.getProjectName(),
+                        "clientName", project.getClientName(),
+                        "productCount", products.size(),
+                        "deletedBy", actor));
+
+        if (!products.isEmpty()) {
+            productRepository.deleteAll(products);
+            productRepository.flush();
+        }
+
+        projectRepository.delete(project);
+        projectRepository.flush();
+    }
+
+    /**
+     * Permanently removes one setup-only Product/Drawing child.
+     * Products that already own BOM or material-requisition history are kept
+     * immutable from a deletion perspective and should be deactivated instead.
+     */
+    @Transactional
+    public ProjectPortfolioResponse deleteProduct(
+            UUID projectId,
+            UUID productId,
+            Long rowVersion) {
+
+        accessService.requireProjectWrite();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        assertVersion(rowVersion, product.getRowVersion(), "Project Product");
+        assertProductCanBeDeleted(product);
+
+        String actor = accessService.actor();
+
+        auditService.record(
+                "PROJECT_PRODUCT",
+                product.getId(),
+                "PROJECT_PRODUCT_DELETED",
+                project.getPlantCode(),
+                project.getProjectCode(),
+                product.getDrawingNo(),
+                auditService.details(
+                        "projectId", project.getId(),
+                        "productName", product.getProductName(),
+                        "drawingRevision", product.getDrawingRevision(),
+                        "deletedBy", actor));
+
+        productRepository.delete(product);
+        productRepository.flush();
+
+        return toPortfolio(project);
+    }
+
+    private void assertProductCanBeDeleted(MatFlowProjectDrawing product) {
+        if (product == null || product.getId() == null) {
+            throw badRequest("Project Product is required");
+        }
+
+        boolean hasBom = !bomRepository
+                .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
+                .isEmpty();
+        boolean hasRequisition = !requisitionRepository
+                .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
+                .isEmpty();
+
+        if (hasBom || hasRequisition) {
+            String dependencies = hasBom && hasRequisition
+                    ? "BOM and material requisition history"
+                    : hasBom
+                            ? "BOM history"
+                            : "material requisition history";
+
+            throw conflict(
+                    "Cannot delete Product '" + product.getProductName() + "' because it already has "
+                            + dependencies
+                            + ". Mark the Product inactive instead so MatFlow traceability is preserved.");
+        }
+    }
+
     private ProjectPortfolioResponse toPortfolio(MatFlowProject project) {
         List<ProductPortfolioRow> products = productsOf(project).stream()
                 .sorted(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
@@ -402,29 +522,21 @@ public class MatFlowProjectService {
                 .findFirst()
                 .orElse(null);
 
-        List<MatFlowMaterialRequisition> requisitions = requisitionRepository
+        MatFlowMaterialRequisition latestReq = requisitionRepository
                 .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
                 .stream()
-                .filter(req -> req.status != RequisitionStatus.CANCELLED)
-                .toList();
+                .findFirst()
+                .orElse(null);
 
-        MatFlowMaterialRequisition latestReq = requisitions.stream().findFirst().orElse(null);
-
-        /*
-         * Product portfolio quantities must represent the whole Product/Drawing,
-         * not only its newest requisition. A product may be requisitioned in
-         * multiple approved lots, so latest-only totals silently under-report
-         * material demand and consumption.
-         */
         BigDecimal requested = BigDecimal.ZERO;
         BigDecimal reserved = BigDecimal.ZERO;
         BigDecimal shortage = BigDecimal.ZERO;
         BigDecimal issued = BigDecimal.ZERO;
         BigDecimal consumed = BigDecimal.ZERO;
 
-        for (MatFlowMaterialRequisition requisition : requisitions) {
+        if (latestReq != null) {
             for (MatFlowRequisitionLine line : requisitionLineRepository
-                    .findByRequisition_IdOrderByLineNoAsc(requisition.getId())) {
+                    .findByRequisition_IdOrderByLineNoAsc(latestReq.getId())) {
                 requested = requested.add(zero(line.requestedQty));
                 reserved = reserved.add(zero(line.reservedQty));
                 shortage = shortage.add(zero(line.shortageQty));
@@ -433,10 +545,7 @@ public class MatFlowProjectService {
             }
         }
 
-        boolean productCompleted = isProductManufacturingComplete(latestBom);
-        String reqStatus = productCompleted
-                ? RequisitionStatus.PRODUCTION_COMPLETED.name()
-                : latestReq == null || latestReq.status == null ? null : latestReq.status.name();
+        String reqStatus = latestReq == null || latestReq.status == null ? null : latestReq.status.name();
         return new ProductPortfolioRow(
                 product.getId(), product.getProductName(), product.getDrawingNo(), product.getDrawingRevision(),
                 product.getRequiredDate(), product.getProductApprovalStatus(), product.getProductApprovedBy(),
@@ -450,60 +559,9 @@ public class MatFlowProjectService {
                 latestReq == null ? null : latestReq.getId(),
                 latestReq == null ? null : latestReq.requisitionNumber,
                 reqStatus,
-                currentDepartment(requisitions),
+                currentDepartment(latestReq),
                 scale(requested), scale(reserved), scale(shortage), scale(issued), scale(consumed),
                 product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
-    }
-
-    /**
-     * A Product is complete only when the current effective approved BOM is fully
-     * requisitioned and every non-cancelled requisition carrying that BOM has
-     * completed Production. This prevents one small/partial requisition from
-     * falsely completing the whole Product.
-     */
-    private boolean isProductManufacturingComplete(MatFlowBom operationalBom) {
-        if (operationalBom == null
-                || operationalBom.getStatus() != MatFlowBomStatus.APPROVED
-                || !operationalBom.isEffective()) {
-            return false;
-        }
-
-        List<com.alsorg.packing.domain.matflow.MatFlowBomLine> bomLines = bomLineRepository
-                .findByBom_IdOrderByLineNoAsc(operationalBom.getId());
-        if (bomLines.isEmpty())
-            return false;
-
-        java.util.LinkedHashSet<UUID> requisitionIds = new java.util.LinkedHashSet<>();
-
-        for (com.alsorg.packing.domain.matflow.MatFlowBomLine bomLine : bomLines) {
-            List<MatFlowRequisitionLine> requestedLines = requisitionLineRepository
-                    .findByBomLine_Id(bomLine.getId())
-                    .stream()
-                    .filter(line -> line.requisition != null
-                            && line.requisition.status != RequisitionStatus.CANCELLED)
-                    .toList();
-
-            BigDecimal totalRequested = requestedLines.stream()
-                    .map(line -> zero(line.requestedQty))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            if (totalRequested.compareTo(zero(bomLine.getNetRequiredQty())) < 0) {
-                return false;
-            }
-
-            requestedLines.stream()
-                    .map(line -> line.requisition.getId())
-                    .filter(java.util.Objects::nonNull)
-                    .forEach(requisitionIds::add);
-        }
-
-        if (requisitionIds.isEmpty())
-            return false;
-
-        return requisitionIds.stream()
-                .map(requisitionRepository::findById)
-                .allMatch(optional -> optional.isPresent()
-                        && optional.get().status == RequisitionStatus.PRODUCTION_COMPLETED);
     }
 
     private String aggregateDepartment(List<ProductPortfolioRow> products) {
@@ -541,32 +599,20 @@ public class MatFlowProjectService {
         return "ON_TRACK";
     }
 
-    private String currentDepartment(List<MatFlowMaterialRequisition> requisitions) {
-        if (requisitions == null || requisitions.isEmpty())
+    private String currentDepartment(MatFlowMaterialRequisition requisition) {
+        if (requisition == null)
             return "ENGINEERING / BOM";
-
-        /* Parallel shortage + available-stock execution is normal in MatFlow. */
-        boolean purchase = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.SHORTAGE_PENDING);
-        boolean production = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.ISSUED_TO_PRODUCTION
-                || req.status == RequisitionStatus.PRODUCTION_STARTED);
-        boolean store = requisitions.stream().anyMatch(req -> req.status == RequisitionStatus.SUBMITTED_TO_STORE
-                || req.status == RequisitionStatus.STORE_REVIEW_IN_PROGRESS
-                || req.status == RequisitionStatus.PARTIALLY_RESERVED
-                || req.status == RequisitionStatus.READY_TO_ISSUE
-                || req.status == RequisitionStatus.PARTIALLY_ISSUED);
-
-        if (purchase && (production || store))
-            return "MULTI-DEPARTMENT";
-        if (purchase)
-            return "PURCHASE";
-        if (production)
+        RequisitionStatus status = requisition.status;
+        if (status == null)
             return "PRODUCTION";
-        if (store)
-            return "STORE";
-        if (requisitions.stream().allMatch(req -> req.status == RequisitionStatus.PRODUCTION_COMPLETED)) {
-            return "COMPLETED";
-        }
-        return "PRODUCTION";
+        return switch (status) {
+            case DRAFT -> "PRODUCTION";
+            case SUBMITTED_TO_STORE, STORE_REVIEW_IN_PROGRESS, PARTIALLY_RESERVED, READY_TO_ISSUE, PARTIALLY_ISSUED ->
+                "STORE";
+            case SHORTAGE_PENDING -> "PURCHASE";
+            case ISSUED_TO_PRODUCTION, PRODUCTION_STARTED, PRODUCTION_COMPLETED -> "PRODUCTION";
+            default -> "MATFLOW";
+        };
     }
 
     private List<MatFlowProjectDrawing> productsOf(MatFlowProject project) {

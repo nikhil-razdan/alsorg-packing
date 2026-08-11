@@ -83,7 +83,7 @@ const HEADER = [
     ["/matflow/tracker", "Project Material Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
     ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
     ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
-    ["/matflow/projects", "Projects & Products", "Client Project → one or many Products/Items → BOM → material execution hierarchy"],
+    ["/matflow/projects", "Projects & Products", "Portfolio setup, Product / Drawing register, Director approvals and lifecycle administration"],
     ["/matflow/materials", "Material Master", "Standardized operational material records"],
     ["/matflow/locations", "Locations", "Store, Production, Processing and QC destinations"],
 ];

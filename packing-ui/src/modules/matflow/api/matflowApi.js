@@ -57,22 +57,12 @@ export const readMatFlowError = (
 		return data;
 	}
 
-	const validationPayload =
-		(data?.validationErrors && typeof data.validationErrors === "object"
-			? data.validationErrors
-			: null) ||
-		(data?.details?.validationErrors && typeof data.details.validationErrors === "object"
-			? data.details.validationErrors
-			: null) ||
-		(data?.details?.errors && typeof data.details.errors === "object"
-			? data.details.errors
-			: null);
-
-	const validationErrors = validationPayload
-		? Object.entries(validationPayload).map(
-			([field, message]) => `${field}: ${message}`
-		)
-		: [];
+	const validationErrors =
+		data?.validationErrors && typeof data.validationErrors === "object"
+			? Object.entries(data.validationErrors).map(
+				([field, message]) => `${field}: ${message}`
+			)
+			: [];
 
 	const message =
 		data?.message ||
@@ -105,53 +95,83 @@ export const matflowApi = {
 			body
 		),
 
-	/*
-	 * Canonical v3 Project -> Products aggregate.
-	 *
-	 * Backend:
-	 *   /api/matflow/projects
-	 *   /api/matflow/projects/{projectId}/products/...
-	 *
-	 * This is the only Project API used by the frontend.
-	 */
+	// True Project -> Products aggregate (vNext primary project API)
+	listProjectPortfolio: (params = {}) =>
+		API.get(`${BASE}/project-portfolio`, {
+			params: cleanParams(params),
+		}),
+
+	getProjectPortfolio: (projectId) =>
+		API.get(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}`),
+
+	createProjectPortfolio: (body) =>
+		API.post(`${BASE}/project-portfolio`, body),
+
+	updateProjectPortfolio: (projectId, body) =>
+		API.put(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}`, body),
+
+	deleteProjectPortfolio: (projectId, rowVersion) =>
+		API.delete(
+			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
+
+	addProjectProduct: (projectId, body) =>
+		API.post(`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products`, body),
+
+	updateProjectProduct: (projectId, productId, body) =>
+		API.put(
+			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,
+			body
+		),
+
+	deleteProjectProduct: (projectId, productId, rowVersion) =>
+		API.delete(
+			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,
+			{ params: cleanParams({ rowVersion }) }
+		),
+
+	approvePortfolioProduct: (projectId, productId, body) =>
+		API.post(
+			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/approve`,
+			body
+		),
+
+	returnPortfolioProduct: (projectId, productId, body) =>
+		API.post(
+			`${BASE}/project-portfolio/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/return`,
+			body
+		),
+
 	listProjects: (params = {}) =>
 		API.get(`${BASE}/projects`, {
 			params: cleanParams(params),
 		}),
 
-	getProject: (projectId) =>
-		API.get(`${BASE}/projects/${requiredId(projectId, "Project ID")}`),
-
 	createProject: (body) =>
 		API.post(`${BASE}/projects`, body),
 
-	updateProject: (projectId, body) =>
+	updateProject: (id, body) =>
 		API.put(
-			`${BASE}/projects/${requiredId(projectId, "Project ID")}`,
+			`${BASE}/projects/${requiredId(id, "Project drawing ID")}`,
 			body
 		),
 
-	addProjectProduct: (projectId, body) =>
+	approveProjectProduct: (id, body) =>
 		API.post(
-			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products`,
+			`${BASE}/projects/${requiredId(
+				id,
+				"Project drawing ID"
+			)}/approve-product`,
 			body
 		),
 
-	updateProjectProduct: (projectId, productId, body) =>
-		API.put(
-			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,
-			body
-		),
-
-	approveProjectProduct: (projectId, productId, body) =>
+	returnProjectProduct: (id, body) =>
 		API.post(
-			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/approve`,
-			body
-		),
-
-	returnProjectProduct: (projectId, productId, body) =>
-		API.post(
-			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/return`,
+			`${BASE}/projects/${requiredId(
+				id,
+				"Project drawing ID"
+			)}/return-product`,
 			body
 		),
 
@@ -671,10 +691,6 @@ export const matflowApi = {
 	createConsumption: (body) =>
 		API.post(`${BASE}/production-consumptions`, body),
 
-	/* ============================================================
-	 * INSIGHT / PROFESSIONAL TRACKER
-	 * ============================================================ */
-
 	dashboardReport: (params = {}) =>
 		API.get(`${BASE}/reports/dashboard`, {
 			params: cleanParams(params),
@@ -703,36 +719,11 @@ export const matflowApi = {
 			params: cleanParams(params),
 		}),
 
-	/*
-	 * Main professional Project & Material Tracker.
-	 *
-	 * GET /api/matflow/tracker
-	 */
 	getTracker: (params = {}) =>
 		API.get(`${BASE}/tracker`, {
 			params: cleanParams(params),
 		}),
 
-	/*
-	 * Professional requisition-level tracker.
-	 *
-	 * Expected to expose:
-	 * - current workflow stage
-	 * - current department
-	 * - current physical/material location
-	 * - stage owner
-	 * - stage start
-	 * - stage end
-	 * - elapsed duration
-	 * - total lead time
-	 * - material positions
-	 * - bottlenecks
-	 * - timeline
-	 * - next department
-	 * - next action
-	 *
-	 * GET /api/matflow/tracker/requisitions/{id}
-	 */
 	getTrackerDetail: (id) =>
 		API.get(
 			`${BASE}/tracker/requisitions/${requiredId(
