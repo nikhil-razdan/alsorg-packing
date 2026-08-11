@@ -691,6 +691,10 @@ export const matflowApi = {
 	createConsumption: (body) =>
 		API.post(`${BASE}/production-consumptions`, body),
 
+	/* ============================================================
+	 * INSIGHT / PROFESSIONAL TRACKER
+	 * ============================================================ */
+
 	dashboardReport: (params = {}) =>
 		API.get(`${BASE}/reports/dashboard`, {
 			params: cleanParams(params),
@@ -719,11 +723,36 @@ export const matflowApi = {
 			params: cleanParams(params),
 		}),
 
+	/*
+	 * Main professional Project & Material Tracker.
+	 *
+	 * GET /api/matflow/tracker
+	 */
 	getTracker: (params = {}) =>
 		API.get(`${BASE}/tracker`, {
 			params: cleanParams(params),
 		}),
 
+	/*
+	 * Professional requisition-level tracker.
+	 *
+	 * Expected to expose:
+	 * - current workflow stage
+	 * - current department
+	 * - current physical/material location
+	 * - stage owner
+	 * - stage start
+	 * - stage end
+	 * - elapsed duration
+	 * - total lead time
+	 * - material positions
+	 * - bottlenecks
+	 * - timeline
+	 * - next department
+	 * - next action
+	 *
+	 * GET /api/matflow/tracker/requisitions/{id}
+	 */
 	getTrackerDetail: (id) =>
 		API.get(
 			`${BASE}/tracker/requisitions/${requiredId(

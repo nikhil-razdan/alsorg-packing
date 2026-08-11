@@ -25,6 +25,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -408,13 +409,25 @@ public class MatFlowProjectService {
                         "productCount", products.size(),
                         "deletedBy", actor));
 
-        if (!products.isEmpty()) {
-            productRepository.deleteAll(products);
-            productRepository.flush();
-        }
+        try {
+            if (!products.isEmpty()) {
+                productRepository.deleteAll(products);
+                /*
+                 * Force FK/constraint validation inside this service method so a
+                 * protected historical reference becomes a controlled 409 rather
+                 * than an uncaught transaction-commit 500.
+                 */
+                productRepository.flush();
+            }
 
-        projectRepository.delete(project);
-        projectRepository.flush();
+            projectRepository.delete(project);
+            projectRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw conflict(
+                    "Cannot delete Project '" + project.getProjectCode()
+                            + "' because another MatFlow record still references the Project or one of its Products. "
+                            + "Deactivate it instead so historical traceability is preserved.");
+        }
     }
 
     /**
@@ -450,8 +463,16 @@ public class MatFlowProjectService {
                         "drawingRevision", product.getDrawingRevision(),
                         "deletedBy", actor));
 
-        productRepository.delete(product);
-        productRepository.flush();
+        try {
+            productRepository.delete(product);
+            /* See deleteProject(): force the physical constraint check here. */
+            productRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw conflict(
+                    "Cannot delete Product '" + product.getProductName()
+                            + "' because another MatFlow record still references it. "
+                            + "Deactivate it instead so historical traceability is preserved.");
+        }
 
         return toPortfolio(project);
     }
@@ -482,137 +503,156 @@ public class MatFlowProjectService {
         }
     }
 
+    /**
+     * Project Portfolio is an administrative/master view, not the execution
+     * tracker. Keep this response intentionally shallow: Project -> Product ->
+     * latest BOM readiness only. Material demand, reservation, shortage, transfer,
+     * QC, processing and production quantities belong to the Tracker endpoint.
+     *
+     * This also avoids unnecessarily traversing live requisition graphs from the
+     * Projects & Products page, which makes the portfolio read faster and removes
+     * Hibernate proxy sensitivity from a master-data screen.
+     */
     private ProjectPortfolioResponse toPortfolio(MatFlowProject project) {
         List<ProductPortfolioRow> products = productsOf(project).stream()
-                .sorted(Comparator.comparing(MatFlowProjectDrawing::getCreatedAt,
+                .sorted(Comparator.comparing(
+                        MatFlowProjectDrawing::getCreatedAt,
                         Comparator.nullsLast(Comparator.naturalOrder())))
-                .map(this::toProductRow)
+                .map(this::toAdministrativeProductRow)
                 .toList();
 
-        int approved = (int) products.stream().filter(p -> p.approvalStatus() == ProjectProductApprovalStatus.APPROVED)
+        int approved = (int) products.stream()
+                .filter(p -> p.approvalStatus() == ProjectProductApprovalStatus.APPROVED)
                 .count();
-        int completed = (int) products.stream().filter(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus()))
-                .count();
-        int shortage = (int) products.stream().filter(p -> p.shortageQty().compareTo(BigDecimal.ZERO) > 0).count();
 
-        BigDecimal requested = products.stream().map(ProductPortfolioRow::requestedQty).reduce(BigDecimal.ZERO,
-                BigDecimal::add);
-        BigDecimal covered = products.stream().map(p -> p.reservedQty().max(p.issuedQty())).reduce(BigDecimal.ZERO,
-                BigDecimal::add);
-        BigDecimal coverage = requested.compareTo(BigDecimal.ZERO) <= 0
-                ? BigDecimal.ZERO
-                : covered.multiply(BigDecimal.valueOf(100)).divide(requested, 1, RoundingMode.HALF_UP)
-                        .min(BigDecimal.valueOf(100));
-
-        String currentDepartment = aggregateDepartment(products);
-        String health = deriveHealth(project, products, shortage, completed);
+        String portfolioStage = derivePortfolioStage(products);
+        String portfolioHealth = derivePortfolioHealth(project, products);
 
         return new ProjectPortfolioResponse(
-                project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(),
-                project.getPlantCode(), project.getRequiredDate(), project.getPriority(), project.getProjectManager(),
-                project.getRemarks(), project.isActive(), products.size(), approved, completed, shortage, coverage,
-                currentDepartment, health, project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(),
+                project.getId(),
+                project.getProjectCode(),
+                project.getProjectName(),
+                project.getClientName(),
+                project.getPlantCode(),
+                project.getRequiredDate(),
+                project.getPriority(),
+                project.getProjectManager(),
+                project.getRemarks(),
+                project.isActive(),
+                products.size(),
+                approved,
+                0, // completedProductCount: execution lives in Tracker
+                0, // shortageProductCount: execution lives in Tracker
+                BigDecimal.ZERO, // materialCoveragePercent: execution lives in Tracker
+                portfolioStage,
+                portfolioHealth,
+                project.getRowVersion(),
+                project.getCreatedAt(),
+                project.getUpdatedAt(),
                 products);
     }
 
-    private ProductPortfolioRow toProductRow(MatFlowProjectDrawing product) {
+    private ProductPortfolioRow toAdministrativeProductRow(MatFlowProjectDrawing product) {
         MatFlowBom latestBom = bomRepository
                 .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
                 .stream()
                 .findFirst()
                 .orElse(null);
 
-        MatFlowMaterialRequisition latestReq = requisitionRepository
-                .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
-                .stream()
-                .findFirst()
-                .orElse(null);
+        BigDecimal zeroQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
 
-        BigDecimal requested = BigDecimal.ZERO;
-        BigDecimal reserved = BigDecimal.ZERO;
-        BigDecimal shortage = BigDecimal.ZERO;
-        BigDecimal issued = BigDecimal.ZERO;
-        BigDecimal consumed = BigDecimal.ZERO;
-
-        if (latestReq != null) {
-            for (MatFlowRequisitionLine line : requisitionLineRepository
-                    .findByRequisition_IdOrderByLineNoAsc(latestReq.getId())) {
-                requested = requested.add(zero(line.requestedQty));
-                reserved = reserved.add(zero(line.reservedQty));
-                shortage = shortage.add(zero(line.shortageQty));
-                issued = issued.add(zero(line.issuedQty));
-                consumed = consumed.add(zero(line.consumedQty));
-            }
-        }
-
-        String reqStatus = latestReq == null || latestReq.status == null ? null : latestReq.status.name();
         return new ProductPortfolioRow(
-                product.getId(), product.getProductName(), product.getDrawingNo(), product.getDrawingRevision(),
-                product.getRequiredDate(), product.getProductApprovalStatus(), product.getProductApprovedBy(),
-                product.getProductApprovedAt(), product.getProductReturnedBy(), product.getProductReturnedAt(),
-                product.getProductApprovalRemarks(), product.isActive(),
+                product.getId(),
+                product.getProductName(),
+                product.getDrawingNo(),
+                product.getDrawingRevision(),
+                product.getRequiredDate(),
+                product.getProductApprovalStatus(),
+                product.getProductApprovedBy(),
+                product.getProductApprovedAt(),
+                product.getProductReturnedBy(),
+                product.getProductReturnedAt(),
+                product.getProductApprovalRemarks(),
+                product.isActive(),
                 latestBom == null ? null : latestBom.getId(),
                 latestBom == null ? null : latestBom.getBomNumber(),
                 latestBom == null ? null : latestBom.getRevisionNo(),
-                latestBom == null || latestBom.getStatus() == null ? null : latestBom.getStatus().name(),
+                latestBom == null || latestBom.getStatus() == null
+                        ? null
+                        : latestBom.getStatus().name(),
                 latestBom != null && latestBom.isEffective(),
-                latestReq == null ? null : latestReq.getId(),
-                latestReq == null ? null : latestReq.requisitionNumber,
-                reqStatus,
-                currentDepartment(latestReq),
-                scale(requested), scale(reserved), scale(shortage), scale(issued), scale(consumed),
-                product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
+                null, // latestRequisitionId: Tracker owns execution
+                null, // latestRequisitionNumber
+                null, // requisitionStatus
+                deriveProductPortfolioStage(product, latestBom),
+                zeroQty,
+                zeroQty,
+                zeroQty,
+                zeroQty,
+                zeroQty,
+                product.getRowVersion(),
+                product.getCreatedAt(),
+                product.getUpdatedAt());
     }
 
-    private String aggregateDepartment(List<ProductPortfolioRow> products) {
-        if (products.isEmpty())
-            return "PROJECT SETUP";
-        if (products.stream().allMatch(p -> "PRODUCTION_COMPLETED".equals(p.requisitionStatus())))
-            return "COMPLETED";
-        if (products.stream().anyMatch(p -> "PURCHASE".equals(p.currentDepartment())))
-            return "PURCHASE";
-        if (products.stream().anyMatch(p -> "QUALITY CONTROL".equals(p.currentDepartment())))
-            return "QUALITY CONTROL";
-        if (products.stream().anyMatch(p -> "PROCESSING".equals(p.currentDepartment())))
-            return "PROCESSING";
-        if (products.stream().anyMatch(p -> "PRODUCTION".equals(p.currentDepartment())))
-            return "PRODUCTION";
-        if (products.stream().anyMatch(p -> "STORE".equals(p.currentDepartment())))
-            return "STORE";
-        if (products.stream().anyMatch(p -> "BOM REVIEW".equals(p.currentDepartment())))
-            return "BOM REVIEW";
-        return "ENGINEERING";
-    }
+    private String deriveProductPortfolioStage(
+            MatFlowProjectDrawing product,
+            MatFlowBom latestBom) {
 
-    private String deriveHealth(MatFlowProject project, List<ProductPortfolioRow> products, int shortage,
-            int completed) {
-        if (!project.isActive())
+        if (product == null || !product.isActive())
             return "INACTIVE";
-        if (!products.isEmpty() && completed == products.size())
-            return "COMPLETED";
-        if (shortage > 0)
-            return "SHORTAGE_RISK";
-        if (project.getRequiredDate() != null && project.getRequiredDate().isBefore(java.time.LocalDate.now()))
-            return "OVERDUE";
-        if (products.stream().anyMatch(p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED))
-            return "APPROVAL_PENDING";
-        return "ON_TRACK";
+
+        if (product.getProductApprovalStatus() != ProjectProductApprovalStatus.APPROVED) {
+            return "DIRECTOR APPROVAL";
+        }
+
+        if (latestBom == null)
+            return "ENGINEERING / BOM";
+        if (!latestBom.isEffective())
+            return "BOM REVIEW";
+        return "READY FOR EXECUTION";
     }
 
-    private String currentDepartment(MatFlowMaterialRequisition requisition) {
-        if (requisition == null)
+    private String derivePortfolioStage(List<ProductPortfolioRow> products) {
+        if (products == null || products.isEmpty())
+            return "PROJECT SETUP";
+
+        if (products.stream().anyMatch(
+                p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED)) {
+            return "DIRECTOR APPROVAL";
+        }
+
+        if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
             return "ENGINEERING / BOM";
-        RequisitionStatus status = requisition.status;
-        if (status == null)
-            return "PRODUCTION";
-        return switch (status) {
-            case DRAFT -> "PRODUCTION";
-            case SUBMITTED_TO_STORE, STORE_REVIEW_IN_PROGRESS, PARTIALLY_RESERVED, READY_TO_ISSUE, PARTIALLY_ISSUED ->
-                "STORE";
-            case SHORTAGE_PENDING -> "PURCHASE";
-            case ISSUED_TO_PRODUCTION, PRODUCTION_STARTED, PRODUCTION_COMPLETED -> "PRODUCTION";
-            default -> "MATFLOW";
-        };
+        }
+
+        return "BOM ADMINISTRATION";
+    }
+
+    private String derivePortfolioHealth(
+            MatFlowProject project,
+            List<ProductPortfolioRow> products) {
+
+        if (project == null || !project.isActive())
+            return "INACTIVE";
+        if (products == null || products.isEmpty())
+            return "SETUP";
+
+        if (project.getRequiredDate() != null
+                && project.getRequiredDate().isBefore(java.time.LocalDate.now())) {
+            return "OVERDUE";
+        }
+
+        if (products.stream().anyMatch(
+                p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED)) {
+            return "APPROVAL_PENDING";
+        }
+
+        if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
+            return "BOM_PENDING";
+        }
+
+        return "READY";
     }
 
     private List<MatFlowProjectDrawing> productsOf(MatFlowProject project) {
