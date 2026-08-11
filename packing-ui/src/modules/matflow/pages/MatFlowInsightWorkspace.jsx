@@ -624,12 +624,12 @@ export function MatFlowTrackerPage() {
         <ErrorBox>{error}</ErrorBox>
 
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 1 }}>
-            <SummaryCard label="Client Projects" value={projectKpis.projects} colorful />
-            <SummaryCard label="Products / Items" value={projectKpis.products} colorful />
-            <SummaryCard label="Products Completed" value={projectKpis.complete} colorful />
-            <SummaryCard label="Shortage Exposed" value={projectKpis.shortage} colorful />
-            <SummaryCard label="Approval Pending" value={projectKpis.awaitingApproval} colorful />
-            <SummaryCard label="Live Material Controls" value={projectKpis.activeMaterials} colorful />
+            <SummaryCard label="Client Projects" tone="blue" value={projectKpis.projects} colorful />
+            <SummaryCard label="Products / Items" tone="indigo" value={projectKpis.products} colorful />
+            <SummaryCard label="Products Completed" tone="green" value={projectKpis.complete} colorful />
+            <SummaryCard label="Shortage Exposed" tone="red" value={projectKpis.shortage} colorful />
+            <SummaryCard label="Approval Pending" tone="amber" value={projectKpis.awaitingApproval} colorful />
+            <SummaryCard label="Live Material Controls" tone="sky" value={projectKpis.activeMaterials} colorful />
         </Box>
 
         <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
@@ -886,12 +886,12 @@ export function MatFlowTrackerDetailPage() {
         <ErrorBox>{error}</ErrorBox>
 
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}>
-            <SummaryCard label="Current Department" value={summary.currentDepartment || summary.responsibleDesk || "-"} />
-            <SummaryCard label="Current Location" value={summary.currentLocationCode || summary.currentLocationName || "-"} />
-            <SummaryCard label="Stage Time" value={formatDurationMinutes(summary.stageDurationMinutes || 0)} />
-            <SummaryCard label="Total Lead Time" value={formatDurationMinutes(summary.totalLeadTimeMinutes || 0)} />
-            <SummaryCard label="Progress" value={`${summary.actualProgressPercent ?? summary.progressPercent ?? 0}%`} />
-            <SummaryCard label="SLA Breaches" value={cycle.slaBreachedStageCount ?? 0} />
+            <SummaryCard label="Current Department" tone="sky" value={summary.currentDepartment || summary.responsibleDesk || "-"} />
+            <SummaryCard label="Current Location" tone="sky" value={summary.currentLocationCode || summary.currentLocationName || "-"} />
+            <SummaryCard label="Stage Time" tone="purple" value={formatDurationMinutes(summary.stageDurationMinutes || 0)} />
+            <SummaryCard label="Total Lead Time" tone="purple" value={formatDurationMinutes(summary.totalLeadTimeMinutes || 0)} />
+            <SummaryCard label="Progress" tone="green" value={`${summary.actualProgressPercent ?? summary.progressPercent ?? 0}%`} />
+            <SummaryCard label="SLA Breaches" tone="red" value={cycle.slaBreachedStageCount ?? 0} />
         </Box>
 
         <Card sx={panelSx}>
@@ -961,12 +961,12 @@ export function MatFlowTrackerDetailPage() {
                 <MatFlowStatusChip status={cycle.completed ? "COMPLETED" : summary.currentStage} />
             </Box>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: .8 }}>
-                <SummaryCard label="Project Lead" value={formatDurationMinutes(cycle.totalProjectLeadTimeMinutes || 0)} />
-                <SummaryCard label="Requisition Lead" value={formatDurationMinutes(cycle.requisitionLeadTimeMinutes || 0)} />
-                <SummaryCard label="Avg Completed Stage" value={formatDurationMinutes(cycle.averageCompletedStageMinutes || 0)} />
-                <SummaryCard label="Completed Stages" value={`${cycle.completedStageCount || 0}/${cycle.applicableStageCount || 0}`} />
-                <SummaryCard label="Longest Stage" value={cycle.bottleneckStage || "-"} />
-                <SummaryCard label="Longest Duration" value={formatDurationMinutes(cycle.bottleneckMinutes || 0)} />
+                <SummaryCard label="Project Lead" tone="blue" value={formatDurationMinutes(cycle.totalProjectLeadTimeMinutes || 0)} />
+                <SummaryCard label="Requisition Lead" tone="indigo" value={formatDurationMinutes(cycle.requisitionLeadTimeMinutes || 0)} />
+                <SummaryCard label="Avg Completed Stage" tone="green" value={formatDurationMinutes(cycle.averageCompletedStageMinutes || 0)} />
+                <SummaryCard label="Completed Stages" tone="green" value={`${cycle.completedStageCount || 0}/${cycle.applicableStageCount || 0}`} />
+                <SummaryCard label="Longest Stage" tone="amber" value={cycle.bottleneckStage || "-"} />
+                <SummaryCard label="Longest Duration" tone="orange" value={formatDurationMinutes(cycle.bottleneckMinutes || 0)} />
             </Box>
         </Card>
 
@@ -1406,17 +1406,17 @@ export function MatFlowMaterialTrackerPage() {
                     </Card>
 
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 1 }}>
-                        <SummaryCard label="Projects" value={kpis.projectCount || 0} colorful />
-                        <SummaryCard label="Products / Drawings" value={kpis.productCount || 0} colorful />
-                        <SummaryCard label="Tracked Lots / Branches" value={kpis.trackedLotCount || 0} colorful />
-                        <SummaryCard label="Live Lots" value={kpis.liveLotCount || 0} colorful />
-                        <SummaryCard label="Delayed / SLA Breach" value={kpis.delayedLotCount || 0} colorful />
-                        <SummaryCard label="Requested" value={`${formatQty(kpis.requestedQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Current Shortage" value={`${formatQty(kpis.shortageQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="On Hand" value={`${formatQty(kpis.onHandQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Available" value={`${formatQty(kpis.availableQty)} ${identity.uom || ""}`} colorful />
-                        <SummaryCard label="Avg Live Dwell" value={formatDurationMinutes(kpis.averageCurrentDwellMinutes || 0)} colorful />
-                        <SummaryCard label="Longest Live Dwell" value={formatDurationMinutes(kpis.longestCurrentDwellMinutes || 0)} colorful />
+                        <SummaryCard label="Projects" tone="blue" value={kpis.projectCount || 0} colorful />
+                        <SummaryCard label="Products / Drawings" tone="indigo" value={kpis.productCount || 0} colorful />
+                        <SummaryCard label="Tracked Lots / Branches" tone="purple" value={kpis.trackedLotCount || 0} colorful />
+                        <SummaryCard label="Live Lots" tone="sky" value={kpis.liveLotCount || 0} colorful />
+                        <SummaryCard label="Delayed / SLA Breach" tone="red" value={kpis.delayedLotCount || 0} colorful />
+                        <SummaryCard label="Requested" tone="blue" value={`${formatQty(kpis.requestedQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Current Shortage" tone="red" value={`${formatQty(kpis.shortageQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="On Hand" tone="indigo" value={`${formatQty(kpis.onHandQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Available" tone="green" value={`${formatQty(kpis.availableQty)} ${identity.uom || ""}`} colorful />
+                        <SummaryCard label="Avg Live Dwell" tone="amber" value={formatDurationMinutes(kpis.averageCurrentDwellMinutes || 0)} colorful />
+                        <SummaryCard label="Longest Live Dwell" tone="orange" value={formatDurationMinutes(kpis.longestCurrentDwellMinutes || 0)} colorful />
                     </Box>
 
                     <Card sx={panelSx}>

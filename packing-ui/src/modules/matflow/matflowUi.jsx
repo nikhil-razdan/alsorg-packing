@@ -46,20 +46,29 @@ const variables = (mode) => {
   return {
     // Base shell
     "--mf-page-bg": dark ? "#07111f" : "#f6f9fe",
-    "--mf-panel-bg": dark ? "rgba(15,23,42,.90)" : "#ffffff",
-    "--mf-panel-solid": dark ? "#0f172a" : "#ffffff",
-    "--mf-surface": dark ? "rgba(2,6,23,.36)" : "#f8fafd",
-    "--mf-surface-strong": dark ? "rgba(2,6,23,.58)" : "#f3f6fb",
-    "--mf-field-bg": dark ? "rgba(255,255,255,.04)" : "#ffffff",
-    "--mf-hover": dark ? "rgba(14,165,233,.10)" : "#f2f7ff",
+    "--mf-panel-bg": dark ? "#0d1b2e" : "#ffffff",
+    "--mf-panel-solid": dark ? "#0d1b2e" : "#ffffff",
+    "--mf-surface": dark ? "#111f33" : "#f8fbff",
+    "--mf-surface-strong": dark ? "#14243a" : "#f1f5fb",
+    "--mf-field-bg": dark ? "#0a1728" : "#ffffff",
+    "--mf-hover": dark ? "#112b45" : "#edf5ff",
     "--mf-text": dark ? "#f8fafc" : "#172033",
     "--mf-text-secondary": dark ? "rgba(248,250,252,.70)" : "#55627a",
     "--mf-text-muted": dark ? "rgba(248,250,252,.48)" : "#8a96aa",
-    "--mf-border": dark ? "rgba(255,255,255,.08)" : "#e5ebf4",
-    "--mf-border-strong": dark ? "rgba(255,255,255,.16)" : "#d6e0ee",
+    "--mf-border": dark ? "rgba(148,163,184,.16)" : "#dbe5f1",
+    "--mf-border-strong": dark ? "rgba(148,163,184,.28)" : "#c8d6e8",
     "--mf-shadow": dark
-      ? "0 16px 36px rgba(2,6,23,.28)"
-      : "0 4px 16px rgba(39,71,117,.055)",
+      ? "0 12px 30px rgba(2,6,23,.34),0 2px 8px rgba(2,6,23,.20)"
+      : "0 10px 28px rgba(15,23,42,.075),0 2px 8px rgba(15,23,42,.035)",
+
+    // Opaque card chrome. Never use transparent Card/Paper surfaces in MatFlow.
+    "--mf-card-bg": dark ? "#0d1b2e" : "#ffffff",
+    "--mf-card-bg-elevated": dark ? "#102139" : "#ffffff",
+    "--mf-card-border": dark ? "rgba(148,163,184,.18)" : "#d7e2ef",
+    "--mf-card-border-hover": dark ? "rgba(96,165,250,.34)" : "#bfd1e6",
+    "--mf-card-shadow": dark
+      ? "0 12px 28px rgba(2,6,23,.32),0 2px 7px rgba(2,6,23,.18)"
+      : "0 10px 26px rgba(15,23,42,.075),0 2px 7px rgba(15,23,42,.035)",
 
     // PackFlow-inspired light accent system
     "--mf-primary": dark ? "#0ea5e9" : "#3b82f6",
@@ -89,9 +98,9 @@ const variables = (mode) => {
     "--mf-hero-bg": dark
       ? "radial-gradient(circle at top left,rgba(14,165,233,.20),transparent 34%),linear-gradient(180deg,rgba(15,23,42,.94),rgba(15,23,42,.80))"
       : "linear-gradient(180deg,#ffffff 0%,#fbfdff 100%)",
-    "--mf-table-head": dark ? "rgba(2,6,23,.58)" : "#f7f9fc",
-    "--mf-table-row": dark ? "rgba(15,23,42,.90)" : "#ffffff",
-    "--mf-table-hover": dark ? "rgba(14,165,233,.10)" : "#f7faff",
+    "--mf-table-head": dark ? "#0a1728" : "#f3f7fc",
+    "--mf-table-row": dark ? "#0d1b2e" : "#ffffff",
+    "--mf-table-hover": dark ? "#112b45" : "#f2f7ff",
 
     // Portal / modal chrome.
     // These variables are also promoted to :root by MatFlowThemeProvider so
@@ -112,7 +121,7 @@ const variables = (mode) => {
     "--mf-scroll-thumb": dark ? "rgba(96,165,250,.46)" : "rgba(59,130,246,.42)",
     "--mf-scroll-thumb-hover": dark ? "rgba(125,211,252,.78)" : "rgba(37,99,235,.68)",
     "--mf-scroll-corner": dark ? "#081424" : "#eef3f9",
-    "--mf-pagination-bg": dark ? "rgba(2,6,23,.30)" : "#f8fafd",
+    "--mf-pagination-bg": dark ? "#0a1728" : "#f7faff",
   };
 };
 
@@ -151,8 +160,14 @@ const buildTheme = (mode) => {
       MuiCard: {
         styleOverrides: {
           root: {
+            color: dark ? "#f8fafc" : "#172033",
+            backgroundColor: dark ? "#0d1b2e" : "#ffffff",
             backgroundImage: "none",
-            ...(dark ? {} : { borderColor: "#e5ebf4" }),
+            border: `1px solid ${dark ? "rgba(148,163,184,.18)" : "#d7e2ef"}`,
+            boxShadow: dark
+              ? "0 12px 28px rgba(2,6,23,.32),0 2px 7px rgba(2,6,23,.18)"
+              : "0 10px 26px rgba(15,23,42,.075),0 2px 7px rgba(15,23,42,.035)",
+            opacity: 1,
           },
         },
       },
@@ -320,6 +335,10 @@ export function MatFlowThemeProvider({ children }) {
             ":root": cssVars,
             body: {
               backgroundColor: "var(--mf-page-bg)",
+            },
+            ".MuiCard-root": {
+              opacity: "1 !important",
+              backgroundImage: "none",
             },
             ".MuiDialog-root .MuiDialog-paper": {
               color: "var(--mf-text) !important",
@@ -719,54 +738,226 @@ export function Detail({ label, value }) {
     </Box>
   );
 }
-const LIGHT_SUMMARY_TONES = Object.freeze({
-  blue: { from: "#4f86f7", to: "#5f9dfb", soft: "#eef4ff", accent: "#4f86f7" },
-  purple: { from: "#8a5cf6", to: "#a46ee8", soft: "#f4efff", accent: "#8b5cf6" },
-  orange: { from: "#ff8a4c", to: "#ffb449", soft: "#fff4ea", accent: "#fb923c" },
-  pink: { from: "#e94f8f", to: "#f36fa6", soft: "#fff0f6", accent: "#ec4899" },
-  green: { from: "#28b77a", to: "#55c9b0", soft: "#ecfbf5", accent: "#10b981" },
-  indigo: { from: "#6667e8", to: "#8a6ae8", soft: "#f1f0ff", accent: "#6366f1" },
-  sky: { from: "#48aaf7", to: "#65c4f4", soft: "#edf8ff", accent: "#38bdf8" },
-  amber: { from: "#f39a33", to: "#f7bc4a", soft: "#fff8e9", accent: "#f59e0b" },
+const SUMMARY_TONES = Object.freeze({
+  blue: {
+    accent: "#3b82f6",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#edf5ff 100%)",
+    lightBorder: "#c8dcfb",
+    lightLabel: "#4f6f9c",
+    darkBg: "linear-gradient(135deg,#102947 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(96,165,250,.38)",
+    darkLabel: "#93c5fd",
+    glow: "rgba(59,130,246,.22)",
+  },
+  sky: {
+    accent: "#0ea5e9",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#eaf9ff 100%)",
+    lightBorder: "#bde9f8",
+    lightLabel: "#47758b",
+    darkBg: "linear-gradient(135deg,#0c3042 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(56,189,248,.38)",
+    darkLabel: "#7dd3fc",
+    glow: "rgba(14,165,233,.22)",
+  },
+  indigo: {
+    accent: "#6366f1",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#f0f1ff 100%)",
+    lightBorder: "#d4d6ff",
+    lightLabel: "#5e6398",
+    darkBg: "linear-gradient(135deg,#20244e 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(129,140,248,.38)",
+    darkLabel: "#a5b4fc",
+    glow: "rgba(99,102,241,.22)",
+  },
+  purple: {
+    accent: "#8b5cf6",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#f5efff 100%)",
+    lightBorder: "#e0d2ff",
+    lightLabel: "#725f98",
+    darkBg: "linear-gradient(135deg,#2a2046 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(167,139,250,.38)",
+    darkLabel: "#c4b5fd",
+    glow: "rgba(139,92,246,.22)",
+  },
+  green: {
+    accent: "#16a34a",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#edf9f2 100%)",
+    lightBorder: "#c7ead5",
+    lightLabel: "#47735b",
+    darkBg: "linear-gradient(135deg,#123528 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(74,222,128,.34)",
+    darkLabel: "#86efac",
+    glow: "rgba(34,197,94,.19)",
+  },
+  amber: {
+    accent: "#d97706",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#fff7e8 100%)",
+    lightBorder: "#f1ddae",
+    lightLabel: "#866b39",
+    darkBg: "linear-gradient(135deg,#3a2b16 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(251,191,36,.34)",
+    darkLabel: "#fcd34d",
+    glow: "rgba(245,158,11,.18)",
+  },
+  orange: {
+    accent: "#ea580c",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#fff1e9 100%)",
+    lightBorder: "#f6d2bd",
+    lightLabel: "#8c6148",
+    darkBg: "linear-gradient(135deg,#3b2418 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(251,146,60,.36)",
+    darkLabel: "#fdba74",
+    glow: "rgba(249,115,22,.19)",
+  },
+  red: {
+    accent: "#dc2626",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#fff0f1 100%)",
+    lightBorder: "#f3cbd0",
+    lightLabel: "#8b5960",
+    darkBg: "linear-gradient(135deg,#3b1d24 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(248,113,113,.38)",
+    darkLabel: "#fca5a5",
+    glow: "rgba(239,68,68,.19)",
+  },
+  pink: {
+    accent: "#db2777",
+    lightBg: "linear-gradient(135deg,#ffffff 0%,#fff0f7 100%)",
+    lightBorder: "#f4cce0",
+    lightLabel: "#8c5d75",
+    darkBg: "linear-gradient(135deg,#3b1d31 0%,#0d1b2e 72%)",
+    darkBorder: "rgba(244,114,182,.36)",
+    darkLabel: "#f9a8d4",
+    glow: "rgba(236,72,153,.18)",
+  },
 });
-const SUMMARY_TONE_KEYS = Object.keys(LIGHT_SUMMARY_TONES);
+
+const SUMMARY_TONE_ALIASES = Object.freeze({
+  success: "green",
+  warning: "amber",
+  danger: "red",
+  error: "red",
+  info: "blue",
+  primary: "blue",
+  secondary: "purple",
+});
+
+const semanticSummaryTone = (label) => {
+  const text = String(label || "").toLowerCase();
+
+  if (/(shortage|breach|rejected|reject|overdue|delayed|delay|exception|failed|failure|without bom|blocked)/.test(text)) {
+    return "red";
+  }
+  if (/(awaiting|pending|partial|review|approval|longest|ageing|aging|dwell|draft|hold|transit)/.test(text)) {
+    return "amber";
+  }
+  if (/(completed|complete|approved|received|available|consumed|active|ready|healthy|on hand)/.test(text)) {
+    return "green";
+  }
+  if (/(processing|route|bom|stage|lead time|lead|duration)/.test(text)) {
+    return "purple";
+  }
+  if (/(reserved|reservation|product|drawing)/.test(text)) {
+    return "indigo";
+  }
+  if (/(issued|location|department|live|current)/.test(text)) {
+    return "sky";
+  }
+  if (/(requested|request|project|total|progress|records|lots|branches)/.test(text)) {
+    return "blue";
+  }
+
+  return "blue";
+};
+
 const summaryToneFor = (label, requestedTone) => {
-  if (requestedTone && LIGHT_SUMMARY_TONES[requestedTone]) return LIGHT_SUMMARY_TONES[requestedTone];
-  const score = Array.from(String(label || "")).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return LIGHT_SUMMARY_TONES[SUMMARY_TONE_KEYS[score % SUMMARY_TONE_KEYS.length]];
+  const requested = String(requestedTone || "").toLowerCase();
+  const key = SUMMARY_TONES[requested]
+    ? requested
+    : SUMMARY_TONE_ALIASES[requested] || semanticSummaryTone(label);
+  return SUMMARY_TONES[key] || SUMMARY_TONES.blue;
 };
 
 export function SummaryCard({ label, value, helper, tone, colorful = false }) {
   const { isDark } = useMatFlowTheme();
   const meta = summaryToneFor(label, tone);
-  const lightColorful = !isDark && colorful;
 
   return (
     <Card
       sx={{
         ...panelSx,
         position: "relative",
+        isolation: "isolate",
         overflow: "hidden",
-        minHeight: lightColorful ? 104 : undefined,
-        ...(isDark ? {} : lightColorful ? {
-          color: "#fff",
-          border: "1px solid rgba(255,255,255,.34)",
-          background: `linear-gradient(135deg,${meta.from},${meta.to})`,
-          boxShadow: "0 10px 22px rgba(50,92,160,.12)",
-        } : {
-          borderTop: `3px solid ${meta.accent}`,
-          background: "#ffffff",
-        }),
+        minHeight: colorful ? 108 : 96,
+        px: colorful ? 1.75 : 1.55,
+        py: colorful ? 1.55 : 1.35,
+        border: `1px solid ${isDark ? meta.darkBorder : meta.lightBorder}`,
+        borderTop: `3px solid ${meta.accent}`,
+        background: isDark ? meta.darkBg : meta.lightBg,
+        boxShadow: isDark
+          ? `0 12px 28px rgba(2,6,23,.30),0 0 0 1px ${meta.glow}`
+          : "0 10px 24px rgba(15,23,42,.065),0 2px 6px rgba(15,23,42,.035)",
+        transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
+        "&:hover": {
+          transform: "translateY(-1px)",
+          borderColor: meta.accent,
+          boxShadow: isDark
+            ? `0 16px 34px rgba(2,6,23,.38),0 0 0 1px ${meta.glow}`
+            : "0 14px 30px rgba(15,23,42,.09),0 3px 8px rgba(15,23,42,.045)",
+        },
+        "&::after": colorful ? {
+          content: '""',
+          position: "absolute",
+          width: 108,
+          height: 108,
+          borderRadius: "50%",
+          right: -38,
+          top: -48,
+          background: isDark ? meta.glow : `${meta.accent}12`,
+          zIndex: -1,
+          pointerEvents: "none",
+        } : undefined,
       }}
     >
-      <Typography sx={{ ...detailLabelSx, color: lightColorful ? "rgba(255,255,255,.82)" : detailLabelSx.color }}>{label}</Typography>
-      <Box sx={{ mt: .75, fontSize: lightColorful ? 24 : 19, fontWeight: 950, color: lightColorful ? "#fff" : "var(--mf-text)", lineHeight: 1.1 }}>{value ?? "-"}</Box>
-      {helper && <Typography sx={{ ...subTextSx, color: lightColorful ? "rgba(255,255,255,.84)" : subTextSx.color }}>{helper}</Typography>}
-      {lightColorful && <Box sx={{ position: "absolute", width: 92, height: 92, borderRadius: "50%", right: -34, bottom: -46, background: "rgba(255,255,255,.12)" }} />}
+      <Typography
+        sx={{
+          ...detailLabelSx,
+          color: isDark ? meta.darkLabel : meta.lightLabel,
+          fontSize: 9.5,
+          letterSpacing: ".075em",
+        }}
+      >
+        {label}
+      </Typography>
+      <Box
+        sx={{
+          mt: .72,
+          fontSize: colorful ? { xs: 21, md: 23 } : { xs: 18, md: 20 },
+          fontWeight: 950,
+          color: "var(--mf-text)",
+          lineHeight: 1.12,
+          letterSpacing: "-.018em",
+          minWidth: 0,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {value ?? "-"}
+      </Box>
+      {helper && (
+        <Typography
+          sx={{
+            ...subTextSx,
+            mt: .55,
+            color: "var(--mf-text-secondary)",
+            lineHeight: 1.4,
+          }}
+        >
+          {helper}
+        </Typography>
+      )}
     </Card>
   );
 }
-
 
 export function useMatFlowPagination(items, initialPageSize = 20) {
   const source = Array.isArray(items) ? items : [];
@@ -991,12 +1182,13 @@ export const heroSubSx = {
 };
 export const panelSx = {
   p: 1.8,
-  borderRadius: "12px",
+  borderRadius: "13px",
   color: "var(--mf-text)",
-  background: "var(--mf-panel-bg)",
-  border: "1px solid var(--mf-border)",
-  boxShadow: "var(--mf-shadow)",
+  backgroundColor: "var(--mf-card-bg)",
   backgroundImage: "none",
+  border: "1px solid var(--mf-card-border)",
+  boxShadow: "var(--mf-card-shadow)",
+  opacity: 1,
 };
 export const panelTitleSx = { color: "var(--mf-text)", fontSize: 17, fontWeight: 950 };
 export const sectionTitleSx = panelTitleSx;
@@ -1005,9 +1197,12 @@ export const mainTextSx = { color: "var(--mf-text)", fontSize: 12, fontWeight: 8
 export const subTextSx = { mt: .25, color: "var(--mf-text-muted)", fontSize: 10, fontWeight: 650 };
 export const detailBoxSx = {
   p: 1.3,
-  borderRadius: "9px",
-  background: "var(--mf-surface)",
-  border: "1px solid var(--mf-border)",
+  borderRadius: "10px",
+  backgroundColor: "var(--mf-surface)",
+  backgroundImage: "none",
+  border: "1px solid var(--mf-card-border)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.025)",
+  opacity: 1,
 };
 export const detailLabelSx = {
   color: "var(--mf-text-muted)",
@@ -1104,8 +1299,11 @@ export const tableShellSx = {
   overflowX: "auto",
   scrollbarGutter: "stable",
   borderRadius: "10px",
-  border: "1px solid var(--mf-border)",
-  background: "var(--mf-panel-solid)",
+  border: "1px solid var(--mf-card-border)",
+  backgroundColor: "var(--mf-panel-solid)",
+  backgroundImage: "none",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.02)",
+  opacity: 1,
 };
 export const tableHeaderSx = {
   minWidth: 980,

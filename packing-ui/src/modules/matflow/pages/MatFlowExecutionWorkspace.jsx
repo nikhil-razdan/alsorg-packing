@@ -824,14 +824,15 @@ export function MatFlowProductionExecutionPage() {
                     gap: 1,
                 }}
             >
-                <SummaryCard label="Awaiting Start" value={awaitingStartCount} colorful />
-                <SummaryCard label="In Production" value={startedCount} colorful />
+                <SummaryCard label="Awaiting Start" value={awaitingStartCount} tone="amber" colorful />
+                <SummaryCard label="In Production" value={startedCount} tone="sky" colorful />
                 <SummaryCard
                     label="Awaiting Material Accounting"
                     value={awaitingAccountingCount}
+                    tone="orange"
                     colorful
                 />
-                <SummaryCard label="Products Completed" value={completedCount} colorful />
+                <SummaryCard label="Products Completed" value={completedCount} tone="green" colorful />
             </Box>
 
             <Card sx={panelSx}>

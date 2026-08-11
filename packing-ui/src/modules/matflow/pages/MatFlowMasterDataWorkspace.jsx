@@ -852,12 +852,12 @@ export function MatFlowProjectsPage() {
                     gap: 1,
                 }}
             >
-                <SummaryCard label="Client Projects" value={portfolioKpis.projects} colorful />
-                <SummaryCard label="Active Projects" value={portfolioKpis.activeProjects} colorful />
-                <SummaryCard label="Products / Items" value={portfolioKpis.products} colorful />
-                <SummaryCard label="Awaiting Director" value={portfolioKpis.pending} colorful />
-                <SummaryCard label="Director Approved" value={portfolioKpis.approved} colorful />
-                <SummaryCard label="Products Without BOM" value={portfolioKpis.withoutBom} colorful />
+                <SummaryCard label="Client Projects" tone="blue" value={portfolioKpis.projects} colorful />
+                <SummaryCard label="Active Projects" tone="green" value={portfolioKpis.activeProjects} colorful />
+                <SummaryCard label="Products / Items" tone="indigo" value={portfolioKpis.products} colorful />
+                <SummaryCard label="Awaiting Director" tone="amber" value={portfolioKpis.pending} colorful />
+                <SummaryCard label="Director Approved" tone="green" value={portfolioKpis.approved} colorful />
+                <SummaryCard label="Products Without BOM" tone="orange" value={portfolioKpis.withoutBom} colorful />
             </Box>
 
             <Card sx={panelSx}>

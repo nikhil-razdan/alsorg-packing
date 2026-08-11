@@ -2197,7 +2197,7 @@ export function MatFlowRequisitionDetailPage() {
                         }}
                     >
                         <SummaryCard
-                            label="Status"
+                            label="Status" tone="purple"
                             value={
                                 <MatFlowStatusChip
                                     status={
@@ -2208,35 +2208,35 @@ export function MatFlowRequisitionDetailPage() {
                         />
 
                         <SummaryCard
-                            label="Requested"
+                            label="Requested" tone="blue"
                             value={formatQty(
                                 totals.requested
                             )}
                         />
 
                         <SummaryCard
-                            label="Reserved"
+                            label="Reserved" tone="indigo"
                             value={formatQty(
                                 totals.reserved
                             )}
                         />
 
                         <SummaryCard
-                            label="Shortage"
+                            label="Shortage" tone="red"
                             value={formatQty(
                                 totals.shortage
                             )}
                         />
 
                         <SummaryCard
-                            label="Issued"
+                            label="Issued" tone="sky"
                             value={formatQty(
                                 totals.issued
                             )}
                         />
 
                         <SummaryCard
-                            label="Consumed"
+                            label="Consumed" tone="green"
                             value={formatQty(
                                 totals.consumed
                             )}

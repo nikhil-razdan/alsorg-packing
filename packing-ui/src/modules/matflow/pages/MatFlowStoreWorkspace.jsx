@@ -182,7 +182,7 @@ export function MatFlowStoreQueuePage() {
     return <Box sx={pageSx}>
         <PageHero badge="STORE MATERIAL CONTROL" title="Store Review & Reservation" subtitle="Review Production demand material-by-material, reserve verified Store stock, create shortage indents for the uncovered balance, and control the first Store → QC hand-off." actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddOutlinedIcon />} onClick={openStockAdjustment} disabled={stockLocations.length === 0} sx={primaryBtnSx}>Adjust Stock</Button></>} />
         <ErrorBox>{error}</ErrorBox>
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Awaiting Store Review" value={counts.review} /><SummaryCard label="Shortage Pending" value={counts.shortage} /><SummaryCard label="Ready / Partial Issue" value={counts.issue} /></Box>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Awaiting Store Review" tone="amber" value={counts.review} /><SummaryCard label="Shortage Pending" tone="red" value={counts.shortage} /><SummaryCard label="Ready / Partial Issue" tone="orange" value={counts.issue} /></Box>
         <Card sx={panelSx}>
             <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
                 <Box><Typography sx={{ fontSize: 17, fontWeight: 950 }}>Store Inventory</Typography><Typography sx={subTextSx}>On-hand stock is operational inventory. Material Master Minimum/Reorder values are thresholds only and do not create stock.</Typography></Box>
@@ -462,7 +462,7 @@ export function MatFlowStoreDetailPage() {
         <PageHero badge="STORE MATERIAL WORKBENCH" title={requisition?.requisitionNumber || "Store Review"} subtitle={`${requisition?.projectCode || "-"} · ${requisition?.drawingNo || "-"} · ${requisition?.bomNumber || "-"}`} actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<ArrowBackOutlinedIcon />} onClick={() => navigate("/matflow/store")} sx={secondaryBtnSx}>Back</Button></>} />
         <ErrorBox>{error}</ErrorBox>
         {requisition && <>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" value={storeActionsReady} /></Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" tone="blue" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" tone="indigo" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" tone="red" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" tone="sky" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" tone="green" value={storeActionsReady} /></Box>
 
             {normalize(requisition.status) === "ISSUED_TO_PRODUCTION" && <Card sx={{ ...panelSx, border: "1px solid var(--mf-success-border)", background: "var(--mf-success-soft)" }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
@@ -526,7 +526,7 @@ export function MatFlowStoreDetailPage() {
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>SOURCE</Typography>
                                         <Typography sx={{ ...mainTextSx, fontSize: 12 }}>{reservation.sourceLocationCode || "STORE"}</Typography>
                                     </Box>
-                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "var(--mf-primary-soft)" : "transparent" }}>
+                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "var(--mf-primary-soft)" : "var(--mf-surface)" }}>
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>→ {transfer.toLocationCode || "NEXT"}</Typography>
                                         <Box sx={{ mt: .35 }}><MatFlowStatusChip status={transfer.status} /></Box>
                                     </Box>)}
