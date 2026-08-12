@@ -39,7 +39,7 @@ import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
-import { downloadMatFlowExcel } from "../matflowExcel";
+import { downloadMatFlowExcel } from "../api/matflowExcel";
 import {
     Detail,
     EmptyState,

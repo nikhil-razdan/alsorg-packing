@@ -38,7 +38,7 @@ import {
     matflowApi,
     readMatFlowError,
 } from "../api/matflowApi";
-import { downloadMatFlowExcel } from "../matflowExcel";
+import { downloadMatFlowExcel } from ".../api/matflowExcel";
 
 import {
     Detail,

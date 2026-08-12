@@ -21,7 +21,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
-import { downloadMatFlowExcel } from "../matflowExcel";
+import { downloadMatFlowExcel } from ".../api/matflowExcel";
 import {
     Detail,
     EmptyState,

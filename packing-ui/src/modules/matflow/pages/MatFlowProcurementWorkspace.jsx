@@ -20,7 +20,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
-import { downloadMatFlowExcel } from "../matflowExcel";
+import { downloadMatFlowExcel } from ".../api/matflowExcel";
 import {
     EmptyState,
     ErrorBox,
