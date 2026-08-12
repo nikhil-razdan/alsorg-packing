@@ -215,6 +215,9 @@ public class MatFlowQcService {
 
                         return inspections
                                         .stream()
+                                        .map(this::hydrateInspection)
+                                        .filter(inspection -> inspection != null &&
+                                                        inspection.location != null)
                                         .filter(inspection -> accessService.canAccessPlant(
                                                         inspection.location.getPlantCode()))
                                         .map(this::toResponse)
@@ -402,11 +405,8 @@ public class MatFlowQcService {
                                                         : request.rowVersion(),
                                         inspection.getRowVersion());
 
-                        MatFlowGoodsReceiptLine receiptLine = receiptLineRepository
-                                        .findById(
-                                                        inspection.sourceLineId)
-                                        .orElseThrow(() -> notFound(
-                                                        "GRN line not found"));
+                        MatFlowGoodsReceiptLine receiptLine = requireGoodsReceiptLineForQc(
+                                        inspection);
 
                         BigDecimal outstanding = receiptLine.rejectedQty
                                         .subtract(
@@ -470,6 +470,13 @@ public class MatFlowQcService {
 
                         vendorReturn.qcInspection = inspection;
 
+                        if (receiptLine.goodsReceipt == null ||
+                                        receiptLine.goodsReceipt.purchaseOrder == null ||
+                                        receiptLine.goodsReceipt.purchaseOrder.vendor == null) {
+                                throw conflict(
+                                                "GRN line is not linked to a valid Purchase Order vendor");
+                        }
+
                         vendorReturn.vendor = receiptLine.goodsReceipt.purchaseOrder.vendor;
 
                         vendorReturn.material = inspection.material;
@@ -519,35 +526,39 @@ public class MatFlowQcService {
                                 MatFlowQcInspection inspection,
                                 BigDecimal accepted,
                                 String actor) {
-                        MatFlowGoodsReceiptLine receiptLine = receiptLineRepository
-                                        .findById(inspection.sourceLineId)
-                                        .orElseThrow(() -> notFound(
-                                                        "GRN line not found"));
+                        /*
+                         * MatFlow entities expose public JPA backing fields. A lazy
+                         * association can therefore have a valid getId() while direct
+                         * public-field access on the proxy still appears null. Resolve
+                         * the complete GRN -> PO line -> Indent line -> Requisition
+                         * lineage before reading business fields.
+                         */
+                        MatFlowGoodsReceiptLine receiptLine = requireGoodsReceiptLineForQc(
+                                        inspection);
 
                         BigDecimal rejected = scale(
-                                        inspection.inspectionQty
-                                                        .subtract(accepted));
+                                        scale(inspection.inspectionQty)
+                                                        .subtract(scale(accepted)));
 
-                        receiptLine.acceptedQty = accepted;
+                        receiptLine.acceptedQty = scale(accepted);
                         receiptLine.rejectedQty = rejected;
                         receiptLine.setUpdatedBy(actor);
                         receiptLineRepository.save(receiptLine);
 
-                        if (receiptLine.purchaseOrderLine == null ||
-                                        receiptLine.purchaseOrderLine.indentLine == null ||
-                                        receiptLine.purchaseOrderLine.indentLine.requisitionLine == null) {
-                                throw conflict(
-                                                "GRN line is not linked to a valid shortage indent/requisition line");
-                        }
-
-                        MatFlowIndentLine indentLine = receiptLine.purchaseOrderLine.indentLine;
+                        MatFlowPurchaseOrderLine purchaseOrderLine = receiptLine.purchaseOrderLine;
+                        MatFlowIndentLine indentLine = purchaseOrderLine.indentLine;
                         MatFlowRequisitionLine requisitionLine = indentLine.requisitionLine;
                         MatFlowMaterialRequisition requisition = requisitionLine.requisition;
 
-                        if (requisition == null || requisition.destinationLocation == null) {
+                        if (requisition == null ||
+                                        requisition.getId() == null ||
+                                        requisition.destinationLocation == null) {
                                 throw conflict(
                                                 "Purchased material is not linked to a valid requisition destination");
                         }
+
+                        requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        requisition.destinationLocation);
 
                         /*
                          * Only the still-open project shortage is reserved against the
@@ -1331,42 +1342,49 @@ public class MatFlowQcService {
                 }
 
                 private void refreshGoodsReceiptStatus(
-                                MatFlowGoodsReceipt receipt,
+                                MatFlowGoodsReceipt rawReceipt,
                                 String actor) {
+                        if (rawReceipt == null ||
+                                        rawReceipt.getId() == null) {
+                                return;
+                        }
+
+                        MatFlowGoodsReceipt receipt = (MatFlowGoodsReceipt) Hibernate.unproxy(
+                                        rawReceipt);
+
                         List<MatFlowGoodsReceiptLine> lines = receiptLineRepository
                                         .findByGoodsReceipt_IdOrderByCreatedAtAsc(
-                                                        receipt.getId());
+                                                        receipt.getId())
+                                        .stream()
+                                        .map(this::hydrateGoodsReceiptLine)
+                                        .filter(line -> line != null)
+                                        .toList();
 
-                        boolean allInspected = lines.stream()
-                                        .allMatch(line -> line.acceptedQty
-                                                        .add(
-                                                                        line.rejectedQty)
-                                                        .compareTo(
-                                                                        line.receivedQty) >= 0);
+                        boolean allInspected = !lines.isEmpty() &&
+                                        lines.stream()
+                                                        .allMatch(line -> scale(line.acceptedQty)
+                                                                        .add(scale(line.rejectedQty))
+                                                                        .compareTo(scale(line.receivedQty)) >= 0);
 
                         if (!allInspected) {
                                 receipt.status = GoodsReceiptStatus.QC_PENDING;
                         } else {
                                 boolean allAccepted = lines.stream()
-                                                .allMatch(line -> line.acceptedQty
-                                                                .compareTo(
-                                                                                line.receivedQty) >= 0);
+                                                .allMatch(line -> scale(line.acceptedQty)
+                                                                .compareTo(scale(line.receivedQty)) >= 0);
 
                                 boolean allRejected = lines.stream()
-                                                .allMatch(line -> line.rejectedQty
-                                                                .compareTo(
-                                                                                line.receivedQty) >= 0);
+                                                .allMatch(line -> scale(line.rejectedQty)
+                                                                .compareTo(scale(line.receivedQty)) >= 0);
 
                                 boolean allRejectedReturned = lines.stream()
-                                                .allMatch(line -> line.returnedQty
-                                                                .compareTo(
-                                                                                line.rejectedQty) >= 0);
+                                                .allMatch(line -> scale(line.returnedQty)
+                                                                .compareTo(scale(line.rejectedQty)) >= 0);
 
                                 if (allRejectedReturned &&
                                                 lines.stream()
-                                                                .anyMatch(line -> line.rejectedQty
-                                                                                .compareTo(
-                                                                                                BigDecimal.ZERO) > 0)) {
+                                                                .anyMatch(line -> scale(line.rejectedQty)
+                                                                                .compareTo(BigDecimal.ZERO) > 0)) {
                                         receipt.status = GoodsReceiptStatus.CLOSED;
                                 } else if (allAccepted) {
                                         receipt.status = GoodsReceiptStatus.ACCEPTED;
@@ -1382,12 +1400,251 @@ public class MatFlowQcService {
                         receiptRepository.save(receipt);
                 }
 
+                /**
+                 * Hydrates an inspection before any public JPA backing field is read.
+                 * This mirrors the defensive Hibernate proxy handling already used by
+                 * the Transfer and Requisition execution paths.
+                 */
+                private MatFlowQcInspection hydrateInspection(
+                                MatFlowQcInspection rawInspection) {
+                        if (rawInspection == null) {
+                                return null;
+                        }
+
+                        MatFlowQcInspection inspection = (MatFlowQcInspection) Hibernate.unproxy(
+                                        rawInspection);
+
+                        if (inspection.material != null) {
+                                inspection.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                inspection.material);
+                        }
+
+                        if (inspection.location != null) {
+                                inspection.location = (MatFlowLocation) Hibernate.unproxy(
+                                                inspection.location);
+                        }
+
+                        return inspection;
+                }
+
+                /**
+                 * Hydrates the complete purchased-material lineage used by QC:
+                 *
+                 * GRN Line -> PO Line -> Indent Line -> Requisition Line -> Requisition
+                 *
+                 * MatFlow entities currently expose public JPA fields. Reading a field
+                 * directly from a Hibernate proxy can falsely appear null even when the
+                 * foreign key is valid. This method makes the authoritative entity state
+                 * explicit before QC validates or mutates the purchased shortage branch.
+                 */
+                private MatFlowGoodsReceiptLine hydrateGoodsReceiptLine(
+                                MatFlowGoodsReceiptLine rawLine) {
+                        if (rawLine == null) {
+                                return null;
+                        }
+
+                        MatFlowGoodsReceiptLine line = (MatFlowGoodsReceiptLine) Hibernate.unproxy(
+                                        rawLine);
+
+                        if (line.material != null) {
+                                line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                line.material);
+                        }
+
+                        if (line.goodsReceipt != null) {
+                                MatFlowGoodsReceipt receipt = (MatFlowGoodsReceipt) Hibernate.unproxy(
+                                                line.goodsReceipt);
+
+                                if (receipt.receiptLocation != null) {
+                                        receipt.receiptLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        receipt.receiptLocation);
+                                }
+
+                                if (receipt.purchaseOrder != null) {
+                                        MatFlowPurchaseOrder order = (MatFlowPurchaseOrder) Hibernate.unproxy(
+                                                        receipt.purchaseOrder);
+
+                                        if (order.vendor != null) {
+                                                order.vendor = (MatFlowVendor) Hibernate.unproxy(
+                                                                order.vendor);
+                                        }
+
+                                        if (order.indent != null) {
+                                                order.indent = (MatFlowIndent) Hibernate.unproxy(
+                                                                order.indent);
+                                        }
+
+                                        if (order.deliveryLocation != null) {
+                                                order.deliveryLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                                order.deliveryLocation);
+                                        }
+
+                                        receipt.purchaseOrder = order;
+                                }
+
+                                line.goodsReceipt = receipt;
+                        }
+
+                        if (line.purchaseOrderLine != null) {
+                                MatFlowPurchaseOrderLine poLine = (MatFlowPurchaseOrderLine) Hibernate.unproxy(
+                                                line.purchaseOrderLine);
+
+                                if (poLine.material != null) {
+                                        poLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                        poLine.material);
+                                }
+
+                                if (poLine.purchaseOrder != null) {
+                                        poLine.purchaseOrder = (MatFlowPurchaseOrder) Hibernate.unproxy(
+                                                        poLine.purchaseOrder);
+                                }
+
+                                if (poLine.indentLine != null) {
+                                        MatFlowIndentLine indentLine = (MatFlowIndentLine) Hibernate.unproxy(
+                                                        poLine.indentLine);
+
+                                        if (indentLine.indent != null) {
+                                                indentLine.indent = (MatFlowIndent) Hibernate.unproxy(
+                                                                indentLine.indent);
+
+                                                if (indentLine.indent.requisition != null) {
+                                                        indentLine.indent.requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                        .unproxy(
+                                                                                        indentLine.indent.requisition);
+                                                }
+                                        }
+
+                                        if (indentLine.material != null) {
+                                                indentLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                                indentLine.material);
+                                        }
+
+                                        if (indentLine.requisitionLine != null &&
+                                                        indentLine.requisitionLine.getId() != null) {
+                                                MatFlowRequisitionLine requisitionLine = requisitionLineRepository
+                                                                .findById(indentLine.requisitionLine.getId())
+                                                                .map(value -> (MatFlowRequisitionLine) Hibernate
+                                                                                .unproxy(value))
+                                                                .orElse((MatFlowRequisitionLine) Hibernate.unproxy(
+                                                                                indentLine.requisitionLine));
+
+                                                if (requisitionLine.material != null) {
+                                                        requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                                        requisitionLine.material);
+                                                }
+
+                                                if (requisitionLine.requisition != null) {
+                                                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                        .unproxy(
+                                                                                        requisitionLine.requisition);
+
+                                                        if (requisition.destinationLocation != null) {
+                                                                requisition.destinationLocation = (MatFlowLocation) Hibernate
+                                                                                .unproxy(
+                                                                                                requisition.destinationLocation);
+                                                        }
+
+                                                        requisitionLine.requisition = requisition;
+                                                }
+
+                                                indentLine.requisitionLine = requisitionLine;
+                                        }
+
+                                        poLine.indentLine = indentLine;
+                                }
+
+                                line.purchaseOrderLine = poLine;
+                        }
+
+                        return line;
+                }
+
+                private MatFlowGoodsReceiptLine requireGoodsReceiptLineForQc(
+                                MatFlowQcInspection inspection) {
+                        if (inspection == null ||
+                                        inspection.sourceLineId == null) {
+                                throw conflict(
+                                                "Goods Receipt QC inspection has no source GRN line");
+                        }
+
+                        MatFlowGoodsReceiptLine receiptLine = receiptLineRepository
+                                        .findById(inspection.sourceLineId)
+                                        .map(this::hydrateGoodsReceiptLine)
+                                        .orElseThrow(() -> notFound(
+                                                        "GRN line not found"));
+
+                        if (receiptLine.goodsReceipt == null ||
+                                        receiptLine.goodsReceipt.getId() == null) {
+                                throw conflict(
+                                                "GRN line is not linked to a valid Goods Receipt");
+                        }
+
+                        if (inspection.sourceId != null &&
+                                        !inspection.sourceId.equals(
+                                                        receiptLine.goodsReceipt.getId())) {
+                                throw conflict(
+                                                "QC inspection source does not match its Goods Receipt");
+                        }
+
+                        if (receiptLine.purchaseOrderLine == null ||
+                                        receiptLine.purchaseOrderLine.getId() == null) {
+                                throw conflict(
+                                                "GRN line is not linked to a valid Purchase Order line");
+                        }
+
+                        MatFlowIndentLine indentLine = receiptLine.purchaseOrderLine.indentLine;
+
+                        if (indentLine == null ||
+                                        indentLine.getId() == null) {
+                                throw conflict(
+                                                "GRN Purchase Order line is not linked to a shortage Indent line");
+                        }
+
+                        if (indentLine.requisitionLine == null ||
+                                        indentLine.requisitionLine.getId() == null) {
+                                throw conflict(
+                                                "GRN shortage Indent line is not linked to a Requisition line");
+                        }
+
+                        MatFlowRequisitionLine requisitionLine = indentLine.requisitionLine;
+
+                        if (requisitionLine.requisition == null ||
+                                        requisitionLine.requisition.getId() == null) {
+                                throw conflict(
+                                                "GRN shortage Requisition line is not linked to its Requisition");
+                        }
+
+                        if (inspection.material == null ||
+                                        receiptLine.material == null ||
+                                        !inspection.material.getId().equals(
+                                                        receiptLine.material.getId())) {
+                                throw conflict(
+                                                "QC inspection material does not match the Goods Receipt line material");
+                        }
+
+                        if (receiptLine.goodsReceipt.receiptLocation != null &&
+                                        inspection.location != null &&
+                                        !receiptLine.goodsReceipt.receiptLocation.getId().equals(
+                                                        inspection.location.getId())) {
+                                throw conflict(
+                                                "QC inspection location does not match the Goods Receipt location");
+                        }
+
+                        return receiptLine;
+                }
+
                 private MatFlowQcInspection requireInspection(
                                 UUID id) {
                         MatFlowQcInspection inspection = qcRepository
                                         .findById(id)
+                                        .map(this::hydrateInspection)
                                         .orElseThrow(() -> notFound(
                                                         "QC inspection not found"));
+
+                        if (inspection.location == null) {
+                                throw conflict(
+                                                "QC inspection has no custody location");
+                        }
 
                         accessService.requirePlantAccess(
                                         inspection.location.getPlantCode());

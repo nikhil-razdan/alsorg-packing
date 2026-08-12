@@ -515,16 +515,35 @@ public class MatFlowProcurementService {
                                         .findByIdAndPurchaseOrder_Id(
                                                         lineRequest.purchaseOrderLineId(),
                                                         order.getId())
+                                        .map(this::hydratePurchaseOrderLine)
                                         .orElseThrow(() -> badRequest(
                                                         "PO line does not belong to the selected purchase order"));
+
+                        /*
+                         * A Goods Receipt for MatFlow shortage procurement must retain
+                         * the complete Project/Product shortage lineage. Validate it
+                         * before creating the GRN/QC rows so future QC can always trace:
+                         * PO Line -> Indent Line -> Requisition Line -> Requisition.
+                         */
+                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
+                                        poLine);
+
+                        if (indentLine.requisitionLine == null ||
+                                        indentLine.requisitionLine.getId() == null ||
+                                        indentLine.requisitionLine.requisition == null ||
+                                        indentLine.requisitionLine.requisition.getId() == null) {
+                                throw conflict(
+                                                "PO line is not linked to a valid shortage Requisition line. Correct the Indent/PO lineage before receiving material.");
+                        }
 
                         BigDecimal receivedQty = positive(
                                         lineRequest.receivedQty(),
                                         "Received quantity");
 
-                        BigDecimal outstanding = poLine.orderedQty
-                                        .subtract(
-                                                        poLine.receivedQty);
+                        BigDecimal outstanding = scale(poLine.orderedQty)
+                                        .subtract(scale(poLine.receivedQty))
+                                        .max(BigDecimal.ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
                         if (receivedQty.compareTo(
                                         outstanding) > 0) {
@@ -1137,8 +1156,26 @@ public class MatFlowProcurementService {
                 }
 
                 if (line.requisitionLine != null) {
-                        line.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                        MatFlowRequisitionLine requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
                                         line.requisitionLine);
+
+                        if (requisitionLine.material != null) {
+                                requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                requisitionLine.material);
+                        }
+
+                        if (requisitionLine.requisition != null) {
+                                requisitionLine.requisition = (com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition) Hibernate
+                                                .unproxy(requisitionLine.requisition);
+
+                                if (requisitionLine.requisition.destinationLocation != null) {
+                                        requisitionLine.requisition.destinationLocation = (MatFlowLocation) Hibernate
+                                                        .unproxy(
+                                                                        requisitionLine.requisition.destinationLocation);
+                                }
+                        }
+
+                        line.requisitionLine = requisitionLine;
                 }
 
                 return line;
