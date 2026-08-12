@@ -26,7 +26,6 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowStatusChip,
-    MatFlowPagination,
     PageHero,
     SummaryCard,
     clean,
@@ -50,7 +49,6 @@ import {
     tableHeaderSx,
     tableRowSx,
     tableShellSx,
-    useMatFlowPagination,
 } from "../matflowUi";
 
 const REVIEWABLE = new Set(["SUBMITTED_TO_STORE", "STORE_REVIEW_IN_PROGRESS"]);
@@ -115,8 +113,6 @@ export function MatFlowStoreQueuePage() {
         return rows.filter((row) => [row.requisitionNumber, row.projectCode, row.drawingNo, row.bomNumber, row.destinationLocationCode, row.status].some((value) => clean(value).toLowerCase().includes(term)));
     }, [rows, search]);
 
-    const queuePagination = useMatFlowPagination(filtered, 20);
-
     const counts = useMemo(() => ({
         review: rows.filter((row) => REVIEWABLE.has(normalize(row.status))).length,
         shortage: rows.filter((row) => normalize(row.status) === "SHORTAGE_PENDING").length,
@@ -127,8 +123,6 @@ export function MatFlowStoreQueuePage() {
         const locationIds = new Set(stockLocations.map((location) => String(location.id)));
         return stockRows.filter((row) => locationIds.has(String(row.locationId)));
     }, [stockRows, stockLocations]);
-
-    const stockPagination = useMatFlowPagination(storeStockRows, 20);
 
     const openStockAdjustment = () => {
         setStockForm({
@@ -182,7 +176,7 @@ export function MatFlowStoreQueuePage() {
     return <Box sx={pageSx}>
         <PageHero badge="STORE MATERIAL CONTROL" title="Store Review & Reservation" subtitle="Review Production demand material-by-material, reserve verified Store stock, create shortage indents for the uncovered balance, and control the first Store → QC hand-off." actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddOutlinedIcon />} onClick={openStockAdjustment} disabled={stockLocations.length === 0} sx={primaryBtnSx}>Adjust Stock</Button></>} />
         <ErrorBox>{error}</ErrorBox>
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Awaiting Store Review" tone="amber" value={counts.review} /><SummaryCard label="Shortage Pending" tone="red" value={counts.shortage} /><SummaryCard label="Ready / Partial Issue" tone="orange" value={counts.issue} /></Box>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}><SummaryCard label="Awaiting Store Review" value={counts.review} /><SummaryCard label="Shortage Pending" value={counts.shortage} /><SummaryCard label="Ready / Partial Issue" value={counts.issue} /></Box>
         <Card sx={panelSx}>
             <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
                 <Box><Typography sx={{ fontSize: 17, fontWeight: 950 }}>Store Inventory</Typography><Typography sx={subTextSx}>On-hand stock is operational inventory. Material Master Minimum/Reorder values are thresholds only and do not create stock.</Typography></Box>
@@ -190,29 +184,14 @@ export function MatFlowStoreQueuePage() {
             </Box>
             <Box sx={tableShellSx}>
                 <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}>{["Material", "Store", "On Hand", "Reserved", "Blocked", "Available"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-                {storeStockRows.length === 0 ? <EmptyState>No Store stock balances are recorded for this plant. Use Opening / Adjustment to enter the verified physical opening stock before Store review.</EmptyState> : stockPagination.pageItems.map((row) => <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography><Typography sx={subTextSx}>{row.materialName || "-"}</Typography></Box><Box sx={tableCellSx}>{row.locationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box></Box>)}
+                {storeStockRows.length === 0 ? <EmptyState>No Store stock balances are recorded for this plant. Use Opening / Adjustment to enter the verified physical opening stock before Store review.</EmptyState> : storeStockRows.map((row) => <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 110px 110px 110px 110px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode || "-"}</Typography><Typography sx={subTextSx}>{row.materialName || "-"}</Typography></Box><Box sx={tableCellSx}>{row.locationCode || "-"}</Box><Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box><Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box><Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box></Box>)}
             </Box>
-            <MatFlowPagination
-                {...stockPagination}
-                onPageChange={stockPagination.setPage}
-                onPageSizeChange={stockPagination.setPageSize}
-                label="Store Inventory"
-            />
         </Card>
         <Card sx={panelSx}><TextField label="Search Queue" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Requisition, project, drawing or BOM" sx={{ ...fieldSx, minWidth: 340 }} /></Card>
         <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}>{["Requisition", "Project / Drawing", "BOM", "Destination", "Status", "Updated", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-            {filtered.length === 0 ? <EmptyState /> : queuePagination.pageItems.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography></Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={tableCellSx}>{formatDate(row.plannedAt || row.submittedAt || row.requestedAt)}</Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}
-        </Box>}
-            {!loading && (
-                <MatFlowPagination
-                    {...queuePagination}
-                    onPageChange={queuePagination.setPage}
-                    onPageSizeChange={queuePagination.setPageSize}
-                    label="Store Requisition Queue"
-                />
-            )}
-        </Card>
+            {filtered.length === 0 ? <EmptyState /> : filtered.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 150px 170px 180px 150px 100px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{row.bomNumber || "-"}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography></Box><Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box><Box sx={tableCellSx}>{formatDate(row.plannedAt || row.submittedAt || row.requestedAt)}</Box><Box sx={tableCellSx}><Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={secondaryBtnSx}>Open</Button></Box></Box>)}
+        </Box>}</Card>
         <Dialog open={stockDialog} onClose={() => !stockWorking && setStockDialog(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>Store Opening / Stock Adjustment</DialogTitle>
             <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.5 }}>
@@ -462,7 +441,7 @@ export function MatFlowStoreDetailPage() {
         <PageHero badge="STORE MATERIAL WORKBENCH" title={requisition?.requisitionNumber || "Store Review"} subtitle={`${requisition?.projectCode || "-"} · ${requisition?.drawingNo || "-"} · ${requisition?.bomNumber || "-"}`} actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<ArrowBackOutlinedIcon />} onClick={() => navigate("/matflow/store")} sx={secondaryBtnSx}>Back</Button></>} />
         <ErrorBox>{error}</ErrorBox>
         {requisition && <>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" tone="blue" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" tone="indigo" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" tone="red" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" tone="sky" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" tone="green" value={storeActionsReady} /></Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1 }}><SummaryCard label="Requested" value={formatQty(totals.requested)} /><SummaryCard label="Reserved" value={formatQty(totals.reserved)} /><SummaryCard label="Shortage" value={formatQty(totals.shortage)} /><SummaryCard label="Issued" value={formatQty(totals.issued)} /><SummaryCard label="Store Actions Ready" value={storeActionsReady} /></Box>
 
             {normalize(requisition.status) === "ISSUED_TO_PRODUCTION" && <Card sx={{ ...panelSx, border: "1px solid var(--mf-success-border)", background: "var(--mf-success-soft)" }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
@@ -526,7 +505,7 @@ export function MatFlowStoreDetailPage() {
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>SOURCE</Typography>
                                         <Typography sx={{ ...mainTextSx, fontSize: 12 }}>{reservation.sourceLocationCode || "STORE"}</Typography>
                                     </Box>
-                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "var(--mf-primary-soft)" : "var(--mf-surface)" }}>
+                                    {route.map((transfer) => <Box key={transfer.id} sx={{ px: 1, py: .65, border: "1px solid var(--mf-border)", borderRadius: 1.5, minWidth: 110, background: normalize(transfer.status) === "READY" ? "var(--mf-primary-soft)" : "transparent" }}>
                                         <Typography sx={{ ...subTextSx, fontSize: 10 }}>→ {transfer.toLocationCode || "NEXT"}</Typography>
                                         <Box sx={{ mt: .35 }}><MatFlowStatusChip status={transfer.status} /></Box>
                                     </Box>)}
@@ -550,7 +529,7 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}><Typography sx={{ fontSize: 17, fontWeight: 950, mb: 1 }}>Shortage Indents</Typography><Box sx={tableShellSx}><Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}>{["Indent", "Deliver To", "Status", "Lines", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>{indents.length === 0 ? <EmptyState>No shortage indent exists.</EmptyState> : indents.map((indent) => <Box key={indent.id} sx={{ ...tableRowSx, gridTemplateColumns: "180px 150px 150px 180px 120px" }}><Box sx={tableCellSx}>{indent.indentNumber || "-"}</Box><Box sx={tableCellSx}>{indent.deliverToLocationCode || "-"}</Box><Box sx={tableCellSx}><MatFlowStatusChip status={indent.status} /></Box><Box sx={tableCellSx}>{(indent.lines || []).map((line) => `${line.materialCode}: ${formatQty(line.requiredQty)}`).join(" · ") || "-"}</Box><Box sx={tableCellSx}>{["AUTO_CREATED", "DRAFT", "RETURNED"].includes(normalize(indent.status)) ? <Button startIcon={<ShoppingCartOutlinedIcon />} disabled={workingId === String(indent.id)} onClick={() => submitIndent(indent)} sx={primaryBtnSx}>Send to Purchase</Button> : "-"}</Box></Box>)}</Box></Card>
         </>}
 
-        <Dialog open={Boolean(dispatchTarget)} onClose={closeDispatch} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <Dialog open={Boolean(dispatchTarget)} onClose={closeDispatch} PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>Dispatch Reserved Material</DialogTitle>
             <DialogContent sx={dialogContentSx}>
                 <Typography sx={mainTextSx}>{dispatchTarget?.transferNumber || "Transfer"}</Typography>

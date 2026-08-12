@@ -10,6 +10,7 @@ import ApprovalOutlinedIcon from "@mui/icons-material/ApprovalOutlined";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import {
     MATFLOW_ROLES, useMatFlow, ErrorBox, EmptyState, LoadingBlock,
     MATFLOW_MATERIAL_CATEGORIES, MatFlowStatusChip, MatFlowPagination, PageHero, clean,
@@ -23,6 +24,7 @@ import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflow
 
 const FALLBACK_LOCATION_TYPES = ["STORE", "PRODUCTION", "PROCESSING", "QC", "TRANSIT", "EXTERNAL_PROCESSOR", "SUPPLIER"];
 const FALLBACK_OWNERSHIP_TYPES = ["INTERNAL", "EXTERNAL"];
+const PLANNING_STOCK_LOCATION_TYPES = new Set(["STORE", "QC"]);
 
 const emptyMaterial = {
     materialCode: "", materialName: "", category: "", specification: "", uom: "",
@@ -40,6 +42,9 @@ const emptyLocation = {
 
 const upperCode = (value) =>
     clean(value).toUpperCase();
+
+const readableLocationType = (value) =>
+    clean(value).replaceAll("_", " ");
 
 const metadataEnum = (payload, name, fallback) => {
     const raw = payload?.enums?.[name] ?? payload?.data?.enums?.[name] ?? payload?.[name];
@@ -111,12 +116,34 @@ function MasterPage({ type }) {
     const [metadata, setMetadata] = useState({ locationTypes: FALLBACK_LOCATION_TYPES, ownershipTypes: FALLBACK_OWNERSHIP_TYPES });
     const masterPagination = useMatFlowPagination(rows, 20);
 
+    // Planning stock control is intentionally separate from Material/Location master editing.
+    // Available quantity is derived from On Hand - Reserved - Blocked; the UI therefore
+    // posts only an audited On-Hand adjustment through the existing secured stock endpoint.
+    const [stockDialog, setStockDialog] = useState(false);
+    const [stockSaving, setStockSaving] = useState(false);
+    const [stockMaterials, setStockMaterials] = useState([]);
+    const [stockLocations, setStockLocations] = useState([]);
+    const [stockBalance, setStockBalance] = useState(null);
+    const [stockLoadingBalance, setStockLoadingBalance] = useState(false);
+    const [stockForm, setStockForm] = useState({
+        materialId: "",
+        locationId: "",
+        targetAvailableQty: "",
+        batchNo: "",
+        remarks: "",
+    });
+
     const canManage = type === "materials"
         ? hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE)
         : type === "projects"
             ? hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING)
             : hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
     const canApproveProduct = type === "projects" && hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR);
+    const canManageStock = type !== "projects" && hasRole(
+        MATFLOW_ROLES.ADMIN,
+        MATFLOW_ROLES.MANAGER,
+        MATFLOW_ROLES.STORE
+    );
 
     const api = useMemo(() => type === "materials"
         ? { list: matflowApi.listMaterials, create: matflowApi.createMaterial, update: matflowApi.updateMaterial }
@@ -299,6 +326,144 @@ function MasterPage({ type }) {
         finally { setSaving(false); }
     };
 
+    const closeStockControl = () => {
+        if (stockSaving) return;
+        setStockDialog(false);
+        setStockBalance(null);
+        setStockMaterials([]);
+        setStockLocations([]);
+        setStockForm({ materialId: "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
+    };
+
+    const openStockControl = async ({ material = null, location = null } = {}) => {
+        if (!canManageStock) return;
+
+        setStockSaving(true);
+        setError("");
+        try {
+            const [materialResponse, locationResponse] = await Promise.all([
+                type === "materials"
+                    ? Promise.resolve({ data: rows })
+                    : matflowApi.listMaterials({ active: true }),
+                type === "locations"
+                    ? Promise.resolve({ data: rows })
+                    : matflowApi.listLocations({ active: true }),
+            ]);
+
+            const materialRows = extractMatFlowPage(materialResponse?.data).rows
+                .filter((item) => item?.active !== false);
+            const locationRows = extractMatFlowPage(locationResponse?.data).rows
+                .filter((item) =>
+                    item?.active !== false &&
+                    item?.supportsStock !== false &&
+                    PLANNING_STOCK_LOCATION_TYPES.has(normalize(item?.locationType))
+                );
+
+            setStockMaterials(materialRows);
+            setStockLocations(locationRows);
+            setStockBalance(null);
+            setStockForm({
+                materialId: material?.id || "",
+                locationId:
+                    location?.id &&
+                        locationRows.some((item) => String(item.id) === String(location.id))
+                        ? location.id
+                        : "",
+                targetAvailableQty: "",
+                batchNo: "",
+                remarks: "",
+            });
+            setStockDialog(true);
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to open Material × Location Stock Control."));
+        } finally {
+            setStockSaving(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!stockDialog || !stockForm.materialId || !stockForm.locationId) {
+            setStockBalance(null);
+            return undefined;
+        }
+
+        let cancelled = false;
+        setStockLoadingBalance(true);
+
+        matflowApi.listStock({
+            materialId: stockForm.materialId,
+            locationId: stockForm.locationId,
+        }).then((response) => {
+            if (cancelled) return;
+            const stockRows = Array.isArray(response?.data)
+                ? response.data
+                : extractMatFlowPage(response?.data).rows;
+            const balance = stockRows.find((item) =>
+                String(item.materialId) === String(stockForm.materialId) &&
+                String(item.locationId) === String(stockForm.locationId)
+            ) || null;
+            const currentAvailable = Number(balance?.availableQty ?? 0);
+            setStockBalance(balance);
+            setStockForm((current) => ({
+                ...current,
+                targetAvailableQty: Number.isFinite(currentAvailable) ? String(currentAvailable) : "0",
+                remarks: current.remarks || `Verified planning-stock correction at ${balance?.locationCode || "selected location"}.`,
+            }));
+        }).catch((requestError) => {
+            if (!cancelled) {
+                setStockBalance(null);
+                setError(readMatFlowError(requestError, "Unable to load the selected Material/Location stock balance."));
+            }
+        }).finally(() => {
+            if (!cancelled) setStockLoadingBalance(false);
+        });
+
+        return () => { cancelled = true; };
+    }, [stockDialog, stockForm.materialId, stockForm.locationId]);
+
+    const saveStockControl = async () => {
+        if (!stockForm.materialId || !stockForm.locationId) {
+            setError("Material and Store/QC location are required.");
+            return;
+        }
+
+        const targetAvailable = Number(stockForm.targetAvailableQty);
+        if (!Number.isFinite(targetAvailable) || targetAvailable < 0) {
+            setError("Desired Available quantity must be zero or greater.");
+            return;
+        }
+        if (!clean(stockForm.remarks)) {
+            setError("Reason / Remarks are required for a manual stock correction.");
+            return;
+        }
+
+        const currentAvailable = Number(stockBalance?.availableQty ?? 0);
+        const adjustmentQty = targetAvailable - (Number.isFinite(currentAvailable) ? currentAvailable : 0);
+        if (Math.abs(adjustmentQty) < 0.0005) {
+            closeStockControl();
+            return;
+        }
+
+        setStockSaving(true);
+        setError("");
+        try {
+            await matflowApi.adjustStock({
+                materialId: stockForm.materialId,
+                locationId: stockForm.locationId,
+                adjustmentQty,
+                batchNo: clean(stockForm.batchNo) || null,
+                remarks: clean(stockForm.remarks),
+                rowVersion: stockBalance?.rowVersion ?? null,
+            });
+            closeStockControl();
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to update planning stock."));
+        } finally {
+            setStockSaving(false);
+        }
+    };
+
     const title = type === "materials" ? "Material Master" : type === "projects" ? "Projects & Products" : "Material Locations";
     const columns = type === "materials" ? ["Material", "Category", "UOM", "Min / Reorder", "Status", "Action"]
         : type === "projects" ? ["Project", "Product / Drawing", "Client", "Plant", "Director Approval", "Required", "Action"]
@@ -317,6 +482,7 @@ function MasterPage({ type }) {
                 >
                     Track
                 </Button>
+                {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl({ material: row })} sx={secondaryBtnSx}>Stock</Button>}
                 {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
             </Box>,
         ];
@@ -330,13 +496,28 @@ function MasterPage({ type }) {
                 {canApproveProduct && normalize(row.productApprovalStatus) !== "RETURNED" && <Button onClick={() => { setApproval({ type: "RETURN", row }); setApprovalRemarks(""); }} sx={secondaryBtnSx}>Return</Button>}
             </Box>,
         ];
-        return [<Box><Typography sx={mainTextSx}>{row.locationCode}</Typography><Typography sx={subTextSx}>{row.locationName}</Typography></Box>, row.plantCode, row.locationType, row.ownershipType, row.supportsStock ? "Yes" : "No", <MatFlowStatusChip status={row.active ? "ACTIVE" : "INACTIVE"} />, canManage ? <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button> : "-"];
+        const planningStockLocation = row?.active !== false && row?.supportsStock !== false && PLANNING_STOCK_LOCATION_TYPES.has(normalize(row?.locationType));
+        return [
+            <Box><Typography sx={mainTextSx}>{row.locationCode}</Typography><Typography sx={subTextSx}>{row.locationName}</Typography></Box>,
+            row.plantCode,
+            row.locationType,
+            row.ownershipType,
+            row.supportsStock ? "Yes" : "No",
+            <MatFlowStatusChip status={row.active ? "ACTIVE" : "INACTIVE"} />,
+            <Box sx={{ display: "flex", gap: .55, flexWrap: "wrap" }}>
+                {canManageStock && planningStockLocation && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl({ location: row })} sx={secondaryBtnSx}>Stock</Button>}
+                {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
+            </Box>,
+        ];
     };
 
     return <Box sx={pageSx}>
         <PageHero badge={type === "projects" ? "PROJECT / PRODUCT APPROVAL" : "MATFLOW MASTER DATA"} title={title}
             subtitle={type === "projects" ? "Create one or more products/drawings under a client project. Director approval is mandatory before Engineering can create its operational BOM." : type === "materials" ? "Maintain standardized material records and open the Material Control Tower to trace current custody, prior locations, next hand-off and time spent at every stage." : "Maintain MatFlow operational reference data."}
-            actions={canManage ? <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>{type === "projects" ? "Add Product" : "Add"}</Button> : null} />
+            actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl()} sx={secondaryBtnSx}>Planning Stock Control</Button>}
+                {canManage && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>{type === "projects" ? "Add Product" : "Add"}</Button>}
+            </Box>} />
         <Card sx={panelSx}><Box sx={{ display: "flex", gap: 1 }}><TextField label="Search" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={{ ...fieldSx, flex: 1 }} /><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button></Box></Card>
         <ErrorBox>{error}</ErrorBox>
         <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
@@ -352,6 +533,47 @@ function MasterPage({ type }) {
                 />
             )}
         </Card>
+        <Dialog open={stockDialog} onClose={closeStockControl} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}><Inventory2OutlinedIcon /> Material × Location Planning Stock Control</DialogTitle>
+            <DialogContent sx={dialogContentSx}>
+                <Typography sx={{ ...subTextSx, mb: 1.4 }}>
+                    Use this only to correct a verified physical stock count at an active Store/QC planning location. Available is derived as On Hand − Reserved − Blocked; MatFlow never overwrites workflow reservations or QC blocks from this screen.
+                </Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 1.15 }}>
+                    <TextField select label="Material *" value={stockForm.materialId} onChange={(e) => setStockForm((current) => ({ ...current, materialId: e.target.value }))} disabled={stockSaving} sx={fieldSx}>
+                        {stockMaterials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialCode} · {material.materialName} · {material.uom || "-"}</MenuItem>)}
+                    </TextField>
+                    <TextField select label="Store / QC Location *" value={stockForm.locationId} onChange={(e) => setStockForm((current) => ({ ...current, locationId: e.target.value }))} disabled={stockSaving} sx={fieldSx}>
+                        {stockLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {readableLocationType(location.locationType)} · {location.plantCode}</MenuItem>)}
+                    </TextField>
+                </Box>
+
+                <Box sx={{ mt: 1.25, display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .7 }}>
+                    {[
+                        ["On Hand", stockBalance?.onHandQty ?? 0],
+                        ["Reserved", stockBalance?.reservedQty ?? 0],
+                        ["Blocked", stockBalance?.blockedQty ?? 0],
+                        ["Available", stockBalance?.availableQty ?? 0],
+                    ].map(([label, value]) => <Box key={label} sx={{ p: .9, borderRadius: 1.5, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}><Typography sx={{ ...subTextSx, fontSize: 9 }}>{label}</Typography><Typography sx={{ ...mainTextSx, fontSize: 15 }}>{Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</Typography></Box>)}
+                </Box>
+
+                <Box sx={{ mt: 1.25, p: 1, borderRadius: 1.5, border: "1px solid var(--mf-primary-border)", background: "var(--mf-primary-soft)" }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 12 }}>Why Desired Available is safe</Typography>
+                    <Typography sx={subTextSx}>MatFlow calculates the difference from current Available and posts that difference as an audited On-Hand adjustment. Reserved and Blocked remain untouched. The backend still validates rowVersion, plant access, stock support and prevents On Hand from dropping below Reserved + Blocked.</Typography>
+                </Box>
+
+                <Box sx={{ mt: 1.25, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 1.15 }}>
+                    <TextField type="number" label="Desired Available Qty *" value={stockForm.targetAvailableQty} onChange={(e) => setStockForm((current) => ({ ...current, targetAvailableQty: e.target.value }))} disabled={stockSaving || stockLoadingBalance || !stockForm.materialId || !stockForm.locationId} helperText="Enter the verified free quantity that should remain available after existing reservations/blocks." sx={fieldSx} />
+                    <TextField label="Batch / Lot (optional)" value={stockForm.batchNo} onChange={(e) => setStockForm((current) => ({ ...current, batchNo: e.target.value }))} disabled={stockSaving} sx={fieldSx} />
+                    <TextField multiline minRows={3} label="Reason / Remarks *" value={stockForm.remarks} onChange={(e) => setStockForm((current) => ({ ...current, remarks: e.target.value }))} disabled={stockSaving} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                </Box>
+            </DialogContent>
+            <DialogActions sx={dialogActionsSx}>
+                <Button onClick={closeStockControl} disabled={stockSaving} sx={secondaryBtnSx}>Cancel</Button>
+                <Button startIcon={<Inventory2OutlinedIcon />} onClick={saveStockControl} disabled={stockSaving || stockLoadingBalance || !stockForm.materialId || !stockForm.locationId || !clean(stockForm.remarks)} sx={primaryBtnSx}>{stockSaving ? "Updating..." : "Update Verified Stock"}</Button>
+            </DialogActions>
+        </Dialog>
+
         <MasterDialog type={type} open={Boolean(dialog)} row={dialog?.row} form={form} setForm={setForm} saving={saving} availablePlants={availablePlants} metadata={metadata} onClose={() => setDialog(null)} onSave={save} />
         <Dialog open={Boolean(approval)} onClose={() => !saving && setApproval(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
             <DialogTitle sx={dialogTitleSx}>{approval?.type === "APPROVE" ? <><ApprovalOutlinedIcon /> Director Product Approval</> : <><UndoOutlinedIcon /> Return Product to Engineering</>}</DialogTitle>
