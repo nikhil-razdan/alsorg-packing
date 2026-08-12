@@ -27,6 +27,7 @@ import {
     MatFlowPagination,
     MatFlowStatusChip,
     PageHero,
+    SummaryCard,
     clean,
     dangerBtnSx,
     dialogActionsSx,
@@ -65,6 +66,54 @@ const APPROVAL_ROLES = [
 
 const upperCode = (value) => clean(value).toUpperCase();
 
+const indentDeliveryLocationId = (indent) =>
+    indent?.deliveryLocationId ??
+    indent?.deliverToLocationId ??
+    indent?.deliverToLocation?.id ??
+    null;
+
+const indentDeliveryLocationCode = (indent) =>
+    indent?.deliveryLocationCode ??
+    indent?.deliverToLocationCode ??
+    indent?.deliverToLocation?.locationCode ??
+    "";
+
+const indentDeliveryPlantCode = (indent) =>
+    indent?.deliveryPlantCode ??
+    indent?.deliverToPlantCode ??
+    indent?.deliverToLocation?.plantCode ??
+    "";
+
+const normalizePurchaseIndent = (indent, requisition) => ({
+    ...indent,
+
+    /*
+     * Current MatFlowPlanningDtos.IndentResponse exposes:
+     *   deliverToLocationId
+     *   deliverToLocationCode
+     *   deliverToPlantCode
+     *
+     * Older Purchase UI code expected deliveryLocationId / Code / PlantCode.
+     * Normalize both contracts here once so every Purchase action uses the
+     * Store-owned delivery destination without weakening backend validation.
+     */
+    deliveryLocationId: indentDeliveryLocationId(indent),
+    deliveryLocationCode: indentDeliveryLocationCode(indent),
+    deliveryPlantCode: indentDeliveryPlantCode(indent),
+    requisition,
+});
+
+const openIndentLines = (indent) =>
+    (Array.isArray(indent?.lines) ? indent.lines : [])
+        .map((line) => ({
+            ...line,
+            outstanding: Math.max(
+                0,
+                numeric(line.requiredQty) - numeric(line.orderedQty)
+            ),
+        }))
+        .filter((line) => line.outstanding > 0);
+
 async function discoverPurchaseIndents() {
     const requisitionResponse = await matflowApi.listRequisitions();
     const requisitions = Array.isArray(requisitionResponse?.data)
@@ -82,20 +131,23 @@ async function discoverPurchaseIndents() {
     );
 
     const map = new Map();
+
     snapshots.filter(Boolean).forEach((snapshot) => {
-        (snapshot.indents || []).forEach((indent) => {
+        (snapshot.indents || []).forEach((rawIndent) => {
             if (
                 [
                     "SUBMITTED_TO_PURCHASE",
                     "PURCHASE_IN_PROGRESS",
                     "PO_CREATED",
                     "PARTIALLY_RECEIVED",
-                ].includes(normalize(indent.status))
+                ].includes(normalize(rawIndent.status))
             ) {
-                map.set(String(indent.id), {
-                    ...indent,
-                    requisition: snapshot.requisition,
-                });
+                const indent = normalizePurchaseIndent(
+                    rawIndent,
+                    snapshot.requisition
+                );
+
+                map.set(String(indent.id), indent);
             }
         });
     });
@@ -104,7 +156,7 @@ async function discoverPurchaseIndents() {
 }
 
 export function MatFlowPurchasePage() {
-    const { hasRole } = useMatFlow();
+    const { hasRole, selectedPlantParam } = useMatFlow();
     const canPurchase = hasRole(PURCHASE_ROLES);
 
     const [orders, setOrders] = useState([]);
@@ -113,6 +165,10 @@ export function MatFlowPurchasePage() {
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
+    const [poError, setPoError] = useState("");
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
+    const [vendorSearch, setVendorSearch] = useState("");
     const [poDialog, setPoDialog] = useState(false);
     const [vendorDialog, setVendorDialog] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -140,6 +196,7 @@ export function MatFlowPurchasePage() {
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
+
         try {
             const [orderResponse, vendorResponse, purchaseIndents] =
                 await Promise.all([
@@ -152,7 +209,15 @@ export function MatFlowPurchasePage() {
             setVendors(Array.isArray(vendorResponse?.data) ? vendorResponse.data : []);
             setIndents(purchaseIndents);
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to load Purchase workspace."));
+            setOrders([]);
+            setVendors([]);
+            setIndents([]);
+            setError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to load the Purchase procurement workspace."
+                )
+            );
         } finally {
             setLoading(false);
         }
@@ -162,35 +227,158 @@ export function MatFlowPurchasePage() {
         load();
     }, [load]);
 
-    const selectedIndent = indents.find(
-        (indent) => String(indent.id) === String(poForm.indentId)
+    const selectedIndent = useMemo(
+        () =>
+            indents.find(
+                (indent) => String(indent.id) === String(poForm.indentId)
+            ) || null,
+        [indents, poForm.indentId]
     );
 
     const poLines = useMemo(
-        () =>
-            (selectedIndent?.lines || [])
-                .map((line) => ({
-                    ...line,
-                    outstanding: Math.max(
-                        0,
-                        numeric(line.requiredQty) - numeric(line.orderedQty)
-                    ),
-                }))
-                .filter((line) => line.outstanding > 0),
+        () => openIndentLines(selectedIndent),
         [selectedIndent]
     );
 
     useEffect(() => {
-        if (!selectedIndent) return;
+        if (!selectedIndent) {
+            setPoForm((current) => ({ ...current, quantities: {} }));
+            return;
+        }
+
         const quantities = {};
         poLines.forEach((line) => {
             quantities[String(line.id)] = String(line.outstanding);
         });
-        setPoForm((current) => ({ ...current, quantities }));
-    }, [poForm.indentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const orderPagination = useMatFlowPagination(orders, 20);
-    const vendorPagination = useMatFlowPagination(vendors, 20);
+        setPoForm((current) => ({
+            ...current,
+            quantities,
+        }));
+    }, [selectedIndent?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const selectedPlant = upperCode(selectedPlantParam);
+
+    const scopedOrders = useMemo(
+        () =>
+            orders.filter((order) => {
+                if (!selectedPlant) return true;
+
+                return upperCode(
+                    order.deliveryPlantCode ||
+                    order.plantCode ||
+                    order.indentPlantCode
+                ) === selectedPlant;
+            }),
+        [orders, selectedPlant]
+    );
+
+    const scopedIndents = useMemo(
+        () =>
+            indents.filter((indent) => {
+                if (!selectedPlant) return true;
+
+                return upperCode(
+                    indentDeliveryPlantCode(indent) ||
+                    indent?.requisition?.destinationPlantCode
+                ) === selectedPlant;
+            }),
+        [indents, selectedPlant]
+    );
+
+    const purchaseReadyIndents = useMemo(
+        () => scopedIndents.filter((indent) => openIndentLines(indent).length > 0),
+        [scopedIndents]
+    );
+
+    const statusOptions = useMemo(
+        () => [
+            "ALL",
+            ...Array.from(
+                new Set(
+                    scopedOrders
+                        .map((order) => normalize(order.status))
+                        .filter(Boolean)
+                )
+            ),
+        ],
+        [scopedOrders]
+    );
+
+    const filteredOrders = useMemo(() => {
+        const query = clean(search).toLowerCase();
+
+        return scopedOrders.filter((order) => {
+            if (
+                statusFilter !== "ALL" &&
+                normalize(order.status) !== normalize(statusFilter)
+            ) {
+                return false;
+            }
+
+            if (!query) return true;
+
+            return [
+                order.poNumber,
+                order.vendorName,
+                order.vendorCode,
+                order.indentNumber,
+                order.deliveryLocationCode,
+                order.deliveryPlantCode,
+                order.projectCode,
+                order.drawingNo,
+                order.productName,
+                order.status,
+            ].some((value) =>
+                String(value ?? "").toLowerCase().includes(query)
+            );
+        });
+    }, [scopedOrders, search, statusFilter]);
+
+    const filteredVendors = useMemo(() => {
+        const query = clean(vendorSearch).toLowerCase();
+        if (!query) return vendors;
+
+        return vendors.filter((vendor) =>
+            [
+                vendor.vendorCode,
+                vendor.vendorName,
+                vendor.gstin,
+                vendor.contactPerson,
+                vendor.phone,
+                vendor.email,
+            ].some((value) =>
+                String(value ?? "").toLowerCase().includes(query)
+            )
+        );
+    }, [vendors, vendorSearch]);
+
+    const orderPagination = useMatFlowPagination(filteredOrders, 15);
+    const indentPagination = useMatFlowPagination(purchaseReadyIndents, 8);
+    const vendorPagination = useMatFlowPagination(filteredVendors, 10);
+
+    const counts = useMemo(() => {
+        const statusCount = (statuses) =>
+            scopedOrders.filter((order) =>
+                statuses.includes(normalize(order.status))
+            ).length;
+
+        return {
+            openIndents: purchaseReadyIndents.length,
+            openIndentLines: purchaseReadyIndents.reduce(
+                (total, indent) => total + openIndentLines(indent).length,
+                0
+            ),
+            draft: statusCount(["DRAFT"]),
+            placed: statusCount(["PLACED"]),
+            partial: statusCount(["PARTIALLY_RECEIVED"]),
+            received: statusCount(["RECEIVED", "COMPLETED", "CLOSED"]),
+            vendors: vendors.filter((vendor) => vendor.active !== false).length,
+            missingDestination: purchaseReadyIndents.filter(
+                (indent) => !indentDeliveryLocationId(indent)
+            ).length,
+        };
+    }, [scopedOrders, purchaseReadyIndents, vendors]);
 
     const openVendor = (row = null) => {
         setVendorDialog({ row });
@@ -207,6 +395,31 @@ export function MatFlowPurchasePage() {
         setError("");
     };
 
+    const openPo = (indent = null) => {
+        const quantities = {};
+        openIndentLines(indent).forEach((line) => {
+            quantities[String(line.id)] = String(line.outstanding);
+        });
+
+        setPoError("");
+        setError("");
+        setPoForm({
+            indentId: indent?.id ? String(indent.id) : "",
+            vendorId: "",
+            poNumber: "",
+            poDate: new Date().toISOString().slice(0, 10),
+            remarks: "",
+            quantities,
+        });
+        setPoDialog(true);
+    };
+
+    const closePo = () => {
+        if (working) return;
+        setPoDialog(false);
+        setPoError("");
+    };
+
     const saveVendor = async () => {
         if (!clean(vendorForm.vendorCode) || !clean(vendorForm.vendorName)) {
             setError("Vendor code and vendor name are required.");
@@ -215,6 +428,7 @@ export function MatFlowPurchasePage() {
 
         setWorking(true);
         setError("");
+
         try {
             const body = {
                 vendorCode: upperCode(vendorForm.vendorCode),
@@ -244,66 +458,108 @@ export function MatFlowPurchasePage() {
     };
 
     const createPo = async () => {
-        const lines = poLines
+        const requestLines = poLines
             .map((line) => ({
                 indentLineId: line.id,
-                orderedQty: Number(poForm.quantities[String(line.id)] || 0),
+                orderedQty: Number(
+                    poForm.quantities[String(line.id)] || 0
+                ),
                 remarks: null,
             }))
             .filter(
-                (line) => Number.isFinite(line.orderedQty) && line.orderedQty > 0
+                (line) =>
+                    Number.isFinite(line.orderedQty) &&
+                    line.orderedQty > 0
             );
 
-        if (
-            !selectedIndent?.id ||
-            !poForm.vendorId ||
-            !clean(poForm.poNumber) ||
-            !poForm.poDate ||
-            !lines.length
-        ) {
-            setError(
-                "Indent, vendor, PO number/date and at least one ordered quantity are required."
+        const deliveryLocationId =
+            indentDeliveryLocationId(selectedIndent);
+
+        if (!selectedIndent?.id) {
+            setPoError("Select a Store-confirmed shortage Indent.");
+            return;
+        }
+
+        if (!poForm.vendorId) {
+            setPoError("Select an active Vendor.");
+            return;
+        }
+
+        if (!deliveryLocationId) {
+            setPoError(
+                "The selected Indent has no Store-defined delivery location ID. Refresh the Purchase desk and verify the Store shortage Indent. A PO cannot be created without the exact Indent delivery destination."
             );
             return;
         }
 
-        for (const line of lines) {
-            const source = poLines.find(
-                (item) => String(item.id) === String(line.indentLineId)
+        if (!clean(poForm.poNumber) || !poForm.poDate) {
+            setPoError("PO number and PO date are required.");
+            return;
+        }
+
+        if (!requestLines.length) {
+            setPoError(
+                "Enter an Order Qty greater than zero for at least one shortage material."
             );
-            if (line.orderedQty > numeric(source?.outstanding) + 0.0005) {
-                setError(
-                    `Ordered quantity exceeds shortage balance for ${source?.materialCode || "material"}.`
+            return;
+        }
+
+        for (const requestLine of requestLines) {
+            const source = poLines.find(
+                (item) =>
+                    String(item.id) ===
+                    String(requestLine.indentLineId)
+            );
+
+            if (
+                requestLine.orderedQty >
+                numeric(source?.outstanding) + 0.0005
+            ) {
+                setPoError(
+                    `Order quantity exceeds the remaining shortage for ${source?.materialCode || "the selected material"
+                    }.`
                 );
                 return;
             }
         }
 
         setWorking(true);
-        setError("");
+        setPoError("");
+
         try {
             await matflowApi.createPurchaseOrder({
                 poNumber: upperCode(poForm.poNumber),
                 poDate: poForm.poDate,
                 vendorId: poForm.vendorId,
                 indentId: selectedIndent.id,
-                deliveryLocationId: selectedIndent.deliveryLocationId,
+
+                /*
+                 * Delivery is not a free PO choice. Store already fixed it on
+                 * the shortage Indent and the backend verifies exact equality.
+                 */
+                deliveryLocationId,
+
                 remarks: clean(poForm.remarks) || null,
-                lines,
+                lines: requestLines,
             });
+
             setPoDialog(false);
-            setPoForm((current) => ({
-                ...current,
+            setPoForm({
                 indentId: "",
                 vendorId: "",
                 poNumber: "",
+                poDate: new Date().toISOString().slice(0, 10),
                 remarks: "",
                 quantities: {},
-            }));
+            });
+
             await load();
         } catch (requestError) {
-            setError(
-                readMatFlowError(requestError, "Unable to create purchase order.")
+            setPoError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to create the Draft Purchase Order."
+                )
             );
         } finally {
             setWorking(false);
@@ -312,8 +568,10 @@ export function MatFlowPurchasePage() {
 
     const confirmDeleteDraft = async () => {
         if (!deleteTarget?.id || deleteTarget.rowVersion == null) return;
+
         setWorking(true);
         setError("");
+
         try {
             await matflowApi.deleteDraftPurchaseOrder(
                 deleteTarget.id,
@@ -323,31 +581,53 @@ export function MatFlowPurchasePage() {
             await load();
         } catch (requestError) {
             setError(
-                readMatFlowError(requestError, "Unable to delete the Draft purchase order.")
+                readMatFlowError(
+                    requestError,
+                    "Unable to delete the Draft purchase order."
+                )
             );
         } finally {
             setWorking(false);
         }
     };
 
+    const selectedIndentLocationCode =
+        indentDeliveryLocationCode(selectedIndent);
+    const selectedIndentPlantCode =
+        indentDeliveryPlantCode(selectedIndent);
+
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="PURCHASE PROCUREMENT"
-                title="Purchase Orders & Vendors"
-                subtitle="Create Purchase Orders only against Store-confirmed shortage indents. Draft POs may be deleted before independent approval; placed/received POs remain procurement history."
+                badge="PURCHASE PROCUREMENT CONTROL"
+                title="Shortage Procurement & Purchase Orders"
+                subtitle="Convert Store-confirmed material shortages into controlled Purchase Orders. Every PO remains tied to the exact Indent, Vendor and Store-defined delivery destination before independent approval and GRN receipt."
                 actions={
                     <>
-                        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            onClick={load}
+                            sx={secondaryBtnSx}
+                        >
                             Refresh
                         </Button>
+
                         {canPurchase && (
-                            <Button startIcon={<AddIcon />} onClick={() => openVendor(null)} sx={secondaryBtnSx}>
-                                Vendor
+                            <Button
+                                startIcon={<AddIcon />}
+                                onClick={() => openVendor(null)}
+                                sx={secondaryBtnSx}
+                            >
+                                Add Vendor
                             </Button>
                         )}
+
                         {canPurchase && (
-                            <Button startIcon={<AddIcon />} onClick={() => setPoDialog(true)} sx={primaryBtnSx}>
+                            <Button
+                                startIcon={<AddIcon />}
+                                onClick={() => openPo()}
+                                sx={primaryBtnSx}
+                            >
                                 Create PO
                             </Button>
                         )}
@@ -357,66 +637,611 @@ export function MatFlowPurchasePage() {
 
             <ErrorBox>{error}</ErrorBox>
 
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns:
+                        "repeat(auto-fit,minmax(145px,1fr))",
+                    gap: 1,
+                }}
+            >
+                <SummaryCard
+                    label="Open Shortage Indents"
+                    tone="red"
+                    value={counts.openIndents}
+                    colorful
+                />
+                <SummaryCard
+                    label="Open Material Lines"
+                    tone="orange"
+                    value={counts.openIndentLines}
+                    colorful
+                />
+                <SummaryCard
+                    label="Draft / Approval Queue"
+                    tone="amber"
+                    value={counts.draft}
+                    colorful
+                />
+                <SummaryCard
+                    label="Placed POs"
+                    tone="blue"
+                    value={counts.placed}
+                    colorful
+                />
+                <SummaryCard
+                    label="Partially Received"
+                    tone="purple"
+                    value={counts.partial}
+                    colorful
+                />
+                <SummaryCard
+                    label="Fully Received"
+                    tone="green"
+                    value={counts.received}
+                    colorful
+                />
+                <SummaryCard
+                    label="Active Vendors"
+                    tone="indigo"
+                    value={counts.vendors}
+                    colorful
+                />
+            </Box>
+
+            {counts.missingDestination > 0 && (
+                <Card
+                    sx={{
+                        ...panelSx,
+                        borderColor: "var(--mf-danger-border)",
+                        background: "var(--mf-danger-soft)",
+                    }}
+                >
+                    <Typography
+                        sx={{
+                            color: "var(--mf-danger-text)",
+                            fontWeight: 950,
+                            fontSize: 13,
+                        }}
+                    >
+                        Procurement configuration attention
+                    </Typography>
+                    <Typography sx={subTextSx}>
+                        {counts.missingDestination} purchase-ready Indent
+                        {counts.missingDestination === 1 ? "" : "s"} could not
+                        resolve a delivery-location ID. A PO is intentionally
+                        blocked until the Store-owned Indent destination is
+                        available.
+                    </Typography>
+                </Card>
+            )}
+
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                        xs: "1fr",
+                        xl: "minmax(0,1.15fr) minmax(360px,.85fr)",
+                    },
+                    gap: 1.2,
+                    alignItems: "start",
+                }}
+            >
+                <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                    <Box
+                        sx={{
+                            px: 1.5,
+                            py: 1.25,
+                            borderBottom: "1px solid var(--mf-border)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            alignItems: "flex-start",
+                            flexWrap: "wrap",
+                        }}
+                    >
+                        <Box>
+                            <Typography
+                                sx={{ fontSize: 16, fontWeight: 950 }}
+                            >
+                                Purchase-Ready Shortage Indents
+                            </Typography>
+                            <Typography sx={subTextSx}>
+                                Store-confirmed shortage demand that still has
+                                material quantity available to order.
+                            </Typography>
+                        </Box>
+                        <MatFlowStatusChip
+                            status={
+                                purchaseReadyIndents.length
+                                    ? "PURCHASE_REQUIRED"
+                                    : "NO_OPEN_SHORTAGE"
+                            }
+                        />
+                    </Box>
+
+                    {loading ? (
+                        <LoadingBlock />
+                    ) : (
+                        <>
+                            <Box
+                                sx={{
+                                    ...tableShellSx,
+                                    border: 0,
+                                    borderRadius: 0,
+                                    overflowX: "auto",
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        ...tableHeaderSx,
+                                        minWidth: 940,
+                                        gridTemplateColumns:
+                                            "165px minmax(210px,1fr) 180px 105px 150px 130px",
+                                    }}
+                                >
+                                    {[
+                                        "Indent",
+                                        "Project / Product",
+                                        "Delivery",
+                                        "Open Lines",
+                                        "Status",
+                                        "Action",
+                                    ].map((heading) => (
+                                        <Box
+                                            key={heading}
+                                            sx={tableCellSx}
+                                        >
+                                            {heading}
+                                        </Box>
+                                    ))}
+                                </Box>
+
+                                {purchaseReadyIndents.length === 0 ? (
+                                    <EmptyState>
+                                        No Store-confirmed shortage Indent is
+                                        currently waiting for Purchase.
+                                    </EmptyState>
+                                ) : (
+                                    indentPagination.pageItems.map(
+                                        (indent) => {
+                                            const lines =
+                                                openIndentLines(indent);
+                                            const deliveryId =
+                                                indentDeliveryLocationId(
+                                                    indent
+                                                );
+
+                                            return (
+                                                <Box
+                                                    key={indent.id}
+                                                    sx={{
+                                                        ...tableRowSx,
+                                                        minWidth: 940,
+                                                        gridTemplateColumns:
+                                                            "165px minmax(210px,1fr) 180px 105px 150px 130px",
+                                                    }}
+                                                >
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography
+                                                            sx={mainTextSx}
+                                                        >
+                                                            {indent.indentNumber ||
+                                                                "-"}
+                                                        </Typography>
+                                                        <Typography
+                                                            sx={subTextSx}
+                                                        >
+                                                            {formatDate(
+                                                                indent.updatedAt ||
+                                                                indent.createdAt
+                                                            )}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography
+                                                            sx={mainTextSx}
+                                                        >
+                                                            {indent.requisition
+                                                                ?.projectCode ||
+                                                                "-"}
+                                                        </Typography>
+                                                        <Typography
+                                                            sx={subTextSx}
+                                                        >
+                                                            {indent.requisition
+                                                                ?.productName ||
+                                                                "-"}{" "}
+                                                            ·{" "}
+                                                            {indent.requisition
+                                                                ?.drawingNo ||
+                                                                "-"}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography
+                                                            sx={mainTextSx}
+                                                        >
+                                                            {indentDeliveryLocationCode(
+                                                                indent
+                                                            ) || "-"}
+                                                        </Typography>
+                                                        <Typography
+                                                            sx={subTextSx}
+                                                        >
+                                                            {indentDeliveryPlantCode(
+                                                                indent
+                                                            ) || "-"}
+                                                        </Typography>
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        {lines.length}
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        <MatFlowStatusChip
+                                                            status={
+                                                                indent.status
+                                                            }
+                                                        />
+                                                    </Box>
+
+                                                    <Box sx={tableCellSx}>
+                                                        {canPurchase ? (
+                                                            <Button
+                                                                startIcon={
+                                                                    <AddIcon />
+                                                                }
+                                                                disabled={
+                                                                    !deliveryId
+                                                                }
+                                                                onClick={() =>
+                                                                    openPo(
+                                                                        indent
+                                                                    )
+                                                                }
+                                                                sx={
+                                                                    primaryBtnSx
+                                                                }
+                                                            >
+                                                                Create PO
+                                                            </Button>
+                                                        ) : (
+                                                            <Typography
+                                                                sx={subTextSx}
+                                                            >
+                                                                Read only
+                                                            </Typography>
+                                                        )}
+                                                    </Box>
+                                                </Box>
+                                            );
+                                        }
+                                    )
+                                )}
+                            </Box>
+
+                            <Box sx={{ px: 1.2, pb: 1.2 }}>
+                                <MatFlowPagination
+                                    {...indentPagination}
+                                    onPageChange={indentPagination.setPage}
+                                    onPageSizeChange={
+                                        indentPagination.setPageSize
+                                    }
+                                    pageSizeOptions={[5, 8, 15, 25]}
+                                    label="Purchase-ready Indents"
+                                />
+                            </Box>
+                        </>
+                    )}
+                </Card>
+
+                <Card sx={panelSx}>
+                    <Typography
+                        sx={{ fontSize: 16, fontWeight: 950 }}
+                    >
+                        Procurement Readiness
+                    </Typography>
+                    <Typography sx={{ ...subTextSx, mb: 1.15 }}>
+                        A Purchase Order should be created only when all three
+                        source controls are resolved.
+                    </Typography>
+
+                    {[
+                        {
+                            label: "1 · Store Shortage Indent",
+                            value: purchaseReadyIndents.length,
+                            caption:
+                                "Submitted shortage demand available to Purchase.",
+                            status:
+                                purchaseReadyIndents.length > 0
+                                    ? "READY"
+                                    : "WAITING",
+                        },
+                        {
+                            label: "2 · Active Vendor",
+                            value: counts.vendors,
+                            caption:
+                                "Approved active Vendor master available for selection.",
+                            status:
+                                counts.vendors > 0 ? "READY" : "ACTION_REQUIRED",
+                        },
+                        {
+                            label: "3 · Delivery Destination",
+                            value:
+                                counts.openIndents -
+                                counts.missingDestination,
+                            caption:
+                                "Exact Store-owned Indent location that the backend will enforce on the PO.",
+                            status:
+                                counts.missingDestination === 0
+                                    ? "READY"
+                                    : "ACTION_REQUIRED",
+                        },
+                    ].map((item) => (
+                        <Box
+                            key={item.label}
+                            sx={{
+                                p: 1,
+                                mb: .75,
+                                borderRadius: 1.7,
+                                border: "1px solid var(--mf-border)",
+                                background: "var(--mf-surface)",
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 1,
+                                    alignItems: "center",
+                                }}
+                            >
+                                <Typography sx={mainTextSx}>
+                                    {item.label}
+                                </Typography>
+                                <MatFlowStatusChip status={item.status} />
+                            </Box>
+                            <Typography
+                                sx={{
+                                    fontSize: 20,
+                                    fontWeight: 950,
+                                    mt: .4,
+                                }}
+                            >
+                                {item.value}
+                            </Typography>
+                            <Typography sx={subTextSx}>
+                                {item.caption}
+                            </Typography>
+                        </Box>
+                    ))}
+
+                    <Box
+                        sx={{
+                            mt: 1,
+                            p: 1,
+                            borderRadius: 1.7,
+                            border: "1px solid var(--mf-primary-border)",
+                            background: "var(--mf-primary-soft)",
+                        }}
+                    >
+                        <Typography
+                            sx={{
+                                fontSize: 11.5,
+                                fontWeight: 950,
+                                color: "var(--mf-primary-text)",
+                            }}
+                        >
+                            Controlled delivery rule
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Purchase does not choose an arbitrary receiving
+                            location. The PO inherits the delivery destination
+                            from the Store shortage Indent, and the backend
+                            verifies that both IDs match.
+                        </Typography>
+                    </Box>
+                </Card>
+            </Box>
+
             <Card sx={panelSx}>
-                <Typography sx={{ fontWeight: 950, mb: 1 }}>Purchase Order Register</Typography>
+                <Box
+                    sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 1,
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                        mb: 1.2,
+                    }}
+                >
+                    <Box>
+                        <Typography
+                            sx={{ fontSize: 17, fontWeight: 950 }}
+                        >
+                            Purchase Order Register
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Draft → independent approval → placement → partial /
+                            full receipt. Historical POs remain protected.
+                        </Typography>
+                    </Box>
+
+                    <Typography sx={subTextSx}>
+                        Showing {filteredOrders.length} of {scopedOrders.length}
+                    </Typography>
+                </Box>
+
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: {
+                            xs: "1fr",
+                            md: "minmax(260px,1fr) 220px",
+                        },
+                        gap: 1,
+                        mb: 1.2,
+                    }}
+                >
+                    <TextField
+                        label="Search PO, Vendor, Indent, Project or Delivery"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        sx={fieldSx}
+                    />
+
+                    <TextField
+                        select
+                        label="PO Status"
+                        value={statusFilter}
+                        onChange={(event) =>
+                            setStatusFilter(event.target.value)
+                        }
+                        sx={fieldSx}
+                    >
+                        {statusOptions.map((value) => (
+                            <MenuItem key={value} value={value}>
+                                {value === "ALL"
+                                    ? "All PO Statuses"
+                                    : value
+                                        .replaceAll("_", " ")
+                                        .toLowerCase()
+                                        .replace(/\b\w/g, (char) =>
+                                            char.toUpperCase()
+                                        )}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                </Box>
+
                 {loading ? (
                     <LoadingBlock />
                 ) : (
-                    <Box sx={tableShellSx}>
+                    <Box
+                        sx={{
+                            ...tableShellSx,
+                            overflowX: "auto",
+                        }}
+                    >
                         <Box
                             sx={{
                                 ...tableHeaderSx,
+                                minWidth: 1180,
                                 gridTemplateColumns:
-                                    "170px 150px 170px 170px 150px 90px 190px",
+                                    "180px 190px 180px 190px 155px 90px 150px",
                             }}
                         >
-                            {["PO", "Vendor", "Indent", "Delivery", "Status", "Lines", "Action"].map(
-                                (heading) => (
-                                    <Box key={heading} sx={tableCellSx}>
-                                        {heading}
-                                    </Box>
-                                )
-                            )}
+                            {[
+                                "Purchase Order",
+                                "Vendor",
+                                "Source Indent",
+                                "Delivery",
+                                "Status",
+                                "Lines",
+                                "Control",
+                            ].map((heading) => (
+                                <Box key={heading} sx={tableCellSx}>
+                                    {heading}
+                                </Box>
+                            ))}
                         </Box>
 
-                        {orders.length === 0 ? (
-                            <EmptyState />
+                        {filteredOrders.length === 0 ? (
+                            <EmptyState>
+                                No Purchase Orders match the selected scope and
+                                filters.
+                            </EmptyState>
                         ) : (
                             orderPagination.pageItems.map((row) => (
                                 <Box
                                     key={row.id}
                                     sx={{
                                         ...tableRowSx,
+                                        minWidth: 1180,
                                         gridTemplateColumns:
-                                            "170px 150px 170px 170px 150px 90px 190px",
+                                            "180px 190px 180px 190px 155px 90px 150px",
                                     }}
                                 >
                                     <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>{row.poNumber || "-"}</Typography>
-                                        <Typography sx={subTextSx}>{row.poDate || "-"}</Typography>
+                                        <Typography sx={mainTextSx}>
+                                            {row.poNumber || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.poDate || "-"}
+                                        </Typography>
                                     </Box>
-                                    <Box sx={tableCellSx}>{row.vendorName || "-"}</Box>
-                                    <Box sx={tableCellSx}>{row.indentNumber || "-"}</Box>
+
                                     <Box sx={tableCellSx}>
-                                        <Typography sx={mainTextSx}>{row.deliveryLocationCode || "-"}</Typography>
-                                        <Typography sx={subTextSx}>{row.deliveryPlantCode || "-"}</Typography>
+                                        <Typography sx={mainTextSx}>
+                                            {row.vendorName || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.vendorCode || ""}
+                                        </Typography>
                                     </Box>
+
                                     <Box sx={tableCellSx}>
-                                        <MatFlowStatusChip status={row.status} />
+                                        <Typography sx={mainTextSx}>
+                                            {row.indentNumber || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.projectCode || ""}
+                                            {row.drawingNo
+                                                ? ` · ${row.drawingNo}`
+                                                : ""}
+                                        </Typography>
                                     </Box>
-                                    <Box sx={tableCellSx}>{row.lines?.length || 0}</Box>
-                                    <Box sx={{ ...tableCellSx, display: "flex", gap: .6 }}>
-                                        {canPurchase && normalize(row.status) === "DRAFT" && row.rowVersion != null ? (
+
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>
+                                            {row.deliveryLocationCode || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.deliveryPlantCode || "-"}
+                                        </Typography>
+                                    </Box>
+
+                                    <Box sx={tableCellSx}>
+                                        <MatFlowStatusChip
+                                            status={row.status}
+                                        />
+                                    </Box>
+
+                                    <Box sx={tableCellSx}>
+                                        {row.lines?.length || 0}
+                                    </Box>
+
+                                    <Box
+                                        sx={{
+                                            ...tableCellSx,
+                                            display: "flex",
+                                            gap: .6,
+                                            flexWrap: "wrap",
+                                        }}
+                                    >
+                                        {canPurchase &&
+                                            normalize(row.status) === "DRAFT" &&
+                                            row.rowVersion != null ? (
                                             <Button
-                                                startIcon={<DeleteOutlineIcon />}
+                                                startIcon={
+                                                    <DeleteOutlineIcon />
+                                                }
                                                 disabled={working}
-                                                onClick={() => setDeleteTarget(row)}
+                                                onClick={() =>
+                                                    setDeleteTarget(row)
+                                                }
                                                 sx={dangerBtnSx}
                                             >
                                                 Delete Draft
                                             </Button>
                                         ) : (
-                                            <Typography sx={subTextSx}>History protected</Typography>
+                                            <Typography sx={subTextSx}>
+                                                History protected
+                                            </Typography>
                                         )}
                                     </Box>
                                 </Box>
@@ -424,110 +1249,578 @@ export function MatFlowPurchasePage() {
                         )}
                     </Box>
                 )}
+
                 {!loading && (
                     <MatFlowPagination
                         {...orderPagination}
                         onPageChange={orderPagination.setPage}
                         onPageSizeChange={orderPagination.setPageSize}
+                        pageSizeOptions={[10, 15, 25, 50]}
                         label="Purchase Orders"
                     />
                 )}
             </Card>
 
             <Card sx={panelSx}>
-                <Typography sx={{ fontWeight: 950, mb: 1 }}>Vendor Register</Typography>
-                <Box sx={tableShellSx}>
-                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 210px 160px 160px 120px" }}>
-                        {["Code", "Vendor", "GSTIN", "Contact", "Action"].map((heading) => (
-                            <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                <Box
+                    sx={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 1,
+                        alignItems: "flex-start",
+                        flexWrap: "wrap",
+                        mb: 1.1,
+                    }}
+                >
+                    <Box>
+                        <Typography
+                            sx={{ fontSize: 17, fontWeight: 950 }}
+                        >
+                            Vendor Directory
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Active commercial counterparties used for shortage
+                            Purchase Orders.
+                        </Typography>
+                    </Box>
+
+                    {canPurchase && (
+                        <Button
+                            startIcon={<AddIcon />}
+                            onClick={() => openVendor(null)}
+                            sx={secondaryBtnSx}
+                        >
+                            Add Vendor
+                        </Button>
+                    )}
+                </Box>
+
+                <TextField
+                    fullWidth
+                    label="Search Vendor, GSTIN, Contact or Email"
+                    value={vendorSearch}
+                    onChange={(event) =>
+                        setVendorSearch(event.target.value)
+                    }
+                    sx={{ ...fieldSx, mb: 1.1 }}
+                />
+
+                <Box sx={{ ...tableShellSx, overflowX: "auto" }}>
+                    <Box
+                        sx={{
+                            ...tableHeaderSx,
+                            minWidth: 900,
+                            gridTemplateColumns:
+                                "150px minmax(220px,1fr) 170px 190px 120px",
+                        }}
+                    >
+                        {[
+                            "Code",
+                            "Vendor",
+                            "GSTIN",
+                            "Contact",
+                            "Action",
+                        ].map((heading) => (
+                            <Box key={heading} sx={tableCellSx}>
+                                {heading}
+                            </Box>
                         ))}
                     </Box>
-                    {vendors.length === 0 ? (
-                        <EmptyState />
+
+                    {filteredVendors.length === 0 ? (
+                        <EmptyState>
+                            No Vendors match the current search.
+                        </EmptyState>
                     ) : (
                         vendorPagination.pageItems.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 210px 160px 160px 120px" }}>
-                                <Box sx={tableCellSx}>{row.vendorCode}</Box>
+                            <Box
+                                key={row.id}
+                                sx={{
+                                    ...tableRowSx,
+                                    minWidth: 900,
+                                    gridTemplateColumns:
+                                        "150px minmax(220px,1fr) 170px 190px 120px",
+                                }}
+                            >
                                 <Box sx={tableCellSx}>
-                                    <Typography sx={mainTextSx}>{row.vendorName}</Typography>
-                                    <Typography sx={subTextSx}>{row.email || "-"}</Typography>
+                                    {row.vendorCode || "-"}
                                 </Box>
-                                <Box sx={tableCellSx}>{row.gstin || "-"}</Box>
-                                <Box sx={tableCellSx}>{row.contactPerson || row.phone || "-"}</Box>
                                 <Box sx={tableCellSx}>
-                                    {canPurchase && (
-                                        <Button onClick={() => openVendor(row)} sx={secondaryBtnSx}>
+                                    <Typography sx={mainTextSx}>
+                                        {row.vendorName || "-"}
+                                    </Typography>
+                                    <Typography sx={subTextSx}>
+                                        {row.email || "-"}
+                                    </Typography>
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    {row.gstin || "-"}
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    <Typography sx={mainTextSx}>
+                                        {row.contactPerson || "-"}
+                                    </Typography>
+                                    <Typography sx={subTextSx}>
+                                        {row.phone || "-"}
+                                    </Typography>
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    {canPurchase ? (
+                                        <Button
+                                            onClick={() =>
+                                                openVendor(row)
+                                            }
+                                            sx={secondaryBtnSx}
+                                        >
                                             Edit
                                         </Button>
+                                    ) : (
+                                        "-"
                                     )}
                                 </Box>
                             </Box>
                         ))
                     )}
                 </Box>
+
                 <MatFlowPagination
                     {...vendorPagination}
                     onPageChange={vendorPagination.setPage}
                     onPageSizeChange={vendorPagination.setPageSize}
+                    pageSizeOptions={[5, 10, 20, 50]}
                     label="Vendors"
                 />
             </Card>
 
             <Dialog
                 open={poDialog}
-                onClose={() => !working && setPoDialog(false)}
+                onClose={closePo}
                 fullWidth
-                maxWidth="md"
+                maxWidth="lg"
                 PaperProps={{ sx: dialogPaperSx }}
             >
-                <DialogTitle sx={dialogTitleSx}>Create Purchase Order</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>
+                    Create Controlled Purchase Order
+                </DialogTitle>
+
                 <DialogContent sx={dialogContentSx}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+                    <Box sx={{ mb: 1.25 }}>
+                        <Typography
+                            sx={{ fontSize: 14.5, fontWeight: 950 }}
+                        >
+                            1 · Source Shortage & Delivery
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Select the Store-confirmed Indent first. The delivery
+                            location is inherited from that Indent and cannot be
+                            overridden on the PO.
+                        </Typography>
+                    </Box>
+
+                    {poError && (
+                        <Box sx={{ mb: 1.2 }}>
+                            <ErrorBox>{poError}</ErrorBox>
+                        </Box>
+                    )}
+
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                                xs: "1fr",
+                                md: "minmax(260px,1.15fr) minmax(220px,.85fr)",
+                            },
+                            gap: 1.25,
+                        }}
+                    >
                         <TextField
                             select
                             label="Shortage Indent *"
                             value={poForm.indentId}
-                            onChange={(event) => setPoForm((current) => ({ ...current, indentId: event.target.value }))}
+                            onChange={(event) => {
+                                setPoError("");
+                                setPoForm((current) => ({
+                                    ...current,
+                                    indentId: event.target.value,
+                                }));
+                            }}
                             sx={fieldSx}
                         >
-                            {indents.map((indent) => (
-                                <MenuItem key={indent.id} value={indent.id}>
-                                    {indent.indentNumber} · {indent.requisition?.projectCode || "-"} · {indent.deliveryPlantCode || "-"}
+                            {purchaseReadyIndents.map((indent) => (
+                                <MenuItem
+                                    key={indent.id}
+                                    value={indent.id}
+                                >
+                                    {indent.indentNumber || "-"} ·{" "}
+                                    {indent.requisition?.projectCode ||
+                                        "-"}{" "}
+                                    ·{" "}
+                                    {indentDeliveryLocationCode(indent) ||
+                                        "No delivery location"}
                                 </MenuItem>
                             ))}
                         </TextField>
+
+                        <TextField
+                            label="Delivery Location *"
+                            value={
+                                selectedIndent
+                                    ? `${selectedIndentLocationCode || "Missing"}${selectedIndentPlantCode
+                                        ? ` · ${selectedIndentPlantCode}`
+                                        : ""
+                                    }`
+                                    : ""
+                            }
+                            placeholder="Inherited from selected Indent"
+                            disabled
+                            error={
+                                Boolean(selectedIndent) &&
+                                !indentDeliveryLocationId(selectedIndent)
+                            }
+                            helperText={
+                                selectedIndent
+                                    ? indentDeliveryLocationId(selectedIndent)
+                                        ? "Locked to the Store shortage Indent."
+                                        : "Delivery location ID is missing on this Indent."
+                                    : "Select an Indent to resolve the delivery destination."
+                            }
+                            sx={fieldSx}
+                        />
+                    </Box>
+
+                    {selectedIndent && (
+                        <Box
+                            sx={{
+                                mt: 1,
+                                display: "grid",
+                                gridTemplateColumns: {
+                                    xs: "1fr",
+                                    sm: "repeat(2,minmax(0,1fr))",
+                                    lg: "repeat(4,minmax(0,1fr))",
+                                },
+                                gap: .75,
+                            }}
+                        >
+                            {[
+                                [
+                                    "Project",
+                                    selectedIndent.requisition?.projectCode ||
+                                    "-",
+                                ],
+                                [
+                                    "Product / Drawing",
+                                    `${selectedIndent.requisition
+                                        ?.productName || "-"
+                                    } · ${selectedIndent.requisition
+                                        ?.drawingNo || "-"
+                                    }`,
+                                ],
+                                [
+                                    "Indent Status",
+                                    String(
+                                        selectedIndent.status || "-"
+                                    ).replaceAll("_", " "),
+                                ],
+                                [
+                                    "Open Material Lines",
+                                    poLines.length,
+                                ],
+                            ].map(([label, value]) => (
+                                <Box
+                                    key={label}
+                                    sx={{
+                                        p: .85,
+                                        border: "1px solid var(--mf-border)",
+                                        background: "var(--mf-surface)",
+                                        borderRadius: 1.5,
+                                    }}
+                                >
+                                    <Typography
+                                        sx={{
+                                            ...subTextSx,
+                                            fontSize: 9,
+                                            textTransform: "uppercase",
+                                            fontWeight: 900,
+                                        }}
+                                    >
+                                        {label}
+                                    </Typography>
+                                    <Typography sx={mainTextSx}>
+                                        {value}
+                                    </Typography>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+
+                    <Box sx={{ mt: 1.7, mb: 1 }}>
+                        <Typography
+                            sx={{ fontSize: 14.5, fontWeight: 950 }}
+                        >
+                            2 · Commercial Header
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Choose the Vendor and record the external PO
+                            identity/date.
+                        </Typography>
+                    </Box>
+
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                                xs: "1fr",
+                                md: "repeat(3,minmax(0,1fr))",
+                            },
+                            gap: 1.25,
+                        }}
+                    >
                         <TextField
                             select
                             label="Vendor *"
                             value={poForm.vendorId}
-                            onChange={(event) => setPoForm((current) => ({ ...current, vendorId: event.target.value }))}
+                            onChange={(event) => {
+                                setPoError("");
+                                setPoForm((current) => ({
+                                    ...current,
+                                    vendorId: event.target.value,
+                                }));
+                            }}
                             sx={fieldSx}
                         >
-                            {vendors.filter((vendor) => vendor.active !== false).map((vendor) => (
-                                <MenuItem key={vendor.id} value={vendor.id}>
-                                    {vendor.vendorCode} · {vendor.vendorName}
-                                </MenuItem>
-                            ))}
+                            {vendors
+                                .filter(
+                                    (vendor) =>
+                                        vendor.active !== false
+                                )
+                                .map((vendor) => (
+                                    <MenuItem
+                                        key={vendor.id}
+                                        value={vendor.id}
+                                    >
+                                        {vendor.vendorCode} ·{" "}
+                                        {vendor.vendorName}
+                                    </MenuItem>
+                                ))}
                         </TextField>
-                        <TextField label="PO Number *" value={poForm.poNumber} onChange={(event) => setPoForm((current) => ({ ...current, poNumber: event.target.value }))} sx={fieldSx} />
-                        <TextField type="date" label="PO Date *" value={poForm.poDate} onChange={(event) => setPoForm((current) => ({ ...current, poDate: event.target.value }))} InputLabelProps={{ shrink: true }} sx={fieldSx} />
-                        <TextField label="Remarks" value={poForm.remarks} onChange={(event) => setPoForm((current) => ({ ...current, remarks: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+
+                        <TextField
+                            label="PO Number *"
+                            value={poForm.poNumber}
+                            onChange={(event) => {
+                                setPoError("");
+                                setPoForm((current) => ({
+                                    ...current,
+                                    poNumber: event.target.value,
+                                }));
+                            }}
+                            sx={fieldSx}
+                        />
+
+                        <TextField
+                            type="date"
+                            label="PO Date *"
+                            value={poForm.poDate}
+                            onChange={(event) => {
+                                setPoError("");
+                                setPoForm((current) => ({
+                                    ...current,
+                                    poDate: event.target.value,
+                                }));
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            sx={fieldSx}
+                        />
                     </Box>
-                    <Box sx={{ mt: 1.5 }}>
-                        {poLines.map((line) => (
-                            <Box key={line.id} sx={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 1, alignItems: "center", mb: 1 }}>
-                                <Box>
-                                    <Typography sx={mainTextSx}>{line.materialCode} · {line.materialName}</Typography>
-                                    <Typography sx={subTextSx}>Outstanding {formatQty(line.outstanding)} {line.uom || ""}</Typography>
+
+                    <Box sx={{ mt: 1.7, mb: 1 }}>
+                        <Typography
+                            sx={{ fontSize: 14.5, fontWeight: 950 }}
+                        >
+                            3 · Material Order Quantities
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            Quantities default to the remaining Indent shortage.
+                            Reduce them when creating a partial PO; they can
+                            never exceed the outstanding shortage.
+                        </Typography>
+                    </Box>
+
+                    <Box
+                        sx={{
+                            border: "1px solid var(--mf-border)",
+                            borderRadius: 1.8,
+                            overflow: "hidden",
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                    "minmax(240px,1fr) 140px 140px 170px",
+                                gap: 1,
+                                px: 1.1,
+                                py: .75,
+                                minWidth: 760,
+                                background: "var(--mf-table-head)",
+                                borderBottom:
+                                    "1px solid var(--mf-border)",
+                            }}
+                        >
+                            {[
+                                "Material",
+                                "Required",
+                                "Already Ordered",
+                                "Order Now",
+                            ].map((heading) => (
+                                <Typography
+                                    key={heading}
+                                    sx={{
+                                        ...subTextSx,
+                                        fontSize: 9.5,
+                                        textTransform: "uppercase",
+                                        fontWeight: 950,
+                                    }}
+                                >
+                                    {heading}
+                                </Typography>
+                            ))}
+                        </Box>
+
+                        <Box sx={{ overflowX: "auto" }}>
+                            {poLines.length === 0 ? (
+                                <Box sx={{ p: 1 }}>
+                                    <EmptyState>
+                                        Select an Indent with an outstanding
+                                        material shortage.
+                                    </EmptyState>
                                 </Box>
-                                <TextField type="number" label="Order Qty" value={poForm.quantities[String(line.id)] ?? ""} onChange={(event) => setPoForm((current) => ({ ...current, quantities: { ...current.quantities, [String(line.id)]: event.target.value } }))} sx={fieldSx} />
-                            </Box>
-                        ))}
+                            ) : (
+                                poLines.map((line) => (
+                                    <Box
+                                        key={line.id}
+                                        sx={{
+                                            display: "grid",
+                                            gridTemplateColumns:
+                                                "minmax(240px,1fr) 140px 140px 170px",
+                                            gap: 1,
+                                            alignItems: "center",
+                                            px: 1.1,
+                                            py: .85,
+                                            minWidth: 760,
+                                            borderBottom:
+                                                "1px solid var(--mf-border)",
+                                            "&:last-of-type": {
+                                                borderBottom: 0,
+                                            },
+                                        }}
+                                    >
+                                        <Box>
+                                            <Typography
+                                                sx={mainTextSx}
+                                            >
+                                                {line.materialCode || "-"} ·{" "}
+                                                {line.materialName ||
+                                                    "Material"}
+                                            </Typography>
+                                            <Typography
+                                                sx={subTextSx}
+                                            >
+                                                Outstanding{" "}
+                                                {formatQty(
+                                                    line.outstanding
+                                                )}{" "}
+                                                {line.uom || ""}
+                                            </Typography>
+                                        </Box>
+
+                                        <Typography sx={mainTextSx}>
+                                            {formatQty(
+                                                line.requiredQty
+                                            )}{" "}
+                                            {line.uom || ""}
+                                        </Typography>
+
+                                        <Typography sx={mainTextSx}>
+                                            {formatQty(
+                                                line.orderedQty
+                                            )}{" "}
+                                            {line.uom || ""}
+                                        </Typography>
+
+                                        <TextField
+                                            type="number"
+                                            label="Order Qty"
+                                            value={
+                                                poForm.quantities[
+                                                String(line.id)
+                                                ] ?? ""
+                                            }
+                                            inputProps={{
+                                                min: 0,
+                                                max: line.outstanding,
+                                                step: "any",
+                                            }}
+                                            onChange={(event) => {
+                                                setPoError("");
+                                                setPoForm(
+                                                    (current) => ({
+                                                        ...current,
+                                                        quantities: {
+                                                            ...current.quantities,
+                                                            [String(
+                                                                line.id
+                                                            )]:
+                                                                event.target
+                                                                    .value,
+                                                        },
+                                                    })
+                                                );
+                                            }}
+                                            sx={fieldSx}
+                                        />
+                                    </Box>
+                                ))
+                            )}
+                        </Box>
                     </Box>
+
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={2}
+                        label="Purchase Remarks"
+                        value={poForm.remarks}
+                        onChange={(event) =>
+                            setPoForm((current) => ({
+                                ...current,
+                                remarks: event.target.value,
+                            }))
+                        }
+                        sx={{ ...fieldSx, mt: 1.3 }}
+                    />
                 </DialogContent>
+
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setPoDialog(false)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={createPo} disabled={working} sx={primaryBtnSx}>Create Draft PO</Button>
+                    <Button
+                        onClick={closePo}
+                        disabled={working}
+                        sx={secondaryBtnSx}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={createPo}
+                        disabled={
+                            working ||
+                            !selectedIndent ||
+                            !indentDeliveryLocationId(selectedIndent) ||
+                            poLines.length === 0
+                        }
+                        sx={primaryBtnSx}
+                    >
+                        {working ? "Creating..." : "Create Draft PO"}
+                    </Button>
                 </DialogActions>
             </Dialog>
 
@@ -538,9 +1831,23 @@ export function MatFlowPurchasePage() {
                 maxWidth="sm"
                 PaperProps={{ sx: dialogPaperSx }}
             >
-                <DialogTitle sx={dialogTitleSx}>{vendorDialog?.row ? "Edit Vendor" : "Add Vendor"}</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>
+                    {vendorDialog?.row
+                        ? "Edit Vendor"
+                        : "Add Vendor"}
+                </DialogTitle>
+
                 <DialogContent sx={dialogContentSx}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                                xs: "1fr",
+                                sm: "1fr 1fr",
+                            },
+                            gap: 1.5,
+                        }}
+                    >
                         {[
                             ["vendorCode", "Vendor Code *"],
                             ["vendorName", "Vendor Name *"],
@@ -554,26 +1861,67 @@ export function MatFlowPurchasePage() {
                                 key={key}
                                 label={label}
                                 value={vendorForm[key] || ""}
-                                onChange={(event) => setVendorForm((current) => ({ ...current, [key]: event.target.value }))}
-                                sx={{ ...fieldSx, ...(key === "address" ? { gridColumn: "1 / -1" } : {}) }}
+                                onChange={(event) =>
+                                    setVendorForm((current) => ({
+                                        ...current,
+                                        [key]: event.target.value,
+                                    }))
+                                }
+                                sx={{
+                                    ...fieldSx,
+                                    ...(key === "address"
+                                        ? {
+                                            gridColumn: {
+                                                sm: "1 / -1",
+                                            },
+                                        }
+                                        : {}),
+                                }}
                             />
                         ))}
                     </Box>
+
                     <FormControlLabel
-                        control={<Switch checked={vendorForm.active === true} onChange={(event) => setVendorForm((current) => ({ ...current, active: event.target.checked }))} />}
+                        control={
+                            <Switch
+                                checked={vendorForm.active === true}
+                                onChange={(event) =>
+                                    setVendorForm((current) => ({
+                                        ...current,
+                                        active: event.target.checked,
+                                    }))
+                                }
+                            />
+                        }
                         label="Active"
                     />
                 </DialogContent>
+
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setVendorDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveVendor} disabled={working} sx={primaryBtnSx}>Save Vendor</Button>
+                    <Button
+                        onClick={() => setVendorDialog(null)}
+                        disabled={working}
+                        sx={secondaryBtnSx}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={saveVendor}
+                        disabled={working}
+                        sx={primaryBtnSx}
+                    >
+                        Save Vendor
+                    </Button>
                 </DialogActions>
             </Dialog>
 
             <MatFlowDeleteDialog
                 open={Boolean(deleteTarget)}
                 title="Delete Draft Purchase Order?"
-                subject={deleteTarget?.poNumber || "Draft purchase order"}
+                subject={
+                    deleteTarget?.poNumber ||
+                    "Draft purchase order"
+                }
                 description="This removes only a Draft PO and its lines before approval/placement. Placed or received POs and their GRNs are protected procurement and stock history."
                 working={working}
                 onClose={() => setDeleteTarget(null)}
