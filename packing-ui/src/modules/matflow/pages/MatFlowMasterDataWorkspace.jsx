@@ -16,7 +16,7 @@ import {
     dialogActionsSx, dialogContentSx, dialogPaperSx, dialogTitleSx, fieldSx,
     formatDate, mainTextSx, normalize, pageSx, panelSx, primaryBtnSx, secondaryBtnSx, SummaryCard,
     subTextSx, tableCellSx, tableHeaderSx, tableRowSx, tableShellSx,
-    scrollAreaSx, useMatFlowPagination,
+    useMatFlowPagination,
 } from "../matflowUi";
 import { useNavigate } from "react-router-dom";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
@@ -503,6 +503,7 @@ export function MatFlowProjectsPage() {
             setRows(Array.isArray(response?.data) ? response.data : []);
         } catch (requestError) {
             setRows([]);
+            setSelectedProjectId("");
             setError(readMatFlowError(requestError, "Unable to load Projects & Products portfolio."));
         } finally {
             setLoading(false);
@@ -555,27 +556,21 @@ export function MatFlowProjectsPage() {
         });
     }, [rows, search, statusFilter, priorityFilter, approvalFilter]);
 
-    const directoryPagination = useMatFlowPagination(filteredRows, 10);
+    const projectPagination = useMatFlowPagination(filteredRows, 9);
 
     useEffect(() => {
-        if (filteredRows.length === 0) {
-            if (selectedProjectId) setSelectedProjectId("");
-            return;
-        }
-
+        if (!selectedProjectId) return;
         const stillVisible = filteredRows.some(
             (project) => String(project.id) === String(selectedProjectId)
         );
-        if (!stillVisible) {
-            setSelectedProjectId(String(filteredRows[0].id));
-        }
+        if (!stillVisible) setSelectedProjectId("");
     }, [filteredRows, selectedProjectId]);
 
     const selectedProject = useMemo(
-        () => filteredRows.find(
+        () => rows.find(
             (project) => String(project.id) === String(selectedProjectId)
         ) || null,
-        [filteredRows, selectedProjectId]
+        [rows, selectedProjectId]
     );
 
     const allProducts = useMemo(
@@ -665,13 +660,14 @@ export function MatFlowProjectsPage() {
     };
 
     const openProduct = (project, product = null) => {
+        if (!project?.id) return;
         setProductDialog({ project, product });
         setProductForm(product ? {
             productName: product.productName || "",
             drawingNo: product.drawingNo || "",
             drawingRevision: product.drawingRevision || "0",
             requiredDate: product.requiredDate || "",
-            remarks: "",
+            remarks: product.remarks || "",
             active: product.active !== false,
         } : {
             ...blankPortfolioProduct,
@@ -744,9 +740,10 @@ export function MatFlowProjectsPage() {
                 );
             }
 
+            const projectId = String(approval.project.id);
             setApproval(null);
             setApprovalRemarks("");
-            setSelectedProjectId(String(approval.project.id));
+            setSelectedProjectId(projectId);
             await load();
         } catch (requestError) {
             setError(readMatFlowError(requestError, "Unable to complete Director Product decision."));
@@ -799,6 +796,7 @@ export function MatFlowProjectsPage() {
     const selectedApprovedCount = selectedProducts.filter(
         (product) => normalize(product.approvalStatus) === "APPROVED"
     ).length;
+    const selectedBomCount = selectedProducts.filter((product) => Boolean(product.latestBomId)).length;
     const selectedApprovalPercent = selectedProducts.length
         ? Math.round((selectedApprovedCount / selectedProducts.length) * 100)
         : 0;
@@ -813,7 +811,7 @@ export function MatFlowProjectsPage() {
             <PageHero
                 badge="PROJECT PORTFOLIO ADMINISTRATION"
                 title="Projects & Products"
-                subtitle="Master the client Project structure here: create Project headers, maintain the Product / Drawing register, control Director approval, and hand approved Products to Engineering BOM. Live material custody, shortages, stage timing and execution remain exclusively in Project Tracker."
+                subtitle="A clean Project → Product / Drawing administration workspace. Projects stay compact until you explicitly open one; Director approval and BOM hand-off remain attached to the exact Product / Drawing record."
                 actions={
                     <>
                         <Button
@@ -821,7 +819,7 @@ export function MatFlowProjectsPage() {
                             onClick={() => navigate("/matflow/tracker")}
                             sx={secondaryBtnSx}
                         >
-                            Open Material Tracker
+                            Project Tracker
                         </Button>
                         <Button
                             startIcon={<RefreshIcon />}
@@ -861,6 +859,12 @@ export function MatFlowProjectsPage() {
             </Box>
 
             <Card sx={panelSx}>
+                <Box sx={{ mb: 1.2 }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 15 }}>Find a Project</Typography>
+                    <Typography sx={{ ...subTextSx, mt: .2 }}>
+                        Search and filter the portfolio. Product administration opens only when you choose Manage Products.
+                    </Typography>
+                </Box>
                 <Box
                     sx={{
                         display: "grid",
@@ -872,7 +876,7 @@ export function MatFlowProjectsPage() {
                     }}
                 >
                     <TextField
-                        label="Search project, client, manager, product or drawing"
+                        label="Search Project, client, manager, Product or Drawing"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         sx={fieldSx}
@@ -922,108 +926,147 @@ export function MatFlowProjectsPage() {
                     <EmptyState>No Projects match the current portfolio filters.</EmptyState>
                 </Card>
             ) : (
-                <Box
-                    sx={{
-                        display: "grid",
-                        gridTemplateColumns: {
-                            xs: "1fr",
-                            lg: "minmax(280px,.72fr) minmax(0,2.1fr)",
-                        },
-                        gap: 1.25,
-                        alignItems: "start",
-                    }}
-                >
-                    <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                        <Box sx={{ px: 1.45, py: 1.25, borderBottom: "1px solid var(--mf-border)" }}>
-                            <Typography sx={{ fontWeight: 950, fontSize: 15 }}>
-                                Project Directory
-                            </Typography>
-                            <Typography sx={subTextSx}>
-                                {filteredRows.length} portfolio record{filteredRows.length === 1 ? "" : "s"}. Select one to administer its Product register.
-                            </Typography>
+                <>
+                    <Card sx={panelSx}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", alignItems: "flex-end", mb: 1.2 }}>
+                            <Box>
+                                <Typography sx={{ ...mainTextSx, fontSize: 16 }}>Project Portfolio</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .2 }}>
+                                    {filteredRows.length} Project{filteredRows.length === 1 ? "" : "s"} visible. Nothing is forced open by default.
+                                </Typography>
+                            </Box>
+                            {selectedProject && (
+                                <Button onClick={() => setSelectedProjectId("")} sx={secondaryBtnSx}>
+                                    Close Product Workspace
+                                </Button>
+                            )}
                         </Box>
+
                         <Box
                             sx={{
-                                p: 1,
                                 display: "grid",
-                                gap: .75,
-                                ...scrollAreaSx,
-                                maxHeight: { lg: "calc(100vh - 390px)" },
-                                overflowY: "auto",
-                                overflowX: "hidden",
-                                scrollbarGutter: "stable",
+                                gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" },
+                                gap: 1,
                             }}
                         >
-                            {directoryPagination.pageItems.map((project) => {
+                            {projectPagination.pageItems.map((project) => {
+                                const products = Array.isArray(project.products) ? project.products : [];
+                                const productCount = products.length;
+                                const approvedCount = products.filter((product) => normalize(product.approvalStatus) === "APPROVED").length;
+                                const bomCount = products.filter((product) => Boolean(product.latestBomId)).length;
                                 const selected = String(project.id) === String(selectedProjectId);
-                                const count = Number(project.productCount || 0);
-                                const approved = Number(project.approvedProductCount || 0);
+                                const approvalPercent = productCount ? Math.round((approvedCount / productCount) * 100) : 0;
+
                                 return (
-                                    <Box
+                                    <Card
                                         key={project.id}
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => setSelectedProjectId(String(project.id))}
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter" || event.key === " ") {
-                                                event.preventDefault();
-                                                setSelectedProjectId(String(project.id));
-                                            }
+                                        sx={{
+                                            p: 1.35,
+                                            border: selected ? "1px solid var(--mf-primary-border)" : "1px solid var(--mf-border)",
+                                            background: selected ? "var(--mf-primary-soft)" : "var(--mf-card-bg)",
+                                            boxShadow: "none",
+                                            display: "grid",
+                                            gap: 1,
+                                            minWidth: 0,
                                         }}
-                                        sx={projectDirectoryItemSx(selected)}
                                     >
                                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
-                                                <Typography noWrap sx={{ ...mainTextSx, fontSize: 13.5 }}>
-                                                    {project.projectCode || "No Code"}
+                                                <Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 15.5 }}>
+                                                        {project.projectCode || "No Code"}
+                                                    </Typography>
+                                                    <Box sx={priorityLabelSx(project.priority)}>
+                                                        {normalize(project.priority || "NORMAL")}
+                                                    </Box>
+                                                </Box>
+                                                <Typography noWrap sx={{ ...mainTextSx, mt: .35 }}>
+                                                    {project.projectName || "Unnamed Project"}
                                                 </Typography>
                                                 <Typography noWrap sx={{ ...subTextSx, mt: .15 }}>
-                                                    {project.projectName || "Unnamed Project"}
+                                                    {project.clientName || "No Client"} · {project.plantCode || "No Plant"}
                                                 </Typography>
                                             </Box>
                                             <MatFlowStatusChip status={project.active === false ? "INACTIVE" : "ACTIVE"} />
                                         </Box>
-                                        <Typography noWrap sx={{ ...subTextSx, mt: .75 }}>
-                                            {project.clientName || "No Client"} · {project.plantCode || "No Plant"}
-                                        </Typography>
-                                        <Box sx={{ mt: .85, display: "flex", justifyContent: "space-between", gap: 1 }}>
-                                            <Typography sx={subTextSx}>{count} Product{count === 1 ? "" : "s"}</Typography>
-                                            <Typography sx={subTextSx}>{approved}/{count || 0} Approved</Typography>
+
+                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: .65 }}>
+                                            {[
+                                                ["Products", productCount],
+                                                ["Approved", `${approvedCount}/${productCount}`],
+                                                ["With BOM", `${bomCount}/${productCount}`],
+                                            ].map(([label, value]) => (
+                                                <Box key={label} sx={{ p: .8, border: "1px solid var(--mf-border)", borderRadius: 1.5, background: "var(--mf-surface)" }}>
+                                                    <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>{label}</Typography>
+                                                    <Typography sx={{ ...mainTextSx, mt: .15 }}>{value}</Typography>
+                                                </Box>
+                                            ))}
                                         </Box>
-                                    </Box>
+
+                                        <Box>
+                                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: .45 }}>
+                                                <Typography sx={subTextSx}>Director approval</Typography>
+                                                <Typography sx={subTextSx}>{approvalPercent}%</Typography>
+                                            </Box>
+                                            <Box sx={{ height: 5, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden" }}>
+                                                <Box sx={{ width: `${approvalPercent}%`, height: "100%", background: "var(--mf-success-text)", borderRadius: 99 }} />
+                                            </Box>
+                                        </Box>
+
+                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: .65 }}>
+                                            <Box>
+                                                <Typography sx={subTextSx}>Required</Typography>
+                                                <Typography sx={mainTextSx}>{project.requiredDate ? formatDate(project.requiredDate, false) : "Not set"}</Typography>
+                                            </Box>
+                                            <Box>
+                                                <Typography sx={subTextSx}>Owner</Typography>
+                                                <Typography noWrap sx={mainTextSx}>{project.projectManager || "Unassigned"}</Typography>
+                                            </Box>
+                                        </Box>
+
+                                        <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", pt: .2 }}>
+                                            <Button
+                                                onClick={() => setSelectedProjectId(String(project.id))}
+                                                sx={selected ? secondaryBtnSx : primaryBtnSx}
+                                            >
+                                                {selected ? "Workspace Open" : "Manage Products"}
+                                            </Button>
+                                            {canManage && (
+                                                <Button startIcon={<EditOutlinedIcon />} onClick={() => openProject(project)} sx={secondaryBtnSx}>
+                                                    Edit
+                                                </Button>
+                                            )}
+                                            {canManage && project.active !== false && (
+                                                <Button startIcon={<AddIcon />} onClick={() => { setSelectedProjectId(String(project.id)); openProduct(project); }} sx={secondaryBtnSx}>
+                                                    Add Product
+                                                </Button>
+                                            )}
+                                        </Box>
+                                    </Card>
                                 );
                             })}
                         </Box>
-                        <Box sx={{ px: 1, pb: 1 }}>
+
+                        <Box sx={{ mt: 1.15 }}>
                             <MatFlowPagination
-                                {...directoryPagination}
-                                onPageChange={directoryPagination.setPage}
-                                onPageSizeChange={directoryPagination.setPageSize}
-                                pageSizeOptions={[5, 10, 20]}
+                                {...projectPagination}
+                                onPageChange={projectPagination.setPage}
+                                onPageSizeChange={projectPagination.setPageSize}
+                                pageSizeOptions={[6, 9, 18]}
                                 label="Projects"
-                                compact
                             />
                         </Box>
                     </Card>
 
-                    {!selectedProject ? (
-                        <Card sx={panelSx}>
-                            <EmptyState>Select a Project from the directory.</EmptyState>
-                        </Card>
-                    ) : (
-                        <Box sx={{ display: "grid", gap: 1.1, minWidth: 0 }}>
-                            <Card sx={panelSx}>
-                                <Box
-                                    sx={{
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        gap: 1.5,
-                                        flexWrap: "wrap",
-                                        alignItems: "flex-start",
-                                    }}
-                                >
+                    {selectedProject && (
+                        <Box sx={{ display: "grid", gap: 1.1 }}>
+                            <Card sx={{ ...panelSx, borderColor: "var(--mf-primary-border)" }}>
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.2, flexWrap: "wrap", alignItems: "flex-start" }}>
                                     <Box sx={{ minWidth: 0 }}>
-                                        <Box sx={{ display: "flex", gap: .75, flexWrap: "wrap", alignItems: "center" }}>
+                                        <Typography sx={{ ...subTextSx, textTransform: "uppercase", letterSpacing: .55, fontWeight: 900 }}>
+                                            Open Project Workspace
+                                        </Typography>
+                                        <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap", alignItems: "center", mt: .25 }}>
                                             <Typography sx={{ fontWeight: 950, fontSize: 20 }}>
                                                 {selectedProject.projectCode} · {selectedProject.projectName}
                                             </Typography>
@@ -1032,47 +1075,35 @@ export function MatFlowProjectsPage() {
                                             </Box>
                                             <MatFlowStatusChip status={selectedProject.active === false ? "INACTIVE" : "ACTIVE"} />
                                         </Box>
-                                        <Typography sx={{ ...subTextSx, mt: .45 }}>
+                                        <Typography sx={{ ...subTextSx, mt: .35 }}>
                                             {selectedProject.clientName} · {selectedProject.plantCode}
                                             {selectedProject.projectManager ? ` · Owner ${selectedProject.projectManager}` : ""}
                                         </Typography>
                                     </Box>
 
-                                    <Box sx={{ display: "flex", gap: .65, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                    <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                        <Button onClick={() => setSelectedProjectId("")} sx={secondaryBtnSx}>
+                                            Close
+                                        </Button>
                                         {canManage && (
-                                            <Button
-                                                startIcon={<EditOutlinedIcon />}
-                                                onClick={() => openProject(selectedProject)}
-                                                sx={secondaryBtnSx}
-                                            >
+                                            <Button startIcon={<EditOutlinedIcon />} onClick={() => openProject(selectedProject)} sx={secondaryBtnSx}>
                                                 Edit Project
                                             </Button>
                                         )}
                                         {canManage && selectedProject.active !== false && (
-                                            <Button
-                                                startIcon={<AddIcon />}
-                                                onClick={() => openProduct(selectedProject)}
-                                                sx={primaryBtnSx}
-                                            >
+                                            <Button startIcon={<AddIcon />} onClick={() => openProduct(selectedProject)} sx={primaryBtnSx}>
                                                 Add Product
                                             </Button>
                                         )}
-                                        <Button
-                                            startIcon={<TrackChangesOutlinedIcon />}
-                                            onClick={() => navigate("/matflow/tracker")}
-                                            sx={secondaryBtnSx}
-                                        >
-                                            Material Tracker
+                                        <Button startIcon={<TrackChangesOutlinedIcon />} onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>
+                                            Project Tracker
                                         </Button>
                                         {canManage && (
                                             <Tooltip title={projectDeleteReason} placement="top" arrow>
                                                 <span>
                                                     <Button
                                                         startIcon={<DeleteOutlineIcon />}
-                                                        onClick={() => setDeleteTarget({
-                                                            kind: "PROJECT",
-                                                            project: selectedProject,
-                                                        })}
+                                                        onClick={() => setDeleteTarget({ kind: "PROJECT", project: selectedProject })}
                                                         disabled={projectDeleteBlocked || saving}
                                                         sx={dangerBtnSx}
                                                     >
@@ -1084,257 +1115,199 @@ export function MatFlowProjectsPage() {
                                     </Box>
                                 </Box>
 
-                                <Box
-                                    sx={{
-                                        mt: 1.4,
-                                        display: "grid",
-                                        gridTemplateColumns: "repeat(auto-fit,minmax(135px,1fr))",
-                                        gap: .8,
-                                    }}
-                                >
-                                    <Box sx={registryMetaSx}>
-                                        <Typography sx={subTextSx}>PROJECT OWNER</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35 }}>
-                                            {selectedProject.projectManager || "Unassigned"}
-                                        </Typography>
-                                    </Box>
-                                    <Box sx={registryMetaSx}>
-                                        <Typography sx={subTextSx}>REQUIRED DATE</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35 }}>
-                                            {selectedProject.requiredDate ? formatDate(selectedProject.requiredDate, false) : "Not set"}
-                                        </Typography>
-                                    </Box>
-                                    <Box sx={registryMetaSx}>
-                                        <Typography sx={subTextSx}>PRODUCT REGISTER</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35 }}>
-                                            {selectedProducts.length} Product{selectedProducts.length === 1 ? "" : "s"}
-                                        </Typography>
-                                    </Box>
-                                    <Box sx={registryMetaSx}>
-                                        <Typography sx={subTextSx}>DIRECTOR APPROVAL</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35 }}>
-                                            {selectedApprovedCount}/{selectedProducts.length || 0} Approved
-                                        </Typography>
-                                        <Box sx={{ mt: .65, height: 5, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden" }}>
-                                            <Box sx={{ width: `${selectedApprovalPercent}%`, height: "100%", background: "var(--mf-primary)" }} />
+                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: .8, mt: 1.25 }}>
+                                    {[
+                                        ["Client", selectedProject.clientName || "-"],
+                                        ["Plant", selectedProject.plantCode || "-"],
+                                        ["Required Date", selectedProject.requiredDate ? formatDate(selectedProject.requiredDate, false) : "Not set"],
+                                        ["Product Register", `${selectedProducts.length} Product${selectedProducts.length === 1 ? "" : "s"}`],
+                                        ["Director Approval", `${selectedApprovedCount}/${selectedProducts.length || 0} Approved`],
+                                        ["BOM Coverage", `${selectedBomCount}/${selectedProducts.length || 0} with BOM`],
+                                    ].map(([label, value]) => (
+                                        <Box key={label} sx={registryMetaSx}>
+                                            <Typography sx={{ ...subTextSx, textTransform: "uppercase", fontSize: 9.5, fontWeight: 900 }}>{label}</Typography>
+                                            <Typography sx={{ ...mainTextSx, mt: .35 }}>{value}</Typography>
                                         </Box>
-                                    </Box>
-                                    <Box sx={registryMetaSx}>
-                                        <Typography sx={subTextSx}>LAST UPDATED</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35 }}>
-                                            {formatDate(selectedProject.updatedAt)}
-                                        </Typography>
-                                    </Box>
+                                    ))}
                                 </Box>
 
-                                {selectedProject.remarks && (
-                                    <Box sx={{ mt: 1.1, p: 1.1, borderRadius: 2, border: "1px dashed var(--mf-border-strong)", background: "var(--mf-surface)" }}>
-                                        <Typography sx={subTextSx}>PROJECT REMARKS</Typography>
-                                        <Typography sx={{ ...mainTextSx, mt: .35, fontWeight: 700 }}>
-                                            {selectedProject.remarks}
-                                        </Typography>
+                                <Box sx={{ mt: 1.1 }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: .45 }}>
+                                        <Typography sx={subTextSx}>Product Director approval coverage</Typography>
+                                        <Typography sx={subTextSx}>{selectedApprovalPercent}%</Typography>
                                     </Box>
-                                )}
+                                    <Box sx={{ height: 6, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden" }}>
+                                        <Box sx={{ width: `${selectedApprovalPercent}%`, height: "100%", background: "var(--mf-success-text)", borderRadius: 99 }} />
+                                    </Box>
+                                </Box>
                             </Card>
 
                             <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                                <Box
-                                    sx={{
-                                        px: 1.45,
-                                        py: 1.25,
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        gap: 1,
-                                        flexWrap: "wrap",
-                                        borderBottom: "1px solid var(--mf-border)",
-                                    }}
-                                >
+                                <Box sx={{ px: 1.4, py: 1.15, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid var(--mf-border)" }}>
                                     <Box>
-                                        <Typography sx={{ fontWeight: 950, fontSize: 16 }}>
-                                            Product / Drawing Register
-                                        </Typography>
-                                        <Typography sx={subTextSx}>
-                                            Structural master records only. Operational material execution is intentionally not duplicated here.
+                                        <Typography sx={{ ...mainTextSx, fontSize: 16 }}>Product / Drawing Register</Typography>
+                                        <Typography sx={{ ...subTextSx, mt: .2 }}>
+                                            Every Product is an exact BOM and material-execution ownership point under this Project.
                                         </Typography>
                                     </Box>
                                     {canManage && selectedProject.active !== false && (
-                                        <Button
-                                            startIcon={<AddIcon />}
-                                            onClick={() => openProduct(selectedProject)}
-                                            sx={primaryBtnSx}
-                                        >
+                                        <Button startIcon={<AddIcon />} onClick={() => openProduct(selectedProject)} sx={primaryBtnSx}>
                                             Add Product
                                         </Button>
                                     )}
                                 </Box>
 
-                                <Box sx={tableShellSx}>
-                                    <Box
-                                        sx={{
-                                            ...tableHeaderSx,
-                                            gridTemplateColumns: "minmax(220px,1.2fr) 160px 190px 145px 130px minmax(300px,1.25fr)",
-                                        }}
-                                    >
-                                        {["Product / Drawing", "Director Approval", "BOM Readiness", "Required Date", "Lifecycle", "Administration"].map((heading) => (
-                                            <Box key={heading} sx={tableCellSx}>{heading}</Box>
-                                        ))}
+                                {selectedProducts.length === 0 ? (
+                                    <Box sx={{ p: 1.3 }}>
+                                        <EmptyState>No Products have been added to this Project yet.</EmptyState>
                                     </Box>
-
-                                    {selectedProducts.length === 0 ? (
-                                        <EmptyState>No Products have been registered under this Project.</EmptyState>
-                                    ) : productPagination.pageItems.map((product) => {
-                                        const executionLocked = productHasExecutionHistory(product);
-                                        const deleteReason = executionLocked
-                                            ? "This Product already owns a BOM or material requisition. Deactivate it instead to preserve traceability."
-                                            : "Delete this setup-only Product record.";
-
-                                        return (
+                                ) : (
+                                    <>
+                                        <Box sx={tableShellSx}>
                                             <Box
-                                                key={product.id}
                                                 sx={{
-                                                    ...tableRowSx,
-                                                    gridTemplateColumns: "minmax(220px,1.2fr) 160px 190px 145px 130px minmax(300px,1.25fr)",
+                                                    display: "grid",
+                                                    gridTemplateColumns: "minmax(190px,1.35fr) minmax(145px,.8fr) minmax(155px,.85fr) minmax(115px,.62fr) minmax(95px,.5fr) minmax(280px,1.65fr)",
+                                                    minWidth: 1030,
                                                 }}
                                             >
-                                                <Box sx={tableCellSx}>
-                                                    <Typography sx={mainTextSx}>{product.productName}</Typography>
-                                                    <Typography sx={subTextSx}>
-                                                        {product.drawingNo} · Rev {product.drawingRevision || "0"}
-                                                    </Typography>
-                                                    <Typography sx={{ ...subTextSx, mt: .25 }}>
-                                                        Created {formatDate(product.createdAt)}
-                                                    </Typography>
-                                                </Box>
+                                                {[
+                                                    "PRODUCT / DRAWING",
+                                                    "DIRECTOR APPROVAL",
+                                                    "BOM READINESS",
+                                                    "REQUIRED DATE",
+                                                    "LIFECYCLE",
+                                                    "ACTIONS",
+                                                ].map((header) => (
+                                                    <Box key={header} sx={tableHeaderSx}>{header}</Box>
+                                                ))}
 
-                                                <Box sx={tableCellSx}>
-                                                    <MatFlowStatusChip status={product.approvalStatus || "PENDING_DIRECTOR_APPROVAL"} />
-                                                    {product.approvedBy && (
-                                                        <Typography sx={{ ...subTextSx, mt: .35 }}>By {product.approvedBy}</Typography>
-                                                    )}
-                                                    {product.approvedAt && (
-                                                        <Typography sx={subTextSx}>{formatDate(product.approvedAt)}</Typography>
-                                                    )}
-                                                    {normalize(product.approvalStatus) === "RETURNED" && product.approvalRemarks && (
-                                                        <Typography sx={{ ...subTextSx, color: "var(--mf-danger-text)", mt: .35 }}>
-                                                            {product.approvalRemarks}
-                                                        </Typography>
-                                                    )}
-                                                </Box>
+                                                {productPagination.pageItems.map((product) => {
+                                                    const executionLocked = productHasExecutionHistory(product);
+                                                    const deleteReason = executionLocked
+                                                        ? "This Product already has BOM/material execution history. Deactivate it instead."
+                                                        : "Delete this setup-only Product / Drawing.";
 
-                                                <Box sx={tableCellSx}>
-                                                    <Typography sx={mainTextSx}>
-                                                        {product.latestBomNumber || "Not created"}
-                                                    </Typography>
-                                                    <Typography sx={subTextSx}>
-                                                        {product.latestBomStatus
-                                                            ? `${String(product.latestBomStatus).replaceAll("_", " ")} · Rev ${product.latestBomRevision ?? "-"}`
-                                                            : normalize(product.approvalStatus) === "APPROVED"
-                                                                ? "Ready for Engineering BOM"
-                                                                : "Awaiting Product approval"}
-                                                    </Typography>
-                                                    {product.latestBomId && (
-                                                        <MatFlowStatusChip status={product.latestBomEffective ? "EFFECTIVE" : product.latestBomStatus} />
-                                                    )}
-                                                </Box>
+                                                    return (
+                                                        <Box key={product.id} sx={{ display: "contents", "&:hover > *": tableRowSx["&:hover"] }}>
+                                                            <Box sx={tableCellSx}>
+                                                                <Typography sx={mainTextSx}>{product.productName || "Unnamed Product"}</Typography>
+                                                                <Typography sx={{ ...subTextSx, mt: .25 }}>
+                                                                    {product.drawingNo || "No Drawing"} · Rev {product.drawingRevision ?? "0"}
+                                                                </Typography>
+                                                                <Typography sx={{ ...subTextSx, mt: .2 }}>
+                                                                    Created {product.createdAt ? formatDate(product.createdAt) : "-"}
+                                                                </Typography>
+                                                            </Box>
 
-                                                <Box sx={tableCellSx}>
-                                                    <Typography sx={mainTextSx}>
-                                                        {product.requiredDate ? formatDate(product.requiredDate, false) : "Not set"}
-                                                    </Typography>
-                                                </Box>
+                                                            <Box sx={tableCellSx}>
+                                                                <MatFlowStatusChip status={product.approvalStatus || "PENDING_DIRECTOR_APPROVAL"} />
+                                                                {product.approvedBy && <Typography sx={{ ...subTextSx, mt: .35 }}>By {product.approvedBy}</Typography>}
+                                                                {product.approvedAt && <Typography sx={subTextSx}>{formatDate(product.approvedAt)}</Typography>}
+                                                                {normalize(product.approvalStatus) === "RETURNED" && product.approvalRemarks && (
+                                                                    <Typography sx={{ ...subTextSx, color: "var(--mf-danger-text)", mt: .35 }}>
+                                                                        {product.approvalRemarks}
+                                                                    </Typography>
+                                                                )}
+                                                            </Box>
 
-                                                <Box sx={tableCellSx}>
-                                                    <MatFlowStatusChip status={product.active === false ? "INACTIVE" : "ACTIVE"} />
-                                                </Box>
+                                                            <Box sx={tableCellSx}>
+                                                                <Typography sx={mainTextSx}>{product.latestBomNumber || "Not created"}</Typography>
+                                                                <Typography sx={subTextSx}>
+                                                                    {product.latestBomStatus
+                                                                        ? `${String(product.latestBomStatus).replaceAll("_", " ")} · Rev ${product.latestBomRevision ?? "-"}`
+                                                                        : normalize(product.approvalStatus) === "APPROVED"
+                                                                            ? "Ready for Engineering BOM"
+                                                                            : "Awaiting Director approval"}
+                                                                </Typography>
+                                                                {product.latestBomId && <MatFlowStatusChip status={product.latestBomEffective ? "EFFECTIVE" : product.latestBomStatus} />}
+                                                            </Box>
 
-                                                <Box sx={{ ...tableCellSx, display: "flex", gap: .55, flexWrap: "wrap", alignItems: "center" }}>
-                                                    {canManage && (
-                                                        <Button
-                                                            startIcon={<EditOutlinedIcon />}
-                                                            onClick={() => openProduct(selectedProject, product)}
-                                                            sx={secondaryBtnSx}
-                                                        >
-                                                            Edit
-                                                        </Button>
-                                                    )}
-                                                    {canApprove && normalize(product.approvalStatus) !== "APPROVED" && product.active !== false && (
-                                                        <Button
-                                                            onClick={() => {
-                                                                setApproval({ type: "APPROVE", project: selectedProject, product });
-                                                                setApprovalRemarks("");
-                                                            }}
-                                                            sx={primaryBtnSx}
-                                                        >
-                                                            Approve
-                                                        </Button>
-                                                    )}
-                                                    {canApprove && normalize(product.approvalStatus) !== "RETURNED" && (
-                                                        <Button
-                                                            onClick={() => {
-                                                                setApproval({ type: "RETURN", project: selectedProject, product });
-                                                                setApprovalRemarks("");
-                                                            }}
-                                                            sx={secondaryBtnSx}
-                                                        >
-                                                            Return
-                                                        </Button>
-                                                    )}
-                                                    {normalize(product.approvalStatus) === "APPROVED" && (
-                                                        <Button
-                                                            onClick={() => navigate(
-                                                                product.latestBomId
-                                                                    ? `/matflow/boms/${product.latestBomId}`
-                                                                    : "/matflow/boms/new"
-                                                            )}
-                                                            sx={secondaryBtnSx}
-                                                        >
-                                                            {product.latestBomId ? "Open BOM" : "Create BOM"}
-                                                        </Button>
-                                                    )}
-                                                    {product.latestRequisitionId && (
-                                                        <Button
-                                                            onClick={() => navigate(`/matflow/tracker/${product.latestRequisitionId}`)}
-                                                            sx={secondaryBtnSx}
-                                                        >
-                                                            Open Tracker
-                                                        </Button>
-                                                    )}
-                                                    {canManage && (
-                                                        <Tooltip title={deleteReason} placement="top" arrow>
-                                                            <span>
-                                                                <Button
-                                                                    startIcon={<DeleteOutlineIcon />}
-                                                                    onClick={() => setDeleteTarget({
-                                                                        kind: "PRODUCT",
-                                                                        project: selectedProject,
-                                                                        product,
-                                                                    })}
-                                                                    disabled={executionLocked || saving}
-                                                                    sx={dangerBtnSx}
-                                                                >
-                                                                    Delete
-                                                                </Button>
-                                                            </span>
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
+                                                            <Box sx={tableCellSx}>
+                                                                <Typography sx={mainTextSx}>
+                                                                    {product.requiredDate ? formatDate(product.requiredDate, false) : "Not set"}
+                                                                </Typography>
+                                                            </Box>
+
+                                                            <Box sx={tableCellSx}>
+                                                                <MatFlowStatusChip status={product.active === false ? "INACTIVE" : "ACTIVE"} />
+                                                            </Box>
+
+                                                            <Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap", alignContent: "center" }}>
+                                                                {canManage && (
+                                                                    <Button startIcon={<EditOutlinedIcon />} onClick={() => openProduct(selectedProject, product)} sx={secondaryBtnSx}>
+                                                                        Edit
+                                                                    </Button>
+                                                                )}
+                                                                {canApprove && normalize(product.approvalStatus) !== "APPROVED" && product.active !== false && (
+                                                                    <Button
+                                                                        onClick={() => {
+                                                                            setApproval({ type: "APPROVE", project: selectedProject, product });
+                                                                            setApprovalRemarks("");
+                                                                        }}
+                                                                        sx={primaryBtnSx}
+                                                                    >
+                                                                        Approve
+                                                                    </Button>
+                                                                )}
+                                                                {canApprove && normalize(product.approvalStatus) !== "RETURNED" && (
+                                                                    <Button
+                                                                        onClick={() => {
+                                                                            setApproval({ type: "RETURN", project: selectedProject, product });
+                                                                            setApprovalRemarks("");
+                                                                        }}
+                                                                        sx={secondaryBtnSx}
+                                                                    >
+                                                                        Return
+                                                                    </Button>
+                                                                )}
+                                                                {normalize(product.approvalStatus) === "APPROVED" && (
+                                                                    <Button
+                                                                        onClick={() => navigate(
+                                                                            product.latestBomId
+                                                                                ? `/matflow/boms/${product.latestBomId}`
+                                                                                : `/matflow/boms/new?productId=${encodeURIComponent(product.id)}`
+                                                                        )}
+                                                                        sx={secondaryBtnSx}
+                                                                    >
+                                                                        {product.latestBomId ? "Open BOM" : "Create BOM"}
+                                                                    </Button>
+                                                                )}
+                                                                {canManage && (
+                                                                    <Tooltip title={deleteReason} placement="top" arrow>
+                                                                        <span>
+                                                                            <Button
+                                                                                startIcon={<DeleteOutlineIcon />}
+                                                                                onClick={() => setDeleteTarget({ kind: "PRODUCT", project: selectedProject, product })}
+                                                                                disabled={executionLocked || saving}
+                                                                                sx={dangerBtnSx}
+                                                                            >
+                                                                                Delete
+                                                                            </Button>
+                                                                        </span>
+                                                                    </Tooltip>
+                                                                )}
+                                                            </Box>
+                                                        </Box>
+                                                    );
+                                                })}
                                             </Box>
-                                        );
-                                    })}
-                                </Box>
-                                <Box sx={{ px: 1.2, pb: 1.2 }}>
-                                    <MatFlowPagination
-                                        {...productPagination}
-                                        onPageChange={productPagination.setPage}
-                                        onPageSizeChange={productPagination.setPageSize}
-                                        label="Products / Drawings"
-                                    />
-                                </Box>
+                                        </Box>
+                                        <Box sx={{ px: 1.2, pb: 1.2 }}>
+                                            <MatFlowPagination
+                                                {...productPagination}
+                                                onPageChange={productPagination.setPage}
+                                                onPageSizeChange={productPagination.setPageSize}
+                                                pageSizeOptions={[5, 10, 20]}
+                                                label="Products / Drawings"
+                                            />
+                                        </Box>
+                                    </>
+                                )}
                             </Card>
                         </Box>
                     )}
-                </Box>
+                </>
             )}
 
             <Dialog
@@ -1348,89 +1321,30 @@ export function MatFlowProjectsPage() {
                     {projectDialog?.row ? "Edit Project Header" : "Create Client Project"}
                 </DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.3 }}>
-                        <TextField
-                            label="Project / PD Code *"
-                            value={projectForm.projectCode}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, projectCode: event.target.value }))}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            label="Project Name *"
-                            value={projectForm.projectName}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, projectName: event.target.value }))}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            label="Client Name *"
-                            value={projectForm.clientName}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, clientName: event.target.value }))}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            select
-                            label="Plant *"
-                            value={projectForm.plantCode}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, plantCode: event.target.value }))}
-                            sx={fieldSx}
-                        >
-                            {availablePlants.map((plant) => (
-                                <MenuItem key={plant} value={plant}>{plant}</MenuItem>
-                            ))}
+                    <Typography sx={{ ...subTextSx, mb: 1.3 }}>
+                        Project header information is shared by every Product / Drawing under this client Project. Product identity is maintained separately below the Project.
+                    </Typography>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.3 }}>
+                        <TextField label="Project Code *" value={projectForm.projectCode} onChange={(event) => setProjectForm((current) => ({ ...current, projectCode: event.target.value }))} sx={fieldSx} />
+                        <TextField label="Project Name *" value={projectForm.projectName} onChange={(event) => setProjectForm((current) => ({ ...current, projectName: event.target.value }))} sx={fieldSx} />
+                        <TextField label="Client Name *" value={projectForm.clientName} onChange={(event) => setProjectForm((current) => ({ ...current, clientName: event.target.value }))} sx={fieldSx} />
+                        <TextField select label="Plant *" value={projectForm.plantCode} onChange={(event) => setProjectForm((current) => ({ ...current, plantCode: event.target.value }))} sx={fieldSx}>
+                            {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                         </TextField>
-                        <TextField
-                            type="date"
-                            label="Project Required Date"
-                            value={projectForm.requiredDate}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, requiredDate: event.target.value }))}
-                            InputLabelProps={{ shrink: true }}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            select
-                            label="Priority"
-                            value={projectForm.priority}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, priority: event.target.value }))}
-                            sx={fieldSx}
-                        >
-                            {["LOW", "NORMAL", "HIGH", "CRITICAL"].map((value) => (
-                                <MenuItem key={value} value={value}>{value}</MenuItem>
-                            ))}
+                        <TextField type="date" label="Project Required Date" value={projectForm.requiredDate} onChange={(event) => setProjectForm((current) => ({ ...current, requiredDate: event.target.value }))} InputLabelProps={{ shrink: true }} sx={fieldSx} />
+                        <TextField select label="Priority" value={projectForm.priority} onChange={(event) => setProjectForm((current) => ({ ...current, priority: event.target.value }))} sx={fieldSx}>
+                            {["LOW", "NORMAL", "HIGH", "CRITICAL"].map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
                         </TextField>
-                        <TextField
-                            label="Project Manager / Owner"
-                            value={projectForm.projectManager}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, projectManager: event.target.value }))}
-                            sx={fieldSx}
-                        />
+                        <TextField label="Project Owner / Manager" value={projectForm.projectManager} onChange={(event) => setProjectForm((current) => ({ ...current, projectManager: event.target.value }))} sx={fieldSx} />
                         <Box sx={{ display: "flex", alignItems: "center", px: .3 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={projectForm.active !== false}
-                                        onChange={(event) => setProjectForm((current) => ({ ...current, active: event.target.checked }))}
-                                    />
-                                }
-                                label="Project Active"
-                            />
+                            <FormControlLabel control={<Switch checked={projectForm.active !== false} onChange={(event) => setProjectForm((current) => ({ ...current, active: event.target.checked }))} />} label="Project Active" />
                         </Box>
-                        <TextField
-                            multiline
-                            minRows={3}
-                            label="Project Remarks"
-                            value={projectForm.remarks}
-                            onChange={(event) => setProjectForm((current) => ({ ...current, remarks: event.target.value }))}
-                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                        />
+                        <TextField multiline minRows={3} label="Project Remarks" value={projectForm.remarks} onChange={(event) => setProjectForm((current) => ({ ...current, remarks: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setProjectDialog(null)} disabled={saving} sx={secondaryBtnSx}>
-                        Cancel
-                    </Button>
-                    <Button onClick={saveProject} disabled={saving} sx={primaryBtnSx}>
-                        {saving ? "Saving..." : "Save Project"}
-                    </Button>
+                    <Button onClick={() => setProjectDialog(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={saveProject} disabled={saving} sx={primaryBtnSx}>{saving ? "Saving..." : "Save Project"}</Button>
                 </DialogActions>
             </Dialog>
 
@@ -1442,66 +1356,26 @@ export function MatFlowProjectsPage() {
                 PaperProps={{ sx: dialogPaperSx }}
             >
                 <DialogTitle sx={dialogTitleSx}>
-                    {productDialog?.product
-                        ? "Edit Product / Drawing Record"
-                        : `Add Product to ${productDialog?.project?.projectCode || "Project"}`}
+                    {productDialog?.product ? "Edit Product / Drawing" : `Add Product to ${productDialog?.project?.projectCode || "Project"}`}
                 </DialogTitle>
                 <DialogContent sx={dialogContentSx}>
+                    <Typography sx={{ ...subTextSx, mb: 1.3 }}>
+                        This Product / Drawing becomes the exact owner of its Engineering BOM and downstream material demand.
+                    </Typography>
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.3 }}>
-                        <TextField
-                            label="Product / Item Name *"
-                            value={productForm.productName}
-                            onChange={(event) => setProductForm((current) => ({ ...current, productName: event.target.value }))}
-                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                        />
-                        <TextField
-                            label="Drawing No. *"
-                            value={productForm.drawingNo}
-                            onChange={(event) => setProductForm((current) => ({ ...current, drawingNo: event.target.value }))}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            label="Drawing Revision"
-                            value={productForm.drawingRevision}
-                            onChange={(event) => setProductForm((current) => ({ ...current, drawingRevision: event.target.value }))}
-                            sx={fieldSx}
-                        />
-                        <TextField
-                            type="date"
-                            label="Product Required Date"
-                            value={productForm.requiredDate}
-                            onChange={(event) => setProductForm((current) => ({ ...current, requiredDate: event.target.value }))}
-                            InputLabelProps={{ shrink: true }}
-                            sx={fieldSx}
-                        />
+                        <TextField label="Product / Item Name *" value={productForm.productName} onChange={(event) => setProductForm((current) => ({ ...current, productName: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                        <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(event) => setProductForm((current) => ({ ...current, drawingNo: event.target.value }))} sx={fieldSx} />
+                        <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(event) => setProductForm((current) => ({ ...current, drawingRevision: event.target.value }))} sx={fieldSx} />
+                        <TextField type="date" label="Product Required Date" value={productForm.requiredDate} onChange={(event) => setProductForm((current) => ({ ...current, requiredDate: event.target.value }))} InputLabelProps={{ shrink: true }} sx={fieldSx} />
                         <Box sx={{ display: "flex", alignItems: "center", px: .3 }}>
-                            <FormControlLabel
-                                control={
-                                    <Switch
-                                        checked={productForm.active !== false}
-                                        onChange={(event) => setProductForm((current) => ({ ...current, active: event.target.checked }))}
-                                    />
-                                }
-                                label="Product Active"
-                            />
+                            <FormControlLabel control={<Switch checked={productForm.active !== false} onChange={(event) => setProductForm((current) => ({ ...current, active: event.target.checked }))} />} label="Product Active" />
                         </Box>
-                        <TextField
-                            multiline
-                            minRows={3}
-                            label="Product Remarks"
-                            value={productForm.remarks}
-                            onChange={(event) => setProductForm((current) => ({ ...current, remarks: event.target.value }))}
-                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                        />
+                        <TextField multiline minRows={3} label="Product Remarks" value={productForm.remarks} onChange={(event) => setProductForm((current) => ({ ...current, remarks: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setProductDialog(null)} disabled={saving} sx={secondaryBtnSx}>
-                        Cancel
-                    </Button>
-                    <Button onClick={saveProduct} disabled={saving} sx={primaryBtnSx}>
-                        {saving ? "Saving..." : "Save Product"}
-                    </Button>
+                    <Button onClick={() => setProductDialog(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={saveProduct} disabled={saving} sx={primaryBtnSx}>{saving ? "Saving..." : "Save Product"}</Button>
                 </DialogActions>
             </Dialog>
 
@@ -1513,31 +1387,17 @@ export function MatFlowProjectsPage() {
                 PaperProps={{ sx: dialogPaperSx }}
             >
                 <DialogTitle sx={dialogTitleSx}>
-                    {approval?.type === "APPROVE"
-                        ? "Director Product Approval"
-                        : "Return Product to Engineering"}
+                    {approval?.type === "APPROVE" ? "Director Product Approval" : "Return Product to Engineering"}
                 </DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Typography sx={mainTextSx}>
                         {approval?.project?.projectCode} → {approval?.product?.productName} → {approval?.product?.drawingNo}
                     </Typography>
-                    <TextField
-                        multiline
-                        minRows={3}
-                        fullWidth
-                        label={approval?.type === "RETURN" ? "Return Remarks *" : "Approval Remarks"}
-                        value={approvalRemarks}
-                        onChange={(event) => setApprovalRemarks(event.target.value)}
-                        sx={{ ...fieldSx, mt: 1.5 }}
-                    />
+                    <TextField multiline minRows={3} fullWidth label={approval?.type === "RETURN" ? "Return Remarks *" : "Approval Remarks"} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} sx={{ ...fieldSx, mt: 1.5 }} />
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setApproval(null)} disabled={saving} sx={secondaryBtnSx}>
-                        Cancel
-                    </Button>
-                    <Button onClick={decideProduct} disabled={saving} sx={primaryBtnSx}>
-                        {saving ? "Working..." : "Confirm Decision"}
-                    </Button>
+                    <Button onClick={() => setApproval(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={decideProduct} disabled={saving} sx={primaryBtnSx}>{saving ? "Working..." : "Confirm Decision"}</Button>
                 </DialogActions>
             </Dialog>
 
@@ -1555,31 +1415,23 @@ export function MatFlowProjectsPage() {
                 <DialogContent sx={dialogContentSx}>
                     {deleteTarget?.kind === "PROJECT" ? (
                         <>
-                            <Typography sx={mainTextSx}>
-                                Delete {deleteTarget?.project?.projectCode} · {deleteTarget?.project?.projectName}?
-                            </Typography>
+                            <Typography sx={mainTextSx}>Delete {deleteTarget?.project?.projectCode} · {deleteTarget?.project?.projectName}?</Typography>
                             <Typography sx={{ ...subTextSx, mt: .8 }}>
-                                This permanently removes the Project header and its setup-only Products. The backend refuses deletion if any Product already has a BOM or material requisition, preserving MatFlow execution history.
+                                This permanently removes the Project header and setup-only Products. The backend refuses deletion when BOM/material execution history exists.
                             </Typography>
                         </>
                     ) : (
                         <>
-                            <Typography sx={mainTextSx}>
-                                Delete {deleteTarget?.product?.productName} · {deleteTarget?.product?.drawingNo}?
-                            </Typography>
+                            <Typography sx={mainTextSx}>Delete {deleteTarget?.product?.productName} · {deleteTarget?.product?.drawingNo}?</Typography>
                             <Typography sx={{ ...subTextSx, mt: .8 }}>
-                                This permanently removes this setup-only Product / Drawing record. Products with a BOM or material requisition cannot be deleted and must be deactivated instead.
+                                This permanently removes only this setup-only Product / Drawing. Historical Products must be deactivated instead.
                             </Typography>
                         </>
                     )}
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setDeleteTarget(null)} disabled={saving} sx={secondaryBtnSx}>
-                        Cancel
-                    </Button>
-                    <Button onClick={confirmDelete} disabled={saving} sx={dangerBtnSx}>
-                        {saving ? "Deleting..." : "Delete Permanently"}
-                    </Button>
+                    <Button onClick={() => setDeleteTarget(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={confirmDelete} disabled={saving} sx={dangerBtnSx}>{saving ? "Deleting..." : "Delete Permanently"}</Button>
                 </DialogActions>
             </Dialog>
         </Box>

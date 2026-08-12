@@ -232,61 +232,87 @@ export const MatFlowBomReviewPage = () => <MatFlowBomListPage submittedOnly />;
 export function MatFlowBomCreatePage() {
     const navigate = useNavigate();
     const [params] = useSearchParams();
+    const { selectedPlantParam } = useMatFlow();
     const requestedProductId = params.get("productId") || "";
-    const [products, setProducts] = useState([]);
+
+    const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
-    const [form, setForm] = useState({ projectDrawingId: requestedProductId, remarks: "" });
+    const [form, setForm] = useState({
+        projectId: "",
+        projectDrawingId: requestedProductId,
+        remarks: "",
+    });
 
     useEffect(() => {
         let active = true;
 
         (async () => {
+            setLoading(true);
+            setError("");
             try {
                 /*
-                 * v3 /projects returns the true Project aggregate. BOMs are still
-                 * product-specific, so flatten only Director-approved child Products.
+                 * IMPORTANT:
+                 * `listProjects()` is intentionally a legacy FLAT Product/Drawing
+                 * compatibility adapter. BOM creation needs the authoritative
+                 * nested hierarchy, so it must read Project Portfolio directly:
+                 *
+                 * Project -> approved active Product / Drawing -> BOM.
                  */
-                const response = await matflowApi.listProjects({ active: true });
-                const projectRows = extractMatFlowPage(response?.data).rows;
+                const response = await matflowApi.listProjectPortfolio({
+                    active: true,
+                    plantCode: selectedPlantParam || undefined,
+                });
 
-                const approvedProducts = projectRows.flatMap((projectRow) =>
-                    (Array.isArray(projectRow?.products) ? projectRow.products : [])
-                        .filter((product) =>
-                            product?.active !== false &&
-                            normalize(product?.approvalStatus) === "APPROVED"
-                        )
-                        .map((product) => ({
-                            ...product,
-                            projectId: projectRow.id,
-                            projectCode: projectRow.projectCode,
-                            projectName: projectRow.projectName,
-                            clientName: projectRow.clientName,
-                            plantCode: projectRow.plantCode,
-                            owningPlantCode: projectRow.plantCode,
-                            projectRequiredDate: projectRow.requiredDate,
-                        }))
-                );
+                const visibleProjects = (Array.isArray(response?.data) ? response.data : [])
+                    .filter((project) => project?.active !== false)
+                    .map((project) => ({
+                        ...project,
+                        products: (Array.isArray(project?.products) ? project.products : [])
+                            .filter((product) =>
+                                product?.active !== false &&
+                                normalize(product?.approvalStatus) === "APPROVED"
+                            ),
+                    }))
+                    .filter((project) => project.products.length > 0);
 
                 if (!active) return;
 
-                setProducts(approvedProducts);
+                setProjects(visibleProjects);
 
                 if (requestedProductId) {
-                    const exists = approvedProducts.some(
-                        (product) => String(product.id) === String(requestedProductId)
+                    const owningProject = visibleProjects.find((project) =>
+                        project.products.some(
+                            (product) => String(product.id) === String(requestedProductId)
+                        )
                     );
-                    if (!exists) {
-                        setForm((current) => ({ ...current, projectDrawingId: "" }));
+
+                    if (owningProject) {
+                        setForm((current) => ({
+                            ...current,
+                            projectId: String(owningProject.id),
+                            projectDrawingId: String(requestedProductId),
+                        }));
+                    } else {
+                        setForm((current) => ({
+                            ...current,
+                            projectId: "",
+                            projectDrawingId: "",
+                        }));
                         setError(
-                            "The requested Product is not active and Director-approved, or is not visible in your plant access."
+                            "The requested Product is not active and Director-approved, or is not visible in your current plant access."
                         );
                     }
                 }
             } catch (requestError) {
                 if (active) {
-                    setProducts([]);
+                    setProjects([]);
+                    setForm((current) => ({
+                        ...current,
+                        projectId: "",
+                        projectDrawingId: "",
+                    }));
                     setError(
                         readMatFlowError(
                             requestError,
@@ -302,13 +328,33 @@ export function MatFlowBomCreatePage() {
         return () => {
             active = false;
         };
-    }, [requestedProductId]);
+    }, [requestedProductId, selectedPlantParam]);
 
-    const selected = products.find(
+    const selectedProject = projects.find(
+        (project) => String(project.id) === String(form.projectId)
+    ) || null;
+
+    const availableProducts = Array.isArray(selectedProject?.products)
+        ? selectedProject.products
+        : [];
+
+    const selected = availableProducts.find(
         (product) => String(product.id) === String(form.projectDrawingId)
+    ) || null;
+
+    const totalApprovedProducts = useMemo(
+        () => projects.reduce(
+            (total, project) => total + (Array.isArray(project?.products) ? project.products.length : 0),
+            0
+        ),
+        [projects]
     );
 
     const save = async () => {
+        if (!selectedProject?.id) {
+            setError("Select a Project first.");
+            return;
+        }
         if (!selected?.id) {
             setError("Select a valid Director-approved Product / Drawing.");
             return;
@@ -342,7 +388,7 @@ export function MatFlowBomCreatePage() {
             <PageHero
                 badge="NEW OPERATIONAL BOM"
                 title="Create Product BOM"
-                subtitle="Engineering creates a BOM only for an active Product/Item that has already received Director approval inside its client Project."
+                subtitle="Choose the client Project first, then its active Director-approved Product / Drawing. BOM ownership remains attached to the exact Product / Drawing UUID for complete Project → Product → Material traceability."
                 actions={
                     <Button
                         startIcon={<ArrowBackIcon />}
@@ -356,76 +402,162 @@ export function MatFlowBomCreatePage() {
 
             <ErrorBox>{error}</ErrorBox>
 
-            <Card sx={panelSx}>
-                <Box
-                    sx={{
-                        display: "grid",
-                        gridTemplateColumns: { xs: "1fr", md: "minmax(320px,1.3fr) minmax(260px,.7fr)" },
-                        gap: 1.5,
-                    }}
-                >
-                    <TextField
-                        select
-                        label="Project → Product / Drawing *"
-                        value={form.projectDrawingId}
-                        onChange={(e) =>
-                            setForm((current) => ({
-                                ...current,
-                                projectDrawingId: e.target.value,
-                            }))
-                        }
-                        sx={fieldSx}
-                    >
-                        {products.length === 0 && (
-                            <MenuItem value="" disabled>
-                                No Director-approved Products available
-                            </MenuItem>
-                        )}
-                        {products.map((product) => (
-                            <MenuItem key={product.id} value={product.id}>
-                                {product.projectCode || "-"} → {product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-
-                    <TextField
-                        label="Engineering Remarks"
-                        value={form.remarks}
-                        onChange={(e) =>
-                            setForm((current) => ({
-                                ...current,
-                                remarks: e.target.value,
-                            }))
-                        }
-                        sx={fieldSx}
-                    />
-                </Box>
-            </Card>
-
-            {selected && (
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.5fr) minmax(280px,.5fr)" },
+                    gap: 1.25,
+                    alignItems: "start",
+                }}
+            >
                 <Card sx={panelSx}>
+                    <Box sx={{ mb: 1.4 }}>
+                        <Typography sx={{ ...mainTextSx, fontSize: 16 }}>
+                            Product Ownership
+                        </Typography>
+                        <Typography sx={{ ...subTextSx, mt: .25 }}>
+                            {projects.length} Project{projects.length === 1 ? "" : "s"} · {totalApprovedProducts} approved Product{totalApprovedProducts === 1 ? "" : "s"} available in the current Plant scope.
+                        </Typography>
+                    </Box>
+
                     <Box
                         sx={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
-                            gap: 1,
+                            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                            gap: 1.25,
                         }}
                     >
-                        <Detail label="Project" value={`${selected.projectCode || "-"} · ${selected.projectName || "-"}`} />
-                        <Detail label="Client" value={selected.clientName} />
-                        <Detail label="Product / Item" value={selected.productName} />
-                        <Detail label="Drawing" value={`${selected.drawingNo || "-"} · Rev ${selected.drawingRevision ?? "0"}`} />
-                        <Detail label="Plant" value={selected.plantCode} />
-                        <Detail label="Director Approval" value={<MatFlowStatusChip status={selected.approvalStatus} />} />
+                        <TextField
+                            select
+                            label="1. Client Project *"
+                            value={form.projectId}
+                            onChange={(event) => {
+                                const nextProjectId = event.target.value;
+                                setForm((current) => ({
+                                    ...current,
+                                    projectId: nextProjectId,
+                                    projectDrawingId: "",
+                                }));
+                                setError("");
+                            }}
+                            sx={fieldSx}
+                        >
+                            {projects.length === 0 && (
+                                <MenuItem value="" disabled>
+                                    No Project with approved Products available
+                                </MenuItem>
+                            )}
+                            {projects.map((project) => (
+                                <MenuItem key={project.id} value={project.id}>
+                                    {project.projectCode || "-"} · {project.projectName || "-"} · {project.clientName || "-"}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+
+                        <TextField
+                            select
+                            label="2. Product / Drawing *"
+                            value={form.projectDrawingId}
+                            disabled={!selectedProject?.id}
+                            onChange={(event) => {
+                                setForm((current) => ({
+                                    ...current,
+                                    projectDrawingId: event.target.value,
+                                }));
+                                setError("");
+                            }}
+                            sx={fieldSx}
+                        >
+                            {!selectedProject && (
+                                <MenuItem value="" disabled>
+                                    Select a Project first
+                                </MenuItem>
+                            )}
+                            {selectedProject && availableProducts.length === 0 && (
+                                <MenuItem value="" disabled>
+                                    No active Director-approved Products in this Project
+                                </MenuItem>
+                            )}
+                            {availableProducts.map((product) => (
+                                <MenuItem key={product.id} value={product.id}>
+                                    {product.productName || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision ?? "0"}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+
+                        <TextField
+                            label="Engineering Remarks"
+                            value={form.remarks}
+                            onChange={(event) =>
+                                setForm((current) => ({
+                                    ...current,
+                                    remarks: event.target.value,
+                                }))
+                            }
+                            multiline
+                            minRows={2}
+                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
+                        />
+                    </Box>
+                </Card>
+
+                <Card sx={{ ...panelSx, display: "grid", gap: 1 }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 15 }}>
+                        BOM Eligibility
+                    </Typography>
+                    <Box sx={{ display: "grid", gap: .75 }}>
+                        <Box sx={{ p: 1, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
+                            <Typography sx={subTextSx}>Project</Typography>
+                            <Typography sx={mainTextSx}>{selectedProject?.projectCode || "Not selected"}</Typography>
+                        </Box>
+                        <Box sx={{ p: 1, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
+                            <Typography sx={subTextSx}>Product Approval</Typography>
+                            {selected ? <MatFlowStatusChip status={selected.approvalStatus} /> : <Typography sx={mainTextSx}>Waiting for selection</Typography>}
+                        </Box>
+                        <Box sx={{ p: 1, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
+                            <Typography sx={subTextSx}>BOM Binding</Typography>
+                            <Typography sx={mainTextSx}>Exact Product / Drawing UUID</Typography>
+                        </Box>
+                    </Box>
+                </Card>
+            </Box>
+
+            {selectedProject && (
+                <Card sx={panelSx}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 1 }}>
+                        <Detail label="Project" value={`${selectedProject.projectCode || "-"} · ${selectedProject.projectName || "-"}`} />
+                        <Detail label="Client" value={selectedProject.clientName} />
+                        <Detail label="Plant" value={selectedProject.plantCode} />
+                        <Detail label="Approved Products" value={availableProducts.length} />
+                        {selected && <>
+                            <Detail label="Product / Item" value={selected.productName} />
+                            <Detail label="Drawing" value={`${selected.drawingNo || "-"} · Rev ${selected.drawingRevision ?? "0"}`} />
+                            <Detail label="Required Date" value={selected.requiredDate || selectedProject.requiredDate || "Not set"} />
+                            <Detail label="Director Approval" value={<MatFlowStatusChip status={selected.approvalStatus} />} />
+                        </>}
                     </Box>
                 </Card>
             )}
 
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+            {projects.length === 0 && (
+                <Card sx={panelSx}>
+                    <EmptyState>
+                        No active Director-approved Product / Drawing is available for BOM creation in the current Plant scope. Create the Project/Product in Projects & Products and complete Director Product approval first.
+                    </EmptyState>
+                </Card>
+            )}
+
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                <Button
+                    onClick={() => navigate("/matflow/projects")}
+                    sx={secondaryBtnSx}
+                >
+                    Projects & Products
+                </Button>
                 <Button
                     startIcon={<SaveOutlinedIcon />}
                     onClick={save}
-                    disabled={saving || !selected?.id}
+                    disabled={saving || !selectedProject?.id || !selected?.id}
                     sx={primaryBtnSx}
                 >
                     {saving ? "Creating..." : "Create BOM Draft"}
