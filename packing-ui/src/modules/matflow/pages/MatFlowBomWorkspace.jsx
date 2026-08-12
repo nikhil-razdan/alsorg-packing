@@ -16,6 +16,8 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ApprovalOutlinedIcon from "@mui/icons-material/ApprovalOutlined";
+import AltRouteOutlinedIcon from "@mui/icons-material/AltRouteOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -780,36 +782,68 @@ export function MatFlowBomDetailPage() {
         return Array.from(new Set(issues));
     }, [lines, routes, projectPlantCode, resolveRouteLocation]);
 
-    const validRouteLineCount = useMemo(() => {
-        return lines.filter((line) => {
+    const routeSummaryByLine = useMemo(() => {
+        const summaries = new Map();
+
+        lines.forEach((line) => {
             const lineRoutes = routes
                 .filter((item) => String(item.bomLineId) === String(line.id))
                 .sort((a, b) => Number(a.sequenceNo || 0) - Number(b.sequenceNo || 0));
 
-            if (lineRoutes.length < 2) return false;
-            if (normalize(lineRoutes[0]?.stepType) !== "QC") return false;
-            if (normalize(lineRoutes[lineRoutes.length - 1]?.stepType) !== "PRODUCTION") return false;
+            const hasQc = lineRoutes.some((step) => normalize(step?.stepType) === "QC");
+            const hasProduction = lineRoutes.some((step) => normalize(step?.stepType) === "PRODUCTION");
+            const processingCount = lineRoutes.filter(
+                (step) => normalize(step?.stepType) === "PROCESSING"
+            ).length;
 
-            const qcCount = lineRoutes.filter((step) => normalize(step?.stepType) === "QC").length;
-            const productionCount = lineRoutes.filter((step) => normalize(step?.stepType) === "PRODUCTION").length;
-            if (qcCount !== 1 || productionCount !== 1) return false;
+            const complete =
+                lineRoutes.length >= 2 &&
+                normalize(lineRoutes[0]?.stepType) === "QC" &&
+                normalize(lineRoutes[lineRoutes.length - 1]?.stepType) === "PRODUCTION" &&
+                lineRoutes.filter((step) => normalize(step?.stepType) === "QC").length === 1 &&
+                lineRoutes.filter((step) => normalize(step?.stepType) === "PRODUCTION").length === 1 &&
+                lineRoutes.every((step, index) => {
+                    const stepType = normalize(step?.stepType);
+                    const location = resolveRouteLocation(step);
+                    const locationType = normalize(location?.locationType);
 
-            return lineRoutes.every((step, index) => {
-                const stepType = normalize(step?.stepType);
-                const location = resolveRouteLocation(step);
-                const locationType = normalize(location?.locationType);
+                    if (!step?.locationId || !location || !locationType) return false;
+                    if (location.active === false) return false;
+                    if (projectPlantCode && !sameCode(location.plantCode, projectPlantCode)) return false;
+                    if (stepType === "QC" && locationType !== "QC") return false;
+                    if (
+                        stepType === "PROCESSING" &&
+                        !["PROCESSING", "EXTERNAL_PROCESSOR"].includes(locationType)
+                    ) {
+                        return false;
+                    }
+                    if (stepType === "PRODUCTION" && locationType !== "PRODUCTION") return false;
+                    if (index > 0 && index < lineRoutes.length - 1 && stepType !== "PROCESSING") {
+                        return false;
+                    }
+                    return true;
+                });
 
-                if (!step?.locationId || !location || !locationType) return false;
-                if (location.active === false) return false;
-                if (projectPlantCode && !sameCode(location.plantCode, projectPlantCode)) return false;
-                if (stepType === "QC" && locationType !== "QC") return false;
-                if (stepType === "PROCESSING" && !["PROCESSING", "EXTERNAL_PROCESSOR"].includes(locationType)) return false;
-                if (stepType === "PRODUCTION" && locationType !== "PRODUCTION") return false;
-                if (index > 0 && index < lineRoutes.length - 1 && stepType !== "PROCESSING") return false;
-                return true;
+            summaries.set(String(line.id), {
+                complete,
+                count: lineRoutes.length,
+                hasQc,
+                hasProduction,
+                processingCount,
             });
-        }).length;
+        });
+
+        return summaries;
     }, [lines, routes, projectPlantCode, resolveRouteLocation]);
+
+    const validRouteLineCount = useMemo(
+        () => Array.from(routeSummaryByLine.values()).filter((summary) => summary.complete).length,
+        [routeSummaryByLine]
+    );
+
+    const routeCompletionPercent = lines.length > 0
+        ? Math.round((validRouteLineCount / lines.length) * 100)
+        : 0;
 
     useEffect(() => {
         if (!canEdit) {
@@ -1206,119 +1240,552 @@ export function MatFlowBomDetailPage() {
                 </Alert>
             )}
             {bom && <>
-                <Card sx={panelSx}>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}>
-                        <Detail label="Status" value={<MatFlowStatusChip status={bom.status} />} />
-                        <Detail label="Effective" value={bom.effective ? "Yes" : "No"} />
-                        <Detail label="Latest Revision" value={bom.latestRevision ? "Yes" : "No"} />
-                        <Detail label="Project" value={project.projectCode} /><Detail label="Product" value={project.productName} /><Detail label="Drawing" value={project.drawingNo} /><Detail label="Plant" value={project.plantCode || project.owningPlantCode} />
-                        <Detail label="Responsible Department" value={workflow[0]} /><Detail label="Next Action" value={workflow[1]} />
-                    </Box>
-                    <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "flex-end", mt: 1.5 }}>
-                        {canEdit && lines.length > 0 && <Button startIcon={<SendOutlinedIcon />} onClick={() => setAction("SUBMIT")} sx={primaryBtnSx}>Submit for Approval</Button>}
-                        {canProductionReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("PRODUCTION_APPROVE")} sx={primaryBtnSx}>Production Approve</Button>}
-                        {canProductionReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("PRODUCTION_RETURN")} sx={secondaryBtnSx}>Production Return</Button>}
-                        {canDirectorReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("DIRECTOR_APPROVE")} sx={primaryBtnSx}>Director Final Approve</Button>}
-                        {canDirectorReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("DIRECTOR_RETURN")} sx={secondaryBtnSx}>Director Return</Button>}
-                        {canRevision && <Button onClick={() => setAction("REVISION")} sx={secondaryBtnSx}>Create Revision</Button>}
-                        {canRequisition && <Button onClick={() => navigate(`/matflow/requisitions/new?bomId=${bom.id}`)} sx={primaryBtnSx}>Raise Requisition</Button>}
-                    </Box>
-                </Card>
+                <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1fr) 350px" },
+                            gap: 0,
+                        }}
+                    >
+                        <Box sx={{ p: { xs: 1.35, md: 1.6 } }}>
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    gap: 1,
+                                    flexWrap: "wrap",
+                                    mb: 1.2,
+                                }}
+                            >
+                                <Box>
+                                    <Typography sx={{ ...sectionSubSx, fontSize: 9.5, letterSpacing: ".08em" }}>
+                                        BOM CONTEXT
+                                    </Typography>
+                                    <Typography sx={{ ...sectionTitleSx, fontSize: 17 }}>
+                                        {project.productName || "Product"} · {project.drawingNo || "Drawing"}
+                                    </Typography>
+                                    <Typography sx={sectionSubSx}>
+                                        {project.projectCode || "-"} · Revision {bom?.revisionNo ?? "-"} · {project.plantCode || project.owningPlantCode || "-"}
+                                    </Typography>
+                                </Box>
+                                <MatFlowStatusChip status={bom.status} />
+                            </Box>
 
-                <Card sx={panelSx}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
-                        <Box><Typography sx={sectionTitleSx}>Material Lines</Typography><Typography sx={sectionSubSx}>{lines.length} line(s)</Typography></Box>
-                        {canEdit && <Button startIcon={<AddIcon />} onClick={() => { setLineDialog({ line: null }); setLineForm({ materialId: "", requiredQty: "", wastagePercent: "0", remarks: "" }); }} sx={primaryBtnSx}>Add Material</Button>}
-                    </Box>
-                    <Box sx={{ ...tableShellSx, mt: 1.5 }}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "65px 190px minmax(200px,1fr) 100px 110px 130px 170px" }}>
-                            {["Line", "Material", "Specification", "Required", "Wastage %", "Net Required", "Actions"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
+                            <Box
+                                sx={{
+                                    display: "grid",
+                                    gridTemplateColumns: {
+                                        xs: "repeat(2,minmax(0,1fr))",
+                                        md: "repeat(3,minmax(0,1fr))",
+                                    },
+                                    gap: .85,
+                                }}
+                            >
+                                <Detail label="Project" value={project.projectCode || "-"} />
+                                <Detail label="Product" value={project.productName || "-"} />
+                                <Detail label="Drawing" value={project.drawingNo || "-"} />
+                                <Detail label="Plant" value={project.plantCode || project.owningPlantCode || "-"} />
+                                <Detail label="Effective" value={bom.effective ? "Yes" : "No"} />
+                                <Detail label="Latest Revision" value={bom.latestRevision ? "Yes" : "No"} />
+                            </Box>
                         </Box>
-                        {lines.length === 0 ? <EmptyState>Add at least one material line before submission.</EmptyState> : lines.map((line) => (
-                            <Box key={line.id} sx={{ ...tableRowSx, gridTemplateColumns: "65px 190px minmax(200px,1fr) 100px 110px 130px 170px" }}>
-                                <Box sx={tableCellSx}>{line.lineNo ?? "-"}</Box>
-                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{line.materialCodeSnapshot || line.materialCode || "-"}</Typography><Typography sx={subTextSx}>{line.materialNameSnapshot || line.materialName || "-"}</Typography></Box>
-                                <Box sx={tableCellSx}>{line.specificationSnapshot || line.specification || "-"}</Box>
-                                <Box sx={tableCellSx}>{formatQty(line.requiredQty)} {line.uomSnapshot || line.uom || ""}</Box>
-                                <Box sx={tableCellSx}>{formatQty(line.wastagePercent)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(line.netRequiredQty)}</Box>
-                                <Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>
-                                    {canEdit && <Button onClick={() => { setLineDialog({ line }); setLineForm({ materialId: line.materialId || line.material?.id || "", requiredQty: String(line.requiredQty ?? ""), wastagePercent: String(line.wastagePercent ?? 0), remarks: line.remarks || "" }); }} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
-                                    {canEdit && <Button onClick={() => removeLine(line)} sx={secondaryBtnSx}><DeleteOutlineIcon fontSize="small" /></Button>}
-                                    {canEdit && <Button onClick={() => openRoute(line)} sx={secondaryBtnSx}>Route</Button>}
+
+                        <Box
+                            sx={{
+                                p: { xs: 1.35, md: 1.6 },
+                                borderTop: { xs: "1px solid var(--mf-border)", xl: 0 },
+                                borderLeft: { xs: 0, xl: "1px solid var(--mf-border)" },
+                                background: "var(--mf-surface)",
+                            }}
+                        >
+                            <Typography sx={{ ...sectionSubSx, fontSize: 9.5, letterSpacing: ".08em" }}>
+                                WORKFLOW READINESS
+                            </Typography>
+
+                            <Box sx={{ mt: .8, display: "grid", gap: .8 }}>
+                                <Box
+                                    sx={{
+                                        p: .9,
+                                        borderRadius: 1.5,
+                                        border: "1px solid var(--mf-border)",
+                                        background: "var(--mf-panel-solid)",
+                                    }}
+                                >
+                                    <Typography sx={subTextSx}>Responsible Department</Typography>
+                                    <Typography sx={{ ...mainTextSx, mt: .15 }}>{workflow[0]}</Typography>
+                                </Box>
+
+                                <Box
+                                    sx={{
+                                        p: .9,
+                                        borderRadius: 1.5,
+                                        border: "1px solid var(--mf-border)",
+                                        background: "var(--mf-panel-solid)",
+                                    }}
+                                >
+                                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                                        <Box>
+                                            <Typography sx={subTextSx}>Material Route Coverage</Typography>
+                                            <Typography sx={{ ...mainTextSx, mt: .15 }}>
+                                                {validRouteLineCount}/{lines.length} complete
+                                            </Typography>
+                                        </Box>
+                                        <Chip
+                                            size="small"
+                                            icon={validRouteLineCount === lines.length && lines.length > 0
+                                                ? <CheckCircleOutlineIcon />
+                                                : <AltRouteOutlinedIcon />}
+                                            label={`${routeCompletionPercent}%`}
+                                            color={validRouteLineCount === lines.length && lines.length > 0 ? "success" : "warning"}
+                                        />
+                                    </Box>
+                                </Box>
+
+                                <Box
+                                    sx={{
+                                        p: .9,
+                                        borderRadius: 1.5,
+                                        border: "1px solid var(--mf-border)",
+                                        background: "var(--mf-panel-solid)",
+                                    }}
+                                >
+                                    <Typography sx={subTextSx}>Next Action</Typography>
+                                    <Typography sx={{ ...mainTextSx, mt: .15, lineHeight: 1.45 }}>
+                                        {workflow[1]}
+                                    </Typography>
                                 </Box>
                             </Box>
-                        ))}
+                        </Box>
+                    </Box>
+
+                    <Box
+                        sx={{
+                            px: { xs: 1.35, md: 1.6 },
+                            py: 1.05,
+                            borderTop: "1px solid var(--mf-border)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            flexWrap: "wrap",
+                            background: "var(--mf-panel-solid)",
+                        }}
+                    >
+                        <Typography sx={subTextSx}>
+                            {lines.length === 0
+                                ? "Add material demand lines to begin Engineering BOM preparation."
+                                : routeIssues.length > 0
+                                    ? `${routeIssues.length} route control issue(s) must be resolved before submission.`
+                                    : "Material demand and approved route controls are ready for the next workflow action."}
+                        </Typography>
+
+                        <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            {canEdit && lines.length > 0 && (
+                                <Button
+                                    startIcon={<SendOutlinedIcon />}
+                                    onClick={() => setAction("SUBMIT")}
+                                    sx={primaryBtnSx}
+                                >
+                                    Submit for Approval
+                                </Button>
+                            )}
+                            {canProductionReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("PRODUCTION_APPROVE")} sx={primaryBtnSx}>Production Approve</Button>}
+                            {canProductionReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("PRODUCTION_RETURN")} sx={secondaryBtnSx}>Production Return</Button>}
+                            {canDirectorReview && <Button startIcon={<ApprovalOutlinedIcon />} onClick={() => setAction("DIRECTOR_APPROVE")} sx={primaryBtnSx}>Director Final Approve</Button>}
+                            {canDirectorReview && <Button startIcon={<UndoOutlinedIcon />} onClick={() => setAction("DIRECTOR_RETURN")} sx={secondaryBtnSx}>Director Return</Button>}
+                            {canRevision && <Button onClick={() => setAction("REVISION")} sx={secondaryBtnSx}>Create Revision</Button>}
+                            {canRequisition && <Button onClick={() => navigate(`/matflow/requisitions/new?bomId=${bom.id}`)} sx={primaryBtnSx}>Raise Requisition</Button>}
+                        </Box>
                     </Box>
                 </Card>
 
-                <Card sx={panelSx}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                    <Box
+                        sx={{
+                            px: { xs: 1.3, md: 1.5 },
+                            py: 1.25,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            borderBottom: "1px solid var(--mf-border)",
+                        }}
+                    >
                         <Box>
-                            <Typography sx={sectionTitleSx}>Approved Material Route</Typography>
+                            <Typography sx={sectionTitleSx}>Material Demand & Route Setup</Typography>
                             <Typography sx={sectionSubSx}>
-                                Every material requires QC and a Production destination. Processing rows are approved candidate Processing Units; QC decides per inspected lot whether to bypass Processing or send the material to one approved unit.
+                                Define the Product's material requirement first, then use <b>Route Material</b> to configure QC → optional Processing → Production for each line.
+                            </Typography>
+                        </Box>
+                        {canEdit && (
+                            <Button
+                                startIcon={<AddIcon />}
+                                onClick={() => {
+                                    setLineDialog({ line: null });
+                                    setLineForm({
+                                        materialId: "",
+                                        requiredQty: "",
+                                        wastagePercent: "0",
+                                        remarks: "",
+                                    });
+                                }}
+                                sx={primaryBtnSx}
+                            >
+                                Add Material
+                            </Button>
+                        )}
+                    </Box>
+
+                    <Box sx={{ p: { xs: 1, md: 1.25 } }}>
+                        <Box sx={tableShellSx}>
+                            <Box
+                                sx={{
+                                    ...tableHeaderSx,
+                                    minWidth: 1260,
+                                    gridTemplateColumns:
+                                        "60px 180px minmax(200px,1fr) 110px 95px 110px 145px 360px",
+                                }}
+                            >
+                                {[
+                                    "Line",
+                                    "Material",
+                                    "Specification",
+                                    "Required",
+                                    "Wastage %",
+                                    "Net Required",
+                                    "Route Status",
+                                    "Actions",
+                                ].map((heading) => (
+                                    <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                ))}
+                            </Box>
+
+                            {lines.length === 0 ? (
+                                <EmptyState>Add at least one material line before submission.</EmptyState>
+                            ) : lines.map((line) => {
+                                const routeSummary = routeSummaryByLine.get(String(line.id)) || {
+                                    complete: false,
+                                    count: 0,
+                                    hasQc: false,
+                                    hasProduction: false,
+                                    processingCount: 0,
+                                };
+
+                                return (
+                                    <Box
+                                        key={line.id}
+                                        sx={{
+                                            ...tableRowSx,
+                                            minWidth: 1260,
+                                            gridTemplateColumns:
+                                                "60px 180px minmax(200px,1fr) 110px 95px 110px 145px 360px",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>{line.lineNo ?? "-"}</Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {line.materialCodeSnapshot || line.materialCode || "-"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                {line.materialNameSnapshot || line.materialName || "-"}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={{ ...mainTextSx, fontWeight: 700 }}>
+                                                {line.specificationSnapshot || line.specification || "-"}
+                                            </Typography>
+                                            {line.remarks && (
+                                                <Typography sx={{ ...subTextSx, mt: .2 }}>
+                                                    {line.remarks}
+                                                </Typography>
+                                            )}
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            {formatQty(line.requiredQty)} {line.uomSnapshot || line.uom || ""}
+                                        </Box>
+                                        <Box sx={tableCellSx}>{formatQty(line.wastagePercent)}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{formatQty(line.netRequiredQty)}</Typography>
+                                            <Typography sx={subTextSx}>{line.uomSnapshot || line.uom || ""}</Typography>
+                                        </Box>
+
+                                        <Box sx={tableCellSx}>
+                                            <Chip
+                                                size="small"
+                                                icon={routeSummary.complete
+                                                    ? <CheckCircleOutlineIcon />
+                                                    : <AltRouteOutlinedIcon />}
+                                                label={routeSummary.complete ? "Ready" : "Route Required"}
+                                                color={routeSummary.complete ? "success" : "warning"}
+                                            />
+                                            <Typography sx={{ ...subTextSx, mt: .35 }}>
+                                                {routeSummary.count === 0
+                                                    ? "No route steps"
+                                                    : `${routeSummary.count} step(s)${routeSummary.processingCount > 0
+                                                        ? ` · ${routeSummary.processingCount} processing option(s)`
+                                                        : ""
+                                                    }`}
+                                            </Typography>
+                                        </Box>
+
+                                        <Box
+                                            sx={{
+                                                ...tableCellSx,
+                                                display: "flex",
+                                                gap: .55,
+                                                alignItems: "center",
+                                                flexWrap: "nowrap",
+                                                whiteSpace: "nowrap",
+                                            }}
+                                        >
+                                            {canEdit ? (
+                                                <>
+                                                    <Button
+                                                        startIcon={<EditOutlinedIcon fontSize="small" />}
+                                                        onClick={() => {
+                                                            setLineDialog({ line });
+                                                            setLineForm({
+                                                                materialId: line.materialId || line.material?.id || "",
+                                                                requiredQty: String(line.requiredQty ?? ""),
+                                                                wastagePercent: String(line.wastagePercent ?? 0),
+                                                                remarks: line.remarks || "",
+                                                            });
+                                                        }}
+                                                        sx={{
+                                                            ...secondaryBtnSx,
+                                                            minWidth: 76,
+                                                            px: 1,
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </Button>
+
+                                                    <Button
+                                                        startIcon={<DeleteOutlineIcon fontSize="small" />}
+                                                        onClick={() => removeLine(line)}
+                                                        sx={{
+                                                            ...dangerBtnSx,
+                                                            minWidth: 86,
+                                                            px: 1,
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </Button>
+
+                                                    <Button
+                                                        startIcon={<AltRouteOutlinedIcon fontSize="small" />}
+                                                        onClick={() => openRoute(line)}
+                                                        sx={{
+                                                            ...secondaryBtnSx,
+                                                            minWidth: 126,
+                                                            px: 1.15,
+                                                            flexShrink: 0,
+                                                            color: "var(--mf-primary-text)",
+                                                            borderColor: "var(--mf-primary-border)",
+                                                            background: "var(--mf-primary-soft)",
+                                                            "&:hover": {
+                                                                background: "var(--mf-hover)",
+                                                                borderColor: "var(--mf-primary-text)",
+                                                            },
+                                                        }}
+                                                    >
+                                                        Route Material
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Typography sx={subTextSx}>Read only</Typography>
+                                            )}
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
+                        </Box>
+
+                        <Typography sx={{ ...subTextSx, mt: .75 }}>
+                            On narrower screens the material register scrolls horizontally so actions remain fully visible instead of being clipped.
+                        </Typography>
+                    </Box>
+                </Card>
+
+                <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                    <Box
+                        sx={{
+                            px: { xs: 1.3, md: 1.5 },
+                            py: 1.25,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            borderBottom: "1px solid var(--mf-border)",
+                        }}
+                    >
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={sectionTitleSx}>Approved Material Route Register</Typography>
+                            <Typography sx={sectionSubSx}>
+                                Every material requires exactly one QC entry point and one Production destination. Processing rows are approved candidate units; QC decides per inspected lot whether Processing is required.
                             </Typography>
                         </Box>
                         <Chip
                             size="small"
+                            icon={lines.length > 0 && validRouteLineCount === lines.length
+                                ? <CheckCircleOutlineIcon />
+                                : <AltRouteOutlinedIcon />}
                             label={`${validRouteLineCount}/${lines.length} material route(s) complete`}
                             color={lines.length > 0 && validRouteLineCount === lines.length ? "success" : "warning"}
                         />
                     </Box>
-                    {routeIssues.length > 0 && (
-                        <Alert severity="warning" sx={{ mt: 1.25, borderRadius: 2 }}>
-                            {routeIssues.slice(0, 3).join(" ")}
-                            {routeIssues.length > 3 ? ` +${routeIssues.length - 3} more route issue(s).` : ""}
-                        </Alert>
-                    )}
-                    <Box sx={{ ...tableShellSx, mt: 1.5 }}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "90px 80px 140px 180px 130px 110px 160px" }}>
-                            {["BOM Line", "Sequence", "Step", "Location", "Process", "Yield %", "Action"].map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}
-                        </Box>
-                        {routes.length === 0 ? <EmptyState>No explicit route configured. Add route steps from the material line actions.</EmptyState> : routes.map((step) => {
-                            const line = lines.find((item) => String(item.id) === String(step.bomLineId));
-                            const resolvedLocation = resolveRouteLocation(step);
-                            const resolvedLocationType = normalize(resolvedLocation?.locationType);
-                            const expectedType = normalize(step.stepType);
-                            const locationTypeValid =
-                                expectedType === "QC"
-                                    ? resolvedLocationType === "QC"
-                                    : expectedType === "PROCESSING"
-                                        ? ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(resolvedLocationType)
-                                        : expectedType === "PRODUCTION"
-                                            ? resolvedLocationType === "PRODUCTION"
-                                            : false;
-                            const plantValid = !projectPlantCode || sameCode(resolvedLocation?.plantCode, projectPlantCode);
-                            const routeLocationValid = Boolean(step.locationId) && Boolean(resolvedLocation) && Boolean(resolvedLocationType) && locationTypeValid && plantValid && resolvedLocation?.active !== false;
 
-                            return <Box key={step.id} sx={{ ...tableRowSx, gridTemplateColumns: "90px 80px 140px 180px 130px 110px 160px" }}>
-                                <Box sx={tableCellSx}>{step.bomLineNo ?? line?.lineNo ?? "-"}</Box>
-                                <Box sx={tableCellSx}>{step.sequenceNo}</Box>
-                                <Box sx={tableCellSx}>{step.stepType}</Box>
-                                <Box sx={tableCellSx}>
-                                    <Typography sx={routeLocationValid ? mainTextSx : { ...mainTextSx, color: "error.main" }}>
-                                        {resolvedLocation?.locationCode || resolvedLocation?.locationName || "INVALID / MISSING"}
-                                    </Typography>
-                                    <Typography sx={subTextSx}>
-                                        {resolvedLocationType ? readable(resolvedLocationType) : "No location type"}
-                                        {resolvedLocation?.plantCode ? ` · ${resolvedLocation.plantCode}` : ""}
-                                    </Typography>
-                                </Box>
-                                <Box sx={tableCellSx}>{step.processCode || "-"}</Box>
-                                <Box sx={tableCellSx}>{step.expectedYieldPercent ?? 100}</Box>
-                                <Box sx={{ ...tableCellSx, display: "flex", gap: .5 }}>
-                                    {canEdit && line ? <>
-                                        <Button onClick={() => openRoute(line, step)} sx={secondaryBtnSx}>Edit</Button>
-                                        <Button onClick={() => deleteRoute(line, step)} sx={secondaryBtnSx}>Delete</Button>
-                                    </> : "-"}
-                                </Box>
-                            </Box>;
-                        })}
+                    {routeIssues.length > 0 && (
+                        <Box sx={{ px: { xs: 1.3, md: 1.5 }, pt: 1.2 }}>
+                            <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                                {routeIssues.slice(0, 3).join(" ")}
+                                {routeIssues.length > 3 ? ` +${routeIssues.length - 3} more route issue(s).` : ""}
+                            </Alert>
+                        </Box>
+                    )}
+
+                    <Box sx={{ p: { xs: 1, md: 1.25 } }}>
+                        <Box sx={tableShellSx}>
+                            <Box
+                                sx={{
+                                    ...tableHeaderSx,
+                                    minWidth: 1120,
+                                    gridTemplateColumns:
+                                        "90px 90px 135px 220px minmax(160px,1fr) 100px 190px",
+                                }}
+                            >
+                                {["BOM Line", "Sequence", "Step", "Location", "Process", "Yield %", "Actions"].map((heading) => (
+                                    <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                                ))}
+                            </Box>
+
+                            {routes.length === 0 ? (
+                                <EmptyState>
+                                    No route configured yet. Use Route Material on a material line to add QC, optional Processing and Production route steps.
+                                </EmptyState>
+                            ) : routes.map((step) => {
+                                const line = lines.find((item) => String(item.id) === String(step.bomLineId));
+                                const resolvedLocation = resolveRouteLocation(step);
+                                const resolvedLocationType = normalize(resolvedLocation?.locationType);
+                                const expectedType = normalize(step.stepType);
+                                const locationTypeValid =
+                                    expectedType === "QC"
+                                        ? resolvedLocationType === "QC"
+                                        : expectedType === "PROCESSING"
+                                            ? ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(resolvedLocationType)
+                                            : expectedType === "PRODUCTION"
+                                                ? resolvedLocationType === "PRODUCTION"
+                                                : false;
+                                const plantValid =
+                                    !projectPlantCode ||
+                                    sameCode(resolvedLocation?.plantCode, projectPlantCode);
+                                const routeLocationValid =
+                                    Boolean(step.locationId) &&
+                                    Boolean(resolvedLocation) &&
+                                    Boolean(resolvedLocationType) &&
+                                    locationTypeValid &&
+                                    plantValid &&
+                                    resolvedLocation?.active !== false;
+
+                                return (
+                                    <Box
+                                        key={step.id}
+                                        sx={{
+                                            ...tableRowSx,
+                                            minWidth: 1120,
+                                            gridTemplateColumns:
+                                                "90px 90px 135px 220px minmax(160px,1fr) 100px 190px",
+                                        }}
+                                    >
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>
+                                                {step.bomLineNo ?? line?.lineNo ?? "-"}
+                                            </Typography>
+                                            {line && (
+                                                <Typography sx={subTextSx}>
+                                                    {line.materialCodeSnapshot || line.materialCode || "-"}
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                        <Box sx={tableCellSx}>{step.sequenceNo}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <MatFlowStatusChip status={step.stepType} />
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography
+                                                sx={
+                                                    routeLocationValid
+                                                        ? mainTextSx
+                                                        : { ...mainTextSx, color: "error.main" }
+                                                }
+                                            >
+                                                {resolvedLocation?.locationCode ||
+                                                    resolvedLocation?.locationName ||
+                                                    "INVALID / MISSING"}
+                                            </Typography>
+                                            <Typography sx={subTextSx}>
+                                                {resolvedLocationType
+                                                    ? readable(resolvedLocationType)
+                                                    : "No location type"}
+                                                {resolvedLocation?.plantCode
+                                                    ? ` · ${resolvedLocation.plantCode}`
+                                                    : ""}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>{step.processCode || "-"}</Box>
+                                        <Box sx={tableCellSx}>{step.expectedYieldPercent ?? 100}</Box>
+                                        <Box
+                                            sx={{
+                                                ...tableCellSx,
+                                                display: "flex",
+                                                gap: .55,
+                                                alignItems: "center",
+                                                flexWrap: "nowrap",
+                                            }}
+                                        >
+                                            {canEdit && line ? (
+                                                <>
+                                                    <Button
+                                                        onClick={() => openRoute(line, step)}
+                                                        sx={{
+                                                            ...secondaryBtnSx,
+                                                            minWidth: 76,
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => deleteRoute(line, step)}
+                                                        sx={{
+                                                            ...dangerBtnSx,
+                                                            minWidth: 84,
+                                                            flexShrink: 0,
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Typography sx={subTextSx}>Read only</Typography>
+                                            )}
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
+                        </Box>
                     </Box>
                 </Card>
             </>}
-
             <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
                 <DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit BOM for Production Review" : action === "PRODUCTION_APPROVE" ? "Production Technical Approval" : action === "PRODUCTION_RETURN" ? "Production Return" : action === "DIRECTOR_APPROVE" ? "Director Final Approval" : action === "DIRECTOR_RETURN" ? "Director Return" : "Create BOM Revision"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}><TextField fullWidth multiline minRows={3} label={["PRODUCTION_RETURN", "DIRECTOR_RETURN"].includes(action) ? "Return Remarks *" : "Remarks"} value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={fieldSx} /></DialogContent>
@@ -1337,77 +1804,99 @@ export function MatFlowBomDetailPage() {
             </Dialog>
 
             <Dialog open={Boolean(routeDialog)} onClose={() => !working && setRouteDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Route Step" : "Add Route Step"}</DialogTitle>
-                <DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
-                    <TextField type="number" label="Sequence *" value={routeForm.sequenceNo} onChange={(e) => setRouteForm((c) => ({ ...c, sequenceNo: e.target.value }))} sx={fieldSx} />
-                    <TextField
-                        select
-                        label="Route Role *"
-                        value={routeForm.stepType}
-                        onChange={(e) => {
-                            const nextStepType = e.target.value;
-                            setRouteForm((current) => ({
-                                ...current,
-                                stepType: nextStepType,
-                                locationId: "",
-                                processCode:
-                                    nextStepType === "PROCESSING"
-                                        ? current.processCode
-                                        : "",
-                            }));
+                <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Material Route Step" : "Route Material"}</DialogTitle>
+                <DialogContent sx={dialogContentSx}>
+                    <Box
+                        sx={{
+                            mb: 1.25,
+                            p: 1,
+                            borderRadius: 1.6,
+                            border: "1px solid var(--mf-border)",
+                            background: "var(--mf-surface)",
                         }}
-                        sx={fieldSx}
                     >
-                        {routeTypeOptions.map((value) => (
-                            <MenuItem key={value} value={value}>
-                                {value === "PROCESSING" ? "Processing Option" : readable(value)}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-
-                    <TextField
-                        select
-                        label="Location *"
-                        value={routeForm.locationId}
-                        onChange={(e) =>
-                            setRouteForm((current) => ({
-                                ...current,
-                                locationId: e.target.value,
-                            }))
-                        }
-                        helperText={
-                            locationLoadError
-                                ? "Location Master could not be loaded."
-                                : routeLocationOptions.length === 0
-                                    ? `No active ${readable(routeForm.stepType)} location configured${["QC", "PRODUCTION"].includes(normalize(routeForm.stepType)) && projectPlantCode
-                                        ? ` for ${projectPlantCode}`
-                                        : ""
-                                    }.`
-                                    : `${routeLocationOptions.length} compatible location(s) available.`
-                        }
-                        sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                    >
-                        {routeLocationOptions.length === 0 ? (
-                            <MenuItem value="" disabled>
-                                {locationLoadError
-                                    ? "Unable to load locations"
-                                    : `No compatible ${readable(routeForm.stepType)} location configured`}
-                            </MenuItem>
-                        ) : (
-                            routeLocationOptions.map((location) => (
-                                <MenuItem key={location.id} value={location.id}>
-                                    {location.locationCode} · {location.locationName} · {location.plantCode}
-                                    {normalize(location.locationType) === "EXTERNAL_PROCESSOR"
-                                        ? " · External Processor"
-                                        : ""}
+                        <Typography sx={mainTextSx}>
+                            {routeDialog?.line?.materialCodeSnapshot ||
+                                routeDialog?.line?.materialCode ||
+                                routeDialog?.line?.materialNameSnapshot ||
+                                routeDialog?.line?.materialName ||
+                                "Material"}
+                        </Typography>
+                        <Typography sx={subTextSx}>
+                            BOM line {routeDialog?.line?.lineNo ?? "-"} · Configure the approved QC → optional Processing → Production route.
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
+                        <TextField type="number" label="Sequence *" value={routeForm.sequenceNo} onChange={(e) => setRouteForm((c) => ({ ...c, sequenceNo: e.target.value }))} sx={fieldSx} />
+                        <TextField
+                            select
+                            label="Route Role *"
+                            value={routeForm.stepType}
+                            onChange={(e) => {
+                                const nextStepType = e.target.value;
+                                setRouteForm((current) => ({
+                                    ...current,
+                                    stepType: nextStepType,
+                                    locationId: "",
+                                    processCode:
+                                        nextStepType === "PROCESSING"
+                                            ? current.processCode
+                                            : "",
+                                }));
+                            }}
+                            sx={fieldSx}
+                        >
+                            {routeTypeOptions.map((value) => (
+                                <MenuItem key={value} value={value}>
+                                    {value === "PROCESSING" ? "Processing Option" : readable(value)}
                                 </MenuItem>
-                            ))
-                        )}
-                    </TextField>
-                    {routeForm.stepType === "PROCESSING" && <TextField label="Process Code *" value={routeForm.processCode} onChange={(e) => setRouteForm((c) => ({ ...c, processCode: e.target.value }))} sx={fieldSx} />}
-                    <TextField type="number" label="Expected Yield %" value={routeForm.expectedYieldPercent} onChange={(e) => setRouteForm((c) => ({ ...c, expectedYieldPercent: e.target.value }))} sx={fieldSx} />
-                    <TextField multiline minRows={2} label="Remarks" value={routeForm.remarks} onChange={(e) => setRouteForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
-                </Box></DialogContent>
+                            ))}
+                        </TextField>
+
+                        <TextField
+                            select
+                            label="Location *"
+                            value={routeForm.locationId}
+                            onChange={(e) =>
+                                setRouteForm((current) => ({
+                                    ...current,
+                                    locationId: e.target.value,
+                                }))
+                            }
+                            helperText={
+                                locationLoadError
+                                    ? "Location Master could not be loaded."
+                                    : routeLocationOptions.length === 0
+                                        ? `No active ${readable(routeForm.stepType)} location configured${["QC", "PRODUCTION"].includes(normalize(routeForm.stepType)) && projectPlantCode
+                                            ? ` for ${projectPlantCode}`
+                                            : ""
+                                        }.`
+                                        : `${routeLocationOptions.length} compatible location(s) available.`
+                            }
+                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
+                        >
+                            {routeLocationOptions.length === 0 ? (
+                                <MenuItem value="" disabled>
+                                    {locationLoadError
+                                        ? "Unable to load locations"
+                                        : `No compatible ${readable(routeForm.stepType)} location configured`}
+                                </MenuItem>
+                            ) : (
+                                routeLocationOptions.map((location) => (
+                                    <MenuItem key={location.id} value={location.id}>
+                                        {location.locationCode} · {location.locationName} · {location.plantCode}
+                                        {normalize(location.locationType) === "EXTERNAL_PROCESSOR"
+                                            ? " · External Processor"
+                                            : ""}
+                                    </MenuItem>
+                                ))
+                            )}
+                        </TextField>
+                        {routeForm.stepType === "PROCESSING" && <TextField label="Process Code *" value={routeForm.processCode} onChange={(e) => setRouteForm((c) => ({ ...c, processCode: e.target.value }))} sx={fieldSx} />}
+                        <TextField type="number" label="Expected Yield %" value={routeForm.expectedYieldPercent} onChange={(e) => setRouteForm((c) => ({ ...c, expectedYieldPercent: e.target.value }))} sx={fieldSx} />
+                        <TextField multiline minRows={2} label="Remarks" value={routeForm.remarks} onChange={(e) => setRouteForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                    </Box>
+                </DialogContent>
                 <DialogActions sx={dialogActionsSx}><Button onClick={() => setRouteDialog(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={saveRoute} disabled={working} sx={primaryBtnSx}>Save Route</Button></DialogActions>
             </Dialog>
             <MatFlowDeleteDialog
