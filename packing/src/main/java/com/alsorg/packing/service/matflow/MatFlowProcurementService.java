@@ -15,6 +15,7 @@ import com.alsorg.packing.domain.matflow.MatFlowGoodsReceiptLine;
 import com.alsorg.packing.domain.matflow.MatFlowIndent;
 import com.alsorg.packing.domain.matflow.MatFlowIndentLine;
 import com.alsorg.packing.domain.matflow.MatFlowLocation;
+import com.alsorg.packing.domain.matflow.MatFlowMaterial;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.GoodsReceiptStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
@@ -23,6 +24,7 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcSourceType;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrderLine;
+import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.domain.matflow.MatFlowQcInspection;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
@@ -49,6 +51,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.Hibernate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -122,8 +125,11 @@ public class MatFlowProcurementService {
                 return purchaseOrderRepository
                                 .findAllByOrderByUpdatedAtDesc()
                                 .stream()
-                                .filter(order -> accessService.canAccessPlant(
-                                                order.deliveryLocation.getPlantCode()))
+                                .map(this::hydratePurchaseOrder)
+                                .filter(order -> order != null &&
+                                                order.deliveryLocation != null &&
+                                                accessService.canAccessPlant(
+                                                                order.deliveryLocation.getPlantCode()))
                                 .map(this::toPurchaseOrderResponse)
                                 .toList();
         }
@@ -210,30 +216,35 @@ public class MatFlowProcurementService {
                                                 "An indent line was selected more than once");
                         }
 
-                        MatFlowIndentLine indentLine = indentLineRepository
-                                        .findByIdAndIndent_Id(
-                                                        lineRequest.indentLineId(),
-                                                        indent.getId())
-                                        .orElseThrow(() -> badRequest(
-                                                        "Indent line does not belong to the selected indent"));
+                        MatFlowIndentLine indentLine = hydrateIndentLine(
+                                        indentLineRepository
+                                                        .findByIdAndIndent_Id(
+                                                                        lineRequest.indentLineId(),
+                                                                        indent.getId())
+                                                        .orElseThrow(() -> badRequest(
+                                                                        "Indent line does not belong to the selected indent")));
 
                         BigDecimal orderedQty = positive(
                                         lineRequest.orderedQty(),
                                         "Ordered quantity");
 
+                        BigDecimal requiredQty = requireIndentRequiredQuantity(
+                                        indentLine);
+
                         BigDecimal committed = committedOrderedQuantity(
                                         indentLine.getId(),
                                         null);
 
-                        BigDecimal remaining = indentLine.requiredQty
-                                        .subtract(committed);
+                        BigDecimal remaining = requiredQty
+                                        .subtract(committed)
+                                        .max(BigDecimal.ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
                         if (orderedQty.compareTo(
                                         remaining) > 0) {
                                 throw conflict(
                                                 "Ordered quantity exceeds the outstanding indent quantity for " +
-                                                                indentLine.material
-                                                                                .getMaterialCode());
+                                                                materialCode(indentLine.material));
                         }
 
                         MatFlowPurchaseOrderLine line = new MatFlowPurchaseOrderLine();
@@ -296,7 +307,10 @@ public class MatFlowProcurementService {
 
                 List<MatFlowPurchaseOrderLine> lines = purchaseOrderLineRepository
                                 .findByPurchaseOrder_IdOrderByCreatedAtAsc(
-                                                order.getId());
+                                                order.getId())
+                                .stream()
+                                .map(this::hydratePurchaseOrderLine)
+                                .toList();
 
                 if (lines.isEmpty()) {
                         throw badRequest(
@@ -304,19 +318,34 @@ public class MatFlowProcurementService {
                 }
 
                 for (MatFlowPurchaseOrderLine line : lines) {
+                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
+                                        line);
+
+                        BigDecimal orderedQty = positive(
+                                        line.orderedQty,
+                                        "PO line ordered quantity");
+
+                        BigDecimal requiredQty = requireIndentRequiredQuantity(
+                                        indentLine);
+
                         BigDecimal otherCommitted = committedOrderedQuantity(
-                                        line.indentLine.getId(),
+                                        indentLine.getId(),
                                         order.getId());
 
-                        BigDecimal available = line.indentLine.requiredQty
-                                        .subtract(otherCommitted);
+                        BigDecimal available = requiredQty
+                                        .subtract(otherCommitted)
+                                        .max(BigDecimal.ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
-                        if (line.orderedQty.compareTo(
+                        if (orderedQty.compareTo(
                                         available) > 0) {
                                 throw conflict(
                                                 "Outstanding indent quantity changed for material " +
-                                                                line.material
-                                                                                .getMaterialCode());
+                                                                materialCode(line.material) +
+                                                                ". Required=" + requiredQty +
+                                                                ", already committed=" + otherCommitted +
+                                                                ", this PO=" + orderedQty +
+                                                                ". Refresh Purchase and verify the shortage before approval.");
                         }
                 }
 
@@ -337,7 +366,18 @@ public class MatFlowProcurementService {
                 order = purchaseOrderRepository.save(order);
 
                 for (MatFlowPurchaseOrderLine line : lines) {
-                        MatFlowIndentLine indentLine = line.indentLine;
+                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
+                                        line);
+
+                        /*
+                         * If this row came from an older record where requiredQty was
+                         * genuinely null (rather than only hidden behind a Hibernate
+                         * proxy), requireIndentRequiredQuantity() repairs it from the
+                         * linked requisition shortage before we persist the approved
+                         * commitment.
+                         */
+                        indentLine.requiredQty = requireIndentRequiredQuantity(
+                                        indentLine);
 
                         indentLine.orderedQty = committedOrderedQuantity(
                                         indentLine.getId(),
@@ -372,7 +412,9 @@ public class MatFlowProcurementService {
                                                 "poNumber", order.poNumber,
                                                 "vendor", order.vendor == null ? null : order.vendor.vendorName,
                                                 "status", order.status,
-                                                "approvedBy", actor));
+                                                "approvedBy", actor,
+                                                "approvedAt", order.approvedAt,
+                                                "approvalRemarks", order.approvalRemarks));
 
                 return toPurchaseOrderResponse(order);
         }
@@ -623,10 +665,19 @@ public class MatFlowProcurementService {
         private BigDecimal committedOrderedQuantity(
                         UUID indentLineId,
                         UUID excludedOrderId) {
+                if (indentLineId == null) {
+                        return BigDecimal.ZERO.setScale(
+                                        3,
+                                        RoundingMode.HALF_UP);
+                }
+
                 return purchaseOrderLineRepository
                                 .findByIndentLine_Id(
                                                 indentLineId)
                                 .stream()
+                                .map(this::hydratePurchaseOrderLine)
+                                .filter(line -> line != null &&
+                                                line.purchaseOrder != null)
                                 .filter(line -> excludedOrderId == null ||
                                                 !line.purchaseOrder
                                                                 .getId()
@@ -646,25 +697,43 @@ public class MatFlowProcurementService {
                                                         .setScale(3, RoundingMode.HALF_UP);
                                 })
                                 .reduce(
-                                                BigDecimal.ZERO,
-                                                BigDecimal::add);
+                                                BigDecimal.ZERO.setScale(
+                                                                3,
+                                                                RoundingMode.HALF_UP),
+                                                BigDecimal::add)
+                                .setScale(
+                                                3,
+                                                RoundingMode.HALF_UP);
         }
 
         private void refreshIndentOrderingStatus(
-                        MatFlowIndent indent,
+                        MatFlowIndent rawIndent,
                         String actor) {
+                MatFlowIndent indent = hydrateIndent(
+                                rawIndent);
+
+                if (indent == null ||
+                                indent.getId() == null) {
+                        throw conflict(
+                                        "Purchase Order is not linked to a valid material indent");
+                }
+
                 List<MatFlowIndentLine> lines = indentLineRepository
                                 .findByIndent_IdOrderByCreatedAtAsc(
-                                                indent.getId());
+                                                indent.getId())
+                                .stream()
+                                .map(this::hydrateIndentLine)
+                                .toList();
 
                 boolean allOrdered = !lines.isEmpty() &&
                                 lines.stream()
-                                                .allMatch(line -> line.orderedQty
+                                                .allMatch(line -> scale(line.orderedQty)
                                                                 .compareTo(
-                                                                                line.requiredQty) >= 0);
+                                                                                requireIndentRequiredQuantity(
+                                                                                                line)) >= 0);
 
                 boolean anyOrdered = lines.stream()
-                                .anyMatch(line -> line.orderedQty
+                                .anyMatch(line -> scale(line.orderedQty)
                                                 .compareTo(
                                                                 BigDecimal.ZERO) > 0);
 
@@ -733,10 +802,16 @@ public class MatFlowProcurementService {
 
         private MatFlowPurchaseOrder requirePurchaseOrder(
                         UUID id) {
-                MatFlowPurchaseOrder order = purchaseOrderRepository
-                                .findById(id)
-                                .orElseThrow(() -> notFound(
-                                                "Purchase order not found"));
+                MatFlowPurchaseOrder order = hydratePurchaseOrder(
+                                purchaseOrderRepository
+                                                .findById(id)
+                                                .orElseThrow(() -> notFound(
+                                                                "Purchase order not found")));
+
+                if (order.deliveryLocation == null) {
+                        throw conflict(
+                                        "Purchase order delivery location is missing");
+                }
 
                 accessService.requirePlantAccess(
                                 order.deliveryLocation.getPlantCode());
@@ -809,25 +884,45 @@ public class MatFlowProcurementService {
         }
 
         private PurchaseOrderResponse toPurchaseOrderResponse(
-                        MatFlowPurchaseOrder order) {
+                        MatFlowPurchaseOrder rawOrder) {
+                MatFlowPurchaseOrder order = hydratePurchaseOrder(
+                                rawOrder);
+
+                if (order == null ||
+                                order.vendor == null ||
+                                order.indent == null ||
+                                order.deliveryLocation == null) {
+                        throw conflict(
+                                        "Purchase order header is incomplete");
+                }
+
                 List<PurchaseOrderLineResponse> lines = purchaseOrderLineRepository
                                 .findByPurchaseOrder_IdOrderByCreatedAtAsc(
                                                 order.getId())
                                 .stream()
-                                .map(line -> new PurchaseOrderLineResponse(
-                                                line.getId(),
-                                                line.indentLine
-                                                                .getId(),
-                                                line.material
-                                                                .getId(),
-                                                line.material
-                                                                .getMaterialCode(),
-                                                line.material
-                                                                .getMaterialName(),
-                                                line.orderedQty,
-                                                line.receivedQty,
-                                                line.uom,
-                                                line.getRowVersion()))
+                                .map(this::hydratePurchaseOrderLine)
+                                .map(line -> {
+                                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
+                                                        line);
+
+                                        if (line.material == null) {
+                                                throw conflict(
+                                                                "Purchase order line " +
+                                                                                line.getId() +
+                                                                                " has no material");
+                                        }
+
+                                        return new PurchaseOrderLineResponse(
+                                                        line.getId(),
+                                                        indentLine.getId(),
+                                                        line.material.getId(),
+                                                        line.material.getMaterialCode(),
+                                                        line.material.getMaterialName(),
+                                                        scale(line.orderedQty),
+                                                        scale(line.receivedQty),
+                                                        line.uom,
+                                                        line.getRowVersion());
+                                })
                                 .toList();
 
                 return new PurchaseOrderResponse(
@@ -931,6 +1026,203 @@ public class MatFlowProcurementService {
                 ledger.actor = actor;
 
                 ledgerRepository.save(ledger);
+        }
+
+        /*
+         * MatFlow entities expose public JPA backing fields. A Hibernate lazy
+         * proxy can therefore return a valid getId() while direct field access
+         * (for example indentLine.requiredQty or purchaseOrder.status) still
+         * reads the proxy's default null value. Always unwrap the Procurement
+         * associations before business arithmetic or response mapping.
+         */
+        private MatFlowPurchaseOrder hydratePurchaseOrder(
+                        MatFlowPurchaseOrder rawOrder) {
+                if (rawOrder == null) {
+                        return null;
+                }
+
+                MatFlowPurchaseOrder order = (MatFlowPurchaseOrder) Hibernate.unproxy(
+                                rawOrder);
+
+                if (order.vendor != null) {
+                        order.vendor = (MatFlowVendor) Hibernate.unproxy(
+                                        order.vendor);
+                }
+
+                if (order.indent != null) {
+                        order.indent = hydrateIndent(
+                                        order.indent);
+                }
+
+                if (order.deliveryLocation != null) {
+                        order.deliveryLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        order.deliveryLocation);
+                }
+
+                return order;
+        }
+
+        private MatFlowPurchaseOrderLine hydratePurchaseOrderLine(
+                        MatFlowPurchaseOrderLine rawLine) {
+                if (rawLine == null) {
+                        return null;
+                }
+
+                MatFlowPurchaseOrderLine line = (MatFlowPurchaseOrderLine) Hibernate.unproxy(
+                                rawLine);
+
+                if (line.purchaseOrder != null) {
+                        line.purchaseOrder = hydratePurchaseOrder(
+                                        line.purchaseOrder);
+                }
+
+                if (line.indentLine != null) {
+                        line.indentLine = hydrateIndentLine(
+                                        line.indentLine);
+                }
+
+                if (line.material != null) {
+                        line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                        line.material);
+                }
+
+                return line;
+        }
+
+        private MatFlowIndent hydrateIndent(
+                        MatFlowIndent rawIndent) {
+                if (rawIndent == null) {
+                        return null;
+                }
+
+                MatFlowIndent indent = (MatFlowIndent) Hibernate.unproxy(
+                                rawIndent);
+
+                if (indent.deliverToLocation != null) {
+                        indent.deliverToLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        indent.deliverToLocation);
+                }
+
+                /*
+                 * projectDrawing / requisition are accessed through getters in the
+                 * workflow below, so Hibernate can initialize them when needed.
+                 * We still unwrap requisition when present because Procurement
+                 * later reads it while refreshing the consolidated MatFlow state.
+                 */
+                if (indent.requisition != null) {
+                        indent.requisition = (com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition) Hibernate
+                                        .unproxy(indent.requisition);
+                }
+
+                return indent;
+        }
+
+        private MatFlowIndentLine hydrateIndentLine(
+                        MatFlowIndentLine rawLine) {
+                if (rawLine == null) {
+                        return null;
+                }
+
+                MatFlowIndentLine line = (MatFlowIndentLine) Hibernate.unproxy(
+                                rawLine);
+
+                if (line.indent != null) {
+                        line.indent = hydrateIndent(
+                                        line.indent);
+                }
+
+                if (line.material != null) {
+                        line.material = (MatFlowMaterial) Hibernate.unproxy(
+                                        line.material);
+                }
+
+                if (line.requisitionLine != null) {
+                        line.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                        line.requisitionLine);
+                }
+
+                return line;
+        }
+
+        private MatFlowIndentLine requirePurchaseOrderIndentLine(
+                        MatFlowPurchaseOrderLine rawLine) {
+                MatFlowPurchaseOrderLine line = hydratePurchaseOrderLine(
+                                rawLine);
+
+                if (line == null ||
+                                line.indentLine == null ||
+                                line.indentLine.getId() == null) {
+                        throw conflict(
+                                        "Purchase order line is not linked to a valid shortage indent line");
+                }
+
+                return line.indentLine;
+        }
+
+        private BigDecimal requireIndentRequiredQuantity(
+                        MatFlowIndentLine rawLine) {
+                MatFlowIndentLine line = hydrateIndentLine(
+                                rawLine);
+
+                if (line == null ||
+                                line.getId() == null) {
+                        throw conflict(
+                                        "Purchase order is linked to an invalid shortage indent line");
+                }
+
+                BigDecimal requiredQty = scale(
+                                line.requiredQty);
+
+                if (requiredQty.compareTo(
+                                BigDecimal.ZERO) > 0) {
+                        return requiredQty;
+                }
+
+                /*
+                 * Compatibility repair for older rows. Store creates an Indent
+                 * line from the linked requisition shortage, so the requisition
+                 * shortage is the only safe fallback if a historical requiredQty
+                 * is genuinely null. Do not infer from requestedQty or PO totals,
+                 * because that could silently authorize over-ordering.
+                 */
+                MatFlowRequisitionLine requisitionLine = line.requisitionLine == null
+                                ? null
+                                : (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                line.requisitionLine);
+
+                BigDecimal shortageQty = requisitionLine == null
+                                ? BigDecimal.ZERO
+                                : scale(
+                                                requisitionLine.shortageQty);
+
+                if (shortageQty.compareTo(
+                                BigDecimal.ZERO) > 0) {
+                        line.requiredQty = shortageQty;
+                        return shortageQty;
+                }
+
+                throw conflict(
+                                "Indent line " +
+                                                line.getId() +
+                                                " has no valid required quantity. Refresh the Store shortage/Indent before approving this PO.");
+        }
+
+        private String materialCode(
+                        MatFlowMaterial rawMaterial) {
+                if (rawMaterial == null) {
+                        return "UNKNOWN_MATERIAL";
+                }
+
+                MatFlowMaterial material = (MatFlowMaterial) Hibernate.unproxy(
+                                rawMaterial);
+
+                String code = clean(
+                                material.getMaterialCode());
+
+                return code == null
+                                ? String.valueOf(
+                                                material.getId())
+                                : code;
         }
 
         private BigDecimal positive(

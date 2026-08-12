@@ -1934,10 +1934,14 @@ export function MatFlowPurchasePage() {
 export function MatFlowPoApprovalPage() {
     const { hasRole } = useMatFlow();
     const canApprove = hasRole(APPROVAL_ROLES);
+
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState("");
     const [error, setError] = useState("");
+    const [approvalTarget, setApprovalTarget] = useState(null);
+    const [approvalRemarks, setApprovalRemarks] = useState("Approved for supplier placement.");
+    const [approvalError, setApprovalError] = useState("");
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1950,6 +1954,7 @@ export function MatFlowPoApprovalPage() {
                 )
             );
         } catch (requestError) {
+            setRows([]);
             setError(readMatFlowError(requestError, "Unable to load PO approvals."));
         } finally {
             setLoading(false);
@@ -1962,17 +1967,65 @@ export function MatFlowPoApprovalPage() {
 
     const approvalPagination = useMatFlowPagination(rows, 20);
 
-    const approve = async (row) => {
-        setWorking(String(row.id));
+    const counts = useMemo(() => {
+        const vendorIds = new Set(
+            rows.map((row) => row.vendorId || row.vendorCode).filter(Boolean)
+        );
+        return {
+            awaiting: rows.length,
+            lines: rows.reduce(
+                (sum, row) => sum + (Array.isArray(row.lines) ? row.lines.length : 0),
+                0
+            ),
+            vendors: vendorIds.size,
+        };
+    }, [rows]);
+
+    const openApproval = (row) => {
+        setApprovalTarget(row);
+        setApprovalRemarks("Approved for supplier placement.");
+        setApprovalError("");
         setError("");
+    };
+
+    const closeApproval = () => {
+        if (working) return;
+        setApprovalTarget(null);
+        setApprovalRemarks("Approved for supplier placement.");
+        setApprovalError("");
+    };
+
+    const approve = async () => {
+        const row = approvalTarget;
+        if (!row?.id) return;
+
+        if (row.rowVersion == null) {
+            setApprovalError(
+                "PO rowVersion is missing. Refresh the Approval page before approving."
+            );
+            return;
+        }
+
+        setWorking(String(row.id));
+        setApprovalError("");
+        setError("");
+
         try {
             await matflowApi.approvePurchaseOrder(row.id, {
                 rowVersion: row.rowVersion,
-                remarks: "Approved for placement.",
+                remarks: clean(approvalRemarks) || null,
             });
+
+            setApprovalTarget(null);
+            setApprovalRemarks("Approved for supplier placement.");
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to approve purchase order."));
+            setApprovalError(
+                readMatFlowError(
+                    requestError,
+                    "Unable to approve purchase order."
+                )
+            );
         } finally {
             setWorking("");
         }
@@ -1983,40 +2036,157 @@ export function MatFlowPoApprovalPage() {
             <PageHero
                 badge="COMMERCIAL APPROVAL"
                 title="Purchase Order Approvals"
-                subtitle="Purchase creates Draft POs; Manager/Director/Admin independently approves them for placement. Deletion remains owned by the Purchase creation desk."
-                actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>}
+                subtitle="Independent commercial approval desk. Review the Vendor, shortage Indent, locked delivery destination and material quantities before releasing a Draft PO to the supplier."
+                actions={
+                    <Button
+                        startIcon={<RefreshIcon />}
+                        onClick={load}
+                        disabled={loading || Boolean(working)}
+                        sx={secondaryBtnSx}
+                    >
+                        Refresh
+                    </Button>
+                }
             />
+
             <ErrorBox>{error}</ErrorBox>
+
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                        xs: "1fr",
+                        sm: "repeat(3,minmax(0,1fr))",
+                    },
+                    gap: 1,
+                }}
+            >
+                <SummaryCard
+                    label="Awaiting Approval"
+                    value={counts.awaiting}
+                    tone="amber"
+                    colorful
+                />
+                <SummaryCard
+                    label="Material Lines"
+                    value={counts.lines}
+                    tone="indigo"
+                    colorful
+                />
+                <SummaryCard
+                    label="Vendors Represented"
+                    value={counts.vendors}
+                    tone="blue"
+                    colorful
+                />
+            </Box>
+
             <Card sx={panelSx}>
+                <Box sx={{ mb: 1 }}>
+                    <Typography sx={{ fontSize: 17, fontWeight: 950 }}>
+                        Draft PO Approval Queue
+                    </Typography>
+                    <Typography sx={subTextSx}>
+                        Approval changes the PO from Draft to Placed. The backend
+                        independently re-validates the shortage commitment and Plant
+                        access before release.
+                    </Typography>
+                </Box>
+
                 {loading ? (
                     <LoadingBlock />
                 ) : (
-                    <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 180px 170px 100px 130px" }}>
-                            {["PO", "Vendor", "Indent", "Delivery", "Lines", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                    <Box sx={{ ...tableShellSx, overflowX: "auto" }}>
+                        <Box
+                            sx={{
+                                ...tableHeaderSx,
+                                minWidth: 980,
+                                gridTemplateColumns:
+                                    "170px 190px 170px 175px 90px 150px",
+                            }}
+                        >
+                            {[
+                                "PO",
+                                "Vendor",
+                                "Indent",
+                                "Delivery",
+                                "Lines",
+                                "Approval",
+                            ].map((heading) => (
+                                <Box key={heading} sx={tableCellSx}>
+                                    {heading}
+                                </Box>
+                            ))}
                         </Box>
+
                         {rows.length === 0 ? (
-                            <EmptyState>No Draft purchase orders are awaiting approval.</EmptyState>
+                            <EmptyState>
+                                No Draft purchase orders are awaiting approval.
+                            </EmptyState>
                         ) : (
                             approvalPagination.pageItems.map((row) => (
-                                <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 180px 170px 100px 130px" }}>
-                                    <Box sx={tableCellSx}>{row.poNumber}</Box>
-                                    <Box sx={tableCellSx}>{row.vendorName}</Box>
-                                    <Box sx={tableCellSx}>{row.indentNumber}</Box>
-                                    <Box sx={tableCellSx}>{row.deliveryLocationCode}</Box>
-                                    <Box sx={tableCellSx}>{row.lines?.length || 0}</Box>
+                                <Box
+                                    key={row.id}
+                                    sx={{
+                                        ...tableRowSx,
+                                        minWidth: 980,
+                                        gridTemplateColumns:
+                                            "170px 190px 170px 175px 90px 150px",
+                                    }}
+                                >
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>
+                                            {row.poNumber || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {formatDate(row.poDate)}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>
+                                            {row.vendorName || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.vendorCode || "-"}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        {row.indentNumber || "-"}
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>
+                                            {row.deliveryLocationCode || "-"}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>
+                                            {row.deliveryPlantCode || "-"}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        {row.lines?.length || 0}
+                                    </Box>
                                     <Box sx={tableCellSx}>
                                         {canApprove ? (
-                                            <Button startIcon={<ApprovalOutlinedIcon />} disabled={working === String(row.id)} onClick={() => approve(row)} sx={primaryBtnSx}>
-                                                Approve
+                                            <Button
+                                                startIcon={<ApprovalOutlinedIcon />}
+                                                disabled={
+                                                    Boolean(working) ||
+                                                    row.rowVersion == null
+                                                }
+                                                onClick={() => openApproval(row)}
+                                                sx={primaryBtnSx}
+                                            >
+                                                Review & Approve
                                             </Button>
-                                        ) : "-"}
+                                        ) : (
+                                            "-"
+                                        )}
                                     </Box>
                                 </Box>
                             ))
                         )}
                     </Box>
                 )}
+
                 {!loading && (
                     <MatFlowPagination
                         {...approvalPagination}
@@ -2026,6 +2196,159 @@ export function MatFlowPoApprovalPage() {
                     />
                 )}
             </Card>
+
+            <Dialog
+                open={Boolean(approvalTarget)}
+                onClose={closeApproval}
+                fullWidth
+                maxWidth="md"
+                PaperProps={{ sx: dialogPaperSx }}
+            >
+                <DialogTitle sx={dialogTitleSx}>
+                    Review & Approve Purchase Order
+                </DialogTitle>
+
+                <DialogContent sx={dialogContentSx}>
+                    {approvalError && (
+                        <Box sx={{ mb: 1.2 }}>
+                            <ErrorBox>{approvalError}</ErrorBox>
+                        </Box>
+                    )}
+
+                    <Typography sx={{ ...subTextSx, mb: 1.2 }}>
+                        This action places the PO and commits its quantities against
+                        the shortage Indent. MatFlow will re-check outstanding
+                        quantity, row version, Plant authorization and procurement
+                        lineage on the backend before approval.
+                    </Typography>
+
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: {
+                                xs: "1fr",
+                                sm: "repeat(2,minmax(0,1fr))",
+                                lg: "repeat(4,minmax(0,1fr))",
+                            },
+                            gap: .8,
+                            mb: 1.3,
+                        }}
+                    >
+                        {[
+                            ["PO", approvalTarget?.poNumber || "-"],
+                            ["Vendor", approvalTarget?.vendorName || "-"],
+                            ["Indent", approvalTarget?.indentNumber || "-"],
+                            [
+                                "Delivery",
+                                `${approvalTarget?.deliveryLocationCode || "-"}${approvalTarget?.deliveryPlantCode
+                                    ? ` · ${approvalTarget.deliveryPlantCode}`
+                                    : ""
+                                }`,
+                            ],
+                        ].map(([label, value]) => (
+                            <Box
+                                key={label}
+                                sx={{
+                                    p: .9,
+                                    border: "1px solid var(--mf-border)",
+                                    borderRadius: 1.5,
+                                    background: "var(--mf-surface)",
+                                }}
+                            >
+                                <Typography
+                                    sx={{
+                                        ...subTextSx,
+                                        fontSize: 9,
+                                        textTransform: "uppercase",
+                                        letterSpacing: ".07em",
+                                    }}
+                                >
+                                    {label}
+                                </Typography>
+                                <Typography sx={mainTextSx}>{value}</Typography>
+                            </Box>
+                        ))}
+                    </Box>
+
+                    <Box sx={{ ...tableShellSx, overflowX: "auto", mb: 1.3 }}>
+                        <Box
+                            sx={{
+                                ...tableHeaderSx,
+                                minWidth: 680,
+                                gridTemplateColumns:
+                                    "160px minmax(220px,1fr) 140px 100px",
+                            }}
+                        >
+                            {["Material", "Name", "Ordered Qty", "UOM"].map(
+                                (heading) => (
+                                    <Box key={heading} sx={tableCellSx}>
+                                        {heading}
+                                    </Box>
+                                )
+                            )}
+                        </Box>
+
+                        {(approvalTarget?.lines || []).map((line) => (
+                            <Box
+                                key={line.id}
+                                sx={{
+                                    ...tableRowSx,
+                                    minWidth: 680,
+                                    gridTemplateColumns:
+                                        "160px minmax(220px,1fr) 140px 100px",
+                                }}
+                            >
+                                <Box sx={tableCellSx}>
+                                    {line.materialCode || "-"}
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    {line.materialName || "-"}
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    {formatQty(line.orderedQty)}
+                                </Box>
+                                <Box sx={tableCellSx}>{line.uom || "-"}</Box>
+                            </Box>
+                        ))}
+                    </Box>
+
+                    <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Approval Remarks / Reason"
+                        value={approvalRemarks}
+                        onChange={(event) => {
+                            setApprovalRemarks(event.target.value);
+                            setApprovalError("");
+                        }}
+                        disabled={Boolean(working)}
+                        sx={fieldSx}
+                    />
+                </DialogContent>
+
+                <DialogActions sx={dialogActionsSx}>
+                    <Button
+                        onClick={closeApproval}
+                        disabled={Boolean(working)}
+                        sx={secondaryBtnSx}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        startIcon={<ApprovalOutlinedIcon />}
+                        onClick={approve}
+                        disabled={
+                            Boolean(working) ||
+                            !approvalTarget?.id ||
+                            approvalTarget?.rowVersion == null
+                        }
+                        sx={primaryBtnSx}
+                    >
+                        {working ? "Approving…" : "Approve & Place PO"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
