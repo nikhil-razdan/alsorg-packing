@@ -11,16 +11,25 @@ import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import AnalyticsOutlinedIcon from "@mui/icons-material/AnalyticsOutlined";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import {
     MATFLOW_ROLES, useMatFlow, ErrorBox, EmptyState, LoadingBlock,
     MATFLOW_MATERIAL_CATEGORIES, MatFlowStatusChip, MatFlowPagination, PageHero, clean,
     dialogActionsSx, dialogContentSx, dialogPaperSx, dialogTitleSx, fieldSx,
-    formatDate, mainTextSx, normalize, pageSx, panelSx, primaryBtnSx, secondaryBtnSx, SummaryCard,
+    formatDate, formatQty, mainTextSx, normalize, pageSx, panelSx, primaryBtnSx, secondaryBtnSx, SummaryCard,
     subTextSx, tableCellSx, tableHeaderSx, tableRowSx, tableShellSx,
     useMatFlowPagination,
 } from "../matflowUi";
 import { useNavigate } from "react-router-dom";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
+import {
+    downloadMatFlowExcel,
+    downloadMaterialImportTemplate,
+    parseMaterialImportWorkbook,
+} from "../matflowExcel";
 
 const FALLBACK_LOCATION_TYPES = ["STORE", "PRODUCTION", "PROCESSING", "QC", "TRANSIT", "EXTERNAL_PROCESSOR", "SUPPLIER"];
 const FALLBACK_OWNERSHIP_TYPES = ["INTERNAL", "EXTERNAL"];
@@ -515,6 +524,7 @@ function MasterPage({ type }) {
         <PageHero badge={type === "projects" ? "PROJECT / PRODUCT APPROVAL" : "MATFLOW MASTER DATA"} title={title}
             subtitle={type === "projects" ? "Create one or more products/drawings under a client project. Director approval is mandatory before Engineering can create its operational BOM." : type === "materials" ? "Maintain standardized material records and open the Material Control Tower to trace current custody, prior locations, next hand-off and time spent at every stage." : "Maintain MatFlow operational reference data."}
             actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                {type === "locations" && <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Locations", sheetName: "Locations", title: "MatFlow Material Locations", rows })} sx={secondaryBtnSx}>Export Excel</Button>}
                 {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl()} sx={secondaryBtnSx}>Planning Stock Control</Button>}
                 {canManage && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>{type === "projects" ? "Add Product" : "Add"}</Button>}
             </Box>} />
@@ -1036,6 +1046,7 @@ export function MatFlowProjectsPage() {
                 subtitle="A clean Project → Product / Drawing administration workspace. Projects stay compact until you explicitly open one; Director approval and BOM hand-off remain attached to the exact Product / Drawing record."
                 actions={
                     <>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Projects_Products", sheetName: "Projects Products", title: "MatFlow Projects & Products", rows: filteredRows })} sx={secondaryBtnSx}>Export Excel</Button>
                         <Button
                             startIcon={<TrackChangesOutlinedIcon />}
                             onClick={() => navigate("/matflow/tracker")}
@@ -1660,5 +1671,474 @@ export function MatFlowProjectsPage() {
     );
 }
 
-export const MatFlowMaterialsPage = () => <MasterPage type="materials" />;
+
+function MaterialInventoryPage() {
+    const navigate = useNavigate();
+    const { hasRole } = useMatFlow();
+    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
+    const canManageStock = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
+
+    const [rows, setRows] = useState([]);
+    const [consumptions, setConsumptions] = useState([]);
+    const [stockRows, setStockRows] = useState([]);
+    const [requisitions, setRequisitions] = useState([]);
+    const [portfolio, setPortfolio] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [search, setSearch] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("");
+    const [plantFilter, setPlantFilter] = useState("");
+    const [dialog, setDialog] = useState(null);
+    const [form, setForm] = useState({ ...emptyMaterial });
+    const [insightMaterial, setInsightMaterial] = useState(null);
+
+    const [importOpen, setImportOpen] = useState(false);
+    const [importFile, setImportFile] = useState(null);
+    const [importRows, setImportRows] = useState([]);
+    const [importWorking, setImportWorking] = useState(false);
+    const [importSummary, setImportSummary] = useState(null);
+    const [importDefaults, setImportDefaults] = useState({ category: "HARDWARE", uom: "PCS", codePrefix: "MAT" });
+
+    const [stockDialog, setStockDialog] = useState(false);
+    const [stockSaving, setStockSaving] = useState(false);
+    const [stockLocations, setStockLocations] = useState([]);
+    const [stockBalance, setStockBalance] = useState(null);
+    const [stockForm, setStockForm] = useState({ materialId: "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const [materialResponse, consumptionResponse, stockResponse, requisitionResponse, portfolioResponse] = await Promise.all([
+                matflowApi.listMaterials({}),
+                matflowApi.listConsumptions(),
+                matflowApi.listStock({}),
+                matflowApi.listRequisitions(),
+                matflowApi.listProjectPortfolio({ active: undefined }),
+            ]);
+            setRows(extractMatFlowPage(materialResponse?.data).rows);
+            setConsumptions(Array.isArray(consumptionResponse?.data) ? consumptionResponse.data : []);
+            setStockRows(Array.isArray(stockResponse?.data) ? stockResponse.data : extractMatFlowPage(stockResponse?.data).rows);
+            setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : extractMatFlowPage(requisitionResponse?.data).rows);
+            setPortfolio(Array.isArray(portfolioResponse?.data) ? portfolioResponse.data : []);
+        } catch (requestError) {
+            setRows([]); setConsumptions([]); setStockRows([]); setRequisitions([]); setPortfolio([]);
+            setError(readMatFlowError(requestError, "Unable to load the global Material Inventory."));
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const categories = useMemo(() => Array.from(new Set(rows.map((row) => normalize(row.category)).filter(Boolean))).sort(), [rows]);
+    const plants = useMemo(() => Array.from(new Set([
+        ...stockRows.map((row) => clean(row.plantCode)),
+        ...consumptions.map((row) => clean(row.productionPlantCode)),
+    ].filter(Boolean))).sort(), [stockRows, consumptions]);
+
+    const requisitionById = useMemo(() => {
+        const map = new Map();
+        requisitions.forEach((row) => {
+            if (row?.id) map.set(String(row.id), row);
+        });
+        return map;
+    }, [requisitions]);
+
+    const productById = useMemo(() => {
+        const map = new Map();
+        portfolio.forEach((project) => {
+            (Array.isArray(project?.products) ? project.products : []).forEach((product) => {
+                if (!product?.id) return;
+                map.set(String(product.id), {
+                    ...product,
+                    projectCode: project.projectCode || product.projectCode || "",
+                    projectName: project.projectName || "",
+                    clientName: project.clientName || "",
+                });
+            });
+        });
+        return map;
+    }, [portfolio]);
+
+    const consumptionByCode = useMemo(() => {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const map = new Map();
+        consumptions.forEach((consumption) => {
+            if (plantFilter && clean(consumption.productionPlantCode) !== plantFilter) return;
+            const at = consumption?.consumedAt ? new Date(consumption.consumedAt) : null;
+            const lines = Array.isArray(consumption?.lines) ? consumption.lines : [];
+            lines.forEach((line) => {
+                const code = upperCode(line?.materialCode);
+                if (!code) return;
+                const quantity = Number(line?.consumedQty || 0);
+                if (!Number.isFinite(quantity)) return;
+                const current = map.get(code) || {
+                    today: 0, week: 0, month: 0, lifetime: 0, events: 0,
+                    lastConsumedAt: null, lastConsumedBy: "", daily: new Map(), byProject: new Map(),
+                };
+                current.lifetime += quantity;
+                current.events += 1;
+                if (at && !Number.isNaN(at.getTime())) {
+                    if (at >= todayStart) current.today += quantity;
+                    if (at >= weekStart) current.week += quantity;
+                    if (at >= monthStart) current.month += quantity;
+                    const dayKey = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+                    current.daily.set(dayKey, (current.daily.get(dayKey) || 0) + quantity);
+                    if (!current.lastConsumedAt || at > new Date(current.lastConsumedAt)) {
+                        current.lastConsumedAt = consumption.consumedAt;
+                        current.lastConsumedBy = consumption.consumedBy || "";
+                    }
+                    const requisition = requisitionById.get(String(consumption.requisitionId || ""));
+                    const product = requisition?.projectDrawingId
+                        ? productById.get(String(requisition.projectDrawingId))
+                        : null;
+                    const scopeKey = requisition?.projectDrawingId || `${requisition?.projectCode || "UNASSIGNED"}:${requisition?.drawingNo || "-"}`;
+                    const scope = current.byProject.get(String(scopeKey)) || {
+                        projectCode: product?.projectCode || requisition?.projectCode || "-",
+                        projectName: product?.projectName || "",
+                        clientName: product?.clientName || "",
+                        productName: product?.productName || "",
+                        drawingNo: product?.drawingNo || requisition?.drawingNo || "-",
+                        quantity: 0,
+                        events: 0,
+                    };
+                    scope.quantity += quantity;
+                    scope.events += 1;
+                    current.byProject.set(String(scopeKey), scope);
+                }
+                map.set(code, current);
+            });
+        });
+        return map;
+    }, [consumptions, plantFilter, requisitionById, productById]);
+
+    const stockByMaterial = useMemo(() => {
+        const map = new Map();
+        stockRows.forEach((row) => {
+            if (plantFilter && clean(row.plantCode) !== plantFilter) return;
+            const key = String(row.materialId || "");
+            if (!key) return;
+            const current = map.get(key) || { onHand: 0, reserved: 0, blocked: 0, available: 0, locations: 0 };
+            current.onHand += Number(row.onHandQty || 0);
+            current.reserved += Number(row.reservedQty || 0);
+            current.blocked += Number(row.blockedQty || 0);
+            current.available += Number(row.availableQty || 0);
+            current.locations += 1;
+            map.set(key, current);
+        });
+        return map;
+    }, [stockRows, plantFilter]);
+
+    const visibleRows = useMemo(() => {
+        const term = clean(search).toLowerCase();
+        return rows.filter((row) => {
+            if (categoryFilter && normalize(row.category) !== categoryFilter) return false;
+            if (!term) return true;
+            return [row.materialName, row.materialCode, row.category, row.uom, row.specification, row.preferredSupplier]
+                .some((value) => clean(value).toLowerCase().includes(term));
+        }).sort((left, right) =>
+            clean(left.materialName).localeCompare(clean(right.materialName), undefined, { sensitivity: "base" }) ||
+            clean(left.materialCode).localeCompare(clean(right.materialCode), undefined, { sensitivity: "base" })
+        );
+    }, [rows, search, categoryFilter]);
+    const pagination = useMatFlowPagination(visibleRows, 20);
+
+    const consumedMaterialCount = useMemo(() => Array.from(consumptionByCode.values()).filter((value) => value.month > 0).length, [consumptionByCode]);
+    const lowStockCount = useMemo(() => rows.filter((row) => {
+        const stock = stockByMaterial.get(String(row.id));
+        return stock && Number(row.reorderLevel || 0) > 0 && stock.available <= Number(row.reorderLevel || 0);
+    }).length, [rows, stockByMaterial]);
+    const activeCount = rows.filter((row) => row.active !== false).length;
+    const topConsumed = useMemo(() => rows.map((row) => ({ row, stats: consumptionByCode.get(upperCode(row.materialCode)) }))
+        .filter((entry) => entry.stats?.month > 0)
+        .sort((a, b) => b.stats.month - a.stats.month)[0] || null, [rows, consumptionByCode]);
+
+    const openCreate = () => { setDialog({ row: null }); setForm({ ...emptyMaterial }); setError(""); };
+    const openEdit = (row) => {
+        setDialog({ row });
+        setForm({
+            materialCode: row.materialCode || "", materialName: row.materialName || "", category: row.category || "",
+            specification: row.specification || "", uom: row.uom || "", preferredSupplier: row.preferredSupplier || "",
+            minimumStock: String(row.minimumStock ?? 0), reorderLevel: String(row.reorderLevel ?? 0), active: row.active !== false,
+        });
+        setError("");
+    };
+    const save = async () => {
+        if (![form.materialCode, form.materialName, form.category, form.uom].every((value) => clean(value))) {
+            setError("Material name, code, category and UOM are required."); return;
+        }
+        setSaving(true); setError("");
+        const body = {
+            materialCode: upperCode(form.materialCode), materialName: clean(form.materialName), category: normalize(form.category),
+            specification: clean(form.specification) || null, uom: upperCode(form.uom), preferredSupplier: clean(form.preferredSupplier) || null,
+            minimumStock: Number(form.minimumStock || 0), reorderLevel: Number(form.reorderLevel || 0), active: form.active !== false,
+            rowVersion: dialog?.row?.rowVersion ?? null,
+        };
+        try {
+            if (dialog?.row?.id) await matflowApi.updateMaterial(dialog.row.id, body); else await matflowApi.createMaterial(body);
+            setDialog(null); await load();
+        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to save material.")); }
+        finally { setSaving(false); }
+    };
+
+    const analyzeImportFile = async (file = importFile) => {
+        if (!file) return;
+        setImportWorking(true); setImportSummary(null); setError("");
+        try { setImportRows(await parseMaterialImportWorkbook(file, importDefaults)); }
+        catch (requestError) { setImportRows([]); setError(requestError?.message || "Unable to analyze the material Excel file."); }
+        finally { setImportWorking(false); }
+    };
+
+    const importMaterials = async () => {
+        if (!importRows.length) return;
+        setImportWorking(true); setImportSummary(null); setError("");
+        const existingCodes = new Set(rows.map((row) => upperCode(row.materialCode)));
+        const existingNames = new Set(rows.map((row) => clean(row.materialName).toLowerCase()));
+        let imported = 0, skipped = 0, failed = 0;
+        const failures = [];
+        for (const material of importRows) {
+            const code = upperCode(material.materialCode);
+            const name = clean(material.materialName).toLowerCase();
+            if (existingCodes.has(code) || existingNames.has(name)) { skipped += 1; continue; }
+            try {
+                await matflowApi.createMaterial({
+                    materialCode: code, materialName: clean(material.materialName), category: normalize(material.category),
+                    specification: clean(material.specification) || null, uom: upperCode(material.uom),
+                    preferredSupplier: clean(material.preferredSupplier) || null,
+                    minimumStock: Number(material.minimumStock || 0), reorderLevel: Number(material.reorderLevel || 0), active: true, rowVersion: null,
+                });
+                imported += 1; existingCodes.add(code); existingNames.add(name);
+            } catch (requestError) {
+                failed += 1;
+                if (failures.length < 5) failures.push(`${material.materialName}: ${readMatFlowError(requestError, "Import failed")}`);
+            }
+        }
+        setImportSummary({ imported, skipped, failed, failures });
+        setImportWorking(false);
+        await load();
+    };
+
+    const exportCatalogue = () => downloadMatFlowExcel({
+        fileName: "ALSORG_Global_Material_Inventory",
+        sheetName: "Material Inventory",
+        title: "ALSORG Global Material Inventory",
+        subtitle: "Master data + physical stock + actual Production consumption",
+        metadata: [plantFilter ? `Plant ${plantFilter}` : "All authorized plants", `${visibleRows.length} material(s)`],
+        rows: visibleRows,
+        columns: [
+            { key: "materialName", label: "Material Name" }, { key: "materialCode", label: "Material Code" },
+            { key: "category", label: "Category" }, { key: "uom", label: "UOM" }, { key: "specification", label: "Specification" },
+            { key: "preferredSupplier", label: "Preferred Supplier / Brand" },
+            { key: "onHand", label: "On Hand", value: (row) => stockByMaterial.get(String(row.id))?.onHand || 0 },
+            { key: "reserved", label: "Reserved", value: (row) => stockByMaterial.get(String(row.id))?.reserved || 0 },
+            { key: "blocked", label: "Blocked", value: (row) => stockByMaterial.get(String(row.id))?.blocked || 0 },
+            { key: "available", label: "Available", value: (row) => stockByMaterial.get(String(row.id))?.available || 0 },
+            { key: "today", label: "Consumed Today", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.today || 0 },
+            { key: "week", label: "Consumed Last 7 Days", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.week || 0 },
+            { key: "month", label: "Consumed This Month", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.month || 0 },
+            { key: "lifetime", label: "Consumed Lifetime", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.lifetime || 0 },
+            { key: "minimumStock", label: "Minimum Stock" }, { key: "reorderLevel", label: "Reorder Level" },
+            { key: "active", label: "Active" },
+        ],
+    });
+
+    const openStockControl = async (material) => {
+        if (!canManageStock) return;
+        setStockSaving(true); setError("");
+        try {
+            const locationResponse = await matflowApi.listLocations({ active: true });
+            const locations = extractMatFlowPage(locationResponse?.data).rows.filter((location) =>
+                location?.active !== false && location?.supportsStock !== false && PLANNING_STOCK_LOCATION_TYPES.has(normalize(location.locationType))
+            );
+            setStockLocations(locations);
+            setStockBalance(null);
+            setStockForm({ materialId: material?.id || "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
+            setStockDialog(true);
+        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to open stock control.")); }
+        finally { setStockSaving(false); }
+    };
+
+    useEffect(() => {
+        if (!stockDialog || !stockForm.materialId || !stockForm.locationId) { setStockBalance(null); return; }
+        let cancelled = false;
+        matflowApi.listStock({ materialId: stockForm.materialId, locationId: stockForm.locationId }).then((response) => {
+            if (cancelled) return;
+            const balances = Array.isArray(response?.data) ? response.data : extractMatFlowPage(response?.data).rows;
+            const balance = balances.find((row) => String(row.materialId) === String(stockForm.materialId) && String(row.locationId) === String(stockForm.locationId)) || null;
+            setStockBalance(balance);
+            setStockForm((current) => ({ ...current, targetAvailableQty: String(Number(balance?.availableQty || 0)), remarks: current.remarks || "Verified physical stock correction." }));
+        }).catch((requestError) => !cancelled && setError(readMatFlowError(requestError, "Unable to load stock balance.")));
+        return () => { cancelled = true; };
+    }, [stockDialog, stockForm.materialId, stockForm.locationId]);
+
+    const saveStock = async () => {
+        const desired = Number(stockForm.targetAvailableQty);
+        if (!stockForm.locationId || !Number.isFinite(desired) || desired < 0 || !clean(stockForm.remarks)) {
+            setError("Location, Desired Available Qty and Reason are required."); return;
+        }
+        const current = Number(stockBalance?.availableQty || 0);
+        const adjustmentQty = desired - current;
+        if (Math.abs(adjustmentQty) < 0.0005) { setStockDialog(false); return; }
+        setStockSaving(true); setError("");
+        try {
+            await matflowApi.adjustStock({
+                materialId: stockForm.materialId, locationId: stockForm.locationId, adjustmentQty,
+                batchNo: clean(stockForm.batchNo) || null, remarks: clean(stockForm.remarks), rowVersion: stockBalance?.rowVersion ?? null
+            });
+            setStockDialog(false); await load();
+        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to update verified stock.")); }
+        finally { setStockSaving(false); }
+    };
+
+    const selectedStats = insightMaterial ? consumptionByCode.get(upperCode(insightMaterial.materialCode)) || {} : {};
+    const selectedStock = insightMaterial ? stockByMaterial.get(String(insightMaterial.id)) || {} : {};
+    const selectedDaily = selectedStats.daily instanceof Map
+        ? Array.from(selectedStats.daily.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-30)
+        : [];
+    const selectedProjectConsumption = selectedStats.byProject instanceof Map
+        ? Array.from(selectedStats.byProject.values()).sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0))
+        : [];
+    const maxDaily = Math.max(1, ...selectedDaily.map(([, qty]) => Number(qty || 0)));
+
+    return <Box sx={pageSx}>
+        <PageHero
+            badge="GLOBAL MATERIAL INVENTORY"
+            title="Material Master · Consumption & Insights"
+            subtitle="One canonical ALSORG material catalogue for operational BOMs, Store/QC stock, Processing and material tracking. Material Name is primary; actual Production consumption drives daily, weekly, monthly and lifetime insights."
+            actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                <Button startIcon={<FileDownloadOutlinedIcon />} onClick={exportCatalogue} sx={secondaryBtnSx}>Export Excel</Button>
+                {canManage && <Button startIcon={<DescriptionOutlinedIcon />} onClick={downloadMaterialImportTemplate} sx={secondaryBtnSx}>Import Template</Button>}
+                {canManage && <Button startIcon={<FileUploadOutlinedIcon />} onClick={() => { setImportOpen(true); setImportSummary(null); }} sx={secondaryBtnSx}>Import Excel</Button>}
+                {canManage && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>Add Material</Button>}
+            </Box>}
+        />
+        <ErrorBox>{error}</ErrorBox>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(155px,1fr))", gap: 1 }}>
+            <SummaryCard label="Catalogue Materials" value={rows.length} tone="blue" colorful />
+            <SummaryCard label="Active Materials" value={activeCount} tone="green" colorful />
+            <SummaryCard label="Consumed This Month" value={`${consumedMaterialCount} material(s)`} tone="purple" colorful />
+            <SummaryCard label="Reorder / Low Stock" value={lowStockCount} tone={lowStockCount ? "red" : "green"} colorful />
+            <SummaryCard label="Top Monthly Material" value={topConsumed ? `${topConsumed.row.materialName}` : "No consumption"} tone="amber" colorful />
+        </Box>
+
+        <Card sx={panelSx}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(220px,1fr) 190px 190px auto" }, gap: 1, alignItems: "center" }}>
+                <TextField label="Search material name, code, category, specification or supplier" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
+                <TextField select label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} sx={fieldSx}>
+                    <MenuItem value="">All Categories</MenuItem>{categories.map((category) => <MenuItem key={category} value={category}>{readableLocationType(category)}</MenuItem>)}
+                </TextField>
+                <TextField select label="Consumption / Stock Plant" value={plantFilter} onChange={(e) => setPlantFilter(e.target.value)} sx={fieldSx}>
+                    <MenuItem value="">All Authorized Plants</MenuItem>{plants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
+                </TextField>
+                <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+            </Box>
+        </Card>
+
+        <Card sx={panelSx}>
+            {loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
+                <Box sx={{ ...tableHeaderSx, minWidth: 1360, gridTemplateColumns: "minmax(260px,1.5fr) 135px 90px 180px 150px 150px 150px 145px 265px" }}>
+                    {["Material Name / Code", "Category", "UOM", "Stock Position", "Today", "Last 7 Days", "This Month", "Lifetime", "Actions"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                </Box>
+                {visibleRows.length === 0 ? <EmptyState>No materials match the current filters.</EmptyState> : pagination.pageItems.map((row) => {
+                    const stats = consumptionByCode.get(upperCode(row.materialCode)) || {};
+                    const stock = stockByMaterial.get(String(row.id)) || {};
+                    return <Box key={row.id} sx={{ ...tableRowSx, minWidth: 1360, gridTemplateColumns: "minmax(260px,1.5fr) 135px 90px 180px 150px 150px 150px 145px 265px" }}>
+                        <Box sx={tableCellSx}><Typography sx={{ ...mainTextSx, fontSize: 13.5 }}>{row.materialName || "-"}</Typography><Typography sx={subTextSx}>{row.materialCode || "-"}{row.specification ? ` · ${row.specification}` : ""}</Typography></Box>
+                        <Box sx={tableCellSx}><MatFlowStatusChip status={row.category || "MISCELLANEOUS"} /></Box>
+                        <Box sx={tableCellSx}>{row.uom || "-"}</Box>
+                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>Available {formatQty(stock.available || 0)}</Typography><Typography sx={subTextSx}>On Hand {formatQty(stock.onHand || 0)} · Reserved {formatQty(stock.reserved || 0)} · Blocked {formatQty(stock.blocked || 0)}</Typography></Box>
+                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.today || 0)} {row.uom || ""}</Typography></Box>
+                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.week || 0)} {row.uom || ""}</Typography></Box>
+                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.month || 0)} {row.uom || ""}</Typography></Box>
+                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.lifetime || 0)} {row.uom || ""}</Typography><Typography sx={subTextSx}>{stats.events || 0} consumption line(s)</Typography></Box>
+                        <Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap" }}>
+                            <Button startIcon={<AnalyticsOutlinedIcon />} onClick={() => setInsightMaterial(row)} sx={secondaryBtnSx}>Insights</Button>
+                            <Button startIcon={<TrackChangesOutlinedIcon />} onClick={() => navigate(`/matflow/tracker/materials/${row.id}`)} sx={primaryBtnSx}>Track</Button>
+                            {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl(row)} sx={secondaryBtnSx}>Stock</Button>}
+                            {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
+                        </Box>
+                    </Box>;
+                })}
+            </Box>}
+            {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Global Materials" />}
+        </Card>
+
+        <MasterDialog type="materials" open={Boolean(dialog)} row={dialog?.row} form={form} setForm={setForm} saving={saving} availablePlants={[]} metadata={{}} onClose={() => setDialog(null)} onSave={save} />
+
+        <Dialog open={Boolean(insightMaterial)} onClose={() => setInsightMaterial(null)} fullWidth maxWidth="lg" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}><AnalyticsOutlinedIcon /> Material Consumption & Inventory Insights</DialogTitle>
+            <DialogContent sx={dialogContentSx}>
+                <Typography sx={{ ...mainTextSx, fontSize: 18 }}>{insightMaterial?.materialName}</Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.3 }}>{insightMaterial?.materialCode} · {insightMaterial?.category} · {insightMaterial?.uom}</Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: .8 }}>
+                    <SummaryCard label="Today" value={`${formatQty(selectedStats.today || 0)} ${insightMaterial?.uom || ""}`} tone="sky" colorful />
+                    <SummaryCard label="Last 7 Days" value={`${formatQty(selectedStats.week || 0)} ${insightMaterial?.uom || ""}`} tone="indigo" colorful />
+                    <SummaryCard label="This Month" value={`${formatQty(selectedStats.month || 0)} ${insightMaterial?.uom || ""}`} tone="purple" colorful />
+                    <SummaryCard label="Lifetime" value={`${formatQty(selectedStats.lifetime || 0)} ${insightMaterial?.uom || ""}`} tone="green" colorful />
+                    <SummaryCard label="Available" value={`${formatQty(selectedStock.available || 0)} ${insightMaterial?.uom || ""}`} tone="blue" colorful />
+                    <SummaryCard label="Reserved / Blocked" value={`${formatQty(selectedStock.reserved || 0)} / ${formatQty(selectedStock.blocked || 0)}`} tone="amber" colorful />
+                </Box>
+                <Card sx={{ ...panelSx, mt: 1.2 }}>
+                    <Typography sx={{ ...mainTextSx, mb: .8 }}>Last 30 Consumption Days</Typography>
+                    {selectedDaily.length === 0 ? <EmptyState>No recorded Production consumption for this material.</EmptyState> : <Box sx={{ display: "grid", gap: .55 }}>
+                        {selectedDaily.map(([date, quantity]) => <Box key={date} sx={{ display: "grid", gridTemplateColumns: "110px minmax(100px,1fr) 110px", gap: .8, alignItems: "center" }}>
+                            <Typography sx={subTextSx}>{date}</Typography>
+                            <Box sx={{ height: 8, borderRadius: 99, background: "var(--mf-surface)", overflow: "hidden" }}><Box sx={{ height: "100%", width: `${Math.max(3, (Number(quantity || 0) / maxDaily) * 100)}%`, background: "var(--mf-primary-text)", borderRadius: 99 }} /></Box>
+                            <Typography sx={{ ...mainTextSx, textAlign: "right" }}>{formatQty(quantity)} {insightMaterial?.uom || ""}</Typography>
+                        </Box>)}
+                    </Box>}
+                    <Typography sx={{ ...subTextSx, mt: 1 }}>Last consumed: {selectedStats.lastConsumedAt ? formatDate(selectedStats.lastConsumedAt) : "Never"}{selectedStats.lastConsumedBy ? ` · By ${selectedStats.lastConsumedBy}` : ""}</Typography>
+                </Card>
+                <Card sx={{ ...panelSx, mt: 1.2 }}>
+                    <Typography sx={{ ...mainTextSx, mb: .35 }}>Consumption by Project / Product</Typography>
+                    <Typography sx={{ ...subTextSx, mb: .9 }}>Actual Production consumption is joined back to its Requisition and exact Product/Drawing ownership.</Typography>
+                    {selectedProjectConsumption.length === 0 ? <EmptyState>No Project/Product consumption split is available yet.</EmptyState> : <Box sx={tableShellSx}>
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px minmax(220px,1fr) 130px 120px" }}>{["Project", "Product / Drawing", "Consumed", "Events"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}</Box>
+                        {selectedProjectConsumption.slice(0, 12).map((row, index) => <Box key={`${row.projectCode}:${row.drawingNo}:${index}`} sx={{ ...tableRowSx, gridTemplateColumns: "180px minmax(220px,1fr) 130px 120px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode}</Typography><Typography sx={subTextSx}>{row.clientName || row.projectName || ""}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "Product"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{formatQty(row.quantity)} {insightMaterial?.uom || ""}</Box><Box sx={tableCellSx}>{row.events}</Box></Box>)}
+                    </Box>}
+                </Card>
+            </DialogContent>
+            <DialogActions sx={dialogActionsSx}><Button onClick={() => setInsightMaterial(null)} sx={secondaryBtnSx}>Close</Button><Button onClick={() => navigate(`/matflow/tracker/materials/${insightMaterial?.id}`)} sx={primaryBtnSx}>Open Material Control Tower</Button></DialogActions>
+        </Dialog>
+
+        <Dialog open={importOpen} onClose={() => !importWorking && setImportOpen(false)} fullWidth maxWidth="lg" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}><FileUploadOutlinedIcon /> Import Global Material Inventory</DialogTitle>
+            <DialogContent sx={dialogContentSx}>
+                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Accepts the ALSORG BOM workbook format, the supplied one-column Material Sheet, or the standard Material Inventory template. Existing code/name matches are skipped to protect master-data uniqueness.</Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 150px 150px 150px" }, gap: 1 }}>
+                    <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>Choose Excel<input hidden type="file" accept=".xlsx,.xlsm" onChange={(e) => { const file = e.target.files?.[0] || null; setImportFile(file); setImportRows([]); setImportSummary(null); if (file) setTimeout(() => analyzeImportFile(file), 0); }} /></Button>
+                    <TextField select label="Default Category" value={importDefaults.category} onChange={(e) => setImportDefaults((current) => ({ ...current, category: e.target.value }))} sx={fieldSx}>{MATFLOW_MATERIAL_CATEGORIES.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}</TextField>
+                    <TextField label="Default UOM" value={importDefaults.uom} onChange={(e) => setImportDefaults((current) => ({ ...current, uom: e.target.value }))} sx={fieldSx} />
+                    <TextField label="Code Prefix" value={importDefaults.codePrefix} onChange={(e) => setImportDefaults((current) => ({ ...current, codePrefix: e.target.value }))} sx={fieldSx} />
+                </Box>
+                <Box sx={{ mt: 1, display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap" }}><Typography sx={mainTextSx}>{importFile?.name || "No workbook selected"}</Typography>{importFile && <Button onClick={() => analyzeImportFile()} disabled={importWorking} sx={secondaryBtnSx}>Re-analyze with Defaults</Button>}</Box>
+                {importRows.length > 0 && <Box sx={{ mt: 1.2 }}><Typography sx={{ ...mainTextSx, mb: .6 }}>{importRows.length} unique candidate material(s) detected</Typography><Box sx={{ ...tableShellSx, maxHeight: 340, overflow: "auto" }}>
+                    <Box sx={{ ...tableHeaderSx, minWidth: 950, gridTemplateColumns: "260px 180px 130px 90px minmax(220px,1fr)" }}>{["Material Name", "Material Code", "Category", "UOM", "Specification / Source"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}</Box>
+                    {importRows.slice(0, 100).map((row, index) => <Box key={`${row.materialCode}:${index}`} sx={{ ...tableRowSx, minWidth: 950, gridTemplateColumns: "260px 180px 130px 90px minmax(220px,1fr)" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.preferredSupplier || ""}</Typography></Box><Box sx={tableCellSx}>{row.materialCode}</Box><Box sx={tableCellSx}>{row.category}</Box><Box sx={tableCellSx}>{row.uom}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.specification || "-"}</Typography><Typography sx={subTextSx}>{row.sourceSection || ""} · row {row.sourceRow || "-"}</Typography></Box></Box>)}
+                </Box>{importRows.length > 100 && <Typography sx={{ ...subTextSx, mt: .5 }}>Showing first 100 candidates in preview.</Typography>}</Box>}
+                {importSummary && <Box sx={{ mt: 1.2, p: 1, border: "1px solid var(--mf-border)", borderRadius: 1.5 }}><Typography sx={mainTextSx}>Imported {importSummary.imported} · Skipped existing {importSummary.skipped} · Failed {importSummary.failed}</Typography>{importSummary.failures?.map((failure) => <Typography key={failure} sx={{ ...subTextSx, color: "var(--mf-danger-text)" }}>{failure}</Typography>)}</Box>}
+            </DialogContent>
+            <DialogActions sx={dialogActionsSx}><Button onClick={() => setImportOpen(false)} disabled={importWorking} sx={secondaryBtnSx}>Close</Button><Button startIcon={<FileUploadOutlinedIcon />} onClick={importMaterials} disabled={importWorking || !importRows.length} sx={primaryBtnSx}>{importWorking ? "Importing..." : `Import ${importRows.length} Materials`}</Button></DialogActions>
+        </Dialog>
+
+        <Dialog open={stockDialog} onClose={() => !stockSaving && setStockDialog(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+            <DialogTitle sx={dialogTitleSx}><Inventory2OutlinedIcon /> Material × Location Stock Control</DialogTitle>
+            <DialogContent sx={dialogContentSx}>
+                <Typography sx={{ ...mainTextSx, mb: .8 }}>{rows.find((row) => String(row.id) === String(stockForm.materialId))?.materialName || "Material"}</Typography>
+                <TextField select fullWidth label="Store / QC Location *" value={stockForm.locationId} onChange={(e) => setStockForm((current) => ({ ...current, locationId: e.target.value }))} sx={fieldSx}>{stockLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationName} · {location.locationCode} · {readableLocationType(location.locationType)} · {location.plantCode}</MenuItem>)}</TextField>
+                <Box sx={{ mt: 1, display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .7 }}>{[["On Hand", stockBalance?.onHandQty], ["Reserved", stockBalance?.reservedQty], ["Blocked", stockBalance?.blockedQty], ["Available", stockBalance?.availableQty]].map(([label, value]) => <Box key={label} sx={{ p: .8, border: "1px solid var(--mf-border)", borderRadius: 1.4 }}><Typography sx={subTextSx}>{label}</Typography><Typography sx={mainTextSx}>{formatQty(value || 0)}</Typography></Box>)}</Box>
+                <Box sx={{ mt: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}><TextField type="number" label="Desired Available Qty *" value={stockForm.targetAvailableQty} onChange={(e) => setStockForm((current) => ({ ...current, targetAvailableQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch / Lot" value={stockForm.batchNo} onChange={(e) => setStockForm((current) => ({ ...current, batchNo: e.target.value }))} sx={fieldSx} /><TextField multiline minRows={3} label="Reason / Remarks *" value={stockForm.remarks} onChange={(e) => setStockForm((current) => ({ ...current, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} /></Box>
+            </DialogContent>
+            <DialogActions sx={dialogActionsSx}><Button onClick={() => setStockDialog(false)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={saveStock} disabled={stockSaving || !stockForm.locationId || !clean(stockForm.remarks)} sx={primaryBtnSx}>{stockSaving ? "Updating..." : "Update Verified Stock"}</Button></DialogActions>
+        </Dialog>
+    </Box>;
+}
+
+export const MatFlowMaterialsPage = MaterialInventoryPage;
 export const MatFlowLocationsPage = () => <MasterPage type="locations" />;

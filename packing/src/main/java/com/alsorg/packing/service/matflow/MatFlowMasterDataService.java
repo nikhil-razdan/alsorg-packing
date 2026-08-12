@@ -373,8 +373,23 @@ public class MatFlowMasterDataService {
                         material.setCreatedBy(actor);
                         material.setUpdatedBy(actor);
 
-                        return toMaterialResponse(
-                                        materialRepository.save(material));
+                        material = materialRepository.save(material);
+
+                        auditService.record(
+                                        "MATERIAL_MASTER",
+                                        material.getId(),
+                                        "MATERIAL_CREATED",
+                                        null,
+                                        null,
+                                        null,
+                                        auditService.details(
+                                                        "materialCode", material.getMaterialCode(),
+                                                        "materialName", material.getMaterialName(),
+                                                        "category", material.getCategory(),
+                                                        "uom", material.getUom(),
+                                                        "active", material.isActive()));
+
+                        return toMaterialResponse(material);
                 }
 
                 @Transactional
@@ -408,11 +423,26 @@ public class MatFlowMasterDataService {
                                         material,
                                         request);
 
-                        material.setUpdatedBy(
-                                        accessService.actor());
+                        String actor = accessService.actor();
+                        material.setUpdatedBy(actor);
+                        material = materialRepository.save(material);
 
-                        return toMaterialResponse(
-                                        materialRepository.save(material));
+                        auditService.record(
+                                        "MATERIAL_MASTER",
+                                        material.getId(),
+                                        "MATERIAL_UPDATED",
+                                        null,
+                                        null,
+                                        null,
+                                        auditService.details(
+                                                        "materialCode", material.getMaterialCode(),
+                                                        "materialName", material.getMaterialName(),
+                                                        "category", material.getCategory(),
+                                                        "uom", material.getUom(),
+                                                        "active", material.isActive(),
+                                                        "updatedBy", actor));
+
+                        return toMaterialResponse(material);
                 }
 
                 @Transactional(readOnly = true)

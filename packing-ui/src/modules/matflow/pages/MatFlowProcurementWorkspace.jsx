@@ -17,8 +17,10 @@ import AddIcon from "@mui/icons-material/Add";
 import ApprovalOutlinedIcon from "@mui/icons-material/ApprovalOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { downloadMatFlowExcel } from "../matflowExcel";
 import {
     EmptyState,
     ErrorBox,
@@ -604,6 +606,7 @@ export function MatFlowPurchasePage() {
                 subtitle="Convert Store-confirmed material shortages into controlled Purchase Orders. Every PO remains tied to the exact Indent, Vendor and Store-defined delivery destination before independent approval and GRN receipt."
                 actions={
                     <>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Purchase_Orders", sheetName: "Purchase Orders", title: "MatFlow Purchase Orders", rows: orders })} sx={secondaryBtnSx}>Export Excel</Button>
                         <Button
                             startIcon={<RefreshIcon />}
                             onClick={load}
@@ -2038,14 +2041,17 @@ export function MatFlowPoApprovalPage() {
                 title="Purchase Order Approvals"
                 subtitle="Independent commercial approval desk. Review the Vendor, shortage Indent, locked delivery destination and material quantities before releasing a Draft PO to the supplier."
                 actions={
-                    <Button
-                        startIcon={<RefreshIcon />}
-                        onClick={load}
-                        disabled={loading || Boolean(working)}
-                        sx={secondaryBtnSx}
-                    >
-                        Refresh
-                    </Button>
+                    <>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_PO_Approval_Queue", sheetName: "PO Approvals", title: "MatFlow Purchase Order Approval Queue", rows })} sx={secondaryBtnSx}>Export Excel</Button>
+                        <Button
+                            startIcon={<RefreshIcon />}
+                            onClick={load}
+                            disabled={loading || Boolean(working)}
+                            sx={secondaryBtnSx}
+                        >
+                            Refresh
+                        </Button>
+                    </>
                 }
             />
 
@@ -2478,6 +2484,7 @@ export function MatFlowReceivingPage() {
                 subtitle="Receive approved Purchase Orders. Posted GRNs immediately become blocked stock / QC history and are intentionally non-deletable."
                 actions={
                     <>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_GRN_Receiving", sheetName: "GRN", title: "MatFlow Goods Receipt Register", rows: receipts })} sx={secondaryBtnSx}>Export Excel</Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                         {canReceive && <Button startIcon={<AddIcon />} onClick={() => setDialog(true)} sx={primaryBtnSx}>Create GRN</Button>}
                     </>
@@ -2536,7 +2543,7 @@ export function MatFlowReceivingPage() {
                         {lines.map((line) => (
                             <Box key={line.id} sx={{ display: "grid", gridTemplateColumns: "1fr 160px 180px", gap: 1, alignItems: "center", mb: 1 }}>
                                 <Box>
-                                    <Typography sx={mainTextSx}>{line.materialCode} · {line.materialName}</Typography>
+                                    <Typography sx={mainTextSx}>{line.materialName} · {line.materialCode}</Typography>
                                     <Typography sx={subTextSx}>Outstanding {formatQty(line.outstanding)} {line.uom || ""}</Typography>
                                 </Box>
                                 <TextField type="number" label="Receive Qty" value={form.quantities[String(line.id)] ?? ""} onChange={(event) => setForm((current) => ({ ...current, quantities: { ...current.quantities, [String(line.id)]: event.target.value } }))} sx={fieldSx} />

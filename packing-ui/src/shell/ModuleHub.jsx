@@ -172,6 +172,28 @@ export default function ModuleHub() {
 			accent: "Material Control",
 		},
 		{
+			key: MODULE_KEYS.MATERIALS,
+			title: "Material Inventory",
+			subtitle:
+				"Global ALSORG material catalogue, stock position, actual consumption insights and Excel import/export.",
+			icon: (
+				<Inventory2OutlinedIcon fontSize="large" />
+			),
+			path: "/matflow/materials",
+			tags: [
+				"Material Master",
+				"Consumption",
+				"Inventory",
+				"Excel Import",
+			],
+			// Transitional visibility: existing MatFlow users keep access today.
+			// Later PackFlow-only users can be assigned MATERIALS independently.
+			visible:
+				canAccess(MODULE_KEYS.MATERIALS) ||
+				canAccess(MODULE_KEYS.MATFLOW),
+			accent: "Global Material Control",
+		},
+		{
 			key: "USERS",
 			title: "User Management",
 			subtitle:

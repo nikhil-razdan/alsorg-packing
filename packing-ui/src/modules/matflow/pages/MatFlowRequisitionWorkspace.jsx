@@ -15,6 +15,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
@@ -37,6 +38,7 @@ import {
     matflowApi,
     readMatFlowError,
 } from "../api/matflowApi";
+import { downloadMatFlowExcel } from "../matflowExcel";
 
 import {
     Detail,
@@ -337,6 +339,13 @@ export function MatFlowRequisitionListPage() {
                 subtitle="Raise and track material demand against the latest effective BOM revision after Production technical approval and Director final approval."
                 actions={
                     <>
+                        <Button
+                            startIcon={<FileDownloadOutlinedIcon />}
+                            onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Production_Requisitions", sheetName: "Requisitions", title: "MatFlow Production Requisitions", rows })}
+                            sx={secondaryBtnSx}
+                        >
+                            Export Excel
+                        </Button>
                         <Button
                             startIcon={
                                 <RefreshIcon />

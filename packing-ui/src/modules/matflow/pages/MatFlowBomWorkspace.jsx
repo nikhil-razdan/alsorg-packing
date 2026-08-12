@@ -32,12 +32,14 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
+import { downloadMatFlowExcel } from "../matflowExcel";
 import {
     Detail,
     EmptyState,
@@ -186,7 +188,7 @@ export function MatFlowBomListPage({ submittedOnly = false }) {
                 subtitle={submittedOnly
                     ? "Production performs the technical review first; Director gives final approval before the BOM becomes effective for material requisitions."
                     : "Engineering authors product-specific BOMs. Production technical approval and Director final approval are both required."}
-                actions={!submittedOnly && canCreate ? <Button startIcon={<AddIcon />} onClick={() => navigate("/matflow/boms/new")} sx={primaryBtnSx}>Create BOM</Button> : null}
+                actions={<><Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: submittedOnly ? "MatFlow_Submitted_BOMs" : "MatFlow_Operational_BOMs", sheetName: "BOMs", title: submittedOnly ? "Submitted BOM Review" : "Operational BOM Register", rows })} sx={secondaryBtnSx}>Export Excel</Button>{!submittedOnly && canCreate && <Button startIcon={<AddIcon />} onClick={() => navigate("/matflow/boms/new")} sx={primaryBtnSx}>Create BOM</Button>}</>}
             />
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: submittedOnly ? "1fr auto" : "1fr 220px auto", gap: 1, alignItems: "center" }}>
@@ -2144,7 +2146,7 @@ export function MatFlowBomDetailPage() {
                         >
                             {materials.map((material) => (
                                 <MenuItem key={material.id} value={material.id}>
-                                    {material.materialCode} · {material.materialName} · {readable(material.category || material.materialCategory || "") || "Uncategorized"} · {material.uom}
+                                    {material.materialName} · {material.materialCode} · {readable(material.category || material.materialCategory || "") || "Uncategorized"} · {material.uom}
                                 </MenuItem>
                             ))}
                         </TextField>
