@@ -930,24 +930,80 @@ public class MatFlowQcService {
                                 throw conflict("Requisition Production destination is missing");
                         }
 
+                        /*
+                         * Requisition is the immutable execution header and therefore owns
+                         * the exact Production destination selected when demand was raised.
+                         * Unwrap the location before reading its operational type; MatFlow
+                         * entities expose public JPA fields and may already be represented
+                         * by Hibernate proxies in the current persistence context.
+                         */
+                        MatFlowLocation productionDestination = (MatFlowLocation) Hibernate.unproxy(
+                                        requisition.destinationLocation);
+                        requisition.destinationLocation = productionDestination;
+
+                        if (productionDestination.getLocationType() != LocationType.PRODUCTION) {
+                                throw conflict(
+                                                "Requisition destination is no longer a valid Production location");
+                        }
+
+                        accessService.requirePlantAccess(
+                                        productionDestination.getPlantCode());
+
                         if (requisitionLine.bomLine == null || requisitionLine.bomLine.getId() == null) {
                                 throw conflict("Requisition line is not linked to its approved BOM material line");
                         }
 
-                        List<MatFlowBomRouteStep> route = routingService.routeForLine(
+                        /*
+                         * Always hydrate the approved route before inspecting public
+                         * backing fields such as stepType/location. This fixes the same
+                         * Hibernate proxy/public-field hazard already handled elsewhere
+                         * in MatFlow.
+                         */
+                        List<MatFlowBomRouteStep> route = hydrateApprovedRoute(
                                         requisitionLine.bomLine.getId());
 
                         MatFlowBomRouteStep productionStep = route.stream()
-                                        .filter(step -> step != null && step.stepType == RouteStepType.PRODUCTION)
+                                        .filter(step -> step.stepType == RouteStepType.PRODUCTION)
                                         .findFirst()
-                                        .orElseThrow(() -> conflict(
-                                                        "Approved BOM route has no Production destination"));
+                                        .orElse(null);
 
-                        if (productionStep.location == null ||
-                                        !productionStep.location.getId()
-                                                        .equals(requisition.destinationLocation.getId())) {
-                                throw conflict(
-                                                "Approved BOM Production route does not match the requisition Production destination");
+                        /*
+                         * Current BOMs are submission-validated to contain one final
+                         * Production step. Older approved BOM/requisition rows created
+                         * before that invariant may legitimately have no explicit
+                         * Production route row. For those historical rows only, the
+                         * Requisition's already validated Production destination is the
+                         * authoritative compatibility destination.
+                         *
+                         * If an explicit Production step exists it is NEVER ignored: it
+                         * must still match the Requisition destination exactly.
+                         */
+                        boolean legacyProductionFallback = productionStep == null;
+                        UUID productionRouteStepId = null;
+
+                        if (productionStep != null) {
+                                if (productionStep.location == null) {
+                                        throw conflict(
+                                                        "Approved BOM Production route has no location");
+                                }
+
+                                MatFlowLocation configuredProduction = (MatFlowLocation) Hibernate.unproxy(
+                                                productionStep.location);
+                                productionStep.location = configuredProduction;
+
+                                if (configuredProduction.getLocationType() != LocationType.PRODUCTION) {
+                                        throw conflict(
+                                                        "Approved BOM Production route does not point to a Production location");
+                                }
+
+                                if (!configuredProduction.getId()
+                                                .equals(productionDestination.getId())) {
+                                        throw conflict(
+                                                        "Approved BOM Production route does not match the requisition Production destination");
+                                }
+
+                                productionDestination = configuredProduction;
+                                productionRouteStepId = productionStep.getId();
                         }
 
                         MatFlowBomRouteStep processingStep = null;
@@ -958,8 +1014,7 @@ public class MatFlowQcService {
                                 }
 
                                 processingStep = route.stream()
-                                                .filter(step -> step != null &&
-                                                                step.stepType == RouteStepType.PROCESSING &&
+                                                .filter(step -> step.stepType == RouteStepType.PROCESSING &&
                                                                 request.processingRouteStepId().equals(step.getId()))
                                                 .findFirst()
                                                 .orElseThrow(() -> badRequest(
@@ -1003,8 +1058,43 @@ public class MatFlowQcService {
                                         ? 10
                                         : sourceTransfer.routeSequenceNo + 10;
 
-                        MatFlowLocation current = inspection.location;
-                        MatFlowTransferOrder firstCreated;
+                        MatFlowLocation current = inspection.location == null
+                                        ? null
+                                        : (MatFlowLocation) Hibernate.unproxy(inspection.location);
+
+                        if (current == null || current.getId() == null) {
+                                throw conflict("QC inspection has no valid current custody location");
+                        }
+
+                        inspection.location = current;
+
+                        boolean alreadyAtProduction = current.getId()
+                                        .equals(productionDestination.getId());
+
+                        /*
+                         * Normal QC routing must start from a QC custody location.
+                         * Historical purchased lots created while legacy empty routes
+                         * were still accepted can already be physically recorded at the
+                         * exact Production destination. Those rows may only be completed
+                         * as Direct-to-Production; creating a fake Production->Production
+                         * transfer would corrupt movement history.
+                         */
+                        if (!alreadyAtProduction &&
+                                        current.getLocationType() != LocationType.QC) {
+                                throw conflict(
+                                                "Material is not currently at a QC location. Current custody: "
+                                                                + current.getLocationCode());
+                        }
+
+                        if (alreadyAtProduction &&
+                                        request.routingDecision() == QcRoutingDecision.SEND_TO_PROCESSING) {
+                                throw conflict(
+                                                "This historical lot is already recorded at its Production destination. "
+                                                                +
+                                                                "It can only be confirmed Direct to Production; do not create a backward Production-to-Processing movement.");
+                        }
+
+                        MatFlowTransferOrder firstCreated = null;
 
                         if (request.routingDecision() == QcRoutingDecision.SEND_TO_PROCESSING) {
                                 firstCreated = createQcRouteTransfer(
@@ -1024,26 +1114,30 @@ public class MatFlowQcService {
                                                 requisition,
                                                 reservation,
                                                 processingStep.location,
-                                                productionStep.location,
-                                                productionStep.getId(),
+                                                productionDestination,
+                                                productionRouteStepId,
                                                 firstCreated.getId(),
                                                 sequence + 10,
                                                 scale(reservation.reservedQty),
                                                 true,
-                                                "Production hand-off planned after selected Processing Unit",
+                                                legacyProductionFallback
+                                                                ? "Production hand-off planned after Processing using the Requisition destination (legacy BOM route compatibility)"
+                                                                : "Production hand-off planned after selected Processing Unit",
                                                 actor);
-                        } else {
+                        } else if (!alreadyAtProduction) {
                                 firstCreated = createQcRouteTransfer(
                                                 requisition,
                                                 reservation,
                                                 current,
-                                                productionStep.location,
-                                                productionStep.getId(),
+                                                productionDestination,
+                                                productionRouteStepId,
                                                 predecessorId,
                                                 sequence,
                                                 scale(reservation.reservedQty),
                                                 deferInitialTransfer,
-                                                "QC routed accepted material directly to Production",
+                                                legacyProductionFallback
+                                                                ? "QC routed accepted material directly to the Requisition Production destination (legacy BOM route compatibility)"
+                                                                : "QC routed accepted material directly to Production",
                                                 actor);
                         }
 
@@ -1069,8 +1163,17 @@ public class MatFlowQcService {
                                                         "routingDecision", inspection.routingDecision,
                                                         "processingRouteStepId", inspection.processingRouteStepId,
                                                         "fromLocation", inspection.location.getLocationCode(),
-                                                        "nextTransferId", firstCreated.getId(),
-                                                        "nextTransferNumber", firstCreated.transferNumber,
+                                                        "productionDestination",
+                                                        productionDestination.getLocationCode(),
+                                                        "productionRouteSource",
+                                                        legacyProductionFallback
+                                                                        ? "REQUISITION_DESTINATION_COMPATIBILITY"
+                                                                        : "APPROVED_BOM_ROUTE",
+                                                        "alreadyAtProduction", alreadyAtProduction,
+                                                        "nextTransferId",
+                                                        firstCreated == null ? null : firstCreated.getId(),
+                                                        "nextTransferNumber",
+                                                        firstCreated == null ? null : firstCreated.transferNumber,
                                                         "acceptedQty", inspection.acceptedQty));
 
                         requisitionService.refreshState(requisition.getId(), actor);
@@ -1175,6 +1278,50 @@ public class MatFlowQcService {
                                         .orElse(false);
                 }
 
+                /**
+                 * Loads the authoritative BOM route and unwraps every route entity
+                 * before callers inspect public JPA backing fields.
+                 *
+                 * Repository query results can reuse an already managed Hibernate
+                 * proxy from the persistence context. In MatFlow, direct public-field
+                 * access (for example step.stepType) bypasses proxy getter
+                 * interception and can therefore look null even when the database row
+                 * is valid.
+                 */
+                private List<MatFlowBomRouteStep> hydrateApprovedRoute(
+                                UUID bomLineId) {
+                        if (bomLineId == null) {
+                                return List.of();
+                        }
+
+                        List<MatFlowBomRouteStep> rawRoute = routingService.routeForLine(
+                                        bomLineId);
+
+                        if (rawRoute == null || rawRoute.isEmpty()) {
+                                return List.of();
+                        }
+
+                        return rawRoute.stream()
+                                        .filter(step -> step != null)
+                                        .map(step -> {
+                                                MatFlowBomRouteStep hydrated = (MatFlowBomRouteStep) Hibernate.unproxy(
+                                                                step);
+
+                                                if (hydrated.location != null) {
+                                                        hydrated.location = (MatFlowLocation) Hibernate.unproxy(
+                                                                        hydrated.location);
+                                                }
+
+                                                if (hydrated.bomLine != null) {
+                                                        hydrated.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                                        hydrated.bomLine);
+                                                }
+
+                                                return hydrated;
+                                        })
+                                        .toList();
+                }
+
                 private MatFlowMaterialRequisition resolveRoutingRequisition(UUID reservationId) {
                         if (reservationId == null)
                                 return null;
@@ -1225,7 +1372,7 @@ public class MatFlowQcService {
                         List<MatFlowBomRouteStep> route = requisitionLine == null ||
                                         requisitionLine.bomLine == null || requisitionLine.bomLine.getId() == null
                                                         ? List.of()
-                                                        : routingService.routeForLine(requisitionLine.bomLine.getId());
+                                                        : hydrateApprovedRoute(requisitionLine.bomLine.getId());
 
                         List<ProcessingRouteOption> options = route.stream()
                                         .filter(step -> step != null && step.stepType == RouteStepType.PROCESSING &&

@@ -99,17 +99,6 @@ import org.springframework.web.server.ResponseStatusException;
 public class MatFlowRequisitionService {
 
         private static final int LINE_NUMBER_INCREMENT = 10;
-
-        /**
-         * Store planning may reserve only stock that is under Store/QC custody.
-         *
-         * STORE stock still has to pass the approved QC route. QC stock is already
-         * inspected/accepted stock (for example accepted PO overage), so when the
-         * approved first route destination is the same QC location the transfer
-         * chain safely skips that already-completed QC hop. Production/Processing
-         * balances are execution stock and must never be reused as fresh Store
-         * planning sources.
-         */
         private static final Set<LocationType> PLANNING_SOURCE_TYPES = EnumSet.of(
                         LocationType.STORE,
                         LocationType.QC);
@@ -480,6 +469,23 @@ public class MatFlowRequisitionService {
                                                                 bomLine.getLineNo() +
                                                                 " has no linked material");
                         }
+
+                        /*
+                         * Defense-in-depth: an approved/effective BOM line must still
+                         * carry the governed QC -> optional Processing -> Production
+                         * route when a new requisition is created. Older approved BOMs
+                         * from before strict route validation must be revised instead of
+                         * sending new shortages/GRNs directly to Production.
+                         */
+                        List<MatFlowBomRouteStep> approvedRoute = loadApprovedRoute(
+                                        bomLine.getId());
+
+                        validateRoute(
+                                        approvedRoute);
+
+                        validateDestination(
+                                        destination,
+                                        approvedRoute);
 
                         BigDecimal approvedQty = positive(
                                         bomLine.getNetRequiredQty(),
@@ -939,12 +945,8 @@ public class MatFlowRequisitionService {
                                                                 "Requisition contains an incomplete material line");
                                         }
 
-                                        List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
+                                        List<MatFlowBomRouteStep> route = loadApprovedRoute(
                                                         line.bomLine.getId());
-
-                                        List<MatFlowBomRouteStep> route = returnedRoute == null
-                                                        ? List.of()
-                                                        : returnedRoute;
 
                                         validateRoute(
                                                         route);
@@ -1264,13 +1266,73 @@ public class MatFlowRequisitionService {
                                 "Requisition Production destination does not match the final BOM route location");
         }
 
+        /**
+         * Returns an execution-safe approved BOM route.
+         *
+         * MatFlow route entities can be reused as Hibernate proxies from the
+         * persistence context. Because several MatFlow entities expose public JPA
+         * fields, direct reads such as step.stepType may otherwise appear null.
+         */
+        private List<MatFlowBomRouteStep> loadApprovedRoute(
+                        UUID bomLineId) {
+
+                if (bomLineId == null) {
+                        return List.of();
+                }
+
+                List<MatFlowBomRouteStep> rawRoute = routingService.routeForLine(
+                                bomLineId);
+
+                if (rawRoute == null || rawRoute.isEmpty()) {
+                        return List.of();
+                }
+
+                return rawRoute.stream()
+                                .filter(step -> step != null)
+                                .map(step -> {
+                                        MatFlowBomRouteStep hydrated = (MatFlowBomRouteStep) Hibernate.unproxy(
+                                                        step);
+
+                                        if (hydrated.location != null) {
+                                                hydrated.location = (MatFlowLocation) Hibernate.unproxy(
+                                                                hydrated.location);
+                                        }
+
+                                        if (hydrated.bomLine != null) {
+                                                hydrated.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                                hydrated.bomLine);
+                                        }
+
+                                        return hydrated;
+                                })
+                                .toList();
+        }
+
         private void validateRoute(
                         List<MatFlowBomRouteStep> route) {
 
-                for (MatFlowBomRouteStep step : route) {
+                if (route == null || route.isEmpty()) {
+                        throw conflict(
+                                        "Approved BOM material route is missing. Engineering must create a QC -> optional Processing -> Production route on a new BOM revision before new Store/Purchase execution.");
+                }
+
+                int qcCount = 0;
+                int productionCount = 0;
+                boolean productionSeen = false;
+
+                for (int index = 0; index < route.size(); index++) {
+                        MatFlowBomRouteStep step = route.get(index);
+
                         if (step == null) {
                                 throw conflict(
                                                 "BOM route contains an empty step");
+                        }
+
+                        if (step.stepType == null) {
+                                throw conflict(
+                                                "BOM route step " +
+                                                                step.sequenceNo +
+                                                                " has no route type");
                         }
 
                         if (step.location == null) {
@@ -1280,25 +1342,84 @@ public class MatFlowRequisitionService {
                                                                 " has no location");
                         }
 
+                        MatFlowLocation location = (MatFlowLocation) Hibernate.unproxy(
+                                        step.location);
+                        step.location = location;
+
                         String routePlant = requirePlantCode(
-                                        step.location
-                                                        .getPlantCode(),
+                                        location.getPlantCode(),
                                         "BOM route location " +
                                                         safeLabel(
-                                                                        step.location
-                                                                                        .getLocationCode(),
-                                                                        step.location
-                                                                                        .getId()));
+                                                                        location.getLocationCode(),
+                                                                        location.getId()));
 
                         accessService.requirePlantAccess(
                                         routePlant);
 
-                        if (!step.location.isActive()) {
+                        if (!location.isActive()) {
                                 throw conflict(
                                                 "BOM route contains an inactive location: " +
-                                                                step.location
-                                                                                .getLocationCode());
+                                                                location.getLocationCode());
                         }
+
+                        LocationType actualType = location.getLocationType();
+
+                        if (actualType == null) {
+                                throw conflict(
+                                                "BOM route location " +
+                                                                location.getLocationCode() +
+                                                                " has no Location Type");
+                        }
+
+                        if (index == 0 && step.stepType != RouteStepType.QC) {
+                                throw conflict(
+                                                "Approved BOM material route must start at QC");
+                        }
+
+                        if (step.stepType == RouteStepType.QC) {
+                                qcCount++;
+                                if (index != 0 || actualType != LocationType.QC) {
+                                        throw conflict(
+                                                        "QC must be the first route step and must use a QC location");
+                                }
+                        }
+
+                        if (productionSeen) {
+                                throw conflict(
+                                                "No BOM route step is allowed after Production");
+                        }
+
+                        if (step.stepType == RouteStepType.PROCESSING &&
+                                        actualType != LocationType.PROCESSING &&
+                                        actualType != LocationType.EXTERNAL_PROCESSOR) {
+                                throw conflict(
+                                                "Processing route step must use a Processing or External Processor location");
+                        }
+
+                        if (step.stepType == RouteStepType.PRODUCTION) {
+                                productionCount++;
+                                productionSeen = true;
+
+                                if (actualType != LocationType.PRODUCTION) {
+                                        throw conflict(
+                                                        "Production route step must use a Production location");
+                                }
+
+                                if (index != route.size() - 1) {
+                                        throw conflict(
+                                                        "Production must be the final BOM route step");
+                                }
+                        }
+                }
+
+                if (qcCount != 1) {
+                        throw conflict(
+                                        "Approved BOM material route must contain exactly one QC step");
+                }
+
+                if (productionCount != 1) {
+                        throw conflict(
+                                        "Approved BOM material route must contain exactly one final Production destination");
                 }
         }
 
@@ -2328,12 +2449,8 @@ public class MatFlowRequisitionService {
                                         line.requestedQty,
                                         "Requested quantity");
 
-                        List<MatFlowBomRouteStep> returnedRoute = routingService.routeForLine(
+                        List<MatFlowBomRouteStep> route = loadApprovedRoute(
                                         line.bomLine.getId());
-
-                        List<MatFlowBomRouteStep> route = returnedRoute == null
-                                        ? List.of()
-                                        : returnedRoute;
 
                         validateRoute(
                                         route);
@@ -4687,6 +4804,8 @@ public class MatFlowRequisitionService {
                         if (line == null ||
                                         line.requisition == null ||
                                         line.material == null ||
+                                        line.bomLine == null ||
+                                        line.bomLine.getId() == null ||
                                         line.requisition.destinationLocation == null) {
 
                                 throw conflict(
@@ -4694,6 +4813,24 @@ public class MatFlowRequisitionService {
                         }
 
                         MatFlowMaterialRequisition requisition = line.requisition;
+
+                        List<MatFlowBomRouteStep> approvedRoute = loadApprovedRoute(
+                                        line.bomLine.getId());
+
+                        validateRoute(
+                                        approvedRoute);
+
+                        validateDestination(
+                                        requisition.destinationLocation,
+                                        approvedRoute);
+
+                        MatFlowLocation shortageDeliveryLocation = approvedRoute.get(0).location;
+
+                        if (shortageDeliveryLocation == null ||
+                                        shortageDeliveryLocation.getLocationType() != LocationType.QC) {
+                                throw conflict(
+                                                "Approved BOM route has no valid QC delivery location for the replacement shortage");
+                        }
 
                         MatFlowIndent editableIndent = indentRepository
                                         .findByRequisition_Id(
@@ -4706,7 +4843,7 @@ public class MatFlowRequisitionService {
                                                         indent.deliverToLocation
                                                                         .getId()
                                                                         .equals(
-                                                                                        requisition.destinationLocation
+                                                                                        shortageDeliveryLocation
                                                                                                         .getId()))
                                         .findFirst()
                                         .orElse(null);
@@ -4731,7 +4868,7 @@ public class MatFlowRequisitionService {
 
                                 editableIndent.bom = requisition.bom;
 
-                                editableIndent.deliverToLocation = requisition.destinationLocation;
+                                editableIndent.deliverToLocation = shortageDeliveryLocation;
 
                                 editableIndent.status = IndentStatus.AUTO_CREATED;
 

@@ -192,6 +192,17 @@ export function MatFlowQcPage() {
                 if (!["DIRECT_TO_PRODUCTION", "SEND_TO_PROCESSING"].includes(decision)) {
                     throw new Error("Select a valid post-QC routing decision.");
                 }
+                const alreadyAtProduction =
+                    routing?.currentLocationId &&
+                    routing?.productionLocationId &&
+                    String(routing.currentLocationId) === String(routing.productionLocationId);
+
+                if (alreadyAtProduction && decision === "SEND_TO_PROCESSING") {
+                    throw new Error(
+                        "This historical QC lot is already recorded at its Production destination. Confirm Direct to Production; a backward Production-to-Processing movement is not permitted."
+                    );
+                }
+
                 if (decision === "SEND_TO_PROCESSING" && !form.processingRouteStepId) {
                     throw new Error("Select the approved Processing Unit for this material lot.");
                 }
@@ -290,7 +301,16 @@ export function MatFlowQcPage() {
                     </Box>
                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.sourceType)}</Typography>{transferReceipt && <Typography sx={subTextSx}>Route receipt</Typography>}</Box>
                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialCode}</Typography><Typography sx={subTextSx}>{row.materialName}</Typography></Box>
-                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationCode}</Typography><Typography sx={subTextSx}>QC custody</Typography></Box>
+                    <Box sx={tableCellSx}>
+                        <Typography sx={mainTextSx}>{row.locationCode}</Typography>
+                        <Typography sx={subTextSx}>
+                            {routing?.currentLocationId &&
+                                routing?.productionLocationId &&
+                                String(routing.currentLocationId) === String(routing.productionLocationId)
+                                ? "Production custody · legacy QC record"
+                                : "QC custody"}
+                        </Typography>
+                    </Box>
                     <Box sx={tableCellSx}>{formatQty(row.inspectionQty)}</Box>
                     <Box sx={tableCellSx}>{formatQty(row.acceptedQty)}</Box>
                     <Box sx={tableCellSx}>{formatQty(row.rejectedQty)}</Box>
@@ -330,9 +350,38 @@ export function MatFlowQcPage() {
                     <TextField type="number" label="Rejected Qty" value={form.rejectedQty} onChange={e => setForm(c => ({ ...c, rejectedQty: e.target.value }))} sx={fieldSx} />
                 </> : dialog?.type === "ROUTE" ? <>
                     <Typography sx={subTextSx}>Current custody: <b>{dialog?.routing?.currentLocationCode || dialog?.row?.locationCode || "QC"}</b> · Production destination: <b>{dialog?.routing?.productionLocationCode || "-"}</b></Typography>
+                    {dialog?.routing?.currentLocationId &&
+                        dialog?.routing?.productionLocationId &&
+                        String(dialog.routing.currentLocationId) === String(dialog.routing.productionLocationId) && (
+                            <Box sx={{
+                                p: 1,
+                                borderRadius: 1.5,
+                                border: "1px solid var(--mf-border)",
+                                background: "var(--mf-surface)",
+                            }}>
+                                <Typography sx={{ ...mainTextSx, fontSize: 12 }}>
+                                    Historical custody compatibility
+                                </Typography>
+                                <Typography sx={subTextSx}>
+                                    This accepted lot is already physically recorded at its exact Production destination from an older BOM/Indent route. Confirm Direct to Production; MatFlow will close the routing decision without creating a false self-transfer.
+                                </Typography>
+                            </Box>
+                        )}
                     <TextField select label="Route Decision *" value={form.routingDecision} onChange={e => setForm(c => ({ ...c, routingDecision: e.target.value, processingRouteStepId: "" }))} sx={fieldSx}>
                         <MenuItem value="DIRECT_TO_PRODUCTION">Direct to Production</MenuItem>
-                        <MenuItem value="SEND_TO_PROCESSING" disabled={(dialog?.routing?.processingOptions || []).length === 0}>Send to Processing Unit</MenuItem>
+                        <MenuItem
+                            value="SEND_TO_PROCESSING"
+                            disabled={
+                                (dialog?.routing?.processingOptions || []).length === 0 ||
+                                Boolean(
+                                    dialog?.routing?.currentLocationId &&
+                                    dialog?.routing?.productionLocationId &&
+                                    String(dialog.routing.currentLocationId) === String(dialog.routing.productionLocationId)
+                                )
+                            }
+                        >
+                            Send to Processing Unit
+                        </MenuItem>
                     </TextField>
                     {form.routingDecision === "SEND_TO_PROCESSING" && <TextField select label="Approved Processing Unit *" value={form.processingRouteStepId} onChange={e => setForm(c => ({ ...c, processingRouteStepId: e.target.value }))} sx={fieldSx}>
                         {(dialog?.routing?.processingOptions || []).map(option => <MenuItem key={option.routeStepId} value={option.routeStepId}>{option.locationCode} · {option.locationName || "Processing"}{option.processCode ? ` · ${option.processCode}` : ""}</MenuItem>)}
