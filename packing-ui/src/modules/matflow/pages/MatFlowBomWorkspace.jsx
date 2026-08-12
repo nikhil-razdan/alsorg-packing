@@ -1777,6 +1777,125 @@ export function MatFlowBomDetailPage() {
                             );
                         })
                     )}
+                    <Card sx={mfBuilderRouteRegisterCardSx}>
+                        <Box sx={mfBuilderRouteRegisterHeaderSx}>
+                            <Box>
+                                <Typography sx={mfBuilderToolbarTitleSx}>
+                                    Approved Material Route Register
+                                </Typography>
+                                <Typography sx={mfBuilderToolbarSubSx}>
+                                    Full governed route detail remains visible for audit and maintenance.
+                                    QC is mandatory first, Processing entries are approved candidate units,
+                                    and Production is mandatory last.
+                                </Typography>
+                            </Box>
+
+                            <Chip
+                                size="small"
+                                icon={allRoutesReady ? <CheckCircleOutlineIcon /> : <AltRouteOutlinedIcon />}
+                                label={`${validRouteLineCount}/${lines.length} complete`}
+                                sx={allRoutesReady ? mfBuilderReadyChipSx : mfBuilderWarningChipSx}
+                            />
+                        </Box>
+
+                        <MatFlowRouteRegister
+                            routes={routes}
+                            lines={lines}
+                            resolveRouteLocation={resolveRouteLocation}
+                            projectPlantCode={projectPlantCode}
+                            canEdit={canEdit}
+                            onEdit={openRoute}
+                            onDelete={deleteRoute}
+                        />
+                    </Card>
+
+                    <Card sx={mfBuilderActionBarSx}>
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={mfBuilderActionEyebrowSx}>
+                                {readable(status || "UNKNOWN")} · {currentOwner}
+                            </Typography>
+                            <Typography sx={mfBuilderActionTitleSx}>
+                                {workflow[1]}
+                            </Typography>
+                            <Typography sx={mfBuilderActionSubSx}>
+                                Project/Product ownership, route rules, Production technical approval,
+                                Director final approval and requisition gating are unchanged.
+                            </Typography>
+                        </Box>
+
+                        <Box sx={mfBuilderActionButtonsSx}>
+                            {canEdit && lines.length > 0 && (
+                                <Button
+                                    startIcon={<SendOutlinedIcon />}
+                                    endIcon={<ArrowForwardIcon />}
+                                    onClick={() => setAction("SUBMIT")}
+                                    disabled={working || routeIssues.length > 0}
+                                    sx={primaryBtnSx}
+                                >
+                                    Submit for Production Review
+                                </Button>
+                            )}
+                            {canProductionReview && (
+                                <Button
+                                    startIcon={<ApprovalOutlinedIcon />}
+                                    onClick={() => setAction("PRODUCTION_APPROVE")}
+                                    disabled={working}
+                                    sx={primaryBtnSx}
+                                >
+                                    Production Approve
+                                </Button>
+                            )}
+                            {canProductionReview && (
+                                <Button
+                                    startIcon={<UndoOutlinedIcon />}
+                                    onClick={() => setAction("PRODUCTION_RETURN")}
+                                    disabled={working}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Production Return
+                                </Button>
+                            )}
+                            {canDirectorReview && (
+                                <Button
+                                    startIcon={<ApprovalOutlinedIcon />}
+                                    onClick={() => setAction("DIRECTOR_APPROVE")}
+                                    disabled={working}
+                                    sx={primaryBtnSx}
+                                >
+                                    Director Final Approve
+                                </Button>
+                            )}
+                            {canDirectorReview && (
+                                <Button
+                                    startIcon={<UndoOutlinedIcon />}
+                                    onClick={() => setAction("DIRECTOR_RETURN")}
+                                    disabled={working}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Director Return
+                                </Button>
+                            )}
+                            {canRevision && (
+                                <Button
+                                    onClick={() => setAction("REVISION")}
+                                    disabled={working}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Create Revision
+                                </Button>
+                            )}
+                            {canRequisition && (
+                                <Button
+                                    endIcon={<ArrowForwardIcon />}
+                                    onClick={() => navigate(`/matflow/requisitions/new?bomId=${bom.id}`)}
+                                    sx={primaryBtnSx}
+                                >
+                                    Raise Requisition
+                                </Button>
+                            )}
+                        </Box>
+                    </Card>
+
                 </Box>
 
                 <Box sx={mfBuilderRightColumnSx}>
@@ -1851,219 +1970,103 @@ export function MatFlowBomDetailPage() {
                         )}
                     </Card>
 
-                    <Card sx={mfBuilderSidePanelSx}>
-                        <Box sx={mfBuilderSideTitleRowSx}>
-                            <Box>
-                                <Typography sx={mfBuilderSideTitleSx}>
-                                    Approval & Handoff
-                                </Typography>
-                                <Typography sx={mfBuilderSideSubSx}>
-                                    Engineering → Production → Director → Requisition.
-                                </Typography>
-                            </Box>
-                            <ApprovalOutlinedIcon sx={{ color: "#93c5fd" }} />
-                        </Box>
-
-                        <Box sx={mfBuilderWorkflowListSx}>
-                            {workflowSteps.map((step, index) => (
-                                <MatFlowBuilderWorkflowStep
-                                    key={step.title}
-                                    index={index + 1}
-                                    {...step}
-                                />
-                            ))}
-                        </Box>
-                    </Card>
-
-                    <Card sx={mfBuilderSidePanelSx}>
-                        <Box sx={mfBuilderSideTitleRowSx}>
-                            <Box>
-                                <Typography sx={mfBuilderSideTitleSx}>
-                                    Section Split
-                                </Typography>
-                                <Typography sx={mfBuilderSideSubSx}>
-                                    Material-line distribution by operational category.
-                                </Typography>
-                            </Box>
-                            <AccountTreeOutlinedIcon sx={{ color: "#93c5fd" }} />
-                        </Box>
-
-                        <Box sx={mfBuilderSplitListSx}>
-                            {materialSections.length === 0 ? (
-                                <Typography sx={mfBuilderSideSubSx}>
-                                    Add materials to generate the section distribution.
-                                </Typography>
-                            ) : materialSections.map((section) => {
-                                const percent = lines.length > 0
-                                    ? Math.round((section.rows.length / lines.length) * 100)
-                                    : 0;
-
-                                return (
-                                    <Box key={section.key} sx={mfBuilderSplitItemSx}>
-                                        <Box sx={mfBuilderSplitTopSx}>
-                                            <Box sx={mfBuilderSplitNameSx}>
-                                                <span style={mfBuilderDotStyle(section.accent)} />
-                                                {section.title}
-                                            </Box>
-                                            <Typography sx={mfBuilderSplitValueSx}>
-                                                {percent}%
-                                            </Typography>
-                                        </Box>
-                                        <LinearProgress
-                                            variant="determinate"
-                                            value={percent}
-                                            sx={mfBuilderProgressSx(section.accent)}
-                                        />
-                                    </Box>
-                                );
-                            })}
-                        </Box>
-                    </Card>
-
-                    <Card sx={mfBuilderSidePanelSx}>
-                        <Box sx={mfBuilderSideTitleRowSx}>
-                            <Box>
-                                <Typography sx={mfBuilderSideTitleSx}>
-                                    Quick Actions
-                                </Typography>
-                                <Typography sx={mfBuilderSideSubSx}>
-                                    MatFlow handoffs around the operational BOM.
-                                </Typography>
-                            </Box>
-                            <SpeedOutlinedIcon sx={{ color: "#93c5fd" }} />
-                        </Box>
-
-                        <Box sx={mfBuilderQuickActionListSx}>
-                            {quickActions.map((item) => (
-                                <MatFlowBuilderQuickAction
-                                    key={item.title}
-                                    {...item}
-                                    onClick={() => navigate(item.path)}
-                                />
-                            ))}
-                        </Box>
-                    </Card>
                 </Box>
             </Box>
 
-            <Card sx={mfBuilderRouteRegisterCardSx}>
-                <Box sx={mfBuilderRouteRegisterHeaderSx}>
-                    <Box>
-                        <Typography sx={mfBuilderToolbarTitleSx}>
-                            Approved Material Route Register
-                        </Typography>
-                        <Typography sx={mfBuilderToolbarSubSx}>
-                            Full governed route detail remains visible for audit and maintenance.
-                            QC is mandatory first, Processing entries are approved candidate units,
-                            and Production is mandatory last.
-                        </Typography>
+            <Box sx={mfBuilderSupportGridSx}>
+                <Card sx={mfBuilderSidePanelSx}>
+                    <Box sx={mfBuilderSideTitleRowSx}>
+                        <Box>
+                            <Typography sx={mfBuilderSideTitleSx}>
+                                Approval & Handoff
+                            </Typography>
+                            <Typography sx={mfBuilderSideSubSx}>
+                                Engineering → Production → Director → Requisition.
+                            </Typography>
+                        </Box>
+                        <ApprovalOutlinedIcon sx={{ color: "#93c5fd" }} />
                     </Box>
 
-                    <Chip
-                        size="small"
-                        icon={allRoutesReady ? <CheckCircleOutlineIcon /> : <AltRouteOutlinedIcon />}
-                        label={`${validRouteLineCount}/${lines.length} complete`}
-                        sx={allRoutesReady ? mfBuilderReadyChipSx : mfBuilderWarningChipSx}
-                    />
-                </Box>
+                    <Box sx={mfBuilderWorkflowListSx}>
+                        {workflowSteps.map((step, index) => (
+                            <MatFlowBuilderWorkflowStep
+                                key={step.title}
+                                index={index + 1}
+                                {...step}
+                            />
+                        ))}
+                    </Box>
+                </Card>
 
-                <MatFlowRouteRegister
-                    routes={routes}
-                    lines={lines}
-                    resolveRouteLocation={resolveRouteLocation}
-                    projectPlantCode={projectPlantCode}
-                    canEdit={canEdit}
-                    onEdit={openRoute}
-                    onDelete={deleteRoute}
-                />
-            </Card>
+                <Card sx={mfBuilderSidePanelSx}>
+                    <Box sx={mfBuilderSideTitleRowSx}>
+                        <Box>
+                            <Typography sx={mfBuilderSideTitleSx}>
+                                Section Split
+                            </Typography>
+                            <Typography sx={mfBuilderSideSubSx}>
+                                Material-line distribution by operational category.
+                            </Typography>
+                        </Box>
+                        <AccountTreeOutlinedIcon sx={{ color: "#93c5fd" }} />
+                    </Box>
 
-            <Card sx={mfBuilderActionBarSx}>
-                <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={mfBuilderActionEyebrowSx}>
-                        {readable(status || "UNKNOWN")} · {currentOwner}
-                    </Typography>
-                    <Typography sx={mfBuilderActionTitleSx}>
-                        {workflow[1]}
-                    </Typography>
-                    <Typography sx={mfBuilderActionSubSx}>
-                        Project/Product ownership, route rules, Production technical approval,
-                        Director final approval and requisition gating are unchanged.
-                    </Typography>
-                </Box>
+                    <Box sx={mfBuilderSplitListSx}>
+                        {materialSections.length === 0 ? (
+                            <Typography sx={mfBuilderSideSubSx}>
+                                Add materials to generate the section distribution.
+                            </Typography>
+                        ) : materialSections.map((section) => {
+                            const percent = lines.length > 0
+                                ? Math.round((section.rows.length / lines.length) * 100)
+                                : 0;
 
-                <Box sx={mfBuilderActionButtonsSx}>
-                    {canEdit && lines.length > 0 && (
-                        <Button
-                            startIcon={<SendOutlinedIcon />}
-                            endIcon={<ArrowForwardIcon />}
-                            onClick={() => setAction("SUBMIT")}
-                            disabled={working || routeIssues.length > 0}
-                            sx={primaryBtnSx}
-                        >
-                            Submit for Production Review
-                        </Button>
-                    )}
-                    {canProductionReview && (
-                        <Button
-                            startIcon={<ApprovalOutlinedIcon />}
-                            onClick={() => setAction("PRODUCTION_APPROVE")}
-                            disabled={working}
-                            sx={primaryBtnSx}
-                        >
-                            Production Approve
-                        </Button>
-                    )}
-                    {canProductionReview && (
-                        <Button
-                            startIcon={<UndoOutlinedIcon />}
-                            onClick={() => setAction("PRODUCTION_RETURN")}
-                            disabled={working}
-                            sx={secondaryBtnSx}
-                        >
-                            Production Return
-                        </Button>
-                    )}
-                    {canDirectorReview && (
-                        <Button
-                            startIcon={<ApprovalOutlinedIcon />}
-                            onClick={() => setAction("DIRECTOR_APPROVE")}
-                            disabled={working}
-                            sx={primaryBtnSx}
-                        >
-                            Director Final Approve
-                        </Button>
-                    )}
-                    {canDirectorReview && (
-                        <Button
-                            startIcon={<UndoOutlinedIcon />}
-                            onClick={() => setAction("DIRECTOR_RETURN")}
-                            disabled={working}
-                            sx={secondaryBtnSx}
-                        >
-                            Director Return
-                        </Button>
-                    )}
-                    {canRevision && (
-                        <Button
-                            onClick={() => setAction("REVISION")}
-                            disabled={working}
-                            sx={secondaryBtnSx}
-                        >
-                            Create Revision
-                        </Button>
-                    )}
-                    {canRequisition && (
-                        <Button
-                            endIcon={<ArrowForwardIcon />}
-                            onClick={() => navigate(`/matflow/requisitions/new?bomId=${bom.id}`)}
-                            sx={primaryBtnSx}
-                        >
-                            Raise Requisition
-                        </Button>
-                    )}
-                </Box>
-            </Card>
+                            return (
+                                <Box key={section.key} sx={mfBuilderSplitItemSx}>
+                                    <Box sx={mfBuilderSplitTopSx}>
+                                        <Box sx={mfBuilderSplitNameSx}>
+                                            <span style={mfBuilderDotStyle(section.accent)} />
+                                            {section.title}
+                                        </Box>
+                                        <Typography sx={mfBuilderSplitValueSx}>
+                                            {percent}%
+                                        </Typography>
+                                    </Box>
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={percent}
+                                        sx={mfBuilderProgressSx(section.accent)}
+                                    />
+                                </Box>
+                            );
+                        })}
+                    </Box>
+                </Card>
+
+                <Card sx={mfBuilderSidePanelSx}>
+                    <Box sx={mfBuilderSideTitleRowSx}>
+                        <Box>
+                            <Typography sx={mfBuilderSideTitleSx}>
+                                Quick Actions
+                            </Typography>
+                            <Typography sx={mfBuilderSideSubSx}>
+                                MatFlow handoffs around the operational BOM.
+                            </Typography>
+                        </Box>
+                        <SpeedOutlinedIcon sx={{ color: "#93c5fd" }} />
+                    </Box>
+
+                    <Box sx={mfBuilderQuickActionListSx}>
+                        {quickActions.map((item) => (
+                            <MatFlowBuilderQuickAction
+                                key={item.title}
+                                {...item}
+                                onClick={() => navigate(item.path)}
+                            />
+                        ))}
+                    </Box>
+                </Card>
+            </Box>
 
             <Dialog
                 open={Boolean(action)}
@@ -3045,7 +3048,7 @@ const mfBuilderMiniSubSx = {
 
 const mfBuilderMainGridSx = {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1.8fr) minmax(330px, .72fr)",
+    gridTemplateColumns: "minmax(0, 1.95fr) minmax(320px, .68fr)",
     gap: "14px",
     alignItems: "start",
     "@media (max-width: 1180px)": {
@@ -3065,6 +3068,17 @@ const mfBuilderRightColumnSx = {
     flexDirection: "column",
     gap: "10px",
     minWidth: 0,
+    alignSelf: "start",
+};
+
+const mfBuilderSupportGridSx = {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "10px",
+    alignItems: "stretch",
+    "@media (max-width: 1180px)": {
+        gridTemplateColumns: "1fr",
+    },
 };
 
 const mfBuilderToolbarSx = {
@@ -3743,6 +3757,7 @@ const mfBuilderQuickActionSubStyle = {
 const mfBuilderRouteRegisterCardSx = {
     p: 0,
     overflow: "hidden",
+    marginTop: "2px",
     borderRadius: "10px",
     background: "rgba(10,24,42,.84)",
     border: "1px solid rgba(255,255,255,.07)",
