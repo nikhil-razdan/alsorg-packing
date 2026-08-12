@@ -21,7 +21,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { useNavigate, useParams } from "react-router-dom";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
-import { downloadMatFlowExcel } from ".../api/matflowExcel";
+import { downloadMatFlowExcel } from "../api/matflowExcel";
 import {
     Detail,
     EmptyState,
