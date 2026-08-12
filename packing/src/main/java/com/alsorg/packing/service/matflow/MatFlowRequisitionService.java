@@ -4814,13 +4814,18 @@ public class MatFlowRequisitionService {
 
                         MatFlowMaterialRequisition requisition = line.requisition;
 
-                        List<MatFlowBomRouteStep> approvedRoute = loadApprovedRoute(
+                        /*
+                         * ControlModule is a static nested class. Route loading/validation
+                         * belongs to the owning MatFlowRequisitionService instance, which
+                         * is already injected here as planningService.
+                         */
+                        List<MatFlowBomRouteStep> approvedRoute = planningService.loadApprovedRoute(
                                         line.bomLine.getId());
 
-                        validateRoute(
+                        planningService.validateRoute(
                                         approvedRoute);
 
-                        validateDestination(
+                        planningService.validateDestination(
                                         requisition.destinationLocation,
                                         approvedRoute);
 
