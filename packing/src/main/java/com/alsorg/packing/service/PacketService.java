@@ -166,10 +166,9 @@ public class PacketService {
                  * Legacy rows without packedAt keep the previous safe behaviour
                  * and fall back to today's India date.
                  */
-                java.time.LocalDate stickerPackingDate =
-                                item.getPackedAt() != null
-                                                ? item.getPackedAt().toLocalDate()
-                                                : java.time.LocalDate.now(INDIA_ZONE);
+                java.time.LocalDate stickerPackingDate = item.getPackedAt() != null
+                                ? item.getPackedAt().toLocalDate()
+                                : java.time.LocalDate.now(INDIA_ZONE);
 
                 pdf.setDate(stickerPackingDate.toString());
 
@@ -1179,10 +1178,10 @@ public class PacketService {
          * - PacketItem.packedAt is the source of truth for sticker packing date.
          * - Matching DispatchedItem.packedAt is kept in sync for reports/UI.
          * - Existing StickerHistory rows keep their original audit metadata, but
-         *   their stored PDF bytes are rebuilt so opening an old sticker-history
-         *   entry immediately shows the corrected packing date.
+         * their stored PDF bytes are rebuilt so opening an old sticker-history
+         * entry immediately shows the corrected packing date.
          * - Sticker number, print iteration, generatedBy, generatedAt and reason
-         *   are never rewritten by a date correction.
+         * are never rewritten by a date correction.
          */
         @Transactional
         public PacketItem adminUpdatePackingDateForDispatchedItem(
@@ -1202,25 +1201,57 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException(
                                                 "Dispatch item not found"));
 
+                String actor = safeActor(updatedBy);
+
                 /*
                  * IMPORTANT WORKFLOW GUARANTEE
                  * ----------------------------
-                 * Packing-date correction must never create/rebuild a Packet or
-                 * PacketItem and must never alter movement status/location/stock.
+                 * This Admin-only correction must NEVER create a Packet/PacketItem,
+                 * change movement status, location, stock, warehouse state, gate pass,
+                 * FG/PKD state, challan state or dispatch state.
                  *
-                 * Some older Dispatch rows can contain a stale packetItemId. Resolve
-                 * only an EXISTING original PacketItem using the application's normal
-                 * linkage conventions. If no original PacketItem exists, fail safely
-                 * instead of manufacturing a workflow record.
+                 * There are two legitimate record origins in the current system:
+                 *
+                 * 1) PACKING-origin item
+                 * PacketItem -> DispatchedItem linkage exists (or can be recovered
+                 * from an existing Packet/PacketItem record).
+                 *
+                 * 2) WAREHOUSE-IMPORT-origin item
+                 * Warehouse Excel import created the DispatchedItem directly.
+                 * Such a row can legitimately have no PacketItem/Packet linkage.
+                 *
+                 * For (1), preserve the existing synchronized behaviour:
+                 * PacketItem.packedAt + DispatchedItem.packedAt + StickerHistory PDFs.
+                 *
+                 * For (2), update ONLY DispatchedItem.packedAt. Do not manufacture a
+                 * PacketItem merely to support an Admin date override.
                  */
-                String actor = safeActor(updatedBy);
-
                 PacketItem packetItem = resolveExistingPacketItemForAdminPackingDate(
                                 dispatchedItem);
 
+                if (packetItem == null) {
+                        if (isStandaloneWarehouseImportedDispatchItem(dispatchedItem)) {
+                                return adminUpdateStandaloneDispatchedPackingDate(
+                                                dispatchedItem,
+                                                packingDate,
+                                                actor);
+                        }
+
+                        /*
+                         * A packet-origin row that merely has broken/stale linkage is a
+                         * different case. Do not silently downgrade it to standalone,
+                         * because doing so could leave an existing sticker history out
+                         * of sync. Fail safely for that genuinely inconsistent record.
+                         */
+                        throw new IllegalStateException(
+                                        "Existing PacketItem linkage could not be resolved for this packet-origin Dispatch item. "
+                                                        +
+                                                        "Packing date was not changed.");
+                }
+
                 /*
-                 * Repair only the linkage fields. This does not touch status,
-                 * location, FG/PKD state, stock, warehouse state or dispatch state.
+                 * Repair only existing linkage fields when an original PacketItem was
+                 * successfully resolved. No workflow fields are changed here.
                  */
                 boolean dispatchLinkChanged = !Objects.equals(
                                 dispatchedItem.getPacketItemId(),
@@ -1248,6 +1279,13 @@ public class PacketService {
                                 actor);
         }
 
+        /**
+         * Resolve an already-existing PacketItem only.
+         *
+         * Returning null is intentional: warehouse-imported inventory rows are valid
+         * standalone DispatchedItem records and must not be forced into the Packet
+         * lifecycle simply because an Admin edits their packing date.
+         */
         private PacketItem resolveExistingPacketItemForAdminPackingDate(
                         DispatchedItem dispatchedItem) {
 
@@ -1270,6 +1308,10 @@ public class PacketService {
                 /*
                  * 2) Original PackFlow convention:
                  * DispatchedItem.zohoItemId == PacketItem.id.toString().
+                 *
+                 * Warehouse-import rows also use UUID-looking IDs, so a parseable UUID
+                 * alone is not treated as proof of PacketItem origin. The PacketItem
+                 * must actually exist.
                  */
                 try {
                         UUID originalPacketItemId = UUID.fromString(
@@ -1299,11 +1341,10 @@ public class PacketService {
                                                 !dispatchedItem.getStickerNumber().isBlank()) {
                                         PacketItem bySticker = packetItems.stream()
                                                         .filter(Objects::nonNull)
-                                                        .filter(candidate ->
-                                                                        candidate.getStickerNumber() != null &&
-                                                                                        candidate.getStickerNumber()
-                                                                                                        .equalsIgnoreCase(
-                                                                                                                        dispatchedItem.getStickerNumber()))
+                                                        .filter(candidate -> candidate.getStickerNumber() != null &&
+                                                                        candidate.getStickerNumber()
+                                                                                        .equalsIgnoreCase(
+                                                                                                        dispatchedItem.getStickerNumber()))
                                                         .findFirst()
                                                         .orElse(null);
 
@@ -1316,11 +1357,10 @@ public class PacketService {
                                                 !dispatchedItem.getSku().isBlank()) {
                                         PacketItem bySku = packetItems.stream()
                                                         .filter(Objects::nonNull)
-                                                        .filter(candidate ->
-                                                                        candidate.getSku() != null &&
-                                                                                        candidate.getSku()
-                                                                                                        .equalsIgnoreCase(
-                                                                                                                        dispatchedItem.getSku()))
+                                                        .filter(candidate -> candidate.getSku() != null &&
+                                                                        candidate.getSku()
+                                                                                        .equalsIgnoreCase(
+                                                                                                        dispatchedItem.getSku()))
                                                         .findFirst()
                                                         .orElse(null);
 
@@ -1336,9 +1376,106 @@ public class PacketService {
                         }
                 }
 
-                throw new IllegalStateException(
-                                "Original PacketItem linkage not found for this Dispatch item. " +
-                                                "Packing date was not changed.");
+                return null;
+        }
+
+        private boolean isStandaloneWarehouseImportedDispatchItem(
+                        DispatchedItem dispatchedItem) {
+
+                if (dispatchedItem == null) {
+                        return false;
+                }
+
+                /*
+                 * Warehouse CSV import creates a DispatchedItem directly. It does not
+                 * create Packet/PacketItem linkage or a packing sticker. These three
+                 * conditions therefore distinguish that legitimate origin from a
+                 * packet-origin row whose relationship is unexpectedly broken.
+                 */
+                boolean noPacketLink = dispatchedItem.getPacketId() == null;
+                boolean noPacketItemLink = dispatchedItem.getPacketItemId() == null;
+                boolean noSticker = dispatchedItem.getStickerNumber() == null ||
+                                dispatchedItem.getStickerNumber().isBlank();
+
+                return noPacketLink && noPacketItemLink && noSticker;
+        }
+
+        /**
+         * Admin packing-date correction for a standalone warehouse-imported row.
+         *
+         * There is deliberately no PacketItem creation here. The import route created
+         * this record directly as a DispatchedItem, so the correction stays within the
+         * same persistence model and cannot alter the normal packing workflow.
+         */
+        private PacketItem adminUpdateStandaloneDispatchedPackingDate(
+                        DispatchedItem dispatchedItem,
+                        String packingDate,
+                        String actor) {
+
+                java.time.LocalDate parsedPackingDate = parseAdminPackingDate(
+                                packingDate);
+
+                LocalDateTime previousPackedAt = dispatchedItem.getPackedAt();
+
+                java.time.LocalTime preservedTime;
+
+                if (previousPackedAt != null) {
+                        preservedTime = previousPackedAt.toLocalTime();
+                } else if (dispatchedItem.getCreatedAt() != null) {
+                        /*
+                         * Warehouse import already has a creation timestamp. Reusing its
+                         * time component gives the standalone row a stable time without
+                         * pretending that a Packet packing event occurred.
+                         */
+                        preservedTime = dispatchedItem.getCreatedAt().toLocalTime();
+                } else if (dispatchedItem.getStoredAt() != null) {
+                        preservedTime = dispatchedItem.getStoredAt().toLocalTime();
+                } else {
+                        preservedTime = LocalDateTime.now(INDIA_ZONE).toLocalTime();
+                }
+
+                LocalDateTime correctedPackedAt = parsedPackingDate
+                                .atTime(preservedTime);
+
+                /*
+                 * ONLY packedAt is changed. Do not touch status/location/stock/etc.
+                 */
+                dispatchedItem.setPackedAt(correctedPackedAt);
+                dispatchedRepo.save(dispatchedItem);
+
+                activityLogService.log(
+                                dispatchedItem.getZohoItemId(),
+                                "PACKING DATE UPDATED",
+                                actor,
+                                "ADMIN",
+                                previousPackedAt == null
+                                                ? null
+                                                : previousPackedAt.toLocalDate().toString(),
+                                parsedPackingDate.toString(),
+                                "Standalone warehouse-imported Dispatch item; no PacketItem linkage created");
+
+                /*
+                 * The controller/frontend only require a successful response. Returning
+                 * null here is deliberate because no PacketItem exists for this origin.
+                 */
+                return null;
+        }
+
+        private java.time.LocalDate parseAdminPackingDate(
+                        String packingDate) {
+
+                if (packingDate == null || packingDate.isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Packing date is required");
+                }
+
+                try {
+                        return java.time.LocalDate.parse(
+                                        packingDate.trim());
+                } catch (Exception exception) {
+                        throw new IllegalArgumentException(
+                                        "Packing date must be in yyyy-MM-dd format");
+                }
         }
 
         @Transactional
@@ -1347,20 +1484,7 @@ public class PacketService {
                         String packingDate,
                         String updatedBy) {
 
-                if (packingDate == null || packingDate.isBlank()) {
-                        throw new IllegalArgumentException(
-                                        "Packing date is required");
-                }
-
-                final java.time.LocalDate parsedPackingDate;
-
-                try {
-                        parsedPackingDate = java.time.LocalDate.parse(
-                                        packingDate.trim());
-                } catch (Exception exception) {
-                        throw new IllegalArgumentException(
-                                        "Packing date must be in yyyy-MM-dd format");
-                }
+                final java.time.LocalDate parsedPackingDate = parseAdminPackingDate(packingDate);
 
                 PacketItem item = packetItemRepository
                                 .findById(itemId)
@@ -1369,13 +1493,11 @@ public class PacketService {
 
                 LocalDateTime previousPackedAt = item.getPackedAt();
 
-                java.time.LocalTime preservedTime =
-                                previousPackedAt != null
-                                                ? previousPackedAt.toLocalTime()
-                                                : LocalDateTime.now(INDIA_ZONE).toLocalTime();
+                java.time.LocalTime preservedTime = previousPackedAt != null
+                                ? previousPackedAt.toLocalTime()
+                                : LocalDateTime.now(INDIA_ZONE).toLocalTime();
 
-                LocalDateTime correctedPackedAt =
-                                parsedPackingDate.atTime(preservedTime);
+                LocalDateTime correctedPackedAt = parsedPackingDate.atTime(preservedTime);
 
                 item.setPackedAt(correctedPackedAt);
 
@@ -1409,24 +1531,22 @@ public class PacketService {
                                         continue;
                                 }
 
-                                String historyStickerNumber =
-                                                firstNonBlankValue(
-                                                                history.getStickerNumber(),
-                                                                saved.getStickerNumber());
+                                String historyStickerNumber = firstNonBlankValue(
+                                                history.getStickerNumber(),
+                                                saved.getStickerNumber());
 
                                 if (historyStickerNumber == null ||
                                                 historyStickerNumber.isBlank()) {
                                         continue;
                                 }
 
-                                long historyIteration =
-                                                history.getPrintIteration() != null &&
-                                                                history.getPrintIteration() > 0
-                                                                                ? history.getPrintIteration()
-                                                                                : saved.getPrintIteration() != null &&
-                                                                                                saved.getPrintIteration() > 0
-                                                                                                                ? saved.getPrintIteration()
-                                                                                                                : 1L;
+                                long historyIteration = history.getPrintIteration() != null &&
+                                                history.getPrintIteration() > 0
+                                                                ? history.getPrintIteration()
+                                                                : saved.getPrintIteration() != null &&
+                                                                                saved.getPrintIteration() > 0
+                                                                                                ? saved.getPrintIteration()
+                                                                                                : 1L;
 
                                 StickerPdfData pdf = buildStickerPdfData(
                                                 saved,
@@ -3176,6 +3296,17 @@ public class PacketService {
                                                 packetItem.getStickerNumber(),
                                                 dispatchedItem.getStickerNumber()));
 
+                /*
+                 * Legacy/history repair only: when a standalone Warehouse import was
+                 * given an Admin packing-date override before sticker history was ever
+                 * rebuilt, carry that existing timestamp into the newly resolved
+                 * PacketItem. This does not alter movement state.
+                 */
+                if (packetItem.getPackedAt() == null &&
+                                dispatchedItem.getPackedAt() != null) {
+                        packetItem.setPackedAt(dispatchedItem.getPackedAt());
+                }
+
                 if (packetItem.getQuantity() == null) {
                         packetItem.setQuantity(1);
                 }
@@ -3266,6 +3397,13 @@ public class PacketService {
                 packetItem.setStatus("READY");
                 packetItem.setCreatedBy(actor);
                 packetItem.setStickerNumber(dispatchedItem.getStickerNumber());
+
+                /*
+                 * If this standalone/imported Dispatch row already has an explicit
+                 * Admin-corrected packing timestamp, preserve it when the existing
+                 * legacy sticker-history rebuild flow later creates a PacketItem.
+                 */
+                packetItem.setPackedAt(dispatchedItem.getPackedAt());
 
                 PacketItem saved = packetItemRepository.save(packetItem);
 
