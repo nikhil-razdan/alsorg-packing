@@ -221,7 +221,7 @@ public class MatFlowMasterDataService {
                                 namesExcluding(
                                                 MatFlowBomStatus.class,
                                                 Set.of("PRODUCTION_REVIEW_PENDING")));
-                enums.put("locationType", names(LocationType.class));
+                enums.put("locationType", namesExcluding(LocationType.class, Set.of("QC")));
                 enums.put("routeStepType", List.of(RouteStepType.PROCESSING.name()));
                 enums.put(
                                 "requisitionStatus",
@@ -234,7 +234,6 @@ public class MatFlowMasterDataService {
                 enums.put("purchaseOrderStatus", names(PurchaseOrderStatus.class));
                 enums.put("goodsReceiptStatus", names(GoodsReceiptStatus.class));
                 enums.put("qcInspectionStatus", names(QcInspectionStatus.class));
-                enums.put("qcRoutingDecision", names(QcRoutingDecision.class));
                 enums.put("qcSourceType", names(QcSourceType.class));
                 enums.put("qcDispositionType", names(QcDispositionType.class));
                 enums.put("qcDispositionStatus", names(QcDispositionStatus.class));
@@ -1031,6 +1030,7 @@ public class MatFlowMasterDataService {
                                         .findByPlantCodeInOrderByLocationCodeAsc(
                                                         accessService.allowedPlants())
                                         .stream()
+                                        .filter(location -> location.getLocationType() != LocationType.QC)
                                         .filter(location -> active == null ||
                                                         location.isActive() == active)
                                         .filter(location -> query.isBlank()
@@ -1418,6 +1418,11 @@ public class MatFlowMasterDataService {
                         if (request.locationType() == null) {
                                 throw badRequest(
                                                 "Location type is required");
+                        }
+
+                        if (request.locationType() == LocationType.QC) {
+                                throw badRequest(
+                                                "QC is a material check, not a MatFlow physical location. Use Store, Processing or Production locations.");
                         }
                 }
 

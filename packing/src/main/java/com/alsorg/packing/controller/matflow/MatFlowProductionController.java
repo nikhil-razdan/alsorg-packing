@@ -29,8 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Processing + Production execution controller.
  *
- * Processing jobs are queued only by QC routing. Processing completes the job
- * and sends the material onward. Production explicitly receives each arriving
+ * Processing jobs are queued from the Store-selected Processing route, whether
+ * or
+ * not QC was required. Processing completes the job and sends the material
+ * onward. Production explicitly receives each arriving
  * material lot, then starts, consumes/wastes/returns and completes the MR.
  */
 @RestController
@@ -70,7 +72,7 @@ public class MatFlowProductionController {
     }
 
     /**
-     * Production acknowledgement for a lot already sent by Store/QC/Processing.
+     * Production acknowledgement for a lot already sent by Store or Processing.
      * This is a Production business action, not a generic transfer receipt desk.
      */
     @PostMapping("/production/reservations/{reservationId}/receive")

@@ -415,6 +415,368 @@ export async function downloadMatFlowExcel({
     URL.revokeObjectURL(url);
 }
 
+
+const ALSORG_BOM_COMPANY_LINE = "Alsorg Interior's Pvt Ltd , Begumpur Khatola, Rectangle No.11,Kharsa No. 2 & 9, Behrampur Road,GGN (Haryana)";
+
+const ALSORG_BOM_COLUMNS = [
+    { header: "SL", width: 5 },
+    { header: "Material", width: 58.33203125 },
+    { header: "Material Type", width: 14.6640625 },
+    { header: "Code", width: 39.44140625 },
+    { header: "Section", width: 8.33203125 },
+    { header: "Finish", width: 6.5546875 },
+    { header: "Size", width: 22.33203125 },
+    { header: "Thk", width: 11.5546875 },
+    { header: "Uom", width: 5.5546875 },
+    { header: "Qty", width: 4.5546875 },
+    { header: "REMARK", width: 9.44140625 },
+];
+
+const BOM_CATEGORY_ORDER = [
+    "WOOD",
+    "VENEER",
+    "LAMINATE",
+    "METAL",
+    "STONE_TILE",
+    "GLASS_MIRROR",
+    "FABRIC_LEATHER",
+    "UPHOLSTERY",
+    "HARDWARE",
+    "PAINT_POLISH",
+    "ADHESIVE_CHEMICAL",
+    "PACKAGING",
+    "RAW_MATERIAL",
+    "OTHER",
+];
+
+const BOM_CATEGORY_LABELS = {
+    WOOD: "Wood Requirement",
+    VENEER: "Veneer Requirement",
+    LAMINATE: "Laminate Requirement",
+    METAL: "Metal Requirement",
+    STONE_TILE: "Stone / Tile Requirement",
+    GLASS_MIRROR: "Glass / Mirror Requirement",
+    FABRIC_LEATHER: "Fabric / Leather Requirement",
+    UPHOLSTERY: "Upholstery Requirement",
+    HARDWARE: "Hardware Requirement",
+    PAINT_POLISH: "Polish / Paint Requirement",
+    ADHESIVE_CHEMICAL: "Adhesive / Chemical Requirement",
+    PACKAGING: "Packaging Requirement",
+    RAW_MATERIAL: "Raw Material Requirement",
+    OTHER: "Other Material Requirement",
+};
+
+const normalizeBomCategory = (value) => {
+    const normalized = upper(value || "OTHER")
+        .replace(/[^A-Z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    return normalized || "OTHER";
+};
+
+const readableBomCategory = (value) =>
+    normalizeBomCategory(value)
+        .toLowerCase()
+        .split("_")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+
+const bomSectionLabel = (category) =>
+    BOM_CATEGORY_LABELS[normalizeBomCategory(category)] || `${readableBomCategory(category)} Requirement`;
+
+const numberForBom = (value, fallback = null) => {
+    if (value === null || value === undefined || value === "") return fallback;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const splitBomSpecification = (value) => {
+    const text = safeText(value);
+    const result = { section: "", finish: "", size: "", thickness: "" };
+    if (!text) return result;
+
+    const parts = text
+        .split(/\s*(?:\||•|·|;)\s*/)
+        .map((part) => safeText(part))
+        .filter(Boolean);
+
+    let matched = false;
+    const unlabelled = [];
+
+    for (const part of parts.length ? parts : [text]) {
+        const match = part.match(/^(section|finish|size|thk|thickness)\s*[:=\-]\s*(.+)$/i);
+        if (!match) {
+            unlabelled.push(part);
+            continue;
+        }
+        matched = true;
+        const key = match[1].toLowerCase();
+        const payload = safeText(match[2]);
+        if (key === "section") result.section = payload;
+        else if (key === "finish") result.finish = payload;
+        else if (key === "size") result.size = payload;
+        else result.thickness = payload;
+    }
+
+    if (unlabelled.length) {
+        const remainder = unlabelled.join(" · ");
+        if (!result.size) result.size = remainder;
+        else result.size = [result.size, remainder].filter(Boolean).join(" · ");
+    } else if (!matched) {
+        result.size = text;
+    }
+
+    return result;
+};
+
+const thinBlackBorder = {
+    top: { style: "thin", color: { argb: "FF000000" } },
+    left: { style: "thin", color: { argb: "FF000000" } },
+    bottom: { style: "thin", color: { argb: "FF000000" } },
+    right: { style: "thin", color: { argb: "FF000000" } },
+};
+
+const styleBomRangeBorder = (sheet, rowNumber) => {
+    for (let col = 1; col <= 11; col += 1) {
+        sheet.getCell(rowNumber, col).border = thinBlackBorder;
+    }
+};
+
+const routesForBomLine = (routes, lineId) =>
+    (Array.isArray(routes) ? routes : [])
+        .filter((step) => String(step?.bomLineId ?? "") === String(lineId ?? ""))
+        .filter((step) => normalizeBomCategory(step?.stepType) === "PROCESSING")
+        .sort((a, b) => numberOr(a?.sequenceNo, 0) - numberOr(b?.sequenceNo, 0));
+
+/**
+ * Downloads one Product BOM in the ALSORG "Final Sparta BOM Format" supplied
+ * for MatFlow. The company/address line, Material Requirement title, Project /
+ * PD No. / Drawing Title / Estimate By rows, column order, widths, borders and
+ * overall visual language intentionally mirror that workbook.
+ *
+ * The only structural difference requested for MatFlow is that materials are
+ * rendered in a separate section for every material category instead of one
+ * continuous list repeating the category in every row. The original
+ * "Material Type" column is retained for format compatibility but is left
+ * blank because the section heading itself is now the category authority.
+ */
+export async function downloadMatFlowBomExcel({ bom, routes = [] } = {}) {
+    if (!bom || typeof bom !== "object") {
+        throw new Error("A BOM is required for download.");
+    }
+
+    const project = bom.project || bom.projectDrawing || bom.projectContext || {};
+    const lines = Array.isArray(bom.lines)
+        ? bom.lines
+        : Array.isArray(bom.bomLines)
+            ? bom.bomLines
+            : Array.isArray(bom.items)
+                ? bom.items
+                : [];
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "ALSORG FlowSuite / MatFlow";
+    workbook.lastModifiedBy = safeText(bom.updatedBy || bom.createdBy || "ALSORG");
+    workbook.company = "ALSORG";
+    workbook.title = safeText(bom.bomNumber || "ALSORG Material Requirement");
+    workbook.subject = "Product Bill of Material / Material Requirement";
+    workbook.category = "MatFlow BOM";
+    workbook.description = "ALSORG MatFlow Product BOM in the approved Sparta Material Requirement format.";
+    workbook.keywords = "ALSORG, MatFlow, BOM, Material Requirement";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const sheet = workbook.addWorksheet("BOM");
+    sheet.properties.defaultRowHeight = 18;
+    sheet.pageSetup.margins = {
+        left: 0.7,
+        right: 0.7,
+        top: 0.75,
+        bottom: 0.75,
+        header: 0.3,
+        footer: 0.3,
+    };
+
+    ALSORG_BOM_COLUMNS.forEach((column, index) => {
+        sheet.getColumn(index + 1).width = column.width;
+    });
+
+    sheet.mergeCells("A1:K1");
+    const companyCell = sheet.getCell("A1");
+    companyCell.value = ALSORG_BOM_COMPANY_LINE;
+    companyCell.font = { name: "Calibri", size: 12, bold: true, color: { argb: "FF000000" } };
+    companyCell.alignment = { horizontal: "center", vertical: "middle" };
+    sheet.getRow(1).height = 20;
+    styleBomRangeBorder(sheet, 1);
+
+    sheet.mergeCells("A2:K2");
+    const titleCell = sheet.getCell("A2");
+    titleCell.value = "Material Requirement";
+    titleCell.font = { name: "Calibri", size: 16, bold: true, color: { argb: "FF000000" } };
+    titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    sheet.getRow(2).height = 26;
+    for (let col = 1; col <= 11; col += 1) {
+        sheet.getCell(2, col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+    }
+    styleBomRangeBorder(sheet, 2);
+
+    sheet.mergeCells("A3:F3");
+    sheet.mergeCells("G3:J3");
+    sheet.getCell("A3").value = `PROJECT :- ${safeText(project.projectName || "")}`;
+    sheet.getCell("G3").value = `PD No. :- ${safeText(project.projectCode || project.pdNo || "-")}`;
+
+    sheet.mergeCells("A4:F4");
+    sheet.mergeCells("G4:J4");
+    sheet.getCell("A4").value = `Drawing Title :- ${safeText(project.productName || project.drawingTitle || "-")}`;
+    sheet.getCell("G4").value = `Estimate By :- ${safeText(bom.createdBy || bom.submittedBy || bom.updatedBy || "-")}`;
+
+    for (const rowNumber of [3, 4]) {
+        sheet.getRow(rowNumber).height = 20;
+        for (let col = 1; col <= 11; col += 1) {
+            const cell = sheet.getCell(rowNumber, col);
+            cell.font = { name: "Calibri", size: 12, color: { argb: "FF000000" } };
+            cell.alignment = { vertical: "middle", wrapText: true };
+        }
+        styleBomRangeBorder(sheet, rowNumber);
+    }
+
+    const grouped = new Map();
+    lines.forEach((line) => {
+        const key = normalizeBomCategory(
+            line?.materialCategorySnapshot || line?.materialCategory || line?.category || "OTHER"
+        );
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(line);
+    });
+
+    const categories = Array.from(grouped.keys()).sort((left, right) => {
+        const leftIndex = BOM_CATEGORY_ORDER.indexOf(left);
+        const rightIndex = BOM_CATEGORY_ORDER.indexOf(right);
+        if (leftIndex >= 0 && rightIndex >= 0) return leftIndex - rightIndex;
+        if (leftIndex >= 0) return -1;
+        if (rightIndex >= 0) return 1;
+        return readableBomCategory(left).localeCompare(readableBomCategory(right));
+    });
+
+    let rowNumber = 5;
+    let serial = 1;
+
+    const writeSectionHeader = (category) => {
+        sheet.mergeCells(rowNumber, 1, rowNumber, 11);
+        const cell = sheet.getCell(rowNumber, 1);
+        cell.value = bomSectionLabel(category);
+        cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: "FF000000" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        for (let col = 1; col <= 11; col += 1) {
+            sheet.getCell(rowNumber, col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+        }
+        sheet.getRow(rowNumber).height = 22;
+        styleBomRangeBorder(sheet, rowNumber);
+        rowNumber += 1;
+    };
+
+    const writeColumnHeader = () => {
+        ALSORG_BOM_COLUMNS.forEach((column, index) => {
+            const cell = sheet.getCell(rowNumber, index + 1);
+            cell.value = column.header;
+            cell.font = { name: "Calibri", size: 12, bold: true, color: { argb: "FF000000" } };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" } };
+            cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+            cell.border = thinBlackBorder;
+        });
+        sheet.getRow(rowNumber).height = 22;
+        rowNumber += 1;
+    };
+
+    const writeMaterialRow = (line) => {
+        const specification = splitBomSpecification(line?.specification || line?.specificationSnapshot);
+        const processing = routesForBomLine(routes, line?.id)
+            .map((step) => {
+                const process = safeText(step?.processCode || "PROCESS");
+                const location = safeText(step?.locationCode || step?.locationName || "PROCESSING UNIT");
+                return `${process} @ ${location}`;
+            })
+            .filter(Boolean)
+            .join(" | ");
+
+        const remark = [
+            safeText(line?.remarks),
+            processing ? `Processing: ${processing}` : "",
+        ].filter(Boolean).join(" | ");
+
+        const qty = numberForBom(line?.netRequiredQty, numberForBom(line?.requiredQty, 0));
+        const values = [
+            serial,
+            safeText(line?.materialName || line?.materialNameSnapshot),
+            "",
+            safeText(line?.materialCode || line?.materialCodeSnapshot),
+            specification.section,
+            specification.finish,
+            specification.size,
+            specification.thickness,
+            safeText(line?.uom || line?.uomSnapshot),
+            qty,
+            remark,
+        ];
+
+        values.forEach((value, index) => {
+            const cell = sheet.getCell(rowNumber, index + 1);
+            cell.value = value;
+            cell.font = { name: "Calibri", size: 12, color: { argb: "FF000000" } };
+            cell.border = thinBlackBorder;
+            cell.alignment = {
+                horizontal: [1, 9, 10].includes(index + 1) ? "center" : "left",
+                vertical: "middle",
+                wrapText: true,
+            };
+        });
+        sheet.getCell(rowNumber, 10).numFmt = "0.###";
+        sheet.getRow(rowNumber).height = 20;
+        serial += 1;
+        rowNumber += 1;
+    };
+
+    if (!categories.length) {
+        writeSectionHeader("OTHER");
+        writeColumnHeader();
+        sheet.mergeCells(rowNumber, 1, rowNumber, 11);
+        const emptyCell = sheet.getCell(rowNumber, 1);
+        emptyCell.value = "No material lines have been added to this BOM.";
+        emptyCell.font = { name: "Calibri", size: 12, italic: true, color: { argb: "FF666666" } };
+        emptyCell.alignment = { horizontal: "center", vertical: "middle" };
+        sheet.getRow(rowNumber).height = 24;
+        styleBomRangeBorder(sheet, rowNumber);
+    } else {
+        categories.forEach((category) => {
+            writeSectionHeader(category);
+            writeColumnHeader();
+            (grouped.get(category) || [])
+                .slice()
+                .sort((a, b) => numberOr(a?.lineNo, 0) - numberOr(b?.lineNo, 0))
+                .forEach(writeMaterialRow);
+        });
+    }
+
+    const finalRow = Math.max(rowNumber, sheet.rowCount);
+    sheet.pageSetup.printArea = `A1:K${finalRow}`;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeText(bom.bomNumber || "ALSORG_Material_Requirement")
+        .replace(/[^a-z0-9._-]+/gi, "_")}.xlsx`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+}
+
 export async function downloadMaterialImportTemplate() {
     return downloadMatFlowExcel({
         fileName: "ALSORG_Global_Material_Inventory_Import_Template",

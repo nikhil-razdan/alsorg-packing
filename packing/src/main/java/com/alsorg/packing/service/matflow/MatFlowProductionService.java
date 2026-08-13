@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Production execution boundary: QC-created processing jobs, explicit
+ * Production execution boundary: Store-selected processing jobs, explicit
  * Production start/completion, material consumption and wastage.
  * Processing never raises Purchase Indents; replacement demand returns to
  * Store.
@@ -102,11 +102,22 @@ public class MatFlowProductionService {
         }
 
         @Transactional
+        public ProcessingJobResponse createProcessingJobForReservation(
+                        UUID reservationId,
+                        UUID processingRouteStepId,
+                        String remarks) {
+                return processing.createForReservation(reservationId, processingRouteStepId, remarks);
+        }
+
+        /**
+         * Compatibility alias for older internal callers; QC no longer creates routes.
+         */
+        @Deprecated
         public ProcessingJobResponse createProcessingJobFromQc(
                         UUID reservationId,
                         UUID processingRouteStepId,
                         String remarks) {
-                return processing.createFromQc(reservationId, processingRouteStepId, remarks);
+                return createProcessingJobForReservation(reservationId, processingRouteStepId, remarks);
         }
 
         @Transactional
@@ -411,12 +422,12 @@ public class MatFlowProductionService {
                                         .toList();
                 }
 
-                ProcessingJobResponse createFromQc(
+                ProcessingJobResponse createForReservation(
                                 UUID reservationId,
                                 UUID routeStepId,
                                 String remarks) {
                         if (reservationId == null || routeStepId == null) {
-                                throw badRequest("QC Processing route requires reservation and Processing step");
+                                throw badRequest("Processing route requires reservation and selected Processing step");
                         }
                         MatFlowReservation reservation = reservationRepository.findById(reservationId)
                                         .orElseThrow(() -> notFound("Reservation not found"));
@@ -426,7 +437,7 @@ public class MatFlowProductionService {
                         final MatFlowBomRouteStep routeStep = (MatFlowBomRouteStep) Hibernate.unproxy(rawRouteStep);
 
                         if (routeStep.stepType != RouteStepType.PROCESSING) {
-                                throw badRequest("Selected QC route step is not a Processing step");
+                                throw badRequest("Selected BOM route step is not a Processing step");
                         }
                         if (reservation.requisitionLine == null || reservation.requisitionLine.bomLine == null ||
                                         routeStep.bomLine == null ||
@@ -475,7 +486,7 @@ public class MatFlowProductionService {
                         job = jobRepository.save(job);
 
                         auditService.record(
-                                        "PROCESSING_JOB", job.getId(), "PROCESSING_JOB_QUEUED_FROM_QC",
+                                        "PROCESSING_JOB", job.getId(), "PROCESSING_JOB_QUEUED_FROM_STORE_ROUTE",
                                         job.location.getPlantCode(),
                                         job.requisition == null || job.requisition.projectDrawing == null ? null
                                                         : job.requisition.projectDrawing.getProjectCode(),

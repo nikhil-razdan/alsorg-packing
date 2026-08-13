@@ -19,7 +19,6 @@ import com.alsorg.packing.repository.matflow.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +56,8 @@ public class MatFlowBomService {
                         MatFlowLocationRepository locationRepository,
                         MatFlowAccessService accessService,
                         MatFlowMasterDataService masterService,
-                        MatFlowAuditService auditService) {
+                        MatFlowAuditService auditService,
+                        MatFlowDocumentNumberService documentNumberService) {
 
                 this.routing = new RoutingModule(
                                 bomRepository, lineRepository, routeRepository, locationRepository, accessService);
@@ -71,6 +71,7 @@ public class MatFlowBomService {
                                 auditService,
                                 accessService,
                                 masterService,
+                                documentNumberService,
                                 routing);
         }
 
@@ -170,6 +171,7 @@ public class MatFlowBomService {
                 private final MatFlowAuditService auditService;
                 private final MatFlowAccessService accessService;
                 private final MatFlowMasterDataService masterService;
+                private final MatFlowDocumentNumberService documentNumberService;
                 private final RoutingModule routingService;
 
                 BomModule(
@@ -181,6 +183,7 @@ public class MatFlowBomService {
                                 MatFlowAuditService auditService,
                                 MatFlowAccessService accessService,
                                 MatFlowMasterDataService masterService,
+                                MatFlowDocumentNumberService documentNumberService,
                                 RoutingModule routingService) {
                         this.bomRepository = bomRepository;
                         this.lineRepository = lineRepository;
@@ -190,6 +193,7 @@ public class MatFlowBomService {
                         this.auditService = auditService;
                         this.accessService = accessService;
                         this.masterService = masterService;
+                        this.documentNumberService = documentNumberService;
                         this.routingService = routingService;
                 }
 
@@ -275,8 +279,15 @@ public class MatFlowBomService {
 
                         MatFlowBom bom = new MatFlowBom();
 
+                        /*
+                         * projectCode is the backward-compatible persistence/API field for
+                         * the business PD No. New BOMs use the exact requested nomenclature:
+                         * BOM/yyyy/MM/dd/PD-NO/DRAWING-NO.
+                         */
                         bom.setBomNumber(
-                                        generateBomNumber());
+                                        documentNumberService.nextBom(
+                                                        project.getProjectCode(),
+                                                        project.getDrawingNo()));
 
                         bom.setRevisionGroupId(
                                         revisionGroupId);
@@ -1210,19 +1221,6 @@ public class MatFlowBomService {
                                         .filter(java.util.Objects::nonNull)
                                         .max(Integer::compareTo)
                                         .orElse(0) + 10;
-                }
-
-                private String generateBomNumber() {
-                        String random = UUID.randomUUID()
-                                        .toString()
-                                        .replace("-", "")
-                                        .substring(0, 8)
-                                        .toUpperCase(Locale.ROOT);
-
-                        return "MFB-" +
-                                        LocalDate.now().getYear() +
-                                        "-" +
-                                        random;
                 }
 
                 private void saveHistory(

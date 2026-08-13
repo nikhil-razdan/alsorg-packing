@@ -79,6 +79,7 @@ export function MatFlowStoreQueuePage() {
     const { selectedPlantParam } = useMatFlow();
 
     const [rows, setRows] = useState([]);
+    const [purchaseIndents, setPurchaseIndents] = useState([]);
     const [stockRows, setStockRows] = useState([]);
     const [materials, setMaterials] = useState([]);
     const [storeLocations, setStoreLocations] = useState([]);
@@ -99,15 +100,32 @@ export function MatFlowStoreQueuePage() {
         setLoading(true);
         setError("");
         try {
-            const [queueResponse, stockResponse, materialResponse, locationResponse] = await Promise.all([
+            const [queueResponse, indentResponse, stockResponse, materialResponse, locationResponse] = await Promise.all([
                 matflowApi.listStoreQueue({ plantCode: selectedPlantParam }),
+                matflowApi.listPurchaseIndents({ plantCode: selectedPlantParam }),
                 matflowApi.listStock({ plantCode: selectedPlantParam }),
                 matflowApi.listMaterials({ active: true }),
                 matflowApi.listLocations({ active: true }),
             ]);
 
+            const indentRows = Array.isArray(indentResponse?.data) ? indentResponse.data : [];
+            setPurchaseIndents(indentRows);
+
+            const indentsByMr = new Map();
+            indentRows.forEach((indent) => {
+                const key = String(indent?.requisitionId || "");
+                if (!key) return;
+                const current = indentsByMr.get(key) || [];
+                current.push(indent);
+                indentsByMr.set(key, current);
+            });
+
             setRows((Array.isArray(queueResponse?.data) ? queueResponse.data : [])
-                .filter((row) => QUEUE_STATUSES.has(normalize(row.status))));
+                .filter((row) => QUEUE_STATUSES.has(normalize(row.status)))
+                .map((row) => ({
+                    ...row,
+                    _linkedPis: indentsByMr.get(String(row.id)) || [],
+                })));
 
             const allLocations = extractMatFlowPage(locationResponse?.data).rows;
             const stores = allLocations.filter((location) =>
@@ -124,6 +142,7 @@ export function MatFlowStoreQueuePage() {
                 .filter((balance) => storeIds.has(String(balance.locationId))));
         } catch (requestError) {
             setRows([]);
+            setPurchaseIndents([]);
             setStockRows([]);
             setError(readMatFlowError(requestError, "Unable to load Store queue and inventory."));
         } finally {
@@ -138,12 +157,13 @@ export function MatFlowStoreQueuePage() {
         if (!term) return rows;
         return rows.filter((row) => [
             row.requisitionNumber,
-            row.projectCode,
+            row.projectCode, // compatibility field: PD No.
             row.drawingNo,
             row.bomNumber,
             row.destinationLocationCode,
             row.requestedBy,
             row.status,
+            ...(Array.isArray(row._linkedPis) ? row._linkedPis.flatMap((pi) => [pi.indentNumber, pi.status]) : []),
         ].some((value) => clean(value).toLowerCase().includes(term)));
     }, [rows, search]);
 
@@ -205,7 +225,7 @@ export function MatFlowStoreQueuePage() {
             <PageHero
                 badge="STORE"
                 title="Material Requisitions & Store Inventory"
-                subtitle="Check physical stock against Production MRs, reserve available material, decide whether each allocated lot needs QC, and raise linked PIs for shortage quantities."
+                subtitle="Check physical stock against Production MRs, reserve available material, independently choose QC and Processing for each lot, and raise linked PIs for shortage quantities."
                 actions={
                     <>
                         <Button
@@ -232,7 +252,7 @@ export function MatFlowStoreQueuePage() {
 
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}>
                 <SummaryCard label="Needs Store Review" value={counts.review} />
-                <SummaryCard label="Shortage / PI Branch" value={counts.shortage} />
+                <SummaryCard label="Linked PIs" value={purchaseIndents.length} />
                 <SummaryCard label="Reserved / Send Action" value={counts.activeIssue} />
             </Box>
 
@@ -260,7 +280,7 @@ export function MatFlowStoreQueuePage() {
 
             <Card sx={panelSx}>
                 <TextField
-                    label="Search MR / Project / Drawing / BOM / Requester"
+                    label="Search MR / PI / PD No. / Drawing / BOM / Requester"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     sx={{ ...fieldSx, minWidth: 360 }}
@@ -270,11 +290,11 @@ export function MatFlowStoreQueuePage() {
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 190px 150px 170px 170px 150px 100px" }}>
-                            {["MR", "Project / Drawing", "BOM", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 180px 145px minmax(180px,1fr) 165px 150px 135px 95px" }}>
+                            {["MR", "PD No. / Drawing", "BOM", "Linked PI(s)", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {filtered.length === 0 ? <EmptyState /> : filtered.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 190px 150px 170px 170px 150px 100px" }}>
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 180px 145px minmax(180px,1fr) 165px 150px 135px 95px" }}>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography>
                                     <Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography>
@@ -284,6 +304,14 @@ export function MatFlowStoreQueuePage() {
                                     <Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography>
                                 </Box>
                                 <Box sx={tableCellSx}>{row.bomNumber || "-"}</Box>
+                                <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>
+                                    {Array.isArray(row._linkedPis) && row._linkedPis.length > 0 ? row._linkedPis.map((pi) => (
+                                        <Box key={pi.id || pi.indentNumber} sx={{ mb: .35 }}>
+                                            <Typography sx={mainTextSx}>{pi.indentNumber || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{readable(pi.status)}</Typography>
+                                        </Box>
+                                    )) : <Typography sx={subTextSx}>No PI</Typography>}
+                                </Box>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography>
                                     <Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography>
@@ -375,10 +403,6 @@ export function MatFlowStoreDetailPage() {
 
             const requisition = nextSnapshot?.requisition;
             const plant = upperCode(requisition?.destinationPlantCode);
-            const qcLocations = nextLocations.filter((location) =>
-                normalize(location.locationType) === "QC" &&
-                (!plant || upperCode(location.plantCode) === plant)
-            );
             const storeLocations = nextLocations.filter((location) =>
                 normalize(location.locationType) === "STORE" &&
                 location.supportsStock !== false &&
@@ -394,7 +418,8 @@ export function MatFlowStoreDetailPage() {
                 nextForms[String(line.id)] = {
                     allocations: allocation,
                     qcRequired: false,
-                    qcLocationId: qcLocations.length === 1 ? qcLocations[0].id : "",
+                    processingRequired: false,
+                    processingRouteStepId: "",
                     createIndentForShortage: allocated + .0005 < needed,
                     indentDeliveryLocationId: storeLocations.length === 1 ? storeLocations[0].id : "",
                     remarks: "",
@@ -421,10 +446,6 @@ export function MatFlowStoreDetailPage() {
     const availabilityByLine = useMemo(() => new Map(availability.map((entry) => [String(entry.requisitionLineId), entry])), [availability]);
 
     const plant = upperCode(requisition?.destinationPlantCode);
-    const qcLocations = useMemo(() => locations.filter((location) =>
-        normalize(location.locationType) === "QC" &&
-        (!plant || upperCode(location.plantCode) === plant)
-    ), [locations, plant]);
     const storeLocations = useMemo(() => locations.filter((location) =>
         normalize(location.locationType) === "STORE" &&
         location.supportsStock !== false &&
@@ -477,8 +498,14 @@ export function MatFlowStoreDetailPage() {
                     }
 
                     const hasNewAllocation = newlyReserved > .0005;
-                    if (hasNewAllocation && config.qcRequired && !config.qcLocationId) {
-                        throw new Error(`Select a QC location for ${line.materialCode}.`);
+                    const processingOptions = Array.isArray(entry?.processingOptions) ? entry.processingOptions : [];
+                    if (hasNewAllocation && config.processingRequired) {
+                        if (!config.processingRouteStepId) {
+                            throw new Error(`Select one approved Processing Unit for ${line.materialCode}.`);
+                        }
+                        if (!processingOptions.some((option) => String(option.routeStepId) === String(config.processingRouteStepId))) {
+                            throw new Error(`The selected Processing Unit is no longer approved for ${line.materialCode}. Refresh the MR.`);
+                        }
                     }
 
                     const shortageAfterAllocation = Math.max(0, outstanding - newlyReserved);
@@ -495,7 +522,10 @@ export function MatFlowStoreDetailPage() {
                             reserveQty,
                         })),
                         qcRequired: hasNewAllocation ? config.qcRequired === true : false,
-                        qcLocationId: hasNewAllocation && config.qcRequired ? config.qcLocationId : null,
+                        processingRequired: hasNewAllocation ? config.processingRequired === true : false,
+                        processingRouteStepId: hasNewAllocation && config.processingRequired
+                            ? config.processingRouteStepId
+                            : null,
                         createIndentForShortage: createIndent,
                         indentDeliveryLocationId: createIndent ? config.indentDeliveryLocationId : null,
                         remarks: clean(config.remarks) || null,
@@ -592,7 +622,7 @@ export function MatFlowStoreDetailPage() {
                 </Box>
                 {reviewable && (
                     <Alert severity="info" sx={{ mt: 1.5 }}>
-                        For each newly allocated lot, Store chooses only <b>QC Required: Yes/No</b>. If QC is not required, Store sends it toward Production. If QC is required, QC later decides Direct Production or one approved Processing Unit.
+                        For each newly allocated lot, Store makes two independent choices: <b>QC Check Required: Yes/No</b> and <b>Processing Required: Yes/No</b>. QC never chooses the route. If Processing is required, Store selects one BOM-approved Processing Unit.
                     </Alert>
                 )}
             </Card>
@@ -667,22 +697,47 @@ export function MatFlowStoreDetailPage() {
                                                     }))}
                                                 />
                                             }
-                                            label="QC required for newly allocated lot"
+                                            label="QC check required"
+                                        />
+
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={config.processingRequired === true}
+                                                    disabled={allocated <= .0005}
+                                                    onChange={(event) => setForms((current) => ({
+                                                        ...current,
+                                                        [key]: {
+                                                            ...current[key],
+                                                            processingRequired: event.target.checked,
+                                                            processingRouteStepId: event.target.checked
+                                                                ? (current[key]?.processingRouteStepId || "")
+                                                                : "",
+                                                        },
+                                                    }))}
+                                                />
+                                            }
+                                            label="Processing required before Production"
                                         />
 
                                         <TextField
                                             select
-                                            label="QC Location"
-                                            value={config.qcLocationId || ""}
-                                            disabled={!config.qcRequired || allocated <= .0005}
+                                            label="Processing Unit"
+                                            value={config.processingRouteStepId || ""}
+                                            disabled={!config.processingRequired || allocated <= .0005}
                                             onChange={(event) => setForms((current) => ({
                                                 ...current,
-                                                [key]: { ...current[key], qcLocationId: event.target.value },
+                                                [key]: { ...current[key], processingRouteStepId: event.target.value },
                                             }))}
-                                            sx={fieldSx}
+                                            helperText={config.processingRequired && !(entry?.processingOptions || []).length
+                                                ? "No Processing Unit is approved on this BOM material line."
+                                                : "Independent of QC. Choose only when this material needs pre-processing."}
+                                            sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
                                         >
-                                            {qcLocations.map((location) => (
-                                                <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName}</MenuItem>
+                                            {(entry?.processingOptions || []).map((option) => (
+                                                <MenuItem key={option.routeStepId} value={option.routeStepId}>
+                                                    {option.locationCode} · {option.locationName}{option.processCode ? ` · ${option.processCode}` : ""}
+                                                </MenuItem>
                                             ))}
                                         </TextField>
 
@@ -753,11 +808,11 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Allocated Material Lots</Typography>
                 <Typography sx={{ ...subTextSx, mb: 1.2 }}>
-                    Store sends each reserved lot according to the QC decision captured during review. Internal custody records remain hidden from the user-facing workflow.
+                    Store sends each reserved lot along the Processing/Production route saved during review. A required QC check only gates the send action; it does not change custody or routing. Internal custody records remain hidden.
                 </Typography>
                 <Box sx={tableShellSx}>
-                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 150px 160px 130px 150px 170px 150px" }}>
-                        {["Material", "Source Store", "First Destination", "Reserved", "State", "Next Action", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
+                        {["Material", "Source Store", "Planned Destination", "QC Check", "Processing", "Reserved", "State / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                     </Box>
                     {reservations.length === 0 ? <EmptyState>No Store allocation has been created yet.</EmptyState> : reservations.map((reservation) => {
                         const pendingStoreLeg = internalTransfers
@@ -775,18 +830,31 @@ export function MatFlowStoreDetailPage() {
                         const storeCanSend = Boolean(pendingStoreLeg) &&
                             numeric(reservation.remainingIssueQty) > .0005;
                         return (
-                            <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 150px 160px 130px 150px 170px 150px" }}>
+                            <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
                                 <Box sx={tableCellSx}>{reservation.materialCode || "-"}</Box>
                                 <Box sx={tableCellSx}>{reservation.sourceLocationCode || "-"}</Box>
                                 <Box sx={tableCellSx}>{reservation.firstDestinationLocationCode || "-"}</Box>
-                                <Box sx={tableCellSx}>{formatQty(reservation.reservedQty)}</Box>
-                                <Box sx={tableCellSx}><MatFlowStatusChip status={reservation.status} /></Box>
                                 <Box sx={tableCellSx}>
-                                    <Typography sx={mainTextSx}>{readable(reservation.nextAction)}</Typography>
-                                    <Typography sx={subTextSx}>{readable(reservation.responsibleDepartment)}</Typography>
+                                    <Typography sx={mainTextSx}>
+                                        {reservation.qcRequired
+                                            ? (reservation.qcCompleted ? "✓ Checked" : "Pending")
+                                            : "Not required"}
+                                    </Typography>
+                                    {reservation.qcRequired && !reservation.qcCompleted && (
+                                        <Typography sx={subTextSx}>No material movement</Typography>
+                                    )}
                                 </Box>
                                 <Box sx={tableCellSx}>
-                                    {storeCanSend && (
+                                    <Typography sx={mainTextSx}>{reservation.processingRequired ? "Required" : "No"}</Typography>
+                                    <Typography sx={subTextSx}>{reservation.processingLocationCode || (reservation.processingRequired ? reservation.firstDestinationLocationCode : "Direct Production")}</Typography>
+                                </Box>
+                                <Box sx={tableCellSx}>{formatQty(reservation.reservedQty)}</Box>
+                                <Box sx={tableCellSx}>
+                                    <MatFlowStatusChip status={reservation.status} />
+                                    <Typography sx={{ ...subTextSx, mt: .4 }}>{readable(reservation.nextAction)}</Typography>
+                                </Box>
+                                <Box sx={tableCellSx}>
+                                    {storeCanSend ? (
                                         <Button
                                             startIcon={<SendOutlinedIcon />}
                                             onClick={() => openIssue(reservation)}
@@ -795,6 +863,10 @@ export function MatFlowStoreDetailPage() {
                                         >
                                             Send Lot
                                         </Button>
+                                    ) : reservation.qcRequired && !reservation.qcCompleted ? (
+                                        <Typography sx={subTextSx}>Waiting QC tick</Typography>
+                                    ) : (
+                                        <Typography sx={subTextSx}>{readable(reservation.responsibleDepartment)}</Typography>
                                     )}
                                 </Box>
                             </Box>
@@ -843,7 +915,7 @@ export function MatFlowStoreDetailPage() {
                 <DialogTitle sx={dialogTitleSx}>Send Reserved Material Lot</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Alert severity="info" sx={{ mb: 1.5 }}>
-                        This sends the complete reservation lot toward its Store-selected destination. If the destination is Production, Production must still explicitly acknowledge receipt.
+                        This sends the complete reservation lot along the Store-selected route. QC, when required, must already be ticked. Processing can be the first destination even when QC was not required. Production still explicitly acknowledges final receipt.
                     </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <TextField label="Batch No." value={issueForm.batchNo} onChange={(e) => setIssueForm((c) => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} />

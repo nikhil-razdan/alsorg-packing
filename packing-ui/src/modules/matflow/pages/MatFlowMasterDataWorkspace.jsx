@@ -181,7 +181,7 @@ export function MatFlowProjectsPage() {
 
     const saveProject = async () => {
         if (![projectForm.projectCode, projectForm.projectName, projectForm.clientName, projectForm.plantCode].every((value) => clean(value))) {
-            setError("Project code, Project name, Client and Plant are required.");
+            setError("PD No., Project name, Client and Plant are required.");
             return;
         }
 
@@ -293,9 +293,9 @@ export function MatFlowProjectsPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="PROJECT → PRODUCT"
+                badge="PD / PROJECT → PRODUCT"
                 title="Projects & Products"
-                subtitle="Create the client Project and add one or many Products / Drawings. No Project or Product approval is required."
+                subtitle="Use PD No. / Project No. as the Project identifier, then add one or many Products / Drawings. No Project or Product approval is required."
                 actions={
                     <>
                         <Button
@@ -307,7 +307,7 @@ export function MatFlowProjectsPage() {
                                 rows: rows.flatMap((project) =>
                                     (project.products || []).length
                                         ? project.products.map((product) => ({
-                                            projectCode: project.projectCode,
+                                            pdNo: project.projectCode,
                                             projectName: project.projectName,
                                             clientName: project.clientName,
                                             plantCode: project.plantCode,
@@ -320,7 +320,7 @@ export function MatFlowProjectsPage() {
                                             currentDepartment: product.currentDepartment,
                                         }))
                                         : [{
-                                            projectCode: project.projectCode,
+                                            pdNo: project.projectCode,
                                             projectName: project.projectName,
                                             clientName: project.clientName,
                                             plantCode: project.plantCode,
@@ -353,7 +353,7 @@ export function MatFlowProjectsPage() {
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 1 }}>
                     <TextField
-                        label="Search Project / Client / Product / Drawing"
+                        label="Search PD No. / Project / Client / Product / Drawing"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         sx={fieldSx}
@@ -401,7 +401,7 @@ export function MatFlowProjectsPage() {
                                         <Typography sx={{ fontWeight: 950, fontSize: 16 }}>
                                             {project.projectCode} · {project.projectName}
                                         </Typography>
-                                        <Typography sx={subTextSx}>{project.clientName} · {project.plantCode}</Typography>
+                                        <Typography sx={subTextSx}>PD No. · {project.clientName} · {project.plantCode}</Typography>
                                     </Box>
                                     <Box>
                                         <Typography sx={subTextSx}>PRODUCTS</Typography>
@@ -526,7 +526,7 @@ export function MatFlowProjectsPage() {
                 <DialogTitle sx={dialogTitleSx}>{projectDialog?.project ? "Edit Project" : "Create Project"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
-                        <TextField label="Project Code *" value={projectForm.projectCode} onChange={(e) => setProjectForm((c) => ({ ...c, projectCode: e.target.value }))} sx={fieldSx} />
+                        <TextField label="PD No. / Project No. *" value={projectForm.projectCode} onChange={(e) => setProjectForm((c) => ({ ...c, projectCode: e.target.value }))} sx={fieldSx} />
                         <TextField label="Project Name *" value={projectForm.projectName} onChange={(e) => setProjectForm((c) => ({ ...c, projectName: e.target.value }))} sx={fieldSx} />
                         <TextField label="Client Name *" value={projectForm.clientName} onChange={(e) => setProjectForm((c) => ({ ...c, clientName: e.target.value }))} sx={fieldSx} />
                         <TextField select label="Plant *" value={projectForm.plantCode} onChange={(e) => setProjectForm((c) => ({ ...c, plantCode: e.target.value }))} sx={fieldSx}>

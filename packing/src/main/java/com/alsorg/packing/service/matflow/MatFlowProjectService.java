@@ -26,7 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * First-class Project aggregate boundary.
  *
- * Project/Product creation is immediate and approval-free. Existing material execution foreign keys
+ * Project/Product creation is immediate and approval-free. The legacy field/property name projectCode is retained for compatibility, but its business meaning is PD No. / Project No. Existing material execution foreign keys
  * attached to MatFlowProjectDrawing (the Product/Item child). The parent
  * Project
  * is a portfolio/ownership aggregate, while every BOM/requisition/stock
@@ -93,11 +93,11 @@ public class MatFlowProjectService {
         validateProjectRequest(request, false);
 
         String plantCode = requiredUpper(request.plantCode(), "Plant");
-        String projectCode = requiredUpper(request.projectCode(), "Project code");
+        String projectCode = requiredUpper(request.projectCode(), "PD No.");
         accessService.requirePlantAccess(plantCode);
 
         if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCase(plantCode, projectCode)) {
-            throw conflict("Project code already exists in plant " + plantCode + ": " + projectCode);
+            throw conflict("PD No. already exists in plant " + plantCode + ": " + projectCode);
         }
 
         String actor = accessService.actor();
@@ -131,19 +131,19 @@ public class MatFlowProjectService {
         assertVersion(request.rowVersion(), project.getRowVersion(), "Project");
 
         List<MatFlowProjectDrawing> products = productsOf(project);
-        String nextCode = requiredUpper(request.projectCode(), "Project code");
+        String nextCode = requiredUpper(request.projectCode(), "PD No.");
         String nextPlant = requiredUpper(request.plantCode(), "Plant");
 
         if (!products.isEmpty()
                 && (!same(project.getProjectCode(), nextCode) || !same(project.getPlantCode(), nextPlant))) {
             throw conflict(
-                    "Project code and plant cannot be changed after products have been created. Create a new Project instead.");
+                    "PD No. and plant cannot be changed after products have been created. Create a new Project instead.");
         }
 
         accessService.requirePlantAccess(nextPlant);
         if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndIdNot(nextPlant, nextCode,
                 project.getId())) {
-            throw conflict("Project code already exists in plant " + nextPlant + ": " + nextCode);
+            throw conflict("PD No. already exists in plant " + nextPlant + ": " + nextCode);
         }
 
         applyProject(project, request, false);
@@ -570,7 +570,7 @@ public class MatFlowProjectService {
     }
 
     private void applyProject(MatFlowProject project, ProjectRequest request, boolean creating) {
-        project.setProjectCode(requiredUpper(request.projectCode(), "Project code"));
+        project.setProjectCode(requiredUpper(request.projectCode(), "PD No."));
         project.setProjectName(required(request.projectName(), "Project name"));
         project.setClientName(required(request.clientName(), "Client name"));
         project.setPlantCode(requiredUpper(request.plantCode(), "Plant"));
@@ -593,7 +593,7 @@ public class MatFlowProjectService {
     private void validateProjectRequest(ProjectRequest request, boolean update) {
         if (request == null)
             throw badRequest("Project request is required");
-        required(request.projectCode(), "Project code");
+        required(request.projectCode(), "PD No.");
         required(request.projectName(), "Project name");
         required(request.clientName(), "Client name");
         required(request.plantCode(), "Plant");

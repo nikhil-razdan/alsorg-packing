@@ -1,12 +1,15 @@
 package com.alsorg.packing.service.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowAuditLog;
+import com.alsorg.packing.domain.matflow.MatFlowBom;
+import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowGoodsReceipt;
 import com.alsorg.packing.domain.matflow.MatFlowIndent;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
 import com.alsorg.packing.repository.matflow.MatFlowAuditLogRepository;
+import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowGoodsReceiptRepository;
 import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
@@ -21,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -56,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
  * PI/yyyy/MM/dd/n
  * PO/yyyy/MM/dd/n
  * GRN/yyyy/MM/dd/n
+ * BOM/yyyy/MM/dd/PD-NO/DRAWING-NO
  * </pre>
  *
  * Important migration properties:
@@ -77,10 +82,11 @@ public class MatFlowDocumentNumberMigrationService implements ApplicationRunner 
 
     private static final Logger LOG = LoggerFactory.getLogger(MatFlowDocumentNumberMigrationService.class);
     private static final String SYSTEM_ACTOR = "SYSTEM_DOCNO_MIGRATION";
-    private static final String MIGRATION_LOCK = "MATFLOW:DOCNO:LEGACY:NORMALIZATION:V1";
+    private static final String MIGRATION_LOCK = "MATFLOW:DOCNO:LEGACY:NORMALIZATION:V2";
 
     private final JdbcTemplate jdbc;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
+    private final MatFlowBomRepository bomRepository;
     private final MatFlowIndentRepository indentRepository;
     private final MatFlowPurchaseOrderRepository purchaseOrderRepository;
     private final MatFlowGoodsReceiptRepository receiptRepository;
@@ -91,6 +97,7 @@ public class MatFlowDocumentNumberMigrationService implements ApplicationRunner 
     public MatFlowDocumentNumberMigrationService(
             JdbcTemplate jdbc,
             MatFlowMaterialRequisitionRepository requisitionRepository,
+            MatFlowBomRepository bomRepository,
             MatFlowIndentRepository indentRepository,
             MatFlowPurchaseOrderRepository purchaseOrderRepository,
             MatFlowGoodsReceiptRepository receiptRepository,
@@ -99,6 +106,7 @@ public class MatFlowDocumentNumberMigrationService implements ApplicationRunner 
             ObjectMapper objectMapper) {
         this.jdbc = jdbc;
         this.requisitionRepository = requisitionRepository;
+        this.bomRepository = bomRepository;
         this.indentRepository = indentRepository;
         this.purchaseOrderRepository = purchaseOrderRepository;
         this.receiptRepository = receiptRepository;
@@ -167,16 +175,21 @@ public class MatFlowDocumentNumberMigrationService implements ApplicationRunner 
                 receiptRepository::flush);
         collect(grn, renamedNumbers, auditRows);
 
+        MigrationResult bom = migrateBomNumbers();
+        collect(bom, renamedNumbers, auditRows);
+
         int ledgerUpdates = synchronizeLedgerReferenceNumbers(renamedNumbers);
         persistMigrationAudit(auditRows);
 
-        int changed = mr.changedCount() + pi.changedCount() + po.changedCount() + grn.changedCount();
+        int changed = mr.changedCount() + pi.changedCount() + po.changedCount() + grn.changedCount()
+                + bom.changedCount();
         if (changed > 0 || ledgerUpdates > 0) {
             LOG.info(
-                    "MatFlow document-number migration completed: MR={}, PI={}, PO={}, GRN={}, ledgerRefs={}",
-                    mr.changedCount(), pi.changedCount(), po.changedCount(), grn.changedCount(), ledgerUpdates);
+                    "MatFlow document-number migration completed: MR={}, PI={}, PO={}, GRN={}, BOM={}, ledgerRefs={}",
+                    mr.changedCount(), pi.changedCount(), po.changedCount(), grn.changedCount(), bom.changedCount(),
+                    ledgerUpdates);
         } else {
-            LOG.debug("MatFlow document-number migration: all MR/PI/PO/GRN numbers already canonical");
+            LOG.debug("MatFlow document-number migration: all MR/PI/PO/GRN/BOM numbers already canonical");
         }
     }
 
@@ -290,6 +303,96 @@ public class MatFlowDocumentNumberMigrationService implements ApplicationRunner 
                 .toList();
 
         return new MigrationResult(audits);
+    }
+
+    /**
+     * Normalizes every historical BOM family to:
+     * BOM/yyyy/MM/dd/{PD No.}/{Drawing No.}
+     *
+     * The date is taken from the earliest revision in the revision group, and
+     * every revision in that family retains the same BOM number. The existing
+     * projectCode database/API field is intentionally interpreted as PD No.; it
+     * is not renamed at schema level so historical MatFlow relationships stay
+     * backward-compatible.
+     */
+    private MigrationResult migrateBomNumbers() {
+        List<MatFlowBom> all = new ArrayList<>(bomRepository.findAll());
+        if (all.isEmpty()) {
+            return new MigrationResult(List.of());
+        }
+
+        Map<String, List<MatFlowBom>> groups = new LinkedHashMap<>();
+        for (MatFlowBom row : all) {
+            if (row == null || row.getId() == null)
+                continue;
+            String groupKey = row.getRevisionGroupId() == null
+                    ? "BOM:" + row.getId()
+                    : "REV:" + row.getRevisionGroupId();
+            groups.computeIfAbsent(groupKey, ignored -> new ArrayList<>()).add(row);
+        }
+
+        List<MigrationAudit> audits = new ArrayList<>();
+        List<MatFlowBom> changedRows = new ArrayList<>();
+
+        for (List<MatFlowBom> family : groups.values()) {
+            family.sort(Comparator
+                    .comparing(MatFlowBom::getRevisionNo, Comparator.nullsLast(Integer::compareTo))
+                    .thenComparing(MatFlowBom::getCreatedAt, Comparator.nullsLast(LocalDateTime::compareTo))
+                    .thenComparing(row -> row.getId() == null ? "" : row.getId().toString()));
+
+            MatFlowProjectDrawing product = family.stream()
+                    .map(MatFlowBom::getProjectDrawing)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+
+            if (product == null || clean(product.getProjectCode()) == null || clean(product.getDrawingNo()) == null) {
+                LOG.warn(
+                        "Skipping historical BOM number normalization for a BOM family with missing PD No./Drawing context");
+                continue;
+            }
+
+            LocalDateTime firstCreated = family.stream()
+                    .map(MatFlowBom::getCreatedAt)
+                    .filter(Objects::nonNull)
+                    .min(LocalDateTime::compareTo)
+                    .orElse(null);
+            LocalDate familyDate = businessDate(firstCreated, null);
+            String target;
+            try {
+                target = MatFlowDocumentNumberService.canonicalBomNumber(
+                        familyDate,
+                        product.getProjectCode(),
+                        product.getDrawingNo());
+            } catch (IllegalArgumentException ex) {
+                LOG.warn("Skipping historical BOM number normalization for product {}: {}",
+                        product.getId(), ex.getMessage());
+                continue;
+            }
+
+            for (MatFlowBom row : family) {
+                String oldNumber = clean(row.getBomNumber());
+                if (Objects.equals(oldNumber, target))
+                    continue;
+
+                row.setBomNumber(target);
+                row.setUpdatedBy(SYSTEM_ACTOR);
+                changedRows.add(row);
+                audits.add(new MigrationAudit(
+                        "BOM",
+                        row.getId(),
+                        "BOM",
+                        oldNumber,
+                        target));
+            }
+        }
+
+        if (!changedRows.isEmpty()) {
+            bomRepository.saveAll(changedRows);
+            bomRepository.flush();
+        }
+
+        return new MigrationResult(List.copyOf(audits));
     }
 
     private int synchronizeLedgerReferenceNumbers(Map<String, String> renames) {

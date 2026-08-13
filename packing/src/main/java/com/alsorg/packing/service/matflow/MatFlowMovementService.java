@@ -38,9 +38,9 @@ import org.springframework.web.server.ResponseStatusException;
  * Internal custody engine + Production material returns.
  *
  * mf_transfer_orders remain durable audit/custody records, but they are no
- * longer a user-facing desk. Store, QC and Processing send material through
- * internal custody records; Production explicitly acknowledges its final
- * receipt.
+ * longer a user-facing desk. Store and Processing advance physical material
+ * through internal custody records; QC is only a non-location check gate.
+ * Production explicitly acknowledges its final receipt.
  */
 @Service
 public class MatFlowMovementService {
@@ -97,7 +97,9 @@ public class MatFlowMovementService {
         /**
          * Store's explicit Issue/Send action. The Store user can release all or part
          * of one reservation lot. The selected quantity is physically advanced to
-         * the destination already captured during Store review (QC or Production).
+         * the destination already captured during Store review (Processing or
+         * Production).
+         * A QC-required lot remains deferred until its QC tick is complete.
          */
         @Transactional
         public PlanningResponse advanceStoreReservation(UUID reservationId, StoreIssueRequest request) {
@@ -137,6 +139,16 @@ public class MatFlowMovementService {
          * Internal full-lot advancement used after a QC route decision or Processing
          * completion. The caller service has already enforced the owning desk role.
          */
+        /**
+         * Returns the Store-selected Processing BOM step for this reservation, if
+         * Processing is part of its saved route. Used only to queue the Processing
+         * job after Store has physically sent the lot to the processor.
+         */
+        @Transactional(readOnly = true)
+        public UUID processingRouteStepId(UUID reservationId) {
+                return transfers.processingRouteStepId(reservationId);
+        }
+
         @Transactional
         public PlanningResponse advanceReservation(UUID reservationId, String remarks) {
                 transfers.advanceReservation(reservationId, null, null, remarks);
@@ -230,6 +242,29 @@ public class MatFlowMovementService {
                         this.qcRepository = qcRepository;
                         this.auditService = auditService;
                         this.requisitionService = requisitionService;
+                }
+
+                UUID processingRouteStepId(UUID reservationId) {
+                        if (reservationId == null) {
+                                return null;
+                        }
+                        return transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
+                                        .stream()
+                                        .filter(transfer -> transfer != null
+                                                        && transfer.toLocation != null
+                                                        && (transfer.toLocation
+                                                                        .getLocationType() == LocationType.PROCESSING
+                                                                        || transfer.toLocation
+                                                                                        .getLocationType() == LocationType.EXTERNAL_PROCESSOR))
+                                        .map(transfer -> transferLineRepository
+                                                        .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
+                                                                        transfer.getId())
+                                                        .map(line -> line.routeStepId)
+                                                        .orElse(null))
+                                        .filter(java.util.Objects::nonNull)
+                                        .findFirst()
+                                        .orElse(null);
                 }
 
                 void advanceReservation(
@@ -2324,21 +2359,13 @@ public class MatFlowMovementService {
                         if (inspection == null) {
                                 inspection = new MatFlowQcInspection();
 
-                                inspection.inspectionNumber = "MFQ-" +
-                                                LocalDate.now()
-                                                                .getYear()
-                                                +
-                                                "-" +
-                                                UUID.randomUUID()
-                                                                .toString()
-                                                                .replace(
-                                                                                "-",
-                                                                                "")
-                                                                .substring(
-                                                                                0,
-                                                                                8)
-                                                                .toUpperCase(
-                                                                                Locale.ROOT);
+                                /*
+                                 * QC is not a numbered business document.
+                                 * Keep the legacy NOT NULL / UNIQUE persistence column populated
+                                 * with the already-unique source-line UUID only as a hidden technical
+                                 * compatibility token. It is never exposed by the MatFlow QC API/UI.
+                                 */
+                                inspection.inspectionNumber = transferLine.getId().toString();
 
                                 inspection.sourceType = QcSourceType.TRANSFER_RECEIPT;
 

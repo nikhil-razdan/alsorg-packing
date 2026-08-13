@@ -135,7 +135,7 @@ public final class MatFlowPlanningDtos {
             boolean transferRequired) {
     }
 
-    /** Processing Units QC may choose after inspection. Store cannot choose them. */
+    /** Approved Processing Units Store may optionally select for an allocated MR lot. */
     public record StoreApprovedRouteStepResponse(
             UUID routeStepId,
             Integer sequenceNo,
@@ -161,7 +161,7 @@ public final class MatFlowPlanningDtos {
             BigDecimal shortageQty,
             UUID productionDestinationLocationId,
             String productionDestinationLocationCode,
-            List<StoreApprovedRouteStepResponse> qcProcessingOptions,
+            List<StoreApprovedRouteStepResponse> processingOptions,
             List<StoreStockOptionResponse> stockOptions) {
     }
 
@@ -261,7 +261,12 @@ public final class MatFlowPlanningDtos {
             UUID issueLocationId,
             String issueLocationCode,
             String responsibleDepartment,
-            String nextAction) {
+            String nextAction,
+            boolean qcRequired,
+            boolean qcCompleted,
+            boolean processingRequired,
+            UUID processingRouteStepId,
+            String processingLocationCode) {
     }
 
     public record IndentLineResponse(
@@ -361,15 +366,21 @@ public final class MatFlowPlanningDtos {
     }
 
     /**
-     * Store owns physical availability and QC-required decisions. Processing is
-     * never selected here; QC chooses an approved Processing Unit after inspection.
+     * Store owns two independent per-lot decisions:
+     * 1) whether the allocated material requires a QC check; and
+     * 2) whether the material must visit one approved Processing Unit before Production.
+     *
+     * QC has no location and does not choose the route. processingRouteStepId is
+     * required only when processingRequired=true and must identify one PROCESSING
+     * option approved on the Product BOM material line.
      */
     public record StoreLineReviewRequest(
             @NotNull(message = "Requisition line ID is required.") UUID requisitionLineId,
             @NotNull(message = "Requisition line row version is required.") Long rowVersion,
             List<@Valid StoreSourceAllocationRequest> allocations,
             @NotNull(message = "QC decision is required for each allocated material line.") Boolean qcRequired,
-            UUID qcLocationId,
+            @NotNull(message = "Processing decision is required for each allocated material line.") Boolean processingRequired,
+            UUID processingRouteStepId,
             @NotNull(message = "Shortage-indent decision is required.") Boolean createIndentForShortage,
             UUID indentDeliveryLocationId,
             @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {

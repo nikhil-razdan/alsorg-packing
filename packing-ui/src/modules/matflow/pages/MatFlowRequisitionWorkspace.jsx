@@ -179,7 +179,7 @@ export function MatFlowRequisitionListPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "175px 190px 150px 175px 175px 145px 160px" }}>
-                            {["MR", "Project / Drawing", "BOM", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["MR", "PD No. / Drawing", "BOM", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "175px 190px 150px 175px 175px 145px 160px" }}>
@@ -398,7 +398,7 @@ export function MatFlowRequisitionCreatePage() {
                 <>
                     <Card sx={panelSx}>
                         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}>
-                            <Detail label="Project" value={`${project.projectCode || "-"} · ${project.projectName || "-"}`} />
+                            <Detail label="PD No. / Project" value={`${project.projectCode || "-"} · ${project.projectName || "-"}`} />
                             <Detail label="Client" value={project.clientName || "-"} />
                             <Detail label="Product" value={project.productName || "-"} />
                             <Detail label="Drawing" value={`${project.drawingNo || "-"} · Rev ${project.drawingRevision || "0"}`} />

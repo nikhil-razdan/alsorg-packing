@@ -163,7 +163,7 @@ export function MatFlowDashboardPage() {
                         <Typography sx={{ ...subTextSx, mb: 1.2 }}>The highest-age active Project/Product MRs and their current material owner/location.</Typography>
                         <Box sx={tableShellSx}>
                             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 160px 170px 170px 120px 170px 120px" }}>
-                                {["Project / Product", "MR", "Current Department", "Current Location", "Ready %", "Blocker / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                {["PD No. / Product", "MR", "Current Department", "Current Location", "Ready %", "Blocker / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                             </Box>
                             {liveRows.length === 0 ? <EmptyState>No active Material Requisitions.</EmptyState> : liveRows.map((row) => {
                                 const target = nextActionTarget(row);
@@ -293,7 +293,7 @@ export function MatFlowTrackerPage() {
 
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 1 }}>
-                    <TextField label="Search Project / Product / MR / Material State" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
+                    <TextField label="Search PD No. / Product / MR / Material State" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
                     <TextField select label="Current Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
                         {stages.map((value) => <MenuItem key={value || "ALL"} value={value}>{value ? readable(value) : "All Stages"}</MenuItem>)}
                     </TextField>
@@ -499,7 +499,10 @@ export function MatFlowMaterialTrackerPage() {
     const { selectedPlantParam } = useMatFlow();
 
     const [materials, setMaterials] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [selectedId, setSelectedId] = useState(materialId || "");
+    const [selectedProjectId, setSelectedProjectId] = useState("");
+    const [selectedProductId, setSelectedProductId] = useState("");
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -508,10 +511,52 @@ export function MatFlowMaterialTrackerPage() {
     const [expandedLotKey, setExpandedLotKey] = useState("");
 
     useEffect(() => {
-        matflowApi.listMaterials({ active: true })
-            .then((response) => setMaterials(extractMatFlowPage(response?.data).rows))
-            .catch(() => setMaterials([]));
-    }, []);
+        let active = true;
+        Promise.all([
+            matflowApi.listMaterials({ active: true }),
+            matflowApi.listProjects({
+                active: true,
+                plantCode: selectedPlantParam || undefined,
+            }),
+        ])
+            .then(([materialResponse, projectResponse]) => {
+                if (!active) return;
+                setMaterials(extractMatFlowPage(materialResponse?.data).rows);
+                const projectRows = extractMatFlowPage(projectResponse?.data).rows;
+                setProjects(projectRows);
+                setSelectedProjectId((current) =>
+                    current && projectRows.some((project) => String(project.id) === String(current))
+                        ? current
+                        : ""
+                );
+            })
+            .catch(() => {
+                if (!active) return;
+                setMaterials([]);
+                setProjects([]);
+                setSelectedProjectId("");
+                setSelectedProductId("");
+            });
+        return () => { active = false; };
+    }, [selectedPlantParam]);
+
+    const selectedProject = useMemo(
+        () => projects.find((project) => String(project.id) === String(selectedProjectId)) || null,
+        [projects, selectedProjectId]
+    );
+
+    const availableProducts = useMemo(
+        () => (Array.isArray(selectedProject?.products) ? selectedProject.products : [])
+            .filter((product) => product?.active !== false),
+        [selectedProject]
+    );
+
+    useEffect(() => {
+        if (!selectedProductId) return;
+        if (!availableProducts.some((product) => String(product.id) === String(selectedProductId))) {
+            setSelectedProductId("");
+        }
+    }, [availableProducts, selectedProductId]);
 
     const load = useCallback(async () => {
         const id = selectedId || materialId;
@@ -539,25 +584,44 @@ export function MatFlowMaterialTrackerPage() {
     const lots = Array.isArray(data?.lots) ? data.lots : [];
     const filteredLots = useMemo(() => {
         const term = clean(search).toLowerCase();
-        if (!term) return lots;
-        return lots.filter((row) => [
-            row.projectCode,
-            row.projectName,
-            row.clientName,
-            row.productName,
-            row.drawingNo,
-            row.requisitionNumber,
-            row.currentStage,
-            row.currentDepartment,
-            row.currentLocationCode,
-            row.nextDepartment,
-            row.nextAction,
-        ].some((value) => clean(value).toLowerCase().includes(term)));
-    }, [lots, search]);
+        return lots.filter((row) => {
+            if (selectedProjectId && String(row.projectId || "") !== String(selectedProjectId)) {
+                return false;
+            }
+            if (selectedProductId && String(row.productId || "") !== String(selectedProductId)) {
+                return false;
+            }
+            if (!term) return true;
+            return [
+                row.projectCode, // compatibility field: business PD No.
+                row.projectName,
+                row.clientName,
+                row.productName,
+                row.drawingNo,
+                row.bomNumber,
+                row.requisitionNumber,
+                row.currentStage,
+                row.currentDepartment,
+                row.currentLocationCode,
+                row.nextDepartment,
+                row.nextAction,
+            ].some((value) => clean(value).toLowerCase().includes(term));
+        });
+    }, [lots, search, selectedProjectId, selectedProductId]);
 
     const pagination = useMatFlowPagination(filteredLots, 20);
     const identity = data?.material || {};
     const kpis = data?.kpis || {};
+    const visibleKpis = useMemo(() => {
+        const live = filteredLots.filter((row) => row.completed !== true);
+        return {
+            projectCount: new Set(filteredLots.map((row) => row.projectId).filter(Boolean)).size,
+            productCount: new Set(filteredLots.map((row) => row.productId).filter(Boolean)).size,
+            liveLotCount: live.length,
+            shortageQty: filteredLots.reduce((total, row) => total + numeric(row.lineShortageQty), 0),
+            delayedLotCount: live.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))).length,
+        };
+    }, [filteredLots]);
 
     return (
         <Box sx={pageSx}>
@@ -573,11 +637,40 @@ export function MatFlowMaterialTrackerPage() {
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={panelSx}>
-                <Box sx={{ display: "grid", gridTemplateColumns: "minmax(280px,1fr) 220px 180px", gap: 1 }}>
-                    <TextField select label="Material *" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); navigate(`/matflow/tracker/materials/${e.target.value}`, { replace: true }); }} sx={fieldSx}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(260px,1.15fr) minmax(210px,.9fr) minmax(230px,1fr) minmax(200px,.9fr) 160px" }, gap: 1 }}>
+                    <TextField select label="Material *" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setExpandedLotKey(""); navigate(`/matflow/tracker/materials/${e.target.value}`, { replace: true }); }} sx={fieldSx}>
                         {materials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialName} · {material.materialCode}</MenuItem>)}
                     </TextField>
-                    <TextField label="Search allocations" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
+                    <TextField
+                        select
+                        label="PD No. / Project"
+                        value={selectedProjectId}
+                        onChange={(e) => { setSelectedProjectId(e.target.value); setSelectedProductId(""); }}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="">All PDs / Projects</MenuItem>
+                        {projects.map((project) => (
+                            <MenuItem key={project.id} value={project.id}>
+                                {project.projectCode || "-"} · {project.projectName || "Project"}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <TextField
+                        select
+                        label="Product / Drawing"
+                        value={selectedProductId}
+                        onChange={(e) => setSelectedProductId(e.target.value)}
+                        disabled={!selectedProjectId}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="">All Products</MenuItem>
+                        {availableProducts.map((product) => (
+                            <MenuItem key={product.id} value={product.id}>
+                                {product.productName || "Product"} · {product.drawingNo || "-"}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <TextField label="Search MR / BOM / state" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
                     <TextField select label="Scope" value={activeOnly ? "ACTIVE" : "ALL"} onChange={(e) => setActiveOnly(e.target.value === "ACTIVE")} sx={fieldSx}>
                         <MenuItem value="ACTIVE">Live only</MenuItem>
                         <MenuItem value="ALL">All history</MenuItem>
@@ -588,20 +681,20 @@ export function MatFlowMaterialTrackerPage() {
             {loading ? <LoadingBlock /> : data && (
                 <>
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 1 }}>
-                        <SummaryCard label="Projects" value={kpis.projectCount ?? 0} />
-                        <SummaryCard label="Products" value={kpis.productCount ?? 0} />
-                        <SummaryCard label="Live Lots" value={kpis.liveLotCount ?? 0} />
-                        <SummaryCard label="Shortage Qty" value={formatQty(kpis.shortageQty)} />
-                        <SummaryCard label="Available Stock" value={formatQty(kpis.availableQty)} />
-                        <SummaryCard label="Delayed Lots" value={kpis.delayedLotCount ?? 0} />
+                        <SummaryCard label="PDs / Projects" value={visibleKpis.projectCount} />
+                        <SummaryCard label="Products" value={visibleKpis.productCount} />
+                        <SummaryCard label="Live Lots" value={visibleKpis.liveLotCount} />
+                        <SummaryCard label="Shortage Qty" value={formatQty(visibleKpis.shortageQty)} />
+                        <SummaryCard label="Available Stock (Plant)" value={formatQty(kpis.availableQty)} />
+                        <SummaryCard label="Delayed Lots" value={visibleKpis.delayedLotCount} />
                     </Box>
 
                     <Card sx={panelSx}>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Routes by Project/Product</Typography>
+                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Routes by PD / Product</Typography>
                         <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material, including Store, Purchase, QC, Processing and Production custody.</Typography>
                         <Box sx={tableShellSx}>
                             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 175px 130px 180px 150px 190px 150px 105px" }}>
-                                {["Project / Product", "MR", "Tracked Qty", "Current", "Location", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                {["PD No. / Product", "MR", "Tracked Qty", "Current", "Location", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                             </Box>
                             {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                                 const history = Array.isArray(row.history) ? row.history : [];
@@ -801,7 +894,7 @@ export function MatFlowLedgerPage() {
 
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 1 }}>
-                    <TextField label="Search reference / Project / Drawing / batch / actor" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} sx={fieldSx} />
+                    <TextField label="Search reference / PD No. / Drawing / batch / actor" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} sx={fieldSx} />
                     <TextField label="Movement Type" value={movementType} onChange={(e) => { setMovementType(e.target.value); setPage(0); }} sx={fieldSx} />
                 </Box>
             </Card>
@@ -810,7 +903,7 @@ export function MatFlowLedgerPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 170px 150px 150px 110px 130px 170px 140px" }}>
-                            {["Material", "Location", "Movement", "Qty Change", "On Hand", "Reference", "Project / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["Material", "Location", "Movement", "Qty Change", "On Hand", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {(data.rows || []).length === 0 ? <EmptyState /> : data.rows.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "180px 170px 150px 150px 110px 130px 170px 140px" }}>
@@ -885,7 +978,7 @@ export function MatFlowReportsPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 190px 190px 100px 110px 120px 140px" }}>
-                            {["MR", "Project / Drawing", "Material", "Requested", "Shortage", "Age", "Plant"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["MR", "PD No. / Drawing", "Material", "Requested", "Shortage", "Age", "Plant"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {shortages.length === 0 ? <EmptyState>No open shortages.</EmptyState> : shortages.slice(0, 50).map((row) => (
                             <Box key={row.requisitionLineId} sx={{ ...tableRowSx, gridTemplateColumns: "170px 190px 190px 100px 110px 120px 140px" }}>

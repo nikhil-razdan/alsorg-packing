@@ -85,6 +85,7 @@ public class MatFlowInsightService {
                                 stockRepository,
                                 ledgerRepository,
                                 auditRepository,
+                                reservationRepository,
                                 accessService);
 
                 this.tracker = new TrackerModule(
@@ -186,6 +187,7 @@ public class MatFlowInsightService {
                 private final MatFlowStockBalanceRepository stockRepository;
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowAuditLogRepository auditRepository;
+                private final MatFlowReservationRepository reservationRepository;
                 private final MatFlowAccessService accessService;
 
                 ReportingModule(
@@ -203,6 +205,7 @@ public class MatFlowInsightService {
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowAuditLogRepository auditRepository,
+                                MatFlowReservationRepository reservationRepository,
                                 MatFlowAccessService accessService) {
                         this.projectRepository = projectRepository;
                         this.projectHeaderRepository = projectHeaderRepository;
@@ -230,6 +233,8 @@ public class MatFlowInsightService {
                         this.ledgerRepository = ledgerRepository;
 
                         this.auditRepository = auditRepository;
+
+                        this.reservationRepository = reservationRepository;
 
                         this.accessService = accessService;
                 }
@@ -1104,7 +1109,7 @@ public class MatFlowInsightService {
 
                                         ledger.referenceType,
                                         ledger.referenceId,
-                                        ledger.referenceNumber,
+                                        displayLedgerReferenceNumber(ledger),
 
                                         ledger.projectCode,
                                         ledger.drawingNo,
@@ -1113,6 +1118,84 @@ public class MatFlowInsightService {
                                         ledger.remarks,
                                         ledger.actor,
                                         ledger.actionAt);
+                }
+
+                /**
+                 * Historical QC ledger rows may still physically store an old QC
+                 * token in referenceNumber. QC has no business document number in
+                 * the current workflow, so the read model resolves those rows back
+                 * to the owning MR whenever possible. The database audit key remains
+                 * untouched; only the user-facing reference is normalized.
+                 */
+                private String displayLedgerReferenceNumber(MatFlowStockLedger ledger) {
+                        if (ledger == null ||
+                                        !"MATFLOW_QC".equals(ledger.referenceType) ||
+                                        ledger.referenceId == null) {
+                                return ledger == null ? null : ledger.referenceNumber;
+                        }
+
+                        MatFlowQcInspection inspection = qcRepository.findById(ledger.referenceId)
+                                        .map(value -> (MatFlowQcInspection) Hibernate.unproxy(value))
+                                        .orElse(null);
+                        if (inspection == null) {
+                                return ledger.referenceNumber;
+                        }
+
+                        if (inspection.routingReservationId != null) {
+                                MatFlowReservation reservation = reservationRepository
+                                                .findById(inspection.routingReservationId)
+                                                .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (reservation != null && reservation.requisitionLine != null) {
+                                        MatFlowRequisitionLine line = (MatFlowRequisitionLine) Hibernate
+                                                        .unproxy(reservation.requisitionLine);
+                                        if (line.requisition != null) {
+                                                MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                .unproxy(line.requisition);
+                                                if (requisition.requisitionNumber != null &&
+                                                                !requisition.requisitionNumber.isBlank()) {
+                                                        return requisition.requisitionNumber;
+                                                }
+                                        }
+                                }
+                        }
+
+                        if (inspection.sourceType == QcSourceType.TRANSFER_RECEIPT && inspection.sourceId != null) {
+                                MatFlowTransferOrder transfer = transferRepository.findById(inspection.sourceId)
+                                                .map(value -> (MatFlowTransferOrder) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (transfer != null && transfer.requisition != null) {
+                                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                                        .unproxy(transfer.requisition);
+                                        if (requisition.requisitionNumber != null
+                                                        && !requisition.requisitionNumber.isBlank()) {
+                                                return requisition.requisitionNumber;
+                                        }
+                                }
+                        }
+
+                        if (inspection.sourceType == QcSourceType.GOODS_RECEIPT && inspection.sourceId != null) {
+                                MatFlowGoodsReceipt receipt = receiptRepository.findById(inspection.sourceId)
+                                                .map(value -> (MatFlowGoodsReceipt) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (receipt != null && receipt.purchaseOrder != null) {
+                                        MatFlowPurchaseOrder order = (MatFlowPurchaseOrder) Hibernate
+                                                        .unproxy(receipt.purchaseOrder);
+                                        if (order.indent != null) {
+                                                MatFlowIndent indent = (MatFlowIndent) Hibernate.unproxy(order.indent);
+                                                if (indent.requisition != null) {
+                                                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                        .unproxy(indent.requisition);
+                                                        if (requisition.requisitionNumber != null &&
+                                                                        !requisition.requisitionNumber.isBlank()) {
+                                                                return requisition.requisitionNumber;
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+
+                        return ledger.referenceNumber;
                 }
 
                 private Set<String> resolvePlants(
@@ -1399,8 +1482,6 @@ public class MatFlowInsightService {
                         String currentStage;
                         if (hasPendingQc(context)) {
                                 currentStage = "QC_PENDING";
-                        } else if (hasPendingQcRouting(context)) {
-                                currentStage = "QC_ROUTING_PENDING";
                         } else if (hasActiveProcessing(context)) {
                                 currentStage = "PROCESSING";
                         } else {
@@ -1767,33 +1848,22 @@ public class MatFlowInsightService {
 
                         for (MatFlowQcInspection qc : c.inspections()) {
                                 boolean done = "COMPLETED".equals(enumName(qc.status));
-                                operations.add(stageRecord("QC", "QC Quality " + safeText(qc.inspectionNumber), "QC",
+                                operations.add(stageRecord(
+                                                "QC",
+                                                done ? "QC Check Completed" : "QC Check Pending",
+                                                "QC",
                                                 qc.location,
-                                                qc.getCreatedAt(), qc.inspectedAt, done ? "DONE" : "CURRENT",
-                                                target("QC"), qc.inspectedBy,
-                                                "QC_INSPECTION", qc.getId(), qc.inspectionNumber,
-                                                "Quality inspection only: accepted vs rejected quantity."));
-
-                                boolean routingApplicable = done && safe(qc.acceptedQty).compareTo(BigDecimal.ZERO) > 0
-                                                && qc.routingReservationId != null;
-                                if (routingApplicable) {
-                                        operations.add(stageRecord(
-                                                        "QC_ROUTE",
-                                                        "QC Routing " + safeText(qc.inspectionNumber),
-                                                        "QC",
-                                                        qc.location,
-                                                        qc.inspectedAt,
-                                                        qc.routingDecidedAt,
-                                                        qc.routingDecidedAt == null ? "CURRENT" : "DONE",
-                                                        target("QC_ROUTE"),
-                                                        qc.routingDecidedBy,
-                                                        "QC_INSPECTION",
-                                                        qc.getId(),
-                                                        qc.inspectionNumber,
-                                                        qc.routingDecidedAt == null
-                                                                        ? "Accepted material is held at QC awaiting Direct-to-Production vs Processing decision."
-                                                                        : "QC route: " + enumName(qc.routingDecision)));
-                                }
+                                                qc.getCreatedAt(),
+                                                qc.inspectedAt,
+                                                done ? "DONE" : "CURRENT",
+                                                target("QC"),
+                                                qc.inspectedBy,
+                                                "QC_INSPECTION",
+                                                qc.getId(),
+                                                c.requisition().requisitionNumber,
+                                                done
+                                                                ? "MR material check completed. QC did not take custody or choose a route."
+                                                                : "MR material is waiting for a check/tick while physical custody remains at Store."));
                         }
 
                         for (MatFlowProcessingJob job : c.jobs()) {
@@ -2187,13 +2257,11 @@ public class MatFlowInsightService {
                 private Position qcPosition(TrackingContext context) {
                         MatFlowQcInspection inspection = context.inspections().stream()
                                         .filter(item -> item != null && item.location != null)
-                                        .filter(item -> "PENDING".equals(enumName(item.status)) ||
-                                                        ("COMPLETED".equals(enumName(item.status)) &&
-                                                                        item.routingReservationId != null &&
-                                                                        item.routingDecision == null))
+                                        .filter(item -> "PENDING".equals(enumName(item.status)))
                                         .min(Comparator.comparing(MatFlowQcInspection::getCreatedAt,
                                                         Comparator.nullsLast(Comparator.naturalOrder())))
                                         .orElse(null);
+                        /* inspection.location is the physical Store custody location for new checks. */
                         return inspection == null ? Position.of("QUALITY CONTROL", null)
                                         : Position.of("QUALITY CONTROL", inspection.location);
                 }
@@ -2431,12 +2499,7 @@ public class MatFlowInsightService {
                 }
 
                 private boolean hasPendingQcRouting(TrackingContext context) {
-                        return context != null && context.inspections().stream()
-                                        .anyMatch(inspection -> inspection != null &&
-                                                        "COMPLETED".equals(enumName(inspection.status)) &&
-                                                        safe(inspection.acceptedQty).compareTo(BigDecimal.ZERO) > 0 &&
-                                                        inspection.routingReservationId != null &&
-                                                        inspection.routingDecision == null);
+                        return false;
                 }
 
                 private boolean hasActiveProcessing(TrackingContext context) {
@@ -2483,7 +2546,7 @@ public class MatFlowInsightService {
                                         "PRODUCTION";
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
-                                case "QC_PENDING", "QC_ROUTING_PENDING" -> "QUALITY CONTROL";
+                                case "QC_PENDING" -> "QUALITY CONTROL";
                                 case "PROCESSING" -> "PROCESSING";
                                 case "TRANSFER_IN_PROGRESS" -> "ROUTE / TRANSFER";
                                 case "CANCELLED" -> "CLOSED";
@@ -2498,7 +2561,6 @@ public class MatFlowInsightService {
                                 case "SHORTAGE_PENDING" -> 48;
                                 case "MATERIAL_RESERVED" -> 58;
                                 case "QC_PENDING" -> 64;
-                                case "QC_ROUTING_PENDING" -> 68;
                                 case "PROCESSING" -> 74;
                                 case "TRANSFER_IN_PROGRESS" -> 72;
                                 case "READY_TO_ISSUE" -> 82;
@@ -2517,7 +2579,6 @@ public class MatFlowInsightService {
                                         target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
                                 case "QC_PENDING" -> target("QC");
-                                case "QC_ROUTING_PENDING" -> target("QC_ROUTE");
                                 case "PROCESSING" -> target("PROCESSING");
                                 case "TRANSFER_IN_PROGRESS" -> target("ROUTE");
                                 case "PRODUCTION_ISSUE" -> target("PRODUCTION_ISSUE");
@@ -2554,7 +2615,7 @@ public class MatFlowInsightService {
                                 case "DRAFT" -> "DEMAND";
                                 case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
-                                case "QC_PENDING", "QC_ROUTING_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
+                                case "QC_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
                                                 "READY_TO_ISSUE" ->
                                         "ROUTE";
                                 case "PRODUCTION_ISSUE" -> "PRODUCTION_ISSUE";

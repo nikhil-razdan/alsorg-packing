@@ -323,7 +323,7 @@ export function MatFlowPurchasePage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 170px 210px 160px 140px 150px" }}>
-                            {["PI", "Linked MR", "Project / Product", "Delivery Store", "Status", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["PI", "Linked MR", "PD No. / Product", "Delivery Store", "Status", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {indentPagination.pageItems.length === 0 ? <EmptyState>No open Store-raised PI.</EmptyState> : indentPagination.pageItems.map((indent) => (
                             <Box key={indent.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 170px 210px 160px 140px 150px" }}>
@@ -348,7 +348,7 @@ export function MatFlowPurchasePage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 170px 170px 200px 160px 130px" }}>
-                            {["PO", "PI / MR", "Vendor", "Project / Product", "Delivery", "Status"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["PO", "PI / MR", "Vendor", "PD No. / Product", "Delivery", "Status"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {orderPagination.pageItems.length === 0 ? <EmptyState /> : orderPagination.pageItems.map((order) => (
                             <Box key={order.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 170px 170px 200px 160px 130px" }}>
@@ -607,7 +607,7 @@ export function MatFlowReceivingPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 160px 160px 170px 200px 130px" }}>
-                            {["GRN", "PO / PI", "Linked MR", "Store", "Project / Product", "Received"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["GRN", "PO / PI", "Linked MR", "Store", "PD No. / Product", "Received"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {receiptPagination.pageItems.length === 0 ? <EmptyState>No GRN records.</EmptyState> : receiptPagination.pageItems.map((receipt) => (
                             <Box key={receipt.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 160px 160px 170px 200px 130px" }}>

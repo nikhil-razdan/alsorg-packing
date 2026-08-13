@@ -60,34 +60,23 @@ export function MatFlowQcPage() {
     const canAct = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.QC);
 
     const [rows, setRows] = useState([]);
-    const [routingRows, setRoutingRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [status, setStatus] = useState("");
     const [dialog, setDialog] = useState(null);
-    const [form, setForm] = useState({
-        acceptedQty: "",
-        rejectedQty: "",
-        routingDecision: "DIRECT_TO_PRODUCTION",
-        processingRouteStepId: "",
-        remarks: "",
-    });
+    const [remarks, setRemarks] = useState("");
+    const [photo, setPhoto] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const [inspectionResponse, routingResponse] = await Promise.all([
-                matflowApi.listQcInspections({ status: status || undefined }),
-                matflowApi.listQcRouting(),
-            ]);
-            setRows(Array.isArray(inspectionResponse?.data) ? inspectionResponse.data : []);
-            setRoutingRows(Array.isArray(routingResponse?.data) ? routingResponse.data : []);
+            const response = await matflowApi.listQcInspections({ status: status || undefined });
+            setRows(Array.isArray(response?.data) ? response.data : []);
         } catch (requestError) {
             setRows([]);
-            setRoutingRows([]);
-            setError(readMatFlowError(requestError, "Unable to load QC work queue."));
+            setError(readMatFlowError(requestError, "Unable to load the MR-linked QC checklist."));
         } finally {
             setLoading(false);
         }
@@ -95,101 +84,55 @@ export function MatFlowQcPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    const routingByInspection = useMemo(
-        () => new Map(routingRows.map((row) => [String(row.inspectionId), row])),
-        [routingRows]
-    );
-
     const counts = useMemo(() => ({
         pending: rows.filter((row) => normalize(row.status) === "PENDING").length,
-        route: routingRows.filter((row) => row.routingRequired === true && row.routingComplete !== true).length,
-        processing: routingRows.filter((row) => normalize(row.routingDecision) === "SEND_TO_PROCESSING").length,
-        direct: routingRows.filter((row) => normalize(row.routingDecision) === "DIRECT_TO_PRODUCTION").length,
-    }), [rows, routingRows]);
+        checked: rows.filter((row) => normalize(row.status) === "COMPLETED").length,
+        evidence: rows.filter((row) => row.photoAvailable === true).length,
+    }), [rows]);
 
-    const openInspection = (row) => {
-        setDialog({ type: "INSPECT", row });
-        setForm({
-            acceptedQty: String(row.inspectionQty ?? 0),
-            rejectedQty: "0",
-            routingDecision: "DIRECT_TO_PRODUCTION",
-            processingRouteStepId: "",
-            remarks: "",
-        });
+    const openCheck = (row) => {
+        setDialog(row);
+        setRemarks("");
+        setPhoto(null);
         setError("");
     };
 
-    const openRoute = async (row) => {
+    const completeCheck = async () => {
+        const row = dialog;
+        if (!row?.id || row.rowVersion == null) return;
         setWorking(true);
         setError("");
         try {
-            const response = await matflowApi.getQcRouting(row.id);
-            const routing = response?.data;
-            if (!routing?.routingRequired) {
-                throw new Error("This accepted quantity is not tied to an active Project/Product reservation.");
+            if (photo) {
+                await matflowApi.uploadQcPhoto(row.id, photo);
             }
-            if (routing.routingComplete) {
-                throw new Error(`Routing is already completed as ${readable(routing.routingDecision)}.`);
-            }
-            setDialog({ type: "ROUTE", row, routing });
-            setForm({
-                acceptedQty: "",
-                rejectedQty: "",
-                routingDecision: "DIRECT_TO_PRODUCTION",
-                processingRouteStepId: "",
-                remarks: "",
+            await matflowApi.decideQc(row.id, {
+                rowVersion: row.rowVersion,
+                remarks: clean(remarks) || null,
             });
+            setDialog(null);
+            setPhoto(null);
+            await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, requestError?.message || "Unable to open QC routing."));
+            setError(readMatFlowError(requestError, requestError?.message || "Unable to complete the QC check."));
         } finally {
             setWorking(false);
         }
     };
 
-    const execute = async () => {
-        const row = dialog?.row;
-        if (!row) return;
-
+    const viewPhoto = async (row) => {
+        if (!row?.id) return;
         setWorking(true);
         setError("");
         try {
-            if (dialog.type === "INSPECT") {
-                const acceptedQty = Number(form.acceptedQty);
-                const rejectedQty = Number(form.rejectedQty);
-                if (
-                    !Number.isFinite(acceptedQty) || acceptedQty < 0 ||
-                    !Number.isFinite(rejectedQty) || rejectedQty < 0 ||
-                    Math.abs(acceptedQty + rejectedQty - numeric(row.inspectionQty)) > .0005
-                ) {
-                    throw new Error("Accepted + Rejected must exactly equal the inspection quantity.");
-                }
-                await matflowApi.decideQc(row.id, {
-                    rowVersion: row.rowVersion,
-                    acceptedQty,
-                    rejectedQty,
-                    remarks: clean(form.remarks) || null,
-                });
-            } else {
-                const routing = dialog.routing;
-                const decision = normalize(form.routingDecision);
-                if (!["DIRECT_TO_PRODUCTION", "SEND_TO_PROCESSING"].includes(decision)) {
-                    throw new Error("Choose Direct to Production or Send to Processing.");
-                }
-                if (decision === "SEND_TO_PROCESSING" && !form.processingRouteStepId) {
-                    throw new Error("Select one approved Processing Unit.");
-                }
-                await matflowApi.routeQcMaterial(row.id, {
-                    rowVersion: routing.rowVersion,
-                    routingDecision: decision,
-                    processingRouteStepId: decision === "SEND_TO_PROCESSING" ? form.processingRouteStepId : null,
-                    remarks: clean(form.remarks) || null,
-                });
-            }
-
-            setDialog(null);
-            await load();
+            const response = await matflowApi.getQcPhoto(row.id);
+            const blob = response?.data;
+            if (!(blob instanceof Blob)) throw new Error("QC picture could not be loaded.");
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank", "noopener,noreferrer");
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
         } catch (requestError) {
-            setError(readMatFlowError(requestError, requestError?.message || "Unable to complete QC action."));
+            setError(readMatFlowError(requestError, requestError?.message || "Unable to open the QC picture."));
         } finally {
             setWorking(false);
         }
@@ -200,108 +143,158 @@ export function MatFlowQcPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="QUALITY CONTROL"
-                title="QC Material Gate"
-                subtitle="Only Store-routed QC-required lots appear here. QC first records quality, then accepted Project/Product material is routed Direct to Production or to one approved Processing Unit."
+                badge="QUALITY CHECK"
+                title="MR Material QC Checklist"
+                subtitle="QC is only a check/tick against an MR material lot. It has no QC location and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
                 actions={
                     <>
-                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_QC", sheetName: "QC", title: "MatFlow QC Register", rows })} sx={secondaryBtnSx}>Export Excel</Button>
+                        <Button
+                            startIcon={<FileDownloadOutlinedIcon />}
+                            onClick={() => downloadMatFlowExcel({
+                                fileName: "MatFlow_QC_Checklist",
+                                sheetName: "QC Checks",
+                                title: "MatFlow MR Material QC Checklist",
+                                rows,
+                            })}
+                            sx={secondaryBtnSx}
+                        >
+                            Export Excel
+                        </Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                     </>
                 }
             />
+
             <ErrorBox>{error}</ErrorBox>
 
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
-                <SummaryCard label="Pending Inspection" value={counts.pending} />
-                <SummaryCard label="Awaiting Route" value={counts.route} />
-                <SummaryCard label="Direct Production" value={counts.direct} />
-                <SummaryCard label="Sent to Processing" value={counts.processing} />
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}>
+                <SummaryCard label="Pending Check" value={counts.pending} />
+                <SummaryCard label="Checked" value={counts.checked} />
+                <SummaryCard label="With Picture" value={counts.evidence} />
             </Box>
 
             <Card sx={panelSx}>
-                <TextField select label="QC Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ ...fieldSx, minWidth: 220 }}>
+                <TextField
+                    select
+                    label="QC State"
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                    sx={{ ...fieldSx, minWidth: 220 }}
+                >
                     <MenuItem value="">All</MenuItem>
-                    <MenuItem value="PENDING">Pending</MenuItem>
-                    <MenuItem value="COMPLETED">Completed</MenuItem>
+                    <MenuItem value="PENDING">Pending Check</MenuItem>
+                    <MenuItem value="COMPLETED">Checked</MenuItem>
                 </TextField>
             </Card>
 
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 190px 150px 90px 90px 90px 140px minmax(230px,1fr)" }}>
-                            {["Inspection", "Material", "QC Location", "Qty", "Accepted", "Rejected", "Status", "Action / Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "190px 190px minmax(210px,1fr) 90px 130px 135px 165px 150px" }}>
+                            {["MR / Procurement", "PD No. / Product", "Material", "Qty", "QC", "Picture", "Checked By / At", "Action"].map((heading) => (
+                                <Box key={heading} sx={tableCellSx}>{heading}</Box>
+                            ))}
                         </Box>
-                        {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
-                            const routing = routingByInspection.get(String(row.id));
-                            const pending = normalize(row.status) === "PENDING";
-                            const accepted = numeric(row.acceptedQty) > .0005;
-                            const routeWaiting = !pending && accepted && routing?.routingRequired === true && routing?.routingComplete !== true;
 
+                        {pagination.pageItems.length === 0 ? (
+                            <EmptyState>No material QC checks in this view.</EmptyState>
+                        ) : pagination.pageItems.map((row) => {
+                            const procurement = [
+                                ...(Array.isArray(row.indentNumbers) ? row.indentNumbers : []),
+                                ...(Array.isArray(row.purchaseOrderNumbers) ? row.purchaseOrderNumbers : []),
+                                ...(Array.isArray(row.grnNumbers) ? row.grnNumbers : []),
+                            ];
+                            const pending = normalize(row.status) === "PENDING";
                             return (
-                                <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 190px 150px 90px 90px 90px 140px minmax(230px,1fr)" }}>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.inspectionNumber}</Typography><Typography sx={subTextSx}>{readable(row.sourceType)}</Typography></Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.materialCode}</Typography></Box>
-                                    <Box sx={tableCellSx}>{row.locationCode || "-"}</Box>
+                                <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "190px 190px minmax(210px,1fr) 90px 130px 135px 165px 150px" }}>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{procurement.length ? procurement.join(" · ") : "Store stock MR lot"}</Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.pdNo || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.productName || "-"} · {row.drawingNo || "-"}</Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.materialName || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.materialCode || "-"}</Typography>
+                                    </Box>
                                     <Box sx={tableCellSx}>{formatQty(row.inspectionQty)}</Box>
-                                    <Box sx={tableCellSx}>{formatQty(row.acceptedQty)}</Box>
-                                    <Box sx={tableCellSx}>{formatQty(row.rejectedQty)}</Box>
-                                    <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
-                                    <Box sx={{ ...tableCellSx, display: "flex", gap: .6, flexWrap: "wrap" }}>
-                                        {canAct && pending && <Button onClick={() => openInspection(row)} sx={primaryBtnSx}>Inspect</Button>}
-                                        {canAct && routeWaiting && <Button onClick={() => openRoute(row)} sx={primaryBtnSx}>Choose Route</Button>}
-                                        {routing?.routingComplete && (
-                                            <Typography sx={subTextSx}>
-                                                {readable(routing.routingDecision)}
-                                                {routing.selectedProcessingRouteStepId ? " · Processing selected" : ""}
-                                                {routing.routedBy ? ` · by ${routing.routedBy}` : ""}
-                                            </Typography>
-                                        )}
-                                        {!pending && accepted && routing?.routingRequired === false && (
-                                            <Typography sx={subTextSx}>Accepted free stock; no Project route action.</Typography>
-                                        )}
+                                    <Box sx={tableCellSx}><MatFlowStatusChip status={pending ? "PENDING" : "COMPLETED"} /></Box>
+                                    <Box sx={tableCellSx}>
+                                        {row.photoAvailable ? (
+                                            <Button onClick={() => viewPhoto(row)} disabled={working} sx={secondaryBtnSx}>View</Button>
+                                        ) : <Typography sx={subTextSx}>Optional</Typography>}
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        <Typography sx={mainTextSx}>{row.inspectedBy || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{formatDate(row.inspectedAt)}</Typography>
+                                    </Box>
+                                    <Box sx={tableCellSx}>
+                                        {canAct && pending ? (
+                                            <Button onClick={() => openCheck(row)} disabled={working} sx={primaryBtnSx}>✓ Check</Button>
+                                        ) : <Typography sx={subTextSx}>{row.remarks || "Checked"}</Typography>}
                                     </Box>
                                 </Box>
                             );
                         })}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="QC Inspections" />}
+
+                {!loading && (
+                    <MatFlowPagination
+                        {...pagination}
+                        onPageChange={pagination.setPage}
+                        onPageSizeChange={pagination.setPageSize}
+                        label="QC Checks"
+                    />
+                )}
             </Card>
 
-            <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{dialog?.type === "INSPECT" ? "QC Quality Decision" : "Post-QC Route"}</DialogTitle>
+            <Dialog
+                open={Boolean(dialog)}
+                onClose={() => !working && setDialog(null)}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{ sx: dialogPaperSx }}
+            >
+                <DialogTitle sx={dialogTitleSx}>Complete QC Check</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    {dialog?.type === "INSPECT" ? (
-                        <Box sx={{ display: "grid", gap: 1.5 }}>
-                            <Alert severity="info">Quality decision and route decision are separate. Processing is never automatically selected.</Alert>
-                            <TextField type="number" label="Accepted Qty *" value={form.acceptedQty} onChange={(e) => setForm((c) => ({ ...c, acceptedQty: e.target.value }))} sx={fieldSx} />
-                            <TextField type="number" label="Rejected Qty *" value={form.rejectedQty} onChange={(e) => setForm((c) => ({ ...c, rejectedQty: e.target.value }))} sx={fieldSx} />
-                            <TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={(e) => setForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
+                    <Box sx={{ display: "grid", gap: 1.5 }}>
+                        <Alert severity="info">
+                            This is only a QC confirmation against {dialog?.requisitionNumber || "the MR"}. QC does not receive the material at a separate location and does not choose Processing or Production.
+                        </Alert>
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                            <Detail label="MR" value={dialog?.requisitionNumber || "-"} />
+                            <Detail label="Material" value={dialog?.materialName || dialog?.materialCode || "-"} />
+                            <Detail label="Quantity" value={formatQty(dialog?.inspectionQty)} />
+                            <Detail label="Next Route" value="Already selected by Store" />
                         </Box>
-                    ) : (
-                        <Box sx={{ display: "grid", gap: 1.5 }}>
-                            <TextField select label="Accepted Material Route *" value={form.routingDecision} onChange={(e) => setForm((c) => ({ ...c, routingDecision: e.target.value, processingRouteStepId: "" }))} sx={fieldSx}>
-                                <MenuItem value="DIRECT_TO_PRODUCTION">Direct to Production</MenuItem>
-                                <MenuItem value="SEND_TO_PROCESSING">Send to Processing</MenuItem>
-                            </TextField>
-                            {normalize(form.routingDecision) === "SEND_TO_PROCESSING" && (
-                                <TextField select label="Approved Processing Unit *" value={form.processingRouteStepId} onChange={(e) => setForm((c) => ({ ...c, processingRouteStepId: e.target.value }))} sx={fieldSx}>
-                                    {(dialog?.routing?.processingOptions || []).map((option) => (
-                                        <MenuItem key={option.routeStepId} value={option.routeStepId}>
-                                            {option.locationCode} · {option.locationName} · {option.processCode}
-                                        </MenuItem>
-                                    ))}
-                                </TextField>
-                            )}
-                            <TextField multiline minRows={2} label="Routing Remarks" value={form.remarks} onChange={(e) => setForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
-                        </Box>
-                    )}
+                        <Button component="label" sx={secondaryBtnSx}>
+                            {photo ? `Picture: ${photo.name}` : "Attach QC Picture (Optional)"}
+                            <input
+                                hidden
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                onChange={(event) => setPhoto(event.target.files?.[0] || null)}
+                            />
+                        </Button>
+                        <Typography sx={subTextSx}>PNG, JPG/JPEG or WEBP. Maximum 8 MB.</Typography>
+                        <TextField
+                            multiline
+                            minRows={3}
+                            label="QC Remarks (Optional)"
+                            value={remarks}
+                            onChange={(event) => setRemarks(event.target.value)}
+                            sx={fieldSx}
+                        />
+                    </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
                     <Button onClick={() => setDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={execute} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Confirm"}</Button>
+                    <Button onClick={completeCheck} disabled={working} sx={primaryBtnSx}>
+                        {working ? "Saving..." : "✓ Mark Checked"}
+                    </Button>
                 </DialogActions>
             </Dialog>
         </Box>
@@ -426,7 +419,7 @@ export function MatFlowProcessingPage() {
             <PageHero
                 badge="PROCESSING UNIT"
                 title="Material Processing Jobs"
-                subtitle="Only QC-routed material appears here. The Processor starts the queued job, records output and wastage, then completion automatically releases the material toward Production."
+                subtitle="Only Store-selected Processing lots appear here. Processing may be required with or without QC; the Processor starts the queued job, records output/wastage, then completion releases the material toward Production."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Processing_Jobs", sheetName: "Processing", title: "MatFlow Processing Jobs", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -449,7 +442,7 @@ export function MatFlowProcessingPage() {
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>
                             {["Job", "MR", "Processing Unit", "Input Material", "Planned", "Output / Waste", "Status", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
-                        {pagination.pageItems.length === 0 ? <EmptyState>No QC-routed Processing jobs.</EmptyState> : pagination.pageItems.map((job) => {
+                        {pagination.pageItems.length === 0 ? <EmptyState>No Store-selected Processing jobs.</EmptyState> : pagination.pageItems.map((job) => {
                             const state = normalize(job.status);
                             return (
                                 <Box key={job.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>
@@ -744,7 +737,7 @@ export function MatFlowProductionExecutionPage() {
 
             <Card sx={panelSx}>
                 <TextField
-                    label="Search Project / Product / MR / Material State"
+                    label="Search PD No. / Product / MR / Material State"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     sx={{ ...fieldSx, minWidth: 360 }}
@@ -755,7 +748,7 @@ export function MatFlowProductionExecutionPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 190px 170px 150px 100px 210px 210px" }}>
-                            {["Project / Product", "MR", "Current Material State", "Current Location", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["PD No. / Product", "MR", "Current Material State", "Current Location", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                             const stage = normalize(row.currentStage);
@@ -823,7 +816,7 @@ export function MatFlowProductionExecutionPage() {
 
                             {dialog?.type === "RECEIVE" && (
                                 <>
-                                    <Alert severity="info" sx={{ mb: 1.2 }}>Production acknowledges each lot actually sent by Store, QC or Processing. There is no generic Transfer receipt desk.</Alert>
+                                    <Alert severity="info" sx={{ mb: 1.2 }}>Production acknowledges each lot actually sent by Store or Processing. QC is only a check gate and does not physically send material.</Alert>
                                     {receivingReservations.length === 0 ? <EmptyState>No material lot is currently waiting for Production receipt.</EmptyState> : receivingReservations.map((reservation) => (
                                         <Box key={reservation.id} sx={{ p: 1, mb: .8, border: "1px solid var(--mf-border)", borderRadius: 2, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
                                             <Box>

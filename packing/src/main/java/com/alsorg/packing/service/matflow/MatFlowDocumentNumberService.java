@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * PI/2026/08/13/1
  * PO/2026/08/13/1
  * GRN/2026/08/13/1
+ * BOM/2026/08/13/F-65/09-03
  * </pre>
  *
  * The number belongs to the business date on which the document is generated.
@@ -90,6 +91,55 @@ public class MatFlowDocumentNumberService {
         return next("GRN", () -> receiptRepository.findAll().stream()
                 .map(row -> row.grnNumber)
                 .toList());
+    }
+
+    /**
+     * Canonical Product BOM number. The existing database/API field named
+     * projectCode is the MatFlow compatibility field for the business PD No.
+     *
+     * Example: PD F-65 + drawing 09/03 => BOM/2026/08/13/F-65/09-03.
+     * BOM revisions intentionally retain the same BOM number; revisionNo is the
+     * separate revision identity.
+     */
+    public String nextBom(String pdNo, String drawingNo) {
+        return canonicalBomNumber(currentBusinessDate(), pdNo, drawingNo);
+    }
+
+    static String canonicalBomNumber(LocalDate businessDate, String pdNo, String drawingNo) {
+        if (businessDate == null) {
+            throw new IllegalArgumentException("Business date is required");
+        }
+
+        String pd = canonicalBomSegment(pdNo, "PD No.");
+        String drawing = canonicalBomSegment(drawingNo, "Drawing number");
+
+        return "BOM/" + DATE_PATH.format(businessDate) + "/" + pd + "/" + drawing;
+    }
+
+    static boolean isCanonicalBom(LocalDate businessDate, String pdNo, String drawingNo, String value) {
+        if (value == null) {
+            return false;
+        }
+        return canonicalBomNumber(businessDate, pdNo, drawingNo).equals(value.trim());
+    }
+
+    private static String canonicalBomSegment(String value, String label) {
+        if (value == null || value.trim().isBlank()) {
+            throw new IllegalArgumentException(label + " is required for BOM numbering");
+        }
+
+        String normalized = value.trim().toUpperCase(Locale.ROOT)
+                .replace('\\', '-')
+                .replace('/', '-')
+                .replaceAll("\\s+", "-")
+                .replaceAll("[^A-Z0-9._-]+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^[.-]+|[.-]+$", "");
+
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException(label + " has no usable characters for BOM numbering");
+        }
+        return normalized;
     }
 
     private String next(String prefix, Supplier<List<String>> existingNumbers) {

@@ -11,7 +11,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Reservation
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
-import com.alsorg.packing.service.matflow.MatFlowMovementService;
+import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import com.alsorg.packing.service.matflow.MatFlowRequisitionService;
 import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
 import jakarta.validation.Valid;
@@ -32,24 +32,25 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Material Requisition + Store control boundary.
  *
- * Production raises/submits the MR. Store allocates Store stock, decides QC or
- * direct Production for each lot, and raises a linked PI for shortage. Internal
- * custody rows are execution mechanics only and have no public Transfers desk.
+ * Production raises/submits the MR. Store allocates Store stock and makes two
+ * independent per-lot decisions: whether QC is required and whether Processing
+ * is required. If Processing is selected, Store chooses one BOM-approved unit.
+ * QC has no location/routing authority. Internal custody rows remain hidden.
  */
 @RestController
 @RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowRequisitionController {
     private final MatFlowRequisitionService service;
-    private final MatFlowMovementService movementService;
+    private final MatFlowWorkflowCoordinatorService workflowCoordinator;
     private final MatFlowSafeDeleteService safeDeleteService;
 
     public MatFlowRequisitionController(
             MatFlowRequisitionService service,
-            MatFlowMovementService movementService,
+            MatFlowWorkflowCoordinatorService workflowCoordinator,
             MatFlowSafeDeleteService safeDeleteService) {
         this.service = service;
-        this.movementService = movementService;
+        this.workflowCoordinator = workflowCoordinator;
         this.safeDeleteService = safeDeleteService;
     }
 
@@ -125,12 +126,12 @@ public class MatFlowRequisitionController {
         return service.reviewRequisition(id, request);
     }
 
-    /** Store sends one complete allocated lot to QC or toward Production. */
+    /** Store sends one complete allocated lot along its saved Processing/Production route. */
     @PostMapping("/store/reservations/{reservationId}/issue")
     public PlanningResponse issueReservation(
             @PathVariable UUID reservationId,
             @Valid @RequestBody StoreIssueRequest request) {
-        return movementService.advanceStoreReservation(reservationId, request);
+        return workflowCoordinator.issueStoreReservation(reservationId, request);
     }
 
     @PostMapping("/reservations/{id}/release")

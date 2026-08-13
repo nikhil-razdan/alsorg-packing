@@ -19,6 +19,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,9 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Unified QC service for purchased and internally transferred material.
- * Accepted/rejected inspection decisions and rejected-material disposition
- * now share one service boundary.
+ * MatFlow QC check service.
+ *
+ * QC is intentionally not a custody location and does not choose a route. New
+ * MR-linked QC work is a simple completion/tick gate with optional photo
+ * evidence.
+ * Store owns the physical Processing/Production route before the QC check is
+ * done.
+ * Legacy rejected-material helpers remain for historical rows only.
  */
 @Service
 public class MatFlowQcService {
@@ -49,6 +55,7 @@ public class MatFlowQcService {
                         MatFlowRequisitionLineRepository requisitionLineRepository,
                         MatFlowIndentRepository indentRepository,
                         MatFlowIndentLineRepository indentLineRepository,
+                        MatFlowPurchaseOrderRepository purchaseOrderRepository,
                         MatFlowTransferOrderRepository transferRepository,
                         MatFlowTransferLineRepository transferLineRepository,
                         MatFlowVendorReturnRepository vendorReturnRepository,
@@ -57,7 +64,8 @@ public class MatFlowQcService {
                         MatFlowBomService bomService,
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
-                        MatFlowRequisitionService requisitionService) {
+                        MatFlowRequisitionService requisitionService,
+                        MatFlowQcEvidenceService evidenceService) {
 
                 this.qc = new QcModule(
                                 qcRepository,
@@ -69,13 +77,15 @@ public class MatFlowQcService {
                                 requisitionLineRepository,
                                 indentRepository,
                                 indentLineRepository,
+                                purchaseOrderRepository,
                                 transferRepository,
                                 transferLineRepository,
                                 vendorReturnRepository,
                                 bomService,
                                 accessService,
                                 auditService,
-                                requisitionService);
+                                requisitionService,
+                                evidenceService);
 
                 this.disposition = new DispositionModule(
                                 dispositionRepository,
@@ -101,6 +111,11 @@ public class MatFlowQcService {
         @Transactional
         public QcInspectionResponse decide(UUID inspectionId, QcDecisionRequest request) {
                 return qc.decide(inspectionId, request);
+        }
+
+        @Transactional(readOnly = true)
+        public QcInspectionResponse getInspection(UUID inspectionId) {
+                return qc.get(inspectionId);
         }
 
         @Transactional(readOnly = true)
@@ -144,6 +159,7 @@ public class MatFlowQcService {
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
                 private final MatFlowIndentRepository indentRepository;
                 private final MatFlowIndentLineRepository indentLineRepository;
+                private final MatFlowPurchaseOrderRepository purchaseOrderRepository;
                 private final MatFlowTransferOrderRepository transferRepository;
                 private final MatFlowTransferLineRepository transferLineRepository;
                 private final MatFlowVendorReturnRepository vendorReturnRepository;
@@ -151,6 +167,7 @@ public class MatFlowQcService {
                 private final MatFlowAccessService accessService;
                 private final MatFlowAuditService auditService;
                 private final MatFlowRequisitionService requisitionService;
+                private final MatFlowQcEvidenceService evidenceService;
 
                 QcModule(
                                 MatFlowQcInspectionRepository qcRepository,
@@ -162,13 +179,15 @@ public class MatFlowQcService {
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
                                 MatFlowIndentRepository indentRepository,
                                 MatFlowIndentLineRepository indentLineRepository,
+                                MatFlowPurchaseOrderRepository purchaseOrderRepository,
                                 MatFlowTransferOrderRepository transferRepository,
                                 MatFlowTransferLineRepository transferLineRepository,
                                 MatFlowVendorReturnRepository vendorReturnRepository,
                                 MatFlowBomService routingService,
                                 MatFlowAccessService accessService,
                                 MatFlowAuditService auditService,
-                                MatFlowRequisitionService requisitionService) {
+                                MatFlowRequisitionService requisitionService,
+                                MatFlowQcEvidenceService evidenceService) {
                         this.qcRepository = qcRepository;
 
                         this.receiptRepository = receiptRepository;
@@ -187,6 +206,8 @@ public class MatFlowQcService {
 
                         this.indentLineRepository = indentLineRepository;
 
+                        this.purchaseOrderRepository = purchaseOrderRepository;
+
                         this.transferRepository = transferRepository;
 
                         this.transferLineRepository = transferLineRepository;
@@ -199,6 +220,7 @@ public class MatFlowQcService {
 
                         this.auditService = auditService;
                         this.requisitionService = requisitionService;
+                        this.evidenceService = evidenceService;
                 }
 
                 @Transactional(readOnly = true)
@@ -224,6 +246,12 @@ public class MatFlowQcService {
                                         .toList();
                 }
 
+                @Transactional(readOnly = true)
+                public QcInspectionResponse get(UUID id) {
+                        accessService.requireRead();
+                        return toResponse(requireInspection(id));
+                }
+
                 @Transactional
                 public QcInspectionResponse decide(
                                 UUID id,
@@ -246,13 +274,25 @@ public class MatFlowQcService {
                                         request.rowVersion(),
                                         inspection.getRowVersion());
 
-                        BigDecimal accepted = nonNegative(
-                                        request.acceptedQty(),
-                                        "Accepted quantity");
+                        /*
+                         * Current workflow: a Store-created reservation QC row is only a
+                         * check/tick. It does not move stock, create a QC location or select
+                         * a route. Completing the check simply unlocks the route Store
+                         * already selected during MR allocation.
+                         */
+                        if (isSimpleReservationCheck(inspection)) {
+                                return completeReservationQcCheck(inspection, request);
+                        }
 
-                        BigDecimal rejected = nonNegative(
-                                        request.rejectedQty(),
-                                        "Rejected quantity");
+                        /*
+                         * Historical compatibility: old pending physical-QC rows may still
+                         * exist in the database. The new UI no longer asks for accepted /
+                         * rejected quantities, so completing one legacy row treats the full
+                         * quantity as checked/accepted and preserves its existing downstream
+                         * execution logic.
+                         */
+                        BigDecimal accepted = scale(inspection.inspectionQty);
+                        BigDecimal rejected = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
 
                         BigDecimal decidedQty = accepted.add(rejected);
 
@@ -349,8 +389,8 @@ public class MatFlowQcService {
                                         "QC completed",
                                         actor);
 
-                        MatFlowMaterialRequisition auditRequisition = resolveRoutingRequisition(
-                                        inspection.routingReservationId);
+                        QcBusinessContext businessContext = resolveBusinessContext(inspection);
+                        MatFlowMaterialRequisition auditRequisition = businessContext.requisition();
 
                         auditService.record(
                                         "QC_INSPECTION",
@@ -364,8 +404,10 @@ public class MatFlowQcService {
                                                         ? null
                                                         : auditRequisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
-                                                        "inspectionNumber",
-                                                        inspection.inspectionNumber,
+                                                        "requisitionNumber", businessContext.requisitionNumber(),
+                                                        "indentNumbers", businessContext.indentNumbers(),
+                                                        "purchaseOrderNumbers", businessContext.purchaseOrderNumbers(),
+                                                        "grnNumbers", businessContext.grnNumbers(),
                                                         "materialCode",
                                                         inspection.material.getMaterialCode(),
                                                         "inspectionQty",
@@ -377,6 +419,93 @@ public class MatFlowQcService {
                                                         "sourceType",
                                                         inspection.sourceType));
 
+                        return toResponse(inspection);
+                }
+
+                private boolean isSimpleReservationCheck(MatFlowQcInspection inspection) {
+                        return inspection != null
+                                        && inspection.routingReservationId != null
+                                        && inspection.routingReservationId.equals(inspection.sourceId)
+                                        && inspection.routingReservationId.equals(inspection.sourceLineId);
+                }
+
+                private QcInspectionResponse completeReservationQcCheck(
+                                MatFlowQcInspection inspection,
+                                QcDecisionRequest request) {
+                        MatFlowReservation reservation = reservationRepository
+                                        .findById(inspection.routingReservationId)
+                                        .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> conflict(
+                                                        "QC check is not linked to a valid MR reservation"));
+
+                        if (reservation.requisitionLine == null || reservation.requisitionLine.getId() == null) {
+                                throw conflict("QC check reservation has no MR material line");
+                        }
+
+                        MatFlowRequisitionLine line = requisitionLineRepository
+                                        .findById(reservation.requisitionLine.getId())
+                                        .map(value -> (MatFlowRequisitionLine) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> conflict("QC check MR material line no longer exists"));
+                        if (line.requisition == null || line.requisition.getId() == null) {
+                                throw conflict("QC check is not linked to a valid Material Requisition");
+                        }
+
+                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                        .unproxy(line.requisition);
+                        accessService.requirePlantAccess(
+                                        requisition.destinationLocation == null
+                                                        ? inspection.location.getPlantCode()
+                                                        : requisition.destinationLocation.getPlantCode());
+
+                        String actor = accessService.actor();
+                        inspection.acceptedQty = scale(inspection.inspectionQty);
+                        inspection.rejectedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                        inspection.status = QcInspectionStatus.COMPLETED;
+                        inspection.inspectedBy = actor;
+                        inspection.inspectedAt = LocalDateTime.now();
+                        inspection.remarks = clean(request.remarks());
+                        inspection.setUpdatedBy(actor);
+                        inspection = qcRepository.save(inspection);
+
+                        /* Unlock only the first Store-origin hand-off. */
+                        transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
+                                        .stream()
+                                        .filter(transfer -> transfer != null && transfer.predecessorTransferId == null)
+                                        .findFirst()
+                                        .ifPresent(first -> {
+                                                if (first.status == TransferStatus.PLANNED) {
+                                                        first.status = TransferStatus.READY;
+                                                        first.setUpdatedBy(actor);
+                                                        transferRepository.save(first);
+                                                }
+                                        });
+
+                        QcBusinessContext context = resolveBusinessContext(inspection);
+                        MatFlowProjectDrawing product = requisition.projectDrawing == null
+                                        ? null
+                                        : (MatFlowProjectDrawing) Hibernate.unproxy(requisition.projectDrawing);
+
+                        auditService.record(
+                                        "QC_CHECK",
+                                        inspection.getId(),
+                                        "QC_CHECK_COMPLETED",
+                                        inspection.location == null ? null : inspection.location.getPlantCode(),
+                                        product == null ? null : product.getProjectCode(),
+                                        product == null ? null : product.getDrawingNo(),
+                                        auditService.details(
+                                                        "requisitionNumber", context.requisitionNumber(),
+                                                        "indentNumbers", context.indentNumbers(),
+                                                        "purchaseOrderNumbers", context.purchaseOrderNumbers(),
+                                                        "grnNumbers", context.grnNumbers(),
+                                                        "materialCode", inspection.material == null
+                                                                        ? null
+                                                                        : inspection.material.getMaterialCode(),
+                                                        "quantity", inspection.inspectionQty,
+                                                        "photoAvailable", evidenceService.exists(inspection.getId()),
+                                                        "nextRouteOwnedBy", "STORE"));
+
+                        requisitionService.refreshState(requisition.getId(), actor);
                         return toResponse(inspection);
                 }
 
@@ -962,49 +1091,13 @@ public class MatFlowQcService {
                         List<MatFlowBomRouteStep> route = hydrateApprovedRoute(
                                         requisitionLine.bomLine.getId());
 
-                        MatFlowBomRouteStep productionStep = route.stream()
-                                        .filter(step -> step.stepType == RouteStepType.PRODUCTION)
-                                        .findFirst()
-                                        .orElse(null);
-
                         /*
-                         * Current BOMs are submission-validated to contain one final
-                         * Production step. Older approved BOM/requisition rows created
-                         * before that invariant may legitimately have no explicit
-                         * Production route row. For those historical rows only, the
-                         * Requisition's already validated Production destination is the
-                         * authoritative compatibility destination.
-                         *
-                         * If an explicit Production step exists it is NEVER ignored: it
-                         * must still match the Requisition destination exactly.
+                         * The BOM intentionally contains only optional PROCESSING choices.
+                         * Store decides whether QC is required, and the MR owns the exact
+                         * Production destination. Therefore QC never searches the BOM for
+                         * a QC or Production route step.
                          */
-                        boolean legacyProductionFallback = productionStep == null;
-                        UUID productionRouteStepId = null;
-
-                        if (productionStep != null) {
-                                if (productionStep.location == null) {
-                                        throw conflict(
-                                                        "Approved BOM Production route has no location");
-                                }
-
-                                MatFlowLocation configuredProduction = (MatFlowLocation) Hibernate.unproxy(
-                                                productionStep.location);
-                                productionStep.location = configuredProduction;
-
-                                if (configuredProduction.getLocationType() != LocationType.PRODUCTION) {
-                                        throw conflict(
-                                                        "Approved BOM Production route does not point to a Production location");
-                                }
-
-                                if (!configuredProduction.getId()
-                                                .equals(productionDestination.getId())) {
-                                        throw conflict(
-                                                        "Approved BOM Production route does not match the requisition Production destination");
-                                }
-
-                                productionDestination = configuredProduction;
-                                productionRouteStepId = productionStep.getId();
-                        }
+                        final UUID productionRouteStepId = null;
 
                         MatFlowBomRouteStep processingStep = null;
 
@@ -1120,9 +1213,7 @@ public class MatFlowQcService {
                                                 sequence + 10,
                                                 scale(reservation.reservedQty),
                                                 true,
-                                                legacyProductionFallback
-                                                                ? "Production hand-off planned after Processing using the Requisition destination (legacy BOM route compatibility)"
-                                                                : "Production hand-off planned after selected Processing Unit",
+                                                "Production hand-off planned after selected Processing Unit to the MR Production destination",
                                                 actor);
                         } else if (!alreadyAtProduction) {
                                 firstCreated = createQcRouteTransfer(
@@ -1135,9 +1226,7 @@ public class MatFlowQcService {
                                                 sequence,
                                                 scale(reservation.reservedQty),
                                                 deferInitialTransfer,
-                                                legacyProductionFallback
-                                                                ? "QC routed accepted material directly to the Requisition Production destination (legacy BOM route compatibility)"
-                                                                : "QC routed accepted material directly to Production",
+                                                "QC routed accepted material directly to the MR Production destination",
                                                 actor);
                         }
 
@@ -1159,16 +1248,14 @@ public class MatFlowQcService {
                                         requisition.projectDrawing == null ? null
                                                         : requisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
-                                                        "inspectionNumber", inspection.inspectionNumber,
+                                                        "requisitionNumber", requisition.requisitionNumber,
                                                         "routingDecision", inspection.routingDecision,
                                                         "processingRouteStepId", inspection.processingRouteStepId,
                                                         "fromLocation", inspection.location.getLocationCode(),
                                                         "productionDestination",
                                                         productionDestination.getLocationCode(),
                                                         "productionRouteSource",
-                                                        legacyProductionFallback
-                                                                        ? "REQUISITION_DESTINATION_COMPATIBILITY"
-                                                                        : "APPROVED_BOM_ROUTE",
+                                                        "REQUISITION_DESTINATION",
                                                         "alreadyAtProduction", alreadyAtProduction,
                                                         "nextTransferId",
                                                         firstCreated == null ? null : firstCreated.getId(),
@@ -1322,6 +1409,267 @@ public class MatFlowQcService {
                                         .toList();
                 }
 
+                private QcBusinessContext resolveBusinessContext(MatFlowQcInspection inspection) {
+                        MatFlowRequisitionLine requisitionLine = null;
+                        MatFlowMaterialRequisition requisition = null;
+                        MatFlowIndent directIndent = null;
+                        MatFlowPurchaseOrder directOrder = null;
+                        MatFlowGoodsReceipt directReceipt = null;
+
+                        if (inspection != null && inspection.sourceType == QcSourceType.GOODS_RECEIPT
+                                        && inspection.sourceLineId != null) {
+                                MatFlowGoodsReceiptLine receiptLine = receiptLineRepository
+                                                .findById(inspection.sourceLineId)
+                                                .map(this::hydrateGoodsReceiptLine)
+                                                .orElse(null);
+
+                                if (receiptLine != null) {
+                                        directReceipt = receiptLine.goodsReceipt;
+
+                                        if (receiptLine.purchaseOrderLine != null) {
+                                                MatFlowPurchaseOrderLine poLine = (MatFlowPurchaseOrderLine) Hibernate
+                                                                .unproxy(receiptLine.purchaseOrderLine);
+
+                                                if (poLine.purchaseOrder != null) {
+                                                        directOrder = (MatFlowPurchaseOrder) Hibernate
+                                                                        .unproxy(poLine.purchaseOrder);
+                                                }
+
+                                                if (poLine.indentLine != null) {
+                                                        MatFlowIndentLine indentLine = (MatFlowIndentLine) Hibernate
+                                                                        .unproxy(poLine.indentLine);
+
+                                                        if (indentLine.indent != null) {
+                                                                directIndent = (MatFlowIndent) Hibernate
+                                                                                .unproxy(indentLine.indent);
+                                                        }
+
+                                                        if (indentLine.requisitionLine != null
+                                                                        && indentLine.requisitionLine.getId() != null) {
+                                                                requisitionLine = requisitionLineRepository
+                                                                                .findById(indentLine.requisitionLine
+                                                                                                .getId())
+                                                                                .map(value -> (MatFlowRequisitionLine) Hibernate
+                                                                                                .unproxy(value))
+                                                                                .orElse((MatFlowRequisitionLine) Hibernate
+                                                                                                .unproxy(indentLine.requisitionLine));
+                                                        }
+                                                }
+                                        }
+
+                                        if (directOrder == null && directReceipt != null
+                                                        && directReceipt.purchaseOrder != null) {
+                                                directOrder = (MatFlowPurchaseOrder) Hibernate
+                                                                .unproxy(directReceipt.purchaseOrder);
+                                        }
+
+                                        if (directIndent == null && directOrder != null && directOrder.indent != null) {
+                                                directIndent = (MatFlowIndent) Hibernate.unproxy(directOrder.indent);
+                                        }
+                                }
+                        }
+
+                        if (inspection != null && inspection.sourceType == QcSourceType.TRANSFER_RECEIPT) {
+                                MatFlowTransferOrder sourceTransfer = null;
+
+                                if (inspection.sourceId != null) {
+                                        sourceTransfer = transferRepository.findById(inspection.sourceId)
+                                                        .map(value -> (MatFlowTransferOrder) Hibernate.unproxy(value))
+                                                        .orElse(null);
+                                }
+
+                                if (sourceTransfer == null && inspection.sourceLineId != null) {
+                                        MatFlowTransferLine sourceLine = transferLineRepository
+                                                        .findById(inspection.sourceLineId)
+                                                        .map(value -> (MatFlowTransferLine) Hibernate.unproxy(value))
+                                                        .orElse(null);
+                                        if (sourceLine != null && sourceLine.transferOrder != null) {
+                                                sourceTransfer = (MatFlowTransferOrder) Hibernate
+                                                                .unproxy(sourceLine.transferOrder);
+                                        }
+                                }
+
+                                if (sourceTransfer != null) {
+                                        if (sourceTransfer.reservation != null
+                                                        && sourceTransfer.reservation.getId() != null) {
+                                                MatFlowReservation reservation = reservationRepository
+                                                                .findById(sourceTransfer.reservation.getId())
+                                                                .map(value -> (MatFlowReservation) Hibernate
+                                                                                .unproxy(value))
+                                                                .orElse(null);
+
+                                                if (reservation != null && reservation.requisitionLine != null
+                                                                && reservation.requisitionLine.getId() != null) {
+                                                        requisitionLine = requisitionLineRepository
+                                                                        .findById(reservation.requisitionLine.getId())
+                                                                        .map(value -> (MatFlowRequisitionLine) Hibernate
+                                                                                        .unproxy(value))
+                                                                        .orElse(null);
+                                                }
+                                        }
+
+                                        if (sourceTransfer.requisition != null) {
+                                                requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                .unproxy(sourceTransfer.requisition);
+                                        }
+                                }
+                        }
+
+                        if (requisitionLine != null && requisitionLine.requisition != null) {
+                                requisition = (MatFlowMaterialRequisition) Hibernate
+                                                .unproxy(requisitionLine.requisition);
+                        }
+
+                        if (requisition == null && directIndent != null && directIndent.requisition != null) {
+                                requisition = (MatFlowMaterialRequisition) Hibernate
+                                                .unproxy(directIndent.requisition);
+                        }
+
+                        if (inspection != null && inspection.routingReservationId != null) {
+                                MatFlowReservation routingReservation = reservationRepository
+                                                .findById(inspection.routingReservationId)
+                                                .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (routingReservation != null && routingReservation.requisitionLine != null
+                                                && routingReservation.requisitionLine.getId() != null) {
+                                        requisitionLine = requisitionLineRepository
+                                                        .findById(routingReservation.requisitionLine.getId())
+                                                        .map(value -> (MatFlowRequisitionLine) Hibernate.unproxy(value))
+                                                        .orElse(requisitionLine);
+                                }
+                                if (requisitionLine != null && requisitionLine.requisition != null) {
+                                        requisition = (MatFlowMaterialRequisition) Hibernate
+                                                        .unproxy(requisitionLine.requisition);
+                                } else if (requisition == null) {
+                                        requisition = resolveRoutingRequisition(inspection.routingReservationId);
+                                }
+                        }
+
+                        List<MatFlowIndent> relatedIndents = new ArrayList<>();
+                        if (directIndent != null) {
+                                relatedIndents.add(directIndent);
+                        }
+
+                        final UUID targetRequisitionLineId = requisitionLine == null
+                                        ? null
+                                        : requisitionLine.getId();
+
+                        if (requisition != null && requisition.getId() != null) {
+                                for (MatFlowIndent indent : indentRepository
+                                                .findByRequisition_IdOrderByCreatedAtAsc(requisition.getId())) {
+                                        if (indent == null || indent.getId() == null) {
+                                                continue;
+                                        }
+
+                                        boolean matchesLine = targetRequisitionLineId == null
+                                                        || indentLineRepository
+                                                                        .findByIndent_IdOrderByCreatedAtAsc(
+                                                                                        indent.getId())
+                                                                        .stream()
+                                                                        .anyMatch(line -> line != null
+                                                                                        && line.requisitionLine != null
+                                                                                        && targetRequisitionLineId
+                                                                                                        .equals(
+                                                                                                                        line.requisitionLine
+                                                                                                                                        .getId()));
+
+                                        if (matchesLine && relatedIndents.stream()
+                                                        .noneMatch(existing -> existing.getId()
+                                                                        .equals(indent.getId()))) {
+                                                relatedIndents.add(indent);
+                                        }
+                                }
+                        }
+
+                        LinkedHashSet<String> indentNumbers = new LinkedHashSet<>();
+                        LinkedHashSet<UUID> indentIds = new LinkedHashSet<>();
+                        for (MatFlowIndent indent : relatedIndents) {
+                                if (indent == null) {
+                                        continue;
+                                }
+                                if (indent.getId() != null) {
+                                        indentIds.add(indent.getId());
+                                }
+                                String number = clean(indent.indentNumber);
+                                if (number != null) {
+                                        indentNumbers.add(number);
+                                }
+                        }
+
+                        LinkedHashSet<MatFlowPurchaseOrder> orders = new LinkedHashSet<>();
+                        if (directOrder != null) {
+                                orders.add(directOrder);
+                        }
+                        for (UUID indentId : indentIds) {
+                                purchaseOrderRepository.findByIndent_Id(indentId).stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .map(order -> (MatFlowPurchaseOrder) Hibernate.unproxy(order))
+                                                .forEach(orders::add);
+                        }
+
+                        LinkedHashSet<String> purchaseOrderNumbers = new LinkedHashSet<>();
+                        LinkedHashSet<MatFlowGoodsReceipt> receipts = new LinkedHashSet<>();
+                        if (directReceipt != null) {
+                                receipts.add(directReceipt);
+                        }
+
+                        for (MatFlowPurchaseOrder order : orders) {
+                                if (order == null) {
+                                        continue;
+                                }
+                                String number = clean(order.poNumber);
+                                if (number != null) {
+                                        purchaseOrderNumbers.add(number);
+                                }
+                                if (order.getId() != null) {
+                                        receiptRepository.findByPurchaseOrder_IdOrderByReceivedAtAsc(order.getId())
+                                                        .stream()
+                                                        .filter(java.util.Objects::nonNull)
+                                                        .map(receipt -> (MatFlowGoodsReceipt) Hibernate
+                                                                        .unproxy(receipt))
+                                                        .forEach(receipts::add);
+                                }
+                        }
+
+                        LinkedHashSet<String> grnNumbers = new LinkedHashSet<>();
+                        for (MatFlowGoodsReceipt receipt : receipts) {
+                                String number = receipt == null ? null : clean(receipt.grnNumber);
+                                if (number != null) {
+                                        grnNumbers.add(number);
+                                }
+                        }
+
+                        return new QcBusinessContext(
+                                        requisition,
+                                        requisition == null ? null : requisition.requisitionNumber,
+                                        List.copyOf(indentNumbers),
+                                        List.copyOf(purchaseOrderNumbers),
+                                        List.copyOf(grnNumbers));
+                }
+
+                private record QcBusinessContext(
+                                MatFlowMaterialRequisition requisition,
+                                String requisitionNumber,
+                                List<String> indentNumbers,
+                                List<String> purchaseOrderNumbers,
+                                List<String> grnNumbers) {
+                        String primaryReferenceNumber() {
+                                if (requisitionNumber != null && !requisitionNumber.isBlank()) {
+                                        return requisitionNumber;
+                                }
+                                if (!grnNumbers.isEmpty()) {
+                                        return grnNumbers.get(grnNumbers.size() - 1);
+                                }
+                                if (!purchaseOrderNumbers.isEmpty()) {
+                                        return purchaseOrderNumbers.get(purchaseOrderNumbers.size() - 1);
+                                }
+                                if (!indentNumbers.isEmpty()) {
+                                        return indentNumbers.get(indentNumbers.size() - 1);
+                                }
+                                return null;
+                        }
+                }
+
                 private MatFlowMaterialRequisition resolveRoutingRequisition(UUID reservationId) {
                         if (reservationId == null)
                                 return null;
@@ -1387,12 +1735,6 @@ public class MatFlowQcService {
                                                         step.sequenceNo))
                                         .toList();
 
-                        MatFlowBomRouteStep production = route.stream()
-                                        .filter(step -> step != null && step.stepType == RouteStepType.PRODUCTION &&
-                                                        step.location != null)
-                                        .findFirst()
-                                        .orElse(null);
-
                         MatFlowTransferOrder nextTransfer = reservation == null ? null
                                         : transferRepository
                                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
@@ -1415,7 +1757,8 @@ public class MatFlowQcService {
 
                         return new QcRoutingResponse(
                                         inspection.getId(),
-                                        inspection.inspectionNumber,
+                                        requisition == null ? null : requisition.getId(),
+                                        requisition == null ? null : requisition.requisitionNumber,
                                         inspection.routingReservationId,
                                         required,
                                         required && inspection.routingDecision != null,
@@ -1426,17 +1769,12 @@ public class MatFlowQcService {
                                         inspection.routingRemarks,
                                         inspection.location == null ? null : inspection.location.getId(),
                                         inspection.location == null ? null : inspection.location.getLocationCode(),
-                                        production == null ? (requisition == null
-                                                        || requisition.destinationLocation == null
-                                                                        ? null
-                                                                        : requisition.destinationLocation.getId())
-                                                        : production.location.getId(),
-                                        production == null ? (requisition == null
-                                                        || requisition.destinationLocation == null
-                                                                        ? null
-                                                                        : requisition.destinationLocation
-                                                                                        .getLocationCode())
-                                                        : production.location.getLocationCode(),
+                                        requisition == null || requisition.destinationLocation == null
+                                                        ? null
+                                                        : requisition.destinationLocation.getId(),
+                                        requisition == null || requisition.destinationLocation == null
+                                                        ? null
+                                                        : requisition.destinationLocation.getLocationCode(),
                                         nextTransfer == null ? null : nextTransfer.getId(),
                                         nextTransfer == null ? null : nextTransfer.transferNumber,
                                         options,
@@ -1790,7 +2128,7 @@ public class MatFlowQcService {
 
                         if (inspection.location == null) {
                                 throw conflict(
-                                                "QC inspection has no custody location");
+                                                "QC check has no internal plant/custody context");
                         }
 
                         accessService.requirePlantAccess(
@@ -1801,27 +2139,35 @@ public class MatFlowQcService {
 
                 private QcInspectionResponse toResponse(
                                 MatFlowQcInspection inspection) {
+                        inspection = hydrateInspection(inspection);
+                        QcBusinessContext context = resolveBusinessContext(inspection);
+                        MatFlowMaterialRequisition requisition = context.requisition();
+                        MatFlowProjectDrawing product = requisition == null || requisition.projectDrawing == null
+                                        ? null
+                                        : (MatFlowProjectDrawing) Hibernate.unproxy(requisition.projectDrawing);
+
                         return new QcInspectionResponse(
                                         inspection.getId(),
-                                        inspection.inspectionNumber,
+                                        requisition == null ? null : requisition.getId(),
+                                        context.requisitionNumber(),
+                                        product == null ? null : product.getProjectCode(),
+                                        product == null ? null : product.getDrawingNo(),
+                                        product == null ? null : product.getProductName(),
+                                        context.indentNumbers(),
+                                        context.purchaseOrderNumbers(),
+                                        context.grnNumbers(),
                                         inspection.sourceType,
                                         inspection.sourceId,
                                         inspection.sourceLineId,
-                                        inspection.material.getId(),
-                                        inspection.material
-                                                        .getMaterialCode(),
-                                        inspection.material
-                                                        .getMaterialName(),
-                                        inspection.location.getId(),
-                                        inspection.location.locationCode,
-                                        inspection.location.getPlantCode(),
-                                        inspection.inspectionQty,
-                                        inspection.acceptedQty,
-                                        inspection.rejectedQty,
+                                        inspection.material == null ? null : inspection.material.getId(),
+                                        inspection.material == null ? null : inspection.material.getMaterialCode(),
+                                        inspection.material == null ? null : inspection.material.getMaterialName(),
+                                        scale(inspection.inspectionQty),
                                         inspection.status,
                                         inspection.inspectedBy,
                                         inspection.inspectedAt,
                                         inspection.remarks,
+                                        evidenceService.exists(inspection.getId()),
                                         inspection.getRowVersion());
                 }
 
@@ -1876,9 +2222,10 @@ public class MatFlowQcService {
                         ledger.blockedAfter = balance.blockedQty;
                         ledger.inTransitAfter = balance.inTransitQty;
 
+                        QcBusinessContext businessContext = resolveBusinessContext(inspection);
                         ledger.referenceType = "MATFLOW_QC";
                         ledger.referenceId = inspection.getId();
-                        ledger.referenceNumber = inspection.inspectionNumber;
+                        ledger.referenceNumber = businessContext.primaryReferenceNumber();
                         ledger.remarks = remarks;
                         ledger.actor = actor;
 

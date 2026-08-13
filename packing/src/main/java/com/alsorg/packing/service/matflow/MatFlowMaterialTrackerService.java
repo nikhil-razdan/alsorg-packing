@@ -533,7 +533,7 @@ public class MatFlowMaterialTrackerService {
         }
 
         for (MatFlowQcInspection inspection : inspections) {
-            addQcMilestones(inspection, milestones);
+            addQcMilestones(inspection, context.requisition().requisitionNumber, milestones);
         }
 
         for (MatFlowProcessingJob job : jobs) {
@@ -839,7 +839,8 @@ public class MatFlowMaterialTrackerService {
             addMilestone(milestones, "GRN", "Material received / GRN", "STORE / RECEIVING",
                     receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                     scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
-                    "REQUISITION_LINE", "Vendor material inwarded into Store stock. Store will allocate it to the MR and decide QC or direct Production.");
+                    "REQUISITION_LINE",
+                    "Vendor material inwarded into Store stock. Store will allocate it to the MR and decide QC or direct Production.");
         }
     }
 
@@ -889,11 +890,12 @@ public class MatFlowMaterialTrackerService {
                         addMilestone(milestones, "GRN", "Material received / GRN", "STORE / RECEIVING",
                                 receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                                 scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
-                                "REQUISITION_LINE", "Physical receipt into Store stock; Store will allocate this quantity and decide whether QC is required.");
+                                "REQUISITION_LINE",
+                                "Physical receipt into Store stock; Store will allocate this quantity and decide whether QC is required.");
                     }
                     context.inspections().stream()
                             .filter(qc -> receiptLine.getId().equals(qc.sourceLineId))
-                            .forEach(qc -> addQcMilestones(qc, milestones));
+                            .forEach(qc -> addQcMilestones(qc, context.requisition().requisitionNumber, milestones));
                 }
             }
         }
@@ -951,32 +953,19 @@ public class MatFlowMaterialTrackerService {
         }
     }
 
-    private void addQcMilestones(MatFlowQcInspection inspection, List<Milestone> milestones) {
+    private void addQcMilestones(MatFlowQcInspection inspection, String requisitionNumber, List<Milestone> milestones) {
         if (inspection == null)
             return;
-        addMilestone(milestones, "QC_PENDING", "QC inspection pending", "QC", inspection.location,
+        addMilestone(milestones, "QC_PENDING", "QC check pending", "QC", inspection.location,
                 "QC_PENDING", inspection.getCreatedAt(), inspection.getCreatedBy(), scale(inspection.inspectionQty),
-                "QC_INSPECTION", inspection.getId(), inspection.inspectionNumber, "MATERIAL_LOT",
-                "Material is physically held for quality inspection.");
+                "QC_INSPECTION", inspection.getId(), requisitionNumber, "MATERIAL_LOT",
+                "QC is a check/tick only; physical material remains at the Store custody location.");
 
         if (inspection.inspectedAt != null) {
-            BigDecimal accepted = scale(inspection.acceptedQty);
-            BigDecimal rejected = scale(inspection.rejectedQty);
-            String note = "QC completed: accepted " + accepted + ", rejected " + rejected + ".";
-            String nextState = accepted.compareTo(ZERO) > 0 && inspection.routingReservationId != null
-                    && inspection.routingDecision == null
-                            ? "QC_ACCEPTED_AWAITING_ROUTE"
-                            : "QC_COMPLETED";
-            addMilestone(milestones, "QC_COMPLETED", "QC inspection completed", "QC", inspection.location,
-                    nextState, inspection.inspectedAt, inspection.inspectedBy, accepted,
-                    "QC_INSPECTION", inspection.getId(), inspection.inspectionNumber, "MATERIAL_LOT", note);
-        }
-
-        if (inspection.routingDecidedAt != null) {
-            addMilestone(milestones, "QC_ROUTE", "QC route decided", "QC", inspection.location,
-                    "QC_ROUTE_DECIDED", inspection.routingDecidedAt, inspection.routingDecidedBy,
-                    scale(inspection.acceptedQty), "QC_INSPECTION", inspection.getId(), inspection.inspectionNumber,
-                    "RESERVATION_LOT", "Next route: " + enumName(inspection.routingDecision) + ".");
+            addMilestone(milestones, "QC_COMPLETED", "QC check completed", "QC", inspection.location,
+                    "QC_COMPLETED", inspection.inspectedAt, inspection.inspectedBy, scale(inspection.inspectionQty),
+                    "QC_INSPECTION", inspection.getId(), requisitionNumber, "MATERIAL_LOT",
+                    "Check completed. Store may now send the lot along its already-selected Processing/Production route.");
         }
     }
 
@@ -1199,25 +1188,18 @@ public class MatFlowMaterialTrackerService {
         }
 
         MatFlowQcInspection currentQc = inspections.stream()
-                .filter(item -> "PENDING".equals(enumName(item.status))
-                        || ("COMPLETED".equals(enumName(item.status))
-                                && scale(item.acceptedQty).compareTo(ZERO) > 0
-                                && reservation.getId().equals(item.routingReservationId)
-                                && item.routingDecision == null))
+                .filter(item -> "PENDING".equals(enumName(item.status)))
                 .findFirst().orElse(null);
         if (currentQc != null) {
-            boolean pending = "PENDING".equals(enumName(currentQc.status));
             return current(
                     "QC",
                     "QC",
                     currentQc.location,
-                    pending ? "QC_PENDING" : "QC_ACCEPTED_AWAITING_ROUTE",
-                    pending
-                            ? currentQc.getCreatedAt()
-                            : firstNonNull(currentQc.inspectedAt, currentQc.getUpdatedAt()),
+                    "QC_PENDING",
+                    currentQc.getCreatedAt(),
                     "QC_INSPECTION",
                     currentQc.getId(),
-                    currentQc.inspectionNumber,
+                    context.requisition().requisitionNumber,
                     false);
         }
 
@@ -1488,11 +1470,8 @@ public class MatFlowMaterialTrackerService {
             return next("PROCESSING", current.location(), "Start the approved processing job.");
         }
         if ("QC_PENDING".equals(current.state())) {
-            return next("QC", current.location(), "Complete QC and record accepted / rejected quantity.");
-        }
-        if ("QC_ACCEPTED_AWAITING_ROUTE".equals(current.state())) {
             return next("QC", current.location(),
-                    "Choose the accepted lot route: Direct to Production or approved Processing Unit.");
+                    "Complete the QC check/tick. The material remains under Store custody and its route is already selected.");
         }
 
         MatFlowTransferOrder open = route.stream().filter(item -> !CLOSED_TRANSFERS.contains(enumName(item.status)))
@@ -1541,7 +1520,7 @@ public class MatFlowMaterialTrackerService {
                 .orElse(null);
         if (pendingQc != null) {
             return current("PURCHASE / QC", "QC", pendingQc.location, "QC_PENDING", pendingQc.getCreatedAt(),
-                    "QC_INSPECTION", pendingQc.getId(), pendingQc.inspectionNumber, false);
+                    "QC_INSPECTION", pendingQc.getId(), context.requisition().requisitionNumber, false);
         }
 
         MatFlowPurchaseOrder latestOrder = context.poLines().stream()
