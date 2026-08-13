@@ -273,26 +273,31 @@ public class WarehouseService {
      * ========================================================= */
 
     @Transactional
-    public void adminReturnToDispatch(
+    public void adminRequestReturnToDispatch(
             String itemId,
             String username) {
 
-        dispatchedItemService.requestReturnToDispatch(
-                itemId,
-                username);
+        DispatchedItem item = repo.findById(itemId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Warehouse item not found: " + itemId));
+
+        if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
+            throw new IllegalArgumentException(
+                    "Only items currently stored in Warehouse can request Return to Dispatch");
+        }
 
         /*
-         * ADMIN is already the approval authority. Completing both steps
-         * inside one transaction prevents an item being stranded in
-         * WAREHOUSE_RETURN_REQUESTED if the second step fails.
+         * Preserve the ORIGINAL return workflow exactly:
+         * IN_WAREHOUSE -> WAREHOUSE_RETURN_REQUESTED.
+         * Approval remains a separate Admin action and is NOT auto-executed here.
          */
-        dispatchedItemService.approveReturnToDispatch(
+        dispatchedItemService.requestReturnToDispatch(
                 itemId,
                 username);
     }
 
     @Transactional
-    public int adminBulkReturnToDispatch(
+    public int adminBulkRequestReturnToDispatch(
             List<String> itemIds,
             String username) {
 
@@ -303,13 +308,102 @@ public class WarehouseService {
                     "Select at least one warehouse item");
         }
 
+        /* Validate the whole batch before the first state change. */
         for (String itemId : uniqueIds) {
-            adminReturnToDispatch(
+            DispatchedItem item = repo.findById(itemId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Warehouse item not found: " + itemId));
+
+            if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
+                throw new IllegalArgumentException(
+                        "Bulk Return can only be requested for IN_WAREHOUSE items. " +
+                                "Item " + itemId + " is " + item.getStatus());
+            }
+        }
+
+        for (String itemId : uniqueIds) {
+            dispatchedItemService.requestReturnToDispatch(
                     itemId,
                     username);
         }
 
         return uniqueIds.size();
+    }
+
+    /**
+     * ADMIN bulk decision for already-requested Warehouse -> Dispatch returns.
+     *
+     * All rows are validated before the first mutation.  Because this method is
+     * transactional, an invalid/missing row cannot leave the selection partially
+     * approved.
+     */
+    @Transactional
+    public int adminBulkApproveReturnRequests(
+            List<String> itemIds,
+            String username) {
+
+        List<String> pendingIds = requirePendingReturnRequestIds(
+                itemIds);
+
+        for (String itemId : pendingIds) {
+            dispatchedItemService.approveReturnToDispatch(
+                    itemId,
+                    username);
+        }
+
+        return pendingIds.size();
+    }
+
+    /**
+     * ADMIN bulk rejection for already-requested Warehouse -> Dispatch returns.
+     * Restores every validated row to IN_WAREHOUSE through the existing single
+     * item service so current audit/activity logging remains unchanged.
+     */
+    @Transactional
+    public int adminBulkRejectReturnRequests(
+            List<String> itemIds,
+            String username) {
+
+        List<String> pendingIds = requirePendingReturnRequestIds(
+                itemIds);
+
+        for (String itemId : pendingIds) {
+            dispatchedItemService.rejectReturnToDispatch(
+                    itemId,
+                    username);
+        }
+
+        return pendingIds.size();
+    }
+
+    private List<String> requirePendingReturnRequestIds(
+            List<String> itemIds) {
+
+        List<String> uniqueIds = cleanUniqueIds(
+                itemIds);
+
+        if (uniqueIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Select at least one return request");
+        }
+
+        /*
+         * Pre-validate the COMPLETE batch before changing anything.
+         */
+        for (String itemId : uniqueIds) {
+            DispatchedItem item = repo.findById(
+                    itemId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Warehouse item not found: " + itemId));
+
+            if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED) {
+                throw new IllegalArgumentException(
+                        "Only pending Return to Dispatch requests can be approved/rejected. "
+                                + "Item " + itemId + " is " + item.getStatus());
+            }
+        }
+
+        return uniqueIds;
     }
 
     @Transactional

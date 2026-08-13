@@ -82,6 +82,7 @@ function WarehousePage() {
 	const [uploadFile, setUploadFile] = useState(null);
 	const [selectionModel, setSelectionModel] = useState([]);
 	const [bulkLoading, setBulkLoading] = useState(false);
+	const [bulkReturnDecisionLoading, setBulkReturnDecisionLoading] = useState("");
 	const [statusFilter, setStatusFilter] = useState("ALL");
 	const [bulkWarehouseApproveOpen, setBulkWarehouseApproveOpen] =
 		useState(false);
@@ -337,7 +338,7 @@ function WarehousePage() {
 	const requestReturn = async (id) => {
 		try {
 			const endpoint = isAdmin
-				? `${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/return-to-dispatch`
+				? `${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/request-return-to-dispatch`
 				: `${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/request-return`;
 
 			const res = await fetch(endpoint, {
@@ -347,13 +348,13 @@ function WarehousePage() {
 
 			if (!res.ok) {
 				const text = await res.text();
-				throw new Error(text || "Return to Dispatch failed");
+				throw new Error(text || "Return request failed");
 			}
 
 			await fetchItems();
 		} catch (err) {
 			console.error(err);
-			alert(err.message || "Return to Dispatch failed");
+			alert(err.message || "Return request failed");
 		}
 	};
 
@@ -375,7 +376,7 @@ function WarehousePage() {
 		}
 
 		const confirmBulk = window.confirm(
-			`Return ${selectionModel.length} selected warehouse items directly to Dispatch?`
+			`Request Return to Dispatch for ${selectionModel.length} selected warehouse item(s)?`
 		);
 
 		if (!confirmBulk) return;
@@ -384,7 +385,7 @@ function WarehousePage() {
 			setBulkLoading(true);
 
 			const res = await fetch(
-				`${API_BASE_URL}/api/warehouse/admin/bulk-return-to-dispatch`,
+				`${API_BASE_URL}/api/warehouse/admin/returns/bulk/request`,
 				{
 					method: "POST",
 					credentials: "include",
@@ -397,7 +398,7 @@ function WarehousePage() {
 
 			if (!res.ok) {
 				const text = await res.text();
-				throw new Error(text || "Bulk return failed");
+				throw new Error(text || "Bulk return request failed");
 			}
 
 			setSelectionModel([]);
@@ -406,7 +407,7 @@ function WarehousePage() {
 		} catch (err) {
 
 			console.error(err);
-			alert(err.message || "Bulk return failed");
+			alert(err.message || "Bulk return request failed");
 
 		} finally {
 
@@ -418,6 +419,7 @@ function WarehousePage() {
 	const selectableStatuses = [
 		"WAREHOUSE_REQUESTED",
 		"IN_WAREHOUSE",
+		"WAREHOUSE_RETURN_REQUESTED",
 	];
 
 	const getWarehouseRowId = (row) => {
@@ -810,6 +812,76 @@ function WarehousePage() {
 		selectedWarehouseItems.every(
 			(item) => getWarehouseStatus(item) === "WAREHOUSE_REQUESTED"
 		);
+
+	const allSelectedReturnRequested =
+		selectedWarehouseItems.length > 0 &&
+		selectedWarehouseItems.every(
+			(item) => getWarehouseStatus(item) === "WAREHOUSE_RETURN_REQUESTED"
+		);
+
+	const bulkResolveReturnRequests = async (decision) => {
+		if (!isAdmin) {
+			alert("Only Admin can approve or reject return requests");
+			return;
+		}
+
+		if (!allSelectedReturnRequested) {
+			alert("Select only pending Return to Dispatch requests");
+			return;
+		}
+
+		const normalizedDecision =
+			String(decision || "").toUpperCase();
+
+		const action =
+			normalizedDecision === "APPROVE" ? "approve" : "reject";
+
+		const itemIds = selectedWarehouseItems
+			.map((row) => getWarehouseRowId(row))
+			.filter(Boolean);
+
+		if (itemIds.length === 0) {
+			alert("Select return requests first");
+			return;
+		}
+
+		const confirmed = window.confirm(
+			`${action === "approve" ? "Approve" : "Reject"} ${itemIds.length} selected Return to Dispatch request(s)?`
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setBulkReturnDecisionLoading(action);
+
+			const res = await fetch(
+				`${API_BASE_URL}/api/warehouse/admin/returns/bulk/${action}`,
+				{
+					method: "POST",
+					credentials: "include",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(itemIds),
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(
+					text || `Bulk return ${action} failed`
+				);
+			}
+
+			setSelectionModel([]);
+			await fetchItems();
+		} catch (err) {
+			console.error(`Bulk return ${action} failed`, err);
+			alert(err.message || `Bulk return ${action} failed`);
+		} finally {
+			setBulkReturnDecisionLoading("");
+		}
+	};
 
 	const canBulkApproveWarehouseThroughGatePass =
 		allSelectedWarehouseRequested &&
@@ -1552,7 +1624,7 @@ function WarehousePage() {
 									onClick={() => requestReturn(row.zohoItemId)}
 									sx={actionWarning}
 								>
-									Return to Dispatch
+									Request Return
 								</Button>
 
 								<Button
@@ -2081,16 +2153,18 @@ function WarehousePage() {
 												? "Warehouse Requested"
 												: allWarehouseItems
 													? "Stored In Warehouse"
-													: "Mixed Selection"
+													: allSelectedReturnRequested
+														? "Return Requests"
+														: "Mixed Selection"
 										}
 										sx={{
 											background:
-												allSelectedWarehouseRequested || allWarehouseItems
+												allSelectedWarehouseRequested || allWarehouseItems || allSelectedReturnRequested
 													? "rgba(16,185,129,.15)"
 													: "rgba(239,68,68,.15)",
 
 											color:
-												allSelectedWarehouseRequested || allWarehouseItems
+												allSelectedWarehouseRequested || allWarehouseItems || allSelectedReturnRequested
 													? "#34d399"
 													: "#f87171",
 
@@ -2142,6 +2216,46 @@ function WarehousePage() {
 										: "✅ Bulk Approve Through Gate Pass"}
 								</Button>
 
+								{isAdmin && allSelectedReturnRequested && (
+									<>
+										<Button
+											disabled={Boolean(bulkReturnDecisionLoading)}
+											onClick={() => bulkResolveReturnRequests("APPROVE")}
+											sx={{
+												minWidth: 190,
+												height: 44,
+												borderRadius: "14px",
+												fontWeight: 800,
+												textTransform: "none",
+												background: "linear-gradient(180deg,#059669,#10b981)",
+												color: "#fff",
+											}}
+										>
+											{bulkReturnDecisionLoading === "approve"
+												? "Approving..."
+												: "✅ Bulk Approve Return"}
+										</Button>
+
+										<Button
+											disabled={Boolean(bulkReturnDecisionLoading)}
+											onClick={() => bulkResolveReturnRequests("REJECT")}
+											sx={{
+												minWidth: 180,
+												height: 44,
+												borderRadius: "14px",
+												fontWeight: 800,
+												textTransform: "none",
+												background: "linear-gradient(180deg,#dc2626,#b91c1c)",
+												color: "#fff",
+											}}
+										>
+											{bulkReturnDecisionLoading === "reject"
+												? "Rejecting..."
+												: "❌ Bulk Reject Return"}
+										</Button>
+									</>
+								)}
+
 								{isAdmin && (
 									<Button
 										disabled={!allWarehouseItems || bulkLoading}
@@ -2169,7 +2283,7 @@ function WarehousePage() {
 									>
 										{bulkLoading
 											? "Processing..."
-											: "🔁 Bulk Return To Dispatch"}
+											: "🔁 Bulk Request Return"}
 									</Button>
 								)}
 

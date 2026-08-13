@@ -5322,6 +5322,7 @@ export default function DispatchedItemsPage() {
 	const [selectionModel, setSelectionModel] = useState([]);
 	const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 	const [bulkLoading, setBulkLoading] = useState(false);
+	const [bulkReturnDecisionLoading, setBulkReturnDecisionLoading] = useState("");
 	const [gatePassModal, setGatePassModal] = useState(null);
 	const [warehouseCode, setWarehouseCode] = useState("");
 	const [gatePassPreview, setGatePassPreview] = useState(null);
@@ -12789,6 +12790,82 @@ export default function DispatchedItemsPage() {
 		);
 	}, [rows, selectionModel]);
 
+	const selectedReturnRequestItems = useMemo(() => {
+		return selectedItems.filter(
+			(row) => getRowStatus(row) === "WAREHOUSE_RETURN_REQUESTED"
+		);
+	}, [selectedItems]);
+
+	const allSelectedReturnRequests =
+		selectedItems.length > 0 &&
+		selectedReturnRequestItems.length === selectedItems.length;
+
+	const bulkResolveReturnRequests = async (decision) => {
+		if (!isAdmin) {
+			alert("Only Admin can approve or reject warehouse return requests");
+			return;
+		}
+
+		if (!allSelectedReturnRequests) {
+			alert("Select only Warehouse Return Requested items");
+			return;
+		}
+
+		const normalizedDecision =
+			String(decision || "").trim().toUpperCase();
+
+		const action =
+			normalizedDecision === "APPROVE" ? "approve" : "reject";
+
+		const itemIds = selectedReturnRequestItems
+			.map((row) => String(getRowId(row) || "").trim())
+			.filter(Boolean);
+
+		if (itemIds.length === 0) {
+			alert("Select return requests first");
+			return;
+		}
+
+		const confirmed = window.confirm(
+			`${action === "approve" ? "Approve" : "Reject"} ${itemIds.length} selected Return to Dispatch request(s)?`
+		);
+
+		if (!confirmed) return;
+
+		try {
+			setBulkReturnDecisionLoading(action);
+
+			const response = await authFetch(
+				`${API_BASE_URL}/api/warehouse/admin/returns/bulk/${action}`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					body: JSON.stringify(itemIds),
+				}
+			);
+
+			if (!response.ok) {
+				const message = await readResponseError(
+					response,
+					`Bulk return ${action} failed`
+				);
+
+				throw new Error(message);
+			}
+
+			setSelectionModel([]);
+			await fetchData();
+		} catch (error) {
+			console.error(`Bulk return ${action} failed:`, error);
+			alert(error?.message || `Bulk return ${action} failed`);
+		} finally {
+			setBulkReturnDecisionLoading("");
+		}
+	};
+
 	const selectedActionList = useMemo(() => {
 		return selectedItems.map((row) => getDispatchRowAction(row));
 	}, [selectedItems, isDispatch]);
@@ -12863,7 +12940,7 @@ export default function DispatchedItemsPage() {
 
 			localDate.setMinutes(
 				localDate.getMinutes() -
-					localDate.getTimezoneOffset()
+				localDate.getTimezoneOffset()
 			);
 
 			return localDate
@@ -18696,7 +18773,20 @@ export default function DispatchedItemsPage() {
 				 * the normal dispatch action chip and the Admin
 				 * Edit Selected button.
 				 */}
-								{isAdmin && !isDispatch ? (
+								{allSelectedReturnRequests ? (
+									<Chip
+										size="small"
+										label="Return Requests"
+										sx={{
+											height: 26,
+											fontWeight: 900,
+											fontSize: 11,
+											color: "#fde68a",
+											background: "rgba(245,158,11,.15)",
+											border: "1px solid rgba(245,158,11,.28)",
+										}}
+									/>
+								) : isAdmin && !isDispatch ? (
 									<Chip
 										size="small"
 										label="Admin Bulk Edit"
@@ -18768,6 +18858,48 @@ export default function DispatchedItemsPage() {
 			 * This stays outside the isDispatch wrapper so an
 			 * ADMIN-only user can edit the selected rows.
 			 */}
+							{isAdmin && allSelectedReturnRequests && (
+								<>
+									<Button
+										size="small"
+										disabled={Boolean(bulkReturnDecisionLoading)}
+										onClick={() => bulkResolveReturnRequests("APPROVE")}
+										sx={{
+											px: 2.4,
+											height: 38,
+											borderRadius: "12px",
+											fontWeight: 900,
+											textTransform: "none",
+											background: "linear-gradient(180deg,#10b981,#059669)",
+											color: "#fff",
+										}}
+									>
+										{bulkReturnDecisionLoading === "approve"
+											? "Approving..."
+											: "Approve Selected Returns"}
+									</Button>
+
+									<Button
+										size="small"
+										disabled={Boolean(bulkReturnDecisionLoading)}
+										onClick={() => bulkResolveReturnRequests("REJECT")}
+										sx={{
+											px: 2.4,
+											height: 38,
+											borderRadius: "12px",
+											fontWeight: 900,
+											textTransform: "none",
+											background: "linear-gradient(180deg,#ef4444,#dc2626)",
+											color: "#fff",
+										}}
+									>
+										{bulkReturnDecisionLoading === "reject"
+											? "Rejecting..."
+											: "Reject Selected Returns"}
+									</Button>
+								</>
+							)}
+
 							{isAdmin && (
 								<Button
 									size="small"

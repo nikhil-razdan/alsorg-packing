@@ -1,1072 +1,339 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Box, Button, Card, Dialog, DialogActions, DialogContent, DialogTitle,
-    FormControlLabel, MenuItem, Switch, TextField, Tooltip, Typography,
+    Alert,
+    Box,
+    Button,
+    Card,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    FormControlLabel,
+    IconButton,
+    MenuItem,
+    Switch,
+    TextField,
+    Tooltip,
+    Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import ApprovalOutlinedIcon from "@mui/icons-material/ApprovalOutlined";
-import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
-import AnalyticsOutlinedIcon from "@mui/icons-material/AnalyticsOutlined";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import {
-    MATFLOW_ROLES, useMatFlow, ErrorBox, EmptyState, LoadingBlock,
-    MATFLOW_MATERIAL_CATEGORIES, MatFlowStatusChip, MatFlowPagination, PageHero, clean,
-    dialogActionsSx, dialogContentSx, dialogPaperSx, dialogTitleSx, fieldSx,
-    formatDate, formatQty, mainTextSx, normalize, pageSx, panelSx, primaryBtnSx, secondaryBtnSx, SummaryCard,
-    subTextSx, tableCellSx, tableHeaderSx, tableRowSx, tableShellSx,
-    useMatFlowPagination,
-} from "../matflowUi";
+import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate } from "react-router-dom";
+
+import {
+    MATFLOW_MATERIAL_CATEGORIES,
+    MATFLOW_ROLES,
+    useMatFlow,
+} from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
     downloadMatFlowExcel,
     downloadMaterialImportTemplate,
     parseMaterialImportWorkbook,
 } from "../api/matflowExcel";
+import {
+    EmptyState,
+    ErrorBox,
+    LoadingBlock,
+    MatFlowDeleteDialog,
+    MatFlowPagination,
+    MatFlowStatusChip,
+    PageHero,
+    SummaryCard,
+    clean,
+    dialogActionsSx,
+    dialogContentSx,
+    dialogPaperSx,
+    dialogTitleSx,
+    fieldSx,
+    formatDate,
+    formatQty,
+    mainTextSx,
+    normalize,
+    pageSx,
+    panelSx,
+    primaryBtnSx,
+    readable,
+    secondaryBtnSx,
+    subTextSx,
+    tableCellSx,
+    tableHeaderSx,
+    tableRowSx,
+    tableShellSx,
+    useMatFlowPagination,
+} from "../matflowUi";
 
-const FALLBACK_LOCATION_TYPES = ["STORE", "PRODUCTION", "PROCESSING", "QC", "TRANSIT", "EXTERNAL_PROCESSOR", "SUPPLIER"];
-const FALLBACK_OWNERSHIP_TYPES = ["INTERNAL", "EXTERNAL"];
-const PLANNING_STOCK_LOCATION_TYPES = new Set(["STORE", "QC"]);
+const upperCode = (value) => clean(value).toUpperCase();
 
 const emptyMaterial = {
-    materialCode: "", materialName: "", category: "", specification: "", uom: "",
-    preferredSupplier: "", minimumStock: "0", reorderLevel: "0", active: true,
+    materialCode: "",
+    materialName: "",
+    category: "",
+    specification: "",
+    uom: "",
+    preferredSupplier: "",
+    minimumStock: "0",
+    reorderLevel: "0",
+    active: true,
 };
-const emptyProject = {
-    projectCode: "", projectName: "", clientName: "", drawingNo: "", drawingRevision: "0",
-    productName: "", plantCode: "", requiredDate: "", remarks: "", active: true,
-};
+
 const emptyLocation = {
-    locationCode: "", locationName: "", plantCode: "", locationType: "STORE",
-    ownershipType: "INTERNAL", supportsStock: true, address: "", contactPerson: "",
-    contactPhone: "", active: true,
+    locationCode: "",
+    locationName: "",
+    plantCode: "",
+    locationType: "STORE",
+    ownershipType: "INTERNAL",
+    supportsStock: true,
+    address: "",
+    contactPerson: "",
+    contactPhone: "",
+    active: true,
 };
 
-const upperCode = (value) =>
-    clean(value).toUpperCase();
-
-const readableLocationType = (value) =>
-    clean(value).replaceAll("_", " ");
-
-const metadataEnum = (payload, name, fallback) => {
-    const raw = payload?.enums?.[name] ?? payload?.data?.enums?.[name] ?? payload?.[name];
-    return Array.isArray(raw) && raw.length ? raw : fallback;
+const emptyProject = {
+    projectCode: "",
+    projectName: "",
+    clientName: "",
+    plantCode: "",
+    requiredDate: "",
+    priority: "NORMAL",
+    projectManager: "",
+    remarks: "",
+    active: true,
 };
 
-function MasterDialog({ type, open, row, form, setForm, saving, availablePlants, metadata, onClose, onSave }) {
-    const text = (key, label, extra = {}) => (
-        <TextField key={key} label={label} value={form[key] ?? ""}
-            onChange={(e) => setForm((c) => ({ ...c, [key]: e.target.value }))}
-            disabled={saving} sx={fieldSx} {...extra} />
-    );
-    const plant = (
-        <TextField select label="Plant *" value={form.plantCode || ""}
-            onChange={(e) => setForm((c) => ({ ...c, plantCode: e.target.value }))}
-            disabled={saving} sx={fieldSx}>
-            {availablePlants.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
-        </TextField>
-    );
-
-    return <Dialog open={open} onClose={() => !saving && onClose()} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
-        <DialogTitle sx={dialogTitleSx}>{row ? "Edit" : "Add"} {type === "materials" ? "Material" : type === "projects" ? "Project Product" : "Location"}</DialogTitle>
-        <DialogContent sx={dialogContentSx}>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 1.5 }}>
-                {type === "materials" && <>
-                    {text("materialCode", "Material Code *")}{text("materialName", "Material Name *")}
-                    <TextField select label="Category *" value={form.category || ""} onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))} sx={fieldSx}>
-                        {MATFLOW_MATERIAL_CATEGORIES.map((c) => <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>)}
-                    </TextField>
-                    {text("uom", "UOM *")}{text("preferredSupplier", "Preferred Supplier")}
-                    {text("minimumStock", "Minimum Stock", { type: "number" })}{text("reorderLevel", "Reorder Level", { type: "number" })}
-                    {text("specification", "Specification", { multiline: true, minRows: 3, sx: { ...fieldSx, gridColumn: "1 / -1" } })}
-                </>}
-                {type === "projects" && <>
-                    {text("projectCode", "Project / PD Code *")}{text("projectName", "Project Name *")}
-                    {text("clientName", "Client Name *")}{text("productName", "Product / Item *")}
-                    {text("drawingNo", "Drawing No. *")}{text("drawingRevision", "Drawing Revision")}
-                    {plant}{text("requiredDate", "Required Date", { type: "date", InputLabelProps: { shrink: true } })}
-                    {text("remarks", "Remarks", { multiline: true, minRows: 3, sx: { ...fieldSx, gridColumn: "1 / -1" } })}
-                </>}
-                {type === "locations" && <>
-                    {text("locationCode", "Location Code *")}{text("locationName", "Location Name *")}{plant}
-                    <TextField select label="Location Type *" value={form.locationType || ""} onChange={(e) => setForm((c) => ({ ...c, locationType: e.target.value }))} sx={fieldSx}>
-                        {metadata.locationTypes.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    <TextField select label="Ownership *" value={form.ownershipType || ""} onChange={(e) => setForm((c) => ({ ...c, ownershipType: e.target.value }))} sx={fieldSx}>
-                        {metadata.ownershipTypes.map((v) => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                    </TextField>
-                    {text("contactPerson", "Contact Person")}{text("contactPhone", "Contact Phone")}
-                    {text("address", "Address", { multiline: true, minRows: 3, sx: { ...fieldSx, gridColumn: "1 / -1" } })}
-                </>}
-            </Box>
-            <Box sx={{ mt: 1.5, display: "flex", gap: 2, flexWrap: "wrap" }}>
-                {type === "locations" && <FormControlLabel control={<Switch checked={form.supportsStock === true} onChange={(e) => setForm((c) => ({ ...c, supportsStock: e.target.checked }))} />} label="Supports stock" />}
-                <FormControlLabel control={<Switch checked={form.active !== false} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
-            </Box>
-        </DialogContent>
-        <DialogActions sx={dialogActionsSx}><Button onClick={onClose} sx={secondaryBtnSx}>Cancel</Button><Button onClick={onSave} disabled={saving} sx={primaryBtnSx}>{saving ? "Saving..." : "Save"}</Button></DialogActions>
-    </Dialog>;
-}
-
-function MasterPage({ type }) {
-    const navigate = useNavigate();
-    const { availablePlants, hasRole } = useMatFlow();
-    const [rows, setRows] = useState([]), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
-    const [error, setError] = useState(""), [search, setSearch] = useState("");
-    const [dialog, setDialog] = useState(null), [approval, setApproval] = useState(null), [approvalRemarks, setApprovalRemarks] = useState("");
-    const [form, setForm] = useState(type === "materials" ? emptyMaterial : type === "projects" ? emptyProject : emptyLocation);
-    const [metadata, setMetadata] = useState({ locationTypes: FALLBACK_LOCATION_TYPES, ownershipTypes: FALLBACK_OWNERSHIP_TYPES });
-    const masterPagination = useMatFlowPagination(rows, 20);
-
-    // Planning stock control is intentionally separate from Material/Location master editing.
-    // Available quantity is derived from On Hand - Reserved - Blocked; the UI therefore
-    // posts only an audited On-Hand adjustment through the existing secured stock endpoint.
-    const [stockDialog, setStockDialog] = useState(false);
-    const [stockSaving, setStockSaving] = useState(false);
-    const [stockMaterials, setStockMaterials] = useState([]);
-    const [stockLocations, setStockLocations] = useState([]);
-    const [stockBalance, setStockBalance] = useState(null);
-    const [stockLoadingBalance, setStockLoadingBalance] = useState(false);
-    const [stockForm, setStockForm] = useState({
-        materialId: "",
-        locationId: "",
-        targetAvailableQty: "",
-        batchNo: "",
-        remarks: "",
-    });
-
-    const canManage = type === "materials"
-        ? hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE)
-        : type === "projects"
-            ? hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING)
-            : hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
-    const canApproveProduct = type === "projects" && hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR);
-    const canManageStock = type !== "projects" && hasRole(
-        MATFLOW_ROLES.ADMIN,
-        MATFLOW_ROLES.MANAGER,
-        MATFLOW_ROLES.STORE
-    );
-
-    const api = useMemo(() => type === "materials"
-        ? { list: matflowApi.listMaterials, create: matflowApi.createMaterial, update: matflowApi.updateMaterial }
-        : type === "projects"
-            ? { list: matflowApi.listProjects, create: matflowApi.createProject, update: matflowApi.updateProject }
-            : { list: matflowApi.listLocations, create: matflowApi.createLocation, update: matflowApi.updateLocation }, [type]);
-
-    const load = useCallback(async () => {
-        setLoading(true); setError("");
-        try { setRows(extractMatFlowPage((await api.list({ search: clean(search) || undefined }))?.data).rows); }
-        catch (e) { setRows([]); setError(readMatFlowError(e, "Unable to load MatFlow master data.")); }
-        finally { setLoading(false); }
-    }, [api, search]);
-    useEffect(() => { load(); }, [load]);
-    useEffect(() => {
-        if (type !== "locations") return;
-        matflowApi.metadata().then((r) => setMetadata({
-            locationTypes: metadataEnum(r?.data, "locationType", FALLBACK_LOCATION_TYPES),
-            ownershipTypes: metadataEnum(r?.data, "ownershipType", FALLBACK_OWNERSHIP_TYPES),
-        })).catch(() => { });
-    }, [type]);
-
-    const blank = type === "materials" ? emptyMaterial : type === "projects" ? emptyProject : emptyLocation;
-    const openCreate = () => { setDialog({ row: null }); setForm({ ...blank, plantCode: blank.plantCode || availablePlants[0] || "" }); setError(""); };
-    const openEdit = (row) => { const next = { ...blank }; Object.keys(next).forEach((k) => { if (row[k] != null) next[k] = typeof next[k] === "boolean" ? row[k] === true : String(row[k]); }); setDialog({ row }); setForm(next); setError(""); };
-
-    const validate = () => {
-        if (type === "materials") {
-            if (!clean(form.materialCode) || !clean(form.materialName) || !clean(form.category) || !clean(form.uom)) return "Material code, name, category and UOM are required.";
-        } else if (type === "projects") {
-            if (![form.projectCode, form.projectName, form.clientName, form.productName, form.drawingNo, form.plantCode].every((v) => clean(v))) return "Project code, Project Name, Client, Product, Drawing and Plant are required.";
-        } else if (![form.locationCode, form.locationName, form.plantCode, form.locationType, form.ownershipType].every((v) => clean(v))) return "Location code, name, plant, type and ownership are required.";
-        return "";
-    };
-    const body = () => {
-        if (type === "materials") {
-            return {
-                ...form,
-
-                // Business identifier: preserve -, ., / etc.
-                materialCode: upperCode(
-                    form.materialCode
-                ),
-
-                materialName:
-                    clean(form.materialName),
-
-                // Category is an enum-like value.
-                category:
-                    normalize(form.category),
-
-                specification:
-                    clean(form.specification) || null,
-
-                // UOM is a business code, not an enum.
-                // Preserve values such as SQ.FT, SQ-M, KG/M2, etc.
-                uom:
-                    upperCode(form.uom),
-
-                preferredSupplier:
-                    clean(form.preferredSupplier) || null,
-
-                minimumStock:
-                    Number(form.minimumStock || 0),
-
-                reorderLevel:
-                    Number(form.reorderLevel || 0),
-
-                active:
-                    form.active === true,
-
-                rowVersion:
-                    dialog?.row?.rowVersion ?? null,
-            };
-        }
-
-        if (type === "projects") {
-            return {
-                ...form,
-
-                // Preserve project/PD punctuation.
-                projectCode:
-                    upperCode(form.projectCode),
-
-                projectName:
-                    clean(form.projectName),
-
-                clientName:
-                    clean(form.clientName),
-
-                // Preserve WR-359.06 etc.
-                drawingNo:
-                    upperCode(form.drawingNo),
-
-                drawingRevision:
-                    upperCode(form.drawingRevision) || "0",
-
-                productName:
-                    clean(form.productName),
-
-                // CRITICAL FIX:
-                // AL-P1 must remain AL-P1.
-                plantCode:
-                    upperCode(form.plantCode),
-
-                requiredDate:
-                    clean(form.requiredDate) || null,
-
-                remarks:
-                    clean(form.remarks) || null,
-
-                active:
-                    form.active === true,
-
-                rowVersion:
-                    dialog?.row?.rowVersion ?? null,
-            };
-        }
-
-        return {
-            ...form,
-
-            // Preserve codes such as QC-AL-P1.
-            locationCode:
-                upperCode(form.locationCode),
-
-            locationName:
-                clean(form.locationName),
-
-            // CRITICAL FIX:
-            // AL-P1 must remain AL-P1.
-            plantCode:
-                upperCode(form.plantCode),
-
-            // These ARE enum values.
-            locationType:
-                normalize(form.locationType),
-
-            ownershipType:
-                normalize(
-                    form.ownershipType || "INTERNAL"
-                ),
-
-            supportsStock:
-                form.supportsStock === true,
-
-            address:
-                clean(form.address) || null,
-
-            contactPerson:
-                clean(form.contactPerson) || null,
-
-            contactPhone:
-                clean(form.contactPhone) || null,
-
-            active:
-                form.active === true,
-
-            rowVersion:
-                dialog?.row?.rowVersion ?? null,
-        };
-    };
-    const save = async () => {
-        const message = validate(); if (message) { setError(message); return; }
-        setSaving(true); setError("");
-        try { dialog?.row?.id ? await api.update(dialog.row.id, body()) : await api.create(body()); setDialog(null); await load(); }
-        catch (e) { setError(readMatFlowError(e, "Unable to save MatFlow master record.")); }
-        finally { setSaving(false); }
-    };
-    const decideProduct = async () => {
-        if (!approval?.row?.id) return;
-        if (approval.type === "RETURN" && !clean(approvalRemarks)) { setError("Return remarks are required."); return; }
-        setSaving(true); setError("");
-        try {
-            const request = { rowVersion: approval.row.rowVersion, remarks: clean(approvalRemarks) || null };
-            if (approval.type === "APPROVE") await matflowApi.approveProjectProduct(approval.row.id, request);
-            else await matflowApi.returnProjectProduct(approval.row.id, request);
-            setApproval(null); setApprovalRemarks(""); await load();
-        } catch (e) { setError(readMatFlowError(e, "Unable to complete Director product approval.")); }
-        finally { setSaving(false); }
-    };
-
-    const closeStockControl = () => {
-        if (stockSaving) return;
-        setStockDialog(false);
-        setStockBalance(null);
-        setStockMaterials([]);
-        setStockLocations([]);
-        setStockForm({ materialId: "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
-    };
-
-    const openStockControl = async ({ material = null, location = null } = {}) => {
-        if (!canManageStock) return;
-
-        setStockSaving(true);
-        setError("");
-        try {
-            const [materialResponse, locationResponse] = await Promise.all([
-                type === "materials"
-                    ? Promise.resolve({ data: rows })
-                    : matflowApi.listMaterials({ active: true }),
-                type === "locations"
-                    ? Promise.resolve({ data: rows })
-                    : matflowApi.listLocations({ active: true }),
-            ]);
-
-            const materialRows = extractMatFlowPage(materialResponse?.data).rows
-                .filter((item) => item?.active !== false);
-            const locationRows = extractMatFlowPage(locationResponse?.data).rows
-                .filter((item) =>
-                    item?.active !== false &&
-                    item?.supportsStock !== false &&
-                    PLANNING_STOCK_LOCATION_TYPES.has(normalize(item?.locationType))
-                );
-
-            setStockMaterials(materialRows);
-            setStockLocations(locationRows);
-            setStockBalance(null);
-            setStockForm({
-                materialId: material?.id || "",
-                locationId:
-                    location?.id &&
-                        locationRows.some((item) => String(item.id) === String(location.id))
-                        ? location.id
-                        : "",
-                targetAvailableQty: "",
-                batchNo: "",
-                remarks: "",
-            });
-            setStockDialog(true);
-        } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to open Material × Location Stock Control."));
-        } finally {
-            setStockSaving(false);
-        }
-    };
-
-    useEffect(() => {
-        if (!stockDialog || !stockForm.materialId || !stockForm.locationId) {
-            setStockBalance(null);
-            return undefined;
-        }
-
-        let cancelled = false;
-        setStockLoadingBalance(true);
-
-        matflowApi.listStock({
-            materialId: stockForm.materialId,
-            locationId: stockForm.locationId,
-        }).then((response) => {
-            if (cancelled) return;
-            const stockRows = Array.isArray(response?.data)
-                ? response.data
-                : extractMatFlowPage(response?.data).rows;
-            const balance = stockRows.find((item) =>
-                String(item.materialId) === String(stockForm.materialId) &&
-                String(item.locationId) === String(stockForm.locationId)
-            ) || null;
-            const currentAvailable = Number(balance?.availableQty ?? 0);
-            setStockBalance(balance);
-            setStockForm((current) => ({
-                ...current,
-                targetAvailableQty: Number.isFinite(currentAvailable) ? String(currentAvailable) : "0",
-                remarks: current.remarks || `Verified planning-stock correction at ${balance?.locationCode || "selected location"}.`,
-            }));
-        }).catch((requestError) => {
-            if (!cancelled) {
-                setStockBalance(null);
-                setError(readMatFlowError(requestError, "Unable to load the selected Material/Location stock balance."));
-            }
-        }).finally(() => {
-            if (!cancelled) setStockLoadingBalance(false);
-        });
-
-        return () => { cancelled = true; };
-    }, [stockDialog, stockForm.materialId, stockForm.locationId]);
-
-    const saveStockControl = async () => {
-        if (!stockForm.materialId || !stockForm.locationId) {
-            setError("Material and Store/QC location are required.");
-            return;
-        }
-
-        const targetAvailable = Number(stockForm.targetAvailableQty);
-        if (!Number.isFinite(targetAvailable) || targetAvailable < 0) {
-            setError("Desired Available quantity must be zero or greater.");
-            return;
-        }
-        if (!clean(stockForm.remarks)) {
-            setError("Reason / Remarks are required for a manual stock correction.");
-            return;
-        }
-
-        const currentAvailable = Number(stockBalance?.availableQty ?? 0);
-        const adjustmentQty = targetAvailable - (Number.isFinite(currentAvailable) ? currentAvailable : 0);
-        if (Math.abs(adjustmentQty) < 0.0005) {
-            closeStockControl();
-            return;
-        }
-
-        setStockSaving(true);
-        setError("");
-        try {
-            await matflowApi.adjustStock({
-                materialId: stockForm.materialId,
-                locationId: stockForm.locationId,
-                adjustmentQty,
-                batchNo: clean(stockForm.batchNo) || null,
-                remarks: clean(stockForm.remarks),
-                rowVersion: stockBalance?.rowVersion ?? null,
-            });
-            closeStockControl();
-            await load();
-        } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to update planning stock."));
-        } finally {
-            setStockSaving(false);
-        }
-    };
-
-    const title = type === "materials" ? "Material Master" : type === "projects" ? "Projects & Products" : "Material Locations";
-    const columns = type === "materials" ? ["Material", "Category", "UOM", "Min / Reorder", "Status", "Action"]
-        : type === "projects" ? ["Project", "Product / Drawing", "Client", "Plant", "Director Approval", "Required", "Action"]
-            : ["Location", "Plant", "Type", "Ownership", "Stock", "Status", "Action"];
-    const grid = `repeat(${columns.length},minmax(130px,1fr))`;
-
-    const rowCells = (row) => {
-        if (type === "materials") return [
-            <Box><Typography sx={mainTextSx}>{row.materialCode}</Typography><Typography sx={subTextSx}>{row.materialName}</Typography></Box>, row.category, row.uom,
-            `${row.minimumStock ?? 0} / ${row.reorderLevel ?? 0}`, <MatFlowStatusChip status={row.active ? "ACTIVE" : "INACTIVE"} />,
-            <Box sx={{ display: "flex", gap: .55, flexWrap: "wrap" }}>
-                <Button
-                    startIcon={<TrackChangesOutlinedIcon />}
-                    onClick={() => navigate(`/matflow/tracker/materials/${row.id}`)}
-                    sx={primaryBtnSx}
-                >
-                    Track
-                </Button>
-                {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl({ material: row })} sx={secondaryBtnSx}>Stock</Button>}
-                {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
-            </Box>,
-        ];
-        if (type === "projects") return [
-            <Box><Typography sx={mainTextSx}>{row.projectCode}</Typography><Typography sx={subTextSx}>{row.projectName}</Typography></Box>,
-            <Box><Typography sx={mainTextSx}>{row.productName}</Typography><Typography sx={subTextSx}>{row.drawingNo} · Rev {row.drawingRevision ?? "0"}</Typography></Box>,
-            row.clientName || "-", row.plantCode || "-", <Box><MatFlowStatusChip status={row.productApprovalStatus || "PENDING_DIRECTOR_APPROVAL"} />{row.productApprovedBy && <Typography sx={subTextSx}>By {row.productApprovedBy}</Typography>}</Box>, row.requiredDate || "-",
-            <Box sx={{ display: "flex", gap: .5, flexWrap: "wrap" }}>
-                {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
-                {canApproveProduct && normalize(row.productApprovalStatus) !== "APPROVED" && <Button onClick={() => { setApproval({ type: "APPROVE", row }); setApprovalRemarks(""); }} sx={primaryBtnSx}>Approve</Button>}
-                {canApproveProduct && normalize(row.productApprovalStatus) !== "RETURNED" && <Button onClick={() => { setApproval({ type: "RETURN", row }); setApprovalRemarks(""); }} sx={secondaryBtnSx}>Return</Button>}
-            </Box>,
-        ];
-        const planningStockLocation = row?.active !== false && row?.supportsStock !== false && PLANNING_STOCK_LOCATION_TYPES.has(normalize(row?.locationType));
-        return [
-            <Box><Typography sx={mainTextSx}>{row.locationCode}</Typography><Typography sx={subTextSx}>{row.locationName}</Typography></Box>,
-            row.plantCode,
-            row.locationType,
-            row.ownershipType,
-            row.supportsStock ? "Yes" : "No",
-            <MatFlowStatusChip status={row.active ? "ACTIVE" : "INACTIVE"} />,
-            <Box sx={{ display: "flex", gap: .55, flexWrap: "wrap" }}>
-                {canManageStock && planningStockLocation && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl({ location: row })} sx={secondaryBtnSx}>Stock</Button>}
-                {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
-            </Box>,
-        ];
-    };
-
-    return <Box sx={pageSx}>
-        <PageHero badge={type === "projects" ? "PROJECT / PRODUCT APPROVAL" : "MATFLOW MASTER DATA"} title={title}
-            subtitle={type === "projects" ? "Create one or more products/drawings under a client project. Director approval is mandatory before Engineering can create its operational BOM." : type === "materials" ? "Maintain standardized material records and open the Material Control Tower to trace current custody, prior locations, next hand-off and time spent at every stage." : "Maintain MatFlow operational reference data."}
-            actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-                {type === "locations" && <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Locations", sheetName: "Locations", title: "MatFlow Material Locations", rows })} sx={secondaryBtnSx}>Export Excel</Button>}
-                {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl()} sx={secondaryBtnSx}>Planning Stock Control</Button>}
-                {canManage && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>{type === "projects" ? "Add Product" : "Add"}</Button>}
-            </Box>} />
-        <Card sx={panelSx}><Box sx={{ display: "flex", gap: 1 }}><TextField label="Search" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={{ ...fieldSx, flex: 1 }} /><Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button></Box></Card>
-        <ErrorBox>{error}</ErrorBox>
-        <Card sx={panelSx}>{loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
-            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: grid }}>{columns.map((h) => <Box key={h} sx={tableCellSx}>{h}</Box>)}</Box>
-            {rows.length === 0 ? <EmptyState /> : masterPagination.pageItems.map((row) => <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: grid }}>{rowCells(row).map((cell, i) => <Box key={i} sx={tableCellSx}>{cell}</Box>)}</Box>)}
-        </Box>}
-            {!loading && (
-                <MatFlowPagination
-                    {...masterPagination}
-                    onPageChange={masterPagination.setPage}
-                    onPageSizeChange={masterPagination.setPageSize}
-                    label={type === "materials" ? "Materials" : type === "locations" ? "Locations" : "Project Products"}
-                />
-            )}
-        </Card>
-        <Dialog open={stockDialog} onClose={closeStockControl} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
-            <DialogTitle sx={dialogTitleSx}><Inventory2OutlinedIcon /> Material × Location Planning Stock Control</DialogTitle>
-            <DialogContent sx={dialogContentSx}>
-                <Typography sx={{ ...subTextSx, mb: 1.4 }}>
-                    Use this only to correct a verified physical stock count at an active Store/QC planning location. Available is derived as On Hand − Reserved − Blocked; MatFlow never overwrites workflow reservations or QC blocks from this screen.
-                </Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 1.15 }}>
-                    <TextField select label="Material *" value={stockForm.materialId} onChange={(e) => setStockForm((current) => ({ ...current, materialId: e.target.value }))} disabled={stockSaving} sx={fieldSx}>
-                        {stockMaterials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialCode} · {material.materialName} · {material.uom || "-"}</MenuItem>)}
-                    </TextField>
-                    <TextField select label="Store / QC Location *" value={stockForm.locationId} onChange={(e) => setStockForm((current) => ({ ...current, locationId: e.target.value }))} disabled={stockSaving} sx={fieldSx}>
-                        {stockLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {readableLocationType(location.locationType)} · {location.plantCode}</MenuItem>)}
-                    </TextField>
-                </Box>
-
-                <Box sx={{ mt: 1.25, display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .7 }}>
-                    {[
-                        ["On Hand", stockBalance?.onHandQty ?? 0],
-                        ["Reserved", stockBalance?.reservedQty ?? 0],
-                        ["Blocked", stockBalance?.blockedQty ?? 0],
-                        ["Available", stockBalance?.availableQty ?? 0],
-                    ].map(([label, value]) => <Box key={label} sx={{ p: .9, borderRadius: 1.5, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}><Typography sx={{ ...subTextSx, fontSize: 9 }}>{label}</Typography><Typography sx={{ ...mainTextSx, fontSize: 15 }}>{Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 })}</Typography></Box>)}
-                </Box>
-
-                <Box sx={{ mt: 1.25, p: 1, borderRadius: 1.5, border: "1px solid var(--mf-primary-border)", background: "var(--mf-primary-soft)" }}>
-                    <Typography sx={{ ...mainTextSx, fontSize: 12 }}>Why Desired Available is safe</Typography>
-                    <Typography sx={subTextSx}>MatFlow calculates the difference from current Available and posts that difference as an audited On-Hand adjustment. Reserved and Blocked remain untouched. The backend still validates rowVersion, plant access, stock support and prevents On Hand from dropping below Reserved + Blocked.</Typography>
-                </Box>
-
-                <Box sx={{ mt: 1.25, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 1.15 }}>
-                    <TextField type="number" label="Desired Available Qty *" value={stockForm.targetAvailableQty} onChange={(e) => setStockForm((current) => ({ ...current, targetAvailableQty: e.target.value }))} disabled={stockSaving || stockLoadingBalance || !stockForm.materialId || !stockForm.locationId} helperText="Enter the verified free quantity that should remain available after existing reservations/blocks." sx={fieldSx} />
-                    <TextField label="Batch / Lot (optional)" value={stockForm.batchNo} onChange={(e) => setStockForm((current) => ({ ...current, batchNo: e.target.value }))} disabled={stockSaving} sx={fieldSx} />
-                    <TextField multiline minRows={3} label="Reason / Remarks *" value={stockForm.remarks} onChange={(e) => setStockForm((current) => ({ ...current, remarks: e.target.value }))} disabled={stockSaving} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
-                </Box>
-            </DialogContent>
-            <DialogActions sx={dialogActionsSx}>
-                <Button onClick={closeStockControl} disabled={stockSaving} sx={secondaryBtnSx}>Cancel</Button>
-                <Button startIcon={<Inventory2OutlinedIcon />} onClick={saveStockControl} disabled={stockSaving || stockLoadingBalance || !stockForm.materialId || !stockForm.locationId || !clean(stockForm.remarks)} sx={primaryBtnSx}>{stockSaving ? "Updating..." : "Update Verified Stock"}</Button>
-            </DialogActions>
-        </Dialog>
-
-        <MasterDialog type={type} open={Boolean(dialog)} row={dialog?.row} form={form} setForm={setForm} saving={saving} availablePlants={availablePlants} metadata={metadata} onClose={() => setDialog(null)} onSave={save} />
-        <Dialog open={Boolean(approval)} onClose={() => !saving && setApproval(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-            <DialogTitle sx={dialogTitleSx}>{approval?.type === "APPROVE" ? <><ApprovalOutlinedIcon /> Director Product Approval</> : <><UndoOutlinedIcon /> Return Product to Engineering</>}</DialogTitle>
-            <DialogContent sx={dialogContentSx}><Typography sx={mainTextSx}>{approval?.row?.projectCode} · {approval?.row?.productName} · {approval?.row?.drawingNo}</Typography><TextField fullWidth multiline minRows={3} label={approval?.type === "RETURN" ? "Return Remarks *" : "Approval Remarks"} value={approvalRemarks} onChange={(e) => setApprovalRemarks(e.target.value)} sx={{ ...fieldSx, mt: 1.5 }} /></DialogContent>
-            <DialogActions sx={dialogActionsSx}><Button onClick={() => setApproval(null)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={decideProduct} disabled={saving} sx={primaryBtnSx}>Confirm</Button></DialogActions>
-        </Dialog>
-    </Box>;
-}
-
-const blankProjectHeader = {
-    projectCode: "", projectName: "", clientName: "", plantCode: "",
-    requiredDate: "", priority: "NORMAL", projectManager: "", remarks: "", active: true,
+const emptyProduct = {
+    productName: "",
+    drawingNo: "",
+    drawingRevision: "0",
+    requiredDate: "",
+    remarks: "",
+    active: true,
 };
 
-const blankPortfolioProduct = {
-    productName: "", drawingNo: "", drawingRevision: "0", requiredDate: "", remarks: "", active: true,
-};
-
-const dangerBtnSx = {
-    ...secondaryBtnSx,
-    color: "var(--mf-danger-text)",
-    borderColor: "var(--mf-danger-border)",
-    background: "var(--mf-danger-soft)",
-    "&:hover": {
-        borderColor: "var(--mf-danger-text)",
-        background: "var(--mf-danger-soft)",
-    },
-    "&.Mui-disabled": {
-        color: "var(--mf-text-muted)",
-        borderColor: "var(--mf-border)",
-        background: "var(--mf-surface)",
-    },
-};
-
-const projectDirectoryItemSx = (selected) => ({
-    width: "100%",
-    textAlign: "left",
-    cursor: "pointer",
-    p: 1.35,
-    borderRadius: 2,
-    border: selected
-        ? "1px solid var(--mf-primary-border)"
-        : "1px solid var(--mf-border)",
-    background: selected
-        ? "var(--mf-primary-soft)"
-        : "var(--mf-panel-bg)",
-    transition: "border-color .15s ease, background .15s ease, transform .15s ease",
-    "&:hover": {
-        borderColor: "var(--mf-primary-border)",
-        background: selected ? "var(--mf-primary-soft)" : "var(--mf-hover)",
-        transform: "translateY(-1px)",
-    },
-});
-
-const registryMetaSx = {
-    p: 1.2,
-    minHeight: 74,
-    borderRadius: 2,
-    border: "1px solid var(--mf-border)",
-    background: "var(--mf-surface)",
-};
-
-const priorityLabelSx = (priority) => {
-    const value = normalize(priority || "NORMAL");
-    const danger = value === "CRITICAL";
-    const warning = value === "HIGH";
-    return {
-        display: "inline-flex",
-        alignItems: "center",
-        px: .9,
-        py: .35,
-        borderRadius: 999,
-        fontSize: 10,
-        fontWeight: 900,
-        letterSpacing: .25,
-        color: danger
-            ? "var(--mf-danger-text)"
-            : warning
-                ? "var(--mf-warning-text)"
-                : "var(--mf-primary-text)",
-        background: danger
-            ? "var(--mf-danger-soft)"
-            : warning
-                ? "var(--mf-warning-soft)"
-                : "var(--mf-primary-soft)",
-        border: danger
-            ? "1px solid var(--mf-danger-border)"
-            : warning
-                ? "1px solid var(--mf-warning-border)"
-                : "1px solid var(--mf-primary-border)",
-    };
-};
-
-const productHasExecutionHistory = (product) =>
-    Boolean(product?.latestBomId || product?.latestRequisitionId);
-
-/**
- * Project Portfolio / master administration workspace.
- *
- * Deliberately NOT a second material tracker:
- * - this page owns Project headers and Product/Drawing registry data;
- * - Director product approval and BOM hand-off live here;
- * - material custody, shortages, stage timing and next actions live only in
- *   the dedicated Project Tracker.
- */
 export function MatFlowProjectsPage() {
     const navigate = useNavigate();
-    const { availablePlants, selectedPlantParam, hasRole } = useMatFlow();
-
-    const canManage = hasRole(
-        MATFLOW_ROLES.ADMIN,
-        MATFLOW_ROLES.MANAGER,
-        MATFLOW_ROLES.ENGINEERING
-    );
-    const canApprove = hasRole(
-        MATFLOW_ROLES.ADMIN,
-        MATFLOW_ROLES.MANAGER,
-        MATFLOW_ROLES.DIRECTOR
-    );
+    const { hasRole, selectedPlantParam, availablePlants } = useMatFlow();
+    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING);
 
     const [rows, setRows] = useState([]);
+    const [expandedProjects, setExpandedProjects] = useState({});
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
-
     const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState("ALL");
-    const [priorityFilter, setPriorityFilter] = useState("ALL");
-    const [approvalFilter, setApprovalFilter] = useState("ALL");
-    const [selectedProjectId, setSelectedProjectId] = useState("");
-
+    const [activeFilter, setActiveFilter] = useState("ACTIVE");
     const [projectDialog, setProjectDialog] = useState(null);
     const [productDialog, setProductDialog] = useState(null);
-    const [approval, setApproval] = useState(null);
-    const [approvalRemarks, setApprovalRemarks] = useState("");
-    const [deleteTarget, setDeleteTarget] = useState(null);
-
-    const [projectForm, setProjectForm] = useState(blankProjectHeader);
-    const [productForm, setProductForm] = useState(blankPortfolioProduct);
+    const [deleteDialog, setDeleteDialog] = useState(null);
+    const [projectForm, setProjectForm] = useState(emptyProject);
+    const [productForm, setProductForm] = useState(emptyProduct);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const response = await matflowApi.listProjectPortfolio({
+            const response = await matflowApi.listProjects({
+                search: clean(search) || undefined,
+                active: activeFilter === "ALL" ? undefined : activeFilter === "ACTIVE",
                 plantCode: selectedPlantParam || undefined,
-                active: undefined,
             });
             setRows(Array.isArray(response?.data) ? response.data : []);
         } catch (requestError) {
             setRows([]);
-            setSelectedProjectId("");
-            setError(readMatFlowError(requestError, "Unable to load Projects & Products portfolio."));
+            setError(readMatFlowError(requestError, "Unable to load Projects & Products."));
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam]);
+    }, [search, activeFilter, selectedPlantParam]);
 
-    useEffect(() => {
-        load();
-    }, [load]);
+    useEffect(() => { load(); }, [load]);
 
-    const filteredRows = useMemo(() => {
-        const query = clean(search).toLowerCase();
-        const status = normalize(statusFilter);
-        const priority = normalize(priorityFilter);
-        const approvalState = normalize(approvalFilter);
+    const counts = useMemo(() => ({
+        projects: rows.length,
+        products: rows.reduce((total, project) => total + (Array.isArray(project?.products) ? project.products.length : 0), 0),
+        bomReady: rows.reduce((total, project) => total + (project?.products || []).filter((product) => product?.bomEffective === true).length, 0),
+        active: rows.filter((project) => project?.active !== false).length,
+    }), [rows]);
 
-        return rows.filter((project) => {
-            if (status === "ACTIVE" && project.active === false) return false;
-            if (status === "INACTIVE" && project.active !== false) return false;
-            if (priority !== "ALL" && normalize(project.priority || "NORMAL") !== priority) return false;
-
-            const products = Array.isArray(project.products) ? project.products : [];
-            if (
-                approvalState !== "ALL" &&
-                !products.some((product) => normalize(product.approvalStatus) === approvalState)
-            ) {
-                return false;
-            }
-
-            if (!query) return true;
-
-            const projectMatch = [
-                project.projectCode,
-                project.projectName,
-                project.clientName,
-                project.projectManager,
-                project.plantCode,
-            ].some((value) => String(value ?? "").toLowerCase().includes(query));
-
-            const productMatch = products.some((product) =>
-                [
-                    product.productName,
-                    product.drawingNo,
-                    product.drawingRevision,
-                    product.latestBomNumber,
-                ].some((value) => String(value ?? "").toLowerCase().includes(query))
-            );
-
-            return projectMatch || productMatch;
-        });
-    }, [rows, search, statusFilter, priorityFilter, approvalFilter]);
-
-    const projectPagination = useMatFlowPagination(filteredRows, 9);
-
-    useEffect(() => {
-        if (!selectedProjectId) return;
-        const stillVisible = filteredRows.some(
-            (project) => String(project.id) === String(selectedProjectId)
-        );
-        if (!stillVisible) setSelectedProjectId("");
-    }, [filteredRows, selectedProjectId]);
-
-    const selectedProject = useMemo(
-        () => rows.find(
-            (project) => String(project.id) === String(selectedProjectId)
-        ) || null,
-        [rows, selectedProjectId]
-    );
-
-    const allProducts = useMemo(
-        () => rows.flatMap((project) => Array.isArray(project.products) ? project.products : []),
-        [rows]
-    );
-
-    const portfolioKpis = useMemo(() => {
-        const approved = allProducts.filter(
-            (product) => normalize(product.approvalStatus) === "APPROVED"
-        ).length;
-        const pending = allProducts.filter(
-            (product) => normalize(product.approvalStatus) === "PENDING_DIRECTOR_APPROVAL"
-        ).length;
-        const withoutBom = allProducts.filter((product) => !product.latestBomId).length;
-        return {
-            projects: rows.length,
-            activeProjects: rows.filter((project) => project.active !== false).length,
-            products: allProducts.length,
-            approved,
-            pending,
-            withoutBom,
-        };
-    }, [rows, allProducts]);
-
-    const openProject = (row = null) => {
-        setProjectDialog({ row });
-        setProjectForm(row ? {
-            projectCode: row.projectCode || "",
-            projectName: row.projectName || "",
-            clientName: row.clientName || "",
-            plantCode: row.plantCode || "",
-            requiredDate: row.requiredDate || "",
-            priority: row.priority || "NORMAL",
-            projectManager: row.projectManager || "",
-            remarks: row.remarks || "",
-            active: row.active !== false,
-        } : {
-            ...blankProjectHeader,
-            plantCode: selectedPlantParam || availablePlants[0] || "",
+    const openProject = (project = null) => {
+        setProjectDialog({ project });
+        setProjectForm({
+            ...emptyProject,
+            projectCode: project?.projectCode || "",
+            projectName: project?.projectName || "",
+            clientName: project?.clientName || "",
+            plantCode: project?.plantCode || selectedPlantParam || availablePlants[0] || "",
+            requiredDate: project?.requiredDate || "",
+            priority: project?.priority || "NORMAL",
+            projectManager: project?.projectManager || "",
+            remarks: project?.remarks || "",
+            active: project?.active !== false,
         });
         setError("");
     };
 
     const saveProject = async () => {
-        if (
-            ![
-                projectForm.projectCode,
-                projectForm.projectName,
-                projectForm.clientName,
-                projectForm.plantCode,
-            ].every((value) => Boolean(clean(value)))
-        ) {
+        if (![projectForm.projectCode, projectForm.projectName, projectForm.clientName, projectForm.plantCode].every((value) => clean(value))) {
             setError("Project code, Project name, Client and Plant are required.");
             return;
         }
 
-        const body = {
-            projectCode: upperCode(projectForm.projectCode),
-            projectName: clean(projectForm.projectName),
-            clientName: clean(projectForm.clientName),
-            plantCode: upperCode(projectForm.plantCode),
-            requiredDate: projectForm.requiredDate || null,
-            priority: upperCode(projectForm.priority || "NORMAL"),
-            projectManager: clean(projectForm.projectManager) || null,
-            remarks: clean(projectForm.remarks) || null,
-            active: projectForm.active !== false,
-            rowVersion: projectDialog?.row?.rowVersion ?? null,
-        };
-
-        setSaving(true);
+        setWorking(true);
         setError("");
         try {
-            const response = projectDialog?.row?.id
-                ? await matflowApi.updateProjectPortfolio(projectDialog.row.id, body)
-                : await matflowApi.createProjectPortfolio(body);
-
-            const savedId = response?.data?.id || projectDialog?.row?.id || null;
+            const body = {
+                projectCode: upperCode(projectForm.projectCode),
+                projectName: clean(projectForm.projectName),
+                clientName: clean(projectForm.clientName),
+                plantCode: upperCode(projectForm.plantCode),
+                requiredDate: clean(projectForm.requiredDate) || null,
+                priority: upperCode(projectForm.priority || "NORMAL"),
+                projectManager: clean(projectForm.projectManager) || null,
+                remarks: clean(projectForm.remarks) || null,
+                active: projectForm.active === true,
+                rowVersion: projectDialog?.project?.rowVersion ?? null,
+            };
+            if (projectDialog?.project?.id) {
+                await matflowApi.updateProject(projectDialog.project.id, body);
+            } else {
+                await matflowApi.createProject(body);
+            }
             setProjectDialog(null);
             await load();
-            if (savedId) setSelectedProjectId(String(savedId));
         } catch (requestError) {
             setError(readMatFlowError(requestError, "Unable to save Project."));
         } finally {
-            setSaving(false);
+            setWorking(false);
         }
     };
 
     const openProduct = (project, product = null) => {
-        if (!project?.id) return;
         setProductDialog({ project, product });
-        setProductForm(product ? {
-            productName: product.productName || "",
-            drawingNo: product.drawingNo || "",
-            drawingRevision: product.drawingRevision || "0",
-            requiredDate: product.requiredDate || "",
-            remarks: product.remarks || "",
-            active: product.active !== false,
-        } : {
-            ...blankPortfolioProduct,
-            requiredDate: project?.requiredDate || "",
+        setProductForm({
+            ...emptyProduct,
+            productName: product?.productName || "",
+            drawingNo: product?.drawingNo || "",
+            drawingRevision: product?.drawingRevision || "0",
+            requiredDate: product?.requiredDate || "",
+            remarks: product?.remarks || "",
+            active: product?.active !== false,
         });
         setError("");
     };
 
     const saveProduct = async () => {
-        const { project, product } = productDialog || {};
-        if (!project?.id || !clean(productForm.productName) || !clean(productForm.drawingNo)) {
-            setError("Project, Product name and Drawing number are required.");
+        const project = productDialog?.project;
+        if (!project?.id) return;
+        if (!clean(productForm.productName) || !clean(productForm.drawingNo)) {
+            setError("Product name and Drawing number are required.");
             return;
         }
 
-        const body = {
-            productName: clean(productForm.productName),
-            drawingNo: upperCode(productForm.drawingNo),
-            drawingRevision: upperCode(productForm.drawingRevision) || "0",
-            requiredDate: productForm.requiredDate || null,
-            remarks: clean(productForm.remarks) || null,
-            active: productForm.active !== false,
-            rowVersion: product?.rowVersion ?? null,
-        };
-
-        setSaving(true);
+        setWorking(true);
         setError("");
         try {
-            if (product?.id) {
-                await matflowApi.updateProjectProduct(project.id, product.id, body);
+            const body = {
+                productName: clean(productForm.productName),
+                drawingNo: upperCode(productForm.drawingNo),
+                drawingRevision: upperCode(productForm.drawingRevision) || "0",
+                requiredDate: clean(productForm.requiredDate) || null,
+                remarks: clean(productForm.remarks) || null,
+                active: productForm.active === true,
+                rowVersion: productDialog?.product?.rowVersion ?? null,
+            };
+            if (productDialog?.product?.id) {
+                await matflowApi.updateProjectProduct(project.id, productDialog.product.id, body);
             } else {
                 await matflowApi.addProjectProduct(project.id, body);
             }
             setProductDialog(null);
-            setSelectedProjectId(String(project.id));
+            setExpandedProjects((current) => ({ ...current, [String(project.id)]: true }));
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to save Project Product."));
+            setError(readMatFlowError(requestError, "Unable to save Product / Drawing."));
         } finally {
-            setSaving(false);
-        }
-    };
-
-    const decideProduct = async () => {
-        if (!approval?.project?.id || !approval?.product?.id) return;
-        if (approval.type === "RETURN" && !clean(approvalRemarks)) {
-            setError("Return remarks are required.");
-            return;
-        }
-
-        setSaving(true);
-        setError("");
-        try {
-            const body = {
-                rowVersion: approval.product.rowVersion,
-                remarks: clean(approvalRemarks) || null,
-            };
-
-            if (approval.type === "APPROVE") {
-                await matflowApi.approvePortfolioProduct(
-                    approval.project.id,
-                    approval.product.id,
-                    body
-                );
-            } else {
-                await matflowApi.returnPortfolioProduct(
-                    approval.project.id,
-                    approval.product.id,
-                    body
-                );
-            }
-
-            const projectId = String(approval.project.id);
-            setApproval(null);
-            setApprovalRemarks("");
-            setSelectedProjectId(projectId);
-            await load();
-        } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to complete Director Product decision."));
-        } finally {
-            setSaving(false);
+            setWorking(false);
         }
     };
 
     const confirmDelete = async () => {
-        if (!deleteTarget) return;
-
-        setSaving(true);
+        const target = deleteDialog;
+        if (!target) return;
+        setWorking(true);
         setError("");
         try {
-            if (deleteTarget.kind === "PROJECT") {
-                await matflowApi.deleteProjectPortfolio(
-                    deleteTarget.project.id,
-                    deleteTarget.project.rowVersion
-                );
-                if (String(selectedProjectId) === String(deleteTarget.project.id)) {
-                    setSelectedProjectId("");
-                }
+            if (target.type === "PROJECT") {
+                await matflowApi.deleteProject(target.project.id, target.project.rowVersion);
             } else {
                 await matflowApi.deleteProjectProduct(
-                    deleteTarget.project.id,
-                    deleteTarget.product.id,
-                    deleteTarget.product.rowVersion
+                    target.project.id,
+                    target.product.id,
+                    target.product.rowVersion
                 );
-                setSelectedProjectId(String(deleteTarget.project.id));
             }
-
-            setDeleteTarget(null);
+            setDeleteDialog(null);
             await load();
         } catch (requestError) {
             setError(readMatFlowError(
                 requestError,
-                deleteTarget.kind === "PROJECT"
-                    ? "Unable to delete Project."
-                    : "Unable to delete Product."
+                "Unable to delete this setup record. If execution history exists, deactivate it instead."
             ));
         } finally {
-            setSaving(false);
+            setWorking(false);
         }
     };
-
-    const selectedProducts = Array.isArray(selectedProject?.products)
-        ? selectedProject.products
-        : [];
-    const productPagination = useMatFlowPagination(selectedProducts, 10);
-    const selectedApprovedCount = selectedProducts.filter(
-        (product) => normalize(product.approvalStatus) === "APPROVED"
-    ).length;
-    const selectedBomCount = selectedProducts.filter((product) => Boolean(product.latestBomId)).length;
-    const selectedApprovalPercent = selectedProducts.length
-        ? Math.round((selectedApprovedCount / selectedProducts.length) * 100)
-        : 0;
-    const projectDeleteBlocked = selectedProducts.some(productHasExecutionHistory);
-
-    const projectDeleteReason = projectDeleteBlocked
-        ? "This Project contains Product(s) with a BOM or material requisition. Deactivate it instead so execution history stays traceable."
-        : "Delete this Project and its setup-only Product records.";
 
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="PROJECT PORTFOLIO ADMINISTRATION"
+                badge="PROJECT → PRODUCT"
                 title="Projects & Products"
-                subtitle="A clean Project → Product / Drawing administration workspace. Projects stay compact until you explicitly open one; Director approval and BOM hand-off remain attached to the exact Product / Drawing record."
+                subtitle="Create the client Project and add one or many Products / Drawings. No Project or Product approval is required."
                 actions={
                     <>
-                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Projects_Products", sheetName: "Projects Products", title: "MatFlow Projects & Products", rows: filteredRows })} sx={secondaryBtnSx}>Export Excel</Button>
                         <Button
-                            startIcon={<TrackChangesOutlinedIcon />}
-                            onClick={() => navigate("/matflow/tracker")}
+                            startIcon={<FileDownloadOutlinedIcon />}
+                            onClick={() => downloadMatFlowExcel({
+                                fileName: "MatFlow_Projects_Products",
+                                sheetName: "Projects",
+                                title: "MatFlow Projects & Products",
+                                rows: rows.flatMap((project) =>
+                                    (project.products || []).length
+                                        ? project.products.map((product) => ({
+                                            projectCode: project.projectCode,
+                                            projectName: project.projectName,
+                                            clientName: project.clientName,
+                                            plantCode: project.plantCode,
+                                            productName: product.productName,
+                                            drawingNo: product.drawingNo,
+                                            drawingRevision: product.drawingRevision,
+                                            latestBomNumber: product.latestBomNumber,
+                                            latestBomStatus: product.latestBomStatus,
+                                            bomEffective: product.bomEffective,
+                                            currentDepartment: product.currentDepartment,
+                                        }))
+                                        : [{
+                                            projectCode: project.projectCode,
+                                            projectName: project.projectName,
+                                            clientName: project.clientName,
+                                            plantCode: project.plantCode,
+                                        }]
+                                ),
+                            })}
                             sx={secondaryBtnSx}
                         >
-                            Project Tracker
+                            Export Excel
                         </Button>
-                        <Button
-                            startIcon={<RefreshIcon />}
-                            onClick={load}
-                            sx={secondaryBtnSx}
-                        >
-                            Refresh
-                        </Button>
+                        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                         {canManage && (
-                            <Button
-                                startIcon={<AddIcon />}
-                                onClick={() => openProject()}
-                                sx={primaryBtnSx}
-                            >
+                            <Button startIcon={<AddIcon />} onClick={() => openProject()} sx={primaryBtnSx}>
                                 Create Project
                             </Button>
                         )}
@@ -1076,1069 +343,581 @@ export function MatFlowProjectsPage() {
 
             <ErrorBox>{error}</ErrorBox>
 
-            <Box
-                sx={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
-                    gap: 1,
-                }}
-            >
-                <SummaryCard label="Client Projects" tone="blue" value={portfolioKpis.projects} colorful />
-                <SummaryCard label="Active Projects" tone="green" value={portfolioKpis.activeProjects} colorful />
-                <SummaryCard label="Products / Items" tone="indigo" value={portfolioKpis.products} colorful />
-                <SummaryCard label="Awaiting Director" tone="amber" value={portfolioKpis.pending} colorful />
-                <SummaryCard label="Director Approved" tone="green" value={portfolioKpis.approved} colorful />
-                <SummaryCard label="Products Without BOM" tone="orange" value={portfolioKpis.withoutBom} colorful />
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
+                <SummaryCard label="Projects" value={counts.projects} />
+                <SummaryCard label="Products" value={counts.products} />
+                <SummaryCard label="Effective BOMs" value={counts.bomReady} />
+                <SummaryCard label="Active Projects" value={counts.active} />
             </Box>
 
             <Card sx={panelSx}>
-                <Box sx={{ mb: 1.2 }}>
-                    <Typography sx={{ ...mainTextSx, fontSize: 15 }}>Find a Project</Typography>
-                    <Typography sx={{ ...subTextSx, mt: .2 }}>
-                        Search and filter the portfolio. Product administration opens only when you choose Manage Products.
-                    </Typography>
-                </Box>
-                <Box
-                    sx={{
-                        display: "grid",
-                        gridTemplateColumns: {
-                            xs: "1fr",
-                            md: "minmax(260px,1.5fr) repeat(3,minmax(150px,.6fr))",
-                        },
-                        gap: 1,
-                    }}
-                >
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 1 }}>
                     <TextField
-                        label="Search Project, client, manager, Product or Drawing"
+                        label="Search Project / Client / Product / Drawing"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         sx={fieldSx}
                     />
                     <TextField
                         select
-                        label="Project Status"
-                        value={statusFilter}
-                        onChange={(event) => setStatusFilter(event.target.value)}
+                        label="Project State"
+                        value={activeFilter}
+                        onChange={(event) => setActiveFilter(event.target.value)}
                         sx={fieldSx}
                     >
-                        <MenuItem value="ALL">All Projects</MenuItem>
                         <MenuItem value="ACTIVE">Active</MenuItem>
                         <MenuItem value="INACTIVE">Inactive</MenuItem>
-                    </TextField>
-                    <TextField
-                        select
-                        label="Priority"
-                        value={priorityFilter}
-                        onChange={(event) => setPriorityFilter(event.target.value)}
-                        sx={fieldSx}
-                    >
-                        <MenuItem value="ALL">All Priorities</MenuItem>
-                        {["LOW", "NORMAL", "HIGH", "CRITICAL"].map((value) => (
-                            <MenuItem key={value} value={value}>{value}</MenuItem>
-                        ))}
-                    </TextField>
-                    <TextField
-                        select
-                        label="Product Approval"
-                        value={approvalFilter}
-                        onChange={(event) => setApprovalFilter(event.target.value)}
-                        sx={fieldSx}
-                    >
-                        <MenuItem value="ALL">All Approval States</MenuItem>
-                        <MenuItem value="PENDING_DIRECTOR_APPROVAL">Pending Director</MenuItem>
-                        <MenuItem value="APPROVED">Approved</MenuItem>
-                        <MenuItem value="RETURNED">Returned</MenuItem>
+                        <MenuItem value="ALL">All</MenuItem>
                     </TextField>
                 </Box>
             </Card>
 
-            {loading ? (
-                <LoadingBlock />
-            ) : filteredRows.length === 0 ? (
-                <Card sx={panelSx}>
-                    <EmptyState>No Projects match the current portfolio filters.</EmptyState>
-                </Card>
+            {loading ? <LoadingBlock /> : rows.length === 0 ? (
+                <Card sx={panelSx}><EmptyState>No Projects found.</EmptyState></Card>
             ) : (
-                <>
-                    <Card sx={panelSx}>
-                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap", alignItems: "flex-end", mb: 1.2 }}>
-                            <Box>
-                                <Typography sx={{ ...mainTextSx, fontSize: 16 }}>Project Portfolio</Typography>
-                                <Typography sx={{ ...subTextSx, mt: .2 }}>
-                                    {filteredRows.length} Project{filteredRows.length === 1 ? "" : "s"} visible. Nothing is forced open by default.
-                                </Typography>
-                            </Box>
-                            {selectedProject && (
-                                <Button onClick={() => setSelectedProjectId("")} sx={secondaryBtnSx}>
-                                    Close Product Workspace
-                                </Button>
-                            )}
-                        </Box>
-
-                        <Box
-                            sx={{
-                                display: "grid",
-                                gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" },
-                                gap: 1,
-                            }}
-                        >
-                            {projectPagination.pageItems.map((project) => {
-                                const products = Array.isArray(project.products) ? project.products : [];
-                                const productCount = products.length;
-                                const approvedCount = products.filter((product) => normalize(product.approvalStatus) === "APPROVED").length;
-                                const bomCount = products.filter((product) => Boolean(product.latestBomId)).length;
-                                const selected = String(project.id) === String(selectedProjectId);
-                                const approvalPercent = productCount ? Math.round((approvedCount / productCount) * 100) : 0;
-
-                                return (
-                                    <Card
-                                        key={project.id}
-                                        sx={{
-                                            p: 1.35,
-                                            border: selected ? "1px solid var(--mf-primary-border)" : "1px solid var(--mf-border)",
-                                            background: selected ? "var(--mf-primary-soft)" : "var(--mf-card-bg)",
-                                            boxShadow: "none",
-                                            display: "grid",
-                                            gap: 1,
-                                            minWidth: 0,
-                                        }}
-                                    >
-                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
-                                            <Box sx={{ minWidth: 0 }}>
-                                                <Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
-                                                    <Typography sx={{ ...mainTextSx, fontSize: 15.5 }}>
-                                                        {project.projectCode || "No Code"}
-                                                    </Typography>
-                                                    <Box sx={priorityLabelSx(project.priority)}>
-                                                        {normalize(project.priority || "NORMAL")}
-                                                    </Box>
-                                                </Box>
-                                                <Typography noWrap sx={{ ...mainTextSx, mt: .35 }}>
-                                                    {project.projectName || "Unnamed Project"}
-                                                </Typography>
-                                                <Typography noWrap sx={{ ...subTextSx, mt: .15 }}>
-                                                    {project.clientName || "No Client"} · {project.plantCode || "No Plant"}
-                                                </Typography>
-                                            </Box>
-                                            <MatFlowStatusChip status={project.active === false ? "INACTIVE" : "ACTIVE"} />
-                                        </Box>
-
-                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: .65 }}>
-                                            {[
-                                                ["Products", productCount],
-                                                ["Approved", `${approvedCount}/${productCount}`],
-                                                ["With BOM", `${bomCount}/${productCount}`],
-                                            ].map(([label, value]) => (
-                                                <Box key={label} sx={{ p: .8, border: "1px solid var(--mf-border)", borderRadius: 1.5, background: "var(--mf-surface)" }}>
-                                                    <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>{label}</Typography>
-                                                    <Typography sx={{ ...mainTextSx, mt: .15 }}>{value}</Typography>
-                                                </Box>
-                                            ))}
-                                        </Box>
-
-                                        <Box>
-                                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: .45 }}>
-                                                <Typography sx={subTextSx}>Director approval</Typography>
-                                                <Typography sx={subTextSx}>{approvalPercent}%</Typography>
-                                            </Box>
-                                            <Box sx={{ height: 5, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden" }}>
-                                                <Box sx={{ width: `${approvalPercent}%`, height: "100%", background: "var(--mf-success-text)", borderRadius: 99 }} />
-                                            </Box>
-                                        </Box>
-
-                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: .65 }}>
-                                            <Box>
-                                                <Typography sx={subTextSx}>Required</Typography>
-                                                <Typography sx={mainTextSx}>{project.requiredDate ? formatDate(project.requiredDate, false) : "Not set"}</Typography>
-                                            </Box>
-                                            <Box>
-                                                <Typography sx={subTextSx}>Owner</Typography>
-                                                <Typography noWrap sx={mainTextSx}>{project.projectManager || "Unassigned"}</Typography>
-                                            </Box>
-                                        </Box>
-
-                                        <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", pt: .2 }}>
-                                            <Button
-                                                onClick={() => setSelectedProjectId(String(project.id))}
-                                                sx={selected ? secondaryBtnSx : primaryBtnSx}
-                                            >
-                                                {selected ? "Workspace Open" : "Manage Products"}
-                                            </Button>
-                                            {canManage && (
-                                                <Button startIcon={<EditOutlinedIcon />} onClick={() => openProject(project)} sx={secondaryBtnSx}>
+                <Box sx={{ display: "grid", gap: 1.1 }}>
+                    {rows.map((project) => {
+                        const expanded = expandedProjects[String(project.id)] === true;
+                        const products = Array.isArray(project.products) ? project.products : [];
+                        return (
+                            <Card
+                                key={project.id}
+                                sx={{ ...panelSx, p: 0, overflow: "hidden", cursor: expanded ? "default" : "pointer" }}
+                                onClick={() => {
+                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [String(project.id)]: true }));
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        p: 1.6,
+                                        display: "grid",
+                                        gridTemplateColumns: "minmax(260px,1.7fr) minmax(160px,1fr) 120px 150px auto",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        background: expanded ? "var(--mf-surface)" : "var(--mf-card-bg)",
+                                    }}
+                                >
+                                    <Box>
+                                        <Typography sx={{ fontWeight: 950, fontSize: 16 }}>
+                                            {project.projectCode} · {project.projectName}
+                                        </Typography>
+                                        <Typography sx={subTextSx}>{project.clientName} · {project.plantCode}</Typography>
+                                    </Box>
+                                    <Box>
+                                        <Typography sx={subTextSx}>PRODUCTS</Typography>
+                                        <Typography sx={mainTextSx}>{products.length}</Typography>
+                                    </Box>
+                                    <MatFlowStatusChip status={project.active === false ? "INACTIVE" : "ACTIVE"} />
+                                    <Box>
+                                        <Typography sx={subTextSx}>CURRENT</Typography>
+                                        <Typography sx={mainTextSx}>{readable(project.currentDepartment || "PROJECT SETUP")}</Typography>
+                                    </Box>
+                                    <Box sx={{ display: "flex", gap: .5, justifyContent: "flex-end" }}>
+                                        {canManage && (
+                                            <>
+                                                <Button
+                                                    onClick={(event) => { event.stopPropagation(); openProject(project); }}
+                                                    sx={secondaryBtnSx}
+                                                >
                                                     Edit
                                                 </Button>
-                                            )}
-                                            {canManage && project.active !== false && (
-                                                <Button startIcon={<AddIcon />} onClick={() => { setSelectedProjectId(String(project.id)); openProduct(project); }} sx={secondaryBtnSx}>
+                                                <Button
+                                                    onClick={(event) => { event.stopPropagation(); openProduct(project); setExpandedProjects((current) => ({ ...current, [String(project.id)]: true })); }}
+                                                    sx={primaryBtnSx}
+                                                >
                                                     Add Product
                                                 </Button>
-                                            )}
-                                        </Box>
-                                    </Card>
-                                );
-                            })}
-                        </Box>
-
-                        <Box sx={{ mt: 1.15 }}>
-                            <MatFlowPagination
-                                {...projectPagination}
-                                onPageChange={projectPagination.setPage}
-                                onPageSizeChange={projectPagination.setPageSize}
-                                pageSizeOptions={[6, 9, 18]}
-                                label="Projects"
-                            />
-                        </Box>
-                    </Card>
-
-                    {selectedProject && (
-                        <Box sx={{ display: "grid", gap: 1.1 }}>
-                            <Card sx={{ ...panelSx, borderColor: "var(--mf-primary-border)" }}>
-                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.2, flexWrap: "wrap", alignItems: "flex-start" }}>
-                                    <Box sx={{ minWidth: 0 }}>
-                                        <Typography sx={{ ...subTextSx, textTransform: "uppercase", letterSpacing: .55, fontWeight: 900 }}>
-                                            Open Project Workspace
-                                        </Typography>
-                                        <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap", alignItems: "center", mt: .25 }}>
-                                            <Typography sx={{ fontWeight: 950, fontSize: 20 }}>
-                                                {selectedProject.projectCode} · {selectedProject.projectName}
-                                            </Typography>
-                                            <Box sx={priorityLabelSx(selectedProject.priority)}>
-                                                {normalize(selectedProject.priority || "NORMAL")}
-                                            </Box>
-                                            <MatFlowStatusChip status={selectedProject.active === false ? "INACTIVE" : "ACTIVE"} />
-                                        </Box>
-                                        <Typography sx={{ ...subTextSx, mt: .35 }}>
-                                            {selectedProject.clientName} · {selectedProject.plantCode}
-                                            {selectedProject.projectManager ? ` · Owner ${selectedProject.projectManager}` : ""}
-                                        </Typography>
-                                    </Box>
-
-                                    <Box sx={{ display: "flex", gap: .6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                        <Button onClick={() => setSelectedProjectId("")} sx={secondaryBtnSx}>
-                                            Close
-                                        </Button>
-                                        {canManage && (
-                                            <Button startIcon={<EditOutlinedIcon />} onClick={() => openProject(selectedProject)} sx={secondaryBtnSx}>
-                                                Edit Project
-                                            </Button>
+                                                {project.rowVersion != null && (
+                                                    <Tooltip title="Delete setup-only Project">
+                                                        <IconButton
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                setDeleteDialog({ type: "PROJECT", project });
+                                                            }}
+                                                            size="small"
+                                                        >
+                                                            <DeleteOutlineIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                            </>
                                         )}
-                                        {canManage && selectedProject.active !== false && (
-                                            <Button startIcon={<AddIcon />} onClick={() => openProduct(selectedProject)} sx={primaryBtnSx}>
-                                                Add Product
-                                            </Button>
-                                        )}
-                                        <Button startIcon={<TrackChangesOutlinedIcon />} onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>
-                                            Project Tracker
-                                        </Button>
-                                        {canManage && (
-                                            <Tooltip title={projectDeleteReason} placement="top" arrow>
-                                                <span>
-                                                    <Button
-                                                        startIcon={<DeleteOutlineIcon />}
-                                                        onClick={() => setDeleteTarget({ kind: "PROJECT", project: selectedProject })}
-                                                        disabled={projectDeleteBlocked || saving}
-                                                        sx={dangerBtnSx}
-                                                    >
-                                                        Delete Project
-                                                    </Button>
-                                                </span>
+                                        {expanded && (
+                                            <Tooltip title="Collapse Project">
+                                                <IconButton
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        setExpandedProjects((current) => ({ ...current, [String(project.id)]: false }));
+                                                    }}
+                                                    size="small"
+                                                >
+                                                    <ExpandLessIcon />
+                                                </IconButton>
                                             </Tooltip>
                                         )}
                                     </Box>
                                 </Box>
 
-                                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: .8, mt: 1.25 }}>
-                                    {[
-                                        ["Client", selectedProject.clientName || "-"],
-                                        ["Plant", selectedProject.plantCode || "-"],
-                                        ["Required Date", selectedProject.requiredDate ? formatDate(selectedProject.requiredDate, false) : "Not set"],
-                                        ["Product Register", `${selectedProducts.length} Product${selectedProducts.length === 1 ? "" : "s"}`],
-                                        ["Director Approval", `${selectedApprovedCount}/${selectedProducts.length || 0} Approved`],
-                                        ["BOM Coverage", `${selectedBomCount}/${selectedProducts.length || 0} with BOM`],
-                                    ].map(([label, value]) => (
-                                        <Box key={label} sx={registryMetaSx}>
-                                            <Typography sx={{ ...subTextSx, textTransform: "uppercase", fontSize: 9.5, fontWeight: 900 }}>{label}</Typography>
-                                            <Typography sx={{ ...mainTextSx, mt: .35 }}>{value}</Typography>
+                                {expanded && (
+                                    <Box sx={{ p: 1.4 }}>
+                                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1, mb: 1.2 }}>
+                                            <Box><Typography sx={subTextSx}>Required Date</Typography><Typography sx={mainTextSx}>{project.requiredDate || "-"}</Typography></Box>
+                                            <Box><Typography sx={subTextSx}>Priority</Typography><Typography sx={mainTextSx}>{readable(project.priority || "NORMAL")}</Typography></Box>
+                                            <Box><Typography sx={subTextSx}>Project Manager</Typography><Typography sx={mainTextSx}>{project.projectManager || "-"}</Typography></Box>
+                                            <Box><Typography sx={subTextSx}>Health</Typography><MatFlowStatusChip status={project.health || "READY"} /></Box>
                                         </Box>
-                                    ))}
-                                </Box>
 
-                                <Box sx={{ mt: 1.1 }}>
-                                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: .45 }}>
-                                        <Typography sx={subTextSx}>Product Director approval coverage</Typography>
-                                        <Typography sx={subTextSx}>{selectedApprovalPercent}%</Typography>
-                                    </Box>
-                                    <Box sx={{ height: 6, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden" }}>
-                                        <Box sx={{ width: `${selectedApprovalPercent}%`, height: "100%", background: "var(--mf-success-text)", borderRadius: 99 }} />
-                                    </Box>
-                                </Box>
-                            </Card>
-
-                            <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                                <Box sx={{ px: 1.4, py: 1.15, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid var(--mf-border)" }}>
-                                    <Box>
-                                        <Typography sx={{ ...mainTextSx, fontSize: 16 }}>Product / Drawing Register</Typography>
-                                        <Typography sx={{ ...subTextSx, mt: .2 }}>
-                                            Every Product is an exact BOM and material-execution ownership point under this Project.
-                                        </Typography>
-                                    </Box>
-                                    {canManage && selectedProject.active !== false && (
-                                        <Button startIcon={<AddIcon />} onClick={() => openProduct(selectedProject)} sx={primaryBtnSx}>
-                                            Add Product
-                                        </Button>
-                                    )}
-                                </Box>
-
-                                {selectedProducts.length === 0 ? (
-                                    <Box sx={{ p: 1.3 }}>
-                                        <EmptyState>No Products have been added to this Project yet.</EmptyState>
-                                    </Box>
-                                ) : (
-                                    <>
                                         <Box sx={tableShellSx}>
-                                            <Box
-                                                sx={{
-                                                    display: "grid",
-                                                    gridTemplateColumns: "minmax(190px,1.35fr) minmax(145px,.8fr) minmax(155px,.85fr) minmax(115px,.62fr) minmax(95px,.5fr) minmax(280px,1.65fr)",
-                                                    minWidth: 1030,
-                                                }}
-                                            >
-                                                {[
-                                                    "PRODUCT / DRAWING",
-                                                    "DIRECTOR APPROVAL",
-                                                    "BOM READINESS",
-                                                    "REQUIRED DATE",
-                                                    "LIFECYCLE",
-                                                    "ACTIONS",
-                                                ].map((header) => (
-                                                    <Box key={header} sx={tableHeaderSx}>{header}</Box>
+                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 210px" }}>
+                                                {["Product / Item", "Drawing", "Required", "Latest BOM", "Current", "Action"].map((heading) => (
+                                                    <Box key={heading} sx={tableCellSx}>{heading}</Box>
                                                 ))}
-
-                                                {productPagination.pageItems.map((product) => {
-                                                    const executionLocked = productHasExecutionHistory(product);
-                                                    const deleteReason = executionLocked
-                                                        ? "This Product already has BOM/material execution history. Deactivate it instead."
-                                                        : "Delete this setup-only Product / Drawing.";
-
-                                                    return (
-                                                        <Box key={product.id} sx={{ display: "contents", "&:hover > *": tableRowSx["&:hover"] }}>
-                                                            <Box sx={tableCellSx}>
-                                                                <Typography sx={mainTextSx}>{product.productName || "Unnamed Product"}</Typography>
-                                                                <Typography sx={{ ...subTextSx, mt: .25 }}>
-                                                                    {product.drawingNo || "No Drawing"} · Rev {product.drawingRevision ?? "0"}
-                                                                </Typography>
-                                                                <Typography sx={{ ...subTextSx, mt: .2 }}>
-                                                                    Created {product.createdAt ? formatDate(product.createdAt) : "-"}
-                                                                </Typography>
-                                                            </Box>
-
-                                                            <Box sx={tableCellSx}>
-                                                                <MatFlowStatusChip status={product.approvalStatus || "PENDING_DIRECTOR_APPROVAL"} />
-                                                                {product.approvedBy && <Typography sx={{ ...subTextSx, mt: .35 }}>By {product.approvedBy}</Typography>}
-                                                                {product.approvedAt && <Typography sx={subTextSx}>{formatDate(product.approvedAt)}</Typography>}
-                                                                {normalize(product.approvalStatus) === "RETURNED" && product.approvalRemarks && (
-                                                                    <Typography sx={{ ...subTextSx, color: "var(--mf-danger-text)", mt: .35 }}>
-                                                                        {product.approvalRemarks}
-                                                                    </Typography>
-                                                                )}
-                                                            </Box>
-
-                                                            <Box sx={tableCellSx}>
-                                                                <Typography sx={mainTextSx}>{product.latestBomNumber || "Not created"}</Typography>
-                                                                <Typography sx={subTextSx}>
-                                                                    {product.latestBomStatus
-                                                                        ? `${String(product.latestBomStatus).replaceAll("_", " ")} · Rev ${product.latestBomRevision ?? "-"}`
-                                                                        : normalize(product.approvalStatus) === "APPROVED"
-                                                                            ? "Ready for Engineering BOM"
-                                                                            : "Awaiting Director approval"}
-                                                                </Typography>
-                                                                {product.latestBomId && <MatFlowStatusChip status={product.latestBomEffective ? "EFFECTIVE" : product.latestBomStatus} />}
-                                                            </Box>
-
-                                                            <Box sx={tableCellSx}>
-                                                                <Typography sx={mainTextSx}>
-                                                                    {product.requiredDate ? formatDate(product.requiredDate, false) : "Not set"}
-                                                                </Typography>
-                                                            </Box>
-
-                                                            <Box sx={tableCellSx}>
-                                                                <MatFlowStatusChip status={product.active === false ? "INACTIVE" : "ACTIVE"} />
-                                                            </Box>
-
-                                                            <Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap", alignContent: "center" }}>
-                                                                {canManage && (
-                                                                    <Button startIcon={<EditOutlinedIcon />} onClick={() => openProduct(selectedProject, product)} sx={secondaryBtnSx}>
-                                                                        Edit
-                                                                    </Button>
-                                                                )}
-                                                                {canApprove && normalize(product.approvalStatus) !== "APPROVED" && product.active !== false && (
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            setApproval({ type: "APPROVE", project: selectedProject, product });
-                                                                            setApprovalRemarks("");
-                                                                        }}
-                                                                        sx={primaryBtnSx}
-                                                                    >
-                                                                        Approve
-                                                                    </Button>
-                                                                )}
-                                                                {canApprove && normalize(product.approvalStatus) !== "RETURNED" && (
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            setApproval({ type: "RETURN", project: selectedProject, product });
-                                                                            setApprovalRemarks("");
-                                                                        }}
-                                                                        sx={secondaryBtnSx}
-                                                                    >
-                                                                        Return
-                                                                    </Button>
-                                                                )}
-                                                                {normalize(product.approvalStatus) === "APPROVED" && (
-                                                                    <Button
-                                                                        onClick={() => navigate(
-                                                                            product.latestBomId
-                                                                                ? `/matflow/boms/${product.latestBomId}`
-                                                                                : `/matflow/boms/new?productId=${encodeURIComponent(product.id)}`
-                                                                        )}
-                                                                        sx={secondaryBtnSx}
-                                                                    >
-                                                                        {product.latestBomId ? "Open BOM" : "Create BOM"}
-                                                                    </Button>
-                                                                )}
-                                                                {canManage && (
-                                                                    <Tooltip title={deleteReason} placement="top" arrow>
-                                                                        <span>
-                                                                            <Button
-                                                                                startIcon={<DeleteOutlineIcon />}
-                                                                                onClick={() => setDeleteTarget({ kind: "PRODUCT", project: selectedProject, product })}
-                                                                                disabled={executionLocked || saving}
-                                                                                sx={dangerBtnSx}
-                                                                            >
-                                                                                Delete
-                                                                            </Button>
-                                                                        </span>
-                                                                    </Tooltip>
-                                                                )}
-                                                            </Box>
-                                                        </Box>
-                                                    );
-                                                })}
                                             </Box>
+                                            {products.length === 0 ? <EmptyState>No Products added yet.</EmptyState> : products.map((product) => (
+                                                <Box key={product.id} sx={{ ...tableRowSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 210px" }}>
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>{product.productName || "-"}</Typography>
+                                                        <Typography sx={subTextSx}>{product.active === false ? "Inactive" : "Active"}</Typography>
+                                                    </Box>
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>{product.drawingNo || "-"}</Typography>
+                                                        <Typography sx={subTextSx}>Rev {product.drawingRevision || "0"}</Typography>
+                                                    </Box>
+                                                    <Box sx={tableCellSx}>{product.requiredDate || project.requiredDate || "-"}</Box>
+                                                    <Box sx={tableCellSx}>
+                                                        {product.latestBomId ? (
+                                                            <>
+                                                                <Typography sx={mainTextSx}>{product.latestBomNumber || "-"}</Typography>
+                                                                <Typography sx={subTextSx}>Rev {product.latestBomRevision ?? "-"} · {readable(product.latestBomStatus || "-")}</Typography>
+                                                            </>
+                                                        ) : <Typography sx={subTextSx}>Not created</Typography>}
+                                                    </Box>
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>{readable(product.currentDepartment || (product.latestBomId ? "BOM" : "ENGINEERING / BOM"))}</Typography>
+                                                    </Box>
+                                                    <Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap" }}>
+                                                        {product.latestBomId ? (
+                                                            <Button onClick={() => navigate(`/matflow/boms/${product.latestBomId}`)} sx={secondaryBtnSx}>Open BOM</Button>
+                                                        ) : canManage ? (
+                                                            <Button onClick={() => navigate(`/matflow/boms/new?productId=${encodeURIComponent(product.id)}`)} sx={primaryBtnSx}>Create BOM</Button>
+                                                        ) : null}
+                                                        {canManage && <Button onClick={() => openProduct(project, product)} sx={secondaryBtnSx}>Edit</Button>}
+                                                        {canManage && product.rowVersion != null && (
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => setDeleteDialog({ type: "PRODUCT", project, product })}
+                                                            >
+                                                                <DeleteOutlineIcon fontSize="small" />
+                                                            </IconButton>
+                                                        )}
+                                                    </Box>
+                                                </Box>
+                                            ))}
                                         </Box>
-                                        <Box sx={{ px: 1.2, pb: 1.2 }}>
-                                            <MatFlowPagination
-                                                {...productPagination}
-                                                onPageChange={productPagination.setPage}
-                                                onPageSizeChange={productPagination.setPageSize}
-                                                pageSizeOptions={[5, 10, 20]}
-                                                label="Products / Drawings"
-                                            />
-                                        </Box>
-                                    </>
+                                    </Box>
                                 )}
                             </Card>
-                        </Box>
-                    )}
-                </>
+                        );
+                    })}
+                </Box>
             )}
 
-            <Dialog
-                open={Boolean(projectDialog)}
-                onClose={() => !saving && setProjectDialog(null)}
-                fullWidth
-                maxWidth="md"
-                PaperProps={{ sx: dialogPaperSx }}
-            >
-                <DialogTitle sx={dialogTitleSx}>
-                    {projectDialog?.row ? "Edit Project Header" : "Create Client Project"}
-                </DialogTitle>
+            <Dialog open={Boolean(projectDialog)} onClose={() => !working && setProjectDialog(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+                <DialogTitle sx={dialogTitleSx}>{projectDialog?.project ? "Edit Project" : "Create Project"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    <Typography sx={{ ...subTextSx, mb: 1.3 }}>
-                        Project header information is shared by every Product / Drawing under this client Project. Product identity is maintained separately below the Project.
-                    </Typography>
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.3 }}>
-                        <TextField label="Project Code *" value={projectForm.projectCode} onChange={(event) => setProjectForm((current) => ({ ...current, projectCode: event.target.value }))} sx={fieldSx} />
-                        <TextField label="Project Name *" value={projectForm.projectName} onChange={(event) => setProjectForm((current) => ({ ...current, projectName: event.target.value }))} sx={fieldSx} />
-                        <TextField label="Client Name *" value={projectForm.clientName} onChange={(event) => setProjectForm((current) => ({ ...current, clientName: event.target.value }))} sx={fieldSx} />
-                        <TextField select label="Plant *" value={projectForm.plantCode} onChange={(event) => setProjectForm((current) => ({ ...current, plantCode: event.target.value }))} sx={fieldSx}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
+                        <TextField label="Project Code *" value={projectForm.projectCode} onChange={(e) => setProjectForm((c) => ({ ...c, projectCode: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Project Name *" value={projectForm.projectName} onChange={(e) => setProjectForm((c) => ({ ...c, projectName: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Client Name *" value={projectForm.clientName} onChange={(e) => setProjectForm((c) => ({ ...c, clientName: e.target.value }))} sx={fieldSx} />
+                        <TextField select label="Plant *" value={projectForm.plantCode} onChange={(e) => setProjectForm((c) => ({ ...c, plantCode: e.target.value }))} sx={fieldSx}>
                             {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                         </TextField>
-                        <TextField type="date" label="Project Required Date" value={projectForm.requiredDate} onChange={(event) => setProjectForm((current) => ({ ...current, requiredDate: event.target.value }))} InputLabelProps={{ shrink: true }} sx={fieldSx} />
-                        <TextField select label="Priority" value={projectForm.priority} onChange={(event) => setProjectForm((current) => ({ ...current, priority: event.target.value }))} sx={fieldSx}>
-                            {["LOW", "NORMAL", "HIGH", "CRITICAL"].map((value) => <MenuItem key={value} value={value}>{value}</MenuItem>)}
+                        <TextField type="date" label="Required Date" InputLabelProps={{ shrink: true }} value={projectForm.requiredDate} onChange={(e) => setProjectForm((c) => ({ ...c, requiredDate: e.target.value }))} sx={fieldSx} />
+                        <TextField select label="Priority" value={projectForm.priority} onChange={(e) => setProjectForm((c) => ({ ...c, priority: e.target.value }))} sx={fieldSx}>
+                            {["LOW", "NORMAL", "HIGH", "URGENT"].map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
                         </TextField>
-                        <TextField label="Project Owner / Manager" value={projectForm.projectManager} onChange={(event) => setProjectForm((current) => ({ ...current, projectManager: event.target.value }))} sx={fieldSx} />
-                        <Box sx={{ display: "flex", alignItems: "center", px: .3 }}>
-                            <FormControlLabel control={<Switch checked={projectForm.active !== false} onChange={(event) => setProjectForm((current) => ({ ...current, active: event.target.checked }))} />} label="Project Active" />
-                        </Box>
-                        <TextField multiline minRows={3} label="Project Remarks" value={projectForm.remarks} onChange={(event) => setProjectForm((current) => ({ ...current, remarks: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                        <TextField label="Project Manager" value={projectForm.projectManager} onChange={(e) => setProjectForm((c) => ({ ...c, projectManager: e.target.value }))} sx={fieldSx} />
+                        <FormControlLabel control={<Switch checked={projectForm.active === true} onChange={(e) => setProjectForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
+                        <TextField multiline minRows={3} label="Remarks" value={projectForm.remarks} onChange={(e) => setProjectForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setProjectDialog(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveProject} disabled={saving} sx={primaryBtnSx}>{saving ? "Saving..." : "Save Project"}</Button>
+                    <Button onClick={() => setProjectDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={saveProject} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Save Project"}</Button>
                 </DialogActions>
             </Dialog>
 
-            <Dialog
-                open={Boolean(productDialog)}
-                onClose={() => !saving && setProductDialog(null)}
-                fullWidth
-                maxWidth="sm"
-                PaperProps={{ sx: dialogPaperSx }}
-            >
-                <DialogTitle sx={dialogTitleSx}>
-                    {productDialog?.product ? "Edit Product / Drawing" : `Add Product to ${productDialog?.project?.projectCode || "Project"}`}
-                </DialogTitle>
+            <Dialog open={Boolean(productDialog)} onClose={() => !working && setProductDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+                <DialogTitle sx={dialogTitleSx}>{productDialog?.product ? "Edit Product / Drawing" : "Add Product / Drawing"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    <Typography sx={{ ...subTextSx, mb: 1.3 }}>
-                        This Product / Drawing becomes the exact owner of its Engineering BOM and downstream material demand.
-                    </Typography>
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.3 }}>
-                        <TextField label="Product / Item Name *" value={productForm.productName} onChange={(event) => setProductForm((current) => ({ ...current, productName: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
-                        <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(event) => setProductForm((current) => ({ ...current, drawingNo: event.target.value }))} sx={fieldSx} />
-                        <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(event) => setProductForm((current) => ({ ...current, drawingRevision: event.target.value }))} sx={fieldSx} />
-                        <TextField type="date" label="Product Required Date" value={productForm.requiredDate} onChange={(event) => setProductForm((current) => ({ ...current, requiredDate: event.target.value }))} InputLabelProps={{ shrink: true }} sx={fieldSx} />
-                        <Box sx={{ display: "flex", alignItems: "center", px: .3 }}>
-                            <FormControlLabel control={<Switch checked={productForm.active !== false} onChange={(event) => setProductForm((current) => ({ ...current, active: event.target.checked }))} />} label="Product Active" />
-                        </Box>
-                        <TextField multiline minRows={3} label="Product Remarks" value={productForm.remarks} onChange={(event) => setProductForm((current) => ({ ...current, remarks: event.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                    <Alert severity="info" sx={{ mb: 1.5 }}>Product creation is immediate. There is no approval step.</Alert>
+                    <Box sx={{ display: "grid", gap: 1.5 }}>
+                        <TextField label="Product / Item *" value={productForm.productName} onChange={(e) => setProductForm((c) => ({ ...c, productName: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(e) => setProductForm((c) => ({ ...c, drawingNo: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(e) => setProductForm((c) => ({ ...c, drawingRevision: e.target.value }))} sx={fieldSx} />
+                        <TextField type="date" label="Required Date" InputLabelProps={{ shrink: true }} value={productForm.requiredDate} onChange={(e) => setProductForm((c) => ({ ...c, requiredDate: e.target.value }))} sx={fieldSx} />
+                        <TextField multiline minRows={2} label="Remarks" value={productForm.remarks} onChange={(e) => setProductForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
+                        <FormControlLabel control={<Switch checked={productForm.active === true} onChange={(e) => setProductForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setProductDialog(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveProduct} disabled={saving} sx={primaryBtnSx}>{saving ? "Saving..." : "Save Product"}</Button>
+                    <Button onClick={() => setProductDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={saveProduct} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Save Product"}</Button>
                 </DialogActions>
             </Dialog>
 
-            <Dialog
-                open={Boolean(approval)}
-                onClose={() => !saving && setApproval(null)}
-                fullWidth
-                maxWidth="sm"
-                PaperProps={{ sx: dialogPaperSx }}
-            >
-                <DialogTitle sx={dialogTitleSx}>
-                    {approval?.type === "APPROVE" ? "Director Product Approval" : "Return Product to Engineering"}
-                </DialogTitle>
-                <DialogContent sx={dialogContentSx}>
-                    <Typography sx={mainTextSx}>
-                        {approval?.project?.projectCode} → {approval?.product?.productName} → {approval?.product?.drawingNo}
-                    </Typography>
-                    <TextField multiline minRows={3} fullWidth label={approval?.type === "RETURN" ? "Return Remarks *" : "Approval Remarks"} value={approvalRemarks} onChange={(event) => setApprovalRemarks(event.target.value)} sx={{ ...fieldSx, mt: 1.5 }} />
-                </DialogContent>
-                <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setApproval(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={decideProduct} disabled={saving} sx={primaryBtnSx}>{saving ? "Working..." : "Confirm Decision"}</Button>
-                </DialogActions>
-            </Dialog>
+            <MatFlowDeleteDialog
+                open={Boolean(deleteDialog)}
+                title={deleteDialog?.type === "PROJECT" ? "Delete Project?" : "Delete Product?"}
+                subject={deleteDialog?.type === "PROJECT"
+                    ? deleteDialog?.project?.projectCode
+                    : deleteDialog?.product?.productName}
+                description="Permanent delete is limited to setup-only records without BOM/MR history. Use inactive state when historical traceability exists."
+                working={working}
+                onClose={() => setDeleteDialog(null)}
+                onConfirm={confirmDelete}
+            />
+        </Box>
+    );
+}
 
-            <Dialog
-                open={Boolean(deleteTarget)}
-                onClose={() => !saving && setDeleteTarget(null)}
-                fullWidth
-                maxWidth="sm"
-                PaperProps={{ sx: dialogPaperSx }}
-            >
-                <DialogTitle sx={{ ...dialogTitleSx, color: "var(--mf-danger-text)" }}>
-                    <DeleteOutlineIcon />
-                    {deleteTarget?.kind === "PROJECT" ? "Delete Project" : "Delete Product"}
-                </DialogTitle>
+export function MatFlowMaterialsPage() {
+    const { hasRole } = useMatFlow();
+    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
+    const fileRef = useRef(null);
+
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [working, setWorking] = useState(false);
+    const [error, setError] = useState("");
+    const [search, setSearch] = useState("");
+    const [dialog, setDialog] = useState(null);
+    const [form, setForm] = useState(emptyMaterial);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError("");
+        try {
+            setRows(extractMatFlowPage((await matflowApi.listMaterials({ search: clean(search) || undefined }))?.data).rows);
+        } catch (requestError) {
+            setRows([]);
+            setError(readMatFlowError(requestError, "Unable to load Material Inventory."));
+        } finally {
+            setLoading(false);
+        }
+    }, [search]);
+
+    useEffect(() => { load(); }, [load]);
+    const pagination = useMatFlowPagination(rows, 20);
+
+    const open = (row = null) => {
+        setDialog({ row });
+        setForm({
+            ...emptyMaterial,
+            ...Object.fromEntries(Object.keys(emptyMaterial).map((key) => [
+                key,
+                row?.[key] == null ? emptyMaterial[key] : typeof emptyMaterial[key] === "boolean" ? row[key] === true : String(row[key]),
+            ])),
+        });
+        setError("");
+    };
+
+    const save = async () => {
+        if (![form.materialCode, form.materialName, form.category, form.uom].every((value) => clean(value))) {
+            setError("Material code, name, category and UOM are required.");
+            return;
+        }
+        setWorking(true);
+        setError("");
+        try {
+            const body = {
+                materialCode: upperCode(form.materialCode),
+                materialName: clean(form.materialName),
+                category: normalize(form.category),
+                specification: clean(form.specification) || null,
+                uom: upperCode(form.uom),
+                preferredSupplier: clean(form.preferredSupplier) || null,
+                minimumStock: Number(form.minimumStock || 0),
+                reorderLevel: Number(form.reorderLevel || 0),
+                active: form.active === true,
+                rowVersion: dialog?.row?.rowVersion ?? null,
+            };
+            if (dialog?.row?.id) await matflowApi.updateMaterial(dialog.row.id, body);
+            else await matflowApi.createMaterial(body);
+            setDialog(null);
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to save Material."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const importMaterials = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+
+        setWorking(true);
+        setError("");
+        try {
+            const imported = await parseMaterialImportWorkbook(file, { category: "OTHER", uom: "PCS", codePrefix: "MAT" });
+            if (!imported.length) throw new Error("No material rows were found in the workbook.");
+
+            let saved = 0;
+            const errors = [];
+            for (const row of imported) {
+                try {
+                    await matflowApi.createMaterial({
+                        materialCode: upperCode(row.materialCode),
+                        materialName: clean(row.materialName),
+                        category: normalize(row.category || "OTHER"),
+                        specification: clean(row.specification) || null,
+                        uom: upperCode(row.uom || "PCS"),
+                        preferredSupplier: clean(row.preferredSupplier) || null,
+                        minimumStock: Number(row.minimumStock || 0),
+                        reorderLevel: Number(row.reorderLevel || 0),
+                        active: row.active !== false,
+                        rowVersion: null,
+                    });
+                    saved += 1;
+                } catch (requestError) {
+                    errors.push(`${row.materialCode || row.materialName}: ${readMatFlowError(requestError, "failed")}`);
+                }
+            }
+            await load();
+            if (errors.length) {
+                setError(`Imported ${saved}/${imported.length}. ${errors.slice(0, 5).join(" | ")}${errors.length > 5 ? ` | +${errors.length - 5} more` : ""}`);
+            }
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, requestError?.message || "Unable to import Material workbook."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    return (
+        <Box sx={pageSx}>
+            <PageHero
+                badge="MATERIAL INVENTORY"
+                title="Material Master"
+                subtitle="Materials used in BOMs and Store inventory. Specifications and UOM flow into BOM/MR traceability."
+                actions={
+                    <>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Materials", sheetName: "Materials", title: "MatFlow Material Inventory", rows })} sx={secondaryBtnSx}>Export Excel</Button>
+                        {canManage && <Button onClick={() => downloadMaterialImportTemplate()} sx={secondaryBtnSx}>Import Template</Button>}
+                        {canManage && <Button startIcon={<FileUploadOutlinedIcon />} onClick={() => fileRef.current?.click()} disabled={working} sx={secondaryBtnSx}>Import</Button>}
+                        <input ref={fileRef} type="file" hidden accept=".xlsx,.xls" onChange={importMaterials} />
+                        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+                        {canManage && <Button startIcon={<AddIcon />} onClick={() => open()} sx={primaryBtnSx}>Add Material</Button>}
+                    </>
+                }
+            />
+            <ErrorBox>{error}</ErrorBox>
+            <Card sx={panelSx}><TextField label="Search Material" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} /></Card>
+
+            <Card sx={panelSx}>
+                {loading ? <LoadingBlock /> : (
+                    <Box sx={tableShellSx}>
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 220px 160px minmax(220px,1fr) 90px 120px 120px 110px" }}>
+                            {["Code", "Material", "Category", "Specification", "UOM", "Min Stock", "Reorder", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        </Box>
+                        {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 220px 160px minmax(220px,1fr) 90px 120px 120px 110px" }}>
+                                <Box sx={tableCellSx}>{row.materialCode}</Box>
+                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.preferredSupplier || "-"}</Typography></Box>
+                                <Box sx={tableCellSx}>{readable(row.category)}</Box>
+                                <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>{row.specification || "-"}</Box>
+                                <Box sx={tableCellSx}>{row.uom}</Box>
+                                <Box sx={tableCellSx}>{formatQty(row.minimumStock)}</Box>
+                                <Box sx={tableCellSx}>{formatQty(row.reorderLevel)}</Box>
+                                <Box sx={tableCellSx}>{canManage && <Button onClick={() => open(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
+                            </Box>
+                        ))}
+                    </Box>
+                )}
+                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Materials" />}
+            </Card>
+
+            <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+                <DialogTitle sx={dialogTitleSx}>{dialog?.row ? "Edit Material" : "Add Material"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    {deleteTarget?.kind === "PROJECT" ? (
-                        <>
-                            <Typography sx={mainTextSx}>Delete {deleteTarget?.project?.projectCode} · {deleteTarget?.project?.projectName}?</Typography>
-                            <Typography sx={{ ...subTextSx, mt: .8 }}>
-                                This permanently removes the Project header and setup-only Products. The backend refuses deletion when BOM/material execution history exists.
-                            </Typography>
-                        </>
-                    ) : (
-                        <>
-                            <Typography sx={mainTextSx}>Delete {deleteTarget?.product?.productName} · {deleteTarget?.product?.drawingNo}?</Typography>
-                            <Typography sx={{ ...subTextSx, mt: .8 }}>
-                                This permanently removes only this setup-only Product / Drawing. Historical Products must be deactivated instead.
-                            </Typography>
-                        </>
-                    )}
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
+                        <TextField label="Material Code *" value={form.materialCode} onChange={(e) => setForm((c) => ({ ...c, materialCode: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Material Name *" value={form.materialName} onChange={(e) => setForm((c) => ({ ...c, materialName: e.target.value }))} sx={fieldSx} />
+                        <TextField select label="Category *" value={form.category} onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))} sx={fieldSx}>
+                            {MATFLOW_MATERIAL_CATEGORIES.map((category) => <MenuItem key={category.value} value={category.value}>{category.label}</MenuItem>)}
+                        </TextField>
+                        <TextField label="UOM *" value={form.uom} onChange={(e) => setForm((c) => ({ ...c, uom: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Preferred Supplier" value={form.preferredSupplier} onChange={(e) => setForm((c) => ({ ...c, preferredSupplier: e.target.value }))} sx={fieldSx} />
+                        <TextField type="number" label="Minimum Stock" value={form.minimumStock} onChange={(e) => setForm((c) => ({ ...c, minimumStock: e.target.value }))} sx={fieldSx} />
+                        <TextField type="number" label="Reorder Level" value={form.reorderLevel} onChange={(e) => setForm((c) => ({ ...c, reorderLevel: e.target.value }))} sx={fieldSx} />
+                        <FormControlLabel control={<Switch checked={form.active === true} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
+                        <TextField multiline minRows={3} label="Specification" value={form.specification} onChange={(e) => setForm((c) => ({ ...c, specification: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                    </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setDeleteTarget(null)} disabled={saving} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={confirmDelete} disabled={saving} sx={dangerBtnSx}>{saving ? "Deleting..." : "Delete Permanently"}</Button>
+                    <Button onClick={() => setDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={save} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Save"}</Button>
                 </DialogActions>
             </Dialog>
         </Box>
     );
 }
 
-
-function MaterialInventoryPage() {
-    const navigate = useNavigate();
-    const { hasRole } = useMatFlow();
-    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
-    const canManageStock = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
-
+export function MatFlowLocationsPage() {
+    const { hasRole, availablePlants, selectedPlantParam } = useMatFlow();
+    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
     const [rows, setRows] = useState([]);
-    const [consumptions, setConsumptions] = useState([]);
-    const [stockRows, setStockRows] = useState([]);
-    const [requisitions, setRequisitions] = useState([]);
-    const [portfolio, setPortfolio] = useState([]);
+    const [metadata, setMetadata] = useState({ locationType: [], ownershipType: [] });
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("");
-    const [plantFilter, setPlantFilter] = useState("");
     const [dialog, setDialog] = useState(null);
-    const [form, setForm] = useState({ ...emptyMaterial });
-    const [insightMaterial, setInsightMaterial] = useState(null);
-
-    const [importOpen, setImportOpen] = useState(false);
-    const [importFile, setImportFile] = useState(null);
-    const [importRows, setImportRows] = useState([]);
-    const [importWorking, setImportWorking] = useState(false);
-    const [importSummary, setImportSummary] = useState(null);
-    const [importDefaults, setImportDefaults] = useState({ category: "HARDWARE", uom: "PCS", codePrefix: "MAT" });
-
-    const [stockDialog, setStockDialog] = useState(false);
-    const [stockSaving, setStockSaving] = useState(false);
-    const [stockLocations, setStockLocations] = useState([]);
-    const [stockBalance, setStockBalance] = useState(null);
-    const [stockForm, setStockForm] = useState({ materialId: "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
+    const [form, setForm] = useState(emptyLocation);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const [materialResponse, consumptionResponse, stockResponse, requisitionResponse, portfolioResponse] = await Promise.all([
-                matflowApi.listMaterials({}),
-                matflowApi.listConsumptions(),
-                matflowApi.listStock({}),
-                matflowApi.listRequisitions(),
-                matflowApi.listProjectPortfolio({ active: undefined }),
+            const [locationResponse, metaResponse] = await Promise.all([
+                matflowApi.listLocations({ search: clean(search) || undefined }),
+                matflowApi.metadata(),
             ]);
-            setRows(extractMatFlowPage(materialResponse?.data).rows);
-            setConsumptions(Array.isArray(consumptionResponse?.data) ? consumptionResponse.data : []);
-            setStockRows(Array.isArray(stockResponse?.data) ? stockResponse.data : extractMatFlowPage(stockResponse?.data).rows);
-            setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : extractMatFlowPage(requisitionResponse?.data).rows);
-            setPortfolio(Array.isArray(portfolioResponse?.data) ? portfolioResponse.data : []);
+            setRows(extractMatFlowPage(locationResponse?.data).rows.filter((row) =>
+                !selectedPlantParam || upperCode(row.plantCode) === upperCode(selectedPlantParam)
+            ));
+            setMetadata({
+                locationType: metaResponse?.data?.enums?.locationType || ["STORE", "QC", "PROCESSING", "EXTERNAL_PROCESSOR", "PRODUCTION"],
+                ownershipType: metaResponse?.data?.enums?.ownershipType || ["INTERNAL", "EXTERNAL"],
+            });
         } catch (requestError) {
-            setRows([]); setConsumptions([]); setStockRows([]); setRequisitions([]); setPortfolio([]);
-            setError(readMatFlowError(requestError, "Unable to load the global Material Inventory."));
+            setRows([]);
+            setError(readMatFlowError(requestError, "Unable to load Locations."));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [search, selectedPlantParam]);
 
     useEffect(() => { load(); }, [load]);
+    const pagination = useMatFlowPagination(rows, 20);
 
-    const categories = useMemo(() => Array.from(new Set(rows.map((row) => normalize(row.category)).filter(Boolean))).sort(), [rows]);
-    const plants = useMemo(() => Array.from(new Set([
-        ...stockRows.map((row) => clean(row.plantCode)),
-        ...consumptions.map((row) => clean(row.productionPlantCode)),
-    ].filter(Boolean))).sort(), [stockRows, consumptions]);
-
-    const requisitionById = useMemo(() => {
-        const map = new Map();
-        requisitions.forEach((row) => {
-            if (row?.id) map.set(String(row.id), row);
-        });
-        return map;
-    }, [requisitions]);
-
-    const productById = useMemo(() => {
-        const map = new Map();
-        portfolio.forEach((project) => {
-            (Array.isArray(project?.products) ? project.products : []).forEach((product) => {
-                if (!product?.id) return;
-                map.set(String(product.id), {
-                    ...product,
-                    projectCode: project.projectCode || product.projectCode || "",
-                    projectName: project.projectName || "",
-                    clientName: project.clientName || "",
-                });
-            });
-        });
-        return map;
-    }, [portfolio]);
-
-    const consumptionByCode = useMemo(() => {
-        const now = new Date();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const map = new Map();
-        consumptions.forEach((consumption) => {
-            if (plantFilter && clean(consumption.productionPlantCode) !== plantFilter) return;
-            const at = consumption?.consumedAt ? new Date(consumption.consumedAt) : null;
-            const lines = Array.isArray(consumption?.lines) ? consumption.lines : [];
-            lines.forEach((line) => {
-                const code = upperCode(line?.materialCode);
-                if (!code) return;
-                const quantity = Number(line?.consumedQty || 0);
-                if (!Number.isFinite(quantity)) return;
-                const current = map.get(code) || {
-                    today: 0, week: 0, month: 0, lifetime: 0, events: 0,
-                    lastConsumedAt: null, lastConsumedBy: "", daily: new Map(), byProject: new Map(),
-                };
-                current.lifetime += quantity;
-                current.events += 1;
-                if (at && !Number.isNaN(at.getTime())) {
-                    if (at >= todayStart) current.today += quantity;
-                    if (at >= weekStart) current.week += quantity;
-                    if (at >= monthStart) current.month += quantity;
-                    const dayKey = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
-                    current.daily.set(dayKey, (current.daily.get(dayKey) || 0) + quantity);
-                    if (!current.lastConsumedAt || at > new Date(current.lastConsumedAt)) {
-                        current.lastConsumedAt = consumption.consumedAt;
-                        current.lastConsumedBy = consumption.consumedBy || "";
-                    }
-                    const requisition = requisitionById.get(String(consumption.requisitionId || ""));
-                    const product = requisition?.projectDrawingId
-                        ? productById.get(String(requisition.projectDrawingId))
-                        : null;
-                    const scopeKey = requisition?.projectDrawingId || `${requisition?.projectCode || "UNASSIGNED"}:${requisition?.drawingNo || "-"}`;
-                    const scope = current.byProject.get(String(scopeKey)) || {
-                        projectCode: product?.projectCode || requisition?.projectCode || "-",
-                        projectName: product?.projectName || "",
-                        clientName: product?.clientName || "",
-                        productName: product?.productName || "",
-                        drawingNo: product?.drawingNo || requisition?.drawingNo || "-",
-                        quantity: 0,
-                        events: 0,
-                    };
-                    scope.quantity += quantity;
-                    scope.events += 1;
-                    current.byProject.set(String(scopeKey), scope);
-                }
-                map.set(code, current);
-            });
-        });
-        return map;
-    }, [consumptions, plantFilter, requisitionById, productById]);
-
-    const stockByMaterial = useMemo(() => {
-        const map = new Map();
-        stockRows.forEach((row) => {
-            if (plantFilter && clean(row.plantCode) !== plantFilter) return;
-            const key = String(row.materialId || "");
-            if (!key) return;
-            const current = map.get(key) || { onHand: 0, reserved: 0, blocked: 0, available: 0, locations: 0 };
-            current.onHand += Number(row.onHandQty || 0);
-            current.reserved += Number(row.reservedQty || 0);
-            current.blocked += Number(row.blockedQty || 0);
-            current.available += Number(row.availableQty || 0);
-            current.locations += 1;
-            map.set(key, current);
-        });
-        return map;
-    }, [stockRows, plantFilter]);
-
-    const visibleRows = useMemo(() => {
-        const term = clean(search).toLowerCase();
-        return rows.filter((row) => {
-            if (categoryFilter && normalize(row.category) !== categoryFilter) return false;
-            if (!term) return true;
-            return [row.materialName, row.materialCode, row.category, row.uom, row.specification, row.preferredSupplier]
-                .some((value) => clean(value).toLowerCase().includes(term));
-        }).sort((left, right) =>
-            clean(left.materialName).localeCompare(clean(right.materialName), undefined, { sensitivity: "base" }) ||
-            clean(left.materialCode).localeCompare(clean(right.materialCode), undefined, { sensitivity: "base" })
-        );
-    }, [rows, search, categoryFilter]);
-    const pagination = useMatFlowPagination(visibleRows, 20);
-
-    const consumedMaterialCount = useMemo(() => Array.from(consumptionByCode.values()).filter((value) => value.month > 0).length, [consumptionByCode]);
-    const lowStockCount = useMemo(() => rows.filter((row) => {
-        const stock = stockByMaterial.get(String(row.id));
-        return stock && Number(row.reorderLevel || 0) > 0 && stock.available <= Number(row.reorderLevel || 0);
-    }).length, [rows, stockByMaterial]);
-    const activeCount = rows.filter((row) => row.active !== false).length;
-    const topConsumed = useMemo(() => rows.map((row) => ({ row, stats: consumptionByCode.get(upperCode(row.materialCode)) }))
-        .filter((entry) => entry.stats?.month > 0)
-        .sort((a, b) => b.stats.month - a.stats.month)[0] || null, [rows, consumptionByCode]);
-
-    const openCreate = () => { setDialog({ row: null }); setForm({ ...emptyMaterial }); setError(""); };
-    const openEdit = (row) => {
+    const open = (row = null) => {
         setDialog({ row });
         setForm({
-            materialCode: row.materialCode || "", materialName: row.materialName || "", category: row.category || "",
-            specification: row.specification || "", uom: row.uom || "", preferredSupplier: row.preferredSupplier || "",
-            minimumStock: String(row.minimumStock ?? 0), reorderLevel: String(row.reorderLevel ?? 0), active: row.active !== false,
+            ...emptyLocation,
+            locationCode: row?.locationCode || "",
+            locationName: row?.locationName || "",
+            plantCode: row?.plantCode || selectedPlantParam || availablePlants[0] || "",
+            locationType: row?.locationType || "STORE",
+            ownershipType: row?.ownershipType || "INTERNAL",
+            supportsStock: row?.supportsStock !== false,
+            address: row?.address || "",
+            contactPerson: row?.contactPerson || "",
+            contactPhone: row?.contactPhone || "",
+            active: row?.active !== false,
         });
         setError("");
     };
+
     const save = async () => {
-        if (![form.materialCode, form.materialName, form.category, form.uom].every((value) => clean(value))) {
-            setError("Material name, code, category and UOM are required."); return;
+        if (![form.locationCode, form.locationName, form.plantCode, form.locationType, form.ownershipType].every((value) => clean(value))) {
+            setError("Location code, name, Plant, type and ownership are required.");
+            return;
         }
-        setSaving(true); setError("");
-        const body = {
-            materialCode: upperCode(form.materialCode), materialName: clean(form.materialName), category: normalize(form.category),
-            specification: clean(form.specification) || null, uom: upperCode(form.uom), preferredSupplier: clean(form.preferredSupplier) || null,
-            minimumStock: Number(form.minimumStock || 0), reorderLevel: Number(form.reorderLevel || 0), active: form.active !== false,
-            rowVersion: dialog?.row?.rowVersion ?? null,
-        };
+        setWorking(true);
+        setError("");
         try {
-            if (dialog?.row?.id) await matflowApi.updateMaterial(dialog.row.id, body); else await matflowApi.createMaterial(body);
-            setDialog(null); await load();
-        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to save material.")); }
-        finally { setSaving(false); }
-    };
-
-    const analyzeImportFile = async (file = importFile) => {
-        if (!file) return;
-        setImportWorking(true); setImportSummary(null); setError("");
-        try { setImportRows(await parseMaterialImportWorkbook(file, importDefaults)); }
-        catch (requestError) { setImportRows([]); setError(requestError?.message || "Unable to analyze the material Excel file."); }
-        finally { setImportWorking(false); }
-    };
-
-    const importMaterials = async () => {
-        if (!importRows.length) return;
-        setImportWorking(true); setImportSummary(null); setError("");
-        const existingCodes = new Set(rows.map((row) => upperCode(row.materialCode)));
-        const existingNames = new Set(rows.map((row) => clean(row.materialName).toLowerCase()));
-        let imported = 0, skipped = 0, failed = 0;
-        const failures = [];
-        for (const material of importRows) {
-            const code = upperCode(material.materialCode);
-            const name = clean(material.materialName).toLowerCase();
-            if (existingCodes.has(code) || existingNames.has(name)) { skipped += 1; continue; }
-            try {
-                await matflowApi.createMaterial({
-                    materialCode: code, materialName: clean(material.materialName), category: normalize(material.category),
-                    specification: clean(material.specification) || null, uom: upperCode(material.uom),
-                    preferredSupplier: clean(material.preferredSupplier) || null,
-                    minimumStock: Number(material.minimumStock || 0), reorderLevel: Number(material.reorderLevel || 0), active: true, rowVersion: null,
-                });
-                imported += 1; existingCodes.add(code); existingNames.add(name);
-            } catch (requestError) {
-                failed += 1;
-                if (failures.length < 5) failures.push(`${material.materialName}: ${readMatFlowError(requestError, "Import failed")}`);
-            }
+            const body = {
+                locationCode: upperCode(form.locationCode),
+                locationName: clean(form.locationName),
+                plantCode: upperCode(form.plantCode),
+                locationType: normalize(form.locationType),
+                ownershipType: normalize(form.ownershipType),
+                supportsStock: form.supportsStock === true,
+                address: clean(form.address) || null,
+                contactPerson: clean(form.contactPerson) || null,
+                contactPhone: clean(form.contactPhone) || null,
+                active: form.active === true,
+                rowVersion: dialog?.row?.rowVersion ?? null,
+            };
+            if (dialog?.row?.id) await matflowApi.updateLocation(dialog.row.id, body);
+            else await matflowApi.createLocation(body);
+            setDialog(null);
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to save Location."));
+        } finally {
+            setWorking(false);
         }
-        setImportSummary({ imported, skipped, failed, failures });
-        setImportWorking(false);
-        await load();
     };
 
-    const exportCatalogue = () => downloadMatFlowExcel({
-        fileName: "ALSORG_Global_Material_Inventory",
-        sheetName: "Material Inventory",
-        title: "ALSORG Global Material Inventory",
-        subtitle: "Master data + physical stock + actual Production consumption",
-        metadata: [plantFilter ? `Plant ${plantFilter}` : "All authorized plants", `${visibleRows.length} material(s)`],
-        rows: visibleRows,
-        columns: [
-            { key: "materialName", label: "Material Name" }, { key: "materialCode", label: "Material Code" },
-            { key: "category", label: "Category" }, { key: "uom", label: "UOM" }, { key: "specification", label: "Specification" },
-            { key: "preferredSupplier", label: "Preferred Supplier / Brand" },
-            { key: "onHand", label: "On Hand", value: (row) => stockByMaterial.get(String(row.id))?.onHand || 0 },
-            { key: "reserved", label: "Reserved", value: (row) => stockByMaterial.get(String(row.id))?.reserved || 0 },
-            { key: "blocked", label: "Blocked", value: (row) => stockByMaterial.get(String(row.id))?.blocked || 0 },
-            { key: "available", label: "Available", value: (row) => stockByMaterial.get(String(row.id))?.available || 0 },
-            { key: "today", label: "Consumed Today", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.today || 0 },
-            { key: "week", label: "Consumed Last 7 Days", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.week || 0 },
-            { key: "month", label: "Consumed This Month", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.month || 0 },
-            { key: "lifetime", label: "Consumed Lifetime", value: (row) => consumptionByCode.get(upperCode(row.materialCode))?.lifetime || 0 },
-            { key: "minimumStock", label: "Minimum Stock" }, { key: "reorderLevel", label: "Reorder Level" },
-            { key: "active", label: "Active" },
-        ],
-    });
+    return (
+        <Box sx={pageSx}>
+            <PageHero
+                badge="LOCATION MASTER"
+                title="MatFlow Locations"
+                subtitle="Define Store, QC, Processing and Production locations used by the internal material workflow."
+                actions={
+                    <>
+                        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+                        {canManage && <Button startIcon={<AddIcon />} onClick={() => open()} sx={primaryBtnSx}>Add Location</Button>}
+                    </>
+                }
+            />
+            <ErrorBox>{error}</ErrorBox>
+            <Card sx={panelSx}><TextField label="Search Location" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} /></Card>
 
-    const openStockControl = async (material) => {
-        if (!canManageStock) return;
-        setStockSaving(true); setError("");
-        try {
-            const locationResponse = await matflowApi.listLocations({ active: true });
-            const locations = extractMatFlowPage(locationResponse?.data).rows.filter((location) =>
-                location?.active !== false && location?.supportsStock !== false && PLANNING_STOCK_LOCATION_TYPES.has(normalize(location.locationType))
-            );
-            setStockLocations(locations);
-            setStockBalance(null);
-            setStockForm({ materialId: material?.id || "", locationId: "", targetAvailableQty: "", batchNo: "", remarks: "" });
-            setStockDialog(true);
-        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to open stock control.")); }
-        finally { setStockSaving(false); }
-    };
-
-    useEffect(() => {
-        if (!stockDialog || !stockForm.materialId || !stockForm.locationId) { setStockBalance(null); return; }
-        let cancelled = false;
-        matflowApi.listStock({ materialId: stockForm.materialId, locationId: stockForm.locationId }).then((response) => {
-            if (cancelled) return;
-            const balances = Array.isArray(response?.data) ? response.data : extractMatFlowPage(response?.data).rows;
-            const balance = balances.find((row) => String(row.materialId) === String(stockForm.materialId) && String(row.locationId) === String(stockForm.locationId)) || null;
-            setStockBalance(balance);
-            setStockForm((current) => ({ ...current, targetAvailableQty: String(Number(balance?.availableQty || 0)), remarks: current.remarks || "Verified physical stock correction." }));
-        }).catch((requestError) => !cancelled && setError(readMatFlowError(requestError, "Unable to load stock balance.")));
-        return () => { cancelled = true; };
-    }, [stockDialog, stockForm.materialId, stockForm.locationId]);
-
-    const saveStock = async () => {
-        const desired = Number(stockForm.targetAvailableQty);
-        if (!stockForm.locationId || !Number.isFinite(desired) || desired < 0 || !clean(stockForm.remarks)) {
-            setError("Location, Desired Available Qty and Reason are required."); return;
-        }
-        const current = Number(stockBalance?.availableQty || 0);
-        const adjustmentQty = desired - current;
-        if (Math.abs(adjustmentQty) < 0.0005) { setStockDialog(false); return; }
-        setStockSaving(true); setError("");
-        try {
-            await matflowApi.adjustStock({
-                materialId: stockForm.materialId, locationId: stockForm.locationId, adjustmentQty,
-                batchNo: clean(stockForm.batchNo) || null, remarks: clean(stockForm.remarks), rowVersion: stockBalance?.rowVersion ?? null
-            });
-            setStockDialog(false); await load();
-        } catch (requestError) { setError(readMatFlowError(requestError, "Unable to update verified stock.")); }
-        finally { setStockSaving(false); }
-    };
-
-    const selectedStats = insightMaterial ? consumptionByCode.get(upperCode(insightMaterial.materialCode)) || {} : {};
-    const selectedStock = insightMaterial ? stockByMaterial.get(String(insightMaterial.id)) || {} : {};
-    const selectedDaily = selectedStats.daily instanceof Map
-        ? Array.from(selectedStats.daily.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-30)
-        : [];
-    const selectedProjectConsumption = selectedStats.byProject instanceof Map
-        ? Array.from(selectedStats.byProject.values()).sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0))
-        : [];
-    const maxDaily = Math.max(1, ...selectedDaily.map(([, qty]) => Number(qty || 0)));
-
-    return <Box sx={pageSx}>
-        <PageHero
-            badge="GLOBAL MATERIAL INVENTORY"
-            title="Material Master · Consumption & Insights"
-            subtitle="One canonical ALSORG material catalogue for operational BOMs, Store/QC stock, Processing and material tracking. Material Name is primary; actual Production consumption drives daily, weekly, monthly and lifetime insights."
-            actions={<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-                <Button startIcon={<FileDownloadOutlinedIcon />} onClick={exportCatalogue} sx={secondaryBtnSx}>Export Excel</Button>
-                {canManage && <Button startIcon={<DescriptionOutlinedIcon />} onClick={downloadMaterialImportTemplate} sx={secondaryBtnSx}>Import Template</Button>}
-                {canManage && <Button startIcon={<FileUploadOutlinedIcon />} onClick={() => { setImportOpen(true); setImportSummary(null); }} sx={secondaryBtnSx}>Import Excel</Button>}
-                {canManage && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>Add Material</Button>}
-            </Box>}
-        />
-        <ErrorBox>{error}</ErrorBox>
-
-        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(155px,1fr))", gap: 1 }}>
-            <SummaryCard label="Catalogue Materials" value={rows.length} tone="blue" colorful />
-            <SummaryCard label="Active Materials" value={activeCount} tone="green" colorful />
-            <SummaryCard label="Consumed This Month" value={`${consumedMaterialCount} material(s)`} tone="purple" colorful />
-            <SummaryCard label="Reorder / Low Stock" value={lowStockCount} tone={lowStockCount ? "red" : "green"} colorful />
-            <SummaryCard label="Top Monthly Material" value={topConsumed ? `${topConsumed.row.materialName}` : "No consumption"} tone="amber" colorful />
-        </Box>
-
-        <Card sx={panelSx}>
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(220px,1fr) 190px 190px auto" }, gap: 1, alignItems: "center" }}>
-                <TextField label="Search material name, code, category, specification or supplier" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
-                <TextField select label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} sx={fieldSx}>
-                    <MenuItem value="">All Categories</MenuItem>{categories.map((category) => <MenuItem key={category} value={category}>{readableLocationType(category)}</MenuItem>)}
-                </TextField>
-                <TextField select label="Consumption / Stock Plant" value={plantFilter} onChange={(e) => setPlantFilter(e.target.value)} sx={fieldSx}>
-                    <MenuItem value="">All Authorized Plants</MenuItem>{plants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
-                </TextField>
-                <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-            </Box>
-        </Card>
-
-        <Card sx={panelSx}>
-            {loading ? <LoadingBlock /> : <Box sx={tableShellSx}>
-                <Box sx={{ ...tableHeaderSx, minWidth: 1360, gridTemplateColumns: "minmax(260px,1.5fr) 135px 90px 180px 150px 150px 150px 145px 265px" }}>
-                    {["Material Name / Code", "Category", "UOM", "Stock Position", "Today", "Last 7 Days", "This Month", "Lifetime", "Actions"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
-                </Box>
-                {visibleRows.length === 0 ? <EmptyState>No materials match the current filters.</EmptyState> : pagination.pageItems.map((row) => {
-                    const stats = consumptionByCode.get(upperCode(row.materialCode)) || {};
-                    const stock = stockByMaterial.get(String(row.id)) || {};
-                    return <Box key={row.id} sx={{ ...tableRowSx, minWidth: 1360, gridTemplateColumns: "minmax(260px,1.5fr) 135px 90px 180px 150px 150px 150px 145px 265px" }}>
-                        <Box sx={tableCellSx}><Typography sx={{ ...mainTextSx, fontSize: 13.5 }}>{row.materialName || "-"}</Typography><Typography sx={subTextSx}>{row.materialCode || "-"}{row.specification ? ` · ${row.specification}` : ""}</Typography></Box>
-                        <Box sx={tableCellSx}><MatFlowStatusChip status={row.category || "MISCELLANEOUS"} /></Box>
-                        <Box sx={tableCellSx}>{row.uom || "-"}</Box>
-                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>Available {formatQty(stock.available || 0)}</Typography><Typography sx={subTextSx}>On Hand {formatQty(stock.onHand || 0)} · Reserved {formatQty(stock.reserved || 0)} · Blocked {formatQty(stock.blocked || 0)}</Typography></Box>
-                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.today || 0)} {row.uom || ""}</Typography></Box>
-                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.week || 0)} {row.uom || ""}</Typography></Box>
-                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.month || 0)} {row.uom || ""}</Typography></Box>
-                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(stats.lifetime || 0)} {row.uom || ""}</Typography><Typography sx={subTextSx}>{stats.events || 0} consumption line(s)</Typography></Box>
-                        <Box sx={{ ...tableCellSx, display: "flex", gap: .5, flexWrap: "wrap" }}>
-                            <Button startIcon={<AnalyticsOutlinedIcon />} onClick={() => setInsightMaterial(row)} sx={secondaryBtnSx}>Insights</Button>
-                            <Button startIcon={<TrackChangesOutlinedIcon />} onClick={() => navigate(`/matflow/tracker/materials/${row.id}`)} sx={primaryBtnSx}>Track</Button>
-                            {canManageStock && <Button startIcon={<Inventory2OutlinedIcon />} onClick={() => openStockControl(row)} sx={secondaryBtnSx}>Stock</Button>}
-                            {canManage && <Button onClick={() => openEdit(row)} sx={secondaryBtnSx}><EditOutlinedIcon fontSize="small" /></Button>}
+            <Card sx={panelSx}>
+                {loading ? <LoadingBlock /> : (
+                    <Box sx={tableShellSx}>
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
+                            {["Code", "Location", "Plant", "Type", "Ownership", "Stock", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
-                    </Box>;
-                })}
-            </Box>}
-            {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Global Materials" />}
-        </Card>
+                        {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
+                                <Box sx={tableCellSx}>{row.locationCode}</Box>
+                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationName}</Typography><Typography sx={subTextSx}>{row.contactPerson || row.address || "-"}</Typography></Box>
+                                <Box sx={tableCellSx}>{row.plantCode}</Box>
+                                <Box sx={tableCellSx}><MatFlowStatusChip status={row.locationType} /></Box>
+                                <Box sx={tableCellSx}>{readable(row.ownershipType)}</Box>
+                                <Box sx={tableCellSx}>{row.supportsStock ? "Yes" : "No"}</Box>
+                                <Box sx={tableCellSx}>{canManage && <Button onClick={() => open(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
+                            </Box>
+                        ))}
+                    </Box>
+                )}
+                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Locations" />}
+            </Card>
 
-        <MasterDialog type="materials" open={Boolean(dialog)} row={dialog?.row} form={form} setForm={setForm} saving={saving} availablePlants={[]} metadata={{}} onClose={() => setDialog(null)} onSave={save} />
-
-        <Dialog open={Boolean(insightMaterial)} onClose={() => setInsightMaterial(null)} fullWidth maxWidth="lg" PaperProps={{ sx: dialogPaperSx }}>
-            <DialogTitle sx={dialogTitleSx}><AnalyticsOutlinedIcon /> Material Consumption & Inventory Insights</DialogTitle>
-            <DialogContent sx={dialogContentSx}>
-                <Typography sx={{ ...mainTextSx, fontSize: 18 }}>{insightMaterial?.materialName}</Typography>
-                <Typography sx={{ ...subTextSx, mb: 1.3 }}>{insightMaterial?.materialCode} · {insightMaterial?.category} · {insightMaterial?.uom}</Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: .8 }}>
-                    <SummaryCard label="Today" value={`${formatQty(selectedStats.today || 0)} ${insightMaterial?.uom || ""}`} tone="sky" colorful />
-                    <SummaryCard label="Last 7 Days" value={`${formatQty(selectedStats.week || 0)} ${insightMaterial?.uom || ""}`} tone="indigo" colorful />
-                    <SummaryCard label="This Month" value={`${formatQty(selectedStats.month || 0)} ${insightMaterial?.uom || ""}`} tone="purple" colorful />
-                    <SummaryCard label="Lifetime" value={`${formatQty(selectedStats.lifetime || 0)} ${insightMaterial?.uom || ""}`} tone="green" colorful />
-                    <SummaryCard label="Available" value={`${formatQty(selectedStock.available || 0)} ${insightMaterial?.uom || ""}`} tone="blue" colorful />
-                    <SummaryCard label="Reserved / Blocked" value={`${formatQty(selectedStock.reserved || 0)} / ${formatQty(selectedStock.blocked || 0)}`} tone="amber" colorful />
-                </Box>
-                <Card sx={{ ...panelSx, mt: 1.2 }}>
-                    <Typography sx={{ ...mainTextSx, mb: .8 }}>Last 30 Consumption Days</Typography>
-                    {selectedDaily.length === 0 ? <EmptyState>No recorded Production consumption for this material.</EmptyState> : <Box sx={{ display: "grid", gap: .55 }}>
-                        {selectedDaily.map(([date, quantity]) => <Box key={date} sx={{ display: "grid", gridTemplateColumns: "110px minmax(100px,1fr) 110px", gap: .8, alignItems: "center" }}>
-                            <Typography sx={subTextSx}>{date}</Typography>
-                            <Box sx={{ height: 8, borderRadius: 99, background: "var(--mf-surface)", overflow: "hidden" }}><Box sx={{ height: "100%", width: `${Math.max(3, (Number(quantity || 0) / maxDaily) * 100)}%`, background: "var(--mf-primary-text)", borderRadius: 99 }} /></Box>
-                            <Typography sx={{ ...mainTextSx, textAlign: "right" }}>{formatQty(quantity)} {insightMaterial?.uom || ""}</Typography>
-                        </Box>)}
-                    </Box>}
-                    <Typography sx={{ ...subTextSx, mt: 1 }}>Last consumed: {selectedStats.lastConsumedAt ? formatDate(selectedStats.lastConsumedAt) : "Never"}{selectedStats.lastConsumedBy ? ` · By ${selectedStats.lastConsumedBy}` : ""}</Typography>
-                </Card>
-                <Card sx={{ ...panelSx, mt: 1.2 }}>
-                    <Typography sx={{ ...mainTextSx, mb: .35 }}>Consumption by Project / Product</Typography>
-                    <Typography sx={{ ...subTextSx, mb: .9 }}>Actual Production consumption is joined back to its Requisition and exact Product/Drawing ownership.</Typography>
-                    {selectedProjectConsumption.length === 0 ? <EmptyState>No Project/Product consumption split is available yet.</EmptyState> : <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px minmax(220px,1fr) 130px 120px" }}>{["Project", "Product / Drawing", "Consumed", "Events"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}</Box>
-                        {selectedProjectConsumption.slice(0, 12).map((row, index) => <Box key={`${row.projectCode}:${row.drawingNo}:${index}`} sx={{ ...tableRowSx, gridTemplateColumns: "180px minmax(220px,1fr) 130px 120px" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode}</Typography><Typography sx={subTextSx}>{row.clientName || row.projectName || ""}</Typography></Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "Product"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box><Box sx={tableCellSx}>{formatQty(row.quantity)} {insightMaterial?.uom || ""}</Box><Box sx={tableCellSx}>{row.events}</Box></Box>)}
-                    </Box>}
-                </Card>
-            </DialogContent>
-            <DialogActions sx={dialogActionsSx}><Button onClick={() => setInsightMaterial(null)} sx={secondaryBtnSx}>Close</Button><Button onClick={() => navigate(`/matflow/tracker/materials/${insightMaterial?.id}`)} sx={primaryBtnSx}>Open Material Control Tower</Button></DialogActions>
-        </Dialog>
-
-        <Dialog open={importOpen} onClose={() => !importWorking && setImportOpen(false)} fullWidth maxWidth="lg" PaperProps={{ sx: dialogPaperSx }}>
-            <DialogTitle sx={dialogTitleSx}><FileUploadOutlinedIcon /> Import Global Material Inventory</DialogTitle>
-            <DialogContent sx={dialogContentSx}>
-                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Accepts the ALSORG BOM workbook format, the supplied one-column Material Sheet, or the standard Material Inventory template. Existing code/name matches are skipped to protect master-data uniqueness.</Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 150px 150px 150px" }, gap: 1 }}>
-                    <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>Choose Excel<input hidden type="file" accept=".xlsx,.xlsm" onChange={(e) => { const file = e.target.files?.[0] || null; setImportFile(file); setImportRows([]); setImportSummary(null); if (file) setTimeout(() => analyzeImportFile(file), 0); }} /></Button>
-                    <TextField select label="Default Category" value={importDefaults.category} onChange={(e) => setImportDefaults((current) => ({ ...current, category: e.target.value }))} sx={fieldSx}>{MATFLOW_MATERIAL_CATEGORIES.map((item) => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}</TextField>
-                    <TextField label="Default UOM" value={importDefaults.uom} onChange={(e) => setImportDefaults((current) => ({ ...current, uom: e.target.value }))} sx={fieldSx} />
-                    <TextField label="Code Prefix" value={importDefaults.codePrefix} onChange={(e) => setImportDefaults((current) => ({ ...current, codePrefix: e.target.value }))} sx={fieldSx} />
-                </Box>
-                <Box sx={{ mt: 1, display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap" }}><Typography sx={mainTextSx}>{importFile?.name || "No workbook selected"}</Typography>{importFile && <Button onClick={() => analyzeImportFile()} disabled={importWorking} sx={secondaryBtnSx}>Re-analyze with Defaults</Button>}</Box>
-                {importRows.length > 0 && <Box sx={{ mt: 1.2 }}><Typography sx={{ ...mainTextSx, mb: .6 }}>{importRows.length} unique candidate material(s) detected</Typography><Box sx={{ ...tableShellSx, maxHeight: 340, overflow: "auto" }}>
-                    <Box sx={{ ...tableHeaderSx, minWidth: 950, gridTemplateColumns: "260px 180px 130px 90px minmax(220px,1fr)" }}>{["Material Name", "Material Code", "Category", "UOM", "Specification / Source"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}</Box>
-                    {importRows.slice(0, 100).map((row, index) => <Box key={`${row.materialCode}:${index}`} sx={{ ...tableRowSx, minWidth: 950, gridTemplateColumns: "260px 180px 130px 90px minmax(220px,1fr)" }}><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.preferredSupplier || ""}</Typography></Box><Box sx={tableCellSx}>{row.materialCode}</Box><Box sx={tableCellSx}>{row.category}</Box><Box sx={tableCellSx}>{row.uom}</Box><Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.specification || "-"}</Typography><Typography sx={subTextSx}>{row.sourceSection || ""} · row {row.sourceRow || "-"}</Typography></Box></Box>)}
-                </Box>{importRows.length > 100 && <Typography sx={{ ...subTextSx, mt: .5 }}>Showing first 100 candidates in preview.</Typography>}</Box>}
-                {importSummary && <Box sx={{ mt: 1.2, p: 1, border: "1px solid var(--mf-border)", borderRadius: 1.5 }}><Typography sx={mainTextSx}>Imported {importSummary.imported} · Skipped existing {importSummary.skipped} · Failed {importSummary.failed}</Typography>{importSummary.failures?.map((failure) => <Typography key={failure} sx={{ ...subTextSx, color: "var(--mf-danger-text)" }}>{failure}</Typography>)}</Box>}
-            </DialogContent>
-            <DialogActions sx={dialogActionsSx}><Button onClick={() => setImportOpen(false)} disabled={importWorking} sx={secondaryBtnSx}>Close</Button><Button startIcon={<FileUploadOutlinedIcon />} onClick={importMaterials} disabled={importWorking || !importRows.length} sx={primaryBtnSx}>{importWorking ? "Importing..." : `Import ${importRows.length} Materials`}</Button></DialogActions>
-        </Dialog>
-
-        <Dialog open={stockDialog} onClose={() => !stockSaving && setStockDialog(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
-            <DialogTitle sx={dialogTitleSx}><Inventory2OutlinedIcon /> Material × Location Stock Control</DialogTitle>
-            <DialogContent sx={dialogContentSx}>
-                <Typography sx={{ ...mainTextSx, mb: .8 }}>{rows.find((row) => String(row.id) === String(stockForm.materialId))?.materialName || "Material"}</Typography>
-                <TextField select fullWidth label="Store / QC Location *" value={stockForm.locationId} onChange={(e) => setStockForm((current) => ({ ...current, locationId: e.target.value }))} sx={fieldSx}>{stockLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationName} · {location.locationCode} · {readableLocationType(location.locationType)} · {location.plantCode}</MenuItem>)}</TextField>
-                <Box sx={{ mt: 1, display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .7 }}>{[["On Hand", stockBalance?.onHandQty], ["Reserved", stockBalance?.reservedQty], ["Blocked", stockBalance?.blockedQty], ["Available", stockBalance?.availableQty]].map(([label, value]) => <Box key={label} sx={{ p: .8, border: "1px solid var(--mf-border)", borderRadius: 1.4 }}><Typography sx={subTextSx}>{label}</Typography><Typography sx={mainTextSx}>{formatQty(value || 0)}</Typography></Box>)}</Box>
-                <Box sx={{ mt: 1, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}><TextField type="number" label="Desired Available Qty *" value={stockForm.targetAvailableQty} onChange={(e) => setStockForm((current) => ({ ...current, targetAvailableQty: e.target.value }))} sx={fieldSx} /><TextField label="Batch / Lot" value={stockForm.batchNo} onChange={(e) => setStockForm((current) => ({ ...current, batchNo: e.target.value }))} sx={fieldSx} /><TextField multiline minRows={3} label="Reason / Remarks *" value={stockForm.remarks} onChange={(e) => setStockForm((current) => ({ ...current, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} /></Box>
-            </DialogContent>
-            <DialogActions sx={dialogActionsSx}><Button onClick={() => setStockDialog(false)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={saveStock} disabled={stockSaving || !stockForm.locationId || !clean(stockForm.remarks)} sx={primaryBtnSx}>{stockSaving ? "Updating..." : "Update Verified Stock"}</Button></DialogActions>
-        </Dialog>
-    </Box>;
+            <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+                <DialogTitle sx={dialogTitleSx}>{dialog?.row ? "Edit Location" : "Add Location"}</DialogTitle>
+                <DialogContent sx={dialogContentSx}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
+                        <TextField label="Location Code *" value={form.locationCode} onChange={(e) => setForm((c) => ({ ...c, locationCode: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Location Name *" value={form.locationName} onChange={(e) => setForm((c) => ({ ...c, locationName: e.target.value }))} sx={fieldSx} />
+                        <TextField select label="Plant *" value={form.plantCode} onChange={(e) => setForm((c) => ({ ...c, plantCode: e.target.value }))} sx={fieldSx}>
+                            {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
+                        </TextField>
+                        <TextField select label="Location Type *" value={form.locationType} onChange={(e) => setForm((c) => ({ ...c, locationType: e.target.value }))} sx={fieldSx}>
+                            {metadata.locationType.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+                        </TextField>
+                        <TextField select label="Ownership *" value={form.ownershipType} onChange={(e) => setForm((c) => ({ ...c, ownershipType: e.target.value }))} sx={fieldSx}>
+                            {metadata.ownershipType.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+                        </TextField>
+                        <TextField label="Contact Person" value={form.contactPerson} onChange={(e) => setForm((c) => ({ ...c, contactPerson: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm((c) => ({ ...c, contactPhone: e.target.value }))} sx={fieldSx} />
+                        <TextField multiline minRows={2} label="Address" value={form.address} onChange={(e) => setForm((c) => ({ ...c, address: e.target.value }))} sx={fieldSx} />
+                        <FormControlLabel control={<Switch checked={form.supportsStock === true} onChange={(e) => setForm((c) => ({ ...c, supportsStock: e.target.checked }))} />} label="Supports Stock" />
+                        <FormControlLabel control={<Switch checked={form.active === true} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={dialogActionsSx}>
+                    <Button onClick={() => setDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
+                    <Button onClick={save} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Save"}</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
 }
-
-export const MatFlowMaterialsPage = MaterialInventoryPage;
-export const MatFlowLocationsPage = () => <MasterPage type="locations" />;

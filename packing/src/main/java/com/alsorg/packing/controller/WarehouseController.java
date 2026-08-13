@@ -265,31 +265,38 @@ public class WarehouseController {
                                 .body(csv);
         }
 
-        /* =========================================================
+        /*
+         * =========================================================
          * ADMIN WAREHOUSE CONTROL
-         * ========================================================= */
+         * =========================================================
+         */
 
-        @PostMapping("/admin/{zohoItemId}/return-to-dispatch")
-        public ResponseEntity<?> adminReturnToDispatch(
+        @PostMapping("/admin/{zohoItemId}/request-return-to-dispatch")
+        public ResponseEntity<?> adminRequestReturnToDispatch(
                         @PathVariable String zohoItemId,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
 
                 User user = currentUserService.getCurrentUserFromAuth(auth);
                 assertAdmin(user);
 
-                service.adminReturnToDispatch(
-                                zohoItemId,
-                                user.getUsername());
+                try {
+                        service.adminRequestReturnToDispatch(
+                                        zohoItemId,
+                                        user.getUsername());
 
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "message", "Item returned to Dispatch",
-                                                "status", "READY",
-                                                "zohoItemId", zohoItemId));
+                        return ResponseEntity.ok(
+                                        Map.of(
+                                                        "message", "Return to Dispatch requested",
+                                                        "status", "WAREHOUSE_RETURN_REQUESTED",
+                                                        "zohoItemId", zohoItemId));
+                } catch (IllegalArgumentException exception) {
+                        return ResponseEntity.badRequest()
+                                        .body(exception.getMessage());
+                }
         }
 
-        @PostMapping("/admin/bulk-return-to-dispatch")
-        public ResponseEntity<?> adminBulkReturnToDispatch(
+        @PostMapping("/admin/returns/bulk/request")
+        public ResponseEntity<?> adminBulkRequestReturnToDispatch(
                         @RequestBody List<String> itemIds,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
 
@@ -301,26 +308,78 @@ public class WarehouseController {
                                         .body("Select at least one warehouse item");
                 }
 
-                List<String> uniqueIds = itemIds.stream()
-                                .filter(id -> id != null && !id.trim().isBlank())
-                                .map(String::trim)
-                                .distinct()
-                                .toList();
+                try {
+                        int updated = service.adminBulkRequestReturnToDispatch(
+                                        itemIds,
+                                        user.getUsername());
 
-                if (uniqueIds.isEmpty()) {
+                        return ResponseEntity.ok(
+                                        Map.of(
+                                                        "message", updated + " return request(s) created",
+                                                        "updated", updated,
+                                                        "status", "WAREHOUSE_RETURN_REQUESTED"));
+                } catch (IllegalArgumentException exception) {
                         return ResponseEntity.badRequest()
-                                        .body("Select at least one warehouse item");
+                                        .body(exception.getMessage());
+                }
+        }
+
+        @PostMapping("/admin/returns/bulk/approve")
+        public ResponseEntity<?> adminBulkApproveReturnRequests(
+                        @RequestBody List<String> itemIds,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                if (itemIds == null || itemIds.isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one return request");
                 }
 
-                int updated = service.adminBulkReturnToDispatch(
-                                uniqueIds,
-                                user.getUsername());
+                try {
+                        int updated = service.adminBulkApproveReturnRequests(
+                                        itemIds,
+                                        user.getUsername());
 
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "message", updated + " item(s) returned to Dispatch",
-                                                "updated", updated,
-                                                "status", "READY"));
+                        return ResponseEntity.ok(
+                                        Map.of(
+                                                        "message", updated + " return request(s) approved",
+                                                        "updated", updated,
+                                                        "status", "READY"));
+                } catch (IllegalArgumentException exception) {
+                        return ResponseEntity.badRequest()
+                                        .body(exception.getMessage());
+                }
+        }
+
+        @PostMapping("/admin/returns/bulk/reject")
+        public ResponseEntity<?> adminBulkRejectReturnRequests(
+                        @RequestBody List<String> itemIds,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                if (itemIds == null || itemIds.isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one return request");
+                }
+
+                try {
+                        int updated = service.adminBulkRejectReturnRequests(
+                                        itemIds,
+                                        user.getUsername());
+
+                        return ResponseEntity.ok(
+                                        Map.of(
+                                                        "message", updated + " return request(s) rejected",
+                                                        "updated", updated,
+                                                        "status", "IN_WAREHOUSE"));
+                } catch (IllegalArgumentException exception) {
+                        return ResponseEntity.badRequest()
+                                        .body(exception.getMessage());
+                }
         }
 
         @PatchMapping("/admin/{zohoItemId}/location")

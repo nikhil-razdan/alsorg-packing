@@ -1202,25 +1202,143 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException(
                                                 "Dispatch item not found"));
 
-                UUID packetItemId = dispatchedItem.getPacketItemId();
+                /*
+                 * IMPORTANT WORKFLOW GUARANTEE
+                 * ----------------------------
+                 * Packing-date correction must never create/rebuild a Packet or
+                 * PacketItem and must never alter movement status/location/stock.
+                 *
+                 * Some older Dispatch rows can contain a stale packetItemId. Resolve
+                 * only an EXISTING original PacketItem using the application's normal
+                 * linkage conventions. If no original PacketItem exists, fail safely
+                 * instead of manufacturing a workflow record.
+                 */
+                String actor = safeActor(updatedBy);
 
-                if (packetItemId == null) {
-                        try {
-                                packetItemId = UUID.fromString(cleanDispatchItemId);
-                        } catch (Exception ignored) {
-                                // Legacy non-PacketItem dispatch records cannot own sticker history.
-                        }
+                PacketItem packetItem = resolveExistingPacketItemForAdminPackingDate(
+                                dispatchedItem);
+
+                /*
+                 * Repair only the linkage fields. This does not touch status,
+                 * location, FG/PKD state, stock, warehouse state or dispatch state.
+                 */
+                boolean dispatchLinkChanged = !Objects.equals(
+                                dispatchedItem.getPacketItemId(),
+                                packetItem.getId());
+
+                if (dispatchLinkChanged) {
+                        dispatchedItem.setPacketItemId(packetItem.getId());
                 }
 
-                if (packetItemId == null) {
-                        throw new IllegalStateException(
-                                        "This dispatch item is not linked to a packet item/sticker");
+                if (packetItem.getPacket() != null &&
+                                !Objects.equals(
+                                                dispatchedItem.getPacketId(),
+                                                packetItem.getPacket().getId())) {
+                        dispatchedItem.setPacketId(packetItem.getPacket().getId());
+                        dispatchLinkChanged = true;
+                }
+
+                if (dispatchLinkChanged) {
+                        dispatchedRepo.save(dispatchedItem);
                 }
 
                 return adminUpdatePackingDate(
-                                packetItemId,
+                                packetItem.getId(),
                                 packingDate,
-                                updatedBy);
+                                actor);
+        }
+
+        private PacketItem resolveExistingPacketItemForAdminPackingDate(
+                        DispatchedItem dispatchedItem) {
+
+                if (dispatchedItem == null) {
+                        throw new IllegalArgumentException(
+                                        "Dispatch item is required");
+                }
+
+                /* 1) Current explicit relationship, when still valid. */
+                if (dispatchedItem.getPacketItemId() != null) {
+                        PacketItem linked = packetItemRepository
+                                        .findById(dispatchedItem.getPacketItemId())
+                                        .orElse(null);
+
+                        if (linked != null) {
+                                return linked;
+                        }
+                }
+
+                /*
+                 * 2) Original PackFlow convention:
+                 * DispatchedItem.zohoItemId == PacketItem.id.toString().
+                 */
+                try {
+                        UUID originalPacketItemId = UUID.fromString(
+                                        dispatchedItem.getZohoItemId());
+
+                        PacketItem original = packetItemRepository
+                                        .findById(originalPacketItemId)
+                                        .orElse(null);
+
+                        if (original != null) {
+                                return original;
+                        }
+                } catch (Exception ignored) {
+                        // Non-UUID legacy/import ID. Try existing packet membership below.
+                }
+
+                /*
+                 * 3) Existing parent packet membership only. No reconstruction.
+                 * Prefer exact sticker number, then SKU, and finally a sole child.
+                 */
+                if (dispatchedItem.getPacketId() != null) {
+                        List<PacketItem> packetItems = packetItemRepository
+                                        .findByPacketId(dispatchedItem.getPacketId());
+
+                        if (packetItems != null && !packetItems.isEmpty()) {
+                                if (dispatchedItem.getStickerNumber() != null &&
+                                                !dispatchedItem.getStickerNumber().isBlank()) {
+                                        PacketItem bySticker = packetItems.stream()
+                                                        .filter(Objects::nonNull)
+                                                        .filter(candidate ->
+                                                                        candidate.getStickerNumber() != null &&
+                                                                                        candidate.getStickerNumber()
+                                                                                                        .equalsIgnoreCase(
+                                                                                                                        dispatchedItem.getStickerNumber()))
+                                                        .findFirst()
+                                                        .orElse(null);
+
+                                        if (bySticker != null) {
+                                                return bySticker;
+                                        }
+                                }
+
+                                if (dispatchedItem.getSku() != null &&
+                                                !dispatchedItem.getSku().isBlank()) {
+                                        PacketItem bySku = packetItems.stream()
+                                                        .filter(Objects::nonNull)
+                                                        .filter(candidate ->
+                                                                        candidate.getSku() != null &&
+                                                                                        candidate.getSku()
+                                                                                                        .equalsIgnoreCase(
+                                                                                                                        dispatchedItem.getSku()))
+                                                        .findFirst()
+                                                        .orElse(null);
+
+                                        if (bySku != null) {
+                                                return bySku;
+                                        }
+                                }
+
+                                if (packetItems.size() == 1 &&
+                                                packetItems.get(0) != null) {
+                                        return packetItems.get(0);
+                                }
+                        }
+                }
+
+                throw new IllegalStateException(
+                                "Original PacketItem linkage not found for this Dispatch item. " +
+                                                "Packing date was not changed.");
         }
 
         @Transactional

@@ -28,10 +28,8 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import ApprovalOutlinedIcon from "@mui/icons-material/ApprovalOutlined";
 import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
-import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
@@ -50,45 +48,41 @@ const NAV = [
     ["Project Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
     ["Material Control Tower", "/matflow/tracker/materials", "tracking", <Inventory2OutlinedIcon />],
     ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
-    ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
+    ["Material Inventory", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
     ["Operational BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
-    ["BOM Review & Approval", "/matflow/bom-approvals", "bom-review", <ApprovalOutlinedIcon />],
     ["Production Requisitions", "/matflow/production", "production", <EngineeringOutlinedIcon />],
     ["Store", "/matflow/store", "store", <StorefrontOutlinedIcon />],
-    ["Transfers", "/matflow/transfers", "transfers", <SwapHorizOutlinedIcon />],
     ["Purchase", "/matflow/purchase", "purchase", <ShoppingCartOutlinedIcon />],
-    ["PO Approvals", "/matflow/approvals", "approvals", <ApprovalOutlinedIcon />],
-    ["Receiving", "/matflow/receiving", "receiving", <LocalShippingOutlinedIcon />],
+    ["GRN / Receiving", "/matflow/receiving", "receiving", <LocalShippingOutlinedIcon />],
     ["Quality Control", "/matflow/qc", "qc", <FactCheckOutlinedIcon />],
     ["Processing", "/matflow/processing", "processing", <PrecisionManufacturingOutlinedIcon />],
     ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
+    ["Material Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
     ["Stock Ledger", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
     ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const HEADER = [
-    ["/matflow/dashboard", "MatFlow Operations Command Center", "Project → Product → Material state, custody, timing, actor/reason and intervention control"],
-    ["/matflow/production-execution", "Production Execution", "Production start → consumption/returns → finished-product completion"],
-    ["/matflow/bom-approvals", "BOM Review & Approval", "Production technical review followed by Director final approval"],
-    ["/matflow/boms", "Operational BOMs", "Engineering material structure and approved route control"],
-    ["/matflow/store", "Store Material Control", "Availability, reservation, shortage, indent and issue"],
-    ["/matflow/production", "Production Material Control", "Requisitions, issue readiness and finished-product lifecycle"],
-    ["/matflow/transfers", "Material Transfers", "Movement between Store, QC, Processing and Production"],
-    ["/matflow/purchase", "Purchase", "Purchase orders and vendors"],
-    ["/matflow/approvals", "PO Approvals", "Independent Manager/Director commercial approval"],
-    ["/matflow/receiving", "GRN & Receiving", "Receive approved purchase orders into QC-blocked stock"],
-    ["/matflow/qc", "Quality Control", "Inspect material and decide Direct-to-Production vs optional Processing routing"],
-    ["/matflow/processing", "Material Processing", "Processing inputs, outputs, yield and wastage"],
-    ["/matflow/returns", "Material Returns", "Controlled return movements"],
-    ["/matflow/tracker/materials", "Material Control Tower", "Material → Project/Product allocations → current custody → previous location → next hand-off → dwell time"],
-    ["/matflow/tracker", "Project Tracker", "Project → Product → Material custody, timing, shortages and next actions"],
-    ["/matflow/ledger", "Stock Ledger", "Immutable material movement history"],
-    ["/matflow/reports", "Reports", "Shortage, project, stock and audit reporting"],
-    ["/matflow/projects", "Projects & Products", "Portfolio setup, Product / Drawing register, Director approvals and lifecycle administration"],
-    ["/matflow/materials", "Material Master", "Standardized operational material records"],
-    ["/matflow/locations", "Locations", "Store, Production, Processing and QC destinations"],
+    ["/matflow/dashboard", "MatFlow Operations Command Center", "Project → Product → Material readiness, custody, shortages and execution"],
+    ["/matflow/production-execution", "Production Execution", "Receive material → start Production → consume / waste / return → complete"],
+    ["/matflow/boms", "Operational BOMs", "Engineering BOM authoring with Production review on the same BOM page"],
+    ["/matflow/store", "Store Material Control", "MR availability, reservation, QC choice, Store issue and shortage PI"],
+    ["/matflow/production", "Production Material Requisitions", "BOM-backed MR demand and Production ownership"],
+    ["/matflow/purchase", "Purchase", "Store-raised PI → vendor PO for exact shortage quantities"],
+    ["/matflow/receiving", "GRN & Receiving", "PO receipt into Store stock before Store re-allocation"],
+    ["/matflow/qc", "Quality Control", "Inspect Store-routed lots, then choose Direct Production or Processing"],
+    ["/matflow/processing", "Material Processing", "QC-routed jobs only: start, complete and release toward Production"],
+    ["/matflow/returns", "Material Returns", "Production unused / excess material return control"],
+    ["/matflow/material-register", "Material Register", "Derived purchased, issued, consumed, wasted, returned and stock quantities"],
+    ["/matflow/tracker/materials", "Material Control Tower", "Material-specific route, custody, Project/Product allocation and next action"],
+    ["/matflow/tracker", "Project Tracker", "Project → Product → Material state, owner, location and Production readiness"],
+    ["/matflow/ledger", "Stock Ledger", "Immutable physical inventory movement history"],
+    ["/matflow/reports", "Reports", "Shortage, Product, stock and audit reporting"],
+    ["/matflow/projects", "Projects & Products", "Approval-free Project → Product / Drawing administration"],
+    ["/matflow/materials", "Material Inventory", "Operational material master and stock helper inputs"],
+    ["/matflow/locations", "Locations", "Store, QC, Processing and Production locations"],
 ];
 
 export default function MatFlowLayout() {
