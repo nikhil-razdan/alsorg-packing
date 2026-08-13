@@ -1,15 +1,29 @@
 package com.alsorg.packing.domain.matflow;
 
+/**
+ * MatFlow workflow enums.
+ *
+ * Legacy constants are intentionally retained where database history may still
+ * contain them. New workflow code does not expose Product approval or a
+ * standalone Transfers desk.
+ */
 public final class MatFlowPlanningTypes {
     private MatFlowPlanningTypes() {
     }
 
+    /**
+     * Legacy storage compatibility. New Products are created APPROVED immediately.
+     */
     public enum ProjectProductApprovalStatus {
         PENDING_DIRECTOR_APPROVAL,
         APPROVED,
         RETURNED
     }
 
+    /**
+     * Legacy partial decision compatibility. New Store review defaults to
+     * ISSUE_AVAILABLE_NOW.
+     */
     public enum PartialAvailabilityDecision {
         UNDECIDED,
         ISSUE_AVAILABLE_NOW,
@@ -24,6 +38,10 @@ public final class MatFlowPlanningTypes {
         INTERNAL, EXTERNAL
     }
 
+    /**
+     * BOM route rows are now used only for approved PROCESSING options.
+     * QC and PRODUCTION remain for historical-row compatibility.
+     */
     public enum RouteStepType {
         QC, PROCESSING, PRODUCTION
     }
@@ -71,15 +89,15 @@ public final class MatFlowPlanningTypes {
         PARTIALLY_RECEIVED, RECEIVED, RETURNED, CANCELLED
     }
 
+    /** Internal custody/audit state. No standalone Transfers page is required. */
     public enum TransferStatus {
         PLANNED, READY, PARTIALLY_DISPATCHED, IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
     }
 
     public enum TransferPurpose {
         STORE_TO_PROCESSING, PROCESSING_TO_PROCESSING, PROCESSING_TO_PRODUCTION,
-        STORE_TO_PRODUCTION, QC_TO_PROCESSING, QC_TO_PRODUCTION,
-        INTER_PLANT, QC_TRANSFER, QC_TO_REWORK,
-        RETURN_TO_SOURCE, PRODUCTION_RETURN
+        STORE_TO_PRODUCTION, INTER_PLANT, QC_TRANSFER, QC_TO_PROCESSING,
+        QC_TO_PRODUCTION, QC_TO_REWORK, RETURN_TO_SOURCE, PRODUCTION_RETURN
     }
 
     public enum PurchaseOrderStatus {
@@ -94,18 +112,13 @@ public final class MatFlowPlanningTypes {
         PENDING, COMPLETED, CANCELLED
     }
 
-    /**
-     * The quality decision and the physical next-hop decision are deliberately
-     * separate. Accepted material stays under QC custody until this decision is
-     * recorded by the QC actor.
-     */
-    public enum QcRoutingDecision {
-        DIRECT_TO_PRODUCTION,
-        SEND_TO_PROCESSING
-    }
-
     public enum QcSourceType {
         GOODS_RECEIPT, TRANSFER_RECEIPT
+    }
+
+    /** Actual post-inspection route selected by QC for one material lot. */
+    public enum QcRoutingDecision {
+        DIRECT_TO_PRODUCTION, SEND_TO_PROCESSING
     }
 
     public enum VendorReturnStatus {

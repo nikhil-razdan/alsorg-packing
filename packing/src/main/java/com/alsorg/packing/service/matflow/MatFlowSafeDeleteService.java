@@ -6,15 +6,10 @@ import com.alsorg.packing.domain.matflow.MatFlowBomRouteStep;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialReturn;
 import com.alsorg.packing.domain.matflow.MatFlowMaterialReturnLine;
-import com.alsorg.packing.domain.matflow.MatFlowProcessingJob;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
-import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
-import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrderLine;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.domain.matflow.MatFlowBomStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MaterialReturnStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProcessingJobStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
 import com.alsorg.packing.repository.matflow.MatFlowBomApprovalHistoryRepository;
 import com.alsorg.packing.repository.matflow.MatFlowBomLineRepository;
@@ -23,9 +18,6 @@ import com.alsorg.packing.repository.matflow.MatFlowBomRouteStepRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialReturnLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialReturnRepository;
-import com.alsorg.packing.repository.matflow.MatFlowProcessingJobRepository;
-import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderLineRepository;
-import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderRepository;
 import com.alsorg.packing.repository.matflow.MatFlowRequisitionLineRepository;
 
 import jakarta.persistence.EntityManager;
@@ -64,17 +56,11 @@ public class MatFlowSafeDeleteService {
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
     private final MatFlowRequisitionLineRepository requisitionLineRepository;
 
-    private final MatFlowPurchaseOrderRepository purchaseOrderRepository;
-    private final MatFlowPurchaseOrderLineRepository purchaseOrderLineRepository;
-
     private final MatFlowMaterialReturnRepository materialReturnRepository;
     private final MatFlowMaterialReturnLineRepository materialReturnLineRepository;
 
-    private final MatFlowProcessingJobRepository processingJobRepository;
-
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
-    private final MatFlowRequisitionService requisitionService;
     private final EntityManager entityManager;
 
     public MatFlowSafeDeleteService(
@@ -84,14 +70,10 @@ public class MatFlowSafeDeleteService {
             MatFlowBomApprovalHistoryRepository bomHistoryRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
             MatFlowRequisitionLineRepository requisitionLineRepository,
-            MatFlowPurchaseOrderRepository purchaseOrderRepository,
-            MatFlowPurchaseOrderLineRepository purchaseOrderLineRepository,
             MatFlowMaterialReturnRepository materialReturnRepository,
             MatFlowMaterialReturnLineRepository materialReturnLineRepository,
-            MatFlowProcessingJobRepository processingJobRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
-            MatFlowRequisitionService requisitionService,
             EntityManager entityManager) {
 
         this.bomRepository = bomRepository;
@@ -100,14 +82,10 @@ public class MatFlowSafeDeleteService {
         this.bomHistoryRepository = bomHistoryRepository;
         this.requisitionRepository = requisitionRepository;
         this.requisitionLineRepository = requisitionLineRepository;
-        this.purchaseOrderRepository = purchaseOrderRepository;
-        this.purchaseOrderLineRepository = purchaseOrderLineRepository;
         this.materialReturnRepository = materialReturnRepository;
         this.materialReturnLineRepository = materialReturnLineRepository;
-        this.processingJobRepository = processingJobRepository;
         this.accessService = accessService;
         this.auditService = auditService;
-        this.requisitionService = requisitionService;
         this.entityManager = entityManager;
     }
 
@@ -216,6 +194,7 @@ public class MatFlowSafeDeleteService {
         MatFlowMaterialRequisition requisition = requisitionRepository
                 .findById(requisitionId)
                 .orElseThrow(() -> notFound("Requisition not found"));
+        accessService.requireProductionOwnership(requisition.requestedBy);
 
         MatFlowProjectDrawing product = requisition.projectDrawing;
         String plantCode = product != null && product.getPlantCode() != null
@@ -264,59 +243,6 @@ public class MatFlowSafeDeleteService {
         }
     }
 
-    /** Deletes only a Purchase Order that is still DRAFT. */
-    @Transactional
-    public void deleteDraftPurchaseOrder(UUID purchaseOrderId, Long rowVersion) {
-        accessService.requirePurchaseOrderWrite();
-
-        MatFlowPurchaseOrder order = purchaseOrderRepository
-                .findById(purchaseOrderId)
-                .orElseThrow(() -> notFound("Purchase order not found"));
-
-        String plantCode = order.deliveryLocation == null
-                ? null
-                : order.deliveryLocation.getPlantCode();
-        accessService.requirePlantAccess(plantCode);
-        assertVersion(rowVersion, order.getRowVersion(), "Purchase order");
-
-        if (order.status != PurchaseOrderStatus.DRAFT) {
-            throw conflict(
-                    "Only a Draft purchase order can be permanently deleted. Placed/received purchase orders are retained as procurement and stock history.");
-        }
-
-        String actor = accessService.actor();
-        MatFlowProjectDrawing product = order.indent == null ? null : order.indent.projectDrawing;
-
-        auditService.record(
-                "PURCHASE_ORDER",
-                order.getId(),
-                "DRAFT_PURCHASE_ORDER_DELETED",
-                plantCode,
-                product == null ? null : product.getProjectCode(),
-                product == null ? null : product.getDrawingNo(),
-                auditService.details(
-                        "poNumber", order.poNumber,
-                        "indentNumber", order.indent == null ? null : order.indent.indentNumber,
-                        "vendor", order.vendor == null ? null : order.vendor.vendorName,
-                        "deletedBy", actor,
-                        "deletePolicy", "DRAFT_ONLY"));
-
-        try {
-            List<MatFlowPurchaseOrderLine> lines = purchaseOrderLineRepository
-                    .findByPurchaseOrder_IdOrderByCreatedAtAsc(order.getId());
-
-            if (!lines.isEmpty()) {
-                purchaseOrderLineRepository.deleteAll(lines);
-            }
-
-            purchaseOrderRepository.delete(order);
-            entityManager.flush();
-        } catch (DataIntegrityViolationException ex) {
-            throw conflict(
-                    "This Draft purchase order is already referenced by another MatFlow record and cannot be deleted.");
-        }
-    }
-
     /** Deletes only a DRAFT material return, before any dispatch/stock movement. */
     @Transactional
     public void deleteDraftMaterialReturn(UUID materialReturnId, Long rowVersion) {
@@ -325,6 +251,9 @@ public class MatFlowSafeDeleteService {
         MatFlowMaterialReturn materialReturn = materialReturnRepository
                 .findById(materialReturnId)
                 .orElseThrow(() -> notFound("Material return not found"));
+        if (materialReturn.requisition != null) {
+            accessService.requireProductionOwnership(materialReturn.requisition.requestedBy);
+        }
 
         String plantCode = materialReturn.fromLocation == null
                 ? null
@@ -370,64 +299,6 @@ public class MatFlowSafeDeleteService {
         } catch (DataIntegrityViolationException ex) {
             throw conflict(
                     "This material return has already entered physical execution and cannot be deleted.");
-        }
-    }
-
-    /**
-     * Deletes only a PENDING Processing Job. Starting the job creates physical
-     * stock/ledger effects, after which deletion is prohibited.
-     */
-    @Transactional
-    public void deletePendingProcessingJob(UUID processingJobId, Long rowVersion) {
-        accessService.requireProcessingWrite();
-
-        MatFlowProcessingJob job = processingJobRepository
-                .findById(processingJobId)
-                .orElseThrow(() -> notFound("Processing job not found"));
-
-        String plantCode = job.location == null ? null : job.location.getPlantCode();
-        accessService.requirePlantAccess(plantCode);
-        assertVersion(rowVersion, job.getRowVersion(), "Processing job");
-
-        if (job.status != ProcessingJobStatus.PENDING) {
-            throw conflict(
-                    "Only a Pending processing job can be permanently deleted. In-progress/completed jobs are stock and production history.");
-        }
-
-        UUID requisitionId = job.requisition == null ? null : job.requisition.getId();
-        String actor = accessService.actor();
-        MatFlowProjectDrawing product = job.requisition == null
-                ? null
-                : job.requisition.projectDrawing;
-
-        auditService.record(
-                "PROCESSING_JOB",
-                job.getId(),
-                "PENDING_PROCESSING_JOB_DELETED",
-                plantCode,
-                product == null ? null : product.getProjectCode(),
-                product == null ? null : product.getDrawingNo(),
-                auditService.details(
-                        "jobNumber", job.jobNumber,
-                        "requisitionNumber", job.requisition == null
-                                ? null
-                                : job.requisition.requisitionNumber,
-                        "reservationId", job.reservation == null ? null : job.reservation.getId(),
-                        "routeStepId", job.routeStep == null ? null : job.routeStep.getId(),
-                        "deletedBy", actor,
-                        "deletePolicy", "PENDING_ONLY"));
-
-        try {
-            processingJobRepository.delete(job);
-            entityManager.flush();
-        } catch (DataIntegrityViolationException ex) {
-            throw conflict(
-                    "This processing job already has downstream execution references and cannot be deleted.");
-        }
-
-        /* Recompute the requisition stage after removing its pending task. */
-        if (requisitionId != null) {
-            requisitionService.refreshState(requisitionId, actor);
         }
     }
 

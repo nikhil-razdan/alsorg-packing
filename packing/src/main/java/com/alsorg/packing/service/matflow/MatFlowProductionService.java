@@ -5,10 +5,13 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.Consumptio
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ConsumptionLineRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ConsumptionLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProcessingJobCompleteRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProcessingJobCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProcessingJobResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProcessingJobStartRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProductionWasteDtos.ProductionWasteLineRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProductionWasteDtos.ProductionWasteLineResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProductionWasteDtos.ProductionWasteRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProductionWasteDtos.ProductionWasteResponse;
 
 import com.alsorg.packing.domain.matflow.*;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.*;
@@ -30,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Production execution boundary: preprocessing/processing jobs, explicit
- * Production start/completion and material consumption.
+ * Production execution boundary: QC-created processing jobs, explicit
+ * Production start/completion, material consumption and wastage.
+ * Processing never raises Purchase Indents; replacement demand returns to
+ * Store.
  */
 @Service
 public class MatFlowProductionService {
@@ -47,15 +52,12 @@ public class MatFlowProductionService {
                         MatFlowProcessingJobRepository jobRepository,
                         MatFlowReservationRepository reservationRepository,
                         MatFlowBomRouteStepRepository routeRepository,
-                        MatFlowMaterialRepository materialRepository,
                         MatFlowStockBalanceRepository stockRepository,
                         MatFlowStockLedgerRepository ledgerRepository,
                         MatFlowTransferOrderRepository transferRepository,
                         MatFlowTransferLineRepository transferLineRepository,
                         MatFlowRequisitionLineRepository requisitionLineRepository,
                         MatFlowMaterialRequisitionRepository requisitionRepository,
-                        MatFlowIndentRepository indentRepository,
-                        MatFlowIndentLineRepository indentLineRepository,
                         MatFlowProductionConsumptionRepository consumptionRepository,
                         MatFlowProductionConsumptionLineRepository consumptionLineRepository,
                         MatFlowLocationRepository locationRepository,
@@ -72,14 +74,11 @@ public class MatFlowProductionService {
                                 jobRepository,
                                 reservationRepository,
                                 routeRepository,
-                                materialRepository,
                                 stockRepository,
                                 ledgerRepository,
                                 transferRepository,
                                 transferLineRepository,
                                 requisitionLineRepository,
-                                indentRepository,
-                                indentLineRepository,
                                 accessService,
                                 auditService,
                                 requisitionService);
@@ -103,8 +102,11 @@ public class MatFlowProductionService {
         }
 
         @Transactional
-        public ProcessingJobResponse createProcessingJob(ProcessingJobCreateRequest request) {
-                return processing.create(request);
+        public ProcessingJobResponse createProcessingJobFromQc(
+                        UUID reservationId,
+                        UUID processingRouteStepId,
+                        String remarks) {
+                return processing.createFromQc(reservationId, processingRouteStepId, remarks);
         }
 
         @Transactional
@@ -138,6 +140,7 @@ public class MatFlowProductionService {
                                 requisition,
                                 "Production start");
 
+                accessService.requireProductionOwnership(requisition.requestedBy);
                 accessService.requirePlantAccess(
                                 requisition.destinationLocation.getPlantCode());
 
@@ -174,6 +177,11 @@ public class MatFlowProductionService {
                                                 requisition.requisitionNumber));
         }
 
+        @Transactional
+        public ProductionWasteResponse recordProductionWaste(ProductionWasteRequest request) {
+                return consumption.recordWaste(request);
+        }
+
         @Transactional(readOnly = true)
         public List<ConsumptionResponse> listConsumptions() {
                 return consumption.list();
@@ -200,6 +208,7 @@ public class MatFlowProductionService {
                                 requisition,
                                 "Production completion");
 
+                accessService.requireProductionOwnership(requisition.requestedBy);
                 accessService.requirePlantAccess(
                                 requisition.destinationLocation.getPlantCode());
 
@@ -228,7 +237,8 @@ public class MatFlowProductionService {
                         BigDecimal requested = zero(line.requestedQty);
                         BigDecimal issued = zero(line.issuedQty);
                         BigDecimal accounted = zero(line.consumedQty)
-                                        .add(zero(line.returnedQty));
+                                        .add(zero(line.returnedQty))
+                                        .add(consumption.productionWasteForLine(line.getId()));
 
                         return issued.compareTo(requested) >= 0 &&
                                         accounted.compareTo(issued) >= 0;
@@ -236,7 +246,7 @@ public class MatFlowProductionService {
 
                 if (!fullyAccounted) {
                         throw conflict(
-                                        "Production cannot be completed until all requested material is issued and every issued quantity is consumed or returned");
+                                        "Production cannot be completed until all requested material is issued and every issued quantity is consumed, wasted or returned");
                 }
 
                 String actor = accessService.actor();
@@ -354,14 +364,11 @@ public class MatFlowProductionService {
                 private final MatFlowProcessingJobRepository jobRepository;
                 private final MatFlowReservationRepository reservationRepository;
                 private final MatFlowBomRouteStepRepository routeRepository;
-                private final MatFlowMaterialRepository materialRepository;
                 private final MatFlowStockBalanceRepository stockRepository;
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowTransferOrderRepository transferRepository;
                 private final MatFlowTransferLineRepository transferLineRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
-                private final MatFlowIndentRepository indentRepository;
-                private final MatFlowIndentLineRepository indentLineRepository;
                 private final MatFlowAccessService accessService;
                 private final MatFlowAuditService auditService;
                 private final MatFlowRequisitionService requisitionService;
@@ -370,28 +377,22 @@ public class MatFlowProductionService {
                                 MatFlowProcessingJobRepository jobRepository,
                                 MatFlowReservationRepository reservationRepository,
                                 MatFlowBomRouteStepRepository routeRepository,
-                                MatFlowMaterialRepository materialRepository,
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowTransferOrderRepository transferRepository,
                                 MatFlowTransferLineRepository transferLineRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
-                                MatFlowIndentRepository indentRepository,
-                                MatFlowIndentLineRepository indentLineRepository,
                                 MatFlowAccessService accessService,
                                 MatFlowAuditService auditService,
                                 MatFlowRequisitionService requisitionService) {
                         this.jobRepository = jobRepository;
                         this.reservationRepository = reservationRepository;
                         this.routeRepository = routeRepository;
-                        this.materialRepository = materialRepository;
                         this.stockRepository = stockRepository;
                         this.ledgerRepository = ledgerRepository;
                         this.transferRepository = transferRepository;
                         this.transferLineRepository = transferLineRepository;
                         this.requisitionLineRepository = requisitionLineRepository;
-                        this.indentRepository = indentRepository;
-                        this.indentLineRepository = indentLineRepository;
                         this.accessService = accessService;
                         this.auditService = auditService;
                         this.requisitionService = requisitionService;
@@ -410,160 +411,84 @@ public class MatFlowProductionService {
                                         .toList();
                 }
 
-                @Transactional
-                public ProcessingJobResponse create(
-                                ProcessingJobCreateRequest request) {
-                        accessService.requireProcessingWrite();
+                ProcessingJobResponse createFromQc(
+                                UUID reservationId,
+                                UUID routeStepId,
+                                String remarks) {
+                        if (reservationId == null || routeStepId == null) {
+                                throw badRequest("QC Processing route requires reservation and Processing step");
+                        }
+                        MatFlowReservation reservation = reservationRepository.findById(reservationId)
+                                        .orElseThrow(() -> notFound("Reservation not found"));
+                        reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+                        MatFlowBomRouteStep rawRouteStep = routeRepository.findById(routeStepId)
+                                        .orElseThrow(() -> notFound("Processing route step not found"));
+                        final MatFlowBomRouteStep routeStep = (MatFlowBomRouteStep) Hibernate.unproxy(rawRouteStep);
 
-                        if (request == null ||
-                                        request.reservationId() == null ||
-                                        request.routeStepId() == null) {
-                                throw badRequest(
-                                                "Reservation and processing route step are required");
+                        if (routeStep.stepType != RouteStepType.PROCESSING) {
+                                throw badRequest("Selected QC route step is not a Processing step");
+                        }
+                        if (reservation.requisitionLine == null || reservation.requisitionLine.bomLine == null ||
+                                        routeStep.bomLine == null ||
+                                        !routeStep.bomLine.getId()
+                                                        .equals(reservation.requisitionLine.bomLine.getId())) {
+                                throw conflict("Processing route step does not belong to the reserved BOM material line");
+                        }
+                        accessService.requirePlantAccess(routeStep.location.getPlantCode());
+
+                        ProcessingJobResponse existing = jobRepository
+                                        .findByReservation_IdAndRouteStep_Id(reservationId, routeStepId)
+                                        .map(this::toResponse).orElse(null);
+                        if (existing != null) {
+                                return existing;
                         }
 
-                        MatFlowReservation reservation = reservationRepository
-                                        .findById(request.reservationId())
-                                        .orElseThrow(() -> notFound(
-                                                        "Reservation not found"));
-
-                        MatFlowBomRouteStep routeStep = routeRepository
-                                        .findById(request.routeStepId())
-                                        .orElseThrow(() -> notFound(
-                                                        "Route step not found"));
-
-                        if (routeStep.stepType != MatFlowPlanningTypes.RouteStepType.PROCESSING) {
-                                throw badRequest(
-                                                "Selected route step is not a processing step");
-                        }
-
-                        if (!routeStep.bomLine.getId()
-                                        .equals(
-                                                        reservation.requisitionLine.bomLine
-                                                                        .getId())) {
-                                throw conflict(
-                                                "Route step does not belong to the reservation BOM line");
-                        }
-
-                        accessService.requirePlantAccess(
-                                        routeStep.location.getPlantCode());
-
-                        if (jobRepository
-                                        .findByReservation_IdAndRouteStep_Id(
-                                                        reservation.getId(),
-                                                        routeStep.getId())
-                                        .isPresent()) {
-                                throw conflict(
-                                                "A processing job already exists for this reservation and route step");
-                        }
-
-                        if (reservation.status != ReservationStatus.ACTIVE) {
-                                throw conflict(
-                                                "Processing requires an active, not-yet-issued material reservation");
-                        }
-
-                        /*
-                         * vNext processing semantics:
-                         * PROCESSING steps in the approved BOM are permitted QC routing
-                         * options, not a mandatory sequence. The QC actor selects at most
-                         * one Processing Unit for the inspected lot. Therefore job creation
-                         * must validate the exact transfer created by the QC routing gate,
-                         * not demand completion of lower-sequence processing options.
-                         */
-                        boolean inboundSelectedProcessingTransferReceived = transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAsc(reservation.getId())
+                        boolean receivedAtProcessor = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAsc(reservationId)
                                         .stream()
-                                        .filter(transfer -> transfer != null
-                                                        && transfer.toLocation != null
-                                                        && routeStep.location != null
-                                                        && transfer.toLocation.getId()
-                                                                        .equals(routeStep.location.getId())
-                                                        && transfer.status == TransferStatus.RECEIVED)
+                                        .filter(transfer -> transfer != null && transfer.toLocation != null &&
+                                                        transfer.status == TransferStatus.RECEIVED &&
+                                                        routeStep.location.getId().equals(transfer.toLocation.getId()))
                                         .anyMatch(transfer -> transferLineRepository
                                                         .findFirstByTransferOrder_IdOrderByCreatedAtAsc(
                                                                         transfer.getId())
-                                                        .map(line -> routeStep.getId().equals(line.routeStepId))
+                                                        .map(line -> routeStepId.equals(line.routeStepId))
                                                         .orElse(false));
-
-                        if (!inboundSelectedProcessingTransferReceived) {
-                                throw conflict(
-                                                "QC has not routed and fully received this reservation at the selected Processing Unit");
-                        }
-
-                        MatFlowMaterial outputMaterial = request.outputMaterialId() == null
-                                        ? reservation.material
-                                        : materialRepository
-                                                        .findById(
-                                                                        request.outputMaterialId())
-                                                        .orElseThrow(() -> notFound(
-                                                                        "Output material not found"));
-
-                        if (!reservation.material
-                                        .getUom()
-                                        .equalsIgnoreCase(
-                                                        outputMaterial.getUom())) {
-                                throw badRequest(
-                                                "Input and output materials must use the same UOM");
-                        }
-
-                        BigDecimal plannedQty = positive(
-                                        request.plannedInputQty(),
-                                        "Planned input quantity");
-
-                        BigDecimal reservationQty = scale(reservation.reservedQty);
-
-                        /*
-                         * One ProcessingJob is allowed per reservation + route step. Therefore
-                         * a job must process the complete reserved lot at that step; allowing a
-                         * smaller planned quantity would strand the remainder with no legal
-                         * second job for the same route step.
-                         */
-                        if (plannedQty.compareTo(reservationQty) != 0) {
-                                throw conflict(
-                                                "Planned processing quantity must equal the complete reserved quantity of "
-                                                                +
-                                                                reservationQty);
+                        if (!receivedAtProcessor) {
+                                throw conflict("Material has not yet been received by the selected Processing Unit");
                         }
 
                         String actor = accessService.actor();
-
                         MatFlowProcessingJob job = new MatFlowProcessingJob();
-
                         job.jobNumber = generateNumber("MFP");
-
                         job.requisition = reservation.requisitionLine.requisition;
-
                         job.reservation = reservation;
                         job.routeStep = routeStep;
                         job.location = routeStep.location;
                         job.inputMaterial = reservation.material;
-                        job.outputMaterial = outputMaterial;
-                        job.plannedInputQty = plannedQty;
+                        job.outputMaterial = reservation.material;
+                        job.plannedInputQty = scale(reservation.reservedQty);
                         job.status = ProcessingJobStatus.PENDING;
-                        job.remarks = clean(request.remarks());
-
+                        job.remarks = clean(remarks);
                         job.setCreatedBy(actor);
                         job.setUpdatedBy(actor);
-
                         job = jobRepository.save(job);
 
                         auditService.record(
-                                        "PROCESSING_JOB",
-                                        job.getId(),
-                                        "PROCESSING_JOB_CREATED",
+                                        "PROCESSING_JOB", job.getId(), "PROCESSING_JOB_QUEUED_FROM_QC",
                                         job.location.getPlantCode(),
-                                        job.requisition.projectDrawing == null ? null
+                                        job.requisition == null || job.requisition.projectDrawing == null ? null
                                                         : job.requisition.projectDrawing.getProjectCode(),
-                                        job.requisition.projectDrawing == null ? null
+                                        job.requisition == null || job.requisition.projectDrawing == null ? null
                                                         : job.requisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
                                                         "jobNumber", job.jobNumber,
-                                                        "reservationId", reservation.getId(),
-                                                        "routeStepId", routeStep.getId(),
-                                                        "processCode", routeStep.processCode,
-                                                        "plannedInputQty", plannedQty));
-
-                        requisitionService.refreshState(job.requisition.getId(), actor);
+                                                        "reservationId", reservationId,
+                                                        "routeStepId", routeStepId,
+                                                        "plannedInputQty", job.plannedInputQty));
+                        if (job.requisition != null) {
+                                requisitionService.refreshState(job.requisition.getId(), actor);
+                        }
                         return toResponse(job);
                 }
 
@@ -907,81 +832,56 @@ public class MatFlowProductionService {
                         }
                 }
 
+                /**
+                 * Processing wastage creates replacement demand on the linked MR only.
+                 * Store remains the sole authority that may create a Purchase Indent
+                 * after checking physical inventory for that replacement demand.
+                 */
                 private void registerProcessingShortage(
                                 MatFlowProcessingJob job,
                                 BigDecimal wastageQty,
                                 String actor) {
                         MatFlowRequisitionLine requisitionLine = job.reservation.requisitionLine;
+                        if (requisitionLine == null || requisitionLine.requisition == null) {
+                                throw conflict("Processing job is not linked to a valid MR line");
+                        }
 
                         requisitionLine.reservedQty = scale(
-                                        requisitionLine.reservedQty
+                                        scale(requisitionLine.reservedQty)
                                                         .subtract(wastageQty)
                                                         .max(BigDecimal.ZERO));
-
                         requisitionLine.shortageQty = scale(
-                                        requisitionLine.shortageQty
+                                        scale(requisitionLine.shortageQty)
                                                         .add(wastageQty));
-
                         requisitionLine.setUpdatedBy(actor);
-
-                        requisitionLineRepository.save(
-                                        requisitionLine);
+                        requisitionLineRepository.save(requisitionLine);
 
                         MatFlowMaterialRequisition requisition = requisitionLine.requisition;
 
-                        requisitionService.refreshState(
-                                        requisition.getId(),
-                                        actor);
+                        auditService.record(
+                                        "REQUISITION_LINE",
+                                        requisitionLine.getId(),
+                                        "PROCESSING_REPLACEMENT_DEMAND_RAISED",
+                                        requisition.destinationLocation == null
+                                                        ? job.location.getPlantCode()
+                                                        : requisition.destinationLocation.getPlantCode(),
+                                        requisition.projectDrawing == null
+                                                        ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null
+                                                        ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "requisitionNumber", requisition.requisitionNumber,
+                                                        "processingJobNumber", job.jobNumber,
+                                                        "materialCode", job.inputMaterial == null
+                                                                        ? null
+                                                                        : job.inputMaterial.getMaterialCode(),
+                                                        "replacementQty", wastageQty,
+                                                        "nextOwner", "STORE",
+                                                        "nextAction", "CHECK_STOCK_AND_RAISE_PI_IF_REQUIRED"));
 
-                        MatFlowIndent indent = new MatFlowIndent();
-
-                        indent.indentNumber = generateNumber("MFI");
-
-                        indent.requisition = requisition;
-
-                        indent.projectDrawing = requisition.projectDrawing;
-
-                        indent.bom = requisition.bom;
-
-                        List<MatFlowBomRouteStep> approvedRoute = routeRepository
-                                        .findByBomLine_IdOrderBySequenceNoAsc(requisitionLine.bomLine.getId());
-
-                        MatFlowBomRouteStep qcStep = approvedRoute.stream()
-                                        .filter(step -> step != null &&
-                                                        step.stepType == RouteStepType.QC &&
-                                                        step.location != null)
-                                        .findFirst()
-                                        .orElseThrow(() -> conflict(
-                                                        "Processing-wastage replacement cannot be purchased because the approved BOM line has no QC route step"));
-
-                        indent.deliverToLocation = qcStep.location;
-
-                        indent.status = MatFlowPlanningTypes.IndentStatus.AUTO_CREATED;
-
-                        indent.autoGenerated = true;
-
-                        indent.remarks = "Automatically created for processing wastage; replacement must re-enter through approved QC";
-
-                        indent.setCreatedBy(actor);
-                        indent.setUpdatedBy(actor);
-
-                        indent = indentRepository.save(indent);
-
-                        MatFlowIndentLine indentLine = new MatFlowIndentLine();
-
-                        indentLine.indent = indent;
-                        indentLine.requisitionLine = requisitionLine;
-                        indentLine.material = job.inputMaterial;
-                        indentLine.requiredQty = wastageQty;
-                        indentLine.orderedQty = BigDecimal.ZERO;
-                        indentLine.receivedQty = BigDecimal.ZERO;
-                        indentLine.uom = job.inputMaterial.getUom();
-                        indentLine.remarks = "Replacement required for processing wastage";
-
-                        indentLine.setCreatedBy(actor);
-                        indentLine.setUpdatedBy(actor);
-
-                        indentLineRepository.save(indentLine);
+                        requisitionService.refreshState(requisition.getId(), actor);
                 }
 
                 private MatFlowProcessingJob requireJob(
@@ -1295,6 +1195,8 @@ public class MatFlowProductionService {
                                                 "Production consumption requisition has no Project/Drawing");
                         }
 
+                        accessService.requireProductionOwnership(requisition.requestedBy);
+
                         MatFlowLocation productionLocation = locationRepository
                                         .findById(
                                                         request.productionLocationId())
@@ -1415,14 +1317,12 @@ public class MatFlowProductionService {
                                                 lineRequest.quantity(),
                                                 "Consumption quantity");
 
-                                BigDecimal outstandingIssued = scale(
-                                                requisitionLine.issuedQty)
-                                                .subtract(
-                                                                scale(
-                                                                                requisitionLine.consumedQty))
-                                                .subtract(
-                                                                scale(
-                                                                                requisitionLine.returnedQty));
+                                BigDecimal outstandingIssued = scale(requisitionLine.issuedQty)
+                                                .subtract(scale(requisitionLine.consumedQty))
+                                                .subtract(scale(requisitionLine.returnedQty))
+                                                .subtract(productionWasteForLine(requisitionLine.getId()))
+                                                .max(BigDecimal.ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
 
                                 if (outstandingIssued.compareTo(
                                                 BigDecimal.ZERO) <= 0) {
@@ -1532,6 +1432,154 @@ public class MatFlowProductionService {
                                         actor);
 
                         return toResponse(consumption);
+                }
+
+                ProductionWasteResponse recordWaste(ProductionWasteRequest request) {
+                        accessService.requireProductionRequest();
+                        if (request == null || request.requisitionId() == null ||
+                                        request.productionLocationId() == null || request.lines() == null ||
+                                        request.lines().isEmpty()) {
+                                throw badRequest("Requisition, Production location and wastage lines are required");
+                        }
+
+                        MatFlowMaterialRequisition requisition = requisitionRepository.findById(request.requisitionId())
+                                        .orElseThrow(() -> notFound("Requisition not found"));
+                        requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(requisition);
+                        if (requisition.destinationLocation != null) {
+                                requisition.destinationLocation = (MatFlowLocation) Hibernate
+                                                .unproxy(requisition.destinationLocation);
+                        }
+                        if (requisition.projectDrawing != null) {
+                                requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate
+                                                .unproxy(requisition.projectDrawing);
+                        }
+                        accessService.requireProductionOwnership(requisition.requestedBy);
+                        if (requisition.status != RequisitionStatus.PRODUCTION_STARTED) {
+                                throw conflict("Production wastage can be recorded only after Production has started");
+                        }
+
+                        MatFlowLocation location = locationRepository.findById(request.productionLocationId())
+                                        .orElseThrow(() -> notFound("Production location not found"));
+                        location = (MatFlowLocation) Hibernate.unproxy(location);
+                        accessService.requirePlantAccess(location.getPlantCode());
+                        if (location.getLocationType() != LocationType.PRODUCTION ||
+                                        requisition.destinationLocation == null ||
+                                        !location.getId().equals(requisition.destinationLocation.getId())) {
+                                throw conflict("Wastage must be recorded at the requisition Production location");
+                        }
+
+                        String actor = accessService.actor();
+                        LocalDateTime now = LocalDateTime.now();
+                        Set<UUID> uniqueLines = new HashSet<>();
+                        List<ProductionWasteLineResponse> responses = new java.util.ArrayList<>();
+
+                        for (ProductionWasteLineRequest lineRequest : request.lines()) {
+                                if (lineRequest == null || lineRequest.requisitionLineId() == null ||
+                                                !uniqueLines.add(lineRequest.requisitionLineId())) {
+                                        throw badRequest("Every wastage line must identify a unique MR material line");
+                                }
+                                MatFlowRequisitionLine line = requisitionLineRepository
+                                                .findById(lineRequest.requisitionLineId())
+                                                .orElseThrow(() -> notFound("Requisition material line not found"));
+                                line = (MatFlowRequisitionLine) Hibernate.unproxy(line);
+                                if (line.requisition == null || !requisition.getId().equals(line.requisition.getId())) {
+                                        throw badRequest(
+                                                        "Wastage line does not belong to the selected Material Requisition");
+                                }
+                                MatFlowMaterial rawMaterial = line.issuedMaterial == null ? line.material
+                                                : line.issuedMaterial;
+                                if (rawMaterial == null) {
+                                        throw conflict("Requisition line has no issued material");
+                                }
+                                final MatFlowMaterial material = (MatFlowMaterial) Hibernate.unproxy(rawMaterial);
+
+                                BigDecimal qty = positive(lineRequest.wastedQty(), "Wasted quantity");
+                                BigDecimal remainingIssued = scale(line.issuedQty)
+                                                .subtract(scale(line.consumedQty))
+                                                .subtract(scale(line.returnedQty))
+                                                .subtract(productionWasteForLine(line.getId()))
+                                                .max(BigDecimal.ZERO).setScale(3, RoundingMode.HALF_UP);
+                                if (qty.compareTo(remainingIssued) > 0) {
+                                        throw conflict("Wastage exceeds unaccounted issued quantity for "
+                                                        + material.getMaterialCode());
+                                }
+
+                                MatFlowStockBalance balance = stockRepository
+                                                .lockBalance(material.getId(), location.getId())
+                                                .orElseThrow(() -> conflict("Production stock balance not found for "
+                                                                + material.getMaterialCode()));
+                                BigDecimal usable = scale(balance.onHandQty).subtract(scale(balance.blockedQty));
+                                if (usable.compareTo(qty) < 0) {
+                                        throw conflict("Insufficient Production stock for wastage of "
+                                                        + material.getMaterialCode());
+                                }
+                                balance.onHandQty = scale(balance.onHandQty).subtract(qty).setScale(3,
+                                                RoundingMode.HALF_UP);
+                                balance.setUpdatedBy(actor);
+                                balance = stockRepository.save(balance);
+
+                                MatFlowStockLedger ledger = new MatFlowStockLedger();
+                                ledger.material = material;
+                                ledger.location = location;
+                                ledger.movementType = MovementType.SCRAP;
+                                ledger.quantityChange = qty.negate();
+                                ledger.reservedChange = BigDecimal.ZERO;
+                                ledger.blockedChange = BigDecimal.ZERO;
+                                ledger.inTransitChange = BigDecimal.ZERO;
+                                ledger.onHandAfter = balance.onHandQty;
+                                ledger.reservedAfter = balance.reservedQty;
+                                ledger.blockedAfter = balance.blockedQty;
+                                ledger.inTransitAfter = balance.inTransitQty;
+                                ledger.referenceType = "MATFLOW_PRODUCTION_WASTE";
+                                ledger.referenceId = line.getId();
+                                ledger.referenceNumber = requisition.requisitionNumber;
+                                ledger.batchNo = clean(lineRequest.batchNo());
+                                ledger.projectCode = requisition.projectDrawing == null ? null
+                                                : requisition.projectDrawing.getProjectCode();
+                                ledger.drawingNo = requisition.projectDrawing == null ? null
+                                                : requisition.projectDrawing.getDrawingNo();
+                                ledger.remarks = clean(lineRequest.remarks());
+                                ledger.actor = actor;
+                                ledgerRepository.save(ledger);
+
+                                responses.add(new ProductionWasteLineResponse(
+                                                line.getId(), material.getId(), material.getMaterialCode(),
+                                                material.getMaterialName(), qty, material.getUom(),
+                                                clean(lineRequest.batchNo())));
+                        }
+
+                        auditService.record(
+                                        "REQUISITION", requisition.getId(), "PRODUCTION_WASTAGE_RECORDED",
+                                        location.getPlantCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "requisitionNumber", requisition.requisitionNumber,
+                                                        "lineCount", responses.size(),
+                                                        "totalWastedQty", responses.stream()
+                                                                        .map(ProductionWasteLineResponse::wastedQty)
+                                                                        .reduce(BigDecimal.ZERO, BigDecimal::add)));
+                        requisitionService.refreshState(requisition.getId(), actor);
+
+                        return new ProductionWasteResponse(
+                                        requisition.getId(), requisition.requisitionNumber,
+                                        location.getId(), location.getLocationCode(), location.getPlantCode(),
+                                        actor, now, clean(request.remarks()), List.copyOf(responses));
+                }
+
+                BigDecimal productionWasteForLine(UUID requisitionLineId) {
+                        if (requisitionLineId == null) {
+                                return BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                        }
+                        return ledgerRepository.findAll().stream()
+                                        .filter(entry -> entry != null && entry.movementType == MovementType.SCRAP)
+                                        .filter(entry -> "MATFLOW_PRODUCTION_WASTE".equals(entry.referenceType))
+                                        .filter(entry -> requisitionLineId.equals(entry.referenceId))
+                                        .map(entry -> scale(entry.quantityChange).abs())
+                                        .reduce(BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP), BigDecimal::add)
+                                        .setScale(3, RoundingMode.HALF_UP);
                 }
 
                 private ConsumptionResponse toResponse(

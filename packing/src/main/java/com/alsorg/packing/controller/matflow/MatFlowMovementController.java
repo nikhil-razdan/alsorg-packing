@@ -3,71 +3,37 @@ package com.alsorg.packing.controller.matflow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferActionRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.TransferStatus;
 import com.alsorg.packing.service.matflow.MatFlowMovementService;
-
+import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
 import jakarta.validation.Valid;
-
 import java.util.List;
 import java.util.UUID;
-
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Physical movement controller: route transfers + Production material returns.
- *
- * Direct reservation issue is intentionally not exposed here; Store issue is
- * owned only by MatFlowRequisitionController/MatFlowRequisitionService.
- */
+/** Production material-return boundary; no public Transfer document API exists. */
 @RestController
 @RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowMovementController {
-
     private final MatFlowMovementService service;
+    private final MatFlowSafeDeleteService safeDeleteService;
 
-    public MatFlowMovementController(MatFlowMovementService service) {
+    public MatFlowMovementController(
+            MatFlowMovementService service,
+            MatFlowSafeDeleteService safeDeleteService) {
         this.service = service;
+        this.safeDeleteService = safeDeleteService;
     }
-
-    /* -------------------- Transfers -------------------- */
-
-    @GetMapping("/transfers")
-    public List<TransferResponse> transfers(
-            @RequestParam(required = false) TransferStatus status,
-            @RequestParam(required = false) String plantCode) {
-        return service.listTransfers(status, plantCode);
-    }
-
-    @GetMapping("/transfers/{id}")
-    public TransferResponse transfer(@PathVariable UUID id) {
-        return service.getTransfer(id);
-    }
-
-    @PostMapping("/transfers/{id}/dispatch")
-    public TransferResponse dispatchTransfer(
-            @PathVariable UUID id,
-            @Valid @RequestBody TransferActionRequest request) {
-        return service.dispatchTransfer(id, request);
-    }
-
-    @PostMapping("/transfers/{id}/receive")
-    public TransferResponse receiveTransfer(
-            @PathVariable UUID id,
-            @Valid @RequestBody TransferActionRequest request) {
-        return service.receiveTransfer(id, request);
-    }
-
-    /* -------------------- Production material returns -------------------- */
 
     @GetMapping("/material-returns")
     public List<MaterialReturnResponse> materialReturns() {
@@ -78,6 +44,14 @@ public class MatFlowMovementController {
     public MaterialReturnResponse createReturn(
             @Valid @RequestBody MaterialReturnCreateRequest request) {
         return service.createReturn(request);
+    }
+
+    @DeleteMapping("/material-returns/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDraftReturn(
+            @PathVariable UUID id,
+            @RequestParam Long rowVersion) {
+        safeDeleteService.deleteDraftMaterialReturn(id, rowVersion);
     }
 
     @PostMapping("/material-returns/{id}/dispatch")

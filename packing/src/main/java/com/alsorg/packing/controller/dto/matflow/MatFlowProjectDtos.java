@@ -1,13 +1,11 @@
 package com.alsorg.packing.controller.dto.matflow;
 
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** API contract for the Project -> Products portfolio aggregate. */
+/** API contract for the approval-free Project -> Products aggregate. */
 public final class MatFlowProjectDtos {
     private MatFlowProjectDtos() {
     }
@@ -35,43 +33,29 @@ public final class MatFlowProjectDtos {
             Long rowVersion) {
     }
 
-    public record ProductApprovalRequest(
-            Long rowVersion,
-            String remarks) {
-    }
-
+    /**
+     * Administrative Product row: identity + latest BOM readiness only.
+     * Material execution/shortage/quantity metrics belong to the tracker.
+     */
     public record ProductPortfolioRow(
             UUID id,
             String productName,
             String drawingNo,
             String drawingRevision,
             LocalDate requiredDate,
-            ProjectProductApprovalStatus approvalStatus,
-            String approvedBy,
-            LocalDateTime approvedAt,
-            String returnedBy,
-            LocalDateTime returnedAt,
-            String approvalRemarks,
             boolean active,
             UUID latestBomId,
             String latestBomNumber,
             Integer latestBomRevision,
             String latestBomStatus,
             boolean bomEffective,
-            UUID latestRequisitionId,
-            String latestRequisitionNumber,
-            String requisitionStatus,
             String currentDepartment,
-            BigDecimal requestedQty,
-            BigDecimal reservedQty,
-            BigDecimal shortageQty,
-            BigDecimal issuedQty,
-            BigDecimal consumedQty,
             Long rowVersion,
             LocalDateTime createdAt,
             LocalDateTime updatedAt) {
     }
 
+    /** Project master response intentionally stays small and non-duplicative. */
     public record ProjectPortfolioResponse(
             UUID id,
             String projectCode,
@@ -84,10 +68,6 @@ public final class MatFlowProjectDtos {
             String remarks,
             boolean active,
             int productCount,
-            int approvedProductCount,
-            int completedProductCount,
-            int shortageProductCount,
-            BigDecimal materialCoveragePercent,
             String currentDepartment,
             String health,
             Long rowVersion,

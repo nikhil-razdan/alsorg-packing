@@ -2,7 +2,7 @@ package com.alsorg.packing.controller.matflow;
 
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.RequisitionCancelRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.ReservationReleaseRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.PartialAvailabilityDecisionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.IndentResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
@@ -11,17 +11,16 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Reservation
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
+import com.alsorg.packing.service.matflow.MatFlowMovementService;
 import com.alsorg.packing.service.matflow.MatFlowRequisitionService;
-
+import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
 import jakarta.validation.Valid;
-
 import java.util.List;
 import java.util.UUID;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,24 +30,28 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Single authority for requisition, Store review, reservations, shortages,
- * indent submission, Store issue and requisition control.
+ * Material Requisition + Store control boundary.
  *
- * Replaces PlanningController, StoreController, ControlController and
- * IndentController. Legacy automatic /requisitions/{id}/plan is removed.
+ * Production raises/submits the MR. Store allocates Store stock, decides QC or
+ * direct Production for each lot, and raises a linked PI for shortage. Internal
+ * custody rows are execution mechanics only and have no public Transfers desk.
  */
 @RestController
 @RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowRequisitionController {
-
     private final MatFlowRequisitionService service;
+    private final MatFlowMovementService movementService;
+    private final MatFlowSafeDeleteService safeDeleteService;
 
-    public MatFlowRequisitionController(MatFlowRequisitionService service) {
+    public MatFlowRequisitionController(
+            MatFlowRequisitionService service,
+            MatFlowMovementService movementService,
+            MatFlowSafeDeleteService safeDeleteService) {
         this.service = service;
+        this.movementService = movementService;
+        this.safeDeleteService = safeDeleteService;
     }
-
-    /* -------------------- Production requisition -------------------- */
 
     @GetMapping("/requisitions")
     public List<RequisitionResponse> requisitions() {
@@ -71,6 +74,14 @@ public class MatFlowRequisitionController {
         return service.createRequisition(request);
     }
 
+    @DeleteMapping("/requisitions/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDraftRequisition(
+            @PathVariable UUID id,
+            @RequestParam Long rowVersion) {
+        safeDeleteService.deleteDraftRequisition(id, rowVersion);
+    }
+
     @PostMapping("/requisitions/{id}/submit")
     public RequisitionResponse submitRequisition(
             @PathVariable UUID id,
@@ -85,22 +96,11 @@ public class MatFlowRequisitionController {
         return service.cancelRequisition(id, request);
     }
 
-    /**
-     * Production decision for a genuine partial-availability situation.
-     *
-     * ISSUE_AVAILABLE_NOW allows the already-reserved quantity to continue
-     * through its approved QC/Processing route while Purchase closes the
-     * shortage. HOLD_UNTIL_SHORTAGE_COMPLETE keeps the initial route transfer
-     * deferred until the shortage reaches zero.
-     */
-    @PostMapping("/requisitions/{id}/partial-availability-decision")
-    public RequisitionResponse decidePartialAvailability(
-            @PathVariable UUID id,
-            @Valid @RequestBody PartialAvailabilityDecisionRequest request) {
-        return service.decidePartialAvailability(id, request);
+    @GetMapping("/purchase-indents")
+    public List<IndentResponse> purchaseIndents(
+            @RequestParam(required = false) String plantCode) {
+        return service.listPurchaseIndents(plantCode);
     }
-
-    /* -------------------- Store desk -------------------- */
 
     @GetMapping("/store/requisitions")
     public List<RequisitionResponse> storeQueue(
@@ -125,29 +125,18 @@ public class MatFlowRequisitionController {
         return service.reviewRequisition(id, request);
     }
 
+    /** Store sends one complete allocated lot to QC or toward Production. */
     @PostMapping("/store/reservations/{reservationId}/issue")
     public PlanningResponse issueReservation(
             @PathVariable UUID reservationId,
             @Valid @RequestBody StoreIssueRequest request) {
-        return service.issueReservation(reservationId, request);
+        return movementService.advanceStoreReservation(reservationId, request);
     }
-
-    /* -------------------- Reservation control -------------------- */
 
     @PostMapping("/reservations/{id}/release")
     public ReservationResponse releaseReservation(
             @PathVariable UUID id,
             @Valid @RequestBody ReservationReleaseRequest request) {
         return service.releaseReservation(id, request);
-    }
-
-    /* -------------------- Shortage indent -------------------- */
-
-    @PatchMapping("/indents/{id}/submit-to-purchase")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void submitIndentToPurchase(
-            @PathVariable UUID id,
-            @Valid @RequestBody RequisitionActionRequest request) {
-        service.submitIndentToPurchase(id, request);
     }
 }

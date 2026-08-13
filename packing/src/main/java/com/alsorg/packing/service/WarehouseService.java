@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.alsorg.packing.domain.imports.ImportPreviewRow;
@@ -265,6 +266,127 @@ public class WarehouseService {
         }
 
         return result;
+    }
+
+    /* =========================================================
+     * ADMIN WAREHOUSE OPERATIONS
+     * ========================================================= */
+
+    @Transactional
+    public void adminReturnToDispatch(
+            String itemId,
+            String username) {
+
+        dispatchedItemService.requestReturnToDispatch(
+                itemId,
+                username);
+
+        /*
+         * ADMIN is already the approval authority. Completing both steps
+         * inside one transaction prevents an item being stranded in
+         * WAREHOUSE_RETURN_REQUESTED if the second step fails.
+         */
+        dispatchedItemService.approveReturnToDispatch(
+                itemId,
+                username);
+    }
+
+    @Transactional
+    public int adminBulkReturnToDispatch(
+            List<String> itemIds,
+            String username) {
+
+        List<String> uniqueIds = cleanUniqueIds(itemIds);
+
+        if (uniqueIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Select at least one warehouse item");
+        }
+
+        for (String itemId : uniqueIds) {
+            adminReturnToDispatch(
+                    itemId,
+                    username);
+        }
+
+        return uniqueIds.size();
+    }
+
+    @Transactional
+    public DispatchedItem adminEditLocation(
+            String itemId,
+            String plantCode,
+            String currentLocationCode,
+            String fgZoneCode,
+            String warehouseCode,
+            String username) {
+
+        return dispatchedItemService.assignPlantLocationToDispatchedItem(
+                itemId,
+                plantCode,
+                currentLocationCode,
+                fgZoneCode,
+                warehouseCode,
+                username);
+    }
+
+    @Transactional
+    public int adminBulkEditLocation(
+            List<String> itemIds,
+            String plantCode,
+            String currentLocationCode,
+            String fgZoneCode,
+            String warehouseCode,
+            String username) {
+
+        List<String> uniqueIds = cleanUniqueIds(itemIds);
+
+        if (uniqueIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Select at least one warehouse item");
+        }
+
+        if (plantCode == null || plantCode.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Plant code required");
+        }
+
+        for (String itemId : uniqueIds) {
+            adminEditLocation(
+                    itemId,
+                    plantCode.trim(),
+                    cleanNullable(currentLocationCode),
+                    cleanNullable(fgZoneCode),
+                    cleanNullable(warehouseCode),
+                    username);
+        }
+
+        return uniqueIds.size();
+    }
+
+    private List<String> cleanUniqueIds(
+            List<String> itemIds) {
+
+        if (itemIds == null) {
+            return List.of();
+        }
+
+        return itemIds.stream()
+                .filter(id -> id != null && !id.trim().isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+    }
+
+    private String cleanNullable(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim();
+        return clean.isBlank() ? null : clean;
     }
 
     public int generateMissingGatePassForStoredItems(

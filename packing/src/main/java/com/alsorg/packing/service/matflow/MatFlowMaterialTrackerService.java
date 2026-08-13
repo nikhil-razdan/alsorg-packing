@@ -44,7 +44,7 @@ import org.springframework.web.server.ResponseStatusException;
  * </p>
  *
  * <p>
- * The result lets a Director/Manager (and every existing MatFlow read role)
+ * The result lets a Manager (and every existing MatFlow read role)
  * answer: where is this material now, where was it before, where should it go
  * next, which Project/Product owns the demand, how much is at each branch, and
  * how long every custody state took.
@@ -555,6 +555,7 @@ public class MatFlowMaterialTrackerService {
                 .count() > 1;
 
         addConsumptionMilestones(context, line, milestones, lineAggregate);
+        addProductionWasteMilestones(line, milestones, lineAggregate);
         addReturnMilestones(context, line, milestones, lineAggregate);
 
         List<MaterialCustodyEvent> history = finalizeHistory(milestones);
@@ -818,22 +819,27 @@ public class MatFlowMaterialTrackerService {
         }
 
         if (order != null) {
-            addMilestone(milestones, "PURCHASE_ORDER", "Purchase Order created", "PURCHASE / DIRECTOR",
-                    order.deliveryLocation, "PURCHASE_ORDER_DRAFT", order.getCreatedAt(), order.getCreatedBy(),
+            boolean placed = !"DRAFT".equals(enumName(order.status));
+            addMilestone(milestones, "PURCHASE_ORDER",
+                    placed ? "Purchase Order placed" : "Purchase Order created",
+                    "PURCHASE",
+                    placed ? null : order.deliveryLocation,
+                    placed ? "SUPPLIER_ORDERED" : "PURCHASE_ORDER_DRAFT",
+                    placed ? firstNonNull(order.approvedAt, order.getUpdatedAt()) : order.getCreatedAt(),
+                    placed && order.approvedBy != null ? order.approvedBy : order.getCreatedBy(),
                     scale(poLine.orderedQty), "PURCHASE_ORDER", order.getId(), order.poNumber,
-                    "REQUISITION_LINE", "PO prepared for the material shortage.");
-            addMilestone(milestones, "SUPPLIER", "Purchase Order approved / placed", "SUPPLIER",
-                    null, "SUPPLIER_ORDERED", order.approvedAt, order.approvedBy,
-                    scale(poLine.orderedQty), "PURCHASE_ORDER", order.getId(), order.poNumber,
-                    "REQUISITION_LINE", order.vendor == null ? "Approved PO released to supplier."
-                            : "Approved PO released to " + order.vendor.vendorName + ".");
+                    "REQUISITION_LINE",
+                    placed
+                            ? (order.vendor == null ? "PO placed with supplier."
+                                    : "PO placed with " + order.vendor.vendorName + ".")
+                            : "Purchase is preparing the PO against the Store PI.");
         }
 
         if (receipt != null) {
             addMilestone(milestones, "GRN", "Material received / GRN", "STORE / RECEIVING",
                     receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                     scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
-                    "REQUISITION_LINE", "Vendor material physically received and blocked for QC.");
+                    "REQUISITION_LINE", "Vendor material inwarded into Store stock. Store will allocate it to the MR and decide QC or direct Production.");
         }
     }
 
@@ -858,15 +864,20 @@ public class MatFlowMaterialTrackerService {
                 MatFlowPurchaseOrder order = poLine.purchaseOrder;
                 if (order == null)
                     continue;
-                addMilestone(milestones, "PURCHASE_ORDER", "Purchase Order created", "PURCHASE / DIRECTOR",
-                        order.deliveryLocation, "PURCHASE_ORDER_DRAFT", order.getCreatedAt(), order.getCreatedBy(),
+                boolean placed = !"DRAFT".equals(enumName(order.status));
+                addMilestone(milestones, "PURCHASE_ORDER",
+                        placed ? "Purchase Order placed" : "Purchase Order created",
+                        "PURCHASE",
+                        placed ? null : order.deliveryLocation,
+                        placed ? "SUPPLIER_ORDERED" : "PURCHASE_ORDER_DRAFT",
+                        placed ? firstNonNull(order.approvedAt, order.getUpdatedAt()) : order.getCreatedAt(),
+                        placed && order.approvedBy != null ? order.approvedBy : order.getCreatedBy(),
                         scale(poLine.orderedQty), "PURCHASE_ORDER", order.getId(), order.poNumber,
-                        "REQUISITION_LINE", "PO created against this shortage line.");
-                addMilestone(milestones, "SUPPLIER", "Purchase Order approved / placed", "SUPPLIER",
-                        null, "SUPPLIER_ORDERED", order.approvedAt, order.approvedBy,
-                        scale(poLine.orderedQty), "PURCHASE_ORDER", order.getId(), order.poNumber,
-                        "REQUISITION_LINE", order.vendor == null ? "Approved PO released to supplier."
-                                : "Approved PO released to " + order.vendor.vendorName + ".");
+                        "REQUISITION_LINE",
+                        placed
+                                ? (order.vendor == null ? "PO placed with supplier."
+                                        : "PO placed with " + order.vendor.vendorName + ".")
+                                : "Purchase is preparing the PO against this Store PI line.");
 
                 for (MatFlowGoodsReceiptLine receiptLine : context.receiptLines()) {
                     if (receiptLine.purchaseOrderLine == null
@@ -878,7 +889,7 @@ public class MatFlowMaterialTrackerService {
                         addMilestone(milestones, "GRN", "Material received / GRN", "STORE / RECEIVING",
                                 receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                                 scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
-                                "REQUISITION_LINE", "Physical receipt; accepted quantity still depends on QC.");
+                                "REQUISITION_LINE", "Physical receipt into Store stock; Store will allocate this quantity and decide whether QC is required.");
                     }
                     context.inspections().stream()
                             .filter(qc -> receiptLine.getId().equals(qc.sourceLineId))
@@ -1007,6 +1018,47 @@ public class MatFlowMaterialTrackerService {
                             ? "Consumption is recorded at requisition-line level because multiple reservations feed this line."
                             : "Issued material consumed in Production.");
         }
+    }
+
+    private void addProductionWasteMilestones(
+            MatFlowRequisitionLine line,
+            List<Milestone> milestones,
+            boolean lineAggregate) {
+        if (line == null || line.getId() == null)
+            return;
+        for (MatFlowStockLedger ledger : productionWasteEntries(line.getId())) {
+            addMilestone(milestones,
+                    "PRODUCTION_WASTE",
+                    "Material marked wasted in Production",
+                    "PRODUCTION",
+                    ledger.location,
+                    "WASTED",
+                    ledger.actionAt,
+                    ledger.actor,
+                    scale(ledger.quantityChange).abs(),
+                    "PRODUCTION_WASTE",
+                    line.getId(),
+                    ledger.referenceNumber,
+                    lineAggregate ? "REQUISITION_LINE" : "RESERVATION_LOT",
+                    ledger.remarks == null ? "Issued material accounted as Production wastage." : ledger.remarks);
+        }
+    }
+
+    private List<MatFlowStockLedger> productionWasteEntries(UUID requisitionLineId) {
+        if (requisitionLineId == null)
+            return List.of();
+        return ledgerRepository.findAll((root, query, cb) -> cb.and(
+                cb.equal(root.get("movementType"), MovementType.SCRAP),
+                cb.equal(root.get("referenceType"), "MATFLOW_PRODUCTION_WASTE"),
+                cb.equal(root.get("referenceId"), requisitionLineId)),
+                Sort.by(Sort.Direction.ASC, "actionAt"));
+    }
+
+    private BigDecimal productionWasteForLine(UUID requisitionLineId) {
+        return productionWasteEntries(requisitionLineId).stream()
+                .map(entry -> scale(entry.quantityChange).abs())
+                .reduce(ZERO, BigDecimal::add)
+                .setScale(3, RoundingMode.HALF_UP);
     }
 
     private void addReturnMilestones(
@@ -1241,9 +1293,11 @@ public class MatFlowMaterialTrackerService {
                 }
             }
 
+            BigDecimal productionWastedQty = productionWasteForLine(line.getId());
             BigDecimal outstandingIssued = scale(line.issuedQty)
                     .subtract(scale(line.consumedQty))
                     .subtract(scale(line.returnedQty))
+                    .subtract(productionWastedQty)
                     .max(ZERO);
 
             if (outstandingIssued.compareTo(ZERO) > 0) {
@@ -1266,6 +1320,19 @@ public class MatFlowMaterialTrackerService {
                         reservation.getId(),
                         context.requisition().requisitionNumber,
                         false);
+            }
+
+            if (productionWastedQty.compareTo(ZERO) > 0 && outstandingIssued.compareTo(ZERO) <= 0) {
+                String state = scale(line.consumedQty).compareTo(ZERO) > 0
+                        ? "CONSUMED_AND_WASTED"
+                        : scale(line.returnedQty).compareTo(ZERO) > 0
+                                ? "WASTED_AND_RETURNED"
+                                : "WASTED";
+                MaterialCustodyEvent last = lastHistoryEvent(history);
+                return current(
+                        "CLOSED", "PRODUCTION", context.requisition().destinationLocation,
+                        state, last == null ? line.getUpdatedAt() : last.enteredAt(),
+                        "REQUISITION_LINE", line.getId(), context.requisition().requisitionNumber, true);
             }
 
             if (scale(line.returnedQty).compareTo(ZERO) > 0
@@ -1446,7 +1513,7 @@ public class MatFlowMaterialTrackerService {
             if (last.toLocation != null && last.toLocation.getLocationType() == LocationType.PRODUCTION
                     && scale(line.issuedQty).compareTo(ZERO) <= 0) {
                 return next("PRODUCTION", last.toLocation,
-                        "Store must explicitly issue the received material to Production.");
+                        "Production must acknowledge receipt of the arriving material before Production can start.");
             }
         }
 
@@ -1487,7 +1554,7 @@ public class MatFlowMaterialTrackerService {
                 .orElse(null);
         if (latestOrder != null) {
             boolean placed = !"DRAFT".equals(enumName(latestOrder.status));
-            return current("PURCHASE", placed ? "SUPPLIER / PURCHASE" : "PURCHASE / DIRECTOR",
+            return current("PURCHASE", placed ? "SUPPLIER / PURCHASE" : "PURCHASE",
                     placed ? null : latestOrder.deliveryLocation, placed ? "SUPPLIER_ORDERED" : "PURCHASE_ORDER_DRAFT",
                     placed ? firstNonNull(latestOrder.approvedAt, latestOrder.getUpdatedAt())
                             : latestOrder.getCreatedAt(),
@@ -1534,13 +1601,13 @@ public class MatFlowMaterialTrackerService {
                     latestOrder == null ? null : latestOrder.deliveryLocation,
                     "Receive supplier material through GRN at "
                             + safeLocationCode(latestOrder == null ? null : latestOrder.deliveryLocation)
-                            + " and send the received lot to QC.");
-            case "PURCHASE_ORDER_DRAFT" -> next("DIRECTOR / MANAGER", current.location(),
-                    "Approve and place the Draft Purchase Order.");
+                            + ". Store then re-reviews the MR and decides QC or direct Production.");
+            case "PURCHASE_ORDER_DRAFT" -> next("PURCHASE", current.location(),
+                    "Complete and place the Purchase Order against the linked PI and vendor.");
             case "SHORTAGE_CONFIRMED", "SHORTAGE_PENDING" -> next("PURCHASE", current.location(),
                     "Raise/complete a Purchase Order for the open shortage.");
-            default -> next("QC", current.location(),
-                    "Complete the shortage supply branch and release accepted stock through QC.");
+            default -> next("STORE", current.location(),
+                    "Complete the shortage supply branch, inward through GRN, then let Store allocate the received stock.");
         };
     }
 

@@ -1,10 +1,10 @@
 package com.alsorg.packing.controller.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductApprovalRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectRequest;
 import com.alsorg.packing.service.matflow.MatFlowProjectService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,9 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** True Project -> Products aggregate API. */
+/** Canonical approval-free Project -> Products aggregate API. */
 @RestController
-@RequestMapping("/api/matflow/project-portfolio")
+@RequestMapping("/api/matflow/projects")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowProjectController {
 
@@ -44,14 +44,14 @@ public class MatFlowProjectController {
     }
 
     @PostMapping
-    public ProjectPortfolioResponse create(@RequestBody ProjectRequest request) {
+    public ProjectPortfolioResponse create(@Valid @RequestBody ProjectRequest request) {
         return service.create(request);
     }
 
     @PutMapping("/{projectId}")
     public ProjectPortfolioResponse update(
             @PathVariable UUID projectId,
-            @RequestBody ProjectRequest request) {
+            @Valid @RequestBody ProjectRequest request) {
         return service.update(projectId, request);
     }
 
@@ -65,7 +65,7 @@ public class MatFlowProjectController {
     @PostMapping("/{projectId}/products")
     public ProjectPortfolioResponse addProduct(
             @PathVariable UUID projectId,
-            @RequestBody ProductRequest request) {
+            @Valid @RequestBody ProductRequest request) {
         return service.addProduct(projectId, request);
     }
 
@@ -73,7 +73,7 @@ public class MatFlowProjectController {
     public ProjectPortfolioResponse updateProduct(
             @PathVariable UUID projectId,
             @PathVariable UUID productId,
-            @RequestBody ProductRequest request) {
+            @Valid @RequestBody ProductRequest request) {
         return service.updateProduct(projectId, productId, request);
     }
 
@@ -83,21 +83,5 @@ public class MatFlowProjectController {
             @PathVariable UUID productId,
             @RequestParam Long rowVersion) {
         return service.deleteProduct(projectId, productId, rowVersion);
-    }
-
-    @PostMapping("/{projectId}/products/{productId}/approve")
-    public ProjectPortfolioResponse approveProduct(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @RequestBody ProductApprovalRequest request) {
-        return service.approveProduct(projectId, productId, request);
-    }
-
-    @PostMapping("/{projectId}/products/{productId}/return")
-    public ProjectPortfolioResponse returnProduct(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @RequestBody ProductApprovalRequest request) {
-        return service.returnProduct(projectId, productId, request);
     }
 }

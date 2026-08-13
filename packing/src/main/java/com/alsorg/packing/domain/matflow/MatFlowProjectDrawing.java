@@ -1,18 +1,25 @@
 package com.alsorg.packing.domain.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * Product / Item / Drawing under a MatFlowProject.
  *
- * The legacy project header columns are intentionally retained as synchronized
- * snapshots during the compatibility migration. Existing BOM, requisition,
- * indent, transfer and audit code can therefore continue using projectCode /
- * projectName / clientName / plantCode while new code uses the true parent
- * project association.
+ * Project/Product setup is approval-free. Legacy approval columns remain mapped
+ * only so old database rows can be read safely; all newly created Products are
+ * execution-eligible immediately.
  */
 @Entity
 @Table(name = "mf_project_drawings", uniqueConstraints = @UniqueConstraint(name = "uk_mf_project_drawing_revision", columnNames = {
@@ -29,7 +36,7 @@ public class MatFlowProjectDrawing extends MatFlowBaseEntity {
         @JoinColumn(name = "project_id", nullable = false)
         private MatFlowProject project;
 
-        /* Compatibility snapshots - populated from the parent Project. */
+        /* Compatibility snapshots populated from the parent Project. */
         @Column(name = "project_code", nullable = false, length = 100)
         private String projectCode;
 
@@ -60,9 +67,12 @@ public class MatFlowProjectDrawing extends MatFlowBaseEntity {
         @Column(name = "active", nullable = false)
         private boolean active = true;
 
+        /**
+         * Historical compatibility only; active workflow has no Product approval gate.
+         */
         @Enumerated(EnumType.STRING)
         @Column(name = "product_approval_status", nullable = false, length = 50)
-        private ProjectProductApprovalStatus productApprovalStatus = ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL;
+        private ProjectProductApprovalStatus productApprovalStatus = ProjectProductApprovalStatus.APPROVED;
 
         @Column(name = "product_approved_by", length = 150)
         private String productApprovedBy;
@@ -83,9 +93,7 @@ public class MatFlowProjectDrawing extends MatFlowBaseEntity {
                 return project;
         }
 
-        /**
-         * Sets the parent and synchronizes compatibility header snapshots.
-         */
+        /** Sets the parent and synchronizes compatibility header snapshots. */
         public void setProject(MatFlowProject value) {
                 this.project = value;
                 if (value != null) {
@@ -186,7 +194,7 @@ public class MatFlowProjectDrawing extends MatFlowBaseEntity {
 
         public void setProductApprovalStatus(ProjectProductApprovalStatus value) {
                 this.productApprovalStatus = value == null
-                                ? ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL
+                                ? ProjectProductApprovalStatus.APPROVED
                                 : value;
         }
 

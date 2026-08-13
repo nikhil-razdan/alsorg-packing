@@ -396,4 +396,40 @@ public class PacketController {
                                                 itemId,
                                                 req));
         }
+
+        /**
+         * Correct an already-packed item's packing date from Dispatch Admin Edit.
+         * The service also synchronizes DispatchedItem.packedAt and rebuilds the
+         * stored PDFs in StickerHistory, so no separate history endpoint is needed.
+         */
+        @PutMapping("/dispatched/{zohoItemId:.+}/admin-packing-date")
+        public ResponseEntity<?> adminUpdatePackingDate(
+                        @PathVariable String zohoItemId,
+                        @RequestBody AdminPackingDateRequest req,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.isAdmin(user)) {
+                        return ResponseEntity.status(403)
+                                        .body("Only ADMIN can edit packing date");
+                }
+
+                if (req == null ||
+                                req.packingDate() == null ||
+                                req.packingDate().isBlank()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Packing date is required");
+                }
+
+                return ResponseEntity.ok(
+                                packetService.adminUpdatePackingDateForDispatchedItem(
+                                                zohoItemId,
+                                                req.packingDate(),
+                                                user.getUsername()));
+        }
+
+        public record AdminPackingDateRequest(
+                        String packingDate) {
+        }
 }

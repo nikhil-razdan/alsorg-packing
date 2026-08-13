@@ -25,8 +25,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Consolidated read-model controller for dashboard/reporting, tracker and
- * integrity diagnostics.
+ * Consolidated read-model controller for dashboard/reporting, Production
+ * readiness, material tracking and integrity diagnostics. Internal custody
+ * transfers are read-model inputs only; they are not a public workflow desk.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -47,7 +48,7 @@ public class MatFlowInsightController {
         return service.dashboard(plantCode);
     }
 
-    @GetMapping({"/reports/products/{projectDrawingId}", "/reports/projects/{projectDrawingId}"})
+    @GetMapping("/reports/products/{projectDrawingId}")
     public ProjectTrackingResponse projectTracking(
             @PathVariable UUID projectDrawingId) {
         return service.projectTracking(projectDrawingId);
@@ -107,6 +108,18 @@ public class MatFlowInsightController {
     }
 
     /* -------------------- Smart tracker -------------------- */
+
+    /**
+     * Production Execution read model. Uses the same material-level tracker so
+     * Project/Product readiness, current owner/location and blockers never drift
+     * from the Control Tower.
+     */
+    @GetMapping("/production-readiness")
+    public TrackerResponse productionReadiness(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String plantCode) {
+        return service.tracker(search, plantCode, null);
+    }
 
     @GetMapping("/tracker")
     public TrackerResponse tracker(

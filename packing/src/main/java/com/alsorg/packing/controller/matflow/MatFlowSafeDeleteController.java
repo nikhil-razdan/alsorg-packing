@@ -46,27 +46,11 @@ public class MatFlowSafeDeleteController {
         service.deleteDraftRequisition(requisitionId, rowVersion);
     }
 
-    @DeleteMapping("/purchase-orders/{purchaseOrderId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteDraftPurchaseOrder(
-            @PathVariable UUID purchaseOrderId,
-            @RequestParam Long rowVersion) {
-        service.deleteDraftPurchaseOrder(purchaseOrderId, rowVersion);
-    }
-
     @DeleteMapping("/material-returns/{materialReturnId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteDraftMaterialReturn(
             @PathVariable UUID materialReturnId,
             @RequestParam Long rowVersion) {
         service.deleteDraftMaterialReturn(materialReturnId, rowVersion);
-    }
-
-    @DeleteMapping("/processing-jobs/{processingJobId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deletePendingProcessingJob(
-            @PathVariable UUID processingJobId,
-            @RequestParam Long rowVersion) {
-        service.deletePendingProcessingJob(processingJobId, rowVersion);
     }
 }

@@ -8,7 +8,7 @@ import { API_BASE_URL } from "../config"; import {
 import { useAuth } from "../auth/AuthContext";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
-	
+
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
@@ -88,6 +88,14 @@ function WarehousePage() {
 	const [bulkWarehouseApproveLoading, setBulkWarehouseApproveLoading] =
 		useState(false);
 	const [bulkGatePassNumber, setBulkGatePassNumber] = useState("");
+	const [bulkLocationOpen, setBulkLocationOpen] = useState(false);
+	const [bulkLocationLoading, setBulkLocationLoading] = useState(false);
+	const [bulkLocationForm, setBulkLocationForm] = useState({
+		plantCode: "",
+		currentLocationCode: "",
+		warehouseCode: "",
+		fgZoneCode: "",
+	});
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(20);
 
@@ -328,59 +336,77 @@ function WarehousePage() {
 
 	const requestReturn = async (id) => {
 		try {
-			const res = await fetch(
-				`${API_BASE_URL}/api/dispatched/${id}/request-return`,
-				{
-					method: "POST",
-					credentials: "include",
-				}
-			);
+			const endpoint = isAdmin
+				? `${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/return-to-dispatch`
+				: `${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/request-return`;
 
-			if (!res.ok) throw new Error();
+			const res = await fetch(endpoint, {
+				method: "POST",
+				credentials: "include",
+			});
 
-			fetchItems(); // refresh table
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Return to Dispatch failed");
+			}
+
+			await fetchItems();
 		} catch (err) {
 			console.error(err);
-			alert("Return request failed");
+			alert(err.message || "Return to Dispatch failed");
 		}
 	};
 
 	const bulkReturnToDispatch = async () => {
+
+		if (!isAdmin) {
+			alert("Only Admin can bulk return warehouse items to Dispatch");
+			return;
+		}
 
 		if (selectionModel.length === 0) {
 			alert("Select items first");
 			return;
 		}
 
+		if (!allWarehouseItems) {
+			alert("Bulk Return is available only for items currently stored in Warehouse");
+			return;
+		}
+
 		const confirmBulk = window.confirm(
-			`Return ${selectionModel.length} selected items to dispatch?`
+			`Return ${selectionModel.length} selected warehouse items directly to Dispatch?`
 		);
 
 		if (!confirmBulk) return;
 
 		try {
-
 			setBulkLoading(true);
 
-			await Promise.all(
-				selectionModel.map((id) =>
-					fetch(
-						`${API_BASE_URL}/api/dispatched/${id}/request-return`,
-						{
-							method: "POST",
-							credentials: "include",
-						}
-					)
-				)
+			const res = await fetch(
+				`${API_BASE_URL}/api/warehouse/admin/bulk-return-to-dispatch`,
+				{
+					method: "POST",
+					credentials: "include",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(selectionModel),
+				}
 			);
 
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Bulk return failed");
+			}
+
 			setSelectionModel([]);
-			fetchItems();
+			await fetchItems();
 
 		} catch (err) {
 
 			console.error(err);
-			alert("Bulk return failed");
+			alert(err.message || "Bulk return failed");
 
 		} finally {
 
@@ -544,7 +570,7 @@ function WarehousePage() {
 			setSavingAssignmentId(id);
 
 			const res = await fetch(
-				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/plant-location`,
+				`${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/location`,
 				{
 					method: "PATCH",
 					credentials: "include",
@@ -572,6 +598,98 @@ function WarehousePage() {
 			alert(err.message || "Location assignment failed");
 		} finally {
 			setSavingAssignmentId(null);
+		}
+	};
+
+	const openBulkLocationEdit = () => {
+		if (!isAdmin) {
+			return;
+		}
+
+		if (!allWarehouseItems || selectedWarehouseItems.length === 0) {
+			alert("Select only items currently stored in Warehouse");
+			return;
+		}
+
+		const commonValue = (getter) => {
+			const values = Array.from(
+				new Set(
+					selectedWarehouseItems
+						.map((row) => String(getter(row) || "").trim())
+						.filter(Boolean)
+				)
+			);
+
+			return values.length === 1 ? values[0] : "";
+		};
+
+		setBulkLocationForm({
+			plantCode: commonValue((row) => row.plantCode),
+			currentLocationCode: commonValue(
+				(row) => row.currentLocationCode || row.location
+			),
+			warehouseCode: commonValue((row) => row.warehouseCode),
+			fgZoneCode: commonValue((row) => row.fgZoneCode),
+		});
+
+		setBulkLocationOpen(true);
+	};
+
+	const saveBulkLocation = async () => {
+		if (!isAdmin) {
+			return;
+		}
+
+		if (!bulkLocationForm.plantCode) {
+			alert("Please select Plant");
+			return;
+		}
+
+		if (selectedWarehouseItems.length === 0 || !allWarehouseItems) {
+			alert("Selected warehouse items are no longer valid for bulk location edit");
+			setBulkLocationOpen(false);
+			return;
+		}
+
+		try {
+			setBulkLocationLoading(true);
+
+			const res = await fetch(
+				`${API_BASE_URL}/api/warehouse/admin/bulk-location`,
+				{
+					method: "PATCH",
+					credentials: "include",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						itemIds: selectedWarehouseItems.map((row) =>
+							getWarehouseRowId(row)
+						),
+						plantCode: bulkLocationForm.plantCode,
+						currentLocationCode:
+							bulkLocationForm.currentLocationCode || null,
+						warehouseCode:
+							bulkLocationForm.warehouseCode || null,
+						fgZoneCode:
+							bulkLocationForm.fgZoneCode || null,
+					}),
+				}
+			);
+
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text || "Bulk location update failed");
+			}
+
+			setBulkLocationOpen(false);
+			setSelectionModel([]);
+			await fetchItems();
+		} catch (err) {
+			console.error(err);
+			alert(err.message || "Bulk location update failed");
+		} finally {
+			setBulkLocationLoading(false);
 		}
 	};
 
@@ -1426,6 +1544,28 @@ function WarehousePage() {
 				// ===============================
 				if (row.status === "IN_WAREHOUSE") {
 
+					if (isAdmin) {
+						return (
+							<Box sx={actionCell}>
+								<Button
+									size="small"
+									onClick={() => requestReturn(row.zohoItemId)}
+									sx={actionWarning}
+								>
+									Return to Dispatch
+								</Button>
+
+								<Button
+									size="small"
+									onClick={() => startAssignmentEdit(row)}
+									sx={actionInfo}
+								>
+									Edit Location
+								</Button>
+							</Box>
+						);
+					}
+
 					if (isDispatch) {
 						return (
 							<Button
@@ -1433,19 +1573,7 @@ function WarehousePage() {
 								onClick={() => requestReturn(row.zohoItemId)}
 								sx={actionWarning}
 							>
-								Return to Dispatch
-							</Button>
-						);
-					}
-
-					if (isAdmin) {
-						return (
-							<Button
-								size="small"
-								onClick={() => startAssignmentEdit(row)}
-								sx={actionInfo}
-							>
-								Edit Location
+								Request Return
 							</Button>
 						);
 					}
@@ -2014,34 +2142,59 @@ function WarehousePage() {
 										: "✅ Bulk Approve Through Gate Pass"}
 								</Button>
 
-								<Button
-									disabled={!allWarehouseItems || bulkLoading}
-									onClick={bulkReturnToDispatch}
-									sx={{
-										minWidth: 220,
-										height: 44,
-										borderRadius: "14px",
-										fontWeight: 800,
-										textTransform: "none",
-										background: allWarehouseItems
-											? "linear-gradient(180deg,#f59e0b,#d97706)"
-											: "#64748b",
-										color: "#fff",
-										boxShadow: allWarehouseItems
-											? "0 10px 25px rgba(245,158,11,.35)"
-											: "none",
-
-										"&:hover": {
+								{isAdmin && (
+									<Button
+										disabled={!allWarehouseItems || bulkLoading}
+										onClick={bulkReturnToDispatch}
+										sx={{
+											minWidth: 220,
+											height: 44,
+											borderRadius: "14px",
+											fontWeight: 800,
+											textTransform: "none",
 											background: allWarehouseItems
-												? "linear-gradient(180deg,#fbbf24,#f59e0b)"
+												? "linear-gradient(180deg,#f59e0b,#d97706)"
 												: "#64748b",
-										},
-									}}
-								>
-									{bulkLoading
-										? "Processing..."
-										: "🔁 Bulk Return To Dispatch"}
-								</Button>
+											color: "#fff",
+											boxShadow: allWarehouseItems
+												? "0 10px 25px rgba(245,158,11,.35)"
+												: "none",
+
+											"&:hover": {
+												background: allWarehouseItems
+													? "linear-gradient(180deg,#fbbf24,#f59e0b)"
+													: "#64748b",
+											},
+										}}
+									>
+										{bulkLoading
+											? "Processing..."
+											: "🔁 Bulk Return To Dispatch"}
+									</Button>
+								)}
+
+								{isAdmin && (
+									<Button
+										disabled={!allWarehouseItems || bulkLocationLoading}
+										onClick={openBulkLocationEdit}
+										sx={{
+											minWidth: 190,
+											height: 44,
+											borderRadius: "14px",
+											fontWeight: 800,
+											textTransform: "none",
+											background: allWarehouseItems
+												? "linear-gradient(180deg,#2563eb,#1d4ed8)"
+												: "#64748b",
+											color: "#fff",
+											boxShadow: allWarehouseItems
+												? "0 10px 25px rgba(37,99,235,.30)"
+												: "none",
+										}}
+									>
+										📍 Bulk Edit Location
+									</Button>
+								)}
 
 								<Button
 									size="small"
@@ -2344,6 +2497,177 @@ function WarehousePage() {
 					</Box>
 				</div>
 			</div>
+			{bulkLocationOpen && (
+				<div
+					style={popupOverlay}
+					onClick={() => {
+						if (!bulkLocationLoading) {
+							setBulkLocationOpen(false);
+						}
+					}}
+				>
+					<div
+						style={{
+							...popupBox,
+							maxWidth: 720,
+						}}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<h2
+							style={{
+								marginBottom: 8,
+								fontSize: 24,
+								fontWeight: 900,
+								color: "#fff",
+							}}
+						>
+							Bulk Edit Warehouse Location
+						</h2>
+
+						<Box
+							sx={{
+								color: "#94a3b8",
+								fontSize: 13,
+								fontWeight: 700,
+								mb: 2.5,
+							}}
+						>
+							Admin will update {selectedWarehouseItems.length} stored item
+							{selectedWarehouseItems.length === 1 ? "" : "s"}.
+						</Box>
+
+						<Box
+							sx={{
+								display: "grid",
+								gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+								gap: 1.5,
+								mb: 2.5,
+							}}
+						>
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="Plant"
+								value={bulkLocationForm.plantCode}
+								onChange={(e) =>
+									setBulkLocationForm((prev) => ({
+										...prev,
+										plantCode: e.target.value,
+									}))
+								}
+								sx={compactActionFieldSx}
+							>
+								{plants.map((plant) => (
+									<MenuItem key={plant.plantCode} value={plant.plantCode}>
+										{plant.plantCode}
+									</MenuItem>
+								))}
+							</TextField>
+
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="Location"
+								value={bulkLocationForm.currentLocationCode}
+								onChange={(e) =>
+									setBulkLocationForm((prev) => ({
+										...prev,
+										currentLocationCode: e.target.value,
+									}))
+								}
+								sx={compactActionFieldSx}
+							>
+								<MenuItem value="">Auto / Keep Existing Warehouse</MenuItem>
+								{getLocationOptions(
+									bulkLocationForm.plantCode,
+									bulkLocationForm.currentLocationCode
+								).map((location) => (
+									<MenuItem key={location} value={location}>
+										{location}
+									</MenuItem>
+								))}
+							</TextField>
+
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="Warehouse"
+								value={bulkLocationForm.warehouseCode}
+								onChange={(e) =>
+									setBulkLocationForm((prev) => ({
+										...prev,
+										warehouseCode: e.target.value,
+										currentLocationCode:
+											e.target.value || prev.currentLocationCode,
+									}))
+								}
+								sx={compactActionFieldSx}
+							>
+								<MenuItem value="">No Warehouse</MenuItem>
+								{getWarehouseOptions(
+									bulkLocationForm.plantCode,
+									bulkLocationForm.warehouseCode
+								).map((warehouse) => (
+									<MenuItem key={warehouse} value={warehouse}>
+										{warehouse}
+									</MenuItem>
+								))}
+							</TextField>
+
+							<TextField
+								fullWidth
+								size="small"
+								label="FG Zone (optional)"
+								value={bulkLocationForm.fgZoneCode}
+								onChange={(e) =>
+									setBulkLocationForm((prev) => ({
+										...prev,
+										fgZoneCode: e.target.value,
+									}))
+								}
+								sx={compactActionFieldSx}
+							/>
+						</Box>
+
+						<Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5 }}>
+							<Button
+								disabled={bulkLocationLoading}
+								onClick={() => setBulkLocationOpen(false)}
+								sx={{
+									minWidth: 110,
+									height: 38,
+									borderRadius: "12px",
+									color: "#cbd5e1",
+									border: "1px solid rgba(255,255,255,.08)",
+									textTransform: "none",
+									fontWeight: 800,
+								}}
+							>
+								Cancel
+							</Button>
+
+							<Button
+								disabled={bulkLocationLoading || !bulkLocationForm.plantCode}
+								onClick={saveBulkLocation}
+								sx={{
+									minWidth: 165,
+									height: 38,
+									borderRadius: "12px",
+									color: "#fff",
+									background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+									textTransform: "none",
+									fontWeight: 900,
+								}}
+							>
+								{bulkLocationLoading ? "Saving..." : "Save All Locations"}
+							</Button>
+						</Box>
+					</div>
+				</div>
+			)}
 			{bulkWarehouseApproveOpen && (
 				<div
 					style={popupOverlay}

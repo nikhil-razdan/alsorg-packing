@@ -10,6 +10,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RouteStepRe
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RouteStepResponse;
 import com.alsorg.packing.domain.matflow.MatFlowBomStatus;
 import com.alsorg.packing.service.matflow.MatFlowBomService;
+import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -19,8 +20,8 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Product-specific Operational BOM controller.
- * Workflow: Engineering submit -> Production approve/return -> Director final
- * approve/return. Final Director approval alone makes the revision effective.
+ * Workflow: Engineering submit -> Production review/return. Production review
+ * makes the revision effective.
  */
 @RestController
 @RequestMapping("/api/matflow/boms")
@@ -28,9 +29,13 @@ import org.springframework.web.bind.annotation.*;
 public class MatFlowBomController {
 
     private final MatFlowBomService service;
+    private final MatFlowSafeDeleteService safeDeleteService;
 
-    public MatFlowBomController(MatFlowBomService service) {
+    public MatFlowBomController(
+            MatFlowBomService service,
+            MatFlowSafeDeleteService safeDeleteService) {
         this.service = service;
+        this.safeDeleteService = safeDeleteService;
     }
 
     @GetMapping
@@ -77,16 +82,24 @@ public class MatFlowBomController {
         return service.deleteLine(id, lineId, rowVersion);
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteDraftBom(
+            @PathVariable UUID id,
+            @RequestParam Long rowVersion) {
+        safeDeleteService.deleteDraftBom(id, rowVersion);
+    }
+
     @PostMapping("/{id}/submit")
     public BomDetailResponse submit(@PathVariable UUID id, @Valid @RequestBody BomActionRequest request) {
         return service.submit(id, request);
     }
 
-    @PostMapping("/{id}/production-approve")
-    public BomDetailResponse productionApprove(
+    @PostMapping("/{id}/production-review")
+    public BomDetailResponse productionReview(
             @PathVariable UUID id,
             @Valid @RequestBody BomActionRequest request) {
-        return service.approveByProduction(id, request);
+        return service.reviewByProduction(id, request);
     }
 
     @PostMapping("/{id}/production-return")
@@ -94,20 +107,6 @@ public class MatFlowBomController {
             @PathVariable UUID id,
             @Valid @RequestBody BomActionRequest request) {
         return service.returnByProduction(id, request);
-    }
-
-    @PostMapping("/{id}/director-approve")
-    public BomDetailResponse directorApprove(
-            @PathVariable UUID id,
-            @Valid @RequestBody BomActionRequest request) {
-        return service.approveByDirector(id, request);
-    }
-
-    @PostMapping("/{id}/director-return")
-    public BomDetailResponse directorReturn(
-            @PathVariable UUID id,
-            @Valid @RequestBody BomActionRequest request) {
-        return service.returnByDirector(id, request);
     }
 
     @PostMapping("/{id}/revisions")

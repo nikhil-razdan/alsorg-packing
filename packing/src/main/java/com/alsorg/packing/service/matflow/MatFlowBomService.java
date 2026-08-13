@@ -14,7 +14,6 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomUpdateRequest;
 
 import com.alsorg.packing.domain.matflow.*;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
 import com.alsorg.packing.repository.matflow.*;
 
@@ -34,13 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * BOM aggregate service: Engineering BOM authoring, approved material routes,
- * revision control and sequential Production + Director review/approval.
+ * BOM aggregate service: Engineering BOM authoring, optional Processing
+ * capabilities,
+ * revision control and final Production review.
  *
- * The former HOD intermediate service step is intentionally removed from the
- * public service contract: SUBMITTED -> Production approval -> Director final
- * approval/return is the active
- * workflow. No HOD intermediate approval exists.
+ * Engineering submits the BOM and Production performs the final operational
+ * review.
+ * Project/Product setup and BOM effectiveness do not require Director approval.
  */
 @Service
 public class MatFlowBomService {
@@ -116,18 +115,8 @@ public class MatFlowBomService {
         }
 
         @Transactional
-        public BomDetailResponse approveByProduction(UUID id, BomActionRequest request) {
-                return bom.productionApprove(id, request);
-        }
-
-        @Transactional
-        public BomDetailResponse approveByDirector(UUID id, BomActionRequest request) {
-                return bom.directorApprove(id, request);
-        }
-
-        @Transactional
-        public BomDetailResponse returnByDirector(UUID id, BomActionRequest request) {
-                return bom.directorReturn(id, request);
+        public BomDetailResponse reviewByProduction(UUID id, BomActionRequest request) {
+                return bom.productionReview(id, request);
         }
 
         @Transactional
@@ -280,9 +269,6 @@ public class MatFlowBomService {
                                 throw badRequest(
                                                 "Inactive project drawing cannot be used");
                         }
-
-                        requireApprovedProduct(project);
-
                         String actor = accessService.actor();
 
                         UUID revisionGroupId = UUID.randomUUID();
@@ -360,8 +346,6 @@ public class MatFlowBomService {
                                         throw badRequest(
                                                         "Inactive project drawing cannot be used");
                                 }
-
-                                requireApprovedProduct(project);
                                 bom.setProjectDrawing(project);
                         }
 
@@ -660,9 +644,6 @@ public class MatFlowBomService {
                         assertActionVersion(
                                         request,
                                         bom);
-
-                        requireApprovedProduct(bom.getProjectDrawing());
-
                         List<MatFlowBomLine> lines = lineRepository
                                         .findByBom_IdOrderByLineNoAsc(
                                                         bom.getId());
@@ -738,100 +719,26 @@ public class MatFlowBomService {
                 }
 
                 @Transactional
-                public BomDetailResponse productionApprove(
+                public BomDetailResponse productionReview(
                                 UUID id,
                                 BomActionRequest request) {
-
                         accessService.requireProductionBomReview();
-
                         MatFlowBom bom = requireBom(id);
-
                         if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
-                                throw conflict(
-                                                "Only an Engineering-submitted BOM can be reviewed by Production");
+                                throw conflict("Only an Engineering-submitted BOM can be reviewed by Production");
                         }
-
-                        if (bom.getProductionReviewedAt() != null ||
-                                        clean(bom.getProductionReviewedBy()) != null) {
-                                throw conflict(
-                                                "Production has already approved this BOM. It is now awaiting Director approval.");
-                        }
-
-                        assertActionVersion(request, bom);
-
-                        String actor = accessService.actor();
-                        String reviewRemarks = request == null
-                                        ? null
-                                        : clean(request.remarks());
-
-                        /*
-                         * Production approval is intentionally INTERMEDIATE.
-                         * The BOM remains SUBMITTED and non-effective until Director
-                         * performs the final approval. This prevents Store/Production
-                         * requisitions from using a BOM that has only one of the two
-                         * required approvals.
-                         */
-                        bom.setProductionReviewedBy(actor);
-                        bom.setProductionReviewedAt(LocalDateTime.now());
-                        bom.setProductionReviewRemarks(reviewRemarks);
-                        bom.setApprovedBy(null);
-                        bom.setApprovedAt(null);
-                        bom.setEffective(false);
-                        bom.setUpdatedBy(actor);
-
-                        MatFlowBom reviewedBom = bomRepository.saveAndFlush(bom);
-
-                        saveHistory(
-                                        reviewedBom,
-                                        MatFlowApprovalAction.PRODUCTION_APPROVED,
-                                        MatFlowBomStatus.SUBMITTED,
-                                        MatFlowBomStatus.SUBMITTED,
-                                        reviewRemarks,
-                                        actor);
-
-                        saveAudit(
-                                        reviewedBom,
-                                        "BOM_PRODUCTION_REVIEW_APPROVED",
-                                        auditDetails(
-                                                        "revisionNo", reviewedBom.getRevisionNo(),
-                                                        "productionReviewedBy", actor,
-                                                        "nextApproval", "DIRECTOR",
-                                                        "effective", false),
-                                        actor);
-
-                        return toDetail(reviewedBom);
-                }
-
-                @Transactional
-                public BomDetailResponse directorApprove(
-                                UUID id,
-                                BomActionRequest request) {
-
-                        accessService.requireDirectorBomReview();
-
-                        MatFlowBom bom = requireBom(id);
-
-                        if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
-                                throw conflict(
-                                                "Only a submitted BOM can receive final Director approval");
-                        }
-
-                        if (bom.getProductionReviewedAt() == null ||
-                                        clean(bom.getProductionReviewedBy()) == null) {
-                                throw conflict(
-                                                "Production approval is required before Director can approve this BOM");
-                        }
-
                         assertActionVersion(request, bom);
 
                         String actor = accessService.actor();
                         String remarks = request == null ? null : clean(request.remarks());
+                        LocalDateTime reviewedAt = LocalDateTime.now();
 
-                        /* Final approval: supersede the old effective revision here only. */
-                        bomRepository
-                                        .findFirstByRevisionGroupIdAndEffectiveTrue(
-                                                        bom.getRevisionGroupId())
-                                        .filter(previous -> !previous.getId().equals(bom.getId()))
+                        final UUID reviewedBomId = bom.getId();
+                        final UUID reviewedRevisionGroupId = bom.getRevisionGroupId();
+                        final Integer reviewedRevisionNo = bom.getRevisionNo();
+
+                        bomRepository.findFirstByRevisionGroupIdAndEffectiveTrue(reviewedRevisionGroupId)
+                                        .filter(previous -> !previous.getId().equals(reviewedBomId))
                                         .ifPresent(previous -> {
                                                 MatFlowBomStatus previousStatus = previous.getStatus();
                                                 previous.setEffective(false);
@@ -839,112 +746,40 @@ public class MatFlowBomService {
                                                 previous.setLatestRevision(false);
                                                 previous.setUpdatedBy(actor);
                                                 MatFlowBom superseded = bomRepository.save(previous);
-
-                                                saveHistory(
-                                                                superseded,
-                                                                MatFlowApprovalAction.SUPERSEDED,
-                                                                previousStatus,
-                                                                MatFlowBomStatus.SUPERSEDED,
-                                                                "Superseded by Director-approved revision "
-                                                                                + bom.getRevisionNo(),
+                                                saveHistory(superseded, MatFlowApprovalAction.SUPERSEDED,
+                                                                previousStatus, MatFlowBomStatus.SUPERSEDED,
+                                                                "Superseded by Production-reviewed revision "
+                                                                                + reviewedRevisionNo,
                                                                 actor);
-
-                                                saveAudit(
-                                                                superseded,
-                                                                "BOM_SUPERSEDED",
-                                                                auditDetails(
-                                                                                "supersededByBomId", bom.getId(),
+                                                saveAudit(superseded, "BOM_SUPERSEDED",
+                                                                auditDetails("supersededByBomId", reviewedBomId,
                                                                                 "supersededByRevisionNo",
-                                                                                bom.getRevisionNo()),
+                                                                                reviewedRevisionNo),
                                                                 actor);
                                         });
 
-                        bom.setStatus(MatFlowBomStatus.APPROVED);
-                        bom.setEffective(true);
-                        bom.setLatestRevision(true);
+                        bom.setProductionReviewedBy(actor);
+                        bom.setProductionReviewedAt(reviewedAt);
+                        bom.setProductionReviewRemarks(remarks);
+                        // Historical approvedBy/approvedAt columns now mirror final Production review.
                         bom.setApprovedBy(actor);
-                        bom.setApprovedAt(LocalDateTime.now());
+                        bom.setApprovedAt(reviewedAt);
                         bom.setReturnedBy(null);
                         bom.setReturnedAt(null);
                         bom.setReturnRemarks(null);
+                        bom.setStatus(MatFlowBomStatus.APPROVED);
+                        bom.setEffective(true);
+                        bom.setLatestRevision(true);
                         bom.setUpdatedBy(actor);
+                        bom = bomRepository.saveAndFlush(bom);
 
-                        MatFlowBom approvedBom = bomRepository.saveAndFlush(bom);
-
-                        saveHistory(
-                                        approvedBom,
-                                        MatFlowApprovalAction.DIRECTOR_APPROVED,
-                                        MatFlowBomStatus.SUBMITTED,
-                                        MatFlowBomStatus.APPROVED,
-                                        remarks,
+                        saveHistory(bom, MatFlowApprovalAction.PRODUCTION_REVIEWED,
+                                        MatFlowBomStatus.SUBMITTED, MatFlowBomStatus.APPROVED, remarks, actor);
+                        saveAudit(bom, "BOM_PRODUCTION_REVIEWED",
+                                        auditDetails("revisionNo", bom.getRevisionNo(),
+                                                        "productionReviewedBy", actor, "effective", true),
                                         actor);
-
-                        saveAudit(
-                                        approvedBom,
-                                        "BOM_DIRECTOR_APPROVED",
-                                        auditDetails(
-                                                        "revisionNo", approvedBom.getRevisionNo(),
-                                                        "productionReviewedBy", approvedBom.getProductionReviewedBy(),
-                                                        "directorApprovedBy", actor,
-                                                        "effective", true),
-                                        actor);
-
-                        return toDetail(approvedBom);
-                }
-
-                @Transactional
-                public BomDetailResponse directorReturn(
-                                UUID id,
-                                BomActionRequest request) {
-
-                        accessService.requireDirectorBomReview();
-
-                        MatFlowBom bom = requireBom(id);
-                        if (bom.getStatus() != MatFlowBomStatus.SUBMITTED) {
-                                throw conflict("Only a submitted BOM can be returned by Director");
-                        }
-                        if (bom.getProductionReviewedAt() == null ||
-                                        clean(bom.getProductionReviewedBy()) == null) {
-                                throw conflict("Production approval is required before Director review");
-                        }
-
-                        assertActionVersion(request, bom);
-                        String remarks = request == null ? null : clean(request.remarks());
-                        if (remarks == null) {
-                                throw badRequest("Director return remarks are required");
-                        }
-
-                        String actor = accessService.actor();
-                        bom.setStatus(MatFlowBomStatus.RETURNED);
-                        bom.setEffective(false);
-                        bom.setReturnedBy(actor);
-                        bom.setReturnedAt(LocalDateTime.now());
-                        bom.setReturnRemarks(remarks);
-                        bom.setApprovedBy(null);
-                        bom.setApprovedAt(null);
-                        bom.setUpdatedBy(actor);
-
-                        MatFlowBom returnedBom = bomRepository.saveAndFlush(bom);
-
-                        saveHistory(
-                                        returnedBom,
-                                        MatFlowApprovalAction.DIRECTOR_RETURNED,
-                                        MatFlowBomStatus.SUBMITTED,
-                                        MatFlowBomStatus.RETURNED,
-                                        remarks,
-                                        actor);
-
-                        saveAudit(
-                                        returnedBom,
-                                        "BOM_RETURNED_BY_DIRECTOR",
-                                        auditDetails(
-                                                        "revisionNo", returnedBom.getRevisionNo(),
-                                                        "productionReviewedBy", returnedBom.getProductionReviewedBy(),
-                                                        "returnedBy", actor,
-                                                        "remarks", remarks),
-                                        actor);
-
-                        return toDetail(returnedBom);
+                        return toDetail(bom);
                 }
 
                 @Transactional
@@ -961,12 +796,6 @@ public class MatFlowBomService {
 
                                 throw conflict(
                                                 "Only a submitted BOM can be returned by Production");
-                        }
-
-                        if (bom.getProductionReviewedAt() != null ||
-                                        clean(bom.getProductionReviewedBy()) != null) {
-                                throw conflict(
-                                                "Production has already approved this BOM. Director must make the next approval/return decision.");
                         }
 
                         assertActionVersion(
@@ -1062,9 +891,6 @@ public class MatFlowBomService {
                         assertActionVersion(
                                         request,
                                         source);
-
-                        requireApprovedProduct(source.getProjectDrawing());
-
                         MatFlowBom latest = bomRepository
                                         .findFirstByRevisionGroupIdOrderByRevisionNoDesc(
                                                         source.getRevisionGroupId())
@@ -1521,8 +1347,6 @@ public class MatFlowBomService {
                                         bom.getProductionReviewedBy(),
                                         bom.getProductionReviewedAt(),
                                         bom.getProductionReviewRemarks(),
-                                        bom.getApprovedBy(),
-                                        bom.getApprovedAt(),
                                         bom.getReturnedBy(),
                                         bom.getReturnedAt(),
                                         bom.getReturnRemarks(),
@@ -1557,18 +1381,6 @@ public class MatFlowBomService {
                                         line.getNetRequiredQty(),
                                         line.getRemarks(),
                                         line.getRowVersion());
-                }
-
-                private void requireApprovedProduct(
-                                MatFlowProjectDrawing project) {
-                        if (project == null) {
-                                throw conflict("BOM project/product context is missing");
-                        }
-
-                        if (project.getProductApprovalStatus() != ProjectProductApprovalStatus.APPROVED) {
-                                throw conflict(
-                                                "Director approval is required for this product/drawing before Engineering can create or submit a BOM");
-                        }
                 }
 
                 private String normalizeMaterialCategory(
@@ -1863,30 +1675,25 @@ public class MatFlowBomService {
                 /**
                  * Called before BOM submission.
                  */
+                /** Validate optional Processing capabilities before Engineering submits. */
                 @Transactional(readOnly = true)
                 public void validateBomForSubmission(
                                 MatFlowBom bom) {
                         if (bom == null || bom.getId() == null) {
-                                throw badRequest(
-                                                "Persisted BOM is required for route validation");
+                                throw badRequest("Persisted BOM is required for route validation");
                         }
-
                         String bomPlantCode = requireBomPlantCode(bom);
                         accessService.requirePlantAccess(bomPlantCode);
 
-                        List<MatFlowBomLine> lines = lineRepository
-                                        .findByBom_IdOrderByLineNoAsc(
-                                                        bom.getId());
+                        List<MatFlowBomLine> lines = lineRepository.findByBom_IdOrderByLineNoAsc(bom.getId());
+                        if (lines.isEmpty()) {
+                                throw badRequest("At least one material line is required before submission");
+                        }
 
                         for (MatFlowBomLine line : lines) {
                                 List<MatFlowBomRouteStep> steps = routeRepository
-                                                .findByBomLine_IdOrderBySequenceNoAsc(
-                                                                line.getId());
-
-                                validateRoute(
-                                                bom,
-                                                line,
-                                                steps);
+                                                .findByBomLine_IdOrderBySequenceNoAsc(line.getId());
+                                validateRoute(bom, line, steps);
                         }
                 }
 
@@ -1950,195 +1757,71 @@ public class MatFlowBomService {
                                 List<MatFlowBomRouteStep> steps) {
                         String materialLabel = line == null
                                         ? "UNKNOWN MATERIAL"
-                                        : safeLabel(
-                                                        line.getMaterialCodeSnapshot(),
-                                                        line.getId());
-
+                                        : safeLabel(line.getMaterialCodeSnapshot(), line.getId());
                         if (steps == null || steps.isEmpty()) {
-                                throw badRequest(
-                                                "Every BOM material line requires an approved route: QC -> optional Processing -> Production. "
-                                                                +
-                                                                "Missing route for material " + materialLabel);
+                                return; // Direct/QC choice belongs to Store at MR execution time.
                         }
 
                         String bomPlantCode = requireBomPlantCode(bom);
+                        int previousSequence = 0;
+                        java.util.Set<UUID> seenLocations = new java.util.HashSet<>();
 
-                        int qcCount = 0;
-                        int productionCount = 0;
-                        boolean productionSeen = false;
-
-                        for (int index = 0; index < steps.size(); index++) {
-                                MatFlowBomRouteStep step = steps.get(index);
-
+                        for (MatFlowBomRouteStep step : steps) {
                                 if (step == null || step.location == null || step.stepType == null) {
                                         throw badRequest(
-                                                        "BOM route contains an incomplete step for material "
+                                                        "BOM Processing options contain an incomplete step for material "
                                                                         + materialLabel);
                                 }
-
-                                /*
-                                 * The association on MatFlowBomRouteStep may be a Hibernate
-                                 * lazy proxy. Resolve the authoritative Location entity by ID
-                                 * before validating its operational attributes.
-                                 */
-                                UUID routeLocationId = step.location.getId();
-
-                                if (routeLocationId == null) {
+                                if (step.stepType != RouteStepType.PROCESSING) {
                                         throw badRequest(
-                                                        "BOM route contains a location without an ID for material "
+                                                        "BOM material routes may contain only PROCESSING options. Store decides QC and the MR owns Production destination. Material: "
                                                                         + materialLabel);
                                 }
-
-                                MatFlowLocation location = locationRepository
-                                                .findById(routeLocationId)
-                                                .orElseThrow(() -> conflict(
-                                                                "Route location " + routeLocationId +
-                                                                                " no longer exists for material "
-                                                                                + materialLabel));
-
-                                String locationLabel = safeLabel(
-                                                location.getLocationCode(),
-                                                location.getId());
+                                if (step.sequenceNo == null || step.sequenceNo <= previousSequence) {
+                                        throw badRequest(
+                                                        "Processing option sequence must be strictly increasing for material "
+                                                                        + materialLabel);
+                                }
+                                previousSequence = step.sequenceNo;
+                                if (!seenLocations.add(step.location.getId())) {
+                                        throw badRequest(
+                                                        "The same Processing Unit cannot be configured twice for material "
+                                                                        + materialLabel);
+                                }
 
                                 String routePlantCode = requirePlantCode(
-                                                location.getPlantCode(),
-                                                "Route location " + locationLabel +
-                                                                " used by material " + materialLabel);
-
-                                accessService.requirePlantAccess(
-                                                routePlantCode);
-
+                                                step.location.getPlantCode(),
+                                                "Processing option " + safeLabel(step.location.getLocationCode(),
+                                                                step.location.getId()));
                                 if (!bomPlantCode.equals(routePlantCode)) {
-                                        throw conflict(
-                                                        "Route location " + locationLabel +
-                                                                        " belongs to plant " + routePlantCode +
-                                                                        " but BOM "
-                                                                        + safeLabel(bom.getBomNumber(), bom.getId()) +
-                                                                        " belongs to plant " + bomPlantCode +
-                                                                        ". Use a route location from the BOM plant.");
+                                        throw badRequest("Processing option must belong to the BOM plant for material "
+                                                        + materialLabel);
                                 }
-
-                                if (!location.isActive()) {
-                                        throw badRequest(
-                                                        "Inactive location exists in BOM route: " +
-                                                                        locationLabel);
+                                if (!step.location.isActive()) {
+                                        throw badRequest("Inactive Processing Unit cannot be used for material "
+                                                        + materialLabel);
                                 }
-
-                                validateLocationType(
-                                                step.stepType,
-                                                location);
-
-                                if (index == 0 && step.stepType != RouteStepType.QC) {
-                                        throw badRequest(
-                                                        "The first material route step must be QC for material "
-                                                                        + materialLabel);
-                                }
-
-                                if (step.stepType == RouteStepType.QC) {
-                                        qcCount++;
-                                        if (index != 0) {
-                                                throw badRequest(
-                                                                "QC must be the first and only QC route step for material "
-                                                                                + materialLabel);
-                                        }
-                                }
-
-                                if (productionSeen) {
-                                        throw badRequest(
-                                                        "No route step is allowed after Production for material "
-                                                                        + materialLabel);
-                                }
-
-                                if (step.stepType == RouteStepType.PRODUCTION) {
-                                        productionCount++;
-                                        productionSeen = true;
-
-                                        if (index != steps.size() - 1) {
-                                                throw badRequest(
-                                                                "Production must be the final route step for material "
-                                                                                + materialLabel);
-                                        }
-                                }
-
-                                if (step.stepType == RouteStepType.PROCESSING && index == 0) {
-                                        throw badRequest(
-                                                        "Processing cannot occur before QC for material "
-                                                                        + materialLabel);
-                                }
-                        }
-
-                        if (qcCount != 1) {
-                                throw badRequest(
-                                                "A material route must contain exactly one QC step as the first step for material "
-                                                                + materialLabel);
-                        }
-
-                        if (productionCount != 1) {
-                                throw badRequest(
-                                                "A material route must contain exactly one Production step as the final step for material "
-                                                                + materialLabel);
+                                validateLocationType(step.stepType, step.location);
                         }
                 }
 
                 private void validateLocationType(
                                 RouteStepType stepType,
                                 MatFlowLocation location) {
-
-                        if (stepType == null) {
+                        if (stepType != RouteStepType.PROCESSING) {
                                 throw badRequest(
-                                                "Route step type is required");
+                                                "Only PROCESSING options are configured on a BOM. Store decides QC and the MR defines Production destination.");
                         }
-
                         if (location == null) {
-                                throw badRequest(
-                                                "Route location is required");
+                                throw badRequest("Processing location is required");
                         }
-
-                        /*
-                         * IMPORTANT:
-                         * Always use the entity accessor here.
-                         *
-                         * Route-step locations are commonly Hibernate lazy proxies when
-                         * a BOM is reloaded for submission. Reading a public backing field
-                         * directly (location.locationType) bypasses proxy initialization
-                         * and can therefore appear null/stale even though the persisted
-                         * mf_locations.location_type is QC/PRODUCTION.
-                         *
-                         * getLocationType() goes through Hibernate's proxy interceptor and
-                         * returns the authoritative persisted enum value.
-                         */
                         LocationType actualType = location.getLocationType();
-
-                        String locationLabel = safeLabel(
-                                        location.getLocationCode(),
-                                        location.getId());
-
-                        if (actualType == null) {
+                        if (actualType != LocationType.PROCESSING && actualType != LocationType.EXTERNAL_PROCESSOR) {
                                 throw badRequest(
-                                                "Route location " + locationLabel +
-                                                                " has no Location Type. Correct the MatFlow Location Master record.");
-                        }
-
-                        if (stepType == RouteStepType.PROCESSING &&
-                                        actualType != LocationType.PROCESSING &&
-                                        actualType != LocationType.EXTERNAL_PROCESSOR) {
-                                throw badRequest(
-                                                "Processing step requires PROCESSING or EXTERNAL_PROCESSOR location, but "
-                                                                + locationLabel + " is " + actualType);
-                        }
-
-                        if (stepType == RouteStepType.QC &&
-                                        actualType != LocationType.QC) {
-                                throw badRequest(
-                                                "QC step requires a QC location, but "
-                                                                + locationLabel + " is " + actualType);
-                        }
-
-                        if (stepType == RouteStepType.PRODUCTION &&
-                                        actualType != LocationType.PRODUCTION) {
-                                throw badRequest(
-                                                "Production step requires a PRODUCTION location, but "
-                                                                + locationLabel + " is " + actualType);
+                                                "Processing option requires PROCESSING or EXTERNAL_PROCESSOR location, but "
+                                                                + safeLabel(location.getLocationCode(),
+                                                                                location.getId())
+                                                                + " is " + actualType);
                         }
                 }
 

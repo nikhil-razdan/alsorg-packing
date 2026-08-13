@@ -1,25 +1,17 @@
 package com.alsorg.packing.service.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductApprovalRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductPortfolioRow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectRequest;
 import com.alsorg.packing.domain.matflow.MatFlowBom;
-import com.alsorg.packing.domain.matflow.MatFlowBomStatus;
-import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
 import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
-import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
-import com.alsorg.packing.repository.matflow.MatFlowProjectProductRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
-import com.alsorg.packing.repository.matflow.MatFlowRequisitionLineRepository;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -34,7 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * First-class Project aggregate boundary.
  *
- * This service intentionally leaves existing material execution foreign keys
+ * Project/Product creation is immediate and approval-free. Existing material execution foreign keys
  * attached to MatFlowProjectDrawing (the Product/Item child). The parent
  * Project
  * is a portfolio/ownership aggregate, while every BOM/requisition/stock
@@ -45,26 +37,23 @@ import org.springframework.web.server.ResponseStatusException;
 public class MatFlowProjectService {
 
     private final MatFlowProjectRepository projectRepository;
-    private final MatFlowProjectProductRepository productRepository;
+    private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowBomRepository bomRepository;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
-    private final MatFlowRequisitionLineRepository requisitionLineRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
 
     public MatFlowProjectService(
             MatFlowProjectRepository projectRepository,
-            MatFlowProjectProductRepository productRepository,
+            MatFlowProjectDrawingRepository productRepository,
             MatFlowBomRepository bomRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
-            MatFlowRequisitionLineRepository requisitionLineRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService) {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
         this.bomRepository = bomRepository;
         this.requisitionRepository = requisitionRepository;
-        this.requisitionLineRepository = requisitionLineRepository;
         this.accessService = accessService;
         this.auditService = auditService;
     }
@@ -206,9 +195,9 @@ public class MatFlowProjectService {
         MatFlowProjectDrawing product = new MatFlowProjectDrawing();
         product.setProject(project);
         applyProduct(product, request);
-        product.setProductApprovalStatus(ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL);
-        product.setProductApprovedBy(null);
-        product.setProductApprovedAt(null);
+        product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
+        product.setProductApprovedBy(actor);
+        product.setProductApprovedAt(LocalDateTime.now());
         product.setProductReturnedBy(null);
         product.setProductReturnedAt(null);
         product.setProductApprovalRemarks(null);
@@ -227,7 +216,7 @@ public class MatFlowProjectService {
                         "projectId", project.getId(),
                         "productName", product.getProductName(),
                         "drawingRevision", product.getDrawingRevision(),
-                        "approvalStatus", product.getProductApprovalStatus()));
+                        "executionEligible", true));
 
         return toPortfolio(project);
     }
@@ -268,16 +257,17 @@ public class MatFlowProjectService {
         applyProduct(product, request);
         product.setProject(project);
 
+        String actor = accessService.actor();
         if (identityChanged) {
-            product.setProductApprovalStatus(ProjectProductApprovalStatus.PENDING_DIRECTOR_APPROVAL);
-            product.setProductApprovedBy(null);
-            product.setProductApprovedAt(null);
+            product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
+            product.setProductApprovedBy(actor);
+            product.setProductApprovedAt(LocalDateTime.now());
             product.setProductReturnedBy(null);
             product.setProductReturnedAt(null);
-            product.setProductApprovalRemarks("Product identity changed; Director approval is required again.");
+            product.setProductApprovalRemarks(null);
         }
 
-        product.setUpdatedBy(accessService.actor());
+        product.setUpdatedBy(actor);
         productRepository.save(product);
 
         auditService.record(
@@ -289,73 +279,8 @@ public class MatFlowProjectService {
                 product.getDrawingNo(),
                 auditService.details(
                         "productName", product.getProductName(),
-                        "approvalStatus", product.getProductApprovalStatus(),
+                        "executionEligible", true,
                         "identityChanged", identityChanged));
-
-        return toPortfolio(project);
-    }
-
-    @Transactional
-    public ProjectPortfolioResponse approveProduct(UUID projectId, UUID productId, ProductApprovalRequest request) {
-        accessService.requireProjectProductApproval();
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        assertVersion(request == null ? null : request.rowVersion(), product.getRowVersion(), "Project Product");
-
-        if (!product.isActive())
-            throw conflict("Inactive Product cannot be approved");
-
-        String actor = accessService.actor();
-        product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
-        product.setProductApprovedBy(actor);
-        product.setProductApprovedAt(LocalDateTime.now());
-        product.setProductReturnedBy(null);
-        product.setProductReturnedAt(null);
-        product.setProductApprovalRemarks(request == null ? null : clean(request.remarks()));
-        product.setUpdatedBy(actor);
-        productRepository.save(product);
-
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PROJECT_PRODUCT_DIRECTOR_APPROVED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details("productName", product.getProductName(), "approvedBy", actor));
-
-        return toPortfolio(project);
-    }
-
-    @Transactional
-    public ProjectPortfolioResponse returnProduct(UUID projectId, UUID productId, ProductApprovalRequest request) {
-        accessService.requireProjectProductApproval();
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        assertVersion(request == null ? null : request.rowVersion(), product.getRowVersion(), "Project Product");
-
-        String remarks = request == null ? null : clean(request.remarks());
-        if (remarks == null)
-            throw badRequest("Director return remarks are required");
-
-        String actor = accessService.actor();
-        product.setProductApprovalStatus(ProjectProductApprovalStatus.RETURNED);
-        product.setProductApprovedBy(null);
-        product.setProductApprovedAt(null);
-        product.setProductReturnedBy(actor);
-        product.setProductReturnedAt(LocalDateTime.now());
-        product.setProductApprovalRemarks(remarks);
-        product.setUpdatedBy(actor);
-        productRepository.save(product);
-
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PROJECT_PRODUCT_DIRECTOR_RETURNED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details("productName", product.getProductName(), "remarks", remarks, "returnedBy", actor));
 
         return toPortfolio(project);
     }
@@ -521,10 +446,6 @@ public class MatFlowProjectService {
                 .map(this::toAdministrativeProductRow)
                 .toList();
 
-        int approved = (int) products.stream()
-                .filter(p -> p.approvalStatus() == ProjectProductApprovalStatus.APPROVED)
-                .count();
-
         String portfolioStage = derivePortfolioStage(products);
         String portfolioHealth = derivePortfolioHealth(project, products);
 
@@ -540,10 +461,6 @@ public class MatFlowProjectService {
                 project.getRemarks(),
                 project.isActive(),
                 products.size(),
-                approved,
-                0, // completedProductCount: execution lives in Tracker
-                0, // shortageProductCount: execution lives in Tracker
-                BigDecimal.ZERO, // materialCoveragePercent: execution lives in Tracker
                 portfolioStage,
                 portfolioHealth,
                 project.getRowVersion(),
@@ -559,20 +476,12 @@ public class MatFlowProjectService {
                 .findFirst()
                 .orElse(null);
 
-        BigDecimal zeroQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
-
         return new ProductPortfolioRow(
                 product.getId(),
                 product.getProductName(),
                 product.getDrawingNo(),
                 product.getDrawingRevision(),
                 product.getRequiredDate(),
-                product.getProductApprovalStatus(),
-                product.getProductApprovedBy(),
-                product.getProductApprovedAt(),
-                product.getProductReturnedBy(),
-                product.getProductReturnedAt(),
-                product.getProductApprovalRemarks(),
                 product.isActive(),
                 latestBom == null ? null : latestBom.getId(),
                 latestBom == null ? null : latestBom.getBomNumber(),
@@ -581,15 +490,7 @@ public class MatFlowProjectService {
                         ? null
                         : latestBom.getStatus().name(),
                 latestBom != null && latestBom.isEffective(),
-                null, // latestRequisitionId: Tracker owns execution
-                null, // latestRequisitionNumber
-                null, // requisitionStatus
                 deriveProductPortfolioStage(product, latestBom),
-                zeroQty,
-                zeroQty,
-                zeroQty,
-                zeroQty,
-                zeroQty,
                 product.getRowVersion(),
                 product.getCreatedAt(),
                 product.getUpdatedAt());
@@ -602,10 +503,6 @@ public class MatFlowProjectService {
         if (product == null || !product.isActive())
             return "INACTIVE";
 
-        if (product.getProductApprovalStatus() != ProjectProductApprovalStatus.APPROVED) {
-            return "DIRECTOR APPROVAL";
-        }
-
         if (latestBom == null)
             return "ENGINEERING / BOM";
         if (!latestBom.isEffective())
@@ -616,11 +513,6 @@ public class MatFlowProjectService {
     private String derivePortfolioStage(List<ProductPortfolioRow> products) {
         if (products == null || products.isEmpty())
             return "PROJECT SETUP";
-
-        if (products.stream().anyMatch(
-                p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED)) {
-            return "DIRECTOR APPROVAL";
-        }
 
         if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
             return "ENGINEERING / BOM";
@@ -641,11 +533,6 @@ public class MatFlowProjectService {
         if (project.getRequiredDate() != null
                 && project.getRequiredDate().isBefore(java.time.LocalDate.now())) {
             return "OVERDUE";
-        }
-
-        if (products.stream().anyMatch(
-                p -> p.approvalStatus() != ProjectProductApprovalStatus.APPROVED)) {
-            return "APPROVAL_PENDING";
         }
 
         if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
@@ -728,14 +615,6 @@ public class MatFlowProjectService {
             throw badRequest(entity + " rowVersion is required");
         if (!requested.equals(current))
             throw conflict(entity + " was modified by another user. Refresh and retry.");
-    }
-
-    private BigDecimal zero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
-    }
-
-    private BigDecimal scale(BigDecimal value) {
-        return zero(value).setScale(3, RoundingMode.HALF_UP);
     }
 
     private boolean same(String a, String b) {

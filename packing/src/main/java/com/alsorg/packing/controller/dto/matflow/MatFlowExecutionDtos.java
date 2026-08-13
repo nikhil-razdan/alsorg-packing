@@ -1,25 +1,26 @@
 package com.alsorg.packing.controller.dto.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProcessingJobStatus;
-
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/** Processing and Production execution contracts. */
 public final class MatFlowExecutionDtos {
-
     private MatFlowExecutionDtos() {
     }
 
-    public record ProcessingJobCreateRequest(
-            UUID reservationId,
-            UUID routeStepId,
-            UUID outputMaterialId,
-            BigDecimal plannedInputQty,
-            String remarks) {
+    /** Production explicitly acknowledges receipt of a material lot. */
+    public record ProductionReceiveRequest(
+            @NotNull(message = "Reservation row version is required.") Long rowVersion,
+            @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+            @Size(max = 2000, message = "Receipt remarks cannot exceed 2000 characters.") String remarks) {
     }
 
+    /** Processor starts only a job that QC has already routed/queued. */
     public record ProcessingJobStartRequest(
             Long rowVersion,
             BigDecimal actualInputQty,

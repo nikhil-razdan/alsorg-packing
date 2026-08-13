@@ -5157,6 +5157,7 @@ const createEmptyAdminEditForm = () => ({
 	vehicleId: "",
 	vehicleNumber: "",
 
+	packingDate: "",
 	dispatchDateTime: "",
 });
 
@@ -5175,6 +5176,7 @@ const createEmptyAdminEditApplyState = () => ({
 
 	driver: false,
 	vehicle: false,
+	packingDate: false,
 	dispatchDateTime: false,
 });
 
@@ -12848,6 +12850,41 @@ export default function DispatchedItemsPage() {
 		return row?.packetItemId || row?.itemId || row?.id || row?.zohoItemId || "";
 	};
 
+	const toAdminDateValue = (value) => {
+		if (!value) {
+			return "";
+		}
+
+		if (
+			value instanceof Date &&
+			!Number.isNaN(value.getTime())
+		) {
+			const localDate = new Date(value);
+
+			localDate.setMinutes(
+				localDate.getMinutes() -
+					localDate.getTimezoneOffset()
+			);
+
+			return localDate
+				.toISOString()
+				.slice(0, 10);
+		}
+
+		/*
+		 * Backend packedAt is a LocalDateTime. Its yyyy-MM-dd prefix is already
+		 * the India-business date, so do not round-trip it through UTC.
+		 */
+		const text = String(value)
+			.trim();
+
+		const match = text.match(
+			/^(\d{4}-\d{2}-\d{2})/
+		);
+
+		return match ? match[1] : "";
+	};
+
 	const toAdminDateTimeLocalValue = (value) => {
 		if (!value) {
 			return "";
@@ -12950,6 +12987,17 @@ export default function DispatchedItemsPage() {
 							"string"
 							? row.vehicle
 							: ""
+					)
+			);
+
+		const packingDate =
+			getAdminEditCommonValue(
+				cleanRows,
+				(row) =>
+					toAdminDateValue(
+						row?.packedAt ||
+						row?.packingDate ||
+						row?.packedDate
 					)
 			);
 
@@ -13071,6 +13119,7 @@ export default function DispatchedItemsPage() {
 			vehicleNumber:
 				vehicleNumber,
 
+			packingDate,
 			dispatchDateTime,
 		});
 
@@ -13098,6 +13147,7 @@ export default function DispatchedItemsPage() {
 
 					driver: false,
 					vehicle: false,
+					packingDate: false,
 
 					/*
 					 * Enable automatically only when the single row
@@ -13190,9 +13240,34 @@ export default function DispatchedItemsPage() {
 					)
 					.filter(Boolean);
 
-			if (fields.length === 0) {
+			const packingDateSelected =
+				Boolean(
+					adminEditApply.packingDate
+				);
+
+			if (
+				fields.length === 0 &&
+				!packingDateSelected
+			) {
 				alert(
 					"Select at least one field to apply"
+				);
+
+				return;
+			}
+
+			const cleanPackingDate =
+				String(
+					adminEditForm.packingDate ||
+					""
+				).trim();
+
+			if (
+				packingDateSelected &&
+				!cleanPackingDate
+			) {
+				alert(
+					"Packing date is required"
 				);
 
 				return;
@@ -13320,111 +13395,164 @@ export default function DispatchedItemsPage() {
 					true
 				);
 
-				const response =
-					await authFetch(
-						`${API_BASE_URL}/api/dispatched/admin/bulk-edit`,
-						{
-							method: "PUT",
+				let shouldReloadDispatchRows = false;
 
-							headers: {
-								"Content-Type":
-									"application/json",
+				if (fields.length > 0) {
+					const response =
+						await authFetch(
+							`${API_BASE_URL}/api/dispatched/admin/bulk-edit`,
+							{
+								method: "PUT",
 
-								Accept:
-									"application/json",
-							},
+								headers: {
+									"Content-Type":
+										"application/json",
 
-							body:
-								JSON.stringify(
-									payload
-								),
-						}
-					);
+									Accept:
+										"application/json",
+								},
 
-				if (!response.ok) {
-					const message =
-						await readResponseError(
-							response,
-							"Admin dispatch edit failed"
+								body:
+									JSON.stringify(
+										payload
+									),
+							}
 						);
 
-					throw new Error(
-						message
-					);
+					if (!response.ok) {
+						const message =
+							await readResponseError(
+								response,
+								"Admin dispatch edit failed"
+							);
+
+						throw new Error(
+							message
+						);
+					}
+
+					const result =
+						await response
+							.json()
+							.catch(
+								() => ({})
+							);
+
+					const updatedRows =
+						Array.isArray(
+							result?.updatedRows
+						)
+							? result.updatedRows
+							: [];
+
+					/*
+					 * The backend should return every affected row,
+					 * including other items belonging to an edited challan.
+					 */
+					if (
+						updatedRows.length >
+						0
+					) {
+						const normalizedUpdates =
+							normalizeFetchedDispatchRows(
+								updatedRows
+							);
+
+						const updateMap =
+							new Map(
+								normalizedUpdates.map(
+									(row) => [
+										String(
+											row.zohoItemId
+										),
+										row,
+									]
+								)
+							);
+
+						setRows(
+							(previousRows) =>
+								previousRows.map(
+									(row) => {
+										const update =
+											updateMap.get(
+												String(
+													row?.zohoItemId ||
+													""
+												)
+											);
+
+										if (!update) {
+											return row;
+										}
+
+										return attachDispatchSearchIndex({
+											...row,
+											...update,
+										});
+									}
+								)
+						);
+					} else {
+						shouldReloadDispatchRows = true;
+					}
 				}
 
-				const result =
-					await response
-						.json()
-						.catch(
-							() => ({})
-						);
+				if (packingDateSelected) {
+					for (const row of adminEditRows) {
+						const dispatchItemId =
+							String(
+								row?.zohoItemId ||
+								""
+							).trim();
 
-				const updatedRows =
-					Array.isArray(
-						result?.updatedRows
-					)
-						? result.updatedRows
-						: [];
+						if (!dispatchItemId) {
+							throw new Error(
+								`Dispatch Item ID missing for ${row?.name || row?.sku || "selected item"}`
+							);
+						}
 
-				/*
-				 * The backend should return every affected row,
-				 * including other items belonging to an edited challan.
-				 */
-				if (
-					updatedRows.length >
-					0
-				) {
-					const normalizedUpdates =
-						normalizeFetchedDispatchRows(
-							updatedRows
-						);
-
-					const updateMap =
-						new Map(
-							normalizedUpdates.map(
-								(row) => [
-									String(
-										row.zohoItemId
-									),
-									row,
-								]
-							)
-						);
-
-					setRows(
-						(previousRows) =>
-							previousRows.map(
-								(row) => {
-									const update =
-										updateMap.get(
-											String(
-												row?.zohoItemId ||
-												""
-											)
-										);
-
-									if (!update) {
-										return row;
-									}
-
-									/*
-									 * Backend returns an update DTO, not the complete
-									 * DispatchedItem entity. Preserve packet/location
-									 * fields that are not present in the DTO.
-									 */
-									return attachDispatchSearchIndex({
-										...row,
-										...update,
-									});
+						const packingDateResponse =
+							await authFetch(
+								`${API_BASE_URL}/api/packets/dispatched/${encodeURIComponent(
+									dispatchItemId
+								)}/admin-packing-date`,
+								{
+									method: "PUT",
+									headers: {
+										"Content-Type":
+											"application/json",
+										Accept:
+											"application/json",
+									},
+									body: JSON.stringify({
+										packingDate:
+											cleanPackingDate,
+									}),
 								}
-							)
-					);
-				} else {
+							);
+
+						if (!packingDateResponse.ok) {
+							const message =
+								await readResponseError(
+									packingDateResponse,
+									"Packing date update failed"
+								);
+
+							throw new Error(
+								message
+							);
+						}
+					}
+
 					/*
-					 * Compatibility fallback for an older backend
-					 * response that does not return updatedRows.
+					 * Reload once after all date updates so packedAt, export data and
+					 * current table state exactly match the backend-preserved time.
 					 */
+					shouldReloadDispatchRows = true;
+				}
+
+				if (shouldReloadDispatchRows) {
 					await fetchData();
 				}
 
@@ -22126,7 +22254,8 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									Only checked fields will be
-									applied. Driver, vehicle and
+									applied. Packing date updates the
+									item sticker/history PDFs. Driver, vehicle and
 									dispatch date/time changes are
 									challan-level changes, so every
 									item in each affected challan
@@ -22288,6 +22417,106 @@ export default function DispatchedItemsPage() {
 											);
 										}
 									)}
+								</Box>
+
+								{/* PACKING DATE */}
+								<Box
+									sx={{
+										mt: 2,
+										p: 1.4,
+										borderRadius: "14px",
+
+										background:
+											adminEditApply.packingDate
+												? "rgba(168,85,247,.09)"
+												: "rgba(255,255,255,.025)",
+
+										border:
+											adminEditApply.packingDate
+												? "1px solid rgba(168,85,247,.28)"
+												: "1px solid rgba(255,255,255,.07)",
+									}}
+								>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 1,
+											mb: 1.2,
+										}}
+									>
+										<Checkbox
+											size="small"
+											checked={
+												adminEditApply.packingDate
+											}
+											onChange={(event) =>
+												setAdminEditApply(
+													(previous) => ({
+														...previous,
+														packingDate:
+															event.target.checked,
+													})
+												)
+											}
+											sx={{
+												p: 0.3,
+
+												"&.Mui-checked": {
+													color: "#c084fc",
+												},
+											}}
+										/>
+
+										<Box
+											sx={{
+												color: "#d8b4fe",
+												fontSize: 12,
+												fontWeight: 950,
+											}}
+										>
+											Apply Packing Date
+										</Box>
+									</Box>
+
+									<TextField
+										fullWidth
+										disabled={
+											!adminEditApply.packingDate ||
+											adminEditLoading
+										}
+										type="date"
+										label="Packing Date"
+										InputLabelProps={{
+											shrink: true,
+										}}
+										value={
+											adminEditForm.packingDate ||
+											""
+										}
+										onChange={(event) =>
+											setAdminEditForm(
+												(previous) => ({
+													...previous,
+													packingDate:
+														event.target.value,
+												})
+											)
+										}
+										sx={dateTimeFieldSx}
+									/>
+
+									<Box
+										sx={{
+											mt: 1,
+											color: "rgba(255,255,255,.52)",
+											fontSize: 11,
+											fontWeight: 750,
+										}}
+									>
+										Updates the dispatch register packing date and rebuilds every
+										stored sticker-history PDF for the selected item(s).
+									</Box>
 								</Box>
 
 								{/* DISPATCH DATE / TIME */}

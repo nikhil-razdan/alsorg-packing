@@ -7,6 +7,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -14,13 +15,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
 
 import com.alsorg.packing.service.WarehouseService;
 import com.alsorg.packing.domain.imports.ImportPreviewRow;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.service.DispatchedItemService;
 import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
@@ -262,6 +263,159 @@ public class WarehouseController {
                                 .header("Content-Disposition", "attachment; filename=warehouse_import_template.csv")
                                 .header("Content-Type", "text/csv")
                                 .body(csv);
+        }
+
+        /* =========================================================
+         * ADMIN WAREHOUSE CONTROL
+         * ========================================================= */
+
+        @PostMapping("/admin/{zohoItemId}/return-to-dispatch")
+        public ResponseEntity<?> adminReturnToDispatch(
+                        @PathVariable String zohoItemId,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                service.adminReturnToDispatch(
+                                zohoItemId,
+                                user.getUsername());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message", "Item returned to Dispatch",
+                                                "status", "READY",
+                                                "zohoItemId", zohoItemId));
+        }
+
+        @PostMapping("/admin/bulk-return-to-dispatch")
+        public ResponseEntity<?> adminBulkReturnToDispatch(
+                        @RequestBody List<String> itemIds,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                if (itemIds == null || itemIds.isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one warehouse item");
+                }
+
+                List<String> uniqueIds = itemIds.stream()
+                                .filter(id -> id != null && !id.trim().isBlank())
+                                .map(String::trim)
+                                .distinct()
+                                .toList();
+
+                if (uniqueIds.isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one warehouse item");
+                }
+
+                int updated = service.adminBulkReturnToDispatch(
+                                uniqueIds,
+                                user.getUsername());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message", updated + " item(s) returned to Dispatch",
+                                                "updated", updated,
+                                                "status", "READY"));
+        }
+
+        @PatchMapping("/admin/{zohoItemId}/location")
+        public ResponseEntity<?> adminEditLocation(
+                        @PathVariable String zohoItemId,
+                        @RequestBody PlantAssignmentRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                validateLocationRequest(request);
+
+                return ResponseEntity.ok(
+                                service.adminEditLocation(
+                                                zohoItemId,
+                                                request.getPlantCode(),
+                                                request.getCurrentLocationCode(),
+                                                request.getFgZoneCode(),
+                                                request.getWarehouseCode(),
+                                                user.getUsername()));
+        }
+
+        @PatchMapping("/admin/bulk-location")
+        public ResponseEntity<?> adminBulkEditLocation(
+                        @RequestBody AdminBulkLocationRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+                assertAdmin(user);
+
+                if (request == null ||
+                                request.itemIds() == null ||
+                                request.itemIds().isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one warehouse item");
+                }
+
+                if (request.plantCode() == null ||
+                                request.plantCode().isBlank()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Plant code required");
+                }
+
+                List<String> uniqueIds = request.itemIds().stream()
+                                .filter(id -> id != null && !id.trim().isBlank())
+                                .map(String::trim)
+                                .distinct()
+                                .toList();
+
+                if (uniqueIds.isEmpty()) {
+                        return ResponseEntity.badRequest()
+                                        .body("Select at least one warehouse item");
+                }
+
+                int updated = service.adminBulkEditLocation(
+                                uniqueIds,
+                                request.plantCode(),
+                                request.currentLocationCode(),
+                                request.fgZoneCode(),
+                                request.warehouseCode(),
+                                user.getUsername());
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message", updated + " item location(s) updated",
+                                                "updated", updated));
+        }
+
+        public record AdminBulkLocationRequest(
+                        List<String> itemIds,
+                        String plantCode,
+                        String currentLocationCode,
+                        String fgZoneCode,
+                        String warehouseCode) {
+        }
+
+        private void validateLocationRequest(
+                        PlantAssignmentRequest request) {
+
+                if (request == null ||
+                                request.getPlantCode() == null ||
+                                request.getPlantCode().isBlank()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Plant code required");
+                }
+        }
+
+        private void assertAdmin(User user) {
+                if (!currentUserService.isAdmin(user)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "Only ADMIN can perform this warehouse action");
+                }
         }
 
         private void assertWarehouseAccess(User user) {

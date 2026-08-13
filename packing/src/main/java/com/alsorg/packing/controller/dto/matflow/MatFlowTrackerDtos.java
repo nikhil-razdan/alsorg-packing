@@ -1,31 +1,25 @@
 package com.alsorg.packing.controller.dto.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RequisitionStatus;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Read-only professional MatFlow tracker contracts.
- *
- * The tracker does not create a second workflow state model. It derives timing,
- * custody and department ownership from the existing MatFlow transactional
- * entities plus the immutable audit trail.
- */
+/** Read-only professional MatFlow tracker contracts. */
 public final class MatFlowTrackerDtos {
-
         private MatFlowTrackerDtos() {
         }
 
-        /** Existing list contract + additive professional tracking fields. */
         public record TrackerRowResponse(
                         UUID requisitionId,
                         String requisitionNumber,
                         UUID projectDrawingId,
                         String projectCode,
+                        String projectName,
+                        String clientName,
                         String drawingNo,
+                        String productName,
                         UUID bomId,
                         String bomNumber,
                         Integer bomRevisionNo,
@@ -37,6 +31,9 @@ public final class MatFlowTrackerDtos {
                         String currentStage,
                         String responsibleDesk,
                         int progressPercent,
+                        int materialReadyPercent,
+                        boolean readyToStartProduction,
+                        String productionStartBlocker,
                         BigDecimal requestedQty,
                         BigDecimal reservedQty,
                         BigDecimal shortageQty,
@@ -55,7 +52,6 @@ public final class MatFlowTrackerDtos {
                         LocalDateTime updatedAt,
                         long ageHours,
                         Long rowVersion,
-
                         String currentDepartment,
                         UUID currentLocationId,
                         String currentLocationCode,
@@ -76,12 +72,15 @@ public final class MatFlowTrackerDtos {
                         String bottleneckHint) {
         }
 
+        /**
+         * 'materialInTransit' is an internal custody count, not a Transfers desk KPI.
+         */
         public record TrackerKpiResponse(
                         int activeRequisitions,
                         int awaitingStorePlanning,
                         int shortagePending,
                         int materialReserved,
-                        int transfersInProgress,
+                        int materialInTransit,
                         int productionInProgress,
                         int openIndents,
                         BigDecimal totalRequestedQty,

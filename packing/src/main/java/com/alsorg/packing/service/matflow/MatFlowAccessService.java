@@ -248,16 +248,6 @@ public class MatFlowAccessService {
                                                 "");
         }
 
-        public void requireProjectProductApproval() {
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_DIRECTOR");
-        }
-
         public void requireProductionBomReview() {
                 User user = currentUser();
 
@@ -266,17 +256,6 @@ public class MatFlowAccessService {
                                 "ADMIN",
                                 "MATFLOW_MANAGER",
                                 "MATFLOW_PRODUCTION");
-        }
-
-        /** Final BOM approval after Production has approved the submitted revision. */
-        public void requireDirectorBomReview() {
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_DIRECTOR");
         }
 
         public void requireLocationWrite() {
@@ -309,29 +288,29 @@ public class MatFlowAccessService {
                                 "MATFLOW_PRODUCTION");
         }
 
+        /**
+         * Production execution is owned by the Production user who raised the MR.
+         * Managers/Admins retain oversight; ordinary Production users cannot execute
+         * another user's requisition.
+         */
+        public void requireProductionOwnership(String requestedBy) {
+                User user = currentUser();
+                requireRole(user, "ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION");
+
+                if (isAnyRole(user, "ADMIN", "MATFLOW_MANAGER")) {
+                        return;
+                }
+
+                String owner = requestedBy == null ? "" : requestedBy.trim();
+                String username = user.getUsername() == null ? "" : user.getUsername().trim();
+                if (owner.isBlank() || !owner.equalsIgnoreCase(username)) {
+                        throw new AccessDeniedException(
+                                        "This Material Requisition is assigned to Production user: "
+                                                        + (owner.isBlank() ? "UNKNOWN" : owner));
+                }
+        }
+
         public void requireMaterialPlanning() {
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_STORE");
-        }
-
-        public void requireStoreIssue() {
-
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_STORE");
-        }
-
-        public void requireIndentSubmitToPurchase() {
-
                 User user = currentUser();
 
                 requireRole(
@@ -593,16 +572,6 @@ public class MatFlowAccessService {
         }
 
         public void requireIntegrityRead() {
-                User user = currentUser();
-
-                requireRole(
-                                user,
-                                "ADMIN",
-                                "MATFLOW_MANAGER",
-                                "MATFLOW_DIRECTOR");
-        }
-
-        public void requirePurchaseOrderApproval() {
                 User user = currentUser();
 
                 requireRole(

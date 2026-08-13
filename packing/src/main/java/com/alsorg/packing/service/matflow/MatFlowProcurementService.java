@@ -4,7 +4,6 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.GoodsRec
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.GoodsReceiptLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.GoodsReceiptRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.GoodsReceiptResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.PurchaseOrderActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.PurchaseOrderLineRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.PurchaseOrderLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.PurchaseOrderRequest;
@@ -16,16 +15,16 @@ import com.alsorg.packing.domain.matflow.MatFlowIndent;
 import com.alsorg.packing.domain.matflow.MatFlowIndentLine;
 import com.alsorg.packing.domain.matflow.MatFlowLocation;
 import com.alsorg.packing.domain.matflow.MatFlowMaterial;
+import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
+import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.GoodsReceiptStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcSourceType;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrderLine;
 import com.alsorg.packing.domain.matflow.MatFlowRequisitionLine;
-import com.alsorg.packing.domain.matflow.MatFlowQcInspection;
 import com.alsorg.packing.domain.matflow.MatFlowStockBalance;
 import com.alsorg.packing.domain.matflow.MatFlowStockLedger;
 import com.alsorg.packing.domain.matflow.MatFlowVendor;
@@ -37,7 +36,6 @@ import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
 import com.alsorg.packing.repository.matflow.MatFlowLocationRepository;
 import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderRepository;
-import com.alsorg.packing.repository.matflow.MatFlowQcInspectionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockBalanceRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockLedgerRepository;
 import com.alsorg.packing.repository.matflow.MatFlowVendorRepository;
@@ -68,12 +66,12 @@ public class MatFlowProcurementService {
         private final MatFlowLocationRepository locationRepository;
         private final MatFlowGoodsReceiptRepository receiptRepository;
         private final MatFlowGoodsReceiptLineRepository receiptLineRepository;
-        private final MatFlowQcInspectionRepository qcRepository;
         private final MatFlowStockBalanceRepository stockRepository;
         private final MatFlowStockLedgerRepository ledgerRepository;
         private final MatFlowAccessService accessService;
         private final MatFlowAuditService auditService;
         private final MatFlowRequisitionService requisitionService;
+        private final MatFlowDocumentNumberService documentNumberService;
 
         public MatFlowProcurementService(
                         MatFlowPurchaseOrderRepository purchaseOrderRepository,
@@ -84,12 +82,12 @@ public class MatFlowProcurementService {
                         MatFlowLocationRepository locationRepository,
                         MatFlowGoodsReceiptRepository receiptRepository,
                         MatFlowGoodsReceiptLineRepository receiptLineRepository,
-                        MatFlowQcInspectionRepository qcRepository,
                         MatFlowStockBalanceRepository stockRepository,
                         MatFlowStockLedgerRepository ledgerRepository,
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
-                        MatFlowRequisitionService requisitionService) {
+                        MatFlowRequisitionService requisitionService,
+                        MatFlowDocumentNumberService documentNumberService) {
                 this.purchaseOrderRepository = purchaseOrderRepository;
 
                 this.purchaseOrderLineRepository = purchaseOrderLineRepository;
@@ -106,8 +104,6 @@ public class MatFlowProcurementService {
 
                 this.receiptLineRepository = receiptLineRepository;
 
-                this.qcRepository = qcRepository;
-
                 this.stockRepository = stockRepository;
 
                 this.ledgerRepository = ledgerRepository;
@@ -116,6 +112,7 @@ public class MatFlowProcurementService {
 
                 this.auditService = auditService;
                 this.requisitionService = requisitionService;
+                this.documentNumberService = documentNumberService;
         }
 
         @Transactional(readOnly = true)
@@ -138,117 +135,79 @@ public class MatFlowProcurementService {
         public PurchaseOrderResponse createPurchaseOrder(
                         PurchaseOrderRequest request) {
                 accessService.requirePurchaseOrderWrite();
-
                 validatePurchaseRequest(request);
 
-                if (purchaseOrderRepository
-                                .existsByPoNumberIgnoreCase(
-                                                request.poNumber())) {
-                        throw conflict(
-                                        "Purchase order number already exists");
-                }
-
-                MatFlowIndent indent = indentRepository
-                                .findById(request.indentId())
-                                .orElseThrow(() -> notFound(
-                                                "Indent not found"));
+                MatFlowIndent indent = hydrateIndent(
+                                indentRepository.findById(request.indentId())
+                                                .orElseThrow(() -> notFound("Purchase indent not found")));
 
                 boolean purchaseReadyIndent = indent.status == IndentStatus.SUBMITTED_TO_PURCHASE ||
                                 indent.status == IndentStatus.PURCHASE_IN_PROGRESS ||
                                 indent.status == IndentStatus.PO_CREATED ||
                                 indent.status == IndentStatus.PARTIALLY_RECEIVED;
-
                 if (!purchaseReadyIndent) {
-                        throw conflict(
-                                        "Purchase Orders can be created only after Store submits the shortage indent to Purchase. Current indent status: "
-                                                        +
-                                                        indent.status);
+                        throw conflict("Purchase Order can be raised only against a PI submitted by Store. Current PI status: "
+                                        + indent.status);
                 }
 
-                MatFlowVendor vendor = vendorRepository
-                                .findById(request.vendorId())
-                                .orElseThrow(() -> notFound(
-                                                "Vendor not found"));
-
+                MatFlowVendor vendor = vendorRepository.findById(request.vendorId())
+                                .orElseThrow(() -> notFound("Vendor not found"));
                 if (!vendor.active) {
-                        throw badRequest(
-                                        "Inactive vendor cannot be selected");
+                        throw badRequest("Inactive vendor cannot be selected");
                 }
 
-                MatFlowLocation location = requireLocation(
-                                request.deliveryLocationId());
-
-                if (!location.getId()
-                                .equals(
-                                                indent.deliverToLocation
-                                                                .getId())) {
-                        throw conflict(
-                                        "PO delivery location must match the indent delivery location");
+                MatFlowLocation location = requireLocation(request.deliveryLocationId());
+                if (location.getLocationType() != LocationType.STORE) {
+                        throw badRequest("Purchase Order delivery location must be a Store location");
+                }
+                if (!location.getId().equals(indent.deliverToLocation.getId())) {
+                        throw conflict("PO delivery location must match the linked PI Store location");
                 }
 
                 String actor = accessService.actor();
-
                 MatFlowPurchaseOrder order = new MatFlowPurchaseOrder();
-
-                order.poNumber = request.poNumber()
-                                .trim()
-                                .toUpperCase();
-
+                order.poNumber = documentNumberService.nextPo();
                 order.poDate = request.poDate();
-
                 order.vendor = vendor;
                 order.indent = indent;
                 order.deliveryLocation = location;
-                order.status = PurchaseOrderStatus.DRAFT;
+                // Purchase owns PO creation and placement. There is no approval desk.
+                order.status = PurchaseOrderStatus.PLACED;
+                // Legacy columns are retained as placement audit mirrors for existing DB/API rows.
+                order.approvedBy = actor;
+                order.approvedAt = LocalDateTime.now();
+                order.approvalRemarks = "Placed by Purchase";
                 order.remarks = clean(request.remarks());
-
                 order.setCreatedBy(actor);
                 order.setUpdatedBy(actor);
-
                 order = purchaseOrderRepository.save(order);
 
                 Set<UUID> uniqueIndentLines = new HashSet<>();
-
                 for (PurchaseOrderLineRequest lineRequest : request.lines()) {
-                        if (!uniqueIndentLines.add(
-                                        lineRequest.indentLineId())) {
-                                throw badRequest(
-                                                "An indent line was selected more than once");
+                        if (lineRequest == null || lineRequest.indentLineId() == null) {
+                                throw badRequest("Every PO line requires a PI line");
+                        }
+                        if (!uniqueIndentLines.add(lineRequest.indentLineId())) {
+                                throw badRequest("A PI line was selected more than once");
                         }
 
                         MatFlowIndentLine indentLine = hydrateIndentLine(
                                         indentLineRepository
-                                                        .findByIdAndIndent_Id(
-                                                                        lineRequest.indentLineId(),
+                                                        .findByIdAndIndent_Id(lineRequest.indentLineId(),
                                                                         indent.getId())
                                                         .orElseThrow(() -> badRequest(
-                                                                        "Indent line does not belong to the selected indent")));
-
-                        BigDecimal orderedQty = positive(
-                                        lineRequest.orderedQty(),
-                                        "Ordered quantity");
-
-                        BigDecimal requiredQty = requireIndentRequiredQuantity(
-                                        indentLine);
-
-                        BigDecimal committed = committedOrderedQuantity(
-                                        indentLine.getId(),
-                                        null);
-
-                        BigDecimal remaining = requiredQty
-                                        .subtract(committed)
-                                        .max(BigDecimal.ZERO)
+                                                                        "PI line does not belong to the selected PI")));
+                        BigDecimal orderedQty = positive(lineRequest.orderedQty(), "Ordered quantity");
+                        BigDecimal requiredQty = requireIndentRequiredQuantity(indentLine);
+                        BigDecimal committed = committedOrderedQuantity(indentLine.getId(), null);
+                        BigDecimal remaining = requiredQty.subtract(committed).max(BigDecimal.ZERO)
                                         .setScale(3, RoundingMode.HALF_UP);
-
-                        if (orderedQty.compareTo(
-                                        remaining) > 0) {
-                                throw conflict(
-                                                "Ordered quantity exceeds the outstanding indent quantity for " +
-                                                                materialCode(indentLine.material));
+                        if (orderedQty.compareTo(remaining) > 0) {
+                                throw conflict("Ordered quantity exceeds outstanding PI quantity for "
+                                                + materialCode(indentLine.material));
                         }
 
                         MatFlowPurchaseOrderLine line = new MatFlowPurchaseOrderLine();
-
                         line.purchaseOrder = order;
                         line.indentLine = indentLine;
                         line.material = indentLine.material;
@@ -256,180 +215,38 @@ public class MatFlowProcurementService {
                         line.receivedQty = BigDecimal.ZERO;
                         line.uom = indentLine.uom;
                         line.remarks = clean(lineRequest.remarks());
-
                         line.setCreatedBy(actor);
                         line.setUpdatedBy(actor);
+                        purchaseOrderLineRepository.save(line);
 
-                        purchaseOrderLineRepository.save(
-                                        line);
+                        // The just-created PLACED PO is now a real commercial commitment.
+                        indentLine.orderedQty = scale(indentLine.orderedQty).add(orderedQty)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        indentLine.setUpdatedBy(actor);
+                        indentLineRepository.save(indentLine);
+                }
+
+                refreshIndentOrderingStatus(indent, actor);
+                if (indent.requisition != null && indent.requisition.getId() != null) {
+                        requisitionService.refreshState(indent.requisition.getId(), actor);
                 }
 
                 auditService.record(
-                                "PURCHASE_ORDER",
-                                order.getId(),
-                                "PURCHASE_ORDER_CREATED",
-                                order.deliveryLocation == null ? null : order.deliveryLocation.getPlantCode(),
-                                order.indent == null || order.indent.projectDrawing == null
-                                                ? null
-                                                : order.indent.projectDrawing.getProjectCode(),
-                                order.indent == null || order.indent.projectDrawing == null
-                                                ? null
-                                                : order.indent.projectDrawing.getDrawingNo(),
+                                "PURCHASE_ORDER", order.getId(), "PURCHASE_ORDER_PLACED",
+                                location.getPlantCode(),
+                                indent.projectDrawing == null ? null : indent.projectDrawing.getProjectCode(),
+                                indent.projectDrawing == null ? null : indent.projectDrawing.getDrawingNo(),
                                 auditService.details(
                                                 "poNumber", order.poNumber,
-                                                "vendor", order.vendor == null ? null : order.vendor.vendorName,
-                                                "indentNumber", order.indent == null ? null : order.indent.indentNumber,
+                                                "piNumber", indent.indentNumber,
+                                                "linkedMr",
+                                                indent.requisition == null ? null
+                                                                : indent.requisition.requisitionNumber,
+                                                "vendor", vendor.vendorName,
                                                 "lineCount", request.lines().size(),
                                                 "status", order.status));
 
                 return toPurchaseOrderResponse(order);
-        }
-
-        @Transactional
-        public PurchaseOrderResponse approvePurchaseOrder(
-                        UUID id,
-                        PurchaseOrderActionRequest request) {
-                accessService.requirePurchaseOrderApproval();
-
-                MatFlowPurchaseOrder order = requirePurchaseOrder(id);
-
-                if (order.status != PurchaseOrderStatus.DRAFT) {
-                        throw conflict(
-                                        "Only a draft purchase order can be approved and placed");
-                }
-
-                assertVersion(
-                                request == null
-                                                ? null
-                                                : request.rowVersion(),
-                                order.getRowVersion(),
-                                "Purchase order");
-
-                List<MatFlowPurchaseOrderLine> lines = purchaseOrderLineRepository
-                                .findByPurchaseOrder_IdOrderByCreatedAtAsc(
-                                                order.getId())
-                                .stream()
-                                .map(this::hydratePurchaseOrderLine)
-                                .toList();
-
-                if (lines.isEmpty()) {
-                        throw badRequest(
-                                        "Purchase order requires at least one line");
-                }
-
-                for (MatFlowPurchaseOrderLine line : lines) {
-                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
-                                        line);
-
-                        BigDecimal orderedQty = positive(
-                                        line.orderedQty,
-                                        "PO line ordered quantity");
-
-                        BigDecimal requiredQty = requireIndentRequiredQuantity(
-                                        indentLine);
-
-                        BigDecimal otherCommitted = committedOrderedQuantity(
-                                        indentLine.getId(),
-                                        order.getId());
-
-                        BigDecimal available = requiredQty
-                                        .subtract(otherCommitted)
-                                        .max(BigDecimal.ZERO)
-                                        .setScale(3, RoundingMode.HALF_UP);
-
-                        if (orderedQty.compareTo(
-                                        available) > 0) {
-                                throw conflict(
-                                                "Outstanding indent quantity changed for material " +
-                                                                materialCode(line.material) +
-                                                                ". Required=" + requiredQty +
-                                                                ", already committed=" + otherCommitted +
-                                                                ", this PO=" + orderedQty +
-                                                                ". Refresh Purchase and verify the shortage before approval.");
-                        }
-                }
-
-                String actor = accessService.actor();
-
-                order.status = PurchaseOrderStatus.PLACED;
-                order.approvedBy = actor;
-                order.approvedAt = LocalDateTime.now();
-                order.approvalRemarks = request == null ? null : clean(request.remarks());
-
-                if (request != null &&
-                                clean(request.remarks()) != null) {
-                        order.remarks = clean(request.remarks());
-                }
-
-                order.setUpdatedBy(actor);
-
-                order = purchaseOrderRepository.save(order);
-
-                for (MatFlowPurchaseOrderLine line : lines) {
-                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
-                                        line);
-
-                        /*
-                         * If this row came from an older record where requiredQty was
-                         * genuinely null (rather than only hidden behind a Hibernate
-                         * proxy), requireIndentRequiredQuantity() repairs it from the
-                         * linked requisition shortage before we persist the approved
-                         * commitment.
-                         */
-                        indentLine.requiredQty = requireIndentRequiredQuantity(
-                                        indentLine);
-
-                        indentLine.orderedQty = committedOrderedQuantity(
-                                        indentLine.getId(),
-                                        null);
-
-                        indentLine.setUpdatedBy(actor);
-
-                        indentLineRepository.save(
-                                        indentLine);
-                }
-
-                refreshIndentOrderingStatus(
-                                order.indent,
-                                actor);
-
-                if (order.indent != null && order.indent.requisition != null) {
-                        requisitionService.refreshState(order.indent.requisition.getId(), actor);
-                }
-
-                auditService.record(
-                                "PURCHASE_ORDER",
-                                order.getId(),
-                                "PURCHASE_ORDER_APPROVED",
-                                order.deliveryLocation == null ? null : order.deliveryLocation.getPlantCode(),
-                                order.indent == null || order.indent.projectDrawing == null
-                                                ? null
-                                                : order.indent.projectDrawing.getProjectCode(),
-                                order.indent == null || order.indent.projectDrawing == null
-                                                ? null
-                                                : order.indent.projectDrawing.getDrawingNo(),
-                                auditService.details(
-                                                "poNumber", order.poNumber,
-                                                "vendor", order.vendor == null ? null : order.vendor.vendorName,
-                                                "status", order.status,
-                                                "approvedBy", actor,
-                                                "approvedAt", order.approvedAt,
-                                                "approvalRemarks", order.approvalRemarks));
-
-                return toPurchaseOrderResponse(order);
-        }
-
-        /**
-         * Temporary compatibility alias for the current controller. The next
-         * controller pass should expose this as an approval action rather than a
-         * Purchase-user "place" action.
-         */
-        @Deprecated
-        @Transactional
-        public PurchaseOrderResponse placePurchaseOrder(
-                        UUID id,
-                        PurchaseOrderActionRequest request) {
-                return approvePurchaseOrder(id, request);
         }
 
         @Transactional(readOnly = true)
@@ -439,6 +256,8 @@ public class MatFlowProcurementService {
                 return receiptRepository
                                 .findAllByOrderByReceivedAtDesc()
                                 .stream()
+                                .map(this::hydrateGoodsReceipt)
+                                .filter(receipt -> receipt != null && receipt.receiptLocation != null)
                                 .filter(receipt -> accessService.canAccessPlant(
                                                 receipt.receiptLocation.getPlantCode()))
                                 .map(this::toGoodsReceiptResponse)
@@ -449,235 +268,138 @@ public class MatFlowProcurementService {
         public GoodsReceiptResponse createGoodsReceipt(
                         GoodsReceiptRequest request) {
                 accessService.requireGoodsReceiptWrite();
-
                 validateReceiptRequest(request);
 
-                MatFlowPurchaseOrder order = requirePurchaseOrder(
-                                request.purchaseOrderId());
-
+                MatFlowPurchaseOrder order = requirePurchaseOrder(request.purchaseOrderId());
                 if (order.status != PurchaseOrderStatus.PLACED &&
                                 order.status != PurchaseOrderStatus.PARTIALLY_RECEIVED) {
-                        throw conflict(
-                                        "Purchase order is not open for receipt");
+                        throw conflict("Purchase Order is not open for receipt");
                 }
 
-                MatFlowLocation receiptLocation = requireLocation(
-                                request.receiptLocationId());
-
-                if (!receiptLocation.getId()
-                                .equals(
-                                                order.deliveryLocation
-                                                                .getId())) {
-                        throw conflict(
-                                        "GRN location must match the PO delivery location");
+                MatFlowLocation receiptLocation = requireLocation(request.receiptLocationId());
+                if (receiptLocation.getLocationType() != LocationType.STORE) {
+                        throw badRequest("GRN must inward vendor material into a Store location");
                 }
-
+                if (!receiptLocation.getId().equals(order.deliveryLocation.getId())) {
+                        throw conflict("GRN Store location must match the PO delivery location");
+                }
                 if (!receiptLocation.isSupportsStock()) {
-                        throw badRequest(
-                                        "GRN location does not support stock");
+                        throw badRequest("GRN Store location does not support stock");
                 }
 
                 String actor = accessService.actor();
-
                 MatFlowGoodsReceipt receipt = new MatFlowGoodsReceipt();
-
-                receipt.grnNumber = generateNumber("GRN");
-
+                receipt.grnNumber = documentNumberService.nextGrn();
                 receipt.purchaseOrder = order;
                 receipt.receiptLocation = receiptLocation;
-
                 receipt.vendorChallanNo = clean(request.vendorChallanNo());
-
                 receipt.vendorInvoiceNo = clean(request.vendorInvoiceNo());
-
-                receipt.status = GoodsReceiptStatus.QC_PENDING;
-
+                // GRN means inward completed. QC is a later Store allocation decision,
+                // not an automatic consequence of vendor receipt.
+                receipt.status = GoodsReceiptStatus.ACCEPTED;
                 receipt.receivedBy = actor;
                 receipt.receivedAt = LocalDateTime.now();
-
                 receipt.remarks = clean(request.remarks());
-
                 receipt.setCreatedBy(actor);
                 receipt.setUpdatedBy(actor);
-
                 receipt = receiptRepository.save(receipt);
 
                 Set<UUID> uniquePoLines = new HashSet<>();
-
                 for (GoodsReceiptLineRequest lineRequest : request.lines()) {
-                        if (!uniquePoLines.add(
-                                        lineRequest.purchaseOrderLineId())) {
-                                throw badRequest(
-                                                "A PO line was selected more than once");
+                        if (lineRequest == null || lineRequest.purchaseOrderLineId() == null) {
+                                throw badRequest("Every GRN line requires a PO line");
+                        }
+                        if (!uniquePoLines.add(lineRequest.purchaseOrderLineId())) {
+                                throw badRequest("A PO line was selected more than once");
                         }
 
                         MatFlowPurchaseOrderLine poLine = purchaseOrderLineRepository
-                                        .findByIdAndPurchaseOrder_Id(
-                                                        lineRequest.purchaseOrderLineId(),
-                                                        order.getId())
+                                        .findByIdAndPurchaseOrder_Id(lineRequest.purchaseOrderLineId(), order.getId())
                                         .map(this::hydratePurchaseOrderLine)
                                         .orElseThrow(() -> badRequest(
-                                                        "PO line does not belong to the selected purchase order"));
-
-                        /*
-                         * A Goods Receipt for MatFlow shortage procurement must retain
-                         * the complete Project/Product shortage lineage. Validate it
-                         * before creating the GRN/QC rows so future QC can always trace:
-                         * PO Line -> Indent Line -> Requisition Line -> Requisition.
-                         */
-                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(
-                                        poLine);
-
-                        if (indentLine.requisitionLine == null ||
-                                        indentLine.requisitionLine.getId() == null ||
+                                                        "PO line does not belong to the selected Purchase Order"));
+                        MatFlowIndentLine indentLine = requirePurchaseOrderIndentLine(poLine);
+                        if (indentLine.requisitionLine == null || indentLine.requisitionLine.getId() == null ||
                                         indentLine.requisitionLine.requisition == null ||
                                         indentLine.requisitionLine.requisition.getId() == null) {
-                                throw conflict(
-                                                "PO line is not linked to a valid shortage Requisition line. Correct the Indent/PO lineage before receiving material.");
+                                throw conflict("PO line is not linked to a valid MR shortage line");
                         }
 
-                        BigDecimal receivedQty = positive(
-                                        lineRequest.receivedQty(),
-                                        "Received quantity");
-
-                        BigDecimal outstanding = scale(poLine.orderedQty)
-                                        .subtract(scale(poLine.receivedQty))
-                                        .max(BigDecimal.ZERO)
-                                        .setScale(3, RoundingMode.HALF_UP);
-
-                        if (receivedQty.compareTo(
-                                        outstanding) > 0) {
-                                throw conflict(
-                                                "Received quantity exceeds outstanding PO quantity for " +
-                                                                poLine.material
-                                                                                .getMaterialCode());
+                        BigDecimal receivedQty = positive(lineRequest.receivedQty(), "Received quantity");
+                        BigDecimal outstanding = scale(poLine.orderedQty).subtract(scale(poLine.receivedQty))
+                                        .max(BigDecimal.ZERO).setScale(3, RoundingMode.HALF_UP);
+                        if (receivedQty.compareTo(outstanding) > 0) {
+                                throw conflict("Received quantity exceeds outstanding PO quantity for "
+                                                + materialCode(poLine.material));
                         }
 
                         MatFlowGoodsReceiptLine receiptLine = new MatFlowGoodsReceiptLine();
-
                         receiptLine.goodsReceipt = receipt;
                         receiptLine.purchaseOrderLine = poLine;
                         receiptLine.material = poLine.material;
                         receiptLine.receivedQty = receivedQty;
-                        receiptLine.acceptedQty = BigDecimal.ZERO;
+                        // No pre-allocation QC gate: inward quantity is physically usable Store stock.
+                        // When Store later allocates it to an MR, Store explicitly chooses QC or direct
+                        // issue.
+                        receiptLine.acceptedQty = receivedQty;
                         receiptLine.rejectedQty = BigDecimal.ZERO;
                         receiptLine.returnedQty = BigDecimal.ZERO;
                         receiptLine.uom = poLine.uom;
                         receiptLine.batchNo = clean(lineRequest.batchNo());
-
                         receiptLine.setCreatedBy(actor);
                         receiptLine.setUpdatedBy(actor);
+                        receiptLine = receiptLineRepository.save(receiptLine);
 
-                        receiptLine = receiptLineRepository.save(
-                                        receiptLine);
-
-                        poLine.receivedQty = scale(
-                                        poLine.receivedQty
-                                                        .add(receivedQty));
-
+                        poLine.receivedQty = scale(poLine.receivedQty).add(receivedQty).setScale(3,
+                                        RoundingMode.HALF_UP);
                         poLine.setUpdatedBy(actor);
+                        purchaseOrderLineRepository.save(poLine);
 
-                        purchaseOrderLineRepository.save(
-                                        poLine);
+                        BigDecimal indentRemaining = requireIndentRequiredQuantity(indentLine)
+                                        .subtract(scale(indentLine.receivedQty)).max(BigDecimal.ZERO);
+                        BigDecimal credited = receivedQty.min(indentRemaining).setScale(3, RoundingMode.HALF_UP);
+                        indentLine.receivedQty = scale(indentLine.receivedQty).add(credited).setScale(3,
+                                        RoundingMode.HALF_UP);
+                        indentLine.setUpdatedBy(actor);
+                        indentLineRepository.save(indentLine);
 
-                        /*
-                         * PO-line receivedQty is physical GRN receipt. Do NOT mark
-                         * the shortage indent as fulfilled here. The indent's
-                         * receivedQty represents QC-accepted usable quantity and
-                         * is advanced only by MatFlowQcService. This is what keeps
-                         * rejected vendor material open for replacement purchase.
-                         */
-
-                        MatFlowStockBalance balance = lockOrCreateBalance(
-                                        poLine.material,
-                                        receiptLocation,
-                                        actor);
-
-                        balance.onHandQty = scale(
-                                        balance.onHandQty
-                                                        .add(receivedQty));
-
-                        balance.blockedQty = scale(
-                                        balance.blockedQty
-                                                        .add(receivedQty));
-
+                        MatFlowStockBalance balance = lockOrCreateBalance(poLine.material, receiptLocation, actor);
+                        balance.onHandQty = scale(balance.onHandQty).add(receivedQty).setScale(3, RoundingMode.HALF_UP);
                         balance.setUpdatedBy(actor);
-
                         balance = stockRepository.save(balance);
 
                         saveLedger(
-                                        balance,
-                                        MovementType.RECEIPT,
-
-                                        receivedQty,
-                                        BigDecimal.ZERO,
-                                        receivedQty,
-                                        BigDecimal.ZERO,
-
-                                        "MATFLOW_GRN",
-                                        receipt.getId(),
-                                        receipt.grnNumber,
+                                        balance, MovementType.RECEIPT,
+                                        receivedQty, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                                        "MATFLOW_GRN", receipt.getId(), receipt.grnNumber,
                                         receiptLine.batchNo,
-                                        "Vendor material received and blocked for QC",
+                                        "Vendor material inwarded to Store; QC decision deferred until MR allocation",
                                         actor);
-
-                        MatFlowQcInspection inspection = new MatFlowQcInspection();
-
-                        inspection.inspectionNumber = generateNumber("MFQ");
-
-                        inspection.sourceType = QcSourceType.GOODS_RECEIPT;
-
-                        inspection.sourceId = receipt.getId();
-
-                        inspection.sourceLineId = receiptLine.getId();
-
-                        inspection.material = receiptLine.material;
-
-                        inspection.location = receiptLocation;
-
-                        inspection.inspectionQty = receivedQty;
-
-                        inspection.acceptedQty = BigDecimal.ZERO;
-
-                        inspection.rejectedQty = BigDecimal.ZERO;
-
-                        inspection.status = QcInspectionStatus.PENDING;
-
-                        inspection.setCreatedBy(actor);
-                        inspection.setUpdatedBy(actor);
-
-                        qcRepository.save(inspection);
                 }
 
-                refreshPurchaseOrderReceiptStatus(
-                                order,
-                                actor);
-
+                refreshPurchaseOrderReceiptStatus(order, actor);
+                refreshIndentReceiptStatus(order.indent, actor);
                 if (order.indent != null && order.indent.requisition != null) {
                         requisitionService.refreshState(order.indent.requisition.getId(), actor);
                 }
 
                 auditService.record(
-                                "GOODS_RECEIPT",
-                                receipt.getId(),
-                                "GRN_POSTED",
-                                receipt.receiptLocation.getPlantCode(),
-                                order.indent.projectDrawing
-                                                .getProjectCode(),
-                                order.indent.projectDrawing
-                                                .getDrawingNo(),
+                                "GOODS_RECEIPT", receipt.getId(), "GRN_POSTED_TO_STORE",
+                                receiptLocation.getPlantCode(),
+                                order.indent == null || order.indent.projectDrawing == null ? null
+                                                : order.indent.projectDrawing.getProjectCode(),
+                                order.indent == null || order.indent.projectDrawing == null ? null
+                                                : order.indent.projectDrawing.getDrawingNo(),
                                 auditService.details(
-                                                "grnNumber",
-                                                receipt.grnNumber,
-                                                "poNumber",
-                                                order.poNumber,
-                                                "vendor",
-                                                order.vendor.vendorName,
-                                                "lineCount",
-                                                request.lines().size(),
-                                                "status",
-                                                receipt.status));
-
+                                                "grnNumber", receipt.grnNumber,
+                                                "poNumber", order.poNumber,
+                                                "piNumber", order.indent == null ? null : order.indent.indentNumber,
+                                                "linkedMr",
+                                                order.indent == null || order.indent.requisition == null ? null
+                                                                : order.indent.requisition.requisitionNumber,
+                                                "vendor", order.vendor == null ? null : order.vendor.vendorName,
+                                                "lineCount", request.lines().size(),
+                                                "status", receipt.status));
                 return toGoodsReceiptResponse(receipt);
         }
 
@@ -764,6 +486,29 @@ public class MatFlowProcurementService {
 
                 indent.setUpdatedBy(actor);
 
+                indentRepository.save(indent);
+        }
+
+        private void refreshIndentReceiptStatus(
+                        MatFlowIndent rawIndent,
+                        String actor) {
+                MatFlowIndent indent = hydrateIndent(rawIndent);
+                if (indent == null || indent.getId() == null) {
+                        return;
+                }
+                List<MatFlowIndentLine> lines = indentLineRepository
+                                .findByIndent_IdOrderByCreatedAtAsc(indent.getId())
+                                .stream().map(this::hydrateIndentLine).toList();
+                boolean fullyReceived = !lines.isEmpty() && lines.stream().allMatch(
+                                line -> scale(line.receivedQty).compareTo(requireIndentRequiredQuantity(line)) >= 0);
+                boolean anyReceived = lines.stream()
+                                .anyMatch(line -> scale(line.receivedQty).compareTo(BigDecimal.ZERO) > 0);
+                indent.status = fullyReceived
+                                ? IndentStatus.RECEIVED
+                                : anyReceived
+                                                ? IndentStatus.PARTIALLY_RECEIVED
+                                                : IndentStatus.PURCHASE_IN_PROGRESS;
+                indent.setUpdatedBy(actor);
                 indentRepository.save(indent);
         }
 
@@ -863,10 +608,6 @@ public class MatFlowProcurementService {
                                         "Purchase order request is required");
                 }
 
-                required(
-                                request.poNumber(),
-                                "PO number");
-
                 if (request.poDate() == null) {
                         throw badRequest(
                                         "PO date is required");
@@ -944,6 +685,13 @@ public class MatFlowProcurementService {
                                 })
                                 .toList();
 
+                MatFlowMaterialRequisition linkedRequisition = order.indent == null
+                                ? null
+                                : order.indent.requisition;
+                MatFlowProjectDrawing linkedProduct = order.indent == null
+                                ? null
+                                : order.indent.projectDrawing;
+
                 return new PurchaseOrderResponse(
                                 order.getId(),
                                 order.poNumber,
@@ -953,13 +701,17 @@ public class MatFlowProcurementService {
                                 order.vendor.vendorName,
                                 order.indent.getId(),
                                 order.indent.indentNumber,
+                                linkedRequisition == null ? null : linkedRequisition.getId(),
+                                linkedRequisition == null ? null : linkedRequisition.requisitionNumber,
+                                linkedProduct == null ? null : linkedProduct.getId(),
+                                linkedProduct == null ? null : linkedProduct.getProjectCode(),
+                                linkedProduct == null ? null : linkedProduct.getDrawingNo(),
+                                linkedProduct == null ? null : linkedProduct.getProductName(),
+                                linkedProduct == null ? null : linkedProduct.getClientName(),
                                 order.deliveryLocation.getId(),
                                 order.deliveryLocation.getLocationCode(),
                                 order.deliveryLocation.getPlantCode(),
                                 order.status,
-                                order.approvedBy,
-                                order.approvedAt,
-                                order.approvalRemarks,
                                 order.remarks,
                                 order.getRowVersion(),
                                 lines);
@@ -990,11 +742,25 @@ public class MatFlowProcurementService {
                                                 line.getRowVersion()))
                                 .toList();
 
+                MatFlowPurchaseOrder order = hydratePurchaseOrder(receipt.purchaseOrder);
+                MatFlowIndent indent = order == null ? null : order.indent;
+                MatFlowMaterialRequisition linkedRequisition = indent == null ? null : indent.requisition;
+                MatFlowProjectDrawing linkedProduct = indent == null ? null : indent.projectDrawing;
+
                 return new GoodsReceiptResponse(
                                 receipt.getId(),
                                 receipt.grnNumber,
-                                receipt.purchaseOrder.getId(),
-                                receipt.purchaseOrder.poNumber,
+                                order == null ? null : order.getId(),
+                                order == null ? null : order.poNumber,
+                                indent == null ? null : indent.getId(),
+                                indent == null ? null : indent.indentNumber,
+                                linkedRequisition == null ? null : linkedRequisition.getId(),
+                                linkedRequisition == null ? null : linkedRequisition.requisitionNumber,
+                                linkedProduct == null ? null : linkedProduct.getId(),
+                                linkedProduct == null ? null : linkedProduct.getProjectCode(),
+                                linkedProduct == null ? null : linkedProduct.getDrawingNo(),
+                                linkedProduct == null ? null : linkedProduct.getProductName(),
+                                linkedProduct == null ? null : linkedProduct.getClientName(),
                                 receipt.receiptLocation.getId(),
                                 receipt.receiptLocation.getLocationCode(),
                                 receipt.receiptLocation.getPlantCode(),
@@ -1054,6 +820,25 @@ public class MatFlowProcurementService {
          * reads the proxy's default null value. Always unwrap the Procurement
          * associations before business arithmetic or response mapping.
          */
+        private MatFlowGoodsReceipt hydrateGoodsReceipt(
+                        MatFlowGoodsReceipt rawReceipt) {
+                if (rawReceipt == null) {
+                        return null;
+                }
+
+                MatFlowGoodsReceipt receipt = (MatFlowGoodsReceipt) Hibernate.unproxy(rawReceipt);
+
+                if (receipt.purchaseOrder != null) {
+                        receipt.purchaseOrder = hydratePurchaseOrder(receipt.purchaseOrder);
+                }
+
+                if (receipt.receiptLocation != null) {
+                        receipt.receiptLocation = (MatFlowLocation) Hibernate.unproxy(receipt.receiptLocation);
+                }
+
+                return receipt;
+        }
+
         private MatFlowPurchaseOrder hydratePurchaseOrder(
                         MatFlowPurchaseOrder rawOrder) {
                 if (rawOrder == null) {
@@ -1129,8 +914,11 @@ public class MatFlowProcurementService {
                  * later reads it while refreshing the consolidated MatFlow state.
                  */
                 if (indent.requisition != null) {
-                        indent.requisition = (com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition) Hibernate
-                                        .unproxy(indent.requisition);
+                        indent.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(indent.requisition);
+                }
+
+                if (indent.projectDrawing != null) {
+                        indent.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(indent.projectDrawing);
                 }
 
                 return indent;

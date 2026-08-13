@@ -5,7 +5,10 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialRetu
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnLineRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.MaterialReturnResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProductionReceiveRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferActionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
 
 import com.alsorg.packing.domain.matflow.*;
@@ -32,9 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Physical material movement boundary: internal transfers and Production
- * returns. Direct Store-to-Production issue is intentionally not duplicated
- * here; MatFlowRequisitionService is the single issue authority.
+ * Internal custody engine + Production material returns.
+ *
+ * mf_transfer_orders remain durable audit/custody records, but they are no
+ * longer a user-facing desk. Store, QC and Processing send material through
+ * internal custody records; Production explicitly acknowledges its final
+ * receipt.
  */
 @Service
 public class MatFlowMovementService {
@@ -43,6 +49,7 @@ public class MatFlowMovementService {
 
         private final TransferModule transfers;
         private final ReturnModule returns;
+        private final MatFlowAccessService accessService;
 
         public MatFlowMovementService(
                         MatFlowTransferOrderRepository transferRepository,
@@ -59,6 +66,8 @@ public class MatFlowMovementService {
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
                         MatFlowRequisitionService requisitionService) {
+
+                this.accessService = accessService;
 
                 this.transfers = new TransferModule(
                                 transferRepository,
@@ -85,24 +94,78 @@ public class MatFlowMovementService {
                                 auditService);
         }
 
-        @Transactional(readOnly = true)
-        public List<TransferResponse> listTransfers(TransferStatus status, String plantCode) {
-                return transfers.list(status, plantCode);
+        /**
+         * Store's explicit Issue/Send action. The Store user can release all or part
+         * of one reservation lot. The selected quantity is physically advanced to
+         * the destination already captured during Store review (QC or Production).
+         */
+        @Transactional
+        public PlanningResponse advanceStoreReservation(UUID reservationId, StoreIssueRequest request) {
+                accessService.requireMaterialPlanning();
+                MatFlowReservation reservation = transfers.requireReservationForSnapshot(reservationId);
+                if (request == null || request.rowVersion() == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                        "Reservation rowVersion is required");
+                }
+                if (!request.rowVersion().equals(reservation.getRowVersion())) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                        "Reservation was modified by another user. Refresh and retry.");
+                }
+                BigDecimal remainingLot = zero(reservation.reservedQty)
+                                .subtract(zero(reservation.issuedQty))
+                                .max(BigDecimal.ZERO)
+                                .setScale(3, RoundingMode.HALF_UP);
+                if (remainingLot.compareTo(BigDecimal.ZERO) <= 0) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                        "Reservation lot is already fully issued");
+                }
+                if (request.quantity() != null &&
+                                request.quantity().setScale(3, RoundingMode.HALF_UP).compareTo(remainingLot) != 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                        "Issue/Send must move the complete reservation lot of " + remainingLot
+                                                        + ". Split the Store allocation into separate reservation lots when different routes or quantities are needed.");
+                }
+                transfers.advanceReservation(
+                                reservationId,
+                                remainingLot,
+                                request.batchNo(),
+                                request.remarks());
+                return planningSnapshot(reservationId);
         }
 
-        @Transactional(readOnly = true)
-        public TransferResponse getTransfer(UUID id) {
-                return transfers.get(id);
+        /**
+         * Internal full-lot advancement used after a QC route decision or Processing
+         * completion. The caller service has already enforced the owning desk role.
+         */
+        @Transactional
+        public PlanningResponse advanceReservation(UUID reservationId, String remarks) {
+                transfers.advanceReservation(reservationId, null, null, remarks);
+                return planningSnapshot(reservationId);
         }
 
         @Transactional
-        public TransferResponse dispatchTransfer(UUID id, TransferActionRequest request) {
-                return transfers.dispatch(id, request);
+        public PlanningResponse receiveProductionReservation(
+                        UUID reservationId,
+                        ProductionReceiveRequest request) {
+                accessService.requireProductionRequest();
+                transfers.receiveProductionReservation(reservationId, request);
+                return planningSnapshot(reservationId);
         }
 
-        @Transactional
-        public TransferResponse receiveTransfer(UUID id, TransferActionRequest request) {
-                return transfers.receive(id, request);
+        private PlanningResponse planningSnapshot(UUID reservationId) {
+                MatFlowReservation reservation = transfers.requireReservationForSnapshot(reservationId);
+                if (reservation.requisitionLine == null || reservation.requisitionLine.requisition == null) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                        "Reservation is not linked to a valid Material Requisition");
+                }
+                return transfers.requisitionService.getPlanningSnapshot(
+                                reservation.requisitionLine.requisition.getId());
+        }
+
+        private BigDecimal zero(BigDecimal value) {
+                return value == null
+                                ? BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP)
+                                : value.setScale(3, RoundingMode.HALF_UP);
         }
 
         @Transactional(readOnly = true)
@@ -169,6 +232,143 @@ public class MatFlowMovementService {
                         this.requisitionService = requisitionService;
                 }
 
+                void advanceReservation(
+                                UUID reservationId,
+                                BigDecimal requestedQuantity,
+                                String batchNo,
+                                String remarks) {
+                        MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
+                        accessService.requirePlantAccess(reservation.demandPlantCode);
+
+                        List<MatFlowTransferOrder> route = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
+                        MatFlowTransferOrder next = route.stream()
+                                        .filter(item -> item != null && item.status != TransferStatus.RECEIVED
+                                                        && item.status != TransferStatus.CANCELLED)
+                                        .findFirst()
+                                        .orElseThrow(() -> conflict(
+                                                        "No pending internal hand-off exists for this reserved material"));
+
+                        if (next.status == TransferStatus.PLANNED) {
+                                throw conflict("The next material hand-off is waiting for its preceding QC/Processing action");
+                        }
+
+                        MatFlowTransferLine line = requireLockedTransferLine(next.getId());
+                        BigDecimal remaining = zero(line.plannedQty).subtract(zero(line.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        if (remaining.compareTo(ZERO) <= 0) {
+                                throw conflict("The selected material hand-off is already complete");
+                        }
+
+                        BigDecimal quantity = requestedQuantity == null
+                                        ? remaining
+                                        : positiveQuantity(requestedQuantity, remaining, "Issue/send quantity");
+
+                        BigDecimal alreadyInTransit = zero(line.dispatchedQty).subtract(zero(line.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        BigDecimal dispatchNeeded = quantity.subtract(alreadyInTransit)
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        if (dispatchNeeded.compareTo(ZERO) > 0) {
+                                dispatch(next.getId(), new TransferActionRequest(
+                                                next.getRowVersion(), dispatchNeeded, batchNo, remarks));
+                        }
+
+                        MatFlowTransferOrder afterDispatch = requireLockedTransfer(next.getId());
+
+                        /*
+                         * Production is the only destination that explicitly acknowledges
+                         * receipt. This preserves the user's hand-off: Store/QC/Processing
+                         * sends the material, Production sees it waiting, receives it, then
+                         * starts execution. No generic Transfers page is exposed.
+                         */
+                        if (afterDispatch.toLocation != null
+                                        && afterDispatch.toLocation.getLocationType() == LocationType.PRODUCTION) {
+                                return;
+                        }
+
+                        MatFlowTransferLine afterLine = requireLockedTransferLine(afterDispatch.getId());
+                        BigDecimal outstandingReceipt = zero(afterLine.dispatchedQty)
+                                        .subtract(zero(afterLine.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        BigDecimal receiptQuantity = quantity.min(outstandingReceipt)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        if (receiptQuantity.compareTo(ZERO) > 0) {
+                                receive(afterDispatch.getId(), new TransferActionRequest(
+                                                afterDispatch.getRowVersion(), receiptQuantity, batchNo, remarks));
+                        }
+                }
+
+                void receiveProductionReservation(
+                                UUID reservationId,
+                                ProductionReceiveRequest request) {
+                        MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
+                        if (reservation.requisitionLine == null || reservation.requisitionLine.requisition == null) {
+                                throw conflict("Reservation is not linked to a valid Material Requisition");
+                        }
+                        accessService.requireProductionOwnership(
+                                        reservation.requisitionLine.requisition.requestedBy);
+                        accessService.requirePlantAccess(reservation.demandPlantCode);
+
+                        if (request == null || request.rowVersion() == null) {
+                                throw badRequest("Reservation rowVersion is required");
+                        }
+                        if (!request.rowVersion().equals(reservation.getRowVersion())) {
+                                throw conflict("Reservation was modified by another user. Refresh and retry.");
+                        }
+
+                        MatFlowTransferOrder productionTransfer = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
+                                        .stream()
+                                        .filter(transfer -> transfer != null && transfer.toLocation != null)
+                                        .filter(transfer -> transfer.toLocation
+                                                        .getLocationType() == LocationType.PRODUCTION)
+                                        .filter(transfer -> transfer.status != TransferStatus.RECEIVED
+                                                        && transfer.status != TransferStatus.CANCELLED)
+                                        .findFirst()
+                                        .orElseThrow(() -> conflict(
+                                                        "No material is waiting for Production receipt for this reservation"));
+
+                        if (productionTransfer.status == TransferStatus.PLANNED
+                                        || productionTransfer.status == TransferStatus.READY) {
+                                throw conflict("Material has not yet been sent to Production");
+                        }
+
+                        MatFlowTransferLine line = requireLockedTransferLine(productionTransfer.getId());
+                        BigDecimal outstanding = zero(line.dispatchedQty)
+                                        .subtract(zero(line.receivedQty))
+                                        .max(ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        if (outstanding.compareTo(ZERO) <= 0) {
+                                throw conflict("Production material receipt is already complete");
+                        }
+
+                        MatFlowTransferOrder locked = requireLockedTransfer(productionTransfer.getId());
+                        receive(locked.getId(), new TransferActionRequest(
+                                        locked.getRowVersion(),
+                                        outstanding,
+                                        request.batchNo(),
+                                        request.remarks()));
+                }
+
+                MatFlowReservation requireReservationForSnapshot(UUID reservationId) {
+                        if (reservationId == null) {
+                                throw badRequest("Reservation ID is required");
+                        }
+                        MatFlowReservation reservation = reservationRepository.findById(reservationId)
+                                        .orElseThrow(() -> notFound("Reservation not found"));
+                        reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+                        if (reservation.requisitionLine != null) {
+                                reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate
+                                                .unproxy(reservation.requisitionLine);
+                                if (reservation.requisitionLine.requisition != null) {
+                                        reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate
+                                                        .unproxy(
+                                                                        reservation.requisitionLine.requisition);
+                                }
+                        }
+                        return reservation;
+                }
+
                 @Transactional(readOnly = true)
                 public List<TransferResponse> list(
                                 TransferStatus status,
@@ -197,7 +397,7 @@ public class MatFlowMovementService {
 
                 /**
                  * List views are operational queues. A single malformed historical row
-                 * must not blank the entire Transfer desk. We therefore validate and
+                 * must not break internal custody/tracker reads. We therefore validate and
                  * convert each visible transfer independently. Explicit GET /transfers/{id}
                  * remains strict and still returns the integrity error for the bad row.
                  */
@@ -277,8 +477,8 @@ public class MatFlowMovementService {
                         validateTransferLocations(
                                         transfer);
 
-                        accessService.requireTransferDispatch(
-                                        transfer.fromLocation);
+                        accessService.requirePlantAccess(
+                                        transfer.fromLocation.getPlantCode());
 
                         if (!isDispatchableStatus(
                                         transfer.status)) {
@@ -469,8 +669,8 @@ public class MatFlowMovementService {
                         validateTransferLocations(
                                         transfer);
 
-                        accessService.requireTransferReceive(
-                                        transfer.toLocation);
+                        accessService.requirePlantAccess(
+                                        transfer.toLocation.getPlantCode());
 
                         if (!isReceivableStatus(
                                         transfer.status)) {
@@ -667,16 +867,17 @@ public class MatFlowMovementService {
 
                                         actor);
 
+                        if (finalProductionDestination) {
+                                recordProductionIssueOnReceipt(
+                                                transfer, transferLine, destinationBalance, quantity,
+                                                request == null ? null : request.batchNo(), actor);
+                                requisitionService.refreshState(
+                                                transferRequisition.getId(), actor);
+                        }
+
                         /*
-                         * Transfer receipt and Store issue are intentionally two different
-                         * controls. Reaching the final Production location only means the
-                         * reserved material has completed its approved physical route.
-                         * MatFlowRequisitionService remains the single authority that marks
-                         * quantity as issued when Store performs the explicit Issue action.
-                         *
-                         * This prevents double-counting issuedQty and keeps the workflow:
-                         * Store reserve -> QC -> optional Processing -> Production staging
-                         * -> Store issue -> Production start/consume.
+                         * Reaching Production is the issue event in the simplified MatFlow
+                         * workflow. There is no second Transfer/Store confirmation page.
                          */
                         if (fullyReceived) {
                                 if (hasSuccessor &&
@@ -731,6 +932,83 @@ public class MatFlowMovementService {
 
                         return toResponse(
                                         transfer);
+                }
+
+                private void recordProductionIssueOnReceipt(
+                                MatFlowTransferOrder transfer,
+                                MatFlowTransferLine transferLine,
+                                MatFlowStockBalance productionBalance,
+                                BigDecimal quantity,
+                                String batchNo,
+                                String actor) {
+                        if (transfer.reservation == null || transfer.reservation.getId() == null) {
+                                throw conflict("Final Production hand-off has no reservation lineage");
+                        }
+                        MatFlowReservation reservation = reservationRepository.findById(transfer.reservation.getId())
+                                        .orElseThrow(() -> conflict("Final Production reservation was not found"));
+                        reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+                        if (reservation.requisitionLine == null) {
+                                throw conflict("Final Production reservation has no MR line");
+                        }
+                        MatFlowRequisitionLine line = (MatFlowRequisitionLine) Hibernate
+                                        .unproxy(reservation.requisitionLine);
+
+                        BigDecimal nextReservationIssued = zero(reservation.issuedQty).add(quantity)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        if (nextReservationIssued.compareTo(zero(reservation.reservedQty)) > 0) {
+                                throw conflict("Production receipt exceeds the reserved material quantity");
+                        }
+                        reservation.issuedQty = nextReservationIssued;
+                        reservation.status = nextReservationIssued.compareTo(zero(reservation.reservedQty)) >= 0
+                                        ? ReservationStatus.ISSUED
+                                        : ReservationStatus.PARTIALLY_ISSUED;
+                        reservation.setUpdatedBy(actor);
+                        reservationRepository.save(reservation);
+
+                        line.issuedMaterial = transferLine.material;
+                        line.issuedQty = zero(line.issuedQty).add(quantity).setScale(3, RoundingMode.HALF_UP);
+                        line.status = line.issuedQty.compareTo(zero(line.requestedQty)) >= 0
+                                        ? RequisitionLineStatus.ISSUED_TO_PRODUCTION
+                                        : RequisitionLineStatus.PARTIALLY_ISSUED;
+                        line.setUpdatedBy(actor);
+                        requisitionLineRepository.save(line);
+
+                        // TRANSFER_IN initially parks the lot as reserved at Production;
+                        // issuing it to the named Production demand releases that reservation
+                        // without changing physical on-hand at the Production location.
+                        BigDecimal currentReserved = zero(productionBalance.reservedQty);
+                        if (currentReserved.compareTo(quantity) < 0) {
+                                throw conflict("Production reserved stock is insufficient to complete issue");
+                        }
+                        productionBalance.reservedQty = currentReserved.subtract(quantity)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        productionBalance.setUpdatedBy(actor);
+                        stockRepository.save(productionBalance);
+
+                        saveTransferLedger(
+                                        productionBalance, MovementType.ISSUE_TO_PRODUCTION,
+                                        ZERO, quantity.negate(), ZERO, ZERO,
+                                        transfer, batchNo,
+                                        "Material received and issued to Production demand",
+                                        actor);
+
+                        MatFlowMaterialRequisition requisition = requireTransferRequisition(transfer);
+                        auditService.record(
+                                        "REQUISITION", requisition.getId(), "MATERIAL_ISSUED_TO_PRODUCTION",
+                                        transfer.toLocation.getPlantCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "requisitionNumber", requisition.requisitionNumber,
+                                                        "reservationId", reservation.getId(),
+                                                        "materialCode",
+                                                        transferLine.material == null ? null
+                                                                        : transferLine.material.getMaterialCode(),
+                                                        "quantity", quantity,
+                                                        "productionLocation", transfer.toLocation.getLocationCode(),
+                                                        "issuedTo", requisition.requestedBy));
                 }
 
                 private void activateSuccessor(
@@ -1760,7 +2038,7 @@ public class MatFlowMovementService {
                                         }
 
                                         if (destinationType == LocationType.PRODUCTION) {
-                                                yield "ISSUE_TO_PRODUCTION";
+                                                yield "START_PRODUCTION";
                                         }
 
                                         boolean hasSuccessor = transferRepository
@@ -2169,6 +2447,7 @@ public class MatFlowMovementService {
                                         .orElseThrow(() -> notFound(
                                                         "Requisition not found"));
 
+                        accessService.requireProductionOwnership(requisition.requestedBy);
                         validateReturnRequisition(requisition);
 
                         MatFlowLocation fromLocation = requireLocation(

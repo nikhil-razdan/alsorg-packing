@@ -91,7 +91,13 @@ public class PdfStickerService {
                 String itemName = cleanItemName(safe(data.getItemName()));
 
                 String packingDate = firstNonBlank(
-                        normalizeDate(reflectValue(data, "getPackingDate", "getPackedDate", "getCreatedAt")),
+                        normalizeDate(
+                                reflectValue(
+                                        data,
+                                        "getPackingDate",
+                                        "getPackedDate",
+                                        "getDate",
+                                        "getCreatedAt")),
                         todayIndia());
 
                 String clientName = safe(data.getClientName());

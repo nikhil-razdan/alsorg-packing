@@ -158,7 +158,20 @@ public class PacketService {
                 pdf.setDrawingNo(item.getDrawingNo());
                 pdf.setPrintIteration((int) iteration);
                 pdf.setQuantity(1);
-                pdf.setDate(java.time.LocalDate.now().toString());
+
+                /*
+                 * The sticker must show the item's real packing date, not the
+                 * day on which the PDF happens to be opened/rebuilt.
+                 *
+                 * Legacy rows without packedAt keep the previous safe behaviour
+                 * and fall back to today's India date.
+                 */
+                java.time.LocalDate stickerPackingDate =
+                                item.getPackedAt() != null
+                                                ? item.getPackedAt().toLocalDate()
+                                                : java.time.LocalDate.now(INDIA_ZONE);
+
+                pdf.setDate(stickerPackingDate.toString());
 
                 if (hardwareSticker) {
                         pdf.setDimensions(null);
@@ -1157,6 +1170,175 @@ public class PacketService {
 
         private String keepExistingIfNull(String newValue, String oldValue) {
                 return newValue == null ? oldValue : newValue;
+        }
+
+        /**
+         * ADMIN-only packing-date correction used from the Dispatch page.
+         *
+         * Business guarantees:
+         * - PacketItem.packedAt is the source of truth for sticker packing date.
+         * - Matching DispatchedItem.packedAt is kept in sync for reports/UI.
+         * - Existing StickerHistory rows keep their original audit metadata, but
+         *   their stored PDF bytes are rebuilt so opening an old sticker-history
+         *   entry immediately shows the corrected packing date.
+         * - Sticker number, print iteration, generatedBy, generatedAt and reason
+         *   are never rewritten by a date correction.
+         */
+        @Transactional
+        public PacketItem adminUpdatePackingDateForDispatchedItem(
+                        String dispatchedItemId,
+                        String packingDate,
+                        String updatedBy) {
+
+                if (dispatchedItemId == null || dispatchedItemId.isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Dispatch item ID is required");
+                }
+
+                String cleanDispatchItemId = dispatchedItemId.trim();
+
+                DispatchedItem dispatchedItem = dispatchedRepo
+                                .findById(cleanDispatchItemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Dispatch item not found"));
+
+                UUID packetItemId = dispatchedItem.getPacketItemId();
+
+                if (packetItemId == null) {
+                        try {
+                                packetItemId = UUID.fromString(cleanDispatchItemId);
+                        } catch (Exception ignored) {
+                                // Legacy non-PacketItem dispatch records cannot own sticker history.
+                        }
+                }
+
+                if (packetItemId == null) {
+                        throw new IllegalStateException(
+                                        "This dispatch item is not linked to a packet item/sticker");
+                }
+
+                return adminUpdatePackingDate(
+                                packetItemId,
+                                packingDate,
+                                updatedBy);
+        }
+
+        @Transactional
+        public PacketItem adminUpdatePackingDate(
+                        UUID itemId,
+                        String packingDate,
+                        String updatedBy) {
+
+                if (packingDate == null || packingDate.isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Packing date is required");
+                }
+
+                final java.time.LocalDate parsedPackingDate;
+
+                try {
+                        parsedPackingDate = java.time.LocalDate.parse(
+                                        packingDate.trim());
+                } catch (Exception exception) {
+                        throw new IllegalArgumentException(
+                                        "Packing date must be in yyyy-MM-dd format");
+                }
+
+                PacketItem item = packetItemRepository
+                                .findById(itemId)
+                                .orElseThrow(() -> new RuntimeException(
+                                                "Item not found"));
+
+                LocalDateTime previousPackedAt = item.getPackedAt();
+
+                java.time.LocalTime preservedTime =
+                                previousPackedAt != null
+                                                ? previousPackedAt.toLocalTime()
+                                                : LocalDateTime.now(INDIA_ZONE).toLocalTime();
+
+                LocalDateTime correctedPackedAt =
+                                parsedPackingDate.atTime(preservedTime);
+
+                item.setPackedAt(correctedPackedAt);
+
+                PacketItem saved = packetItemRepository.save(item);
+
+                /*
+                 * Dispatch register/report packing date must change together with
+                 * the PacketItem date. Support both the modern packetItemId link
+                 * and the legacy id convention.
+                 */
+                dispatchedRepo
+                                .findByPacketItemId(itemId)
+                                .or(() -> dispatchedRepo.findById(
+                                                itemId.toString()))
+                                .ifPresent(dispatchedItem -> {
+                                        dispatchedItem.setPackedAt(correctedPackedAt);
+                                        dispatchedRepo.save(dispatchedItem);
+                                });
+
+                /*
+                 * StickerHistoryController serves history.pdfData directly.
+                 * Rebuild every stored history PDF so INITIAL, REPRINT and legacy
+                 * history downloads all display the corrected packing date.
+                 */
+                List<StickerHistory> histories = stickerHistoryRepository
+                                .findByPacketItem_IdOrderByGeneratedAtDesc(itemId);
+
+                if (histories != null && !histories.isEmpty()) {
+                        for (StickerHistory history : histories) {
+                                if (history == null) {
+                                        continue;
+                                }
+
+                                String historyStickerNumber =
+                                                firstNonBlankValue(
+                                                                history.getStickerNumber(),
+                                                                saved.getStickerNumber());
+
+                                if (historyStickerNumber == null ||
+                                                historyStickerNumber.isBlank()) {
+                                        continue;
+                                }
+
+                                long historyIteration =
+                                                history.getPrintIteration() != null &&
+                                                                history.getPrintIteration() > 0
+                                                                                ? history.getPrintIteration()
+                                                                                : saved.getPrintIteration() != null &&
+                                                                                                saved.getPrintIteration() > 0
+                                                                                                                ? saved.getPrintIteration()
+                                                                                                                : 1L;
+
+                                StickerPdfData pdf = buildStickerPdfData(
+                                                saved,
+                                                historyStickerNumber,
+                                                saved.getFloor(),
+                                                true,
+                                                historyIteration,
+                                                false);
+
+                                history.setPdfData(
+                                                pdfService.generateSticker(pdf));
+                        }
+
+                        stickerHistoryRepository.saveAll(histories);
+                }
+
+                String actor = safeActor(updatedBy);
+
+                activityLogService.log(
+                                itemId.toString(),
+                                "PACKING DATE UPDATED",
+                                actor,
+                                "ADMIN",
+                                previousPackedAt == null
+                                                ? null
+                                                : previousPackedAt.toLocalDate().toString(),
+                                parsedPackingDate.toString(),
+                                null);
+
+                return saved;
         }
 
         @Transactional

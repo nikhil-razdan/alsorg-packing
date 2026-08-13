@@ -10,6 +10,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowQcRoutingDtos.QcRoutingR
 import com.alsorg.packing.controller.dto.matflow.MatFlowQcRoutingDtos.QcRoutingResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus;
 import com.alsorg.packing.service.matflow.MatFlowQcService;
+import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -23,11 +24,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Quality gate and explicit post-QC routing authority.
+ * Quality gate and post-QC execution authority.
  *
- * Accepted material does not automatically enter Processing or Production.
- * The QC actor first records quality, then records the physical next-hop
- * choice.
+ * Store decides whether a reserved lot requires QC. When QC is required, the
+ * inspector records quality here and then chooses either direct Production or
+ * an approved Processing Unit. The workflow coordinator advances the internal
+ * custody record in the same transaction, so operators never use a Transfer
+ * desk to continue the normal MatFlow workflow.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -35,9 +38,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class MatFlowQcController {
 
     private final MatFlowQcService service;
+    private final MatFlowWorkflowCoordinatorService workflow;
 
-    public MatFlowQcController(MatFlowQcService service) {
+    public MatFlowQcController(
+            MatFlowQcService service,
+            MatFlowWorkflowCoordinatorService workflow) {
         this.service = service;
+        this.workflow = workflow;
     }
 
     @GetMapping("/qc")
@@ -67,7 +74,7 @@ public class MatFlowQcController {
     public QcRoutingResponse route(
             @PathVariable UUID id,
             @Valid @RequestBody QcRoutingRequest request) {
-        return service.route(id, request);
+        return workflow.routeQc(id, request);
     }
 
     @PostMapping("/qc/{id}/return-to-vendor")
