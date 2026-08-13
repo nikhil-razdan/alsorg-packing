@@ -631,7 +631,7 @@ export function MatFlowReceivingPage() {
                         <TextField select label="Open PO *" value={form.purchaseOrderId} onChange={(e) => setForm((c) => ({ ...c, purchaseOrderId: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }}>
                             {orders.map((order) => (
                                 <MenuItem key={order.id} value={order.id}>
-                                    {order.poNumber} · {order.vendorName} · PI {order.indentNumber} · MR {order.requisitionNumber}
+                                    {order.poNumber} · {order.vendorName} · {order.indentNumber} · {order.requisitionNumber}
                                 </MenuItem>
                             ))}
                         </TextField>
