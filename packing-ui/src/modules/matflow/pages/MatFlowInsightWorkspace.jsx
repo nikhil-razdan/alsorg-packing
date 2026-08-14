@@ -111,30 +111,481 @@ const nextActionTarget = (row) => {
 
 const UNIVERSAL_DASHBOARD_VIEWS = [
     ["overview", "Overall View", "KPIs, live execution and workflow health"],
-    ["kanban", "Work Kanban", "Role-aware action board without bypassing workflow controls"],
+    ["kanban", "Kanban", "Project-wise · Product-wise · Material-wise workflow control"],
     ["projects", "Project Tracker", "Project → Product → MR material readiness"],
     ["materials", "Material Tracker", "One material across Projects, Products and custody routes"],
 ];
 
-const WORK_KANBAN_COLUMNS = [
-    { key: "ACTION", label: "Needs Action", subtitle: "The responsible desk can act now" },
-    { key: "PROGRESS", label: "In Progress", subtitle: "Store, Processing or Production work is underway" },
-    { key: "WAITING", label: "Waiting / External", subtitle: "Purchase, transit or another dependency is pending" },
-    { key: "READY", label: "Ready for Next Step", subtitle: "Material is prepared for the next controlled action" },
-    { key: "DONE", label: "Completed", subtitle: "Production material cycle completed" },
+const KANBAN_SCOPE_OPTIONS = [
+    { value: "PROJECT", label: "Project-wise" },
+    { value: "PRODUCT", label: "Product-wise" },
+    { value: "MATERIAL", label: "Material-wise" },
 ];
 
-const workKanbanLane = (row, roles = [], contextPlants = []) => {
-    const stage = normalize(row?.currentStage);
-    if (stage === "PRODUCTION_COMPLETED") return "DONE";
-    if (["PROCESSING", "PRODUCTION_IN_PROGRESS", "STORE_REVIEW_IN_PROGRESS"].includes(stage)) return "PROGRESS";
-    if (["MATERIAL_RESERVED", "READY_TO_ISSUE", "PRODUCTION_ISSUE"].includes(stage) || row?.readyToStartProduction === true) return "READY";
-    if (stage === "TRANSFER_IN_PROGRESS") return "WAITING";
-    const target = nextActionTarget(row);
-    if (canAccessMatFlowScreenForContext(target.screen, roles, contextPlants)) return "ACTION";
-    return "WAITING";
+const FLOW_KANBAN_COLUMNS = FLOW.map(([key, label]) => ({
+    key,
+    label,
+    subtitle: key === "COMPLETE"
+        ? "Fully accounted / completed"
+        : "Current workflow bottleneck",
+}));
+
+const FLOW_INDEX = FLOW.reduce((result, [key], index) => {
+    result[key] = index;
+    return result;
+}, {});
+
+const requisitionStatusStage = (status) => {
+    switch (normalize(status)) {
+        case "DRAFT": return "DRAFT";
+        case "SUBMITTED":
+        case "SUBMITTED_TO_STORE":
+            return "AWAITING_STORE_PLANNING";
+        case "STORE_REVIEW_IN_PROGRESS":
+            return "AWAITING_STORE_PLANNING";
+        case "PARTIALLY_RESERVED":
+            return "MATERIAL_RESERVED";
+        case "SHORTAGE_PENDING":
+            return "SHORTAGE_PENDING";
+        case "READY_TO_ISSUE":
+            return "READY_TO_ISSUE";
+        case "PARTIALLY_ISSUED":
+        case "ISSUED_TO_PRODUCTION":
+            return "PRODUCTION_ISSUE";
+        case "PRODUCTION_STARTED":
+            return "PRODUCTION_IN_PROGRESS";
+        case "PRODUCTION_COMPLETED":
+        case "COMPLETED":
+            return "PRODUCTION_COMPLETED";
+        default:
+            return normalize(status) || "DRAFT";
+    }
 };
 
+const materialLineBucket = (status, fallbackStage) => {
+    if (normalize(fallbackStage) === "DRAFT") return "DEMAND";
+    switch (normalize(status)) {
+        case "PENDING_STORE_REVIEW":
+        case "RESERVED":
+        case "PARTIALLY_RESERVED":
+        case "READY_TO_ISSUE":
+            return "STORE";
+        case "SHORTAGE_IDENTIFIED":
+        case "INDENT_CREATED":
+        case "ORDERED":
+            return "PURCHASE";
+        case "QC_PENDING":
+            return "QC";
+        case "PROCESSING_REQUIRED":
+        case "IN_PROCESSING":
+            return "PROCESSING";
+        case "PARTIALLY_ISSUED":
+        case "ISSUED_TO_PRODUCTION":
+        case "PARTIALLY_CONSUMED":
+            return "PRODUCTION";
+        case "CONSUMED":
+        case "RETURNED":
+            return "COMPLETE";
+        case "CANCELLED":
+            return "";
+        default:
+            return stageBucket(fallbackStage);
+    }
+};
+
+const materialLineActionTarget = (row) => {
+    const id = row?.requisitionId;
+    switch (normalize(row?.lineStatus)) {
+        case "PENDING_STORE_REVIEW":
+        case "RESERVED":
+        case "PARTIALLY_RESERVED":
+        case "READY_TO_ISSUE":
+            return { label: "Store", path: `/matflow/store/requisitions/${id}`, screen: "store" };
+        case "SHORTAGE_IDENTIFIED":
+        case "INDENT_CREATED":
+        case "ORDERED":
+            return { label: "Purchase", path: "/matflow/purchase", screen: "purchase" };
+        case "QC_PENDING":
+            return { label: "QC", path: "/matflow/qc", screen: "qc" };
+        case "PROCESSING_REQUIRED":
+        case "IN_PROCESSING":
+            return { label: "Processing", path: "/matflow/processing", screen: "processing" };
+        case "PARTIALLY_ISSUED":
+        case "ISSUED_TO_PRODUCTION":
+        case "PARTIALLY_CONSUMED":
+            return { label: "Production", path: "/matflow/production-execution", screen: "production-execution" };
+        case "CONSUMED":
+        case "RETURNED":
+            return { label: "Trace", path: `/matflow/tracker/${id}`, screen: "tracking" };
+        default:
+            return nextActionTarget(row);
+    }
+};
+
+const chooseBottleneckRow = (rows = []) => {
+    const safeRows = Array.isArray(rows) ? rows.filter(Boolean) : [];
+    if (!safeRows.length) return null;
+
+    const active = safeRows.filter((row) =>
+        !["CANCELLED", "PRODUCTION_COMPLETED"].includes(normalize(row.currentStage))
+    );
+    const pool = active.length ? active : safeRows;
+
+    return [...pool].sort((a, b) => {
+        const aBucket = stageBucket(a.currentStage);
+        const bBucket = stageBucket(b.currentStage);
+        const byStage = numeric(FLOW_INDEX[aBucket]) - numeric(FLOW_INDEX[bBucket]);
+        if (byStage !== 0) return byStage;
+        return numeric(b.ageHours) - numeric(a.ageHours);
+    })[0] || null;
+};
+
+const aggregateReadyPercent = (rows = []) => {
+    const requested = rows.reduce((sum, row) => sum + numeric(row.requestedQty), 0);
+    const issued = rows.reduce((sum, row) => sum + numeric(row.issuedQty), 0);
+    if (requested > .0005) return Math.min(100, Math.max(0, Math.round((issued * 100) / requested)));
+    if (!rows.length) return 0;
+    return Math.round(rows.reduce((sum, row) => sum + numeric(row.materialReadyPercent), 0) / rows.length);
+};
+
+const projectKeyOf = (value = {}) =>
+    [value.projectCode, value.projectName, value.clientName]
+        .map((item) => clean(item).toUpperCase())
+        .join("|") ||
+    `PROJECT:${value.projectId || value.projectDrawingId || value.requisitionId || "UNKNOWN"}`;
+
+const chooseMaterialBottleneck = (items = []) => {
+    const safeItems = (Array.isArray(items) ? items : []).filter((item) => item?.lane);
+    if (!safeItems.length) return null;
+    const active = safeItems.filter((item) => item.lane !== "COMPLETE");
+    const pool = active.length ? active : safeItems;
+    return [...pool].sort((a, b) => {
+        const byStage = numeric(FLOW_INDEX[a.lane]) - numeric(FLOW_INDEX[b.lane]);
+        if (byStage !== 0) return byStage;
+        return numeric(b.ageHours) - numeric(a.ageHours);
+    })[0] || null;
+};
+
+const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
+    const grouped = new Map();
+
+    (Array.isArray(projects) ? projects : []).forEach((project) => {
+        if (!project || project.active === false) return;
+        const key = projectKeyOf(project);
+        grouped.set(key, {
+            key,
+            projectId: project.id,
+            projectCode: project.projectCode,
+            projectName: project.projectName,
+            clientName: project.clientName,
+            plantCode: project.plantCode,
+            portfolioStage: project.portfolioStage,
+            products: Array.isArray(project.products) ? project.products : [],
+            rows: [],
+        });
+    });
+
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+        if (!row || normalize(row.currentStage) === "CANCELLED") return;
+        const key = projectKeyOf(row);
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                key,
+                projectId: null,
+                projectCode: row.projectCode,
+                projectName: row.projectName,
+                clientName: row.clientName,
+                plantCode: row.destinationPlantCode,
+                portfolioStage: null,
+                products: [],
+                rows: [],
+            });
+        }
+        grouped.get(key).rows.push(row);
+    });
+
+    return Array.from(grouped.values()).map((group) => {
+        const groupMaterialLines = (Array.isArray(materialLines) ? materialLines : []).filter((line) =>
+            clean(line.projectCode).toUpperCase() === clean(group.projectCode).toUpperCase()
+        );
+        const trackedProductIds = new Set([
+            ...group.rows.map((row) => clean(row.projectDrawingId)).filter(Boolean),
+            ...groupMaterialLines.map((line) => clean(line.projectDrawingId)).filter(Boolean),
+        ]);
+        const pendingProduct = group.products.find((product) =>
+            product?.active !== false && !trackedProductIds.has(clean(product?.id))
+        ) || null;
+        const bottleneckLine = chooseMaterialBottleneck(groupMaterialLines);
+        const rowForLine = bottleneckLine
+            ? group.rows.find((row) => String(row.requisitionId || "") === String(bottleneckLine.requisitionId || "")) || null
+            : null;
+        const bottleneck = rowForLine || chooseBottleneckRow(group.rows);
+        const completed = !pendingProduct && groupMaterialLines.length > 0 &&
+            groupMaterialLines.every((line) => line.lane === "COMPLETE");
+        const trackedProductCount = new Set(group.rows.map((row) =>
+            row.projectDrawingId || `${row.productName || ""}:${row.drawingNo || ""}`
+        )).size;
+        return {
+            ...group,
+            pendingProduct,
+            bottleneckLine,
+            bottleneck,
+            lane: pendingProduct
+                ? "DEMAND"
+                : groupMaterialLines.length > 0
+                    ? completed
+                        ? "COMPLETE"
+                        : bottleneckLine?.lane || stageBucket(bottleneck?.currentStage)
+                    : group.rows.length === 0
+                        ? "DEMAND"
+                        : stageBucket(bottleneck?.currentStage),
+            productCount: Math.max(group.products.length, trackedProductCount),
+            mrCount: group.rows.length,
+            materialLineCount: groupMaterialLines.length,
+            readyPercent: aggregateReadyPercent(group.rows),
+            shortageQty: groupMaterialLines.length
+                ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.shortageQty), 0)
+                : group.rows.reduce((sum, row) => sum + numeric(row.shortageQty), 0),
+            maxAgeHours: Math.max(
+                group.rows.reduce((max, row) => Math.max(max, numeric(row.ageHours)), 0),
+                groupMaterialLines.reduce((max, line) => Math.max(max, numeric(line.ageHours)), 0)
+            ),
+            riskCount: groupMaterialLines.length
+                ? groupMaterialLines.filter((line) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(line.timingHealth))).length
+                : group.rows.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))).length,
+        };
+    });
+};
+
+const productKeyOf = (value = {}) =>
+    clean(value.projectDrawingId || value.id) ||
+    [value.projectCode, value.productName, value.drawingNo]
+        .map((item) => clean(item).toUpperCase())
+        .join("|") ||
+    `PRODUCT:${value.requisitionId || "UNKNOWN"}`;
+
+const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
+    const grouped = new Map();
+
+    (Array.isArray(projects) ? projects : []).forEach((project) => {
+        if (!project || project.active === false) return;
+        (Array.isArray(project.products) ? project.products : [])
+            .filter((product) => product?.active !== false)
+            .forEach((product) => {
+                const key = productKeyOf(product);
+                grouped.set(key, {
+                    key,
+                    projectDrawingId: product.id,
+                    projectCode: project.projectCode,
+                    projectName: project.projectName,
+                    clientName: project.clientName,
+                    productName: product.productName,
+                    drawingNo: product.drawingNo,
+                    plantCode: project.plantCode,
+                    latestBomId: product.latestBomId,
+                    latestBomNumber: product.latestBomNumber,
+                    latestBomStatus: product.latestBomStatus,
+                    bomEffective: product.bomEffective === true,
+                    portfolioStage: product.currentDepartment || product.portfolioStage,
+                    rows: [],
+                });
+            });
+    });
+
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+        if (!row || normalize(row.currentStage) === "CANCELLED") return;
+        const key = productKeyOf(row);
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                key,
+                projectDrawingId: row.projectDrawingId,
+                projectCode: row.projectCode,
+                projectName: row.projectName,
+                clientName: row.clientName,
+                productName: row.productName,
+                drawingNo: row.drawingNo,
+                plantCode: row.destinationPlantCode,
+                latestBomId: null,
+                latestBomNumber: null,
+                latestBomStatus: null,
+                bomEffective: false,
+                portfolioStage: null,
+                rows: [],
+            });
+        }
+        grouped.get(key).rows.push(row);
+    });
+
+    return Array.from(grouped.values()).map((group) => {
+        const groupMaterialLines = (Array.isArray(materialLines) ? materialLines : []).filter((line) =>
+            clean(line.projectDrawingId) && clean(line.projectDrawingId) === clean(group.projectDrawingId)
+        );
+        const bottleneckLine = chooseMaterialBottleneck(groupMaterialLines);
+        const rowForLine = bottleneckLine
+            ? group.rows.find((row) => String(row.requisitionId || "") === String(bottleneckLine.requisitionId || "")) || null
+            : null;
+        const bottleneck = rowForLine || chooseBottleneckRow(group.rows);
+        const completed = groupMaterialLines.length > 0 && groupMaterialLines.every((line) => line.lane === "COMPLETE");
+        return {
+            ...group,
+            bottleneckLine,
+            bottleneck,
+            lane: groupMaterialLines.length > 0
+                ? completed
+                    ? "COMPLETE"
+                    : bottleneckLine?.lane || stageBucket(bottleneck?.currentStage)
+                : group.rows.length === 0
+                    ? "DEMAND"
+                    : stageBucket(bottleneck?.currentStage),
+            mrCount: group.rows.length,
+            materialLineCount: groupMaterialLines.length,
+            requestedQty: groupMaterialLines.length
+                ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.requestedQty), 0)
+                : group.rows.reduce((sum, row) => sum + numeric(row.requestedQty), 0),
+            issuedQty: groupMaterialLines.length
+                ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.issuedQty), 0)
+                : group.rows.reduce((sum, row) => sum + numeric(row.issuedQty), 0),
+            shortageQty: groupMaterialLines.length
+                ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.shortageQty), 0)
+                : group.rows.reduce((sum, row) => sum + numeric(row.shortageQty), 0),
+            readyPercent: aggregateReadyPercent(group.rows),
+            maxAgeHours: Math.max(
+                group.rows.reduce((max, row) => Math.max(max, numeric(row.ageHours)), 0),
+                groupMaterialLines.reduce((max, line) => Math.max(max, numeric(line.ageHours)), 0)
+            ),
+            riskCount: groupMaterialLines.length
+                ? groupMaterialLines.filter((line) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(line.timingHealth))).length
+                : group.rows.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))).length,
+        };
+    });
+};
+
+const productPreExecutionTarget = (item) => {
+    if (item?.bomEffective && item?.latestBomId) {
+        return {
+            label: "Raise MR",
+            path: `/matflow/requisitions/new?bomId=${encodeURIComponent(item.latestBomId)}`,
+            screen: "production",
+        };
+    }
+    if (item?.latestBomId) {
+        return {
+            label: "Open BOM",
+            path: `/matflow/boms/${item.latestBomId}`,
+            screen: "boms",
+        };
+    }
+    if (item?.projectDrawingId) {
+        return {
+            label: "Create BOM",
+            path: `/matflow/boms/new?productId=${encodeURIComponent(item.projectDrawingId)}`,
+            screen: "bom-create",
+        };
+    }
+    return {
+        label: "Projects & Products",
+        path: "/matflow/projects",
+        screen: "projects",
+    };
+};
+
+const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantParam = "") => {
+    const trackerByRequisition = new Map(
+        (Array.isArray(trackerRows) ? trackerRows : [])
+            .filter((row) => row?.requisitionId)
+            .map((row) => [String(row.requisitionId), row])
+    );
+    const selectedPlant = clean(selectedPlantParam).toUpperCase();
+
+    return (Array.isArray(requisitions) ? requisitions : []).flatMap((requisition) => {
+        if (!requisition?.id || normalize(requisition.status) === "CANCELLED") return [];
+        const tracker = trackerByRequisition.get(String(requisition.id)) || null;
+        const plantCode = clean(tracker?.destinationPlantCode || requisition.destinationPlantCode).toUpperCase();
+        if (selectedPlant && plantCode !== selectedPlant) return [];
+
+        const parentStage = tracker?.currentStage || requisitionStatusStage(requisition.status);
+        const lines = Array.isArray(requisition.lines) ? requisition.lines : [];
+        return lines
+            .filter((line) => line?.id && normalize(line.status) !== "CANCELLED")
+            .map((line) => ({
+                id: line.id,
+                materialId: line.issuedMaterialId || line.materialId,
+                originalMaterialId: line.materialId,
+                materialCode: line.issuedMaterialCode || line.materialCode,
+                materialName: line.issuedMaterialName || line.materialName,
+                materialCategory: line.materialCategory,
+                uom: line.uom,
+                lineStatus: line.status,
+                requisitionId: requisition.id,
+                requisitionNumber: requisition.requisitionNumber,
+                projectDrawingId: requisition.projectDrawingId,
+                projectCode: tracker?.projectCode || requisition.projectCode,
+                projectName: tracker?.projectName,
+                clientName: tracker?.clientName,
+                productName: tracker?.productName,
+                drawingNo: tracker?.drawingNo || requisition.drawingNo,
+                destinationPlantCode: plantCode,
+                currentStage: parentStage,
+                currentDepartment: tracker?.currentDepartment || tracker?.responsibleDesk,
+                currentLocationCode: tracker?.currentLocationCode || requisition.destinationLocationCode,
+                timingHealth: tracker?.timingHealth,
+                ageHours: tracker?.ageHours,
+                requestedQty: line.requestedQty,
+                reservedQty: line.reservedQty,
+                shortageQty: line.shortageQty,
+                issuedQty: line.issuedQty,
+                consumedQty: line.consumedQty,
+                returnedQty: line.returnedQty,
+                lane: materialLineBucket(line.status, parentStage),
+            }))
+            .filter((line) => line.lane);
+    });
+};
+
+
+const materialKanbanGroups = (lineItems = []) => {
+    const grouped = new Map();
+    (Array.isArray(lineItems) ? lineItems : []).forEach((line) => {
+        if (!line?.lane) return;
+        const key = clean(line.materialId) || clean(line.materialCode).toUpperCase() || `MATERIAL:${clean(line.materialName).toUpperCase()}`;
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                key,
+                materialId: line.materialId,
+                materialCode: line.materialCode,
+                materialName: line.materialName,
+                materialCategory: line.materialCategory,
+                uom: line.uom,
+                lines: [],
+            });
+        }
+        grouped.get(key).lines.push(line);
+    });
+
+    return Array.from(grouped.values()).map((group) => {
+        const bottleneck = chooseMaterialBottleneck(group.lines);
+        const projectKeys = new Set(group.lines.map((line) => clean(line.projectCode).toUpperCase()).filter(Boolean));
+        const productKeys = new Set(group.lines.map((line) => clean(line.projectDrawingId) || `${clean(line.projectCode).toUpperCase()}|${clean(line.drawingNo).toUpperCase()}`).filter(Boolean));
+        const mrKeys = new Set(group.lines.map((line) => clean(line.requisitionId)).filter(Boolean));
+        return {
+            ...group,
+            bottleneck,
+            lane: bottleneck?.lane || "DEMAND",
+            lineCount: group.lines.length,
+            projectCount: projectKeys.size,
+            productCount: productKeys.size,
+            mrCount: mrKeys.size,
+            requestedQty: group.lines.reduce((sum, line) => sum + numeric(line.requestedQty), 0),
+            reservedQty: group.lines.reduce((sum, line) => sum + numeric(line.reservedQty), 0),
+            shortageQty: group.lines.reduce((sum, line) => sum + numeric(line.shortageQty), 0),
+            issuedQty: group.lines.reduce((sum, line) => sum + numeric(line.issuedQty), 0),
+            consumedQty: group.lines.reduce((sum, line) => sum + numeric(line.consumedQty), 0),
+            returnedQty: group.lines.reduce((sum, line) => sum + numeric(line.returnedQty), 0),
+            maxAgeHours: group.lines.reduce((max, line) => Math.max(max, numeric(line.ageHours)), 0),
+            riskCount: group.lines.filter((line) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(line.timingHealth))).length,
+        };
+    });
+};
 function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
     return (
         <>
@@ -181,15 +632,31 @@ export function MatFlowDashboardPage() {
     const requestedView = normalize(searchParams.get("view") || "overview").toLowerCase();
     const view = ["overview", "kanban", "projects", "materials"].includes(requestedView) ? requestedView : "overview";
     const materialId = clean(searchParams.get("materialId"));
+    const requestedKanbanScope = normalize(searchParams.get("kanbanScope") || "PROJECT");
+    const kanbanScope = ["PROJECT", "PRODUCT", "MATERIAL"].includes(requestedKanbanScope)
+        ? requestedKanbanScope
+        : "PROJECT";
 
     const changeView = useCallback((nextView) => {
         const next = new URLSearchParams(searchParams);
         next.set("view", nextView);
         if (nextView !== "materials") next.delete("materialId");
+        if (nextView !== "kanban") next.delete("kanbanScope");
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams]);
+
+    const changeKanbanScope = useCallback((scope) => {
+        const next = new URLSearchParams(searchParams);
+        next.set("view", "kanban");
+        next.set("kanbanScope", normalize(scope) || "PROJECT");
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
+
     const [data, setData] = useState(null);
     const [tracker, setTracker] = useState(null);
+    const [requisitions, setRequisitions] = useState([]);
+    const [projects, setProjects] = useState([]);
+    const [kanbanSearch, setKanbanSearch] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -201,13 +668,26 @@ export function MatFlowDashboardPage() {
         setLoading(true);
         setError("");
         try {
-            const [dashboardResponse, trackerResponse] = await Promise.all([
+            const [dashboardResponse, trackerResponse, requisitionResponse, projectResponse] = await Promise.all([
                 matflowApi.dashboardReport({ plantCode: selectedPlantParam }),
                 matflowApi.getTracker({ plantCode: selectedPlantParam }),
+                view === "kanban"
+                    ? matflowApi.listRequisitions()
+                    : Promise.resolve({ data: [] }),
+                view === "kanban"
+                    ? matflowApi.listProjects({
+                        active: true,
+                        plantCode: selectedPlantParam || undefined,
+                    })
+                    : Promise.resolve({ data: [] }),
             ]);
             setData(dashboardResponse?.data || null);
             setTracker(trackerResponse?.data || null);
+            setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : []);
+            setProjects(extractMatFlowPage(projectResponse?.data).rows);
         } catch (requestError) {
+            setRequisitions([]);
+            setProjects([]);
             setError(readMatFlowError(requestError, "Unable to load MatFlow dashboard."));
         } finally {
             setLoading(false);
@@ -217,52 +697,337 @@ export function MatFlowDashboardPage() {
     useEffect(() => { load(); }, [load]);
 
     if (view === "kanban") {
-        const managementView = roles.some((role) => ["ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR"].includes(normalize(role)));
-        const workRows = (tracker?.rows || [])
-            .filter((row) => normalize(row.currentStage) !== "CANCELLED")
-            .filter((row) => managementView || canAccessMatFlowScreenForContext(nextActionTarget(row).screen, roles, contextPlants))
-            .sort((a, b) => numeric(b.ageHours) - numeric(a.ageHours));
+        const trackerRows = (Array.isArray(tracker?.rows) ? tracker.rows : [])
+            .filter((row) => normalize(row.currentStage) !== "CANCELLED");
+
+        const term = clean(kanbanSearch).toLowerCase();
+
+        const materialLineItems = materialKanbanRows(
+            requisitions,
+            trackerRows,
+            selectedPlantParam
+        );
+
+        const projectItems = projectKanbanGroups(trackerRows, projects, materialLineItems)
+            .filter((item) => !term || [
+                item.projectCode,
+                item.projectName,
+                item.clientName,
+                item.plantCode,
+                item.pendingProduct?.productName,
+                item.pendingProduct?.drawingNo,
+                item.bottleneck?.requisitionNumber,
+                item.bottleneck?.productName,
+                item.bottleneckLine?.materialCode,
+                item.bottleneckLine?.materialName,
+            ].some((value) => clean(value).toLowerCase().includes(term)))
+            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+
+        const productItems = productKanbanGroups(trackerRows, projects, materialLineItems)
+            .filter((item) => !term || [
+                item.projectCode,
+                item.projectName,
+                item.clientName,
+                item.productName,
+                item.drawingNo,
+                item.plantCode,
+                item.bottleneck?.requisitionNumber,
+                item.bottleneckLine?.materialCode,
+                item.bottleneckLine?.materialName,
+            ].some((value) => clean(value).toLowerCase().includes(term)))
+            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+
+        const materialItems = materialKanbanGroups(materialLineItems)
+            .filter((item) => !term || [
+                item.materialCode,
+                item.materialName,
+                item.materialCategory,
+                item.bottleneck?.projectCode,
+                item.bottleneck?.projectName,
+                item.bottleneck?.productName,
+                item.bottleneck?.drawingNo,
+                item.bottleneck?.requisitionNumber,
+                item.bottleneck?.lineStatus,
+                item.bottleneck?.currentDepartment,
+                item.bottleneck?.currentLocationCode,
+            ].some((value) => clean(value).toLowerCase().includes(term)))
+            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+
+        const activeItems = kanbanScope === "PROJECT"
+            ? projectItems
+            : kanbanScope === "PRODUCT"
+                ? productItems
+                : materialItems;
+
+        const kanbanKpis = kanbanScope === "PROJECT"
+            ? [
+                ["Projects", projectItems.length],
+                ["Products", projectItems.reduce((sum, item) => sum + numeric(item.productCount), 0)],
+                ["MRs", projectItems.reduce((sum, item) => sum + numeric(item.mrCount), 0)],
+                ["Timing Risks", projectItems.reduce((sum, item) => sum + numeric(item.riskCount), 0)],
+            ]
+            : kanbanScope === "PRODUCT"
+                ? [
+                    ["Products", productItems.length],
+                    ["MRs", productItems.reduce((sum, item) => sum + numeric(item.mrCount), 0)],
+                    ["Shortage Qty", formatQty(productItems.reduce((sum, item) => sum + numeric(item.shortageQty), 0))],
+                    ["Timing Risks", productItems.reduce((sum, item) => sum + numeric(item.riskCount), 0)],
+                ]
+                : [
+                    ["Materials", materialItems.length],
+                    ["Demand Lines", materialItems.reduce((sum, item) => sum + numeric(item.lineCount), 0)],
+                    ["Shortage Qty", formatQty(materialItems.reduce((sum, item) => sum + numeric(item.shortageQty), 0))],
+                    ["Issued Qty", formatQty(materialItems.reduce((sum, item) => sum + numeric(item.issuedQty), 0))],
+                ];
+
         return (
             <Box sx={pageSx}>
                 <UniversalDashboardHeader view={view} onViewChange={changeView} onRefresh={load} refreshing={loading} />
                 <ErrorBox>{error}</ErrorBox>
-                <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                    <Box>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>My Operational Work Board</Typography>
-                        <Typography sx={subTextSx}>Cards are plant/role scoped. Workflow status never changes by dragging; use the controlled action button so backend validation, quantities and audit remain authoritative.</Typography>
+
+                <Card sx={{ ...panelSx, display: "grid", gap: 1.1 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                        <Box>
+                            <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Execution Kanban</Typography>
+                            <Typography sx={subTextSx}>
+                                Switch between Project, Product and Material cards. Material-wise cards aggregate the same material across Projects, Products and MRs. The lane is derived from the authoritative backend workflow; cards cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
+                            </Typography>
+                        </Box>
+                        <MatFlowViewToggle
+                            value={kanbanScope}
+                            onChange={changeKanbanScope}
+                            options={KANBAN_SCOPE_OPTIONS}
+                        />
                     </Box>
-                    <Button onClick={() => changeView("overview")} sx={secondaryBtnSx}>Overall View</Button>
+                    <TextField
+                        label={
+                            kanbanScope === "PROJECT"
+                                ? "Search PD No. / Project / Client / MR"
+                                : kanbanScope === "PRODUCT"
+                                    ? "Search PD No. / Product / Drawing / MR"
+                                    : "Search Material / PD No. / Product / MR / State"
+                        }
+                        value={kanbanSearch}
+                        onChange={(event) => setKanbanSearch(event.target.value)}
+                        sx={fieldSx}
+                    />
                 </Card>
+
+                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
+                    {kanbanKpis.map(([label, value]) => (
+                        <SummaryCard key={label} label={label} value={value} />
+                    ))}
+                </Box>
+
                 {loading ? <LoadingBlock /> : (
                     <MatFlowKanbanBoard
-                        columns={WORK_KANBAN_COLUMNS}
-                        items={workRows}
-                        laneFor={(row) => workKanbanLane(row, roles, contextPlants)}
-                        minColumnWidth={290}
-                        renderCard={(row) => {
-                            const target = nextActionTarget(row);
-                            const canOpenTarget = canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                        columns={FLOW_KANBAN_COLUMNS}
+                        items={activeItems}
+                        laneFor={(item) => item.lane}
+                        minColumnWidth={300}
+                        emptyText={`No ${kanbanScope.toLowerCase()} items in this stage.`}
+                        renderCard={(item) => {
+                            if (kanbanScope === "PROJECT") {
+                                const bottleneck = item.bottleneck;
+                                const bottleneckLine = item.bottleneckLine;
+                                const target = item.pendingProduct
+                                    ? productPreExecutionTarget({
+                                        ...item.pendingProduct,
+                                        projectDrawingId: item.pendingProduct.id,
+                                    })
+                                    : bottleneckLine
+                                        ? materialLineActionTarget(bottleneckLine)
+                                        : bottleneck
+                                            ? nextActionTarget(bottleneck)
+                                            : null;
+                                const canOpenTarget = target &&
+                                    canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                return (
+                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.projectCode || "-"} · {item.projectName || "Project"}</Typography>
+                                                <Typography sx={subTextSx}>{item.clientName || "-"} · {item.plantCode || "-"}</Typography>
+                                            </Box>
+                                            <MatFlowStatusChip status={item.pendingProduct ? "PRODUCTION_MR_PENDING" : bottleneckLine?.lineStatus || bottleneck?.currentStage || item.portfolioStage || item.lane} />
+                                        </Box>
+                                        <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                            <Detail label="Products" value={item.productCount} />
+                                            <Detail label="MRs" value={item.mrCount} />
+                                            <Detail label="Material Lines" value={item.materialLineCount} />
+                                            <Detail label="Material Ready" value={`${item.readyPercent}%`} />
+                                            <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                                        </Box>
+                                        <Typography sx={{ ...subTextSx, mt: .75 }}>
+                                            {item.pendingProduct
+                                                ? `Next Product: ${item.pendingProduct.productName || item.pendingProduct.drawingNo || "Product"} · ${readable(item.lane)}`
+                                                : `Bottleneck: ${readable(bottleneckLine?.lineStatus || bottleneck?.currentStage || item.lane)}`}
+                                            {item.riskCount ? ` · ${item.riskCount} timing risk` : ""}
+                                        </Typography>
+                                        <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
+                                            {target ? (
+                                                <Button
+                                                    onClick={() => navigate(
+                                                        canOpenTarget
+                                                            ? target.path
+                                                            : bottleneck?.requisitionId
+                                                                ? `/matflow/tracker/${bottleneck.requisitionId}`
+                                                                : "/matflow/projects"
+                                                    )}
+                                                    sx={primaryBtnSx}
+                                                >
+                                                    {canOpenTarget ? target.label : item.pendingProduct ? "Open Product" : "Open Bottleneck"}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    onClick={() => navigate("/matflow/projects")}
+                                                    sx={primaryBtnSx}
+                                                >
+                                                    Projects & Products
+                                                </Button>
+                                            )}
+                                            <Button
+                                                onClick={() => navigate(
+                                                    item.mrCount > 0
+                                                        ? `/matflow/dashboard?view=projects&search=${encodeURIComponent(item.projectCode || item.projectName || "")}`
+                                                        : "/matflow/boms"
+                                                )}
+                                                sx={secondaryBtnSx}
+                                            >
+                                                {item.mrCount > 0 ? "Project Tracker" : "Operational BOMs"}
+                                            </Button>
+                                        </Box>
+                                    </Card>
+                                );
+                            }
+
+                            if (kanbanScope === "PRODUCT") {
+                                const bottleneck = item.bottleneck;
+                                const bottleneckLine = item.bottleneckLine;
+                                const target = bottleneckLine
+                                    ? materialLineActionTarget(bottleneckLine)
+                                    : bottleneck
+                                        ? nextActionTarget(bottleneck)
+                                        : productPreExecutionTarget(item);
+                                const canOpenTarget = target &&
+                                    canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                return (
+                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.productName || "Product"}</Typography>
+                                                <Typography sx={subTextSx}>{item.projectCode || "-"} · {item.drawingNo || "-"} · {item.plantCode || "-"}</Typography>
+                                            </Box>
+                                            <MatFlowStatusChip status={bottleneckLine?.lineStatus || bottleneck?.currentStage || item.latestBomStatus || item.portfolioStage || item.lane} />
+                                        </Box>
+                                        <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                            <Detail label="MRs" value={item.mrCount} />
+                                            <Detail label="Material Lines" value={item.materialLineCount} />
+                                            <Detail label="Ready" value={`${item.readyPercent}%`} />
+                                            <Detail label="Requested" value={formatQty(item.requestedQty)} />
+                                            <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                                        </Box>
+                                        <Typography sx={{ ...subTextSx, mt: .75 }}>
+                                            {item.clientName || "-"} · {bottleneckLine
+                                                ? `Material bottleneck ${bottleneckLine.materialName || bottleneckLine.materialCode || "Material"} · ${readable(bottleneckLine.lineStatus || item.lane)}`
+                                                : bottleneck
+                                                    ? `Bottleneck ${readable(bottleneck.currentStage || item.lane)}`
+                                                    : item.bomEffective
+                                                        ? "Effective BOM ready · MR not yet raised"
+                                                        : item.latestBomId
+                                                            ? `BOM ${readable(item.latestBomStatus || "IN REVIEW")}`
+                                                            : "Engineering BOM not created"}
+                                        </Typography>
+                                        <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
+                                            <Button
+                                                onClick={() => navigate(
+                                                    canOpenTarget
+                                                        ? target.path
+                                                        : bottleneckLine?.requisitionId
+                                                            ? `/matflow/tracker/${bottleneckLine.requisitionId}`
+                                                            : bottleneck
+                                                                ? `/matflow/tracker/${bottleneck.requisitionId}`
+                                                                : "/matflow/projects"
+                                                )}
+                                                sx={primaryBtnSx}
+                                            >
+                                                {canOpenTarget
+                                                    ? target.label
+                                                    : bottleneck
+                                                        ? "Open Bottleneck"
+                                                        : "Open Product"}
+                                            </Button>
+                                            <Button
+                                                onClick={() => navigate(
+                                                    item.mrCount > 0
+                                                        ? `/matflow/dashboard?view=projects&search=${encodeURIComponent(item.drawingNo || item.productName || "")}`
+                                                        : item.latestBomId
+                                                            ? `/matflow/boms/${item.latestBomId}`
+                                                            : `/matflow/boms/new?productId=${encodeURIComponent(item.projectDrawingId || "")}`
+                                                )}
+                                                sx={secondaryBtnSx}
+                                            >
+                                                {item.mrCount > 0 ? "Product Tracker" : item.latestBomId ? "BOM" : "Create BOM"}
+                                            </Button>
+                                        </Box>
+                                    </Card>
+                                );
+                            }
+
+                            const bottleneck = item.bottleneck;
+                            const target = bottleneck ? materialLineActionTarget(bottleneck) : null;
+                            const canOpenTarget = target && canAccessMatFlowScreenForContext(
+                                target.screen,
+                                roles,
+                                contextPlants
+                            );
                             return (
                                 <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
                                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
                                         <Box sx={{ minWidth: 0 }}>
-                                            <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
-                                            <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                            <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.materialName || "Material"}</Typography>
+                                            <Typography sx={subTextSx}>{item.materialCode || "-"} · {readable(item.materialCategory || "OTHER")} · {item.uom || "-"}</Typography>
                                         </Box>
-                                        <MatFlowStatusChip status={row.currentStage} />
+                                        <MatFlowStatusChip status={bottleneck?.lineStatus || item.lane} />
                                     </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .65 }}>
+                                        {item.projectCount} Project{item.projectCount === 1 ? "" : "s"} · {item.productCount} Product{item.productCount === 1 ? "" : "s"} · {item.mrCount} MR{item.mrCount === 1 ? "" : "s"}
+                                    </Typography>
                                     <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
-                                        <Detail label="Owner" value={readable(row.currentDepartment || row.responsibleDesk)} />
-                                        <Detail label="Location" value={row.currentLocationCode || "-"} />
-                                        <Detail label="Ready" value={`${Math.round(numeric(row.materialReadyPercent))}%`} />
-                                        <Detail label="Age" value={`${Math.round(numeric(row.ageHours))} h`} />
+                                        <Detail label="Demand Lines" value={item.lineCount} />
+                                        <Detail label="Requested" value={`${formatQty(item.requestedQty)} ${item.uom || ""}`} />
+                                        <Detail label="Reserved" value={`${formatQty(item.reservedQty)} ${item.uom || ""}`} />
+                                        <Detail label="Shortage" value={`${formatQty(item.shortageQty)} ${item.uom || ""}`} />
+                                        <Detail label="Issued" value={`${formatQty(item.issuedQty)} ${item.uom || ""}`} />
+                                        <Detail label="Consumed" value={`${formatQty(item.consumedQty)} ${item.uom || ""}`} />
                                     </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .75 }}>{readable(row.productionStartBlocker || row.nextDepartment || row.currentStage)}</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .75 }}>
+                                        {bottleneck
+                                            ? `Bottleneck: ${bottleneck.projectCode || "-"} · ${bottleneck.productName || bottleneck.drawingNo || "Product"} · ${readable(bottleneck.lineStatus || bottleneck.currentStage)}`
+                                            : "No active material demand"}
+                                        {item.riskCount ? ` · ${item.riskCount} timing risk` : ""}
+                                    </Typography>
                                     <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
-                                        <Button onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)} sx={primaryBtnSx}>
-                                            {canOpenTarget ? target.label : "Trace"}
-                                        </Button>
-                                        <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace MR</Button>
+                                        {bottleneck && (
+                                            <Button
+                                                onClick={() => navigate(
+                                                    canOpenTarget
+                                                        ? target.path
+                                                        : `/matflow/tracker/${bottleneck.requisitionId}`
+                                                )}
+                                                sx={primaryBtnSx}
+                                            >
+                                                {canOpenTarget ? target.label : "Open Bottleneck"}
+                                            </Button>
+                                        )}
+                                        {item.materialId && (
+                                            <Button
+                                                onClick={() => navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(item.materialId)}`)}
+                                                sx={secondaryBtnSx}
+                                            >
+                                                Track Material
+                                            </Button>
+                                        )}
                                     </Box>
                                 </Card>
                             );
@@ -277,7 +1042,7 @@ export function MatFlowDashboardPage() {
         return (
             <Box sx={pageSx}>
                 <UniversalDashboardHeader view={view} onViewChange={changeView} />
-                <MatFlowTrackerPage embedded />
+                <MatFlowTrackerPage embedded initialSearch={clean(searchParams.get("search"))} />
             </Box>
         );
     }
@@ -372,17 +1137,21 @@ export function MatFlowDashboardPage() {
     );
 }
 
-export function MatFlowTrackerPage({ embedded = false }) {
+export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
     const navigate = useNavigate();
     const { selectedPlantParam, availablePlants, roles } = useMatFlow();
     const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
     const [data, setData] = useState({ kpis: {}, rows: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(initialSearch || "");
     const [stage, setStage] = useState("");
     const [expandedProjects, setExpandedProjects] = useState({});
     const [trackerView, setTrackerView] = useState("HIERARCHY");
+
+    useEffect(() => {
+        setSearch(initialSearch || "");
+    }, [initialSearch]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -460,12 +1229,12 @@ export function MatFlowTrackerPage({ embedded = false }) {
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                 <Box>
                     <Typography sx={mainTextSx}>Tracker View</Typography>
-                    <Typography sx={subTextSx}>{trackerView === "KANBAN" ? "Workflow-stage Kanban by MR. Actions still open the authoritative workflow screen." : "Project hierarchy with collapsible Products and MR detail."}</Typography>
+                    <Typography sx={subTextSx}>{trackerView === "KANBAN" ? "Detailed MR-level Kanban inside the selected Project/Product tracker. Actions still open the authoritative workflow screen." : "Project hierarchy with collapsible Products and MR detail."}</Typography>
                 </Box>
                 <MatFlowViewToggle
                     value={trackerView}
                     onChange={setTrackerView}
-                    options={[{ value: "HIERARCHY", label: "Hierarchy" }, { value: "KANBAN", label: "Kanban" }]}
+                    options={[{ value: "HIERARCHY", label: "Hierarchy" }, { value: "KANBAN", label: "MR Kanban" }]}
                 />
             </Card>
 

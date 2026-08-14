@@ -259,6 +259,16 @@ export const matflowApi = {
 		API.get(`${BASE}/qc`, { params: cleanParams(params) }),
 	decideQc: (id, body) =>
 		API.post(`${BASE}/qc/${requiredId(id, "QC record ID")}/decision`, body),
+	uploadQcPhoto: (id, file) => {
+		const formData = new FormData();
+		formData.append("file", file);
+		return API.post(
+			`${BASE}/qc/${requiredId(id, "QC record ID")}/photo`,
+			formData
+		);
+	},
+	getQcPhoto: (id) =>
+		API.get(`${BASE}/qc/${requiredId(id, "QC record ID")}/photo`, { responseType: "blob" }),
 	listQcRouting: () =>
 		API.get(`${BASE}/qc-routing`),
 	getQcRouting: (id) =>
