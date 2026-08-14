@@ -928,7 +928,7 @@ export function MatFlowBomDetailPage() {
     const quickActions = [
         { title: "Material Inventory", subtitle: "Open the source material master.", icon: <Inventory2OutlinedIcon />, path: "/matflow/materials" },
         { title: "Projects & Products", subtitle: "Open the owning PD / Product portfolio.", icon: <RuleOutlinedIcon />, path: "/matflow/projects" },
-        { title: "Project Tracker", subtitle: "Trace material execution after MR submission.", icon: <AccountTreeOutlinedIcon />, path: "/matflow/tracker" },
+        { title: "Project Tracker", subtitle: "Trace material execution after MR submission.", icon: <AccountTreeOutlinedIcon />, path: "/matflow/dashboard?view=projects" },
         { title: "Material Requisitions", subtitle: "Open Production material demand.", icon: <SpeedOutlinedIcon />, path: "/matflow/production" },
     ];
 

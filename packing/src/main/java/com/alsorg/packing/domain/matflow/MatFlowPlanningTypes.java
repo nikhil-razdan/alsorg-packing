@@ -52,7 +52,10 @@ public final class MatFlowPlanningTypes {
         PROCESS_CONSUMPTION, PROCESS_OUTPUT, ISSUE_TO_PRODUCTION, RETURN_TO_STORE,
         QC_HOLD, QC_RELEASE, RETURN_TO_VENDOR, PROCESS_WASTAGE,
         PRODUCTION_CONSUMPTION, MATERIAL_RETURN_OUT, MATERIAL_RETURN_RECEIPT_CLEAR,
-        MATERIAL_RETURN_IN, QC_REWORK_RELEASE, SCRAP
+        MATERIAL_RETURN_IN,
+        /** Intermediate remote-Plant return custody; not counted as final returned stock. */
+        MATERIAL_RETURN_ROUTE_IN, MATERIAL_RETURN_ROUTE_OUT, MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR,
+        QC_REWORK_RELEASE, SCRAP
     }
 
     public enum RequisitionStatus {
@@ -130,7 +133,21 @@ public final class MatFlowPlanningTypes {
     }
 
     public enum MaterialReturnStatus {
-        DRAFT, IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
+        DRAFT,
+        /** Remote return: Production -> origin Plant Store. */
+        IN_TRANSIT_TO_ORIGIN_STORE,
+        /** Remote return is physically held at its origin Plant Store. */
+        AT_ORIGIN_STORE,
+        /** Direct P1 or second remote leg: current source -> AL-P1 Main Store. */
+        IN_TRANSIT_TO_MAIN_STORE,
+        /** @deprecated historical compatibility. */
+        @Deprecated
+        IN_TRANSIT,
+        /** @deprecated historical compatibility. */
+        @Deprecated
+        PARTIALLY_RECEIVED,
+        RECEIVED,
+        CANCELLED
     }
 
     public enum MaterialReturnReason {

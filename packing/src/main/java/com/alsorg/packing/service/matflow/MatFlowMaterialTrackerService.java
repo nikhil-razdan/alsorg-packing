@@ -98,6 +98,7 @@ public class MatFlowMaterialTrackerService {
     private final MatFlowStockLedgerRepository ledgerRepository;
     private final MatFlowAuditLogRepository auditRepository;
     private final MatFlowAccessService accessService;
+    private final MatFlowPlantRoutingService plantRoutingService;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
 
@@ -119,6 +120,7 @@ public class MatFlowMaterialTrackerService {
             MatFlowStockLedgerRepository ledgerRepository,
             MatFlowAuditLogRepository auditRepository,
             MatFlowAccessService accessService,
+            MatFlowPlantRoutingService plantRoutingService,
             ObjectMapper objectMapper,
             EntityManager entityManager) {
         this.materialRepository = materialRepository;
@@ -138,6 +140,7 @@ public class MatFlowMaterialTrackerService {
         this.ledgerRepository = ledgerRepository;
         this.auditRepository = auditRepository;
         this.accessService = accessService;
+        this.plantRoutingService = plantRoutingService;
         this.objectMapper = objectMapper;
         this.entityManager = entityManager;
     }
@@ -150,7 +153,9 @@ public class MatFlowMaterialTrackerService {
         }
 
         String requestedPlant = cleanUpper(plantCode);
-        if (requestedPlant != null) {
+        if (requestedPlant != null
+                && !accessService.canAccessPlant(requestedPlant)
+                && !plantRoutingService.canActAsMainStore()) {
             accessService.requirePlantAccess(requestedPlant);
         }
 
@@ -608,10 +613,24 @@ public class MatFlowMaterialTrackerService {
             next = next("STORE", null,
                     "Submit the Project/Product material demand to Store for availability review.");
         } else if (requisition.plannedAt == null) {
-            current = current("STORE", "STORE", null, "STORE_REVIEW", requisition.submittedAt,
-                    "REQUISITION", requisition.getId(), requisition.requisitionNumber, false);
-            next = next("STORE", null,
-                    "Complete availability review and create the required reservation and/or shortage indent.");
+            boolean awaitingForward = requisition.status == RequisitionStatus.SUBMITTED_TO_STORE
+                    && requisition.destinationLocation != null
+                    && !plantRoutingService.isMainStorePlant(requisition.destinationLocation.getPlantCode());
+            if (awaitingForward) {
+                MatFlowLocation originStore = plantRoutingService.requireOriginStore(
+                        requisition.destinationLocation.getPlantCode());
+                current = current("ORIGIN_STORE", "ORIGIN PLANT STORE", originStore,
+                        "ORIGIN_STORE_FORWARDING", requisition.submittedAt,
+                        "REQUISITION", requisition.getId(), requisition.requisitionNumber, false);
+                next = next("AL-P1 MAIN STORE", plantRoutingService.requireMainStore(),
+                        "Forward the same MR unchanged to AL-P1 Main Store.");
+            } else {
+                current = current("MAIN_STORE", "AL-P1 MAIN STORE", plantRoutingService.requireMainStore(),
+                        "STORE_REVIEW", requisition.submittedAt,
+                        "REQUISITION", requisition.getId(), requisition.requisitionNumber, false);
+                next = next("AL-P1 MAIN STORE", plantRoutingService.requireMainStore(),
+                        "Complete centralized availability review and create reservation and/or shortage PI.");
+            }
         } else {
             addMilestone(milestones, "STORE_PLANNED", "Store planning completed", "STORE", null,
                     "STORE_PLANNED_AWAITING_ALLOCATION", requisition.plannedAt, requisition.plannedBy,
@@ -775,10 +794,24 @@ public class MatFlowMaterialTrackerService {
                 "Project/Product material demand created. This is an administrative stage; physical custody has not started yet.");
 
         if (requisition.submittedAt != null) {
-            addMilestone(milestones, "STORE_REVIEW", "Submitted to Store for availability review", "STORE", null,
-                    "STORE_REVIEW", requisition.submittedAt, requisition.submittedBy, scale(line.requestedQty),
-                    "REQUISITION", requisition.getId(), requisition.requisitionNumber, "REQUISITION_LINE",
-                    "Store owns availability review, reservation and shortage determination. Physical location becomes specific once stock is reserved, received or routed.");
+            boolean awaitingForward = requisition.status == RequisitionStatus.SUBMITTED_TO_STORE
+                    && requisition.destinationLocation != null
+                    && !plantRoutingService.isMainStorePlant(requisition.destinationLocation.getPlantCode());
+            if (awaitingForward) {
+                addMilestone(milestones, "ORIGIN_STORE", "MR received by origin Plant Store",
+                        "ORIGIN PLANT STORE", plantRoutingService.requireOriginStore(
+                                requisition.destinationLocation.getPlantCode()),
+                        "ORIGIN_STORE_FORWARDING", requisition.submittedAt, requisition.submittedBy,
+                        scale(line.requestedQty), "REQUISITION", requisition.getId(),
+                        requisition.requisitionNumber, "REQUISITION_LINE",
+                        "Origin Plant Store must forward this same MR to AL-P1 Main Store; no stock planning occurs here.");
+            } else {
+                addMilestone(milestones, "STORE_REVIEW", "MR routed to AL-P1 Main Store",
+                        "AL-P1 MAIN STORE", plantRoutingService.requireMainStore(),
+                        "STORE_REVIEW", requisition.submittedAt, requisition.submittedBy, scale(line.requestedQty),
+                        "REQUISITION", requisition.getId(), requisition.requisitionNumber, "REQUISITION_LINE",
+                        "AL-P1 Main Store owns centralized availability review, reservation and shortage PI.");
+            }
         }
     }
 
@@ -1068,16 +1101,38 @@ public class MatFlowMaterialTrackerService {
                     materialReturn.createdForReturnBy, scale(returnLine.returnQty), "MATERIAL_RETURN",
                     materialReturn.getId(), materialReturn.returnNumber, scope,
                     "Return destination: " + safeLocationCode(materialReturn.toLocation) + ".");
+            MatFlowLocation firstReturnDestination = materialReturn.viaLocation == null
+                    ? materialReturn.toLocation
+                    : materialReturn.viaLocation;
             addMilestone(milestones, "RETURN_DISPATCHED", "Material return dispatched", "IN TRANSIT", null,
                     "RETURN_IN_TRANSIT", materialReturn.dispatchedAt, materialReturn.dispatchedBy,
                     scale(returnLine.dispatchedQty), "MATERIAL_RETURN", materialReturn.getId(),
                     materialReturn.returnNumber, scope,
-                    routeLabel(materialReturn.fromLocation, materialReturn.toLocation));
-            addMilestone(milestones, "RETURN_RECEIVED", "Material return received",
+                    routeLabel(materialReturn.fromLocation, firstReturnDestination));
+
+            if (materialReturn.viaLocation != null) {
+                addMilestone(milestones, "RETURN_ORIGIN_STORE_RECEIVED",
+                        "Return received at origin Plant Store",
+                        departmentFor(materialReturn.viaLocation), materialReturn.viaLocation,
+                        "RETURN_AT_ORIGIN_STORE",
+                        materialReturn.originStoreReceivedAt, materialReturn.originStoreReceivedBy,
+                        scale(returnLine.originStoreReceivedQty), "MATERIAL_RETURN", materialReturn.getId(),
+                        materialReturn.returnNumber, scope,
+                        "Remote return is waiting for the origin Plant Store to forward it to AL-P1 Main Store.");
+                addMilestone(milestones, "RETURN_FORWARDED_TO_MAIN_STORE",
+                        "Origin Plant Store forwarded return to Main Store", "IN TRANSIT", null,
+                        "RETURN_TO_MAIN_STORE",
+                        materialReturn.forwardedAt, materialReturn.forwardedBy,
+                        scale(returnLine.forwardedQty), "MATERIAL_RETURN", materialReturn.getId(),
+                        materialReturn.returnNumber, scope,
+                        routeLabel(materialReturn.viaLocation, materialReturn.toLocation));
+            }
+
+            addMilestone(milestones, "RETURN_RECEIVED", "Material return received at AL-P1 Main Store",
                     departmentFor(materialReturn.toLocation), materialReturn.toLocation, "RETURNED",
                     materialReturn.receivedAt, materialReturn.receivedBy, scale(returnLine.receivedQty),
                     "MATERIAL_RETURN", materialReturn.getId(), materialReturn.returnNumber, scope,
-                    "Returned material entered destination custody.");
+                    "Returned material entered centralized Main Store custody.");
         }
     }
 
@@ -1261,13 +1316,30 @@ public class MatFlowMaterialTrackerService {
             MatFlowMaterialReturn latestReturn = latestReturnForLine(context, line);
             if (latestReturn != null) {
                 String returnStatus = enumName(latestReturn.status);
-                if (Set.of("IN_TRANSIT", "PARTIALLY_RECEIVED").contains(returnStatus)) {
+                if (Set.of("IN_TRANSIT_TO_ORIGIN_STORE", "IN_TRANSIT_TO_MAIN_STORE",
+                        "IN_TRANSIT", "PARTIALLY_RECEIVED").contains(returnStatus)) {
+                    LocalDateTime since = "IN_TRANSIT_TO_MAIN_STORE".equals(returnStatus)
+                            && latestReturn.forwardedAt != null
+                                    ? latestReturn.forwardedAt
+                                    : firstNonNull(latestReturn.dispatchedAt, latestReturn.getUpdatedAt());
                     return current(
                             "RETURN",
                             "IN TRANSIT",
                             null,
                             "RETURN_IN_TRANSIT",
-                            firstNonNull(latestReturn.dispatchedAt, latestReturn.getUpdatedAt()),
+                            since,
+                            "MATERIAL_RETURN",
+                            latestReturn.getId(),
+                            latestReturn.returnNumber,
+                            false);
+                }
+                if ("AT_ORIGIN_STORE".equals(returnStatus) && latestReturn.viaLocation != null) {
+                    return current(
+                            "RETURN",
+                            departmentFor(latestReturn.viaLocation),
+                            latestReturn.viaLocation,
+                            "RETURN_AT_ORIGIN_STORE",
+                            firstNonNull(latestReturn.originStoreReceivedAt, latestReturn.getUpdatedAt()),
                             "MATERIAL_RETURN",
                             latestReturn.getId(),
                             latestReturn.returnNumber,
@@ -2020,14 +2092,24 @@ public class MatFlowMaterialTrackerService {
         if (requisition == null || requisition.projectDrawing == null)
             return false;
         String plant = cleanUpper(requisition.projectDrawing.getPlantCode());
-        return plant != null && canAccessPlant(plant, requestedPlant);
+        if (plant == null)
+            return false;
+        if (requestedPlant != null && !requestedPlant.equals(plant))
+            return false;
+        if (accessService.canAccessPlant(plant))
+            return true;
+        return plantRoutingService.canActAsMainStore()
+                && requisition.status != RequisitionStatus.DRAFT
+                && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
     }
 
     private boolean canAccessPlant(String plant, String requestedPlant) {
         String normalized = cleanUpper(plant);
-        if (normalized == null || !accessService.canAccessPlant(normalized))
+        if (normalized == null)
             return false;
-        return requestedPlant == null || requestedPlant.equals(normalized);
+        if (requestedPlant != null && !requestedPlant.equals(normalized))
+            return false;
+        return accessService.canAccessPlant(normalized) || plantRoutingService.canActAsMainStore();
     }
 
     private boolean sameMaterial(MatFlowMaterial material, UUID id) {

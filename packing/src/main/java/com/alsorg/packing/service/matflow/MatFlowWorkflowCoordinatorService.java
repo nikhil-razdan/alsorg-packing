@@ -4,6 +4,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.Processing
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProcessingJobResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReceiveRequest;
 
 import java.util.UUID;
 
@@ -11,13 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Atomic orchestration for hidden custody transitions that also create or
- * advance Processing execution.
- *
- * QC is deliberately absent here: QC is now only a check/tick gate. Store owns
- * the saved physical route and Processing may be selected whether QC is
- * required
- * or not.
+ * Atomic orchestration for the hidden custody legs in the four-plant MatFlow
+ * route. There is still no public Transfers desk.
  */
 @Service
 public class MatFlowWorkflowCoordinatorService {
@@ -32,9 +28,10 @@ public class MatFlowWorkflowCoordinatorService {
     }
 
     /**
-     * Store sends the reservation along the route selected during Store review.
-     * If the first destination is Processing, the hidden transfer is received by
-     * that unit in the same workflow transaction and the Processing job is queued.
+     * A Store sends the current complete reservation lot. At AL-P1 Main Store
+     * that may mean Main Store -> Processing, Main Store -> origin Plant Store,
+     * or Main Store -> AL-P1 Production. At AL-P2/3/4 Store it means the final
+     * Plant Store -> specific Production user handover.
      */
     @Transactional
     public PlanningResponse issueStoreReservation(
@@ -42,6 +39,10 @@ public class MatFlowWorkflowCoordinatorService {
             StoreIssueRequest request) {
         PlanningResponse response = movementService.advanceStoreReservation(reservationId, request);
 
+        /*
+         * Idempotent: once a Processing destination has actually received the lot,
+         * createProcessingJobForReservation returns the existing job on later calls.
+         */
         UUID processingRouteStepId = movementService.processingRouteStepId(reservationId);
         if (processingRouteStepId != null) {
             productionService.createProcessingJobForReservation(
@@ -52,13 +53,26 @@ public class MatFlowWorkflowCoordinatorService {
         return response;
     }
 
+    /** AL-P2/3/4 Plant Store explicitly receives the inbound Main Store lot. */
+    @Transactional
+    public PlanningResponse receiveAtOriginStore(
+            UUID reservationId,
+            StoreReceiveRequest request) {
+        return movementService.receiveStoreReservation(reservationId, request);
+    }
+
+    /**
+     * Processor completes the job and the output is returned into AL-P1 Main
+     * Store custody. The next plant-issue leg becomes ready but is not silently
+     * dispatched on behalf of Main Store.
+     */
     @Transactional
     public ProcessingJobResponse completeProcessing(
             UUID jobId,
             ProcessingJobCompleteRequest request) {
         ProcessingJobResponse response = productionService.completeProcessingJob(jobId, request);
         if (response != null && response.reservationId() != null) {
-            movementService.advanceReservation(
+            movementService.advanceReservationAfterProcessing(
                     response.reservationId(),
                     request == null ? null : request.remarks());
         }

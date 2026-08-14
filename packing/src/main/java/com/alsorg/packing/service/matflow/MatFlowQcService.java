@@ -65,7 +65,8 @@ public class MatFlowQcService {
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
                         MatFlowRequisitionService requisitionService,
-                        MatFlowQcEvidenceService evidenceService) {
+                        MatFlowQcEvidenceService evidenceService,
+                        MatFlowPlantRoutingService plantRoutingService) {
 
                 this.qc = new QcModule(
                                 qcRepository,
@@ -85,7 +86,8 @@ public class MatFlowQcService {
                                 accessService,
                                 auditService,
                                 requisitionService,
-                                evidenceService);
+                                evidenceService,
+                                plantRoutingService);
 
                 this.disposition = new DispositionModule(
                                 dispositionRepository,
@@ -168,6 +170,7 @@ public class MatFlowQcService {
                 private final MatFlowAuditService auditService;
                 private final MatFlowRequisitionService requisitionService;
                 private final MatFlowQcEvidenceService evidenceService;
+                private final MatFlowPlantRoutingService plantRoutingService;
 
                 QcModule(
                                 MatFlowQcInspectionRepository qcRepository,
@@ -187,7 +190,8 @@ public class MatFlowQcService {
                                 MatFlowAccessService accessService,
                                 MatFlowAuditService auditService,
                                 MatFlowRequisitionService requisitionService,
-                                MatFlowQcEvidenceService evidenceService) {
+                                MatFlowQcEvidenceService evidenceService,
+                                MatFlowPlantRoutingService plantRoutingService) {
                         this.qcRepository = qcRepository;
 
                         this.receiptRepository = receiptRepository;
@@ -221,6 +225,7 @@ public class MatFlowQcService {
                         this.auditService = auditService;
                         this.requisitionService = requisitionService;
                         this.evidenceService = evidenceService;
+                        this.plantRoutingService = plantRoutingService;
                 }
 
                 @Transactional(readOnly = true)
@@ -452,10 +457,11 @@ public class MatFlowQcService {
 
                         MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
                                         .unproxy(line.requisition);
-                        accessService.requirePlantAccess(
-                                        requisition.destinationLocation == null
-                                                        ? inspection.location.getPlantCode()
-                                                        : requisition.destinationLocation.getPlantCode());
+                        if (inspection.location == null) {
+                                throw conflict("QC check has no Main Store custody location");
+                        }
+                        plantRoutingService.assertMainStoreLocation(inspection.location, "MatFlow QC");
+                        accessService.requirePlantAccess(MatFlowPlantRoutingService.MAIN_STORE_PLANT);
 
                         String actor = accessService.actor();
                         inspection.acceptedQty = scale(inspection.inspectionQty);

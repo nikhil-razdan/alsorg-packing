@@ -2,8 +2,11 @@ package com.alsorg.packing.controller.dto.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MaterialReturnReason;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MaterialReturnStatus;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PartialAvailabilityDecision;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionType;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +23,17 @@ public final class MatFlowControlDtos {
     public record RequisitionCancelRequest(Long rowVersion, String reason) {
     }
 
+    /**
+     * Legacy wire compatibility only. The active four-plant workflow does not
+     * require a separate Production partial-availability decision, but keeping
+     * this contract avoids breaking older callers that still compile against it.
+     */
+    public record PartialAvailabilityDecisionRequest(
+            @NotNull(message = "Requisition row version is required.") Long rowVersion,
+            @NotNull(message = "Production partial-availability decision is required.") PartialAvailabilityDecision decision,
+            @Size(max = 2000, message = "Decision remarks cannot exceed 2000 characters.") String remarks) {
+    }
+
     public record MaterialReturnLineRequest(
             UUID requisitionLineId,
             BigDecimal returnQty,
@@ -27,6 +41,11 @@ public final class MatFlowControlDtos {
             String remarks) {
     }
 
+    /**
+     * toLocationId is retained for wire compatibility. The backend now fixes the
+     * final destination to AL-P1 Main Store; null is allowed and a supplied value
+     * must resolve to that same Main Store.
+     */
     public record MaterialReturnCreateRequest(
             UUID requisitionId,
             UUID fromLocationId,
@@ -36,6 +55,11 @@ public final class MatFlowControlDtos {
             List<MaterialReturnLineRequest> lines) {
     }
 
+    /**
+     * The same action contract is used for each custody leg. For a remote return,
+     * dispatch is called once by Production and once by the origin Plant Store;
+     * receive is called once by the origin Plant Store and once by AL-P1 Main Store.
+     */
     public record MaterialReturnActionRequest(Long rowVersion, String remarks) {
     }
 
@@ -47,12 +71,15 @@ public final class MatFlowControlDtos {
             String materialName,
             BigDecimal returnQty,
             BigDecimal dispatchedQty,
+            BigDecimal originStoreReceivedQty,
+            BigDecimal forwardedQty,
             BigDecimal receivedQty,
             String uom,
             String batchNo,
             Long rowVersion) {
     }
 
+    /** One return document with an optional remote origin-Store routing leg. */
     public record MaterialReturnResponse(
             UUID id,
             String returnNumber,
@@ -61,6 +88,9 @@ public final class MatFlowControlDtos {
             UUID fromLocationId,
             String fromLocationCode,
             String fromPlantCode,
+            UUID viaLocationId,
+            String viaLocationCode,
+            String viaPlantCode,
             UUID toLocationId,
             String toLocationCode,
             String toPlantCode,
@@ -68,6 +98,10 @@ public final class MatFlowControlDtos {
             MaterialReturnStatus status,
             String dispatchedBy,
             LocalDateTime dispatchedAt,
+            String originStoreReceivedBy,
+            LocalDateTime originStoreReceivedAt,
+            String forwardedBy,
+            LocalDateTime forwardedAt,
             String receivedBy,
             LocalDateTime receivedAt,
             String remarks,

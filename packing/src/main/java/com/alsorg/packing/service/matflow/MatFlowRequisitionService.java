@@ -19,6 +19,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionLineResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ReservationResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreForwardRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineReviewRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
@@ -138,6 +139,7 @@ public class MatFlowRequisitionService {
         private final MatFlowBomService routingService;
         private final MatFlowAuditService auditService;
         private final MatFlowDocumentNumberService documentNumberService;
+        private final MatFlowPlantRoutingService plantRoutingService;
 
         private final ObjectMapper objectMapper;
 
@@ -165,6 +167,7 @@ public class MatFlowRequisitionService {
                         MatFlowBomService routingService,
                         MatFlowAuditService auditService,
                         MatFlowDocumentNumberService documentNumberService,
+                        MatFlowPlantRoutingService plantRoutingService,
                         ObjectMapper objectMapper) {
 
                 this.requisitionRepository = requisitionRepository;
@@ -193,6 +196,7 @@ public class MatFlowRequisitionService {
                 this.routingService = routingService;
                 this.auditService = auditService;
                 this.documentNumberService = documentNumberService;
+                this.plantRoutingService = plantRoutingService;
 
                 this.objectMapper = objectMapper;
 
@@ -327,8 +331,13 @@ public class MatFlowRequisitionService {
                                                                 project.getProjectCode(),
                                                                 project.getId()));
 
-                accessService.requirePlantAccess(
-                                projectPlantCode);
+                /*
+                 * A new MR is created by the Production user in the owning plant.
+                 * There is no requisition entity yet, so routed Main-Store visibility
+                 * cannot be evaluated here. This was the source of the compile error
+                 * "requisition cannot be resolved to a variable".
+                 */
+                accessService.requirePlantAccess(projectPlantCode);
 
                 MatFlowBom bom = bomRepository
                                 .findById(
@@ -404,6 +413,13 @@ public class MatFlowRequisitionService {
                                         "Selected Production destination is inactive");
                 }
 
+                /*
+                 * Persist the Store channel for this MR so later location-master edits
+                 * cannot silently change its origin/Main-Store route.
+                 */
+                MatFlowLocation originStore = plantRoutingService.requireOriginStore(projectPlantCode);
+                MatFlowLocation mainStore = plantRoutingService.requireMainStore();
+
                 String actor = accessService.actor();
 
                 MatFlowMaterialRequisition requisition = new MatFlowMaterialRequisition();
@@ -415,6 +431,8 @@ public class MatFlowRequisitionService {
                 requisition.bom = bom;
 
                 requisition.destinationLocation = destination;
+                requisition.originStore = originStore;
+                requisition.mainStore = mainStore;
 
                 requisition.status = RequisitionStatus.DRAFT;
                 // Legacy column retained in the database only; the active workflow always
@@ -597,73 +615,154 @@ public class MatFlowRequisitionService {
                 accessService.requireProductionOwnership(requisition.requestedBy);
 
                 if (requisition.status != RequisitionStatus.DRAFT) {
-
-                        throw conflict(
-                                        "Only a Draft requisition can be submitted");
+                        throw conflict("Only a Draft requisition can be submitted");
                 }
 
                 assertVersion(
-                                request == null
-                                                ? null
-                                                : request.rowVersion(),
+                                request == null ? null : request.rowVersion(),
                                 requisition.getRowVersion(),
                                 "Requisition");
 
                 List<MatFlowRequisitionLine> lines = requisitionLineRepository
-                                .findByRequisition_IdOrderByLineNoAsc(
-                                                requisition.getId());
-
+                                .findByRequisition_IdOrderByLineNoAsc(requisition.getId());
                 if (lines.isEmpty()) {
-                        throw badRequest(
-                                        "Requisition requires at least one material line");
+                        throw badRequest("Requisition requires at least one material line");
                 }
 
+                String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                requisition.destinationLocation.getPlantCode());
+                MatFlowLocation originStore = requisition.originStore == null
+                                ? plantRoutingService.requireOriginStore(originPlant)
+                                : requisition.originStore;
+                MatFlowLocation mainStore = requisition.mainStore == null
+                                ? plantRoutingService.requireMainStore()
+                                : requisition.mainStore;
+                plantRoutingService.assertOriginStoreLocation(originStore, originPlant, "MR origin Store");
+                plantRoutingService.assertMainStoreLocation(mainStore, "MR Main Store");
+                requisition.originStore = originStore;
+                requisition.mainStore = mainStore;
                 String actor = accessService.actor();
 
-                requisition.status = RequisitionStatus.SUBMITTED_TO_STORE;
-
+                /*
+                 * AL-P1 Production reaches Main Store directly. AL-P2/3/4 remain in
+                 * SUBMITTED_TO_STORE until their own Store forwards this exact MR.
+                 */
+                boolean directToMainStore = plantRoutingService.isMainStorePlant(originPlant);
+                requisition.status = directToMainStore
+                                ? RequisitionStatus.STORE_REVIEW_IN_PROGRESS
+                                : RequisitionStatus.SUBMITTED_TO_STORE;
                 requisition.submittedBy = actor;
-
                 requisition.submittedAt = LocalDateTime.now();
 
-                String actionRemarks = request == null
-                                ? null
-                                : clean(
-                                                request.remarks());
-
+                String actionRemarks = request == null ? null : clean(request.remarks());
                 if (actionRemarks != null) {
                         requisition.remarks = actionRemarks;
                 }
-
-                requisition.setUpdatedBy(
-                                actor);
-
-                requisition = requisitionRepository.save(
-                                requisition);
+                requisition.setUpdatedBy(actor);
+                requisition = requisitionRepository.save(requisition);
 
                 auditService.record(
                                 "REQUISITION",
                                 requisition.getId(),
-                                "SUBMITTED_TO_STORE",
-                                requisition.destinationLocation
-                                                .getPlantCode(),
-                                requisition.projectDrawing
-                                                .getProjectCode(),
-                                requisition.projectDrawing
-                                                .getDrawingNo(),
+                                directToMainStore
+                                                ? "SUBMITTED_DIRECT_TO_MAIN_STORE"
+                                                : "SUBMITTED_TO_ORIGIN_PLANT_STORE",
+                                originPlant,
+                                requisition.projectDrawing.getProjectCode(),
+                                requisition.projectDrawing.getDrawingNo(),
                                 auditService.details(
-                                                "requisitionNumber",
-                                                requisition.requisitionNumber,
+                                                "requisitionNumber", requisition.requisitionNumber,
+                                                "lineCount", lines.size(),
+                                                "originPlant", originPlant,
+                                                "originStoreId", originStore.getId(),
+                                                "originStoreCode", originStore.getLocationCode(),
+                                                "mainStoreId", mainStore.getId(),
+                                                "mainStoreCode", mainStore.getLocationCode(),
+                                                "requestedBy", requisition.requestedBy,
+                                                "routingState", directToMainStore
+                                                                ? "AT_MAIN_STORE"
+                                                                : "AWAITING_ORIGIN_STORE_FORWARD"));
 
-                                                "lineCount",
-                                                lines.size(),
+                return toRequisitionResponse(requisition);
+        }
 
-                                                "destinationLocationCode",
-                                                requisition.destinationLocation
-                                                                .getLocationCode()));
+        /**
+         * AL-P2/3/4 Plant Store forwards the existing MR unchanged to AL-P1 Main
+         * Store. No second MR and no quantity mutation is created. Actor/time are
+         * retained in the immutable audit stream. AL-P1 never uses this hop.
+         */
+        @Transactional
+        public RequisitionResponse forwardRequisitionToMainStore(
+                        UUID requisitionId,
+                        StoreForwardRequest request) {
+                if (requisitionId == null) {
+                        throw badRequest("Requisition ID is required");
+                }
+                if (request == null) {
+                        throw badRequest("Store forwarding request is required");
+                }
 
-                return toRequisitionResponse(
-                                requisition);
+                requisitionRepository.lockById(requisitionId)
+                                .orElseThrow(() -> notFound("Material requisition not found"));
+
+                MatFlowMaterialRequisition requisition = requireRequisitionForRouting(requisitionId);
+                String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                requisition.destinationLocation.getPlantCode());
+
+                if (plantRoutingService.isMainStorePlant(originPlant)) {
+                        throw conflict("AL-P1 Production requisitions already route directly to AL-P1 Main Store");
+                }
+                plantRoutingService.requireOriginStoreActor(originPlant);
+                if (requisition.status != RequisitionStatus.SUBMITTED_TO_STORE) {
+                        throw conflict("Only an MR waiting at its origin Plant Store can be forwarded. Current status: "
+                                        + requisition.status);
+                }
+                assertVersion(request.rowVersion(), requisition.getRowVersion(), "Requisition");
+
+                MatFlowLocation originStore = requisition.originStore == null
+                                ? plantRoutingService.requireOriginStore(originPlant)
+                                : requisition.originStore;
+                MatFlowLocation mainStore = requisition.mainStore == null
+                                ? plantRoutingService.requireMainStore()
+                                : requisition.mainStore;
+                plantRoutingService.assertOriginStoreLocation(originStore, originPlant, "MR forwarding origin Store");
+                plantRoutingService.assertMainStoreLocation(mainStore, "MR forwarding Main Store");
+                String actor = accessService.actor();
+
+                requisition.originStore = originStore;
+                requisition.mainStore = mainStore;
+                requisition.status = RequisitionStatus.STORE_REVIEW_IN_PROGRESS;
+                requisition.forwardedToMainStoreBy = actor;
+                requisition.forwardedToMainStoreAt = LocalDateTime.now();
+                String forwardingRemarks = clean(request.remarks());
+                requisition.forwardingRemarks = forwardingRemarks;
+                if (forwardingRemarks != null) {
+                        requisition.remarks = forwardingRemarks;
+                }
+                requisition.setUpdatedBy(actor);
+                requisition = requisitionRepository.saveAndFlush(requisition);
+
+                auditService.record(
+                                "REQUISITION",
+                                requisition.getId(),
+                                "REQUISITION_FORWARDED_TO_MAIN_STORE",
+                                originPlant,
+                                requisition.projectDrawing == null ? null
+                                                : requisition.projectDrawing.getProjectCode(),
+                                requisition.projectDrawing == null ? null
+                                                : requisition.projectDrawing.getDrawingNo(),
+                                auditService.details(
+                                                "requisitionNumber", requisition.requisitionNumber,
+                                                "originPlant", originPlant,
+                                                "fromStoreId", originStore.getId(),
+                                                "fromStoreCode", originStore.getLocationCode(),
+                                                "toStoreId", mainStore.getId(),
+                                                "toStoreCode", mainStore.getLocationCode(),
+                                                "productionUser", requisition.requestedBy,
+                                                "forwardedBy", actor,
+                                                "remarks", forwardingRemarks));
+
+                return toRequisitionResponse(requisition);
         }
 
         /*
@@ -702,61 +801,83 @@ public class MatFlowRequisitionService {
                         throw conflict("MR Production destination is missing");
                 }
 
-                MatFlowLocation source = reservation.sourceLocation;
+                MatFlowLocation mainStore = requisition.mainStore == null
+                                ? plantRoutingService.requireMainStore()
+                                : requisition.mainStore;
+                plantRoutingService.assertMainStoreLocation(
+                                mainStore,
+                                "MR persisted Main Store");
+                plantRoutingService.assertMainStoreLocation(
+                                reservation.sourceLocation,
+                                "MR reservation source");
+                if (!mainStore.getId().equals(reservation.sourceLocation.getId())) {
+                        throw conflict("MR reservation source is not the configured AL-P1 Main Store");
+                }
+
                 MatFlowLocation production = requisition.destinationLocation;
+                String originPlant = plantRoutingService.normalizeFactoryPlant(production.getPlantCode());
+                MatFlowLocation originStore = requisition.originStore == null
+                                ? plantRoutingService.requireOriginStore(originPlant)
+                                : requisition.originStore;
+                plantRoutingService.assertOriginStoreLocation(originStore, originPlant, "MR persisted origin Store");
+                boolean remotePlant = plantRoutingService.requiresOriginStoreHop(originPlant);
 
-                if (selectedProcessingStep == null) {
-                        if (!source.getId().equals(production.getId())) {
-                                createPlannedTransfer(
-                                                requisition,
-                                                reservation,
-                                                source,
-                                                production,
-                                                null,
-                                                null,
-                                                LINE_NUMBER_INCREMENT,
-                                                quantity,
-                                                qcRequired,
-                                                qcRequired
-                                                                ? "Store material is reserved; waiting for QC check before sending to Production"
-                                                                : "Store material is ready to send directly to Production",
-                                                actor);
+                MatFlowTransferOrder predecessor = null;
+                int sequence = LINE_NUMBER_INCREMENT;
+
+                if (selectedProcessingStep != null) {
+                        MatFlowLocation processingLocation = selectedProcessingStep.location;
+                        if (processingLocation == null) {
+                                throw conflict("Selected Processing option has no location");
                         }
-                        return;
+
+                        predecessor = createPlannedTransfer(
+                                        requisition, reservation, mainStore, processingLocation,
+                                        selectedProcessingStep.getId(), null, sequence, quantity, qcRequired,
+                                        qcRequired
+                                                        ? "Main Store lot is reserved; waiting for QC tick before Processing"
+                                                        : "Main Store lot is ready for the selected Processing Unit",
+                                        actor);
+                        sequence += LINE_NUMBER_INCREMENT;
+
+                        /* Processing output returns to Main Store before plant issue. */
+                        predecessor = createPlannedTransfer(
+                                        requisition, reservation, processingLocation, mainStore,
+                                        null, predecessor.getId(), sequence, quantity, true,
+                                        "Processing output returns to AL-P1 Main Store for plant issue", actor);
+                        sequence += LINE_NUMBER_INCREMENT;
                 }
 
-                MatFlowLocation processingLocation = selectedProcessingStep.location;
-                if (processingLocation == null) {
-                        throw conflict("Selected Processing option has no location");
-                }
+                if (remotePlant) {
+                        predecessor = createPlannedTransfer(
+                                        requisition, reservation, mainStore, originStore, null,
+                                        predecessor == null ? null : predecessor.getId(),
+                                        sequence, quantity,
+                                        predecessor != null || qcRequired,
+                                        predecessor != null
+                                                        ? "Ready lot awaits AL-P1 Main Store release to the originating Plant Store"
+                                                        : qcRequired
+                                                                        ? "Main Store lot waits for QC before inter-plant issue"
+                                                                        : "Main Store lot is ready for inter-plant issue to the originating Plant Store",
+                                        actor);
+                        sequence += LINE_NUMBER_INCREMENT;
 
-                MatFlowTransferOrder toProcessing = createPlannedTransfer(
-                                requisition,
-                                reservation,
-                                source,
-                                processingLocation,
-                                selectedProcessingStep.getId(),
-                                null,
-                                LINE_NUMBER_INCREMENT,
-                                quantity,
-                                qcRequired,
-                                qcRequired
-                                                ? "Store material is reserved; waiting for QC check before sending to Processing"
-                                                : "Store material is ready to send to the selected Processing Unit",
-                                actor);
-
-                if (!processingLocation.getId().equals(production.getId())) {
                         createPlannedTransfer(
-                                        requisition,
-                                        reservation,
-                                        processingLocation,
-                                        production,
-                                        null,
-                                        toProcessing.getId(),
-                                        LINE_NUMBER_INCREMENT * 2,
-                                        quantity,
-                                        true,
-                                        "Processing output will continue to the MR Production destination",
+                                        requisition, reservation, originStore, production, null,
+                                        predecessor.getId(), sequence, quantity, true,
+                                        "Origin Plant Store will hand the complete lot to the specific Production user",
+                                        actor);
+                } else {
+                        createPlannedTransfer(
+                                        requisition, reservation, mainStore, production, null,
+                                        predecessor == null ? null : predecessor.getId(),
+                                        sequence, quantity,
+                                        predecessor != null || qcRequired,
+                                        predecessor != null
+                                                        ? "Ready lot awaits AL-P1 Main Store release to Production"
+                                                        : qcRequired
+                                                                        ? "Main Store lot waits for QC before Production issue"
+                                                                        : "Main Store lot is ready for direct AL-P1 Production issue",
                                         actor);
                 }
         }
@@ -945,11 +1066,13 @@ public class MatFlowRequisitionService {
         @Transactional(readOnly = true)
         public List<StoreLineAvailabilityResponse> getStoreAvailability(
                         UUID requisitionId) {
-                accessService.requireMaterialPlanning();
-                MatFlowMaterialRequisition requisition = requireRequisition(requisitionId);
-                String demandPlant = requirePlantCode(
-                                requisition.destinationLocation.getPlantCode(),
-                                "Requisition destination");
+                plantRoutingService.requireMainStorePlanningActor();
+                MatFlowMaterialRequisition requisition = requireRequisitionForMainStore(requisitionId);
+                requireAtMainStore(requisition);
+                MatFlowLocation mainStore = requisition.mainStore == null
+                                ? plantRoutingService.requireMainStore()
+                                : requisition.mainStore;
+                plantRoutingService.assertMainStoreLocation(mainStore, "MR availability Main Store");
 
                 List<MatFlowRequisitionLine> lines = requisitionLineRepository
                                 .findByRequisition_IdOrderByLineNoAsc(requisition.getId());
@@ -968,11 +1091,15 @@ public class MatFlowRequisitionService {
                                         .toList();
 
                         List<MatFlowStockBalance> balances = stockRepository.findPlanningCandidates(
-                                        line.material.getId(), Set.of(demandPlant), PLANNING_SOURCE_TYPES);
+                                        line.material.getId(),
+                                        Set.of(MatFlowPlantRoutingService.MAIN_STORE_PLANT),
+                                        PLANNING_SOURCE_TYPES);
 
                         List<StoreStockOptionResponse> stockOptions = balances == null ? List.of()
                                         : balances.stream()
                                                         .filter(balance -> balance != null && balance.location != null)
+                                                        .filter(balance -> mainStore.getId()
+                                                                        .equals(balance.location.getId()))
                                                         .map(balance -> new StoreStockOptionResponse(
                                                                         balance.getId(),
                                                                         line.material.getId(),
@@ -987,13 +1114,7 @@ public class MatFlowRequisitionService {
                                                                         zero(balance.reservedQty),
                                                                         zero(balance.blockedQty),
                                                                         zero(balance.availableQty()),
-                                                                        false,
-                                                                        false,
-                                                                        true))
-                                                        .sorted(Comparator.comparing(
-                                                                        StoreStockOptionResponse::locationCode,
-                                                                        Comparator.nullsLast(
-                                                                                        String.CASE_INSENSITIVE_ORDER)))
+                                                                        false, false, true))
                                                         .toList();
 
                         return new StoreLineAvailabilityResponse(
@@ -1004,8 +1125,7 @@ public class MatFlowRequisitionService {
                                         zero(line.requestedQty), zero(line.reservedQty), zero(line.shortageQty),
                                         requisition.destinationLocation.getId(),
                                         requisition.destinationLocation.getLocationCode(),
-                                        approvedOptions,
-                                        stockOptions);
+                                        approvedOptions, stockOptions);
                 }).toList();
         }
 
@@ -1156,11 +1276,16 @@ public class MatFlowRequisitionService {
                         if (type != LocationType.PROCESSING && type != LocationType.EXTERNAL_PROCESSOR) {
                                 throw conflict("Configured Processing option is not a Processing location");
                         }
-                        String routePlant = requirePlantCode(
+                        /*
+                         * AL-P1 Main Store may route a central lot to any BOM-approved
+                         * Processing Unit. Destination plant permission belongs to the
+                         * Processing user who executes that unit; it must not block the
+                         * Main Store planning decision.
+                         */
+                        requirePlantCode(
                                         step.location.getPlantCode(),
                                         "BOM Processing option " + safeLabel(step.location.getLocationCode(),
                                                         step.location.getId()));
-                        accessService.requirePlantAccess(routePlant);
                         if (!step.location.isActive()) {
                                 throw conflict("BOM Processing option is inactive: " + step.location.getLocationCode());
                         }
@@ -1242,7 +1367,8 @@ public class MatFlowRequisitionService {
                                 project.getPlantCode(),
                                 "Material requisition project");
 
-                accessService.requirePlantAccess(
+                requireRequisitionPlantVisibility(
+                                requisition,
                                 projectPlantCode);
 
                 if (requisition.bom == null) {
@@ -1276,9 +1402,10 @@ public class MatFlowRequisitionService {
                  * Reload through the Location repository instead of relying
                  * on direct state from a Hibernate relationship proxy.
                  */
-                MatFlowLocation destination = requireLocation(
-                                requisition.destinationLocation
-                                                .getId());
+                MatFlowLocation destination = locationRepository
+                                .findById(requisition.destinationLocation.getId())
+                                .orElseThrow(() -> conflict(
+                                                "Material requisition destination location no longer exists"));
 
                 String destinationPlantCode = requirePlantCode(
                                 destination.getPlantCode(),
@@ -1301,12 +1428,99 @@ public class MatFlowRequisitionService {
                 }
 
                 requisition.projectDrawing = project;
-
                 requisition.bom = bom;
-
                 requisition.destinationLocation = destination;
 
+                String originPlant = plantRoutingService.normalizeFactoryPlant(destinationPlantCode);
+                if (requisition.originStore != null) {
+                        requisition.originStore = locationRepository.findById(requisition.originStore.getId())
+                                        .orElseThrow(() -> conflict(
+                                                        "Material requisition origin Store no longer exists"));
+                        plantRoutingService.assertOriginStoreLocation(
+                                        requisition.originStore, originPlant, "Material requisition origin Store");
+                }
+                if (requisition.mainStore != null) {
+                        requisition.mainStore = locationRepository.findById(requisition.mainStore.getId())
+                                        .orElseThrow(() -> conflict(
+                                                        "Material requisition Main Store no longer exists"));
+                        plantRoutingService.assertMainStoreLocation(
+                                        requisition.mainStore, "Material requisition Main Store");
+                }
+
                 return requisition;
+        }
+
+        private MatFlowMaterialRequisition requireRequisitionForRouting(UUID id) {
+                MatFlowMaterialRequisition requisition = requisitionRepository.findById(id)
+                                .orElseThrow(() -> notFound("Material requisition not found"));
+                requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(requisition);
+                if (requisition.projectDrawing == null || requisition.destinationLocation == null) {
+                        throw conflict("Material requisition has incomplete Plant routing context");
+                }
+                requisition.projectDrawing = projectRepository.findById(requisition.projectDrawing.getId())
+                                .orElseThrow(() -> conflict("Material requisition project drawing no longer exists"));
+                requisition.destinationLocation = locationRepository.findById(requisition.destinationLocation.getId())
+                                .orElseThrow(() -> conflict(
+                                                "Material requisition Production destination no longer exists"));
+                if (requisition.bom != null) {
+                        requisition.bom = bomRepository.findById(requisition.bom.getId())
+                                        .orElseThrow(() -> conflict(
+                                                        "Material requisition operational BOM no longer exists"));
+                }
+                if (requisition.originStore != null) {
+                        requisition.originStore = locationRepository.findById(requisition.originStore.getId())
+                                        .orElseThrow(() -> conflict(
+                                                        "Material requisition origin Store no longer exists"));
+                }
+                if (requisition.mainStore != null) {
+                        requisition.mainStore = locationRepository.findById(requisition.mainStore.getId())
+                                        .orElseThrow(() -> conflict(
+                                                        "Material requisition Main Store no longer exists"));
+                }
+                return requisition;
+        }
+
+        private MatFlowMaterialRequisition requireRequisitionForMainStore(UUID id) {
+                MatFlowMaterialRequisition requisition = requireRequisitionForRouting(id);
+                String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                requisition.destinationLocation.getPlantCode());
+                if (!plantRoutingService.canActAsMainStore()) {
+                        throw new org.springframework.security.access.AccessDeniedException(
+                                        "AL-P1 Main Store access is required");
+                }
+                if (!plantRoutingService.isMainStorePlant(originPlant)
+                                && requisition.status == RequisitionStatus.SUBMITTED_TO_STORE) {
+                        throw conflict("The origin Plant Store has not yet forwarded this MR to AL-P1 Main Store");
+                }
+                return requisition;
+        }
+
+        private void requireAtMainStore(MatFlowMaterialRequisition requisition) {
+                if (requisition == null || requisition.destinationLocation == null) {
+                        throw conflict("Material requisition has no Production plant context");
+                }
+                String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                requisition.destinationLocation.getPlantCode());
+                if (!plantRoutingService.isMainStorePlant(originPlant)
+                                && requisition.status == RequisitionStatus.SUBMITTED_TO_STORE) {
+                        throw conflict("MR must be forwarded by " + originPlant
+                                        + " Store before AL-P1 Main Store can review it");
+                }
+        }
+
+        private void requireRequisitionPlantVisibility(
+                        MatFlowMaterialRequisition requisition,
+                        String originPlantCode) {
+                if (accessService.canAccessPlant(originPlantCode)) {
+                        return;
+                }
+                boolean routedToMainStore = plantRoutingService.canActAsMainStore()
+                                && requisition != null
+                                && requisition.status != RequisitionStatus.DRAFT
+                                && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
+                if (!routedToMainStore) {
+                        accessService.requirePlantAccess(originPlantCode);
+                }
         }
 
         private MatFlowLocation requireLocation(
@@ -1565,6 +1779,13 @@ public class MatFlowRequisitionService {
                                 requisition.destinationLocation
                                                 .getPlantCode(),
 
+                                requisition.originStore == null ? null : requisition.originStore.getId(),
+                                requisition.originStore == null ? null : requisition.originStore.getLocationCode(),
+                                requisition.originStore == null ? null : requisition.originStore.getPlantCode(),
+                                requisition.mainStore == null ? null : requisition.mainStore.getId(),
+                                requisition.mainStore == null ? null : requisition.mainStore.getLocationCode(),
+                                requisition.mainStore == null ? null : requisition.mainStore.getPlantCode(),
+
                                 requisition.status,
 
                                 requisition.requestedBy,
@@ -1572,6 +1793,10 @@ public class MatFlowRequisitionService {
 
                                 requisition.submittedBy,
                                 requisition.submittedAt,
+
+                                requisition.forwardedToMainStoreBy,
+                                requisition.forwardedToMainStoreAt,
+                                requisition.forwardingRemarks,
 
                                 requisition.plannedBy,
                                 requisition.plannedAt,
@@ -1654,138 +1879,112 @@ public class MatFlowRequisitionService {
 
         private ReservationResponse toReservationResponse(
                         MatFlowReservation reservation) {
-
                 if (reservation == null) {
-                        throw conflict(
-                                        "Reservation record is incomplete");
+                        throw conflict("Reservation is required");
                 }
-
-                reservation = (MatFlowReservation) Hibernate.unproxy(
-                                reservation);
-
-                if (reservation.requisitionLine == null ||
-                                reservation.material == null ||
-                                reservation.sourceLocation == null ||
-                                reservation.firstDestinationLocation == null) {
-
-                        throw conflict(
-                                        "Reservation record is incomplete");
+                reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+                if (reservation.requisitionLine == null || reservation.material == null
+                                || reservation.sourceLocation == null
+                                || reservation.firstDestinationLocation == null) {
+                        throw conflict("Reservation record is incomplete");
                 }
 
                 MatFlowRequisitionLine reservationLine = (MatFlowRequisitionLine) Hibernate.unproxy(
                                 reservation.requisitionLine);
-
                 reservation.requisitionLine = reservationLine;
-
-                if (reservationLine.requisition == null ||
-                                reservationLine.requisition.getId() == null) {
-
-                        throw conflict(
-                                        "Reservation requisition link is missing");
+                if (reservationLine.requisition == null || reservationLine.requisition.getId() == null) {
+                        throw conflict("Reservation requisition link is missing");
                 }
-
                 MatFlowMaterialRequisition reservationRequisition = requireRequisition(
                                 reservationLine.requisition.getId());
 
-                MatFlowLocation issueLocation = reservationRequisition.destinationLocation;
+                List<MatFlowTransferOrder> route = transferRepository
+                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
+                MatFlowTransferOrder nextTransfer = route.stream()
+                                .filter(transfer -> transfer != null
+                                                && transfer.status != TransferStatus.RECEIVED
+                                                && transfer.status != TransferStatus.CANCELLED)
+                                .findFirst().orElse(null);
 
-                BigDecimal reservedQty = zero(
-                                reservation.reservedQty);
+                MatFlowLocation issueLocation = nextTransfer != null && nextTransfer.fromLocation != null
+                                ? nextTransfer.fromLocation
+                                : reservationRequisition.destinationLocation;
 
-                BigDecimal issuedQty = zero(
-                                reservation.issuedQty);
-
-                BigDecimal remainingIssueQty = reservedQty
-                                .subtract(
-                                                issuedQty)
-                                .max(
-                                                BigDecimal.ZERO)
-                                .setScale(
-                                                3,
-                                                RoundingMode.HALF_UP);
-
-                boolean issueReady = isReservationIssueReady(
-                                reservation,
-                                issueLocation) &&
-                                remainingIssueQty.compareTo(
-                                                BigDecimal.ZERO) > 0
-                                &&
-                                (reservation.status == ReservationStatus.ACTIVE ||
-                                                reservation.status == ReservationStatus.PARTIALLY_ISSUED);
-
-                boolean awaitingProductionReceipt = isAwaitingProductionReceipt(
-                                reservation,
-                                issueLocation);
-                boolean alreadyIssued = reservation.status == ReservationStatus.ISSUED;
+                BigDecimal reservedQty = zero(reservation.reservedQty);
+                BigDecimal issuedQty = zero(reservation.issuedQty);
+                BigDecimal remainingIssueQty = reservedQty.subtract(issuedQty)
+                                .max(BigDecimal.ZERO).setScale(3, RoundingMode.HALF_UP);
 
                 boolean qcRequired = qcRequiredForReservation(reservation);
                 boolean qcCompleted = qcCompletedForReservation(reservation);
                 boolean processingRequired = processingRequiredForReservation(reservation);
+                boolean alreadyIssued = reservation.status == ReservationStatus.ISSUED;
 
-                String responsibleDepartment = awaitingProductionReceipt || alreadyIssued
-                                ? "PRODUCTION"
-                                : qcRequired && !qcCompleted
-                                                ? "QC"
-                                                : processingRequired
-                                                                ? "STORE / PROCESSING"
-                                                                : "STORE";
-                String nextAction = awaitingProductionReceipt
-                                ? "RECEIVE_MATERIAL"
-                                : alreadyIssued
-                                                ? "START_PRODUCTION"
-                                                : qcRequired && !qcCompleted
-                                                                ? "COMPLETE_QC_CHECK"
-                                                                : processingRequired
-                                                                                ? "SEND_TO_PROCESSING"
-                                                                                : "SEND_TO_PRODUCTION";
+                boolean issueReady = nextTransfer != null
+                                && nextTransfer.status == TransferStatus.READY
+                                && nextTransfer.fromLocation != null
+                                && nextTransfer.fromLocation.getLocationType() == LocationType.STORE
+                                && remainingIssueQty.compareTo(BigDecimal.ZERO) > 0
+                                && (reservation.status == ReservationStatus.ACTIVE
+                                                || reservation.status == ReservationStatus.PARTIALLY_ISSUED);
+
+                String responsibleDepartment;
+                String nextAction;
+                if (alreadyIssued || nextTransfer == null) {
+                        responsibleDepartment = "PRODUCTION";
+                        nextAction = "START_PRODUCTION";
+                } else if (qcRequired && !qcCompleted && nextTransfer.predecessorTransferId == null) {
+                        responsibleDepartment = "QC";
+                        nextAction = "COMPLETE_QC_CHECK";
+                } else if (nextTransfer.status == TransferStatus.IN_TRANSIT
+                                || nextTransfer.status == TransferStatus.PARTIALLY_DISPATCHED
+                                || nextTransfer.status == TransferStatus.PARTIALLY_RECEIVED) {
+                        if (nextTransfer.toLocation != null
+                                        && nextTransfer.toLocation.getLocationType() == LocationType.PRODUCTION) {
+                                responsibleDepartment = "PRODUCTION";
+                                nextAction = "RECEIVE_MATERIAL";
+                        } else if (nextTransfer.toLocation != null
+                                        && nextTransfer.toLocation.getLocationType() == LocationType.STORE
+                                        && !plantRoutingService.isMainStoreLocation(nextTransfer.toLocation)) {
+                                responsibleDepartment = "ORIGIN PLANT STORE";
+                                nextAction = "RECEIVE_FROM_MAIN_STORE";
+                        } else {
+                                responsibleDepartment = departmentForLocation(nextTransfer.toLocation);
+                                nextAction = "RECEIVE_MATERIAL";
+                        }
+                } else if (nextTransfer.status == TransferStatus.READY) {
+                        responsibleDepartment = nextTransfer.fromLocation != null
+                                        && plantRoutingService.isMainStoreLocation(nextTransfer.fromLocation)
+                                                        ? "AL-P1 MAIN STORE"
+                                                        : departmentForLocation(nextTransfer.fromLocation);
+                        nextAction = "ISSUE_MATERIAL";
+                } else if (nextTransfer.fromLocation != null
+                                && (nextTransfer.fromLocation.getLocationType() == LocationType.PROCESSING
+                                                || nextTransfer.fromLocation
+                                                                .getLocationType() == LocationType.EXTERNAL_PROCESSOR)) {
+                        responsibleDepartment = "PROCESSING";
+                        nextAction = "COMPLETE_PROCESSING";
+                } else {
+                        responsibleDepartment = "AL-P1 MAIN STORE";
+                        nextAction = "AWAIT_ROUTE_PREREQUISITE";
+                }
 
                 return new ReservationResponse(
                                 reservation.getId(),
-
-                                reservation.requisitionLine
-                                                .getId(),
-
-                                reservation.material
-                                                .getMaterialCode(),
-
-                                reservation.sourceLocation
-                                                .getId(),
-
-                                reservation.sourceLocation
-                                                .getLocationCode(),
-
-                                reservation.sourceLocation
-                                                .getPlantCode(),
-
-                                reservation.firstDestinationLocation
-                                                .getId(),
-
-                                reservation.firstDestinationLocation
-                                                .getLocationCode(),
-
+                                reservation.requisitionLine.getId(),
+                                reservation.material.getMaterialCode(),
+                                reservation.sourceLocation.getId(),
+                                reservation.sourceLocation.getLocationCode(),
+                                reservation.sourceLocation.getPlantCode(),
+                                reservation.firstDestinationLocation.getId(),
+                                reservation.firstDestinationLocation.getLocationCode(),
                                 reservation.demandPlantCode,
-
-                                reservedQty,
-
-                                reservation.status,
-
-                                reservation.getRowVersion(),
-
-                                issuedQty,
-
-                                remainingIssueQty,
-
-                                issueReady,
-
-                                issueLocation.getId(),
-
-                                issueLocation.getLocationCode(),
-
-                                responsibleDepartment,
-                                nextAction,
-                                qcRequired,
-                                qcCompleted,
-                                processingRequired,
+                                reservedQty, reservation.status, reservation.getRowVersion(),
+                                issuedQty, remainingIssueQty, issueReady,
+                                issueLocation == null ? null : issueLocation.getId(),
+                                issueLocation == null ? null : issueLocation.getLocationCode(),
+                                responsibleDepartment, nextAction,
+                                qcRequired, qcCompleted, processingRequired,
                                 processingRouteStepIdForReservation(reservation),
                                 processingLocationCodeForReservation(reservation));
         }
@@ -2155,32 +2354,38 @@ public class MatFlowRequisitionService {
         public PlanningResponse reviewRequisition(
                         UUID requisitionId,
                         StoreReviewRequest request) {
-                accessService.requireMaterialPlanning();
+                plantRoutingService.requireMainStorePlanningActor();
                 if (requisitionId == null)
                         throw badRequest("Requisition ID is required");
                 if (request == null || request.lines() == null || request.lines().isEmpty()) {
-                        throw badRequest("At least one Store review line is required");
+                        throw badRequest("At least one Main Store review line is required");
                 }
 
                 requisitionRepository.lockById(requisitionId)
                                 .orElseThrow(() -> notFound("Material requisition not found"));
-                MatFlowMaterialRequisition requisition = requireRequisition(requisitionId);
+                MatFlowMaterialRequisition requisition = requireRequisitionForMainStore(requisitionId);
+                requireAtMainStore(requisition);
                 if (!isStoreReviewableStatus(requisition.status)) {
-                        throw conflict("Requisition cannot be reviewed by Store in status: " + requisition.status);
+                        throw conflict("Requisition cannot be reviewed by Main Store in status: " + requisition.status);
                 }
                 assertVersion(request.rowVersion(), requisition.getRowVersion(), "Requisition");
+
+                MatFlowLocation mainStore = requisition.mainStore == null
+                                ? plantRoutingService.requireMainStore()
+                                : requisition.mainStore;
+                plantRoutingService.assertMainStoreLocation(mainStore, "MR review Main Store");
+                String demandPlant = plantRoutingService.normalizeFactoryPlant(
+                                requisition.destinationLocation.getPlantCode());
 
                 List<MatFlowRequisitionLine> lines = requisitionLineRepository.lockByRequisitionId(requisition.getId());
                 Map<UUID, MatFlowRequisitionLine> lineById = lines.stream()
                                 .collect(java.util.stream.Collectors.toMap(
-                                                MatFlowRequisitionLine::getId,
-                                                value -> value,
-                                                (a, b) -> a,
-                                                LinkedHashMap::new));
+                                                MatFlowRequisitionLine::getId, value -> value,
+                                                (a, b) -> a, LinkedHashMap::new));
                 Map<UUID, StoreLineReviewRequest> reviewByLineId = new LinkedHashMap<>();
                 for (StoreLineReviewRequest lineReview : request.lines()) {
                         if (lineReview == null || lineReview.requisitionLineId() == null) {
-                                throw badRequest("Every Store review line requires a requisition line ID");
+                                throw badRequest("Every Main Store review line requires a requisition line ID");
                         }
                         if (!lineById.containsKey(lineReview.requisitionLineId())) {
                                 throw badRequest("Store review contains a line that does not belong to this MR");
@@ -2191,7 +2396,6 @@ public class MatFlowRequisitionService {
                 }
 
                 String actor = accessService.actor();
-                boolean anyShortage = false;
                 int reviewedLines = 0;
 
                 for (StoreLineReviewRequest lineReview : reviewByLineId.values()) {
@@ -2213,12 +2417,15 @@ public class MatFlowRequisitionService {
                         List<MatFlowBomRouteStep> processingOptions = routingService.routeForLine(line.bomLine.getId());
                         processingOptions = processingOptions == null ? List.of() : processingOptions;
                         validateRoute(processingOptions);
-                        MatFlowBomRouteStep selectedProcessingStep = validateStoreRouteConfirmation(lineReview,
-                                        processingOptions, line.material);
+                        MatFlowBomRouteStep selectedProcessingStep = validateStoreRouteConfirmation(
+                                        lineReview, processingOptions, line.material);
 
-                        MatFlowLocation nextDestination = selectedProcessingStep == null
-                                        ? requisition.destinationLocation
+                        MatFlowLocation firstDestination = selectedProcessingStep == null
+                                        ? (plantRoutingService.requiresOriginStoreHop(demandPlant)
+                                                        ? plantRoutingService.requireOriginStore(demandPlant)
+                                                        : requisition.destinationLocation)
                                         : selectedProcessingStep.location;
+
                         List<StoreSourceAllocationRequest> allocations = lineReview.allocations() == null
                                         ? List.of()
                                         : lineReview.allocations();
@@ -2227,29 +2434,24 @@ public class MatFlowRequisitionService {
 
                         for (StoreSourceAllocationRequest allocation : allocations) {
                                 if (allocation == null || allocation.sourceLocationId() == null) {
-                                        throw badRequest("A Store allocation contains no source location");
+                                        throw badRequest("A Main Store allocation contains no source location");
                                 }
                                 if (!usedSources.add(allocation.sourceLocationId())) {
                                         throw badRequest(
-                                                        "The same Store source cannot be selected twice for one material line");
+                                                        "The same Main Store source cannot be selected twice for one material line");
                                 }
                                 BigDecimal qty = positive(allocation.reserveQty(), "Reserve quantity");
                                 if (allocatedThisReview.add(qty).compareTo(remainingDemand) > 0) {
-                                        throw badRequest(
-                                                        "Store allocation exceeds the remaining MR demand for material "
-                                                                        + line.material.getMaterialCode());
+                                        throw badRequest("Store allocation exceeds remaining MR demand for "
+                                                        + line.material.getMaterialCode());
                                 }
 
-                                MatFlowLocation source = requireLocation(allocation.sourceLocationId());
-                                if (source.getLocationType() != LocationType.STORE || !source.isSupportsStock()) {
-                                        throw badRequest("MR allocation source must be a stock-enabled STORE location: "
-                                                        + source.getLocationCode());
-                                }
-                                String demandPlant = requirePlantCode(requisition.destinationLocation.getPlantCode(),
-                                                "MR destination");
-                                String sourcePlant = requirePlantCode(source.getPlantCode(), "Store source");
-                                if (!demandPlant.equals(sourcePlant)) {
-                                        throw badRequest("Store source belongs to a different plant than the MR");
+                                MatFlowLocation source = locationRepository.findById(allocation.sourceLocationId())
+                                                .orElseThrow(() -> notFound("Store source location not found"));
+                                plantRoutingService.assertMainStoreLocation(source, "MR stock reservation");
+                                if (!mainStore.getId().equals(source.getId())) {
+                                        throw badRequest(
+                                                        "MR stock may be reserved only from the configured AL-P1 Main Store");
                                 }
 
                                 MatFlowStockBalance balance = stockRepository
@@ -2259,12 +2461,12 @@ public class MatFlowRequisitionService {
                                                                 + source.getLocationCode()));
                                 BigDecimal available = zero(balance.availableQty());
                                 if (available.compareTo(qty) < 0) {
-                                        throw conflict("Available stock at " + source.getLocationCode() + " is "
-                                                        + available + ", requested reserve is " + qty);
+                                        throw conflict("Available Main Store stock is " + available
+                                                        + ", requested reserve is " + qty);
                                 }
 
-                                balance.reservedQty = zero(balance.reservedQty).add(qty).setScale(3,
-                                                RoundingMode.HALF_UP);
+                                balance.reservedQty = zero(balance.reservedQty).add(qty)
+                                                .setScale(3, RoundingMode.HALF_UP);
                                 balance.setUpdatedBy(actor);
                                 balance = stockRepository.save(balance);
 
@@ -2272,7 +2474,7 @@ public class MatFlowRequisitionService {
                                 reservation.requisitionLine = line;
                                 reservation.material = line.material;
                                 reservation.sourceLocation = source;
-                                reservation.firstDestinationLocation = nextDestination;
+                                reservation.firstDestinationLocation = firstDestination;
                                 reservation.demandPlantCode = demandPlant;
                                 reservation.reservedQty = qty;
                                 reservation.issuedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
@@ -2280,25 +2482,19 @@ public class MatFlowRequisitionService {
                                 reservation.routeSnapshotJson = routeSnapshot(
                                                 Boolean.TRUE.equals(lineReview.qcRequired()),
                                                 Boolean.TRUE.equals(lineReview.processingRequired()),
-                                                selectedProcessingStep,
-                                                requisition.destinationLocation);
+                                                selectedProcessingStep, requisition.destinationLocation);
                                 reservation.setCreatedBy(actor);
                                 reservation.setUpdatedBy(actor);
                                 reservation = reservationRepository.saveAndFlush(reservation);
 
                                 saveReservationLedger(balance, requisition, reservation, qty, actor);
-                                createTransferChain(
-                                                requisition,
-                                                reservation,
-                                                selectedProcessingStep,
-                                                qty,
-                                                Boolean.TRUE.equals(lineReview.qcRequired()),
-                                                actor);
-
+                                createTransferChain(requisition, reservation, selectedProcessingStep, qty,
+                                                Boolean.TRUE.equals(lineReview.qcRequired()), actor);
                                 if (Boolean.TRUE.equals(lineReview.qcRequired())) {
                                         createQcCheck(requisition, reservation, qty, actor);
                                 }
-                                allocatedThisReview = allocatedThisReview.add(qty).setScale(3, RoundingMode.HALF_UP);
+                                allocatedThisReview = allocatedThisReview.add(qty)
+                                                .setScale(3, RoundingMode.HALF_UP);
                         }
 
                         BigDecimal newAllocatedTotal = alreadyAllocated.add(allocatedThisReview)
@@ -2306,11 +2502,11 @@ public class MatFlowRequisitionService {
                         BigDecimal shortage = requestedQty.subtract(newAllocatedTotal)
                                         .max(BigDecimal.ZERO).setScale(3, RoundingMode.HALF_UP);
 
-                        if (shortage.compareTo(BigDecimal.ZERO) > 0 &&
-                                        !Boolean.TRUE.equals(lineReview.createIndentForShortage())) {
-                                throw badRequest("Material " + line.material.getMaterialCode() +
-                                                " still has shortage " + shortage
-                                                + ". Create/keep a linked PI for the shortage.");
+                        if (shortage.compareTo(BigDecimal.ZERO) > 0
+                                        && !Boolean.TRUE.equals(lineReview.createIndentForShortage())) {
+                                throw badRequest("Material " + line.material.getMaterialCode()
+                                                + " still has shortage " + shortage
+                                                + ". Keep/create a linked Main Store PI for the shortage.");
                         }
 
                         line.reservedQty = newAllocatedTotal;
@@ -2321,7 +2517,6 @@ public class MatFlowRequisitionService {
                         requisitionLineRepository.save(line);
 
                         if (shortage.compareTo(BigDecimal.ZERO) > 0) {
-                                anyShortage = true;
                                 ensureLinkedIndentLine(requisition, line, shortage,
                                                 lineReview.indentDeliveryLocationId(), request.remarks(),
                                                 lineReview.remarks(), actor);
@@ -2342,16 +2537,20 @@ public class MatFlowRequisitionService {
                 requisitionRepository.saveAndFlush(requisition);
 
                 refreshState(requisition.getId(), actor);
-                MatFlowMaterialRequisition refreshed = requireRequisition(requisition.getId());
+                MatFlowMaterialRequisition refreshed = requireRequisitionForMainStore(requisition.getId());
+
                 auditService.record(
-                                "REQUISITION", refreshed.getId(), "STORE_ALLOCATION_REVIEWED",
-                                refreshed.destinationLocation.getPlantCode(),
-                                refreshed.projectDrawing.getProjectCode(), refreshed.projectDrawing.getDrawingNo(),
+                                "REQUISITION", requisition.getId(), "MAIN_STORE_REVIEW_COMPLETED",
+                                MatFlowPlantRoutingService.MAIN_STORE_PLANT,
+                                requisition.projectDrawing == null ? null : requisition.projectDrawing.getProjectCode(),
+                                requisition.projectDrawing == null ? null : requisition.projectDrawing.getDrawingNo(),
                                 auditService.details(
-                                                "requisitionNumber", refreshed.requisitionNumber,
-                                                "reviewedLineCount", reviewedLines,
-                                                "hasShortage", requisitionHasShortage,
-                                                "rollingReview", true));
+                                                "requisitionNumber", requisition.requisitionNumber,
+                                                "originPlant", demandPlant,
+                                                "mainStoreCode", mainStore.getLocationCode(),
+                                                "reviewedLines", reviewedLines,
+                                                "status", refreshed.status));
+
                 return toPlanningResponse(refreshed);
         }
 
@@ -2464,25 +2663,15 @@ public class MatFlowRequisitionService {
         private MatFlowLocation resolveIndentStore(
                         MatFlowMaterialRequisition requisition,
                         UUID deliveryLocationId) {
-                if (deliveryLocationId == null) {
-                        throw badRequest("Select the Store delivery location for the Purchase Indent");
-                }
+                MatFlowLocation mainStore = requisition != null && requisition.mainStore != null
+                                ? requisition.mainStore
+                                : plantRoutingService.requireMainStore();
+                plantRoutingService.assertMainStoreLocation(mainStore, "Purchase Indent delivery");
 
-                MatFlowLocation location = requireLocation(deliveryLocationId);
-                if (!location.isActive() || !location.isSupportsStock() ||
-                                location.getLocationType() != LocationType.STORE) {
-                        throw badRequest("Purchase Indent delivery location must be an active stock-enabled Store");
+                if (deliveryLocationId != null && !deliveryLocationId.equals(mainStore.getId())) {
+                        throw badRequest("Purchase Indent delivery location is fixed to AL-P1 Main Store");
                 }
-
-                String demandPlant = requirePlantCode(
-                                requisition.destinationLocation.getPlantCode(),
-                                "MR destination");
-                String storePlant = requirePlantCode(location.getPlantCode(), "PI delivery Store");
-                if (!demandPlant.equals(storePlant)) {
-                        throw badRequest("Purchase Indent delivery Store must belong to the MR plant");
-                }
-
-                return location;
+                return mainStore;
         }
 
         private MatFlowIndent createIndent(
@@ -2758,20 +2947,28 @@ public class MatFlowRequisitionService {
 
         private boolean canReadRequisition(
                         MatFlowMaterialRequisition requisition) {
-
-                if (requisition == null ||
-                                requisition.projectDrawing == null) {
-
+                if (requisition == null || requisition.projectDrawing == null) {
                         return false;
                 }
-
-                String plantCode = clean(
-                                requisition.projectDrawing
-                                                .getPlantCode());
-
-                return plantCode != null &&
-                                accessService.canAccessPlant(
-                                                plantCode);
+                String plantCode = clean(requisition.projectDrawing.getPlantCode());
+                if (plantCode == null) {
+                        return false;
+                }
+                String originPlant;
+                try {
+                        originPlant = plantRoutingService.normalizeFactoryPlant(plantCode);
+                } catch (ResponseStatusException ignored) {
+                        return accessService.canAccessPlant(plantCode);
+                }
+                if (accessService.canAccessPlant(originPlant)) {
+                        return true;
+                }
+                /*
+                 * Main Store sees remote-plant MRs only after the origin Store forwards them.
+                 */
+                return plantRoutingService.canActAsMainStore()
+                                && requisition.status != RequisitionStatus.DRAFT
+                                && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
         }
 
         private String generateNumber(
@@ -2929,20 +3126,38 @@ public class MatFlowRequisitionService {
         public List<IndentResponse> listPurchaseIndents(String plantCode) {
                 accessService.requireIndentRead();
 
-                String normalizedPlant = clean(plantCode);
-                if (normalizedPlant != null) {
-                        normalizedPlant = normalizedPlant.toUpperCase(Locale.ROOT);
-                        accessService.requirePlantAccess(normalizedPlant);
-                }
-                final String plantFilter = normalizedPlant;
+                /*
+                 * PI delivery is always AL-P1 Main Store, so plantCode here means the
+                 * originating MR/Production plant, not the PI delivery plant. This lets
+                 * Main Store/Purchase filter central PIs for AL-P2/3/4 without granting
+                 * those actors operational access to the remote plant.
+                 */
+                final String originPlantFilter = clean(plantCode) == null
+                                ? null
+                                : plantRoutingService.normalizeFactoryPlant(plantCode);
 
                 return indentRepository.findAll().stream()
                                 .filter(indent -> indent != null && indent.deliverToLocation != null)
                                 .filter(indent -> accessService.canAccessPlant(indent.deliverToLocation.getPlantCode()))
-                                .filter(indent -> plantFilter == null ||
-                                                plantFilter.equalsIgnoreCase(indent.deliverToLocation.getPlantCode()))
-                                .filter(indent -> indent.status != IndentStatus.AUTO_CREATED &&
-                                                indent.status != IndentStatus.DRAFT)
+                                .filter(indent -> {
+                                        if (originPlantFilter == null) {
+                                                return true;
+                                        }
+                                        MatFlowMaterialRequisition linked = indent.requisition;
+                                        if (linked == null || linked.destinationLocation == null) {
+                                                return false;
+                                        }
+                                        try {
+                                                return originPlantFilter
+                                                                .equals(plantRoutingService.normalizeFactoryPlant(
+                                                                                linked.destinationLocation
+                                                                                                .getPlantCode()));
+                                        } catch (ResponseStatusException ignored) {
+                                                return false;
+                                        }
+                                })
+                                .filter(indent -> indent.status != IndentStatus.AUTO_CREATED
+                                                && indent.status != IndentStatus.DRAFT)
                                 .sorted(Comparator.comparing(
                                                 MatFlowIndent::getCreatedAt,
                                                 Comparator.nullsLast(Comparator.reverseOrder())))
@@ -2954,19 +3169,43 @@ public class MatFlowRequisitionService {
         public List<RequisitionResponse> listStoreQueue(String plantCode) {
                 accessService.requireMaterialPlanning();
 
-                String normalizedPlant = clean(plantCode);
-                if (normalizedPlant != null) {
-                        normalizedPlant = normalizedPlant.toUpperCase(Locale.ROOT);
-                        accessService.requirePlantAccess(normalizedPlant);
+                String plantFilter = clean(plantCode);
+                if (plantFilter != null) {
+                        plantFilter = plantRoutingService.normalizeFactoryPlant(plantFilter);
+                        if (!accessService.canAccessPlant(plantFilter)
+                                        && !plantRoutingService.canActAsMainStore()) {
+                                accessService.requirePlantAccess(plantFilter);
+                        }
                 }
+                final String requestedOriginPlant = plantFilter;
+                final boolean mainStoreActor = plantRoutingService.canActAsMainStore();
 
-                final String plantFilter = normalizedPlant;
+                return requisitionRepository.findAllByOrderByUpdatedAtDesc().stream()
+                                .filter(requisition -> requisition != null
+                                                && requisition.projectDrawing != null
+                                                && requisition.destinationLocation != null)
+                                .filter(requisition -> {
+                                        String originPlant = clean(requisition.destinationLocation.getPlantCode());
+                                        if (originPlant == null)
+                                                return false;
+                                        originPlant = originPlant.toUpperCase(Locale.ROOT);
+                                        if (requestedOriginPlant != null
+                                                        && !requestedOriginPlant.equals(originPlant))
+                                                return false;
 
-                return listRequisitions()
-                                .stream()
-                                .filter(response -> isStoreQueueStatus(response.status()))
-                                .filter(response -> plantFilter == null ||
-                                                plantFilter.equalsIgnoreCase(response.destinationPlantCode()))
+                                        if (mainStoreActor) {
+                                                if (MatFlowPlantRoutingService.MAIN_STORE_PLANT.equals(originPlant)) {
+                                                        return requisition.status != RequisitionStatus.DRAFT;
+                                                }
+                                                return requisition.status != RequisitionStatus.DRAFT
+                                                                && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
+                                        }
+
+                                        return accessService.canAccessPlant(originPlant)
+                                                        && requisition.status != RequisitionStatus.DRAFT;
+                                })
+                                .filter(requisition -> isStoreQueueStatus(requisition.status))
+                                .map(this::toRequisitionResponse)
                                 .toList();
         }
 

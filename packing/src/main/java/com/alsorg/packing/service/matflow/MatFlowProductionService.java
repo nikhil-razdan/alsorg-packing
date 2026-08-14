@@ -445,8 +445,12 @@ public class MatFlowProductionService {
                                                         .equals(reservation.requisitionLine.bomLine.getId())) {
                                 throw conflict("Processing route step does not belong to the reserved BOM material line");
                         }
-                        accessService.requirePlantAccess(routeStep.location.getPlantCode());
-
+                        /*
+                         * The job is auto-created by the Store-selected route after the
+                         * material reaches the processor. Do not require the Store actor
+                         * to be assigned to the processor plant; Processing access is
+                         * enforced when a processor starts/completes the job.
+                         */
                         ProcessingJobResponse existing = jobRepository
                                         .findByReservation_IdAndRouteStep_Id(reservationId, routeStepId)
                                         .map(this::toResponse).orElse(null);

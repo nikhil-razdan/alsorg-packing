@@ -8,34 +8,29 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.Requisition
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.RequisitionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ReservationResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreForwardRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReceiveRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
-import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import com.alsorg.packing.service.matflow.MatFlowRequisitionService;
 import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
+import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
- * Material Requisition + Store control boundary.
+ * Material Requisition + four-plant Store control boundary.
  *
- * Production raises/submits the MR. Store allocates Store stock and makes two
- * independent per-lot decisions: whether QC is required and whether Processing
- * is required. If Processing is selected, Store chooses one BOM-approved unit.
- * QC has no location/routing authority. Internal custody rows remain hidden.
+ * P1 Production -> P1 Main Store directly.
+ * P2/P3/P4 Production -> own Plant Store -> forward same MR -> P1 Main Store.
+ * Only P1 Main Store reviews/reserves/raises PI. Ready material returns through
+ * the origin Plant Store before the specific remote Production user receives
+ * it.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -103,6 +98,10 @@ public class MatFlowRequisitionController {
         return service.listPurchaseIndents(plantCode);
     }
 
+    /**
+     * Queue is plant-context aware: remote Stores see forwarding/handover work; P1
+     * sees routed MRs.
+     */
     @GetMapping("/store/requisitions")
     public List<RequisitionResponse> storeQueue(
             @RequestParam(required = false) String plantCode) {
@@ -114,11 +113,21 @@ public class MatFlowRequisitionController {
         return service.getPlanningSnapshot(id);
     }
 
+    /** P2/P3/P4 Store forwards the same MR to P1 Main Store. */
+    @PostMapping("/store/requisitions/{id}/forward-to-main-store")
+    public RequisitionResponse forwardToMainStore(
+            @PathVariable UUID id,
+            @Valid @RequestBody StoreForwardRequest request) {
+        return service.forwardRequisitionToMainStore(id, request);
+    }
+
+    /** Main Store-only centralized availability. */
     @GetMapping("/store/requisitions/{id}/availability")
     public List<StoreLineAvailabilityResponse> availability(@PathVariable UUID id) {
         return service.getStoreAvailability(id);
     }
 
+    /** Main Store-only review/reservation/PI decision. */
     @PostMapping("/store/requisitions/{id}/review")
     public PlanningResponse review(
             @PathVariable UUID id,
@@ -126,12 +135,22 @@ public class MatFlowRequisitionController {
         return service.reviewRequisition(id, request);
     }
 
-    /** Store sends one complete allocated lot along its saved Processing/Production route. */
+    /**
+     * Current Store sends the complete lot along its already-saved custody route.
+     */
     @PostMapping("/store/reservations/{reservationId}/issue")
     public PlanningResponse issueReservation(
             @PathVariable UUID reservationId,
             @Valid @RequestBody StoreIssueRequest request) {
         return workflowCoordinator.issueStoreReservation(reservationId, request);
+    }
+
+    /** P2/P3/P4 Store explicitly receives the inbound lot from P1 Main Store. */
+    @PostMapping("/store/reservations/{reservationId}/receive")
+    public PlanningResponse receiveAtOriginStore(
+            @PathVariable UUID reservationId,
+            @Valid @RequestBody StoreReceiveRequest request) {
+        return workflowCoordinator.receiveAtOriginStore(reservationId, request);
     }
 
     @PostMapping("/reservations/{id}/release")

@@ -69,6 +69,8 @@ const openIndentLines = (indent) =>
 export function MatFlowPurchasePage() {
     const { hasRole, selectedPlantParam } = useMatFlow();
     const canPurchase = hasRole(PURCHASE_ROLES);
+    const centralPurchaseUser = hasRole(MATFLOW_ROLES.PURCHASE) && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER);
+    const procurementPlantParam = centralPurchaseUser ? undefined : selectedPlantParam;
 
     const [orders, setOrders] = useState([]);
     const [indents, setIndents] = useState([]);
@@ -103,7 +105,7 @@ export function MatFlowPurchasePage() {
         try {
             const [poResponse, piResponse, vendorResponse] = await Promise.all([
                 matflowApi.listPurchaseOrders(),
-                matflowApi.listPurchaseIndents({ plantCode: selectedPlantParam }),
+                matflowApi.listPurchaseIndents({ plantCode: procurementPlantParam }),
                 matflowApi.listVendors({ active: true }),
             ]);
             setOrders(Array.isArray(poResponse?.data) ? poResponse.data : []);
@@ -117,13 +119,13 @@ export function MatFlowPurchasePage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam]);
+    }, [procurementPlantParam]);
 
     useEffect(() => { load(); }, [load]);
 
     const scopedOrders = useMemo(() => orders.filter((order) =>
-        !selectedPlantParam || upperCode(order.plantCode) === upperCode(selectedPlantParam)
-    ), [orders, selectedPlantParam]);
+        !procurementPlantParam || upperCode(order.plantCode) === upperCode(procurementPlantParam)
+    ), [orders, procurementPlantParam]);
 
     const purchaseReadyIndents = useMemo(() => indents.filter((indent) =>
         ["SUBMITTED_TO_PURCHASE", "PURCHASE_IN_PROGRESS", "PO_CREATED", "PARTIALLY_RECEIVED"].includes(normalize(indent.status)) &&
@@ -286,7 +288,7 @@ export function MatFlowPurchasePage() {
             <PageHero
                 badge="PURCHASE"
                 title="Purchase Indents & Purchase Orders"
-                subtitle="Purchase works only from Store-raised shortage PIs linked to MRs. A PO is placed directly against the PI and Vendor—there is no PO approval desk."
+                subtitle="Purchase works centrally from AL-P1 Main Store shortage PIs linked to MRs from all four plants. PO/GRN delivery remains fixed to AL-P1 Main Store; there is no PO approval desk."
                 actions={
                     <>
                         <Button
@@ -453,6 +455,8 @@ export function MatFlowPurchasePage() {
 
 export function MatFlowReceivingPage() {
     const { hasRole, selectedPlantParam } = useMatFlow();
+    const centralReceivingUser = hasRole(MATFLOW_ROLES.STORE) && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER);
+    const receivingPlantParam = centralReceivingUser ? undefined : selectedPlantParam;
     const canReceive = hasRole(RECEIVING_ROLES);
 
     const [orders, setOrders] = useState([]);
@@ -480,10 +484,10 @@ export function MatFlowReceivingPage() {
             ]);
             setOrders((Array.isArray(poResponse?.data) ? poResponse.data : []).filter((order) =>
                 ["PLACED", "PARTIALLY_RECEIVED"].includes(normalize(order.status)) &&
-                (!selectedPlantParam || upperCode(order.plantCode) === upperCode(selectedPlantParam))
+                (!receivingPlantParam || upperCode(order.plantCode) === upperCode(receivingPlantParam))
             ));
             setReceipts((Array.isArray(grnResponse?.data) ? grnResponse.data : []).filter((receipt) =>
-                !selectedPlantParam || upperCode(receipt.plantCode) === upperCode(selectedPlantParam)
+                !receivingPlantParam || upperCode(receipt.plantCode) === upperCode(receivingPlantParam)
             ));
         } catch (requestError) {
             setOrders([]);
@@ -492,7 +496,7 @@ export function MatFlowReceivingPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam]);
+    }, [receivingPlantParam]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -574,7 +578,7 @@ export function MatFlowReceivingPage() {
             <PageHero
                 badge="STORE RECEIVING"
                 title="GRN / Goods Receipt"
-                subtitle="Create a GRN against a placed PO to inward material into Store stock. QC is not automatic; Store re-reviews the linked MR and decides QC or direct Production when allocating the received stock."
+                subtitle="GRN/receiving is centralized at AL-P1 Main Store for POs raised from all four plants. Accepted inward quantity enters Main Store stock; QC remains an optional Main Store checklist and routing stays with Store planning."
                 actions={
                     <>
                         <Button

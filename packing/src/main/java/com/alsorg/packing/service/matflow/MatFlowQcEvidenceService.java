@@ -38,14 +38,17 @@ public class MatFlowQcEvidenceService {
 
     private final MatFlowQcInspectionRepository qcRepository;
     private final MatFlowAccessService accessService;
+    private final MatFlowPlantRoutingService plantRoutingService;
     private final Path root;
 
     public MatFlowQcEvidenceService(
             MatFlowQcInspectionRepository qcRepository,
             MatFlowAccessService accessService,
+            MatFlowPlantRoutingService plantRoutingService,
             @Value("${matflow.qc-evidence-dir:}") String configuredDirectory) {
         this.qcRepository = qcRepository;
         this.accessService = accessService;
+        this.plantRoutingService = plantRoutingService;
         this.root = resolveRoot(configuredDirectory);
         try {
             Files.createDirectories(root);
@@ -133,9 +136,10 @@ public class MatFlowQcEvidenceService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "QC check not found"));
         if (check.location == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "QC check has no internal plant context");
+                    "QC check has no Main Store custody context");
         }
-        accessService.requirePlantAccess(check.location.getPlantCode());
+        plantRoutingService.assertMainStoreLocation(check.location, "MatFlow QC evidence");
+        accessService.requirePlantAccess(MatFlowPlantRoutingService.MAIN_STORE_PLANT);
         return check;
     }
 

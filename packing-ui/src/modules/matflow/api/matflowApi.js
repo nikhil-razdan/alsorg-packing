@@ -70,7 +70,7 @@ export const readMatFlowError = (
 };
 
 /**
- * MatFlow frontend API v4.
+ * MatFlow frontend API v6 (four-plant routing).
  *
  * Deliberately absent:
  * - Project/Product approval actions
@@ -80,6 +80,11 @@ export const readMatFlowError = (
  * - PO approval/draft-delete actions
  * - Public Transfer CRUD
  * - Manual Processing-job creation/delete
+ *
+ * Four-plant additions:
+ * - P2/P3/P4 origin Store forwards the same MR to AL-P1 Main Store
+ * - Origin Store explicitly receives P1-issued material before final Production handoff
+ * - Production returns follow Production -> origin Store -> AL-P1 Main Store
  */
 export const matflowApi = {
 	/* ========================= MASTER / PROJECT ========================= */
@@ -214,6 +219,11 @@ export const matflowApi = {
 
 	listStoreQueue: (params = {}) =>
 		API.get(`${BASE}/store/requisitions`, { params: cleanParams(params) }),
+	forwardRequisitionToMainStore: (id, body) =>
+		API.post(
+			`${BASE}/store/requisitions/${requiredId(id, "Requisition ID")}/forward-to-main-store`,
+			body
+		),
 	getStoreReview: (id) =>
 		API.get(`${BASE}/store/requisitions/${requiredId(id, "Requisition ID")}`),
 	getStoreAvailability: (id) =>
@@ -223,6 +233,11 @@ export const matflowApi = {
 	issueStoreReservation: (reservationId, body) =>
 		API.post(
 			`${BASE}/store/reservations/${requiredId(reservationId, "Reservation ID")}/issue`,
+			body
+		),
+	receiveStoreReservation: (reservationId, body) =>
+		API.post(
+			`${BASE}/store/reservations/${requiredId(reservationId, "Reservation ID")}/receive`,
 			body
 		),
 	releaseReservation: (id, body) =>

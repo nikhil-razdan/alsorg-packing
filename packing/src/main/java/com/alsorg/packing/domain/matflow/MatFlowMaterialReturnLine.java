@@ -21,8 +21,7 @@ import java.math.BigDecimal;
         @Index(name = "idx_mf_return_line_header", columnList = "material_return_id"),
         @Index(name = "idx_mf_return_line_material", columnList = "material_id")
 })
-public class MatFlowMaterialReturnLine
-        extends MatFlowBaseEntity {
+public class MatFlowMaterialReturnLine extends MatFlowBaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_return_id", nullable = false)
@@ -39,9 +38,19 @@ public class MatFlowMaterialReturnLine
     @Column(name = "return_qty", nullable = false, precision = 19, scale = 3)
     public BigDecimal returnQty;
 
+    /** Quantity dispatched from Production on the first leg. */
     @Column(name = "dispatched_qty", nullable = false, precision = 19, scale = 3)
     public BigDecimal dispatchedQty = BigDecimal.ZERO;
 
+    /** Quantity received by the remote origin Store; zero for AL-P1 direct. */
+    @Column(name = "origin_store_received_qty", nullable = false, precision = 19, scale = 3)
+    public BigDecimal originStoreReceivedQty = BigDecimal.ZERO;
+
+    /** Quantity forwarded by the remote origin Store to AL-P1. */
+    @Column(name = "forwarded_qty", nullable = false, precision = 19, scale = 3)
+    public BigDecimal forwardedQty = BigDecimal.ZERO;
+
+    /** Quantity finally received into AL-P1 Main Store. */
     @Column(name = "received_qty", nullable = false, precision = 19, scale = 3)
     public BigDecimal receivedQty = BigDecimal.ZERO;
 

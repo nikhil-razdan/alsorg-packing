@@ -16,14 +16,13 @@ import {
 } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
-    canAccessMatFlowScreen,
+    canAccessMatFlowScreenForContext,
     matFlowRoleLabel,
     useMatFlow,
 } from "./matflowUi";
 import { secondaryBtnSx, useMatFlowTheme } from "./matflowUi";
 
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
-import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
@@ -44,9 +43,7 @@ import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 
 const NAV = [
-    ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
-    ["Project Tracker", "/matflow/tracker", "tracking", <TrackChangesOutlinedIcon />],
-    ["Material Control Tower", "/matflow/tracker/materials", "tracking", <Inventory2OutlinedIcon />],
+    ["Universal Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
     ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Material Inventory", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
@@ -65,7 +62,7 @@ const NAV = [
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const HEADER = [
-    ["/matflow/dashboard", "MatFlow Operations Command Center", "Project → Product → Material readiness, custody, shortages and execution"],
+    ["/matflow/dashboard", "MatFlow Universal Dashboard", "Overall insights + Project tracker + Material tracker in one plant-aware command center"],
     ["/matflow/production-execution", "Production Execution", "Receive material → start Production → consume / waste / return → complete"],
     ["/matflow/boms", "Operational BOMs", "Section-wise MatFlow BOM Builder with Engineering authoring and Production review on the same page"],
     ["/matflow/store", "Store Material Control", "MR availability, reservation, QC choice, Store issue and shortage PI"],
@@ -76,26 +73,28 @@ const HEADER = [
     ["/matflow/processing", "Material Processing", "QC-routed jobs only: start, complete and release toward Production"],
     ["/matflow/returns", "Material Returns", "Production unused / excess material return control"],
     ["/matflow/material-register", "Material Register", "Derived purchased, issued, consumed, wasted, returned and stock quantities"],
-    ["/matflow/tracker/materials", "Material Control Tower", "Material-specific route, custody, Project/Product allocation and next action"],
-    ["/matflow/tracker", "Project Tracker", "Project → Product → Material state, owner, location and Production readiness"],
     ["/matflow/ledger", "Stock Ledger", "Immutable physical inventory movement history"],
     ["/matflow/reports", "Reports", "Shortage, Product, stock and audit reporting"],
     ["/matflow/projects", "Projects & Products", "Approval-free Project → Product / Drawing administration"],
     ["/matflow/materials", "Material Inventory", "Operational material master and stock helper inputs"],
-    ["/matflow/locations", "Locations", "Store, QC, Processing and Production locations"],
+    ["/matflow/locations", "Locations", "Store, Processing and Production locations (QC is a Main Store checklist, not a location)"],
 ];
 
 export default function MatFlowLayout() {
     const { user, logout } = useAuth();
-    const { availablePlants, selectedPlantCode, setSelectedPlantCode, roles, role } = useMatFlow();
+    const { availablePlants, selectedPlantCode, selectedPlantParam, canViewAllPlants, setSelectedPlantCode, roles, role } = useMatFlow();
     const { isDark, toggleMode } = useMatFlowTheme();
     const navigate = useNavigate();
     const location = useLocation();
     const [collapsed, setCollapsed] = useState(false);
 
     const items = useMemo(
-        () => NAV.filter((item) => canAccessMatFlowScreen(item.screen, roles)),
-        [roles]
+        () => NAV.filter((item) => canAccessMatFlowScreenForContext(
+            item.screen,
+            roles,
+            selectedPlantParam ? [selectedPlantParam] : availablePlants
+        )),
+        [roles, selectedPlantParam, availablePlants]
     );
 
     const header = useMemo(
@@ -132,7 +131,7 @@ export default function MatFlowLayout() {
                 <Box component="nav" className="mf-sidebar-scroll" sx={{ py: .9, px: .15, overflowY: "auto", overflowX: "hidden", flex: 1, scrollbarGutter: "stable" }}>
                     {items.map((item) => (
                         <Tooltip key={item.path} title={collapsed ? item.label : ""} placement="right">
-                            <NavLink to={item.path} end={item.path === "/matflow/tracker"} style={({ isActive }) => linkStyle(isActive, collapsed)}>
+                            <NavLink to={item.path} end={item.path === "/matflow/dashboard"} style={({ isActive }) => linkStyle(isActive, collapsed)}>
                                 <span style={{ display: "grid", placeItems: "center" }}>{item.icon}</span>
                                 {!collapsed && <span>{item.label}</span>}
                             </NavLink>
@@ -162,7 +161,7 @@ export default function MatFlowLayout() {
                                 onChange={(event) => setSelectedPlantCode(event.target.value)}
                                 sx={{ minWidth: 150, "& .MuiOutlinedInput-root": { height: 38 } }}
                             >
-                                <MenuItem value="ALL">All Plants</MenuItem>
+                                {canViewAllPlants && <MenuItem value="ALL">All Plants</MenuItem>}
                                 {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                             </TextField>
                         )}

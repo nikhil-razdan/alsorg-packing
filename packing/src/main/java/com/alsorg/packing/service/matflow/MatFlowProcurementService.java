@@ -72,6 +72,7 @@ public class MatFlowProcurementService {
         private final MatFlowAuditService auditService;
         private final MatFlowRequisitionService requisitionService;
         private final MatFlowDocumentNumberService documentNumberService;
+        private final MatFlowPlantRoutingService plantRoutingService;
 
         public MatFlowProcurementService(
                         MatFlowPurchaseOrderRepository purchaseOrderRepository,
@@ -87,7 +88,8 @@ public class MatFlowProcurementService {
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
                         MatFlowRequisitionService requisitionService,
-                        MatFlowDocumentNumberService documentNumberService) {
+                        MatFlowDocumentNumberService documentNumberService,
+                        MatFlowPlantRoutingService plantRoutingService) {
                 this.purchaseOrderRepository = purchaseOrderRepository;
 
                 this.purchaseOrderLineRepository = purchaseOrderLineRepository;
@@ -113,6 +115,7 @@ public class MatFlowProcurementService {
                 this.auditService = auditService;
                 this.requisitionService = requisitionService;
                 this.documentNumberService = documentNumberService;
+                this.plantRoutingService = plantRoutingService;
         }
 
         @Transactional(readOnly = true)
@@ -160,6 +163,7 @@ public class MatFlowProcurementService {
                 if (location.getLocationType() != LocationType.STORE) {
                         throw badRequest("Purchase Order delivery location must be a Store location");
                 }
+                plantRoutingService.assertMainStoreLocation(location, "Purchase Order delivery");
                 if (!location.getId().equals(indent.deliverToLocation.getId())) {
                         throw conflict("PO delivery location must match the linked PI Store location");
                 }
@@ -173,7 +177,8 @@ public class MatFlowProcurementService {
                 order.deliveryLocation = location;
                 // Purchase owns PO creation and placement. There is no approval desk.
                 order.status = PurchaseOrderStatus.PLACED;
-                // Legacy columns are retained as placement audit mirrors for existing DB/API rows.
+                // Legacy columns are retained as placement audit mirrors for existing DB/API
+                // rows.
                 order.approvedBy = actor;
                 order.approvedAt = LocalDateTime.now();
                 order.approvalRemarks = "Placed by Purchase";
@@ -280,6 +285,7 @@ public class MatFlowProcurementService {
                 if (receiptLocation.getLocationType() != LocationType.STORE) {
                         throw badRequest("GRN must inward vendor material into a Store location");
                 }
+                plantRoutingService.assertMainStoreLocation(receiptLocation, "GRN inward");
                 if (!receiptLocation.getId().equals(order.deliveryLocation.getId())) {
                         throw conflict("GRN Store location must match the PO delivery location");
                 }

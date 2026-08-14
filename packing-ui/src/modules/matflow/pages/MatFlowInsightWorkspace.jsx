@@ -13,9 +13,9 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { useMatFlow } from "../matflowUi";
+import { canAccessMatFlowScreenForContext, useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import { downloadMatFlowExcel } from "../api/matflowExcel";
 import {
@@ -62,6 +62,8 @@ const FLOW = [
 const stageBucket = (stage) => {
     switch (normalize(stage)) {
         case "DRAFT": return "DEMAND";
+        case "ORIGIN_STORE_FORWARDING":
+        case "AWAITING_MAIN_STORE_PLANNING":
         case "AWAITING_STORE_PLANNING":
         case "MATERIAL_RESERVED":
         case "READY_TO_ISSUE": return "STORE";
@@ -80,35 +82,97 @@ const stageBucket = (stage) => {
 const nextActionTarget = (row) => {
     const id = row?.requisitionId;
     switch (normalize(row?.currentStage)) {
+        case "ORIGIN_STORE_FORWARDING":
+        case "AWAITING_MAIN_STORE_PLANNING":
         case "AWAITING_STORE_PLANNING":
         case "MATERIAL_RESERVED":
         case "SHORTAGE_PENDING":
         case "READY_TO_ISSUE":
-            return { label: "Store", path: `/matflow/store/requisitions/${id}` };
+            return { label: "Store", path: `/matflow/store/requisitions/${id}`, screen: "store" };
         case "QC_PENDING":
         case "QC_ROUTING_PENDING":
-            return { label: "QC", path: "/matflow/qc" };
+            return { label: "QC", path: "/matflow/qc", screen: "qc" };
         case "PROCESSING":
-            return { label: "Processing", path: "/matflow/processing" };
+            return { label: "Processing", path: "/matflow/processing", screen: "processing" };
         case "PRODUCTION_ISSUE":
         case "PRODUCTION_IN_PROGRESS":
-            return { label: "Production", path: "/matflow/production-execution" };
+            return { label: "Production", path: "/matflow/production-execution", screen: "production-execution" };
         case "TRANSFER_IN_PROGRESS":
-            return { label: "Track Route", path: `/matflow/tracker/${id}` };
+            return { label: "Track Route", path: `/matflow/tracker/${id}`, screen: "tracking" };
         default:
-            return { label: "Open MR", path: `/matflow/requisitions/${id}` };
+            return { label: "Open MR", path: `/matflow/requisitions/${id}`, screen: "production" };
     }
 };
 
+const UNIVERSAL_DASHBOARD_VIEWS = [
+    ["overview", "Overall View", "KPIs, live execution and workflow health"],
+    ["projects", "Project Tracker", "Project → Product → MR material readiness"],
+    ["materials", "Material Tracker", "One material across Projects, Products and custody routes"],
+];
+
+function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
+    return (
+        <>
+            <PageHero
+                badge="MATFLOW UNIVERSAL DASHBOARD"
+                title="Material Operations Command Center"
+                subtitle="One plant-aware dashboard for overall operations, Project/Product material execution and material-specific custody tracking. Operational users are automatically limited to their authorised plant scope."
+                actions={onRefresh ? <Button startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing} sx={secondaryBtnSx}>Refresh</Button> : null}
+            />
+            <Card sx={{ ...panelSx, p: 1 }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,minmax(0,1fr))" }, gap: .8 }}>
+                    {UNIVERSAL_DASHBOARD_VIEWS.map(([key, label, subtitle]) => {
+                        const active = view === key;
+                        return (
+                            <Button
+                                key={key}
+                                onClick={() => onViewChange(key)}
+                                sx={{
+                                    ...(active ? primaryBtnSx : secondaryBtnSx),
+                                    justifyContent: "flex-start",
+                                    textAlign: "left",
+                                    minHeight: 58,
+                                    px: 1.4,
+                                }}
+                            >
+                                <Box>
+                                    <Typography sx={{ fontWeight: 950, fontSize: 13 }}>{label}</Typography>
+                                    <Typography sx={{ fontSize: 10.5, opacity: .78 }}>{subtitle}</Typography>
+                                </Box>
+                            </Button>
+                        );
+                    })}
+                </Box>
+            </Card>
+        </>
+    );
+}
+
 export function MatFlowDashboardPage() {
     const navigate = useNavigate();
-    const { selectedPlantParam } = useMatFlow();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { selectedPlantParam, availablePlants, roles } = useMatFlow();
+    const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
+    const requestedView = normalize(searchParams.get("view") || "overview").toLowerCase();
+    const view = ["overview", "projects", "materials"].includes(requestedView) ? requestedView : "overview";
+    const materialId = clean(searchParams.get("materialId"));
+
+    const changeView = useCallback((nextView) => {
+        const next = new URLSearchParams(searchParams);
+        next.set("view", nextView);
+        if (nextView !== "materials") next.delete("materialId");
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
     const [data, setData] = useState(null);
     const [tracker, setTracker] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
     const load = useCallback(async () => {
+        if (view !== "overview") {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError("");
         try {
@@ -123,9 +187,33 @@ export function MatFlowDashboardPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam]);
+    }, [selectedPlantParam, view]);
 
     useEffect(() => { load(); }, [load]);
+
+    if (view === "projects") {
+        return (
+            <Box sx={pageSx}>
+                <UniversalDashboardHeader view={view} onViewChange={changeView} />
+                <MatFlowTrackerPage embedded />
+            </Box>
+        );
+    }
+
+    if (view === "materials") {
+        return (
+            <Box sx={pageSx}>
+                <UniversalDashboardHeader view={view} onViewChange={changeView} />
+                <MatFlowMaterialTrackerPage embedded materialIdOverride={materialId} onMaterialChange={(id) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("view", "materials");
+                    if (id) next.set("materialId", id);
+                    else next.delete("materialId");
+                    setSearchParams(next, { replace: true });
+                }} />
+            </Box>
+        );
+    }
 
     const totals = data?.totals || {};
     const kpis = tracker?.kpis || {};
@@ -145,12 +233,7 @@ export function MatFlowDashboardPage() {
 
     return (
         <Box sx={pageSx}>
-            <PageHero
-                badge="MATFLOW"
-                title="Material Operations Command Center"
-                subtitle="Track Project → Product → Material demand, Store availability, procurement, QC/Processing and Production readiness without separate approval or Transfer desks."
-                actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>}
-            />
+            <UniversalDashboardHeader view={view} onViewChange={changeView} onRefresh={load} refreshing={loading} />
             <ErrorBox>{error}</ErrorBox>
             {loading ? <LoadingBlock /> : (
                 <>
@@ -175,7 +258,7 @@ export function MatFlowDashboardPage() {
                                         <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
                                         <Box sx={tableCellSx}>{Math.round(numeric(row.materialReadyPercent))}%</Box>
                                         <Box sx={tableCellSx}><Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.nextDepartment || row.currentStage)}</Typography></Box>
-                                        <Box sx={tableCellSx}><Button onClick={() => navigate(target.path)} sx={secondaryBtnSx}>{target.label}</Button></Box>
+                                        <Box sx={tableCellSx}>{canAccessMatFlowScreenForContext(target.screen, roles, contextPlants) ? <Button onClick={() => navigate(target.path)} sx={secondaryBtnSx}>{target.label}</Button> : <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace</Button>}</Box>
                                     </Box>
                                 );
                             })}
@@ -186,14 +269,14 @@ export function MatFlowDashboardPage() {
                         <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>Workflow</Typography>
                         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: 1 }}>
                             {[
-                                ["Projects", "Project + Products", "/matflow/projects"],
-                                ["BOM", "Engineering → Production Review", "/matflow/boms"],
-                                ["MR", "Production demand", "/matflow/production"],
-                                ["Store", "Reserve / QC / PI", "/matflow/store"],
-                                ["Purchase", "PI → PO → GRN", "/matflow/purchase"],
-                                ["QC / Processing", "Only when selected", "/matflow/qc"],
-                                ["Production", "Receive → account → complete", "/matflow/production-execution"],
-                            ].map(([title, subtitle, path]) => (
+                                ["Projects", "Project + Products", "/matflow/projects", "projects"],
+                                ["BOM", "Engineering → Production Review", "/matflow/boms", "boms"],
+                                ["MR", "Production demand", "/matflow/production", "production"],
+                                ["Store", "Plant routing / Main Store planning", "/matflow/store", "store"],
+                                ["Purchase", "PI → PO → GRN at Main Store", "/matflow/purchase", "purchase"],
+                                ["QC", "Main Store checklist", "/matflow/qc", "qc"],
+                                ["Production", "Receive → account → complete", "/matflow/production-execution", "production-execution"],
+                            ].filter(([, , , screen]) => canAccessMatFlowScreenForContext(screen, roles, contextPlants)).map(([title, subtitle, path]) => (
                                 <Card key={title} onClick={() => navigate(path)} sx={{ ...panelSx, m: 0, cursor: "pointer", boxShadow: "none" }}>
                                     <Typography sx={mainTextSx}>{title}</Typography>
                                     <Typography sx={subTextSx}>{subtitle}</Typography>
@@ -207,7 +290,7 @@ export function MatFlowDashboardPage() {
     );
 }
 
-export function MatFlowTrackerPage() {
+export function MatFlowTrackerPage({ embedded = false }) {
     const navigate = useNavigate();
     const { selectedPlantParam } = useMatFlow();
     const [data, setData] = useState({ kpis: {}, rows: [] });
@@ -239,6 +322,7 @@ export function MatFlowTrackerPage() {
 
     const rows = Array.isArray(data?.rows) ? data.rows : [];
     const kpis = data?.kpis || {};
+    const routedStorePending = rows.filter((row) => ["ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING", "AWAITING_STORE_PLANNING"].includes(normalize(row.currentStage))).length;
     const stages = useMemo(() => ["", ...Array.from(new Set(rows.map((row) => normalize(row.currentStage)).filter(Boolean))).sort()], [rows]);
     const projectGroups = useMemo(() => {
         const grouped = new Map();
@@ -267,8 +351,8 @@ export function MatFlowTrackerPage() {
     const projectPagination = useMatFlowPagination(projectGroups, 8);
 
     return (
-        <Box sx={pageSx}>
-            <PageHero
+        <Box sx={embedded ? { display: "grid", gap: 1.1 } : pageSx}>
+            {!embedded && <PageHero
                 badge="PROJECT / PRODUCT TRACKER"
                 title="Material Execution Tracker"
                 subtitle="One row per MR with Product context, current material department/location, readiness, shortage and the next responsible action."
@@ -278,13 +362,22 @@ export function MatFlowTrackerPage() {
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                     </>
                 }
-            />
+            />}
+            {embedded && (
+                <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <Box><Typography sx={{ fontWeight: 950, fontSize: 17 }}>Project / Product Material Tracker</Typography><Typography sx={subTextSx}>Expand a Project to trace its Products, MRs, readiness, shortages and next responsible action.</Typography></Box>
+                    <Box sx={{ display: "flex", gap: .7 }}>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Project_Tracker", sheetName: "Tracker", title: "MatFlow Project Material Tracker", rows })} sx={secondaryBtnSx}>Export</Button>
+                        <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+                    </Box>
+                </Card>
+            )}
 
             <ErrorBox>{error}</ErrorBox>
 
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 1 }}>
                 <SummaryCard label="Active MRs" value={kpis.activeRequisitions ?? 0} />
-                <SummaryCard label="Awaiting Store" value={kpis.awaitingStorePlanning ?? 0} />
+                <SummaryCard label="Awaiting Store" value={routedStorePending} />
                 <SummaryCard label="Shortage" value={kpis.shortagePending ?? 0} />
                 <SummaryCard label="Reserved" value={kpis.materialReserved ?? 0} />
                 <SummaryCard label="In Transit" value={kpis.materialInTransit ?? 0} />
@@ -419,7 +512,7 @@ export function MatFlowTrackerDetailPage() {
                 actions={
                     <>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-                        <Button onClick={() => navigate("/matflow/tracker")} sx={secondaryBtnSx}>Back</Button>
+                        <Button onClick={() => navigate("/matflow/dashboard?view=projects")} sx={secondaryBtnSx}>Back</Button>
                     </>
                 }
             />
@@ -493,8 +586,9 @@ export function MatFlowTrackerDetailPage() {
     );
 }
 
-export function MatFlowMaterialTrackerPage() {
-    const { materialId } = useParams();
+export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverride = "", onMaterialChange = null }) {
+    const { materialId: routeMaterialId } = useParams();
+    const materialId = materialIdOverride || routeMaterialId || "";
     const navigate = useNavigate();
     const { selectedPlantParam } = useMatFlow();
 
@@ -624,21 +718,27 @@ export function MatFlowMaterialTrackerPage() {
     }, [filteredLots]);
 
     return (
-        <Box sx={pageSx}>
-            <PageHero
+        <Box sx={embedded ? { display: "grid", gap: 1.1 } : pageSx}>
+            {!embedded && <PageHero
                 badge="MATERIAL CONTROL TOWER"
                 title={identity.materialName || "Track One Material"}
                 subtitle={identity.materialCode
                     ? `${identity.materialCode} · ${identity.category || "-"} · ${identity.uom || "-"}`
                     : "Select a Material Inventory item to see every Project/Product allocation, current route and next action."}
                 actions={<Button startIcon={<RefreshIcon />} onClick={load} disabled={!selectedId && !materialId} sx={secondaryBtnSx}>Refresh</Button>}
-            />
+            />}
+            {embedded && (
+                <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <Box><Typography sx={{ fontWeight: 950, fontSize: 17 }}>{identity.materialName || "Material Tracker"}</Typography><Typography sx={subTextSx}>{identity.materialCode ? `${identity.materialCode} · ${identity.category || "-"} · ${identity.uom || "-"}` : "Select a Material Inventory item to trace it across Projects, Products, MRs and custody routes."}</Typography></Box>
+                    <Button startIcon={<RefreshIcon />} onClick={load} disabled={!selectedId && !materialId} sx={secondaryBtnSx}>Refresh</Button>
+                </Card>
+            )}
 
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(260px,1.15fr) minmax(210px,.9fr) minmax(230px,1fr) minmax(200px,.9fr) 160px" }, gap: 1 }}>
-                    <TextField select label="Material *" value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setExpandedLotKey(""); navigate(`/matflow/tracker/materials/${e.target.value}`, { replace: true }); }} sx={fieldSx}>
+                    <TextField select label="Material *" value={selectedId} onChange={(e) => { const id = e.target.value; setSelectedId(id); setExpandedLotKey(""); if (embedded && onMaterialChange) onMaterialChange(id); else navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(id)}`, { replace: true }); }} sx={fieldSx}>
                         {materials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialName} · {material.materialCode}</MenuItem>)}
                     </TextField>
                     <TextField

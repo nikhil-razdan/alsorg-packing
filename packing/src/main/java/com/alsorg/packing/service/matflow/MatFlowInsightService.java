@@ -68,7 +68,8 @@ public class MatFlowInsightService {
                         MatFlowStockLedgerRepository ledgerRepository,
                         MatFlowAuditLogRepository auditRepository,
                         MatFlowReservationRepository reservationRepository,
-                        MatFlowAccessService accessService) {
+                        MatFlowAccessService accessService,
+                        MatFlowPlantRoutingService plantRoutingService) {
 
                 this.reporting = new ReportingModule(
                                 projectRepository,
@@ -99,7 +100,8 @@ public class MatFlowInsightService {
                                 qcRepository,
                                 processingRepository,
                                 auditRepository,
-                                accessService);
+                                accessService,
+                                plantRoutingService);
 
                 this.integrity = new IntegrityModule(
                                 stockRepository,
@@ -1339,6 +1341,7 @@ public class MatFlowInsightService {
                 private final MatFlowProcessingJobRepository processingRepository;
                 private final MatFlowAuditLogRepository auditRepository;
                 private final MatFlowAccessService accessService;
+                private final MatFlowPlantRoutingService plantRoutingService;
 
                 TrackerModule(
                                 MatFlowMaterialRequisitionRepository requisitionRepository,
@@ -1351,7 +1354,8 @@ public class MatFlowInsightService {
                                 MatFlowQcInspectionRepository qcRepository,
                                 MatFlowProcessingJobRepository processingRepository,
                                 MatFlowAuditLogRepository auditRepository,
-                                MatFlowAccessService accessService) {
+                                MatFlowAccessService accessService,
+                                MatFlowPlantRoutingService plantRoutingService) {
                         this.requisitionRepository = requisitionRepository;
                         this.requisitionLineRepository = requisitionLineRepository;
                         this.reservationRepository = reservationRepository;
@@ -1363,6 +1367,7 @@ public class MatFlowInsightService {
                         this.processingRepository = processingRepository;
                         this.auditRepository = auditRepository;
                         this.accessService = accessService;
+                        this.plantRoutingService = plantRoutingService;
                 }
 
                 @Transactional(readOnly = true)
@@ -1373,7 +1378,9 @@ public class MatFlowInsightService {
                         String requestedPlant = normalizeCode(plantCode);
                         String requestedStage = normalizeCode(stage);
 
-                        if (requestedPlant != null) {
+                        if (requestedPlant != null
+                                        && !accessService.canAccessPlant(requestedPlant)
+                                        && !plantRoutingService.canActAsMainStore()) {
                                 accessService.requirePlantAccess(requestedPlant);
                         }
 
@@ -1384,7 +1391,7 @@ public class MatFlowInsightService {
                                 if (!hasReadableProject(requisition)) {
                                         continue;
                                 }
-                                if (!accessService.canAccessPlant(requisition.projectDrawing.getPlantCode())) {
+                                if (!canReadTrackerRequisition(requisition)) {
                                         continue;
                                 }
 
@@ -1435,7 +1442,9 @@ public class MatFlowInsightService {
                                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                                                 "Requisition has no readable project/plant context");
                         }
-                        accessService.requirePlantAccess(requisition.projectDrawing.getPlantCode());
+                        if (!canReadTrackerRequisition(requisition)) {
+                                accessService.requirePlantAccess(requisition.projectDrawing.getPlantCode());
+                        }
 
                         TrackingContext context = loadContext(requisition);
                         TrackerRowResponse summary = toTrackerRow(requisition, context);
@@ -2532,9 +2541,10 @@ public class MatFlowInsightService {
                         if ("PARTIALLY_RESERVED".equals(statusName) || "PLANNED".equals(statusName)
                                         || reservedQty.compareTo(BigDecimal.ZERO) > 0)
                                 return "MATERIAL_RESERVED";
-                        if ("SUBMITTED_TO_STORE".equals(statusName) || "STORE_REVIEW_IN_PROGRESS".equals(statusName)
-                                        || "SUBMITTED".equals(statusName))
-                                return "AWAITING_STORE_PLANNING";
+                        if ("SUBMITTED_TO_STORE".equals(statusName))
+                                return "ORIGIN_STORE_FORWARDING";
+                        if ("STORE_REVIEW_IN_PROGRESS".equals(statusName) || "SUBMITTED".equals(statusName))
+                                return "AWAITING_MAIN_STORE_PLANNING";
                         if ("DRAFT".equals(statusName))
                                 return "DRAFT";
                         return statusName.isBlank() ? "UNKNOWN" : statusName;
@@ -2544,7 +2554,9 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT", "PRODUCTION_ISSUE", "PRODUCTION_IN_PROGRESS", "PRODUCTION_COMPLETED" ->
                                         "PRODUCTION";
-                                case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "STORE";
+                                case "ORIGIN_STORE_FORWARDING" -> "ORIGIN PLANT STORE";
+                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
+                                        "AL-P1 MAIN STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
                                 case "QC_PENDING" -> "QUALITY CONTROL";
                                 case "PROCESSING" -> "PROCESSING";
@@ -2557,7 +2569,8 @@ public class MatFlowInsightService {
                 private int resolveProgressPercent(String stage) {
                         return switch (stage) {
                                 case "DRAFT" -> 15;
-                                case "AWAITING_STORE_PLANNING" -> 30;
+                                case "ORIGIN_STORE_FORWARDING" -> 24;
+                                case "AWAITING_MAIN_STORE_PLANNING" -> 30;
                                 case "SHORTAGE_PENDING" -> 48;
                                 case "MATERIAL_RESERVED" -> 58;
                                 case "QC_PENDING" -> 64;
@@ -2575,7 +2588,8 @@ public class MatFlowInsightService {
                 private long targetForCurrentStage(String stage) {
                         return switch (stage) {
                                 case "DRAFT" -> target("DEMAND");
-                                case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
+                                case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
+                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
                                         target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
                                 case "QC_PENDING" -> target("QC");
@@ -2613,7 +2627,9 @@ public class MatFlowInsightService {
                 private String majorKeyForCurrentStage(String stage) {
                         return switch (stage) {
                                 case "DRAFT" -> "DEMAND";
-                                case "AWAITING_STORE_PLANNING", "MATERIAL_RESERVED" -> "STORE";
+                                case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
+                                                "MATERIAL_RESERVED" ->
+                                        "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
                                 case "QC_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
                                                 "READY_TO_ISSUE" ->
@@ -2631,6 +2647,19 @@ public class MatFlowInsightService {
 
                 private boolean isOpenIndent(MatFlowIndent indent) {
                         return indent != null && !CLOSED_INDENT_STATUSES.contains(enumName(indent.status));
+                }
+
+                private boolean canReadTrackerRequisition(MatFlowMaterialRequisition requisition) {
+                        if (!hasReadableProject(requisition)) {
+                                return false;
+                        }
+                        String originPlant = normalizeCode(requisition.projectDrawing.getPlantCode());
+                        if (accessService.canAccessPlant(originPlant)) {
+                                return true;
+                        }
+                        return plantRoutingService.canActAsMainStore()
+                                        && requisition.status != RequisitionStatus.DRAFT
+                                        && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
                 }
 
                 private boolean hasReadableProject(MatFlowMaterialRequisition requisition) {

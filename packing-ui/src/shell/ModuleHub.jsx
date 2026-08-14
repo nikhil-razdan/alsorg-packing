@@ -153,7 +153,7 @@ export default function ModuleHub() {
 			key: MODULE_KEYS.MATFLOW,
 			title: "MatFlow",
 			subtitle:
-				"Operational BOMs, production requisitions, stock reservation, transfers, purchase, QC, processing and returns.",
+				"Operational BOMs, plant-routed production requisitions, AL-P1 Main Store control, purchase, QC, processing, issue, returns and a Universal Dashboard.",
 			icon: (
 				<LayersOutlinedIcon
 					fontSize="large"
@@ -164,7 +164,7 @@ export default function ModuleHub() {
 				"Operational BOM",
 				"Production",
 				"Store",
-				"Purchase & QC",
+				"Universal Dashboard",
 			],
 			visible: canAccess(
 				MODULE_KEYS.MATFLOW

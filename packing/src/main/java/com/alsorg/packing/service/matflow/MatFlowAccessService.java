@@ -581,4 +581,9 @@ public class MatFlowAccessService {
                                 "MATFLOW_DIRECTOR");
         }
 
+        /** MatFlow-scoped role probe used by plant-routing policy services. */
+        public boolean hasAnyRole(String... roles) {
+                return currentUserService.hasAnyRole(currentUser(), roles);
+        }
+
 }

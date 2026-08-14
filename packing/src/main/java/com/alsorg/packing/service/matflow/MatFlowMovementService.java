@@ -9,6 +9,7 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.PlanningRes
 import com.alsorg.packing.controller.dto.matflow.MatFlowExecutionDtos.ProductionReceiveRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferActionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreIssueRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReceiveRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
 
 import com.alsorg.packing.domain.matflow.*;
@@ -50,6 +51,7 @@ public class MatFlowMovementService {
         private final TransferModule transfers;
         private final ReturnModule returns;
         private final MatFlowAccessService accessService;
+        private final MatFlowPlantRoutingService plantRoutingService;
 
         public MatFlowMovementService(
                         MatFlowTransferOrderRepository transferRepository,
@@ -65,9 +67,11 @@ public class MatFlowMovementService {
                         MatFlowLocationRepository locationRepository,
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
-                        MatFlowRequisitionService requisitionService) {
+                        MatFlowRequisitionService requisitionService,
+                        MatFlowPlantRoutingService plantRoutingService) {
 
                 this.accessService = accessService;
+                this.plantRoutingService = plantRoutingService;
 
                 this.transfers = new TransferModule(
                                 transferRepository,
@@ -80,7 +84,8 @@ public class MatFlowMovementService {
                                 accessService,
                                 qcRepository,
                                 auditService,
-                                requisitionService);
+                                requisitionService,
+                                plantRoutingService);
 
                 this.returns = new ReturnModule(
                                 returnRepository,
@@ -91,7 +96,9 @@ public class MatFlowMovementService {
                                 stockRepository,
                                 ledgerRepository,
                                 accessService,
-                                auditService);
+                                auditService,
+                                plantRoutingService,
+                                requisitionService);
         }
 
         /**
@@ -127,7 +134,7 @@ public class MatFlowMovementService {
                                         "Issue/Send must move the complete reservation lot of " + remainingLot
                                                         + ". Split the Store allocation into separate reservation lots when different routes or quantities are needed.");
                 }
-                transfers.advanceReservation(
+                transfers.advanceStoreOrRoutingReservation(
                                 reservationId,
                                 remainingLot,
                                 request.batchNo(),
@@ -151,7 +158,25 @@ public class MatFlowMovementService {
 
         @Transactional
         public PlanningResponse advanceReservation(UUID reservationId, String remarks) {
-                transfers.advanceReservation(reservationId, null, null, remarks);
+                transfers.advanceStoreOrRoutingReservation(reservationId, null, null, remarks);
+                return planningSnapshot(reservationId);
+        }
+
+        /** Origin Plant Store explicitly receives the inter-plant lot from AL-P1. */
+        @Transactional
+        public PlanningResponse receiveStoreReservation(
+                        UUID reservationId,
+                        StoreReceiveRequest request) {
+                transfers.receiveOriginStoreReservation(reservationId, request);
+                return planningSnapshot(reservationId);
+        }
+
+        /** Processing completion sends output back to AL-P1 Main Store. */
+        @Transactional
+        public PlanningResponse advanceReservationAfterProcessing(
+                        UUID reservationId,
+                        String remarks) {
+                transfers.advanceAfterProcessing(reservationId, remarks);
                 return planningSnapshot(reservationId);
         }
 
@@ -217,6 +242,7 @@ public class MatFlowMovementService {
                 private final MatFlowQcInspectionRepository qcRepository;
                 private final MatFlowAuditService auditService;
                 private final MatFlowRequisitionService requisitionService;
+                private final MatFlowPlantRoutingService plantRoutingService;
 
                 TransferModule(
                                 MatFlowTransferOrderRepository transferRepository,
@@ -229,7 +255,8 @@ public class MatFlowMovementService {
                                 MatFlowAccessService accessService,
                                 MatFlowQcInspectionRepository qcRepository,
                                 MatFlowAuditService auditService,
-                                MatFlowRequisitionService requisitionService) {
+                                MatFlowRequisitionService requisitionService,
+                                MatFlowPlantRoutingService plantRoutingService) {
 
                         this.transferRepository = transferRepository;
                         this.transferLineRepository = transferLineRepository;
@@ -242,6 +269,7 @@ public class MatFlowMovementService {
                         this.qcRepository = qcRepository;
                         this.auditService = auditService;
                         this.requisitionService = requisitionService;
+                        this.plantRoutingService = plantRoutingService;
                 }
 
                 UUID processingRouteStepId(UUID reservationId) {
@@ -267,25 +295,35 @@ public class MatFlowMovementService {
                                         .orElse(null);
                 }
 
-                void advanceReservation(
+                void advanceStoreOrRoutingReservation(
                                 UUID reservationId,
                                 BigDecimal requestedQuantity,
                                 String batchNo,
                                 String remarks) {
                         MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
-                        accessService.requirePlantAccess(reservation.demandPlantCode);
 
                         List<MatFlowTransferOrder> route = transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
                         MatFlowTransferOrder next = route.stream()
-                                        .filter(item -> item != null && item.status != TransferStatus.RECEIVED
+                                        .filter(item -> item != null
+                                                        && item.status != TransferStatus.RECEIVED
                                                         && item.status != TransferStatus.CANCELLED)
                                         .findFirst()
                                         .orElseThrow(() -> conflict(
                                                         "No pending internal hand-off exists for this reserved material"));
 
+                        if (next.fromLocation == null) {
+                                throw conflict("Next material hand-off has no source location");
+                        }
+                        LocationType sourceType = next.fromLocation.getLocationType();
+                        if (sourceType != LocationType.STORE) {
+                                throw conflict("This hand-off is owned by " + sourceType
+                                                + ", not by a Store issue action");
+                        }
+                        accessService.requireTransferDispatch(next.fromLocation);
+
                         if (next.status == TransferStatus.PLANNED) {
-                                throw conflict("The next material hand-off is waiting for its preceding QC/Processing action");
+                                throw conflict("The next material hand-off is waiting for QC, Processing or prior Store receipt");
                         }
 
                         MatFlowTransferLine line = requireLockedTransferLine(next.getId());
@@ -309,27 +347,150 @@ public class MatFlowMovementService {
                         }
 
                         MatFlowTransferOrder afterDispatch = requireLockedTransfer(next.getId());
+                        if (afterDispatch.toLocation == null) {
+                                throw conflict("Material hand-off has no destination location");
+                        }
+                        LocationType destinationType = afterDispatch.toLocation.getLocationType();
 
                         /*
-                         * Production is the only destination that explicitly acknowledges
-                         * receipt. This preserves the user's hand-off: Store/QC/Processing
-                         * sends the material, Production sees it waiting, receives it, then
-                         * starts execution. No generic Transfers page is exposed.
+                         * Production and remote Plant Stores acknowledge receipt explicitly.
+                         * A Processing destination is received atomically so its auto-created
+                         * job can begin without exposing a Transfers desk.
                          */
-                        if (afterDispatch.toLocation != null
-                                        && afterDispatch.toLocation.getLocationType() == LocationType.PRODUCTION) {
+                        if (destinationType == LocationType.PRODUCTION
+                                        || destinationType == LocationType.STORE) {
                                 return;
                         }
 
-                        MatFlowTransferLine afterLine = requireLockedTransferLine(afterDispatch.getId());
-                        BigDecimal outstandingReceipt = zero(afterLine.dispatchedQty)
-                                        .subtract(zero(afterLine.receivedQty))
+                        if (destinationType != LocationType.PROCESSING
+                                        && destinationType != LocationType.EXTERNAL_PROCESSOR) {
+                                throw conflict("Unsupported Store issue destination: " + destinationType);
+                        }
+
+                        receiveOutstandingInternally(afterDispatch, quantity, batchNo, remarks);
+                }
+
+                void receiveOriginStoreReservation(
+                                UUID reservationId,
+                                StoreReceiveRequest request) {
+                        MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
+                        String originPlant = plantRoutingService.normalizeFactoryPlant(reservation.demandPlantCode);
+                        if (!plantRoutingService.requiresOriginStoreHop(originPlant)) {
+                                throw conflict("AL-P1 material is issued directly to Production and has no origin-Store receipt hop");
+                        }
+                        plantRoutingService.requireOriginStoreActor(originPlant);
+                        if (request == null || request.rowVersion() == null) {
+                                throw badRequest("Reservation rowVersion is required");
+                        }
+                        if (!request.rowVersion().equals(reservation.getRowVersion())) {
+                                throw conflict("Reservation was modified by another user. Refresh and retry.");
+                        }
+
+                        MatFlowLocation originStore = plantRoutingService.requireOriginStore(originPlant);
+                        MatFlowTransferOrder inbound = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
+                                        .stream()
+                                        .filter(transfer -> transfer != null && transfer.toLocation != null)
+                                        .filter(transfer -> originStore.getId().equals(transfer.toLocation.getId()))
+                                        .filter(transfer -> transfer.status != TransferStatus.RECEIVED
+                                                        && transfer.status != TransferStatus.CANCELLED)
+                                        .findFirst()
+                                        .orElseThrow(() -> conflict(
+                                                        "No Main Store material is waiting at the origin Plant Store"));
+
+                        if (inbound.status == TransferStatus.PLANNED
+                                        || inbound.status == TransferStatus.READY) {
+                                throw conflict("AL-P1 Main Store has not dispatched this lot to the origin Plant Store yet");
+                        }
+
+                        MatFlowTransferLine line = requireLockedTransferLine(inbound.getId());
+                        BigDecimal outstanding = zero(line.dispatchedQty).subtract(zero(line.receivedQty))
                                         .max(ZERO).setScale(3, RoundingMode.HALF_UP);
-                        BigDecimal receiptQuantity = quantity.min(outstandingReceipt)
+                        if (outstanding.compareTo(ZERO) <= 0) {
+                                throw conflict("Origin Plant Store receipt is already complete");
+                        }
+                        receive(inbound.getId(), new TransferActionRequest(
+                                        inbound.getRowVersion(), outstanding,
+                                        request.batchNo(), request.remarks()));
+                }
+
+                void advanceAfterProcessing(UUID reservationId, String remarks) {
+                        MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
+                        List<MatFlowTransferOrder> route = transferRepository
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
+                        MatFlowTransferOrder next = route.stream()
+                                        .filter(item -> item != null
+                                                        && item.status != TransferStatus.RECEIVED
+                                                        && item.status != TransferStatus.CANCELLED)
+                                        .findFirst()
+                                        .orElseThrow(() -> conflict("No pending post-Processing hand-off exists"));
+
+                        if (next.fromLocation == null
+                                        || (next.fromLocation.getLocationType() != LocationType.PROCESSING
+                                                        && next.fromLocation
+                                                                        .getLocationType() != LocationType.EXTERNAL_PROCESSOR)) {
+                                throw conflict("The next hand-off is not owned by Processing");
+                        }
+                        accessService.requireTransferDispatch(next.fromLocation);
+
+                        String actor = accessService.actor();
+                        if (next.status == TransferStatus.PLANNED) {
+                                next.status = TransferStatus.READY;
+                                next.setUpdatedBy(actor);
+                                next = transferRepository.saveAndFlush(next);
+                                auditService.record(
+                                                "TRANSFER", next.getId(), "TRANSFER_READY_AFTER_PROCESSING",
+                                                next.fromLocation.getPlantCode(),
+                                                reservation.requisitionLine == null
+                                                                || reservation.requisitionLine.requisition == null
+                                                                || reservation.requisitionLine.requisition.projectDrawing == null
+                                                                                ? null
+                                                                                : reservation.requisitionLine.requisition.projectDrawing
+                                                                                                .getProjectCode(),
+                                                reservation.requisitionLine == null
+                                                                || reservation.requisitionLine.requisition == null
+                                                                || reservation.requisitionLine.requisition.projectDrawing == null
+                                                                                ? null
+                                                                                : reservation.requisitionLine.requisition.projectDrawing
+                                                                                                .getDrawingNo(),
+                                                auditService.details("reservationId", reservationId));
+                        }
+
+                        MatFlowTransferLine line = requireLockedTransferLine(next.getId());
+                        BigDecimal remaining = zero(line.plannedQty).subtract(zero(line.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        if (remaining.compareTo(ZERO) <= 0) {
+                                return;
+                        }
+                        BigDecimal inTransit = zero(line.dispatchedQty).subtract(zero(line.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        BigDecimal dispatchNeeded = remaining.subtract(inTransit).max(ZERO)
                                         .setScale(3, RoundingMode.HALF_UP);
-                        if (receiptQuantity.compareTo(ZERO) > 0) {
-                                receive(afterDispatch.getId(), new TransferActionRequest(
-                                                afterDispatch.getRowVersion(), receiptQuantity, batchNo, remarks));
+                        if (dispatchNeeded.compareTo(ZERO) > 0) {
+                                dispatch(next.getId(), new TransferActionRequest(
+                                                next.getRowVersion(), dispatchNeeded, null, remarks));
+                        }
+                        MatFlowTransferOrder afterDispatch = requireLockedTransfer(next.getId());
+                        if (afterDispatch.toLocation == null
+                                        || !plantRoutingService.isMainStoreLocation(afterDispatch.toLocation)) {
+                                throw conflict("Processing output must return to AL-P1 Main Store before plant issue");
+                        }
+                        receiveOutstandingInternally(afterDispatch, remaining, null, remarks);
+                }
+
+                private void receiveOutstandingInternally(
+                                MatFlowTransferOrder transfer,
+                                BigDecimal requestedQty,
+                                String batchNo,
+                                String remarks) {
+                        MatFlowTransferOrder locked = requireLockedTransfer(transfer.getId());
+                        MatFlowTransferLine line = requireLockedTransferLine(locked.getId());
+                        BigDecimal outstanding = zero(line.dispatchedQty).subtract(zero(line.receivedQty))
+                                        .max(ZERO).setScale(3, RoundingMode.HALF_UP);
+                        BigDecimal qty = requestedQty == null ? outstanding : requestedQty.min(outstanding);
+                        if (qty.compareTo(ZERO) > 0) {
+                                receiveInternal(locked.getId(), new TransferActionRequest(
+                                                locked.getRowVersion(), qty, batchNo, remarks), false);
                         }
                 }
 
@@ -512,8 +673,7 @@ public class MatFlowMovementService {
                         validateTransferLocations(
                                         transfer);
 
-                        accessService.requirePlantAccess(
-                                        transfer.fromLocation.getPlantCode());
+                        accessService.requireTransferDispatch(transfer.fromLocation);
 
                         if (!isDispatchableStatus(
                                         transfer.status)) {
@@ -695,6 +855,13 @@ public class MatFlowMovementService {
                 public TransferResponse receive(
                                 UUID id,
                                 TransferActionRequest request) {
+                        return receiveInternal(id, request, true);
+                }
+
+                private TransferResponse receiveInternal(
+                                UUID id,
+                                TransferActionRequest request,
+                                boolean enforceDestinationAccess) {
 
                         MatFlowTransferOrder transfer = requireLockedTransfer(id);
 
@@ -704,8 +871,9 @@ public class MatFlowMovementService {
                         validateTransferLocations(
                                         transfer);
 
-                        accessService.requirePlantAccess(
-                                        transfer.toLocation.getPlantCode());
+                        if (enforceDestinationAccess) {
+                                accessService.requireTransferReceive(transfer.toLocation);
+                        }
 
                         if (!isReceivableStatus(
                                         transfer.status)) {
@@ -861,6 +1029,20 @@ public class MatFlowMovementService {
 
                         transfer = transferRepository.saveAndFlush(
                                         transfer);
+
+                        /* Keep reservation custody aligned with the physically received leg. */
+                        if (fullyReceived && transfer.reservation != null
+                                        && transfer.reservation.getId() != null) {
+                                MatFlowReservation custodyReservation = reservationRepository
+                                                .findById(transfer.reservation.getId())
+                                                .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
+                                                .orElseThrow(() -> conflict(
+                                                                "Transfer reservation no longer exists"));
+                                custodyReservation.sourceLocation = transfer.toLocation;
+                                custodyReservation.material = transferLine.material;
+                                custodyReservation.setUpdatedBy(actor);
+                                reservationRepository.save(custodyReservation);
+                        }
 
                         saveTransferLedger(
                                         sourceBalance,
@@ -2409,6 +2591,8 @@ public class MatFlowMovementService {
 
         private static final class ReturnModule {
 
+                private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+
                 private final MatFlowMaterialReturnRepository returnRepository;
                 private final MatFlowMaterialReturnLineRepository returnLineRepository;
                 private final MatFlowMaterialRequisitionRepository requisitionRepository;
@@ -2418,6 +2602,8 @@ public class MatFlowMovementService {
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowAccessService accessService;
                 private final MatFlowAuditService auditService;
+                private final MatFlowPlantRoutingService plantRoutingService;
+                private final MatFlowRequisitionService requisitionService;
 
                 ReturnModule(
                                 MatFlowMaterialReturnRepository returnRepository,
@@ -2428,177 +2614,154 @@ public class MatFlowMovementService {
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowAccessService accessService,
-                                MatFlowAuditService auditService) {
+                                MatFlowAuditService auditService,
+                                MatFlowPlantRoutingService plantRoutingService,
+                                MatFlowRequisitionService requisitionService) {
                         this.returnRepository = returnRepository;
-
                         this.returnLineRepository = returnLineRepository;
-
                         this.requisitionRepository = requisitionRepository;
-
                         this.requisitionLineRepository = requisitionLineRepository;
-
                         this.locationRepository = locationRepository;
-
                         this.stockRepository = stockRepository;
-
                         this.ledgerRepository = ledgerRepository;
-
                         this.accessService = accessService;
                         this.auditService = auditService;
+                        this.plantRoutingService = plantRoutingService;
+                        this.requisitionService = requisitionService;
                 }
 
                 @Transactional(readOnly = true)
                 public List<MaterialReturnResponse> list() {
                         accessService.requireRead();
 
-                        return returnRepository
-                                        .findAllByOrderByUpdatedAtDesc()
-                                        .stream()
-                                        .filter(materialReturn -> accessService.canAccessPlant(
-                                                        materialReturn.fromLocation.getPlantCode()) ||
-                                                        accessService.canAccessPlant(
-                                                                        materialReturn.toLocation.getPlantCode()))
+                        return returnRepository.findAllByOrderByUpdatedAtDesc().stream()
+                                        .map(this::hydrateReturn)
+                                        .filter(this::canReadReturn)
                                         .map(this::toResponse)
                                         .toList();
                 }
 
                 @Transactional
-                public MaterialReturnResponse create(
-                                MaterialReturnCreateRequest request) {
+                public MaterialReturnResponse create(MaterialReturnCreateRequest request) {
                         accessService.requireProductionReturnCreate();
-
                         validateCreateRequest(request);
 
                         MatFlowMaterialRequisition requisition = requisitionRepository
                                         .findDetailById(request.requisitionId())
-                                        .orElseThrow(() -> notFound(
-                                                        "Requisition not found"));
+                                        .map(value -> (MatFlowMaterialRequisition) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> notFound("Requisition not found"));
+                        hydrateRequisitionAssociations(requisition);
 
                         accessService.requireProductionOwnership(requisition.requestedBy);
                         validateReturnRequisition(requisition);
 
-                        MatFlowLocation fromLocation = requireLocation(
-                                        request.fromLocationId());
-
-                        MatFlowLocation toLocation = requireLocation(
-                                        request.toLocationId());
-
+                        MatFlowLocation fromLocation = requireAccessibleLocation(request.fromLocationId());
                         if (fromLocation.getLocationType() != LocationType.PRODUCTION) {
-                                throw badRequest(
-                                                "Return source must be a production location");
+                                throw badRequest("Return source must be a Production location");
+                        }
+                        if (!fromLocation.getId().equals(requisition.destinationLocation.getId())) {
+                                throw conflict("Return source does not match the requisition Production location");
                         }
 
-                        if (!fromLocation.getId()
-                                        .equals(
-                                                        requisition.destinationLocation
-                                                                        .getId())) {
-                                throw conflict(
-                                                "Return source does not match the requisition production location");
+                        String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                        requisition.destinationLocation.getPlantCode());
+                        MatFlowLocation mainStore = requisition.mainStore == null
+                                        ? plantRoutingService.requireMainStore()
+                                        : hydrateLocation(requisition.mainStore);
+                        plantRoutingService.assertMainStoreLocation(mainStore, "Material return destination");
+
+                        if (request.toLocationId() != null && !request.toLocationId().equals(mainStore.getId())) {
+                                throw badRequest("Material return destination is fixed to AL-P1 Main Store");
                         }
 
-                        if (toLocation.getLocationType() == LocationType.PRODUCTION) {
-                                throw badRequest(
-                                                "Return destination cannot be another production location");
-                        }
-
-                        if (!toLocation.isSupportsStock()) {
-                                throw badRequest(
-                                                "Return destination does not support stock");
+                        MatFlowLocation viaStore = null;
+                        if (plantRoutingService.requiresOriginStoreHop(originPlant)) {
+                                viaStore = requisition.originStore == null
+                                                ? plantRoutingService.requireOriginStore(originPlant)
+                                                : hydrateLocation(requisition.originStore);
+                                plantRoutingService.assertOriginStoreLocation(
+                                                viaStore, originPlant, "Material return origin-Store route");
                         }
 
                         String actor = accessService.actor();
-
                         MatFlowMaterialReturn materialReturn = new MatFlowMaterialReturn();
-
                         materialReturn.returnNumber = generateNumber("MFRN");
-
                         materialReturn.requisition = requisition;
-
                         materialReturn.fromLocation = fromLocation;
-
-                        materialReturn.toLocation = toLocation;
-
+                        materialReturn.viaLocation = viaStore;
+                        materialReturn.toLocation = mainStore;
                         materialReturn.reason = request.reason();
-
                         materialReturn.status = MaterialReturnStatus.DRAFT;
-
                         materialReturn.createdForReturnBy = actor;
-
                         materialReturn.remarks = clean(request.remarks());
-
                         materialReturn.setCreatedBy(actor);
                         materialReturn.setUpdatedBy(actor);
-
-                        materialReturn = returnRepository.save(
-                                        materialReturn);
+                        materialReturn = returnRepository.saveAndFlush(materialReturn);
 
                         Set<UUID> uniqueLines = new HashSet<>();
-
                         for (MaterialReturnLineRequest lineRequest : request.lines()) {
-                                if (!uniqueLines.add(
-                                                lineRequest.requisitionLineId())) {
-                                        throw badRequest(
-                                                        "A requisition line was selected more than once");
+                                if (lineRequest == null || lineRequest.requisitionLineId() == null) {
+                                        throw badRequest("Every return line requires a requisition line");
+                                }
+                                if (!uniqueLines.add(lineRequest.requisitionLineId())) {
+                                        throw badRequest("A requisition line was selected more than once");
                                 }
 
+                                /*
+                                 * Serialize return creation per requisition line. Without this row
+                                 * lock, two Production requests can both calculate the same
+                                 * returnable quantity before either open return is visible.
+                                 */
                                 MatFlowRequisitionLine requisitionLine = requisitionLineRepository
-                                                .findById(
-                                                                lineRequest.requisitionLineId())
-                                                .orElseThrow(() -> notFound(
-                                                                "Requisition line not found"));
-
-                                if (!requisitionLine.requisition
-                                                .getId()
-                                                .equals(
-                                                                requisition.getId())) {
-                                        throw badRequest(
-                                                        "Return line does not belong to the selected requisition");
+                                                .lockById(lineRequest.requisitionLineId())
+                                                .map(value -> (MatFlowRequisitionLine) Hibernate.unproxy(value))
+                                                .orElseThrow(() -> notFound("Requisition line not found"));
+                                if (requisitionLine.requisition == null
+                                                || !requisition.getId().equals(requisitionLine.requisition.getId())) {
+                                        throw badRequest("Return line does not belong to the selected requisition");
                                 }
 
                                 MatFlowMaterial material = requisitionLine.issuedMaterial != null
-                                                ? requisitionLine.issuedMaterial
-                                                : requisitionLine.material;
+                                                ? (MatFlowMaterial) Hibernate.unproxy(requisitionLine.issuedMaterial)
+                                                : requisitionLine.material == null
+                                                                ? null
+                                                                : (MatFlowMaterial) Hibernate
+                                                                                .unproxy(requisitionLine.material);
+                                if (material == null) {
+                                        throw conflict("Requisition line has no issued/material master");
+                                }
 
-                                BigDecimal returnQty = positive(
-                                                lineRequest.returnQty(),
-                                                "Return quantity");
-
-                                BigDecimal returnable = requisitionLine.issuedQty
-                                                .subtract(
-                                                                requisitionLine.consumedQty)
-                                                .subtract(
-                                                                requisitionLine.returnedQty);
-
-                                if (returnQty.compareTo(
-                                                returnable) > 0) {
-                                        throw conflict(
-                                                        "Return quantity exceeds unused issued quantity for " +
-                                                                        material.getMaterialCode());
+                                BigDecimal returnQty = positive(lineRequest.returnQty(), "Return quantity");
+                                BigDecimal alreadyCommittedToOpenReturns = openCommittedReturnQtyForLine(
+                                                requisitionLine.getId());
+                                BigDecimal returnable = zero(requisitionLine.issuedQty)
+                                                .subtract(zero(requisitionLine.consumedQty))
+                                                .subtract(zero(requisitionLine.returnedQty))
+                                                .subtract(productionWasteForLine(requisitionLine.getId()))
+                                                .subtract(alreadyCommittedToOpenReturns)
+                                                .max(ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                if (returnQty.compareTo(returnable) > 0) {
+                                        throw conflict("Return quantity exceeds unused issued quantity for "
+                                                        + material.getMaterialCode()
+                                                        + ". Returnable after open returns: "
+                                                        + returnable);
                                 }
 
                                 MatFlowMaterialReturnLine line = new MatFlowMaterialReturnLine();
-
                                 line.materialReturn = materialReturn;
-
                                 line.requisitionLine = requisitionLine;
-
                                 line.material = material;
-
                                 line.returnQty = returnQty;
-
-                                line.dispatchedQty = BigDecimal.ZERO;
-
-                                line.receivedQty = BigDecimal.ZERO;
-
+                                line.dispatchedQty = ZERO;
+                                line.originStoreReceivedQty = ZERO;
+                                line.forwardedQty = ZERO;
+                                line.receivedQty = ZERO;
                                 line.uom = material.getUom();
-
                                 line.batchNo = clean(lineRequest.batchNo());
-
                                 line.remarks = clean(lineRequest.remarks());
-
                                 line.setCreatedBy(actor);
                                 line.setUpdatedBy(actor);
-
                                 returnLineRepository.save(line);
                         }
 
@@ -2606,7 +2769,7 @@ public class MatFlowMovementService {
                                         "MATERIAL_RETURN",
                                         materialReturn.getId(),
                                         "MATERIAL_RETURN_CREATED",
-                                        fromLocation.getPlantCode(),
+                                        originPlant,
                                         requisition.projectDrawing == null ? null
                                                         : requisition.projectDrawing.getProjectCode(),
                                         requisition.projectDrawing == null ? null
@@ -2614,378 +2777,643 @@ public class MatFlowMovementService {
                                         auditService.details(
                                                         "returnNumber", materialReturn.returnNumber,
                                                         "reason", materialReturn.reason,
+                                                        "originPlant", originPlant,
+                                                        "viaStore",
+                                                        viaStore == null ? null : viaStore.getLocationCode(),
+                                                        "finalMainStore", mainStore.getLocationCode(),
                                                         "lineCount", request.lines().size()));
 
                         return toResponse(materialReturn);
                 }
 
+                /**
+                 * Context-aware dispatch:
+                 * DRAFT -> Production dispatches first leg.
+                 * AT_ORIGIN_STORE -> remote origin Store forwards second leg to AL-P1.
+                 */
                 @Transactional
-                public MaterialReturnResponse dispatch(
-                                UUID id,
-                                MaterialReturnActionRequest request) {
+                public MaterialReturnResponse dispatch(UUID id, MaterialReturnActionRequest request) {
                         MatFlowMaterialReturn materialReturn = requireReturn(id);
-                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
-                                        materialReturn);
+                        MatFlowMaterialRequisition requisition = requireReturnRequisition(materialReturn);
+                        assertVersion(request == null ? null : request.rowVersion(),
+                                        materialReturn.getRowVersion(), "Material return");
 
-                        accessService.requireTransferDispatch(
-                                        materialReturn.fromLocation);
-
-                        if (materialReturn.status != MaterialReturnStatus.DRAFT) {
-                                throw conflict(
-                                                "Only a draft material return can be dispatched");
+                        if (materialReturn.status == MaterialReturnStatus.DRAFT) {
+                                return dispatchFromProduction(materialReturn, requisition, request);
+                        }
+                        if (materialReturn.status == MaterialReturnStatus.AT_ORIGIN_STORE) {
+                                return forwardFromOriginStore(materialReturn, requisition, request);
                         }
 
-                        assertVersion(
-                                        request == null
-                                                        ? null
-                                                        : request.rowVersion(),
-                                        materialReturn.getRowVersion(),
-                                        "Material return");
+                        throw conflict("Material return cannot be dispatched in status: " + materialReturn.status);
+                }
+
+                private MaterialReturnResponse dispatchFromProduction(
+                                MatFlowMaterialReturn materialReturn,
+                                MatFlowMaterialRequisition requisition,
+                                MaterialReturnActionRequest request) {
+                        accessService.requireProductionOwnership(requisition.requestedBy);
+                        accessService.requireTransferDispatch(materialReturn.fromLocation);
 
                         String actor = accessService.actor();
-
-                        List<MatFlowMaterialReturnLine> lines = returnLineRepository
-                                        .findByMaterialReturn_IdOrderByCreatedAtAsc(
-                                                        materialReturn.getId());
-
+                        List<MatFlowMaterialReturnLine> lines = requireReturnLines(materialReturn.getId());
                         for (MatFlowMaterialReturnLine line : lines) {
-                                MatFlowStockBalance source = stockRepository
-                                                .lockBalance(
-                                                                line.material.getId(),
-                                                                materialReturn.fromLocation
-                                                                                .getId())
-                                                .orElseThrow(() -> conflict(
-                                                                "Production stock balance not found for " +
-                                                                                line.material
-                                                                                                .getMaterialCode()));
-
-                                BigDecimal usable = source.onHandQty
-                                                .subtract(
-                                                                source.blockedQty);
-
-                                if (usable.compareTo(
-                                                line.returnQty) < 0) {
-                                        throw conflict(
-                                                        "Insufficient production stock for return: " +
-                                                                        line.material
-                                                                                        .getMaterialCode());
+                                BigDecimal qty = zero(line.returnQty);
+                                if (qty.compareTo(ZERO) <= 0) {
+                                        throw conflict("Material return line has no quantity");
+                                }
+                                if (zero(line.dispatchedQty).compareTo(ZERO) > 0) {
+                                        throw conflict("Material return has already been dispatched from Production");
                                 }
 
-                                source.onHandQty = scale(
-                                                source.onHandQty
-                                                                .subtract(
-                                                                                line.returnQty));
+                                MatFlowStockBalance source = stockRepository
+                                                .lockBalance(line.material.getId(), materialReturn.fromLocation.getId())
+                                                .orElseThrow(() -> conflict("Production stock balance not found for "
+                                                                + line.material.getMaterialCode()));
+                                BigDecimal usable = zero(source.onHandQty).subtract(zero(source.blockedQty)).max(ZERO);
+                                if (usable.compareTo(qty) < 0) {
+                                        throw conflict("Insufficient Production stock for return: "
+                                                        + line.material.getMaterialCode());
+                                }
 
-                                source.inTransitQty = scale(
-                                                source.inTransitQty
-                                                                .add(
-                                                                                line.returnQty));
-
+                                source.onHandQty = zero(source.onHandQty).subtract(qty).setScale(3,
+                                                RoundingMode.HALF_UP);
+                                source.inTransitQty = zero(source.inTransitQty).add(qty).setScale(3,
+                                                RoundingMode.HALF_UP);
                                 source.setUpdatedBy(actor);
-
                                 source = stockRepository.save(source);
 
-                                line.dispatchedQty = line.returnQty;
-
+                                line.dispatchedQty = qty;
                                 line.setUpdatedBy(actor);
-
                                 returnLineRepository.save(line);
 
-                                saveLedger(
-                                                source,
-                                                MovementType.MATERIAL_RETURN_OUT,
-
-                                                line.returnQty.negate(),
-                                                BigDecimal.ZERO,
-                                                BigDecimal.ZERO,
-                                                line.returnQty,
-
-                                                materialReturn,
-                                                line,
-                                                actor);
+                                saveLedger(source, MovementType.MATERIAL_RETURN_OUT,
+                                                qty.negate(), ZERO, ZERO, qty,
+                                                materialReturn, line,
+                                                "Production material return dispatched", actor);
                         }
 
-                        materialReturn.status = MaterialReturnStatus.IN_TRANSIT;
-
+                        boolean remote = materialReturn.viaLocation != null;
+                        materialReturn.status = remote
+                                        ? MaterialReturnStatus.IN_TRANSIT_TO_ORIGIN_STORE
+                                        : MaterialReturnStatus.IN_TRANSIT_TO_MAIN_STORE;
                         materialReturn.dispatchedBy = actor;
-
                         materialReturn.dispatchedAt = LocalDateTime.now();
-
-                        if (request != null &&
-                                        clean(request.remarks()) != null) {
-                                materialReturn.remarks = clean(request.remarks());
-                        }
-
+                        applyRemarks(materialReturn, request == null ? null : request.remarks());
                         materialReturn.setUpdatedBy(actor);
-                        materialReturn = returnRepository.save(materialReturn);
+                        materialReturn = returnRepository.saveAndFlush(materialReturn);
 
                         auditService.record(
-                                        "MATERIAL_RETURN",
-                                        materialReturn.getId(),
-                                        "MATERIAL_RETURN_DISPATCHED",
+                                        "MATERIAL_RETURN", materialReturn.getId(),
+                                        remote ? "RETURN_DISPATCHED_TO_ORIGIN_STORE"
+                                                        : "RETURN_DISPATCHED_TO_MAIN_STORE",
                                         materialReturn.fromLocation.getPlantCode(),
-                                        returnRequisition.projectDrawing.getProjectCode(),
-                                        returnRequisition.projectDrawing.getDrawingNo(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
                                                         "returnNumber", materialReturn.returnNumber,
+                                                        "from", materialReturn.fromLocation.getLocationCode(),
+                                                        "to", remote
+                                                                        ? materialReturn.viaLocation.getLocationCode()
+                                                                        : materialReturn.toLocation.getLocationCode(),
                                                         "status", materialReturn.status));
 
                         return toResponse(materialReturn);
                 }
 
-                @Transactional
-                public MaterialReturnResponse receive(
-                                UUID id,
+                private MaterialReturnResponse forwardFromOriginStore(
+                                MatFlowMaterialReturn materialReturn,
+                                MatFlowMaterialRequisition requisition,
                                 MaterialReturnActionRequest request) {
-                        MatFlowMaterialReturn materialReturn = requireReturn(id);
-                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
-                                        materialReturn);
-
-                        accessService.requireTransferReceive(
-                                        materialReturn.toLocation);
-
-                        if (materialReturn.status != MaterialReturnStatus.IN_TRANSIT &&
-                                        materialReturn.status != MaterialReturnStatus.PARTIALLY_RECEIVED) {
-                                throw conflict(
-                                                "Material return is not available for receipt");
+                        if (materialReturn.viaLocation == null) {
+                                throw conflict("This return has no origin Plant Store forwarding leg");
                         }
-
-                        assertVersion(
-                                        request == null
-                                                        ? null
-                                                        : request.rowVersion(),
-                                        materialReturn.getRowVersion(),
-                                        "Material return");
+                        String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                        materialReturn.viaLocation.getPlantCode());
+                        plantRoutingService.requireOriginStoreActor(originPlant);
+                        plantRoutingService.assertOriginStoreLocation(
+                                        materialReturn.viaLocation, originPlant, "Material return forwarding");
+                        plantRoutingService.assertMainStoreLocation(
+                                        materialReturn.toLocation, "Material return final destination");
 
                         String actor = accessService.actor();
+                        List<MatFlowMaterialReturnLine> lines = requireReturnLines(materialReturn.getId());
+                        for (MatFlowMaterialReturnLine line : lines) {
+                                BigDecimal availableToForward = zero(line.originStoreReceivedQty)
+                                                .subtract(zero(line.forwardedQty))
+                                                .max(ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                if (availableToForward.compareTo(ZERO) <= 0) {
+                                        throw conflict("Origin Store has no unforwarded return quantity for "
+                                                        + line.material.getMaterialCode());
+                                }
+                                if (availableToForward.compareTo(zero(line.returnQty)) != 0) {
+                                        throw conflict("Origin Store must forward the complete received return lot for "
+                                                        + line.material.getMaterialCode());
+                                }
 
-                        List<MatFlowMaterialReturnLine> lines = returnLineRepository
-                                        .findByMaterialReturn_IdOrderByCreatedAtAsc(
-                                                        materialReturn.getId());
+                                MatFlowStockBalance source = stockRepository
+                                                .lockBalance(line.material.getId(), materialReturn.viaLocation.getId())
+                                                .orElseThrow(() -> conflict(
+                                                                "Origin Store return stock balance not found"));
+                                if (zero(source.onHandQty).compareTo(availableToForward) < 0) {
+                                        throw conflict("Origin Store stock is insufficient to forward the return lot");
+                                }
+
+                                source.onHandQty = zero(source.onHandQty).subtract(availableToForward)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                /*
+                                 * Intermediate return stock is blocked while it waits in the
+                                 * origin Store so no generic stock consumer can treat it as
+                                 * reusable local inventory. Release that technical block when
+                                 * the Store forwards the lot to Main Store.
+                                 */
+                                BigDecimal blockedReleased = zero(source.blockedQty)
+                                                .min(availableToForward)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                source.blockedQty = zero(source.blockedQty).subtract(blockedReleased)
+                                                .max(ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                source.inTransitQty = zero(source.inTransitQty).add(availableToForward)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                source.setUpdatedBy(actor);
+                                source = stockRepository.save(source);
+
+                                line.forwardedQty = zero(line.forwardedQty).add(availableToForward)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                line.setUpdatedBy(actor);
+                                returnLineRepository.save(line);
+
+                                saveLedger(source, MovementType.MATERIAL_RETURN_ROUTE_OUT,
+                                                availableToForward.negate(), ZERO, blockedReleased.negate(),
+                                                availableToForward,
+                                                materialReturn, line,
+                                                "Origin Plant Store forwarded return to AL-P1 Main Store", actor);
+                        }
+
+                        materialReturn.status = MaterialReturnStatus.IN_TRANSIT_TO_MAIN_STORE;
+                        materialReturn.forwardedBy = actor;
+                        materialReturn.forwardedAt = LocalDateTime.now();
+                        applyRemarks(materialReturn, request == null ? null : request.remarks());
+                        materialReturn.setUpdatedBy(actor);
+                        materialReturn = returnRepository.saveAndFlush(materialReturn);
+
+                        auditService.record(
+                                        "MATERIAL_RETURN", materialReturn.getId(),
+                                        "RETURN_FORWARDED_TO_MAIN_STORE",
+                                        originPlant,
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "returnNumber", materialReturn.returnNumber,
+                                                        "from", materialReturn.viaLocation.getLocationCode(),
+                                                        "to", materialReturn.toLocation.getLocationCode(),
+                                                        "forwardedBy", actor));
+
+                        return toResponse(materialReturn);
+                }
+
+                /**
+                 * Context-aware receipt:
+                 * IN_TRANSIT_TO_ORIGIN_STORE -> origin Store acknowledges first leg.
+                 * IN_TRANSIT_TO_MAIN_STORE -> AL-P1 acknowledges final leg and only then
+                 * increments requisitionLine.returnedQty.
+                 * Legacy IN_TRANSIT/PARTIALLY_RECEIVED rows retain the historical one-leg
+                 * receive behavior.
+                 */
+                @Transactional
+                public MaterialReturnResponse receive(UUID id, MaterialReturnActionRequest request) {
+                        MatFlowMaterialReturn materialReturn = requireReturn(id);
+                        MatFlowMaterialRequisition requisition = requireReturnRequisition(materialReturn);
+                        assertVersion(request == null ? null : request.rowVersion(),
+                                        materialReturn.getRowVersion(), "Material return");
+
+                        if (materialReturn.status == MaterialReturnStatus.IN_TRANSIT_TO_ORIGIN_STORE) {
+                                return receiveAtOriginStore(materialReturn, requisition, request);
+                        }
+                        if (materialReturn.status == MaterialReturnStatus.IN_TRANSIT_TO_MAIN_STORE) {
+                                return receiveAtMainStore(materialReturn, requisition, request, false);
+                        }
+                        if (materialReturn.status == MaterialReturnStatus.IN_TRANSIT
+                                        || materialReturn.status == MaterialReturnStatus.PARTIALLY_RECEIVED) {
+                                return receiveAtMainStore(materialReturn, requisition, request, true);
+                        }
+
+                        throw conflict("Material return is not available for receipt in status: "
+                                        + materialReturn.status);
+                }
+
+                private MaterialReturnResponse receiveAtOriginStore(
+                                MatFlowMaterialReturn materialReturn,
+                                MatFlowMaterialRequisition requisition,
+                                MaterialReturnActionRequest request) {
+                        if (materialReturn.viaLocation == null) {
+                                throw conflict("Remote return origin Store is missing");
+                        }
+                        String originPlant = plantRoutingService.normalizeFactoryPlant(
+                                        materialReturn.viaLocation.getPlantCode());
+                        plantRoutingService.requireOriginStoreActor(originPlant);
+                        plantRoutingService.assertOriginStoreLocation(
+                                        materialReturn.viaLocation, originPlant, "Material return receipt");
+
+                        String actor = accessService.actor();
+                        List<MatFlowMaterialReturnLine> lines = requireReturnLines(materialReturn.getId());
+                        for (MatFlowMaterialReturnLine line : lines) {
+                                BigDecimal outstanding = zero(line.dispatchedQty)
+                                                .subtract(zero(line.originStoreReceivedQty))
+                                                .max(ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                if (outstanding.compareTo(ZERO) <= 0) {
+                                        continue;
+                                }
+
+                                MatFlowStockBalance production = stockRepository
+                                                .lockBalance(line.material.getId(), materialReturn.fromLocation.getId())
+                                                .orElseThrow(() -> conflict(
+                                                                "Production return in-transit balance not found"));
+                                if (zero(production.inTransitQty).compareTo(outstanding) < 0) {
+                                        throw conflict("Production in-transit return quantity is inconsistent");
+                                }
+                                production.inTransitQty = zero(production.inTransitQty).subtract(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                production.setUpdatedBy(actor);
+                                production = stockRepository.save(production);
+
+                                MatFlowStockBalance originStoreBalance = lockOrCreateBalance(
+                                                line.material, materialReturn.viaLocation, actor);
+                                originStoreBalance.onHandQty = zero(originStoreBalance.onHandQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                /*
+                                 * This is transit custody, not local planning stock. Keep the
+                                 * lot blocked until the origin Store forwards it to AL-P1.
+                                 */
+                                originStoreBalance.blockedQty = zero(originStoreBalance.blockedQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                originStoreBalance.setUpdatedBy(actor);
+                                originStoreBalance = stockRepository.save(originStoreBalance);
+
+                                line.originStoreReceivedQty = zero(line.originStoreReceivedQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                line.setUpdatedBy(actor);
+                                returnLineRepository.save(line);
+
+                                saveLedger(production, MovementType.MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR,
+                                                ZERO, ZERO, ZERO, outstanding.negate(),
+                                                materialReturn, line,
+                                                "Return transit cleared at origin Plant Store", actor);
+                                saveLedger(originStoreBalance, MovementType.MATERIAL_RETURN_ROUTE_IN,
+                                                outstanding, ZERO, outstanding, ZERO,
+                                                materialReturn, line,
+                                                "Return received at origin Plant Store; blocked while awaiting forward to AL-P1",
+                                                actor);
+                        }
+
+                        materialReturn.status = MaterialReturnStatus.AT_ORIGIN_STORE;
+                        materialReturn.originStoreReceivedBy = actor;
+                        materialReturn.originStoreReceivedAt = LocalDateTime.now();
+                        applyRemarks(materialReturn, request == null ? null : request.remarks());
+                        materialReturn.setUpdatedBy(actor);
+                        materialReturn = returnRepository.saveAndFlush(materialReturn);
+
+                        auditService.record(
+                                        "MATERIAL_RETURN", materialReturn.getId(),
+                                        "RETURN_RECEIVED_AT_ORIGIN_STORE",
+                                        originPlant,
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "returnNumber", materialReturn.returnNumber,
+                                                        "originStore", materialReturn.viaLocation.getLocationCode(),
+                                                        "nextStore", materialReturn.toLocation.getLocationCode()));
+
+                        return toResponse(materialReturn);
+                }
+
+                private MaterialReturnResponse receiveAtMainStore(
+                                MatFlowMaterialReturn materialReturn,
+                                MatFlowMaterialRequisition requisition,
+                                MaterialReturnActionRequest request,
+                                boolean legacyOneLeg) {
+                        MatFlowLocation finalStore = materialReturn.toLocation;
+                        if (!legacyOneLeg) {
+                                plantRoutingService.requireMainStorePlanningActor();
+                                plantRoutingService.assertMainStoreLocation(finalStore,
+                                                "Material return final receipt");
+                        } else {
+                                accessService.requireTransferReceive(finalStore);
+                        }
+
+                        MatFlowLocation transitSource = materialReturn.viaLocation != null
+                                        && zeroForwardedTotal(materialReturn.getId()).compareTo(ZERO) > 0
+                                                        ? materialReturn.viaLocation
+                                                        : materialReturn.fromLocation;
+                        String actor = accessService.actor();
+                        List<MatFlowMaterialReturnLine> lines = requireReturnLines(materialReturn.getId());
 
                         for (MatFlowMaterialReturnLine line : lines) {
-                                BigDecimal outstanding = line.dispatchedQty
-                                                .subtract(
-                                                                line.receivedQty);
-
-                                if (outstanding.compareTo(
-                                                BigDecimal.ZERO) <= 0) {
+                                BigDecimal dispatchedOnCurrentLeg = materialReturn.viaLocation != null
+                                                && zero(line.forwardedQty).compareTo(ZERO) > 0
+                                                                ? zero(line.forwardedQty)
+                                                                : zero(line.dispatchedQty);
+                                BigDecimal outstanding = dispatchedOnCurrentLeg
+                                                .subtract(zero(line.receivedQty))
+                                                .max(ZERO)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                if (outstanding.compareTo(ZERO) <= 0) {
                                         continue;
                                 }
 
                                 MatFlowStockBalance source = stockRepository
-                                                .lockBalance(
-                                                                line.material.getId(),
-                                                                materialReturn.fromLocation
-                                                                                .getId())
+                                                .lockBalance(line.material.getId(), transitSource.getId())
                                                 .orElseThrow(() -> conflict(
-                                                                "Return source stock balance not found"));
-
-                                if (source.inTransitQty
-                                                .compareTo(
-                                                                outstanding) < 0) {
-                                        throw conflict(
-                                                        "Source in-transit return quantity is inconsistent");
+                                                                "Return source in-transit balance not found"));
+                                if (zero(source.inTransitQty).compareTo(outstanding) < 0) {
+                                        throw conflict("Return source in-transit quantity is inconsistent for "
+                                                        + line.material.getMaterialCode());
                                 }
-
-                                source.inTransitQty = scale(
-                                                source.inTransitQty
-                                                                .subtract(outstanding));
-
+                                source.inTransitQty = zero(source.inTransitQty).subtract(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
                                 source.setUpdatedBy(actor);
-
                                 source = stockRepository.save(source);
 
                                 MatFlowStockBalance destination = lockOrCreateBalance(
-                                                line.material,
-                                                materialReturn.toLocation,
-                                                actor);
+                                                line.material, finalStore, actor);
+                                destination.onHandQty = zero(destination.onHandQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
 
-                                destination.onHandQty = scale(
-                                                destination.onHandQty
-                                                                .add(outstanding));
-
-                                BigDecimal blockedAdded = BigDecimal.ZERO;
-
-                                if (materialReturn.reason == MaterialReturnReason.DAMAGED ||
-                                                materialReturn.reason == MaterialReturnReason.PROCESS_REJECTED ||
-                                                materialReturn.reason == MaterialReturnReason.QC_REJECTED) {
-                                        destination.blockedQty = scale(
-                                                        destination.blockedQty
-                                                                        .add(outstanding));
-
+                                BigDecimal blockedAdded = ZERO;
+                                if (materialReturn.reason == MaterialReturnReason.DAMAGED
+                                                || materialReturn.reason == MaterialReturnReason.PROCESS_REJECTED
+                                                || materialReturn.reason == MaterialReturnReason.QC_REJECTED) {
+                                        destination.blockedQty = zero(destination.blockedQty).add(outstanding)
+                                                        .setScale(3, RoundingMode.HALF_UP);
                                         blockedAdded = outstanding;
                                 }
-
                                 destination.setUpdatedBy(actor);
+                                destination = stockRepository.save(destination);
 
-                                destination = stockRepository.save(
-                                                destination);
-
-                                line.receivedQty = scale(
-                                                line.receivedQty
-                                                                .add(outstanding));
-
+                                line.receivedQty = zero(line.receivedQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
                                 line.setUpdatedBy(actor);
-
                                 returnLineRepository.save(line);
 
-                                MatFlowRequisitionLine requisitionLine = line.requisitionLine;
-
-                                requisitionLine.returnedQty = scale(
-                                                requisitionLine.returnedQty
-                                                                .add(outstanding));
-
+                                MatFlowRequisitionLine requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                line.requisitionLine);
+                                requisitionLine.returnedQty = zero(requisitionLine.returnedQty).add(outstanding)
+                                                .setScale(3, RoundingMode.HALF_UP);
                                 requisitionLine.setUpdatedBy(actor);
+                                requisitionLineRepository.save(requisitionLine);
 
-                                requisitionLineRepository.save(
-                                                requisitionLine);
-
-                                saveLedger(
-                                                source,
-                                                MovementType.MATERIAL_RETURN_RECEIPT_CLEAR,
-
-                                                BigDecimal.ZERO,
-                                                BigDecimal.ZERO,
-                                                BigDecimal.ZERO,
-                                                outstanding.negate(),
-
-                                                materialReturn,
-                                                line,
-                                                actor);
-
-                                saveLedger(
-                                                destination,
-                                                MovementType.MATERIAL_RETURN_IN,
-
-                                                outstanding,
-                                                BigDecimal.ZERO,
-                                                blockedAdded,
-                                                BigDecimal.ZERO,
-
-                                                materialReturn,
-                                                line,
-                                                actor);
+                                MovementType clearType = transitSource.getId()
+                                                .equals(materialReturn.fromLocation.getId())
+                                                                ? MovementType.MATERIAL_RETURN_RECEIPT_CLEAR
+                                                                : MovementType.MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR;
+                                saveLedger(source, clearType,
+                                                ZERO, ZERO, ZERO, outstanding.negate(),
+                                                materialReturn, line,
+                                                "Return transit cleared on final Main Store receipt", actor);
+                                saveLedger(destination, MovementType.MATERIAL_RETURN_IN,
+                                                outstanding, ZERO, blockedAdded, ZERO,
+                                                materialReturn, line,
+                                                "Returned material entered final Store custody", actor);
                         }
 
                         materialReturn.status = MaterialReturnStatus.RECEIVED;
-
                         materialReturn.receivedBy = actor;
-
                         materialReturn.receivedAt = LocalDateTime.now();
-
-                        if (request != null &&
-                                        clean(request.remarks()) != null) {
-                                materialReturn.remarks = clean(request.remarks());
-                        }
-
+                        applyRemarks(materialReturn, request == null ? null : request.remarks());
                         materialReturn.setUpdatedBy(actor);
-                        materialReturn = returnRepository.save(materialReturn);
+                        materialReturn = returnRepository.saveAndFlush(materialReturn);
 
                         auditService.record(
-                                        "MATERIAL_RETURN",
-                                        materialReturn.getId(),
-                                        "MATERIAL_RETURN_RECEIVED",
-                                        materialReturn.toLocation.getPlantCode(),
-                                        returnRequisition.projectDrawing.getProjectCode(),
-                                        returnRequisition.projectDrawing.getDrawingNo(),
+                                        "MATERIAL_RETURN", materialReturn.getId(),
+                                        legacyOneLeg ? "LEGACY_MATERIAL_RETURN_RECEIVED"
+                                                        : "MATERIAL_RETURN_RECEIVED_AT_MAIN_STORE",
+                                        finalStore.getPlantCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
                                         auditService.details(
                                                         "returnNumber", materialReturn.returnNumber,
-                                                        "status", materialReturn.status));
+                                                        "status", materialReturn.status,
+                                                        "finalStore", finalStore.getLocationCode()));
+
+                        /*
+                         * returnedQty changed only at final Store receipt; refresh the
+                         * material/requisition state in the same transaction.
+                         */
+                        requisitionService.refreshState(requisition.getId(), actor);
 
                         return toResponse(materialReturn);
                 }
 
-                private MatFlowMaterialReturn requireReturn(
-                                UUID id) {
-                        MatFlowMaterialReturn materialReturn = returnRepository
-                                        .findById(id)
-                                        .orElseThrow(() -> notFound(
-                                                        "Material return not found"));
-
-                        if (!accessService.canAccessPlant(
-                                        materialReturn.fromLocation.getPlantCode()) &&
-                                        !accessService.canAccessPlant(
-                                                        materialReturn.toLocation.getPlantCode())) {
-                                throw new ResponseStatusException(
-                                                HttpStatus.FORBIDDEN,
-                                                "No access to this material return");
-                        }
-
-                        return materialReturn;
+                private BigDecimal zeroForwardedTotal(UUID returnId) {
+                        return returnLineRepository.findByMaterialReturn_IdOrderByCreatedAtAsc(returnId).stream()
+                                        .map(line -> zero(line.forwardedQty))
+                                        .reduce(ZERO, BigDecimal::add)
+                                        .setScale(3, RoundingMode.HALF_UP);
                 }
 
                 /**
-                 * Re-hydrates the Material Return requisition through the same aggregate
-                 * detail query used by the requisition workflow. This prevents public
-                 * backing-field reads on a Hibernate lazy requisition proxy from being
-                 * mistaken for missing Project/BOM/destination data.
+                 * Quantity already promised by a Draft/in-flight return for this
+                 * requisition line. RECEIVED is excluded because returnedQty already
+                 * contains it; CANCELLED is excluded because it no longer commits stock.
                  */
-                private MatFlowMaterialRequisition requireReturnRequisition(
-                                MatFlowMaterialReturn materialReturn) {
-
-                        if (materialReturn == null ||
-                                        materialReturn.requisition == null ||
-                                        materialReturn.requisition.getId() == null) {
-                                throw conflict(
-                                                "Material return requisition is missing");
+                private BigDecimal openCommittedReturnQtyForLine(UUID requisitionLineId) {
+                        if (requisitionLineId == null) {
+                                return ZERO;
                         }
 
-                        UUID requisitionId = materialReturn.requisition.getId();
+                        BigDecimal total = ZERO;
+                        for (MatFlowMaterialReturnLine rawLine : returnLineRepository
+                                        .findByRequisitionLine_IdOrderByCreatedAtAsc(requisitionLineId)) {
+                                if (rawLine == null) {
+                                        continue;
+                                }
+                                MatFlowMaterialReturnLine line = (MatFlowMaterialReturnLine) Hibernate.unproxy(rawLine);
+                                if (line.materialReturn == null) {
+                                        continue;
+                                }
+                                MatFlowMaterialReturn header = (MatFlowMaterialReturn) Hibernate.unproxy(
+                                                line.materialReturn);
+                                if (header.status == MaterialReturnStatus.RECEIVED
+                                                || header.status == MaterialReturnStatus.CANCELLED) {
+                                        continue;
+                                }
+                                total = total.add(zero(line.returnQty)).setScale(3, RoundingMode.HALF_UP);
+                        }
+                        return total;
+                }
 
-                        MatFlowMaterialRequisition loadedRequisition = requisitionRepository
-                                        .findDetailById(requisitionId)
-                                        .orElseThrow(() -> conflict(
-                                                        "Material return requisition no longer exists: "
-                                                                        + requisitionId));
+                private BigDecimal productionWasteForLine(UUID requisitionLineId) {
+                        if (requisitionLineId == null) {
+                                return ZERO;
+                        }
+                        return ledgerRepository.findAll().stream()
+                                        .filter(entry -> entry != null && entry.movementType == MovementType.SCRAP)
+                                        .filter(entry -> "MATFLOW_PRODUCTION_WASTE".equals(entry.referenceType))
+                                        .filter(entry -> requisitionLineId.equals(entry.referenceId))
+                                        .map(entry -> zero(entry.quantityChange).abs())
+                                        .reduce(ZERO, BigDecimal::add)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                }
 
-                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
-                                        loadedRequisition);
+                private List<MatFlowMaterialReturnLine> requireReturnLines(UUID returnId) {
+                        List<MatFlowMaterialReturnLine> lines = returnLineRepository
+                                        .findByMaterialReturn_IdOrderByCreatedAtAsc(returnId).stream()
+                                        .map(value -> (MatFlowMaterialReturnLine) Hibernate.unproxy(value))
+                                        .toList();
+                        if (lines.isEmpty()) {
+                                throw conflict("Material return has no lines");
+                        }
+                        for (MatFlowMaterialReturnLine line : lines) {
+                                if (line.material == null || line.requisitionLine == null) {
+                                        throw conflict("Material return contains an incomplete line");
+                                }
+                                line.material = (MatFlowMaterial) Hibernate.unproxy(line.material);
+                                line.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(line.requisitionLine);
+                        }
+                        return lines;
+                }
 
+                private MatFlowMaterialReturn requireReturn(UUID id) {
+                        if (id == null) {
+                                throw badRequest("Material return ID is required");
+                        }
+                        MatFlowMaterialReturn materialReturn = returnRepository.lockDetailById(id)
+                                        .map(this::hydrateReturn)
+                                        .orElseThrow(() -> notFound("Material return not found"));
+                        if (!canReadReturn(materialReturn)) {
+                                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                                "No access to this material return");
+                        }
+                        return materialReturn;
+                }
+
+                private MatFlowMaterialReturn hydrateReturn(MatFlowMaterialReturn raw) {
+                        if (raw == null) {
+                                return null;
+                        }
+                        MatFlowMaterialReturn materialReturn = (MatFlowMaterialReturn) Hibernate.unproxy(raw);
+                        if (materialReturn.fromLocation != null) {
+                                materialReturn.fromLocation = hydrateLocation(materialReturn.fromLocation);
+                        }
+                        if (materialReturn.viaLocation != null) {
+                                materialReturn.viaLocation = hydrateLocation(materialReturn.viaLocation);
+                        }
+                        if (materialReturn.toLocation != null) {
+                                materialReturn.toLocation = hydrateLocation(materialReturn.toLocation);
+                        }
+                        if (materialReturn.requisition != null && materialReturn.requisition.getId() != null) {
+                                materialReturn.requisition = requisitionRepository
+                                                .findDetailById(materialReturn.requisition.getId())
+                                                .map(value -> (MatFlowMaterialRequisition) Hibernate.unproxy(value))
+                                                .orElseThrow(() -> conflict(
+                                                                "Material return requisition no longer exists"));
+                                hydrateRequisitionAssociations(materialReturn.requisition);
+                        }
+                        return materialReturn;
+                }
+
+                private boolean canReadReturn(MatFlowMaterialReturn materialReturn) {
+                        if (materialReturn == null) {
+                                return false;
+                        }
+                        return canAccessLocation(materialReturn.fromLocation)
+                                        || canAccessLocation(materialReturn.viaLocation)
+                                        || canAccessLocation(materialReturn.toLocation);
+                }
+
+                private boolean canAccessLocation(MatFlowLocation location) {
+                        return location != null && accessService.canAccessPlant(location.getPlantCode());
+                }
+
+                private MatFlowMaterialRequisition requireReturnRequisition(MatFlowMaterialReturn materialReturn) {
+                        if (materialReturn == null || materialReturn.requisition == null
+                                        || materialReturn.requisition.getId() == null) {
+                                throw conflict("Material return requisition is missing");
+                        }
+                        MatFlowMaterialRequisition requisition = requisitionRepository
+                                        .findDetailById(materialReturn.requisition.getId())
+                                        .map(value -> (MatFlowMaterialRequisition) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> conflict("Material return requisition no longer exists"));
+                        hydrateRequisitionAssociations(requisition);
                         validateReturnRequisition(requisition);
-
                         materialReturn.requisition = requisition;
                         return requisition;
                 }
 
-                private void validateReturnRequisition(
-                                MatFlowMaterialRequisition requisition) {
-
+                private void hydrateRequisitionAssociations(MatFlowMaterialRequisition requisition) {
                         if (requisition == null) {
-                                throw conflict(
-                                                "Material return requisition is missing");
+                                return;
                         }
-
-                        if (requisition.projectDrawing == null) {
-                                throw conflict(
-                                                "Material return requisition has no Project/Drawing master: " +
-                                                                requisition.requisitionNumber);
+                        if (requisition.projectDrawing != null) {
+                                requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate
+                                                .unproxy(requisition.projectDrawing);
                         }
-
-                        if (requisition.bom == null) {
-                                throw conflict(
-                                                "Material return requisition has no operational BOM: " +
-                                                                requisition.requisitionNumber);
+                        if (requisition.bom != null) {
+                                requisition.bom = (MatFlowBom) Hibernate.unproxy(requisition.bom);
                         }
-
-                        if (requisition.destinationLocation == null) {
-                                throw conflict(
-                                                "Material return requisition has no Production destination: " +
-                                                                requisition.requisitionNumber);
+                        if (requisition.destinationLocation != null) {
+                                requisition.destinationLocation = hydrateLocation(requisition.destinationLocation);
+                        }
+                        if (requisition.originStore != null) {
+                                requisition.originStore = hydrateLocation(requisition.originStore);
+                        }
+                        if (requisition.mainStore != null) {
+                                requisition.mainStore = hydrateLocation(requisition.mainStore);
                         }
                 }
 
-                private MatFlowLocation requireLocation(
-                                UUID id) {
-                        MatFlowLocation location = locationRepository
-                                        .findById(id)
-                                        .orElseThrow(() -> notFound(
-                                                        "Location not found"));
+                private void validateReturnRequisition(MatFlowMaterialRequisition requisition) {
+                        if (requisition == null) {
+                                throw conflict("Material return requisition is missing");
+                        }
+                        if (requisition.projectDrawing == null) {
+                                throw conflict("Material return requisition has no Project/Drawing master: "
+                                                + requisition.requisitionNumber);
+                        }
+                        if (requisition.bom == null) {
+                                throw conflict("Material return requisition has no operational BOM: "
+                                                + requisition.requisitionNumber);
+                        }
+                        if (requisition.destinationLocation == null) {
+                                throw conflict("Material return requisition has no Production destination: "
+                                                + requisition.requisitionNumber);
+                        }
+                        if (requisition.destinationLocation.getLocationType() != LocationType.PRODUCTION) {
+                                throw conflict("Material return requisition destination is not Production");
+                        }
+                }
 
-                        accessService.requirePlantAccess(
-                                        location.getPlantCode());
-
+                private MatFlowLocation requireAccessibleLocation(UUID id) {
+                        if (id == null) {
+                                throw badRequest("Location is required");
+                        }
+                        MatFlowLocation location = locationRepository.findById(id)
+                                        .map(value -> (MatFlowLocation) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> notFound("Location not found"));
+                        accessService.requirePlantAccess(location.getPlantCode());
+                        if (!location.isActive()) {
+                                throw badRequest("Inactive location cannot be used");
+                        }
                         return location;
+                }
+
+                private MatFlowLocation hydrateLocation(MatFlowLocation location) {
+                        if (location == null || location.getId() == null) {
+                                return location;
+                        }
+                        return locationRepository.findById(location.getId())
+                                        .map(value -> (MatFlowLocation) Hibernate.unproxy(value))
+                                        .orElseThrow(() -> conflict("Referenced MatFlow location no longer exists"));
                 }
 
                 private MatFlowStockBalance lockOrCreateBalance(
@@ -2993,52 +3421,39 @@ public class MatFlowMovementService {
                                 MatFlowLocation location,
                                 String actor) {
                         MatFlowStockBalance balance = stockRepository
-                                        .lockBalance(
-                                                        material.getId(),
-                                                        location.getId())
+                                        .lockBalance(material.getId(), location.getId())
                                         .orElse(null);
-
                         if (balance != null) {
                                 return balance;
                         }
-
                         MatFlowStockBalance created = new MatFlowStockBalance();
-
                         created.material = material;
                         created.location = location;
-                        created.onHandQty = BigDecimal.ZERO;
-                        created.reservedQty = BigDecimal.ZERO;
-                        created.blockedQty = BigDecimal.ZERO;
-                        created.inTransitQty = BigDecimal.ZERO;
-
+                        created.onHandQty = ZERO;
+                        created.reservedQty = ZERO;
+                        created.blockedQty = ZERO;
+                        created.inTransitQty = ZERO;
                         created.setCreatedBy(actor);
                         created.setUpdatedBy(actor);
-
-                        return stockRepository.saveAndFlush(
-                                        created);
+                        return stockRepository.saveAndFlush(created);
                 }
 
-                private MaterialReturnResponse toResponse(
-                                MatFlowMaterialReturn materialReturn) {
-                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
-                                        materialReturn);
+                private MaterialReturnResponse toResponse(MatFlowMaterialReturn raw) {
+                        MatFlowMaterialReturn materialReturn = hydrateReturn(raw);
+                        MatFlowMaterialRequisition requisition = requireReturnRequisition(materialReturn);
 
-                        List<MaterialReturnLineResponse> lines = returnLineRepository
-                                        .findByMaterialReturn_IdOrderByCreatedAtAsc(
-                                                        materialReturn.getId())
-                                        .stream()
+                        List<MaterialReturnLineResponse> lines = requireReturnLines(materialReturn.getId()).stream()
                                         .map(line -> new MaterialReturnLineResponse(
                                                         line.getId(),
-                                                        line.requisitionLine
-                                                                        .getId(),
+                                                        line.requisitionLine.getId(),
                                                         line.material.getId(),
-                                                        line.material
-                                                                        .getMaterialCode(),
-                                                        line.material
-                                                                        .getMaterialName(),
-                                                        line.returnQty,
-                                                        line.dispatchedQty,
-                                                        line.receivedQty,
+                                                        line.material.getMaterialCode(),
+                                                        line.material.getMaterialName(),
+                                                        zero(line.returnQty),
+                                                        zero(line.dispatchedQty),
+                                                        zero(line.originStoreReceivedQty),
+                                                        zero(line.forwardedQty),
+                                                        zero(line.receivedQty),
                                                         line.uom,
                                                         line.batchNo,
                                                         line.getRowVersion()))
@@ -3047,48 +3462,47 @@ public class MatFlowMovementService {
                         return new MaterialReturnResponse(
                                         materialReturn.getId(),
                                         materialReturn.returnNumber,
-                                        returnRequisition.getId(),
-                                        returnRequisition.requisitionNumber,
-
+                                        requisition.getId(),
+                                        requisition.requisitionNumber,
                                         materialReturn.fromLocation.getId(),
                                         materialReturn.fromLocation.getLocationCode(),
                                         materialReturn.fromLocation.getPlantCode(),
-
+                                        materialReturn.viaLocation == null ? null : materialReturn.viaLocation.getId(),
+                                        materialReturn.viaLocation == null ? null
+                                                        : materialReturn.viaLocation.getLocationCode(),
+                                        materialReturn.viaLocation == null ? null
+                                                        : materialReturn.viaLocation.getPlantCode(),
                                         materialReturn.toLocation.getId(),
                                         materialReturn.toLocation.getLocationCode(),
                                         materialReturn.toLocation.getPlantCode(),
-
                                         materialReturn.reason,
                                         materialReturn.status,
-
                                         materialReturn.dispatchedBy,
                                         materialReturn.dispatchedAt,
+                                        materialReturn.originStoreReceivedBy,
+                                        materialReturn.originStoreReceivedAt,
+                                        materialReturn.forwardedBy,
+                                        materialReturn.forwardedAt,
                                         materialReturn.receivedBy,
                                         materialReturn.receivedAt,
-
                                         materialReturn.remarks,
                                         materialReturn.getRowVersion(),
                                         lines);
                 }
 
-                private void validateCreateRequest(
-                                MaterialReturnCreateRequest request) {
-                        if (request == null ||
-                                        request.requisitionId() == null ||
-                                        request.fromLocationId() == null ||
-                                        request.toLocationId() == null ||
-                                        request.reason() == null ||
-                                        request.lines() == null ||
-                                        request.lines().isEmpty()) {
+                private void validateCreateRequest(MaterialReturnCreateRequest request) {
+                        if (request == null
+                                        || request.requisitionId() == null
+                                        || request.fromLocationId() == null
+                                        || request.reason() == null
+                                        || request.lines() == null
+                                        || request.lines().isEmpty()) {
                                 throw badRequest(
-                                                "Requisition, locations, reason and return lines are required");
+                                                "Requisition, Production source, reason and return lines are required");
                         }
-
-                        if (request.fromLocationId()
-                                        .equals(
-                                                        request.toLocationId())) {
-                                throw badRequest(
-                                                "Return source and destination must be different");
+                        if (request.toLocationId() != null
+                                        && request.fromLocationId().equals(request.toLocationId())) {
+                                throw badRequest("Return source and final destination must be different");
                         }
                 }
 
@@ -3101,104 +3515,67 @@ public class MatFlowMovementService {
                                 BigDecimal transitChange,
                                 MatFlowMaterialReturn materialReturn,
                                 MatFlowMaterialReturnLine line,
+                                String remarks,
                                 String actor) {
-                        MatFlowMaterialRequisition returnRequisition = requireReturnRequisition(
-                                        materialReturn);
-
+                        MatFlowMaterialRequisition requisition = requireReturnRequisition(materialReturn);
                         MatFlowStockLedger ledger = new MatFlowStockLedger();
-
                         ledger.material = balance.material;
-
                         ledger.location = balance.location;
-
                         ledger.movementType = movementType;
-
-                        ledger.quantityChange = scale(quantityChange);
-
-                        ledger.reservedChange = scale(reservedChange);
-
-                        ledger.blockedChange = scale(blockedChange);
-
-                        ledger.inTransitChange = scale(transitChange);
-
-                        ledger.onHandAfter = balance.onHandQty;
-
-                        ledger.reservedAfter = balance.reservedQty;
-
-                        ledger.blockedAfter = balance.blockedQty;
-
-                        ledger.inTransitAfter = balance.inTransitQty;
-
+                        ledger.quantityChange = zero(quantityChange);
+                        ledger.reservedChange = zero(reservedChange);
+                        ledger.blockedChange = zero(blockedChange);
+                        ledger.inTransitChange = zero(transitChange);
+                        ledger.onHandAfter = zero(balance.onHandQty);
+                        ledger.reservedAfter = zero(balance.reservedQty);
+                        ledger.blockedAfter = zero(balance.blockedQty);
+                        ledger.inTransitAfter = zero(balance.inTransitQty);
                         ledger.referenceType = "MATFLOW_MATERIAL_RETURN";
-
                         ledger.referenceId = materialReturn.getId();
-
                         ledger.referenceNumber = materialReturn.returnNumber;
-
-                        ledger.projectCode = returnRequisition.projectDrawing
-                                        .getProjectCode();
-
-                        ledger.drawingNo = returnRequisition.projectDrawing
-                                        .getDrawingNo();
-
-                        ledger.batchNo = line.batchNo;
-
+                        ledger.projectCode = requisition.projectDrawing == null
+                                        ? null
+                                        : requisition.projectDrawing.getProjectCode();
+                        ledger.drawingNo = requisition.projectDrawing == null
+                                        ? null
+                                        : requisition.projectDrawing.getDrawingNo();
+                        ledger.batchNo = line == null ? null : line.batchNo;
+                        ledger.remarks = clean(remarks);
                         ledger.actor = actor;
-
                         ledgerRepository.save(ledger);
                 }
 
-                private BigDecimal positive(
-                                BigDecimal value,
-                                String field) {
-                        BigDecimal result = scale(value);
-
-                        if (result.compareTo(
-                                        BigDecimal.ZERO) <= 0) {
-                                throw badRequest(
-                                                field +
-                                                                " must be greater than zero");
+                private void applyRemarks(MatFlowMaterialReturn materialReturn, String remarks) {
+                        String value = clean(remarks);
+                        if (value != null) {
+                                materialReturn.remarks = value;
                         }
+                }
 
+                private BigDecimal positive(BigDecimal value, String field) {
+                        BigDecimal result = zero(value);
+                        if (result.compareTo(ZERO) <= 0) {
+                                throw badRequest(field + " must be greater than zero");
+                        }
                         return result;
                 }
 
-                private BigDecimal scale(
-                                BigDecimal value) {
-                        return value == null
-                                        ? BigDecimal.ZERO
-                                        : value.setScale(
-                                                        3,
-                                                        RoundingMode.HALF_UP);
+                private BigDecimal zero(BigDecimal value) {
+                        return value == null ? ZERO : value.setScale(3, RoundingMode.HALF_UP);
                 }
 
-                private String generateNumber(
-                                String prefix) {
-                        return prefix +
-                                        "-" +
-                                        LocalDate.now().getYear() +
-                                        "-" +
-                                        UUID.randomUUID()
-                                                        .toString()
-                                                        .replace("-", "")
-                                                        .substring(0, 8)
-                                                        .toUpperCase();
+                private String generateNumber(String prefix) {
+                        return prefix + "-" + LocalDate.now().getYear() + "-"
+                                        + UUID.randomUUID().toString().replace("-", "")
+                                                        .substring(0, 8).toUpperCase(Locale.ROOT);
                 }
 
-                private void assertVersion(
-                                Long requested,
-                                Long current,
-                                String entity) {
+                private void assertVersion(Long requested, Long current, String entity) {
                         if (requested == null) {
-                                throw badRequest(
-                                                entity +
-                                                                " rowVersion is required");
+                                throw badRequest(entity + " rowVersion is required");
                         }
-
                         if (!requested.equals(current)) {
-                                throw conflict(
-                                                entity +
-                                                                " was modified by another user");
+                                throw conflict(entity + " was modified by another user. Refresh and retry.");
                         }
                 }
 
@@ -3206,33 +3583,21 @@ public class MatFlowMovementService {
                         if (value == null) {
                                 return null;
                         }
-
                         String result = value.trim();
-
-                        return result.isBlank()
-                                        ? null
-                                        : result;
+                        return result.isBlank() ? null : result;
                 }
 
-                private ResponseStatusException badRequest(
-                                String message) {
-                        return new ResponseStatusException(
-                                        HttpStatus.BAD_REQUEST,
-                                        message);
+                private ResponseStatusException badRequest(String message) {
+                        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
                 }
 
-                private ResponseStatusException conflict(
-                                String message) {
-                        return new ResponseStatusException(
-                                        HttpStatus.CONFLICT,
-                                        message);
+                private ResponseStatusException conflict(String message) {
+                        return new ResponseStatusException(HttpStatus.CONFLICT, message);
                 }
 
-                private ResponseStatusException notFound(
-                                String message) {
-                        return new ResponseStatusException(
-                                        HttpStatus.NOT_FOUND,
-                                        message);
+                private ResponseStatusException notFound(String message) {
+                        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
                 }
         }
+
 }

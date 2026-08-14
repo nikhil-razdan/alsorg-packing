@@ -21,7 +21,7 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useMatFlow } from "../matflowUi";
+import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
 import { downloadMatFlowExcel } from "../api/matflowExcel";
 import {
@@ -73,10 +73,13 @@ const QUEUE_STATUSES = new Set([
 ]);
 
 const upperCode = (value) => clean(value).toUpperCase();
+const MAIN_PLANT = "AL-P1";
+const samePlant = (left, right) => Boolean(upperCode(left)) && upperCode(left) === upperCode(right);
 
 export function MatFlowStoreQueuePage() {
     const navigate = useNavigate();
-    const { selectedPlantParam } = useMatFlow();
+    const { hasRole, selectedPlantParam } = useMatFlow();
+    const isMainStoreActor = hasRole(MATFLOW_ROLES.STORE) && samePlant(selectedPlantParam, MAIN_PLANT);
 
     const [rows, setRows] = useState([]);
     const [purchaseIndents, setPurchaseIndents] = useState([]);
@@ -101,8 +104,8 @@ export function MatFlowStoreQueuePage() {
         setError("");
         try {
             const [queueResponse, indentResponse, stockResponse, materialResponse, locationResponse] = await Promise.all([
-                matflowApi.listStoreQueue({ plantCode: selectedPlantParam }),
-                matflowApi.listPurchaseIndents({ plantCode: selectedPlantParam }),
+                matflowApi.listStoreQueue(isMainStoreActor ? {} : { plantCode: selectedPlantParam }),
+                matflowApi.listPurchaseIndents(isMainStoreActor ? {} : { plantCode: selectedPlantParam }),
                 matflowApi.listStock({ plantCode: selectedPlantParam }),
                 matflowApi.listMaterials({ active: true }),
                 matflowApi.listLocations({ active: true }),
@@ -148,7 +151,7 @@ export function MatFlowStoreQueuePage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam]);
+    }, [selectedPlantParam, isMainStoreActor]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -225,7 +228,7 @@ export function MatFlowStoreQueuePage() {
             <PageHero
                 badge="STORE"
                 title="Material Requisitions & Store Inventory"
-                subtitle="Check physical stock against Production MRs, reserve available material, independently choose QC and Processing for each lot, and raise linked PIs for shortage quantities."
+                subtitle="Remote Plant Stores forward the same MR to AL-P1 Main Store. AL-P1 Main Store alone checks stock, reserves, raises shortage PI and starts the approved outbound route. Remote Stores later receive and hand material to Production."
                 actions={
                     <>
                         <Button
@@ -251,7 +254,7 @@ export function MatFlowStoreQueuePage() {
             <ErrorBox>{error}</ErrorBox>
 
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}>
-                <SummaryCard label="Needs Store Review" value={counts.review} />
+                <SummaryCard label="Needs Store Action" value={counts.review} />
                 <SummaryCard label="Linked PIs" value={purchaseIndents.length} />
                 <SummaryCard label="Reserved / Send Action" value={counts.activeIssue} />
             </Box>
@@ -314,7 +317,7 @@ export function MatFlowStoreQueuePage() {
                                 </Box>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography>
-                                    <Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{row.destinationPlantCode || "-"} · Origin Store {row.originStoreCode || "-"} → Main {row.mainStoreCode || "-"}</Typography>
                                 </Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
                                 <Box sx={tableCellSx}>{formatDate(row.submittedAt || row.requestedAt)}</Box>
@@ -369,6 +372,8 @@ const autoAllocate = (line, availability) => {
 export function MatFlowStoreDetailPage() {
     const { requisitionId } = useParams();
     const navigate = useNavigate();
+    const { hasRole, selectedPlantParam } = useMatFlow();
+    const canStoreAct = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
 
     const [snapshot, setSnapshot] = useState(null);
     const [availability, setAvailability] = useState([]);
@@ -387,27 +392,37 @@ export function MatFlowStoreDetailPage() {
         setLoading(true);
         setError("");
         try {
-            const [detailResponse, availabilityResponse, locationResponse] = await Promise.all([
+            const [detailResponse, locationResponse] = await Promise.all([
                 matflowApi.getStoreReview(requisitionId),
-                matflowApi.getStoreAvailability(requisitionId),
                 matflowApi.listLocations({ active: true }),
             ]);
 
             const nextSnapshot = detailResponse?.data || null;
-            const nextAvailability = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : [];
             const nextLocations = extractMatFlowPage(locationResponse?.data).rows.filter((row) => row?.active !== false);
+            const requisition = nextSnapshot?.requisition || null;
+            const originPlant = upperCode(requisition?.destinationPlantCode);
+            const remote = Boolean(originPlant) && originPlant !== MAIN_PLANT;
+            const mainContext = !selectedPlantParam || samePlant(selectedPlantParam, MAIN_PLANT);
+            const forwarded = Boolean(requisition?.forwardedToMainStoreAt);
+            const canLoadMainAvailability = mainContext && (!remote || forwarded || normalize(requisition?.status) !== "SUBMITTED_TO_STORE");
+
+            let nextAvailability = [];
+            if (canLoadMainAvailability) {
+                try {
+                    const availabilityResponse = await matflowApi.getStoreAvailability(requisitionId);
+                    nextAvailability = Array.isArray(availabilityResponse?.data) ? availabilityResponse.data : [];
+                } catch (availabilityError) {
+                    // Keep the routed MR usable for origin-Store forwarding/handoff.
+                    // The backend is authoritative and may deny Main-Store planning to this actor.
+                    if (!remote || forwarded) {
+                        setError(readMatFlowError(availabilityError, "Main Store availability could not be loaded."));
+                    }
+                }
+            }
 
             setSnapshot(nextSnapshot);
             setAvailability(nextAvailability);
             setLocations(nextLocations);
-
-            const requisition = nextSnapshot?.requisition;
-            const plant = upperCode(requisition?.destinationPlantCode);
-            const storeLocations = nextLocations.filter((location) =>
-                normalize(location.locationType) === "STORE" &&
-                location.supportsStock !== false &&
-                (!plant || upperCode(location.plantCode) === plant)
-            );
 
             const nextForms = {};
             (requisition?.lines || []).forEach((line) => {
@@ -421,7 +436,7 @@ export function MatFlowStoreDetailPage() {
                     processingRequired: false,
                     processingRouteStepId: "",
                     createIndentForShortage: allocated + .0005 < needed,
-                    indentDeliveryLocationId: storeLocations.length === 1 ? storeLocations[0].id : "",
+                    indentDeliveryLocationId: requisition?.mainStoreId || "",
                     remarks: "",
                 };
             });
@@ -430,11 +445,11 @@ export function MatFlowStoreDetailPage() {
             setSnapshot(null);
             setAvailability([]);
             setLocations([]);
-            setError(readMatFlowError(requestError, "Unable to load Store MR review."));
+            setError(readMatFlowError(requestError, "Unable to load Store MR workbench."));
         } finally {
             setLoading(false);
         }
-    }, [requisitionId]);
+    }, [requisitionId, selectedPlantParam]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -446,16 +461,18 @@ export function MatFlowStoreDetailPage() {
     const availabilityByLine = useMemo(() => new Map(availability.map((entry) => [String(entry.requisitionLineId), entry])), [availability]);
 
     const plant = upperCode(requisition?.destinationPlantCode);
-    const storeLocations = useMemo(() => locations.filter((location) =>
-        normalize(location.locationType) === "STORE" &&
-        location.supportsStock !== false &&
-        (!plant || upperCode(location.plantCode) === plant)
-    ), [locations, plant]);
+    const remoteMr = Boolean(plant) && plant !== MAIN_PLANT;
+    const mainStoreContext = !selectedPlantParam || samePlant(selectedPlantParam, MAIN_PLANT);
+    const originStoreContext = !selectedPlantParam || samePlant(selectedPlantParam, plant);
+    const forwardedToMain = Boolean(requisition?.forwardedToMainStoreAt);
+    const forwardable = canStoreAct && remoteMr && originStoreContext &&
+        normalize(requisition?.status) === "SUBMITTED_TO_STORE" && !forwardedToMain;
 
     const openReviewLines = lines.filter((line) =>
         Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty)) > .0005
     );
-    const reviewable = REVIEWABLE.has(normalize(requisition?.status)) && openReviewLines.length > 0;
+    const reviewable = canStoreAct && mainStoreContext && (!remoteMr || forwardedToMain) &&
+        REVIEWABLE.has(normalize(requisition?.status)) && openReviewLines.length > 0;
 
     const totals = useMemo(() => lines.reduce((sum, line) => ({
         requested: sum.requested + numeric(line.requestedQty),
@@ -511,7 +528,7 @@ export function MatFlowStoreDetailPage() {
                     const shortageAfterAllocation = Math.max(0, outstanding - newlyReserved);
                     const createIndent = shortageAfterAllocation > .0005 && config.createIndentForShortage !== false;
                     if (createIndent && !config.indentDeliveryLocationId) {
-                        throw new Error(`Select the Store delivery location for the shortage PI of ${line.materialCode}.`);
+                        throw new Error(`AL-P1 Main Store is not resolved as the PI delivery location for ${line.materialCode}. Refresh master data.`);
                     }
 
                     return {
@@ -557,28 +574,68 @@ export function MatFlowStoreDetailPage() {
         }
     };
 
-    const openIssue = (reservation) => {
-        setIssueDialog(reservation);
+    const forwardToMainStore = async () => {
+        if (!forwardable || requisition?.rowVersion == null) return;
+        setWorking(true);
+        setError("");
+        try {
+            const response = await matflowApi.forwardRequisitionToMainStore(requisition.id, {
+                rowVersion: requisition.rowVersion,
+                remarks: clean(remarks) || null,
+            });
+            if (response?.data) setSnapshot((current) => ({ ...(current || {}), requisition: response.data }));
+            setRemarks("");
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to forward the same MR to AL-P1 Main Store."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const receiveAtOriginStore = async (reservation) => {
+        if (!reservation?.id || reservation.rowVersion == null) return;
+        setWorkingId(String(reservation.id));
+        setError("");
+        try {
+            await matflowApi.receiveStoreReservation(reservation.id, {
+                rowVersion: reservation.rowVersion,
+                batchNo: null,
+                remarks: "Received from AL-P1 Main Store at origin Plant Store",
+            });
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to receive material from AL-P1 Main Store."));
+        } finally {
+            setWorkingId("");
+        }
+    };
+
+    const openIssue = (reservation, transfer) => {
+        setIssueDialog({ reservation, transfer });
         setIssueForm({ batchNo: "", remarks: "" });
         setError("");
     };
 
     const issueReservation = async () => {
-        const reservation = issueDialog;
+        const reservation = issueDialog?.reservation;
+        const transfer = issueDialog?.transfer;
         if (!reservation?.id || reservation.rowVersion == null) return;
         setWorkingId(String(reservation.id));
         setError("");
         try {
             await matflowApi.issueStoreReservation(reservation.id, {
                 rowVersion: reservation.rowVersion,
-                quantity: reservation.remainingIssueQty || reservation.reservedQty,
+                quantity: transfer
+                    ? Math.max(0, numeric(transfer.plannedQty) - numeric(transfer.dispatchedQty))
+                    : (reservation.remainingIssueQty || reservation.reservedQty),
                 batchNo: clean(issueForm.batchNo) || null,
                 remarks: clean(issueForm.remarks) || null,
             });
             setIssueDialog(null);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to send the reserved material lot."));
+            setError(readMatFlowError(requestError, "Unable to dispatch this Store route leg."));
         } finally {
             setWorkingId("");
         }
@@ -593,7 +650,7 @@ export function MatFlowStoreDetailPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="STORE MR WORKBENCH"
+                badge={remoteMr ? "ROUTED STORE MR" : "MAIN STORE MR"}
                 title={requisition.requisitionNumber || "Material Requisition"}
                 subtitle={`${requisition.projectCode || "-"} · ${requisition.drawingNo || "-"} · requested by ${requisition.requestedBy || "-"}`}
                 actions={
@@ -618,8 +675,25 @@ export function MatFlowStoreDetailPage() {
                     <Detail label="Status" value={<MatFlowStatusChip status={requisition.status} />} />
                     <Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} />
                     <Detail label="Production Destination" value={`${requisition.destinationLocationCode || "-"} · ${requisition.destinationPlantCode || "-"}`} />
+                    <Detail label="Origin Store" value={`${requisition.originStoreCode || "-"} · ${requisition.originStorePlantCode || requisition.destinationPlantCode || "-"}`} />
+                    <Detail label="AL-P1 Main Store" value={`${requisition.mainStoreCode || "-"} · ${requisition.mainStorePlantCode || MAIN_PLANT}`} />
                     <Detail label="Submitted" value={formatDate(requisition.submittedAt)} />
+                    <Detail label="Forwarded to Main" value={requisition.forwardedToMainStoreAt ? `${requisition.forwardedToMainStoreBy || "-"} · ${formatDate(requisition.forwardedToMainStoreAt)}` : (remoteMr ? "Waiting origin Store" : "Direct")} />
                 </Box>
+                {forwardable && (
+                    <Alert severity="warning" sx={{ mt: 1.5 }} action={
+                        <Button onClick={forwardToMainStore} disabled={working} sx={primaryBtnSx}>
+                            {working ? "Forwarding..." : "Forward Same MR to AL-P1"}
+                        </Button>
+                    }>
+                        This is the origin Plant Store step. Do not perform stock reservation here. Forward this same MR unchanged to AL-P1 Main Store; project, Product, quantities and Production requester remain linked.
+                    </Alert>
+                )}
+                {remoteMr && forwardedToMain && (
+                    <Alert severity="success" sx={{ mt: 1.5 }}>
+                        Same MR forwarded by {requisition.forwardedToMainStoreBy || "origin Store"} on {formatDate(requisition.forwardedToMainStoreAt)}. AL-P1 Main Store now owns availability, reservation and shortage PI planning.
+                    </Alert>
+                )}
                 {reviewable && (
                     <Alert severity="info" sx={{ mt: 1.5 }}>
                         For each newly allocated lot, Store makes two independent choices: <b>QC Check Required: Yes/No</b> and <b>Processing Required: Yes/No</b>. QC never chooses the route. If Processing is required, Store selects one BOM-approved Processing Unit.
@@ -756,20 +830,13 @@ export function MatFlowStoreDetailPage() {
                                         />
 
                                         <TextField
-                                            select
                                             label="PI Delivery Store"
-                                            value={config.indentDeliveryLocationId || ""}
+                                            value={requisition.mainStoreCode || "AL-P1 Main Store"}
+                                            helperText="Fixed by MatFlow API v6. Every shortage PI is delivered to AL-P1 Main Store."
+                                            InputProps={{ readOnly: true }}
                                             disabled={shortageAfter <= .0005 || config.createIndentForShortage === false}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], indentDeliveryLocationId: event.target.value },
-                                            }))}
                                             sx={fieldSx}
-                                        >
-                                            {storeLocations.map((location) => (
-                                                <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName}</MenuItem>
-                                            ))}
-                                        </TextField>
+                                        />
 
                                         <TextField
                                             multiline
@@ -827,8 +894,21 @@ export function MatFlowStoreDetailPage() {
                                 return ["READY", "PARTIALLY_DISPATCHED", "PARTIALLY_RECEIVED"].includes(status) &&
                                     remainingDispatch > .0005;
                             });
-                        const storeCanSend = Boolean(pendingStoreLeg) &&
-                            numeric(reservation.remainingIssueQty) > .0005;
+                        const storeLegBelongsHere = Boolean(pendingStoreLeg) &&
+                            (!selectedPlantParam || samePlant(pendingStoreLeg.fromPlantCode, selectedPlantParam));
+                        const storeCanSend = storeLegBelongsHere && (!reservation.qcRequired || reservation.qcCompleted);
+                        const originStoreCanReceive = canStoreAct &&
+                            normalize(reservation.nextAction) === "RECEIVE_FROM_MAIN_STORE" &&
+                            (!selectedPlantParam || samePlant(selectedPlantParam, plant));
+                        const sendLabel = pendingStoreLeg
+                            ? (normalize(pendingStoreLeg.toLocationType) === "PRODUCTION"
+                                ? "Hand Over to Production"
+                                : samePlant(pendingStoreLeg.fromPlantCode, MAIN_PLANT) && remoteMr
+                                    ? "Send to Origin Store"
+                                    : normalize(pendingStoreLeg.toLocationType) === "PROCESSING"
+                                        ? "Send to Processing"
+                                        : "Send Lot")
+                            : "Send Lot";
                         return (
                             <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
                                 <Box sx={tableCellSx}>{reservation.materialCode || "-"}</Box>
@@ -854,14 +934,22 @@ export function MatFlowStoreDetailPage() {
                                     <Typography sx={{ ...subTextSx, mt: .4 }}>{readable(reservation.nextAction)}</Typography>
                                 </Box>
                                 <Box sx={tableCellSx}>
-                                    {storeCanSend ? (
+                                    {originStoreCanReceive ? (
                                         <Button
-                                            startIcon={<SendOutlinedIcon />}
-                                            onClick={() => openIssue(reservation)}
+                                            onClick={() => receiveAtOriginStore(reservation)}
                                             disabled={workingId === String(reservation.id)}
                                             sx={primaryBtnSx}
                                         >
-                                            Send Lot
+                                            Receive from Main Store
+                                        </Button>
+                                    ) : storeCanSend ? (
+                                        <Button
+                                            startIcon={<SendOutlinedIcon />}
+                                            onClick={() => openIssue(reservation, pendingStoreLeg)}
+                                            disabled={workingId === String(reservation.id)}
+                                            sx={primaryBtnSx}
+                                        >
+                                            {sendLabel}
                                         </Button>
                                     ) : reservation.qcRequired && !reservation.qcCompleted ? (
                                         <Typography sx={subTextSx}>Waiting QC tick</Typography>
@@ -912,10 +1000,10 @@ export function MatFlowStoreDetailPage() {
             )}
 
             <Dialog open={Boolean(issueDialog)} onClose={() => !workingId && setIssueDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>Send Reserved Material Lot</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>{normalize(issueDialog?.transfer?.toLocationType) === "PRODUCTION" ? "Hand Over Material to Production" : "Dispatch Store Route Leg"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Alert severity="info" sx={{ mb: 1.5 }}>
-                        This sends the complete reservation lot along the Store-selected route. QC, when required, must already be ticked. Processing can be the first destination even when QC was not required. Production still explicitly acknowledges final receipt.
+                        This dispatches only the current Store-owned route leg. Remote routes are Main Store → origin Plant Store → specific Production location/user. Each receiving step remains explicit and auditable.
                     </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <TextField label="Batch No." value={issueForm.batchNo} onChange={(e) => setIssueForm((c) => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} />

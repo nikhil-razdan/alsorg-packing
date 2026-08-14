@@ -61,6 +61,8 @@ import {
 
 const CREATE_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION];
 const upperCode = (value) => clean(value).toUpperCase();
+const MAIN_PLANT = "AL-P1";
+const isMainPlant = (value) => upperCode(value) === MAIN_PLANT;
 
 export function MatFlowRequisitionListPage() {
     const navigate = useNavigate();
@@ -137,7 +139,7 @@ export function MatFlowRequisitionListPage() {
             <PageHero
                 badge="PRODUCTION MATERIAL DEMAND"
                 title="Material Requisitions"
-                subtitle="Production raises a BOM-backed MR after the BOM has been reviewed. Store owns physical availability, reservation, QC choice and shortage PI creation."
+                subtitle="Production raises one BOM-backed MR. AL-P1 Production submits directly to AL-P1 Main Store; AL-P2/P3/P4 Production submits to its own Plant Store, which forwards the same MR unchanged to Main Store."
                 actions={
                     <>
                         <Button
@@ -178,11 +180,11 @@ export function MatFlowRequisitionListPage() {
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "175px 190px 150px 175px 175px 145px 160px" }}>
-                            {["MR", "PD No. / Drawing", "BOM", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 140px minmax(230px,1fr) 165px 140px 150px" }}>
+                            {["MR", "PD No. / Drawing", "BOM", "Plant Routing", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "175px 190px 150px 175px 175px 145px 160px" }}>
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 140px minmax(230px,1fr) 165px 140px 150px" }}>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography>
                                     <Typography sx={subTextSx}>By {row.requestedBy || "-"}</Typography>
@@ -195,9 +197,14 @@ export function MatFlowRequisitionListPage() {
                                     <Typography sx={mainTextSx}>{row.bomNumber || "-"}</Typography>
                                     <Typography sx={subTextSx}>Rev {row.bomRevisionNo ?? "-"}</Typography>
                                 </Box>
-                                <Box sx={tableCellSx}>
-                                    <Typography sx={mainTextSx}>{row.destinationLocationCode || "-"}</Typography>
-                                    <Typography sx={subTextSx}>{row.destinationPlantCode || "-"}</Typography>
+                                <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>
+                                    <Typography sx={mainTextSx}>{row.destinationLocationCode || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                    <Typography sx={subTextSx}>
+                                        {isMainPlant(row.destinationPlantCode)
+                                            ? `Direct → ${row.mainStoreCode || "AL-P1 Main Store"}`
+                                            : `${row.originStoreCode || `${row.destinationPlantCode || "Origin"} Store`} → ${row.mainStoreCode || "AL-P1 Main Store"}`}
+                                    </Typography>
+                                    {row.forwardedToMainStoreAt && <Typography sx={subTextSx}>Forwarded {formatDate(row.forwardedToMainStoreAt)}</Typography>}
                                 </Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
                                 <Box sx={tableCellSx}>{formatDate(row.requestedAt)}</Box>
@@ -555,7 +562,7 @@ export function MatFlowRequisitionDetailPage() {
                         {canAct && status === "DRAFT" && (
                             <>
                                 <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(requisition)} sx={dangerBtnSx}>Delete Draft</Button>
-                                <Button startIcon={<SendOutlinedIcon />} onClick={() => { setAction("SUBMIT"); setActionText(""); }} sx={primaryBtnSx}>Submit to Store</Button>
+                                <Button startIcon={<SendOutlinedIcon />} onClick={() => { setAction("SUBMIT"); setActionText(""); }} sx={primaryBtnSx}>{isMainPlant(requisition.destinationPlantCode) ? "Submit to AL-P1 Main Store" : `Submit to ${requisition.originStoreCode || requisition.destinationPlantCode || "Plant Store"}`}</Button>
                             </>
                         )}
                         {canAct && !["DRAFT", "CANCELLED", "PRODUCTION_COMPLETED"].includes(status) && (
@@ -583,9 +590,20 @@ export function MatFlowRequisitionDetailPage() {
                     <Detail label="Requested At" value={formatDate(requisition.requestedAt)} />
                     <Detail label="Submitted To Store" value={formatDate(requisition.submittedAt)} />
                     <Detail label="Production Destination" value={`${requisition.destinationLocationCode || "-"} · ${requisition.destinationPlantCode || "-"}`} />
+                    <Detail label="Origin Plant Store" value={`${requisition.originStoreCode || "-"} · ${requisition.originStorePlantCode || requisition.destinationPlantCode || "-"}`} />
+                    <Detail label="AL-P1 Main Store" value={`${requisition.mainStoreCode || "-"} · ${requisition.mainStorePlantCode || MAIN_PLANT}`} />
+                    <Detail label="Forwarded to Main Store" value={requisition.forwardedToMainStoreAt ? `${requisition.forwardedToMainStoreBy || "-"} · ${formatDate(requisition.forwardedToMainStoreAt)}` : (isMainPlant(requisition.destinationPlantCode) ? "Direct on submit" : "Pending origin Store forward")} />
                     <Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} />
                 </Box>
             </Card>
+
+            <Alert severity={isMainPlant(requisition.destinationPlantCode) ? "info" : (requisition.forwardedToMainStoreAt ? "success" : "warning")}>
+                {isMainPlant(requisition.destinationPlantCode)
+                    ? `Routing: Production → ${requisition.mainStoreCode || "AL-P1 Main Store"}. Main Store owns planning and the material returns on the direct route.`
+                    : requisition.forwardedToMainStoreAt
+                        ? `Routing: Production → ${requisition.originStoreCode || `${requisition.destinationPlantCode} Store`} → ${requisition.mainStoreCode || "AL-P1 Main Store"}. The same MR was forwarded unchanged; outbound issue returns through the origin Store to the specific Production destination.`
+                        : `Routing: Production → ${requisition.originStoreCode || `${requisition.destinationPlantCode} Store`} first. That Store must forward this same MR unchanged to ${requisition.mainStoreCode || "AL-P1 Main Store"} before availability/reservation.`}
+            </Alert>
 
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>MR Material Lines</Typography>
@@ -649,7 +667,7 @@ export function MatFlowRequisitionDetailPage() {
             <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
                 <DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit MR to Store" : "Cancel Material Requisition"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    {action === "SUBMIT" && <Alert severity="info" sx={{ mb: 1.5 }}>Store will receive this MR and own availability, QC choice and shortage PI actions.</Alert>}
+                    {action === "SUBMIT" && <Alert severity="info" sx={{ mb: 1.5 }}>{isMainPlant(requisition.destinationPlantCode) ? "This MR goes directly to AL-P1 Main Store for availability/reservation." : `This MR goes first to ${requisition.originStoreCode || requisition.destinationPlantCode || "the origin Plant Store"}. That Store forwards the same MR unchanged to AL-P1 Main Store; only Main Store performs availability, reservation and shortage PI planning.`}</Alert>}
                     <TextField
                         multiline
                         minRows={3}

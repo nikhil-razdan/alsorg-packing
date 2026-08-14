@@ -25,7 +25,9 @@ public interface MatFlowMaterialRequisitionRepository
         @EntityGraph(attributePaths = {
                         "projectDrawing",
                         "bom",
-                        "destinationLocation"
+                        "destinationLocation",
+                        "originStore",
+                        "mainStore"
         })
         @Query("""
                         select requisition

@@ -786,10 +786,11 @@ export function MatFlowLocationsPage() {
                 matflowApi.metadata(),
             ]);
             setRows(extractMatFlowPage(locationResponse?.data).rows.filter((row) =>
-                !selectedPlantParam || upperCode(row.plantCode) === upperCode(selectedPlantParam)
+                normalize(row?.locationType) !== "QC" &&
+                (!selectedPlantParam || upperCode(row.plantCode) === upperCode(selectedPlantParam))
             ));
             setMetadata({
-                locationType: metaResponse?.data?.enums?.locationType || ["STORE", "QC", "PROCESSING", "EXTERNAL_PROCESSOR", "PRODUCTION"],
+                locationType: (metaResponse?.data?.enums?.locationType || ["STORE", "PROCESSING", "EXTERNAL_PROCESSOR", "PRODUCTION"]).filter((value) => normalize(value) !== "QC"),
                 ownershipType: metaResponse?.data?.enums?.ownershipType || ["INTERNAL", "EXTERNAL"],
             });
         } catch (requestError) {
@@ -858,7 +859,7 @@ export function MatFlowLocationsPage() {
             <PageHero
                 badge="LOCATION MASTER"
                 title="MatFlow Locations"
-                subtitle="Define Store, QC, Processing and Production locations used by the internal material workflow."
+                subtitle="Define Store, Processing and Production locations used by material custody. QC is intentionally not a location; it is an AL-P1 Main Store checklist against an MR material lot."
                 actions={
                     <>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>

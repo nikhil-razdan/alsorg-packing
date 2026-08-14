@@ -207,13 +207,13 @@ const ACCESS_GROUPS = [
 				value: "MATFLOW_STORE",
 				label: "Stores",
 				description:
-					"Verify stock, reserve, receive and issue material.",
+					"Forward remote-plant MRs, control AL-P1 Main Store stock, and receive/hand off routed material.",
 			},
 			{
 				value: "MATFLOW_PURCHASE",
 				label: "Purchase",
 				description:
-					"Process material indents and purchase tracking.",
+					"Process Main Store shortage indents and purchase tracking across all plants.",
 			},
 			{
 				value: "MATFLOW_PROCESSING",
@@ -231,7 +231,7 @@ const ACCESS_GROUPS = [
 				value: "MATFLOW_QC",
 				label: "Quality Control",
 				description:
-					"Inspect received material and record acceptance or rejection.",
+					"Complete MR-linked QC checks at AL-P1 Main Store; QC has no routing authority.",
 			},
 			{
 				value: "MATFLOW_DIRECTOR",
