@@ -1220,112 +1220,245 @@ export function MatFlowKanbanBoard({
   renderCard,
   emptyText = "No work items in this lane.",
   minColumnWidth = 270,
+  boardHeight = { xs: 620, md: "clamp(520px, calc(100vh - 320px), 760px)" },
+  initialItemsPerLane = 18,
+  loadMoreStep = 18,
+  completedLaneKeys = ["COMPLETE"],
+  completedLaneLimit = 12,
+  boardKey = "default",
+  laneSummary = null,
+  focusable = true,
 }) {
   const safeColumns = Array.isArray(columns) ? columns : [];
   const safeItems = Array.isArray(items) ? items : [];
-  const grouped = safeColumns.reduce((result, column) => {
-    result[String(column?.key || "")] = [];
-    return result;
-  }, {});
+  const completedKeys = new Set((Array.isArray(completedLaneKeys) ? completedLaneKeys : []).map(String));
+  const [focusedLane, setFocusedLane] = useState("");
+  const [laneLimits, setLaneLimits] = useState({});
 
-  safeItems.forEach((item) => {
-    const lane = String(laneFor?.(item) || "");
-    if (Object.prototype.hasOwnProperty.call(grouped, lane)) grouped[lane].push(item);
-  });
+  const grouped = useMemo(() => {
+    const result = safeColumns.reduce((acc, column) => {
+      acc[String(column?.key || "")] = [];
+      return acc;
+    }, {});
+    safeItems.forEach((item) => {
+      const lane = String(laneFor?.(item) || "");
+      if (Object.prototype.hasOwnProperty.call(result, lane)) result[lane].push(item);
+    });
+    return result;
+  }, [safeColumns, safeItems, laneFor]);
+
+  useEffect(() => {
+    setFocusedLane("");
+    setLaneLimits({});
+  }, [boardKey]);
+
+  const visibleColumns = focusedLane
+    ? safeColumns.filter((column) => String(column?.key || "") === focusedLane)
+    : safeColumns;
+
+  const growLane = useCallback((key, maxCount) => {
+    if (completedKeys.has(key)) return;
+    setLaneLimits((current) => {
+      const existing = Number(current[key]) || initialItemsPerLane;
+      if (existing >= maxCount) return current;
+      return {
+        ...current,
+        [key]: Math.min(maxCount, existing + loadMoreStep),
+      };
+    });
+  }, [completedKeys, initialItemsPerLane, loadMoreStep]);
 
   return (
-    <Box
-      className="mf-kanban-scroll"
-      sx={{
-        display: "grid",
-        gridAutoFlow: "column",
-        gridAutoColumns: `minmax(${minColumnWidth}px, 1fr)`,
-        gap: 1,
-        overflowX: "auto",
-        overflowY: "hidden",
-        pb: .6,
-        scrollSnapType: "x proximity",
-        scrollbarGutter: "stable",
-      }}
-    >
-      {safeColumns.map((column) => {
-        const key = String(column?.key || "");
-        const laneItems = grouped[key] || [];
-        return (
-          <Card
-            key={key}
-            sx={{
-              ...panelSx,
-              m: 0,
-              p: 1,
-              minWidth: minColumnWidth,
-              minHeight: 270,
-              alignSelf: "start",
-              background: "var(--mf-surface)",
-              boxShadow: "none",
-              scrollSnapAlign: "start",
-            }}
-          >
-            <Box
+    <Box sx={{ display: "grid", gap: .7, minWidth: 0 }}>
+      {focusedLane && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            px: .2,
+          }}
+        >
+          <Typography sx={{ ...subTextSx, fontSize: 10.5 }}>
+            Focus mode · {safeColumns.find((column) => String(column?.key || "") === focusedLane)?.label || readable(focusedLane)}
+          </Typography>
+          <Button onClick={() => setFocusedLane("")} sx={{ ...secondaryBtnSx, minHeight: 30, px: 1 }}>
+            Show all stages
+          </Button>
+        </Box>
+      )}
+
+      <Box
+        className="mf-kanban-scroll"
+        sx={{
+          display: "grid",
+          gridAutoFlow: "column",
+          gridAutoColumns: focusedLane ? "minmax(0,1fr)" : `minmax(${minColumnWidth}px, 1fr)`,
+          gap: 1,
+          overflowX: focusedLane ? "hidden" : "auto",
+          overflowY: "hidden",
+          height: boardHeight,
+          minHeight: 0,
+          pb: .35,
+          scrollSnapType: focusedLane ? "none" : "x proximity",
+          scrollbarGutter: "stable",
+        }}
+      >
+        {visibleColumns.map((column) => {
+          const key = String(column?.key || "");
+          const laneItems = grouped[key] || [];
+          const isCompletedLane = completedKeys.has(key);
+          const hardLimit = isCompletedLane
+            ? Math.max(1, Number(completedLaneLimit) || 12)
+            : laneItems.length;
+          const requestedLimit = Number(laneLimits[key]) || Math.max(1, Number(initialItemsPerLane) || 18);
+          const renderLimit = isCompletedLane
+            ? Math.min(hardLimit, laneItems.length)
+            : Math.min(requestedLimit, laneItems.length);
+          const visibleItems = laneItems.slice(0, renderLimit);
+          const remaining = Math.max(0, laneItems.length - renderLimit);
+          const summary = typeof laneSummary === "function" ? laneSummary(laneItems, column) : null;
+
+          return (
+            <Card
+              key={key}
               sx={{
-                mb: .85,
-                px: .25,
+                ...panelSx,
+                m: 0,
+                p: 0,
+                minWidth: focusedLane ? 0 : minColumnWidth,
+                minHeight: 0,
+                height: "100%",
                 display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 1,
+                flexDirection: "column",
+                overflow: "hidden",
+                background: "var(--mf-surface)",
+                boxShadow: "none",
+                scrollSnapAlign: "start",
               }}
             >
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{column?.label || readable(key)}</Typography>
-                {column?.subtitle && <Typography sx={subTextSx}>{column.subtitle}</Typography>}
-              </Box>
               <Box
                 sx={{
-                  minWidth: 28,
-                  height: 28,
-                  px: .75,
-                  borderRadius: 999,
-                  display: "grid",
-                  placeItems: "center",
-                  color: "var(--mf-primary-text)",
-                  background: "var(--mf-primary-soft)",
-                  border: "1px solid var(--mf-primary-border)",
-                  fontSize: 11,
-                  fontWeight: 950,
+                  px: 1,
+                  py: .85,
+                  flex: "0 0 auto",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: .8,
+                  borderBottom: "1px solid var(--mf-border)",
+                  background: "var(--mf-surface)",
+                  position: "relative",
+                  zIndex: 2,
                 }}
               >
-                {laneItems.length}
-              </Box>
-            </Box>
-
-            <Box sx={{ display: "grid", gap: .75 }}>
-              {laneItems.length === 0 ? (
+                <Box sx={{ minWidth: 0 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: .6, flexWrap: "wrap" }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{column?.label || readable(key)}</Typography>
+                    {focusable && !focusedLane && laneItems.length > 0 && (
+                      <Button
+                        onClick={() => setFocusedLane(key)}
+                        sx={{
+                          ...secondaryBtnSx,
+                          minHeight: 23,
+                          px: .7,
+                          py: 0,
+                          fontSize: 9.2,
+                          borderRadius: 999,
+                        }}
+                      >
+                        Focus
+                      </Button>
+                    )}
+                  </Box>
+                  {column?.subtitle && <Typography sx={{ ...subTextSx, mt: .15 }}>{column.subtitle}</Typography>}
+                  {summary && <Typography sx={{ ...subTextSx, mt: .25, fontSize: 9.6 }}>{summary}</Typography>}
+                </Box>
                 <Box
                   sx={{
-                    minHeight: 92,
+                    minWidth: 30,
+                    height: 30,
+                    px: .75,
+                    borderRadius: 999,
                     display: "grid",
                     placeItems: "center",
-                    textAlign: "center",
-                    px: 1,
-                    borderRadius: 2,
-                    border: "1px dashed var(--mf-border)",
-                    color: "var(--mf-text-muted)",
-                    fontSize: 10.5,
-                    fontWeight: 700,
+                    color: "var(--mf-primary-text)",
+                    background: "var(--mf-primary-soft)",
+                    border: "1px solid var(--mf-primary-border)",
+                    fontSize: 11,
+                    fontWeight: 950,
                   }}
                 >
-                  {column?.emptyText || emptyText}
+                  {laneItems.length}
                 </Box>
-              ) : laneItems.map((item, index) => (
-                <Box key={item?.id || item?.requisitionId || item?.key || `${key}:${index}`}>
-                  {renderCard?.(item, column)}
+              </Box>
+
+              <Box
+                className="mf-kanban-lane-scroll"
+                onScroll={(event) => {
+                  if (isCompletedLane || remaining <= 0) return;
+                  const target = event.currentTarget;
+                  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 140) {
+                    growLane(key, laneItems.length);
+                  }
+                }}
+                sx={{
+                  flex: "1 1 auto",
+                  minHeight: 0,
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                  p: .75,
+                  scrollbarGutter: "stable",
+                }}
+              >
+                <Box sx={{ display: "grid", gap: .65 }}>
+                  {laneItems.length === 0 ? (
+                    <Box
+                      sx={{
+                        minHeight: 92,
+                        display: "grid",
+                        placeItems: "center",
+                        textAlign: "center",
+                        px: 1,
+                        borderRadius: 2,
+                        border: "1px dashed var(--mf-border)",
+                        color: "var(--mf-text-muted)",
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {column?.emptyText || emptyText}
+                    </Box>
+                  ) : visibleItems.map((item, index) => (
+                    <Box key={item?.id || item?.requisitionId || item?.key || `${key}:${index}`}>
+                      {renderCard?.(item, column)}
+                    </Box>
+                  ))}
                 </Box>
-              ))}
-            </Box>
-          </Card>
-        );
-      })}
+
+                {laneItems.length > 0 && (
+                  <Box sx={{ display: "grid", gap: .45, mt: .7, pb: .15 }}>
+                    <Typography sx={{ ...subTextSx, textAlign: "center", fontSize: 9.4 }}>
+                      {isCompletedLane && laneItems.length > renderLimit
+                        ? `Showing ${renderLimit} most recent of ${laneItems.length}. Full completed history remains in Trackers.`
+                        : `Showing ${renderLimit} of ${laneItems.length}`}
+                    </Typography>
+                    {!isCompletedLane && remaining > 0 && (
+                      <Button
+                        onClick={() => growLane(key, laneItems.length)}
+                        sx={{ ...secondaryBtnSx, minHeight: 30, fontSize: 10.2 }}
+                      >
+                        Show {Math.min(loadMoreStep, remaining)} more
+                      </Button>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </Card>
+          );
+        })}
+      </Box>
     </Box>
   );
 }

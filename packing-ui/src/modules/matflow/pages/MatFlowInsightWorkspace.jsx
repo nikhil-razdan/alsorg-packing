@@ -4,6 +4,8 @@ import {
     Button,
     Card,
     Collapse,
+    Divider,
+    Drawer,
     LinearProgress,
     MenuItem,
     TextField,
@@ -402,6 +404,7 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
             pendingProduct,
             bottleneckLine,
             bottleneck,
+            materialLines: groupMaterialLines,
             lane: pendingProduct
                 ? "DEMAND"
                 : groupMaterialLines.length > 0
@@ -502,6 +505,7 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
             ...group,
             bottleneckLine,
             bottleneck,
+            materialLines: groupMaterialLines,
             lane: groupMaterialLines.length > 0
                 ? completed
                     ? "COMPLETE"
@@ -658,6 +662,276 @@ const materialKanbanGroups = (lineItems = []) => {
         };
     });
 };
+
+const BOARD_FILTER_OPTIONS = [
+    { value: "ALL", label: "All Work" },
+    { value: "ACTIVE", label: "Active Only" },
+    { value: "RISK", label: "Timing Risk" },
+    { value: "SHORTAGE", label: "Shortage" },
+];
+
+const BOARD_DENSITY_OPTIONS = [
+    { value: "COMPACT", label: "Compact" },
+    { value: "COMFORTABLE", label: "Comfortable" },
+];
+
+const boardPrioritySort = (a, b) => {
+    const aComplete = normalize(a?.lane) === "COMPLETE";
+    const bComplete = normalize(b?.lane) === "COMPLETE";
+    if (aComplete && bComplete) return numeric(a?.maxAgeHours) - numeric(b?.maxAgeHours);
+    const byRisk = numeric(b?.riskCount) - numeric(a?.riskCount);
+    if (byRisk !== 0) return byRisk;
+    const byShortage = numeric(b?.shortageQty) - numeric(a?.shortageQty);
+    if (byShortage !== 0) return byShortage;
+    return numeric(b?.maxAgeHours) - numeric(a?.maxAgeHours);
+};
+
+const boardFilterMatch = (item, filter) => {
+    switch (normalize(filter)) {
+        case "ACTIVE": return normalize(item?.lane) !== "COMPLETE";
+        case "RISK": return numeric(item?.riskCount) > 0;
+        case "SHORTAGE": return numeric(item?.shortageQty) > .0005;
+        default: return true;
+    }
+};
+
+const boardActionFor = (scope, item) => {
+    if (!item) return null;
+    if (scope === "PROJECT") {
+        if (item.pendingProduct) {
+            return productPreExecutionTarget({
+                ...item.pendingProduct,
+                projectDrawingId: item.pendingProduct.id,
+            });
+        }
+        if (item.bottleneckLine) return materialLineActionTarget(item.bottleneckLine);
+        if (item.bottleneck) return nextActionTarget(item.bottleneck);
+        return null;
+    }
+    if (scope === "PRODUCT") {
+        if (item.bottleneckLine) return materialLineActionTarget(item.bottleneckLine);
+        if (item.bottleneck) return nextActionTarget(item.bottleneck);
+        return productPreExecutionTarget(item);
+    }
+    return item.bottleneck ? materialLineActionTarget(item.bottleneck) : null;
+};
+
+function OperationsBoardDrawer({
+    open,
+    scope,
+    item,
+    onClose,
+    navigate,
+    roles,
+    contextPlants,
+}) {
+    if (!item) return null;
+
+    const identity = scope === "PROJECT"
+        ? getMatFlowKanbanIdentity({ kind: "PROJECT", projectKey: item.key || projectKeyOf(item) })
+        : scope === "PRODUCT"
+            ? getMatFlowKanbanIdentity({
+                kind: "PRODUCT",
+                projectKey: projectKeyOf(item),
+                productKey: item.key || productKeyOf(item),
+            })
+            : getMatFlowKanbanIdentity({
+                kind: "MATERIAL",
+                materialCategory: item.materialCategory,
+                materialKey: item.key || item.materialId || item.materialCode || item.materialName,
+            });
+
+    const action = boardActionFor(scope, item);
+    const canOpenAction = action && canAccessMatFlowScreenForContext(action.screen, roles, contextPlants);
+    const bottleneck = item.bottleneck;
+    const bottleneckLine = item.bottleneckLine || (scope === "MATERIAL" ? bottleneck : null);
+    const materialLines = Array.isArray(item.materialLines)
+        ? item.materialLines
+        : Array.isArray(item.lines)
+            ? item.lines
+            : [];
+
+    const title = scope === "PROJECT"
+        ? `${item.projectCode || "-"} · ${item.projectName || "Project"}`
+        : scope === "PRODUCT"
+            ? item.productName || item.drawingNo || "Product"
+            : item.materialName || item.materialCode || "Material";
+
+    const subtitle = scope === "PROJECT"
+        ? `${item.clientName || "-"} · ${item.plantCode || "-"}`
+        : scope === "PRODUCT"
+            ? `${item.projectCode || "-"} · ${item.drawingNo || "-"} · ${item.plantCode || "-"}`
+            : `${item.materialCode || "-"} · ${readable(item.materialCategory || "OTHER")} · ${item.uom || "-"}`;
+
+    const status = scope === "PROJECT"
+        ? item.pendingProduct
+            ? "PRODUCTION_MR_PENDING"
+            : bottleneckLine?.lineStatus || bottleneck?.currentStage || item.portfolioStage || item.lane
+        : scope === "PRODUCT"
+            ? bottleneckLine?.lineStatus || bottleneck?.currentStage || item.latestBomStatus || item.portfolioStage || item.lane
+            : bottleneck?.lineStatus || item.lane;
+
+    const goPrimary = () => {
+        if (canOpenAction) {
+            navigate(action.path);
+            onClose();
+            return;
+        }
+        const mrId = bottleneckLine?.requisitionId || bottleneck?.requisitionId;
+        if (mrId) navigate(`/matflow/tracker/${mrId}`);
+        else navigate(scope === "MATERIAL" ? "/matflow/dashboard?view=materials" : "/matflow/projects");
+        onClose();
+    };
+
+    const goTracker = () => {
+        if (scope === "MATERIAL" && item.materialId) {
+            navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(item.materialId)}`);
+        } else if (scope === "PRODUCT") {
+            navigate(`/matflow/dashboard?view=projects&search=${encodeURIComponent(item.drawingNo || item.productName || "")}`);
+        } else {
+            navigate(`/matflow/dashboard?view=projects&search=${encodeURIComponent(item.projectCode || item.projectName || "")}`);
+        }
+        onClose();
+    };
+
+    return (
+        <Drawer
+            anchor="right"
+            open={Boolean(open)}
+            onClose={onClose}
+            PaperProps={{
+                sx: {
+                    width: { xs: "100vw", sm: 470 },
+                    maxWidth: "100vw",
+                    color: "var(--mf-text)",
+                    background: "var(--mf-panel-solid)",
+                    borderLeft: "1px solid var(--mf-border)",
+                    backgroundImage: "none",
+                },
+            }}
+        >
+            <Box sx={{ p: 1.5, display: "grid", gap: 1.15 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Box sx={{ display: "flex", gap: .5, flexWrap: "wrap", mb: .65 }}>
+                            <MatFlowIdentityBadge label={scope} identity={identity} />
+                            {scope === "MATERIAL" && (
+                                <MatFlowIdentityBadge
+                                    label={identity.familyName || readable(item.materialCategory || "Other")}
+                                    identity={identity}
+                                    accent={identity.familyAccent}
+                                />
+                            )}
+                        </Box>
+                        <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{title}</Typography>
+                        <Typography sx={{ ...subTextSx, mt: .2 }}>{subtitle}</Typography>
+                    </Box>
+                    <Button onClick={onClose} sx={{ ...secondaryBtnSx, minWidth: 64, minHeight: 32 }}>Close</Button>
+                </Box>
+
+                <Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
+                    <MatFlowStatusChip status={status} />
+                    {numeric(item.riskCount) > 0 && <TimingHealthChip health="BREACHED" />}
+                </Box>
+
+                <Divider sx={{ borderColor: "var(--mf-border)" }} />
+
+                {scope === "PROJECT" && (
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: .7 }}>
+                        <Detail label="Products" value={item.productCount} />
+                        <Detail label="MRs" value={item.mrCount} />
+                        <Detail label="Material Lines" value={item.materialLineCount} />
+                        <Detail label="Material Ready" value={`${item.readyPercent}%`} />
+                        <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                        <Detail label="Timing Risks" value={item.riskCount || 0} />
+                    </Box>
+                )}
+
+                {scope === "PRODUCT" && (
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: .7 }}>
+                        <Detail label="MRs" value={item.mrCount} />
+                        <Detail label="Material Lines" value={item.materialLineCount} />
+                        <Detail label="Material Ready" value={`${item.readyPercent}%`} />
+                        <Detail label="Requested" value={formatQty(item.requestedQty)} />
+                        <Detail label="Issued" value={formatQty(item.issuedQty)} />
+                        <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                    </Box>
+                )}
+
+                {scope === "MATERIAL" && (
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: .7 }}>
+                        <Detail label="Projects" value={item.projectCount} />
+                        <Detail label="Products" value={item.productCount} />
+                        <Detail label="MRs" value={item.mrCount} />
+                        <Detail label="Demand Lines" value={item.lineCount} />
+                        <Detail label="Requested" value={`${formatQty(item.requestedQty)} ${item.uom || ""}`} />
+                        <Detail label="Reserved" value={`${formatQty(item.reservedQty)} ${item.uom || ""}`} />
+                        <Detail label="Shortage" value={`${formatQty(item.shortageQty)} ${item.uom || ""}`} />
+                        <Detail label="Issued" value={`${formatQty(item.issuedQty)} ${item.uom || ""}`} />
+                        <Detail label="Consumed" value={`${formatQty(item.consumedQty)} ${item.uom || ""}`} />
+                        <Detail label="Returned" value={`${formatQty(item.returnedQty)} ${item.uom || ""}`} />
+                    </Box>
+                )}
+
+                <Card sx={{ ...panelSx, m: 0, p: 1, ...matFlowKanbanCardSx(identity) }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 12 }}>Current bottleneck</Typography>
+                    <Typography sx={{ ...subTextSx, mt: .35 }}>
+                        {scope === "PROJECT" && item.pendingProduct
+                            ? `Production MR pending for ${item.pendingProduct.productName || item.pendingProduct.drawingNo || "Product"}.`
+                            : bottleneckLine
+                                ? `${bottleneckLine.projectCode || item.projectCode || "-"} · ${bottleneckLine.productName || bottleneckLine.drawingNo || "Product"} · ${bottleneckLine.materialName || bottleneckLine.materialCode || "Material"} · ${readable(bottleneckLine.lineStatus || item.lane)}`
+                                : bottleneck
+                                    ? `${bottleneck.projectCode || item.projectCode || "-"} · ${bottleneck.productName || bottleneck.drawingNo || "Product"} · ${readable(bottleneck.currentStage || item.lane)}`
+                                    : "No active execution bottleneck."}
+                    </Typography>
+                </Card>
+
+                <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                    {(action || bottleneck || item.pendingProduct) && (
+                        <Button onClick={goPrimary} sx={primaryBtnSx}>
+                            {canOpenAction ? action.label : "Open Bottleneck"}
+                        </Button>
+                    )}
+                    <Button onClick={goTracker} sx={secondaryBtnSx}>
+                        {scope === "MATERIAL" ? "Material Tracker" : scope === "PRODUCT" ? "Product Tracker" : "Project Tracker"}
+                    </Button>
+                </Box>
+
+                {materialLines.length > 0 && (
+                    <>
+                        <Divider sx={{ borderColor: "var(--mf-border)" }} />
+                        <Box>
+                            <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>Material demand detail</Typography>
+                            <Typography sx={{ ...subTextSx, mt: .15 }}>
+                                Showing up to 20 demand lines. Use the Tracker for complete history and audit.
+                            </Typography>
+                        </Box>
+                        <Box sx={{ display: "grid", gap: .65 }}>
+                            {materialLines.slice(0, 20).map((line, index) => (
+                                <Card key={line?.id || `${line?.requisitionId || "line"}:${index}`} sx={{ ...panelSx, m: 0, p: .85, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ ...mainTextSx, fontSize: 11.5 }}>
+                                                {scope === "MATERIAL"
+                                                    ? `${line.projectCode || "-"} · ${line.productName || line.drawingNo || "Product"}`
+                                                    : `${line.materialName || line.materialCode || "Material"}`}
+                                            </Typography>
+                                            <Typography sx={{ ...subTextSx, mt: .15 }}>
+                                                {line.requisitionNumber || "MR"} · Req {formatQty(line.requestedQty)} {line.uom || ""} · Reserved {formatQty(line.reservedQty)} · Short {formatQty(line.shortageQty)}
+                                            </Typography>
+                                        </Box>
+                                        <MatFlowStatusChip status={line.lineStatus || line.currentStage || line.lane} />
+                                    </Box>
+                                </Card>
+                            ))}
+                        </Box>
+                    </>
+                )}
+            </Box>
+        </Drawer>
+    );
+}
+
 function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
     return (
         <>
@@ -735,6 +1009,9 @@ export function MatFlowDashboardPage() {
     const [requisitions, setRequisitions] = useState([]);
     const [projects, setProjects] = useState([]);
     const [kanbanSearch, setKanbanSearch] = useState("");
+    const [boardFilter, setBoardFilter] = useState("ALL");
+    const [boardDensity, setBoardDensity] = useState("COMPACT");
+    const [selectedBoardItem, setSelectedBoardItem] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -799,7 +1076,7 @@ export function MatFlowDashboardPage() {
                 item.bottleneckLine?.materialCode,
                 item.bottleneckLine?.materialName,
             ].some((value) => clean(value).toLowerCase().includes(term)))
-            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+            .sort(boardPrioritySort);
 
         const productItems = productKanbanGroups(trackerRows, projects, materialLineItems)
             .filter((item) => !term || [
@@ -813,7 +1090,7 @@ export function MatFlowDashboardPage() {
                 item.bottleneckLine?.materialCode,
                 item.bottleneckLine?.materialName,
             ].some((value) => clean(value).toLowerCase().includes(term)))
-            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+            .sort(boardPrioritySort);
 
         const materialItems = materialKanbanGroups(materialLineItems)
             .filter((item) => !term || [
@@ -829,13 +1106,17 @@ export function MatFlowDashboardPage() {
                 item.bottleneck?.currentDepartment,
                 item.bottleneck?.currentLocationCode,
             ].some((value) => clean(value).toLowerCase().includes(term)))
-            .sort((a, b) => numeric(b.maxAgeHours) - numeric(a.maxAgeHours));
+            .sort(boardPrioritySort);
 
-        const activeItems = kanbanScope === "PROJECT"
+        const scopedItems = kanbanScope === "PROJECT"
             ? projectItems
             : kanbanScope === "PRODUCT"
                 ? productItems
                 : materialItems;
+
+        const activeItems = scopedItems
+            .filter((item) => boardFilterMatch(item, boardFilter))
+            .sort(boardPrioritySort);
 
         const kanbanKpis = kanbanScope === "PROJECT"
             ? [
@@ -863,36 +1144,58 @@ export function MatFlowDashboardPage() {
                 <UniversalDashboardHeader view={view} onViewChange={changeView} onRefresh={load} refreshing={loading} />
                 <ErrorBox>{error}</ErrorBox>
 
-                <Card sx={{ ...panelSx, display: "grid", gap: 1.1 }}>
+                <Card sx={{ ...panelSx, display: "grid", gap: 1.05 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                        <Box>
+                        <Box sx={{ minWidth: 0, flex: "1 1 420px" }}>
                             <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Operations Board</Typography>
                             <Typography sx={subTextSx}>
-                                Switch between Project, Product and Material operational cards. Stable border/tint identities make each entity visually distinct without changing workflow-state colours. Material-wise cards aggregate the same material across Projects, Products and MRs. Every stage is derived from the authoritative backend workflow, so the board cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
+                                Scalable Project, Product and Material workflow control. The board stays within the working viewport, each stage scrolls independently, completed work is intentionally limited to recent records, and large lanes progressively reveal more cards without flooding the page.
                             </Typography>
                         </Box>
                         <MatFlowViewToggle
                             value={kanbanScope}
-                            onChange={changeKanbanScope}
+                            onChange={(scope) => {
+                                setSelectedBoardItem(null);
+                                changeKanbanScope(scope);
+                            }}
                             options={KANBAN_SCOPE_OPTIONS}
                         />
                     </Box>
-                    <TextField
-                        label={
-                            kanbanScope === "PROJECT"
-                                ? "Search PD No. / Project / Client / MR"
-                                : kanbanScope === "PRODUCT"
-                                    ? "Search PD No. / Product / Drawing / MR"
-                                    : "Search Material / PD No. / Product / MR / State"
-                        }
-                        value={kanbanSearch}
-                        onChange={(event) => setKanbanSearch(event.target.value)}
-                        sx={fieldSx}
-                    />
-                    <KanbanIdentityLegend scope={kanbanScope} />
+
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(280px,1fr) auto auto" }, gap: .8, alignItems: "center" }}>
+                        <TextField
+                            label={
+                                kanbanScope === "PROJECT"
+                                    ? "Search PD No. / Project / Client / MR"
+                                    : kanbanScope === "PRODUCT"
+                                        ? "Search PD No. / Product / Drawing / MR"
+                                        : "Search Material / PD No. / Product / MR / State"
+                            }
+                            value={kanbanSearch}
+                            onChange={(event) => setKanbanSearch(event.target.value)}
+                            sx={fieldSx}
+                        />
+                        <MatFlowViewToggle
+                            value={boardFilter}
+                            onChange={setBoardFilter}
+                            options={BOARD_FILTER_OPTIONS}
+                        />
+                        <MatFlowViewToggle
+                            value={boardDensity}
+                            onChange={setBoardDensity}
+                            options={BOARD_DENSITY_OPTIONS}
+                        />
+                    </Box>
+
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                        <KanbanIdentityLegend scope={kanbanScope} />
+                        <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
+                            Priority order: timing risk → shortage → longest waiting. Compact is the recommended daily operating density.
+                        </Typography>
+                    </Box>
                 </Card>
 
-                <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
                     {kanbanKpis.map(([label, value]) => (
                         <SummaryCard key={label} label={label} value={value} />
                     ))}
@@ -903,86 +1206,111 @@ export function MatFlowDashboardPage() {
                         columns={FLOW_KANBAN_COLUMNS}
                         items={activeItems}
                         laneFor={(item) => item.lane}
-                        minColumnWidth={300}
+                        minColumnWidth={boardDensity === "COMPACT" ? 285 : 315}
+                        boardHeight={{ xs: 620, md: "clamp(540px, calc(100vh - 300px), 780px)" }}
+                        initialItemsPerLane={boardDensity === "COMPACT" ? 24 : 12}
+                        loadMoreStep={boardDensity === "COMPACT" ? 24 : 12}
+                        completedLaneKeys={["COMPLETE"]}
+                        completedLaneLimit={12}
+                        boardKey={`${kanbanScope}|${boardFilter}|${term}|${selectedPlantParam || "ALL"}`}
+                        laneSummary={(laneItems) => {
+                            const risk = laneItems.filter((entry) => numeric(entry.riskCount) > 0).length;
+                            const shortage = laneItems.filter((entry) => numeric(entry.shortageQty) > .0005).length;
+                            const parts = [];
+                            if (risk) parts.push(`${risk} risk`);
+                            if (shortage) parts.push(`${shortage} shortage`);
+                            return parts.length ? parts.join(" · ") : "No current risk flags";
+                        }}
                         emptyText={`No ${kanbanScope.toLowerCase()} items in this stage.`}
                         renderCard={(item) => {
+                            const compact = boardDensity === "COMPACT";
+
                             if (kanbanScope === "PROJECT") {
                                 const bottleneck = item.bottleneck;
                                 const bottleneckLine = item.bottleneckLine;
-                                const target = item.pendingProduct
-                                    ? productPreExecutionTarget({
-                                        ...item.pendingProduct,
-                                        projectDrawingId: item.pendingProduct.id,
-                                    })
-                                    : bottleneckLine
-                                        ? materialLineActionTarget(bottleneckLine)
-                                        : bottleneck
-                                            ? nextActionTarget(bottleneck)
-                                            : null;
-                                const canOpenTarget = target &&
-                                    canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                const target = boardActionFor("PROJECT", item);
+                                const canOpenTarget = target && canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
                                 const identity = getMatFlowKanbanIdentity({
                                     kind: "PROJECT",
                                     projectKey: item.key || projectKeyOf(item),
                                 });
+                                const primaryPath = canOpenTarget
+                                    ? target.path
+                                    : bottleneckLine?.requisitionId
+                                        ? `/matflow/tracker/${bottleneckLine.requisitionId}`
+                                        : bottleneck?.requisitionId
+                                            ? `/matflow/tracker/${bottleneck.requisitionId}`
+                                            : "/matflow/projects";
                                 return (
-                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                    <Card sx={{ ...panelSx, m: 0, p: compact ? .85 : 1.15, ...matFlowKanbanCardSx(identity) }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .65, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
-                                                <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                                <Box sx={{ display: "flex", gap: .4, alignItems: "center", flexWrap: "wrap", mb: .4 }}>
                                                     <MatFlowIdentityBadge label="Project" identity={identity} />
-                                                    {item.projectCode && <MatFlowIdentityBadge label={item.projectCode} identity={identity} />}
+                                                    {!compact && item.projectCode && <MatFlowIdentityBadge label={item.projectCode} identity={identity} />}
                                                 </Box>
-                                                <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.projectCode || "-"} · {item.projectName || "Project"}</Typography>
-                                                <Typography sx={subTextSx}>{item.clientName || "-"} · {item.plantCode || "-"}</Typography>
+                                                <Typography sx={{ ...mainTextSx, fontSize: compact ? 12.2 : 13, lineHeight: 1.25 }}>
+                                                    {item.projectCode || "-"} · {item.projectName || "Project"}
+                                                </Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{item.clientName || "-"} · {item.plantCode || "-"}</Typography>
                                             </Box>
                                             <MatFlowStatusChip status={item.pendingProduct ? "PRODUCTION_MR_PENDING" : bottleneckLine?.lineStatus || bottleneck?.currentStage || item.portfolioStage || item.lane} />
                                         </Box>
-                                        <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
-                                            <Detail label="Products" value={item.productCount} />
-                                            <Detail label="MRs" value={item.mrCount} />
-                                            <Detail label="Material Lines" value={item.materialLineCount} />
-                                            <Detail label="Material Ready" value={`${item.readyPercent}%`} />
-                                            <Detail label="Shortage" value={formatQty(item.shortageQty)} />
-                                        </Box>
-                                        <Typography sx={{ ...subTextSx, mt: .75 }}>
+
+                                        {compact ? (
+                                            <>
+                                                <Typography sx={{ ...subTextSx, mt: .55 }}>
+                                                    {item.productCount} Products · {item.mrCount} MRs · {item.materialLineCount} Materials
+                                                </Typography>
+                                                <Typography sx={{ ...mainTextSx, mt: .35, fontSize: 11.2 }}>
+                                                    Ready {item.readyPercent}% · Shortage {formatQty(item.shortageQty)}{item.riskCount ? ` · ${item.riskCount} risk` : ""}
+                                                </Typography>
+                                            </>
+                                        ) : (
+                                            <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                                <Detail label="Products" value={item.productCount} />
+                                                <Detail label="MRs" value={item.mrCount} />
+                                                <Detail label="Material Lines" value={item.materialLineCount} />
+                                                <Detail label="Material Ready" value={`${item.readyPercent}%`} />
+                                                <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                                            </Box>
+                                        )}
+
+                                        <Typography
+                                            sx={{
+                                                ...subTextSx,
+                                                mt: compact ? .45 : .75,
+                                                ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}),
+                                            }}
+                                        >
                                             {item.pendingProduct
-                                                ? `Next Product: ${item.pendingProduct.productName || item.pendingProduct.drawingNo || "Product"} · ${readable(item.lane)}`
+                                                ? `Next: ${item.pendingProduct.productName || item.pendingProduct.drawingNo || "Product"} · Production MR`
                                                 : `Bottleneck: ${readable(bottleneckLine?.lineStatus || bottleneck?.currentStage || item.lane)}`}
-                                            {item.riskCount ? ` · ${item.riskCount} timing risk` : ""}
                                         </Typography>
-                                        <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
-                                            {target ? (
+
+                                        <Box sx={{ display: "flex", gap: .5, mt: compact ? .65 : .9, flexWrap: "wrap" }}>
+                                            <Button
+                                                onClick={() => navigate(primaryPath)}
+                                                sx={{ ...primaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
+                                            >
+                                                {canOpenTarget ? target.label : item.pendingProduct ? "Open Product" : "Open Bottleneck"}
+                                            </Button>
+                                            <Button
+                                                onClick={() => setSelectedBoardItem({ scope: "PROJECT", item })}
+                                                sx={{ ...secondaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
+                                            >
+                                                Details
+                                            </Button>
+                                            {!compact && (
                                                 <Button
-                                                    onClick={() => navigate(
-                                                        canOpenTarget
-                                                            ? target.path
-                                                            : bottleneck?.requisitionId
-                                                                ? `/matflow/tracker/${bottleneck.requisitionId}`
-                                                                : "/matflow/projects"
-                                                    )}
-                                                    sx={primaryBtnSx}
+                                                    onClick={() => navigate(item.mrCount > 0
+                                                        ? `/matflow/dashboard?view=projects&search=${encodeURIComponent(item.projectCode || item.projectName || "")}`
+                                                        : "/matflow/boms")}
+                                                    sx={secondaryBtnSx}
                                                 >
-                                                    {canOpenTarget ? target.label : item.pendingProduct ? "Open Product" : "Open Bottleneck"}
-                                                </Button>
-                                            ) : (
-                                                <Button
-                                                    onClick={() => navigate("/matflow/projects")}
-                                                    sx={primaryBtnSx}
-                                                >
-                                                    Projects & Products
+                                                    {item.mrCount > 0 ? "Project Tracker" : "Operational BOMs"}
                                                 </Button>
                                             )}
-                                            <Button
-                                                onClick={() => navigate(
-                                                    item.mrCount > 0
-                                                        ? `/matflow/dashboard?view=projects&search=${encodeURIComponent(item.projectCode || item.projectName || "")}`
-                                                        : "/matflow/boms"
-                                                )}
-                                                sx={secondaryBtnSx}
-                                            >
-                                                {item.mrCount > 0 ? "Project Tracker" : "Operational BOMs"}
-                                            </Button>
                                         </Box>
                                     </Card>
                                 );
@@ -991,149 +1319,177 @@ export function MatFlowDashboardPage() {
                             if (kanbanScope === "PRODUCT") {
                                 const bottleneck = item.bottleneck;
                                 const bottleneckLine = item.bottleneckLine;
-                                const target = bottleneckLine
-                                    ? materialLineActionTarget(bottleneckLine)
-                                    : bottleneck
-                                        ? nextActionTarget(bottleneck)
-                                        : productPreExecutionTarget(item);
-                                const canOpenTarget = target &&
-                                    canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
-                                const projectIdentity = getMatFlowKanbanIdentity({
-                                    kind: "PROJECT",
-                                    projectKey: projectKeyOf(item),
-                                });
+                                const target = boardActionFor("PRODUCT", item);
+                                const canOpenTarget = target && canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                const projectIdentity = getMatFlowKanbanIdentity({ kind: "PROJECT", projectKey: projectKeyOf(item) });
                                 const identity = getMatFlowKanbanIdentity({
                                     kind: "PRODUCT",
                                     projectKey: projectKeyOf(item),
                                     productKey: item.key || productKeyOf(item),
                                 });
+                                const primaryPath = canOpenTarget
+                                    ? target.path
+                                    : bottleneckLine?.requisitionId
+                                        ? `/matflow/tracker/${bottleneckLine.requisitionId}`
+                                        : bottleneck?.requisitionId
+                                            ? `/matflow/tracker/${bottleneck.requisitionId}`
+                                            : "/matflow/projects";
                                 return (
-                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
-                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                    <Card sx={{ ...panelSx, m: 0, p: compact ? .85 : 1.15, ...matFlowKanbanCardSx(identity) }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .65, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
-                                                <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                                <Box sx={{ display: "flex", gap: .4, alignItems: "center", flexWrap: "wrap", mb: .4 }}>
                                                     <MatFlowIdentityBadge label="Product" identity={identity} />
-                                                    <MatFlowIdentityBadge
-                                                        label={`Project ${item.projectCode || "Family"}`}
-                                                        identity={projectIdentity}
-                                                        accent={projectIdentity.familyAccent}
-                                                    />
+                                                    {!compact && (
+                                                        <MatFlowIdentityBadge
+                                                            label={`Project ${item.projectCode || "Family"}`}
+                                                            identity={projectIdentity}
+                                                            accent={projectIdentity.familyAccent}
+                                                        />
+                                                    )}
                                                 </Box>
-                                                <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.productName || "Product"}</Typography>
-                                                <Typography sx={subTextSx}>{item.projectCode || "-"} · {item.drawingNo || "-"} · {item.plantCode || "-"}</Typography>
+                                                <Typography sx={{ ...mainTextSx, fontSize: compact ? 12.2 : 13, lineHeight: 1.25 }}>{item.productName || "Product"}</Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{item.projectCode || "-"} · {item.drawingNo || "-"} · {item.plantCode || "-"}</Typography>
                                             </Box>
                                             <MatFlowStatusChip status={bottleneckLine?.lineStatus || bottleneck?.currentStage || item.latestBomStatus || item.portfolioStage || item.lane} />
                                         </Box>
-                                        <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
-                                            <Detail label="MRs" value={item.mrCount} />
-                                            <Detail label="Material Lines" value={item.materialLineCount} />
-                                            <Detail label="Ready" value={`${item.readyPercent}%`} />
-                                            <Detail label="Requested" value={formatQty(item.requestedQty)} />
-                                            <Detail label="Shortage" value={formatQty(item.shortageQty)} />
-                                        </Box>
-                                        <Typography sx={{ ...subTextSx, mt: .75 }}>
-                                            {item.clientName || "-"} · {bottleneckLine
-                                                ? `Material bottleneck ${bottleneckLine.materialName || bottleneckLine.materialCode || "Material"} · ${readable(bottleneckLine.lineStatus || item.lane)}`
+
+                                        {compact ? (
+                                            <>
+                                                <Typography sx={{ ...subTextSx, mt: .55 }}>
+                                                    {item.materialLineCount} Materials · {item.mrCount} MRs · Ready {item.readyPercent}%
+                                                </Typography>
+                                                <Typography sx={{ ...mainTextSx, mt: .35, fontSize: 11.2 }}>
+                                                    Requested {formatQty(item.requestedQty)} · Shortage {formatQty(item.shortageQty)}{item.riskCount ? ` · ${item.riskCount} risk` : ""}
+                                                </Typography>
+                                            </>
+                                        ) : (
+                                            <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                                <Detail label="MRs" value={item.mrCount} />
+                                                <Detail label="Material Lines" value={item.materialLineCount} />
+                                                <Detail label="Ready" value={`${item.readyPercent}%`} />
+                                                <Detail label="Requested" value={formatQty(item.requestedQty)} />
+                                                <Detail label="Shortage" value={formatQty(item.shortageQty)} />
+                                            </Box>
+                                        )}
+
+                                        <Typography
+                                            sx={{
+                                                ...subTextSx,
+                                                mt: compact ? .45 : .75,
+                                                ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}),
+                                            }}
+                                        >
+                                            {bottleneckLine
+                                                ? `Material: ${bottleneckLine.materialName || bottleneckLine.materialCode || "Material"} · ${readable(bottleneckLine.lineStatus || item.lane)}`
                                                 : bottleneck
-                                                    ? `Bottleneck ${readable(bottleneck.currentStage || item.lane)}`
+                                                    ? `Bottleneck: ${readable(bottleneck.currentStage || item.lane)}`
                                                     : item.bomEffective
                                                         ? "Effective BOM ready · MR not yet raised"
                                                         : item.latestBomId
                                                             ? `BOM ${readable(item.latestBomStatus || "IN REVIEW")}`
                                                             : "Engineering BOM not created"}
                                         </Typography>
-                                        <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
+
+                                        <Box sx={{ display: "flex", gap: .5, mt: compact ? .65 : .9, flexWrap: "wrap" }}>
                                             <Button
-                                                onClick={() => navigate(
-                                                    canOpenTarget
-                                                        ? target.path
-                                                        : bottleneckLine?.requisitionId
-                                                            ? `/matflow/tracker/${bottleneckLine.requisitionId}`
-                                                            : bottleneck
-                                                                ? `/matflow/tracker/${bottleneck.requisitionId}`
-                                                                : "/matflow/projects"
-                                                )}
-                                                sx={primaryBtnSx}
+                                                onClick={() => navigate(primaryPath)}
+                                                sx={{ ...primaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
                                             >
-                                                {canOpenTarget
-                                                    ? target.label
-                                                    : bottleneck
-                                                        ? "Open Bottleneck"
-                                                        : "Open Product"}
+                                                {canOpenTarget ? target.label : bottleneck ? "Open Bottleneck" : "Open Product"}
                                             </Button>
                                             <Button
-                                                onClick={() => navigate(
-                                                    item.mrCount > 0
+                                                onClick={() => setSelectedBoardItem({ scope: "PRODUCT", item })}
+                                                sx={{ ...secondaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
+                                            >
+                                                Details
+                                            </Button>
+                                            {!compact && (
+                                                <Button
+                                                    onClick={() => navigate(item.mrCount > 0
                                                         ? `/matflow/dashboard?view=projects&search=${encodeURIComponent(item.drawingNo || item.productName || "")}`
                                                         : item.latestBomId
                                                             ? `/matflow/boms/${item.latestBomId}`
-                                                            : `/matflow/boms/new?productId=${encodeURIComponent(item.projectDrawingId || "")}`
-                                                )}
-                                                sx={secondaryBtnSx}
-                                            >
-                                                {item.mrCount > 0 ? "Product Tracker" : item.latestBomId ? "BOM" : "Create BOM"}
-                                            </Button>
+                                                            : `/matflow/boms/new?productId=${encodeURIComponent(item.projectDrawingId || "")}`)}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    {item.mrCount > 0 ? "Product Tracker" : item.latestBomId ? "BOM" : "Create BOM"}
+                                                </Button>
+                                            )}
                                         </Box>
                                     </Card>
                                 );
                             }
 
                             const bottleneck = item.bottleneck;
-                            const target = bottleneck ? materialLineActionTarget(bottleneck) : null;
-                            const canOpenTarget = target && canAccessMatFlowScreenForContext(
-                                target.screen,
-                                roles,
-                                contextPlants
-                            );
+                            const target = boardActionFor("MATERIAL", item);
+                            const canOpenTarget = target && canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
                             const identity = getMatFlowKanbanIdentity({
                                 kind: "MATERIAL",
                                 materialCategory: item.materialCategory,
                                 materialKey: item.key || item.materialId || item.materialCode || item.materialName,
                             });
                             return (
-                                <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
-                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                <Card sx={{ ...panelSx, m: 0, p: compact ? .85 : 1.15, ...matFlowKanbanCardSx(identity) }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .65, alignItems: "flex-start" }}>
                                         <Box sx={{ minWidth: 0 }}>
-                                            <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                            <Box sx={{ display: "flex", gap: .4, alignItems: "center", flexWrap: "wrap", mb: .4 }}>
                                                 <MatFlowIdentityBadge label="Material" identity={identity} />
-                                                <MatFlowIdentityBadge label={identity.familyName || readable(item.materialCategory || "Other")} identity={identity} accent={identity.familyAccent} />
+                                                {!compact && <MatFlowIdentityBadge label={identity.familyName || readable(item.materialCategory || "Other")} identity={identity} accent={identity.familyAccent} />}
                                             </Box>
-                                            <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.materialName || "Material"}</Typography>
-                                            <Typography sx={subTextSx}>{item.materialCode || "-"} · {readable(item.materialCategory || "OTHER")} · {item.uom || "-"}</Typography>
+                                            <Typography sx={{ ...mainTextSx, fontSize: compact ? 12.2 : 13, lineHeight: 1.25 }}>{item.materialName || "Material"}</Typography>
+                                            <Typography sx={{ ...subTextSx, mt: .12 }}>{item.materialCode || "-"} · {readable(item.materialCategory || "OTHER")} · {item.uom || "-"}</Typography>
                                         </Box>
                                         <MatFlowStatusChip status={bottleneck?.lineStatus || item.lane} />
                                     </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .65 }}>
+
+                                    <Typography sx={{ ...subTextSx, mt: .55 }}>
                                         {item.projectCount} Project{item.projectCount === 1 ? "" : "s"} · {item.productCount} Product{item.productCount === 1 ? "" : "s"} · {item.mrCount} MR{item.mrCount === 1 ? "" : "s"}
                                     </Typography>
-                                    <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
-                                        <Detail label="Demand Lines" value={item.lineCount} />
-                                        <Detail label="Requested" value={`${formatQty(item.requestedQty)} ${item.uom || ""}`} />
-                                        <Detail label="Reserved" value={`${formatQty(item.reservedQty)} ${item.uom || ""}`} />
-                                        <Detail label="Shortage" value={`${formatQty(item.shortageQty)} ${item.uom || ""}`} />
-                                        <Detail label="Issued" value={`${formatQty(item.issuedQty)} ${item.uom || ""}`} />
-                                        <Detail label="Consumed" value={`${formatQty(item.consumedQty)} ${item.uom || ""}`} />
-                                    </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .75 }}>
+
+                                    {compact ? (
+                                        <Typography sx={{ ...mainTextSx, mt: .35, fontSize: 11.2 }}>
+                                            {formatQty(item.requestedQty)} {item.uom || ""} requested · {formatQty(item.shortageQty)} short{item.riskCount ? ` · ${item.riskCount} risk` : ""}
+                                        </Typography>
+                                    ) : (
+                                        <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                            <Detail label="Demand Lines" value={item.lineCount} />
+                                            <Detail label="Requested" value={`${formatQty(item.requestedQty)} ${item.uom || ""}`} />
+                                            <Detail label="Reserved" value={`${formatQty(item.reservedQty)} ${item.uom || ""}`} />
+                                            <Detail label="Shortage" value={`${formatQty(item.shortageQty)} ${item.uom || ""}`} />
+                                            <Detail label="Issued" value={`${formatQty(item.issuedQty)} ${item.uom || ""}`} />
+                                            <Detail label="Consumed" value={`${formatQty(item.consumedQty)} ${item.uom || ""}`} />
+                                        </Box>
+                                    )}
+
+                                    <Typography
+                                        sx={{
+                                            ...subTextSx,
+                                            mt: compact ? .45 : .75,
+                                            ...(compact ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}),
+                                        }}
+                                    >
                                         {bottleneck
                                             ? `Bottleneck: ${bottleneck.projectCode || "-"} · ${bottleneck.productName || bottleneck.drawingNo || "Product"} · ${readable(bottleneck.lineStatus || bottleneck.currentStage)}`
                                             : "No active material demand"}
-                                        {item.riskCount ? ` · ${item.riskCount} timing risk` : ""}
                                     </Typography>
-                                    <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
+
+                                    <Box sx={{ display: "flex", gap: .5, mt: compact ? .65 : .9, flexWrap: "wrap" }}>
                                         {bottleneck && (
                                             <Button
-                                                onClick={() => navigate(
-                                                    canOpenTarget
-                                                        ? target.path
-                                                        : `/matflow/tracker/${bottleneck.requisitionId}`
-                                                )}
-                                                sx={primaryBtnSx}
+                                                onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${bottleneck.requisitionId}`)}
+                                                sx={{ ...primaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
                                             >
                                                 {canOpenTarget ? target.label : "Open Bottleneck"}
                                             </Button>
                                         )}
-                                        {item.materialId && (
+                                        <Button
+                                            onClick={() => setSelectedBoardItem({ scope: "MATERIAL", item })}
+                                            sx={{ ...secondaryBtnSx, minHeight: compact ? 30 : undefined, px: compact ? .9 : undefined, fontSize: compact ? 10 : undefined }}
+                                        >
+                                            Details
+                                        </Button>
+                                        {!compact && item.materialId && (
                                             <Button
                                                 onClick={() => navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(item.materialId)}`)}
                                                 sx={secondaryBtnSx}
@@ -1147,6 +1503,16 @@ export function MatFlowDashboardPage() {
                         }}
                     />
                 )}
+
+                <OperationsBoardDrawer
+                    open={Boolean(selectedBoardItem)}
+                    scope={selectedBoardItem?.scope || kanbanScope}
+                    item={selectedBoardItem?.item || null}
+                    onClose={() => setSelectedBoardItem(null)}
+                    navigate={navigate}
+                    roles={roles}
+                    contextPlants={contextPlants}
+                />
             </Box>
         );
     }
@@ -1400,80 +1766,80 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     />
                 )
             ) : (
-                <Box sx={{ display: "grid", gap: 1 }}>
-                    {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
-                        const expanded = expandedProjects[project.key] === true;
-                        return (
-                            <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                                <Box
-                                    role={!expanded ? "button" : undefined}
-                                    tabIndex={!expanded ? 0 : undefined}
-                                    onClick={() => {
-                                        if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (!expanded && (event.key === "Enter" || event.key === " ")) {
-                                            event.preventDefault();
-                                            setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                        }
-                                    }}
-                                    sx={{
-                                        px: 1.5,
-                                        py: 1.2,
-                                        display: "grid",
-                                        gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
-                                        gap: 1,
-                                        alignItems: "center",
-                                        cursor: expanded ? "default" : "pointer",
-                                        background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
-                                    }}
-                                >
-                                    <Box>
-                                        <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
-                                        <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
-                                    </Box>
-                                    <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
-                                    <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
-                                    <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
-                                    <Box sx={{ display: "grid", placeItems: "center" }}>
-                                        {expanded && (
-                                            <Button
-                                                aria-label="Collapse project"
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    setExpandedProjects((current) => ({ ...current, [project.key]: false }));
-                                                }}
-                                                sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
-                                            >
-                                                <ExpandLessIcon fontSize="small" />
-                                            </Button>
-                                        )}
-                                    </Box>
+            <Box sx={{ display: "grid", gap: 1 }}>
+                {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
+                    const expanded = expandedProjects[project.key] === true;
+                    return (
+                        <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                            <Box
+                                role={!expanded ? "button" : undefined}
+                                tabIndex={!expanded ? 0 : undefined}
+                                onClick={() => {
+                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                }}
+                                onKeyDown={(event) => {
+                                    if (!expanded && (event.key === "Enter" || event.key === " ")) {
+                                        event.preventDefault();
+                                        setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                    }
+                                }}
+                                sx={{
+                                    px: 1.5,
+                                    py: 1.2,
+                                    display: "grid",
+                                    gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
+                                    gap: 1,
+                                    alignItems: "center",
+                                    cursor: expanded ? "default" : "pointer",
+                                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
+                                }}
+                            >
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
+                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
                                 </Box>
+                                <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
+                                <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
+                                <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
+                                <Box sx={{ display: "grid", placeItems: "center" }}>
+                                    {expanded && (
+                                        <Button
+                                            aria-label="Collapse project"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setExpandedProjects((current) => ({ ...current, [project.key]: false }));
+                                            }}
+                                            sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
+                                        >
+                                            <ExpandLessIcon fontSize="small" />
+                                        </Button>
+                                    )}
+                                </Box>
+                            </Box>
 
-                                <Collapse in={expanded} unmountOnExit>
-                                    <Box sx={tableShellSx}>
-                                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                            {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
-                                        </Box>
-                                        {project.rows.map((row) => (
-                                            <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
-                                                <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
-                                                <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
-                                            </Box>
-                                        ))}
+                            <Collapse in={expanded} unmountOnExit>
+                                <Box sx={tableShellSx}>
+                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                        {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                     </Box>
-                                </Collapse>
-                            </Card>
-                        );
-                    })}
-                </Box>
+                                    {project.rows.map((row) => (
+                                        <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
+                                            <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
+                                            <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                            <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            </Collapse>
+                        </Card>
+                    );
+                })}
+            </Box>
             )}
             {!loading && trackerView === "HIERARCHY" && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
         </Box>
