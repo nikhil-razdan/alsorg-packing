@@ -23,6 +23,7 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowIdentityBadge,
     MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
@@ -35,7 +36,9 @@ import {
     formatDate,
     formatDurationMinutes,
     formatQty,
+    getMatFlowKanbanIdentity,
     mainTextSx,
+    matFlowKanbanCardSx,
     normalize,
     numeric,
     pageSx,
@@ -121,6 +124,75 @@ const KANBAN_SCOPE_OPTIONS = [
     { value: "PRODUCT", label: "Product-wise" },
     { value: "MATERIAL", label: "Material-wise" },
 ];
+
+
+function KanbanIdentityLegend({ scope }) {
+    const projectA = getMatFlowKanbanIdentity({ kind: "PROJECT", projectKey: "LEGEND-PROJECT-A" });
+    const projectB = getMatFlowKanbanIdentity({ kind: "PROJECT", projectKey: "LEGEND-PROJECT-B" });
+    const productA = getMatFlowKanbanIdentity({ kind: "PRODUCT", projectKey: "LEGEND-PROJECT-A", productKey: "PRODUCT-A" });
+    const productB = getMatFlowKanbanIdentity({ kind: "PRODUCT", projectKey: "LEGEND-PROJECT-A", productKey: "PRODUCT-B" });
+    const materials = [
+        ["Metal", "METAL", "LEGEND-METAL"],
+        ["Wood / Veneer", "WOOD / VENEER", "LEGEND-WOOD"],
+        ["Stone / Tile", "STONE / TILE", "LEGEND-STONE"],
+        ["Hardware", "HARDWARE", "LEGEND-HARDWARE"],
+    ].map(([label, category, key]) => ({
+        label,
+        identity: getMatFlowKanbanIdentity({
+            kind: "MATERIAL",
+            materialCategory: category,
+            materialKey: key,
+        }),
+    }));
+
+    return (
+        <Box
+            sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: .65,
+                flexWrap: "wrap",
+                px: .2,
+            }}
+        >
+            <Typography sx={{ ...subTextSx, fontSize: 10.2, fontWeight: 850, mr: .2 }}>
+                Visual identity:
+            </Typography>
+            {scope === "PROJECT" && (
+                <>
+                    <MatFlowIdentityBadge label="Project A" identity={projectA} />
+                    <MatFlowIdentityBadge label="Project B" identity={projectB} />
+                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
+                        each Project keeps a stable border and background tint.
+                    </Typography>
+                </>
+            )}
+            {scope === "PRODUCT" && (
+                <>
+                    <MatFlowIdentityBadge label="Project family" identity={projectA} accent={projectA.familyAccent} />
+                    <MatFlowIdentityBadge label="Product 1" identity={productA} />
+                    <MatFlowIdentityBadge label="Product 2" identity={productB} />
+                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
+                        Products stay in their parent Project colour family but use distinct shades.
+                    </Typography>
+                </>
+            )}
+            {scope === "MATERIAL" && (
+                <>
+                    {materials.map(({ label, identity }) => (
+                        <MatFlowIdentityBadge key={label} label={label} identity={identity} />
+                    ))}
+                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
+                        category families stay meaningful while each material gets a stable shade.
+                    </Typography>
+                </>
+            )}
+            <Typography sx={{ ...subTextSx, fontSize: 10.2, ml: "auto" }}>
+                Workflow state still uses the existing status chip colours.
+            </Typography>
+        </Box>
+    );
+}
 
 const FLOW_KANBAN_COLUMNS = FLOW.map(([key, label]) => ({
     key,
@@ -790,7 +862,7 @@ export function MatFlowDashboardPage() {
                         <Box>
                             <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Execution Kanban</Typography>
                             <Typography sx={subTextSx}>
-                                Switch between Project, Product and Material cards. Material-wise cards aggregate the same material across Projects, Products and MRs. The lane is derived from the authoritative backend workflow; cards cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
+                                Switch between Project, Product and Material cards. Stable border/tint identities make each entity visually distinct without changing workflow-state colours. Material-wise cards aggregate the same material across Projects, Products and MRs. The lane is derived from the authoritative backend workflow; cards cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
                             </Typography>
                         </Box>
                         <MatFlowViewToggle
@@ -811,6 +883,7 @@ export function MatFlowDashboardPage() {
                         onChange={(event) => setKanbanSearch(event.target.value)}
                         sx={fieldSx}
                     />
+                    <KanbanIdentityLegend scope={kanbanScope} />
                 </Card>
 
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
@@ -842,10 +915,18 @@ export function MatFlowDashboardPage() {
                                             : null;
                                 const canOpenTarget = target &&
                                     canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                const identity = getMatFlowKanbanIdentity({
+                                    kind: "PROJECT",
+                                    projectKey: item.key || projectKeyOf(item),
+                                });
                                 return (
-                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
                                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
+                                                <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                                    <MatFlowIdentityBadge label="Project" identity={identity} />
+                                                    {item.projectCode && <MatFlowIdentityBadge label={item.projectCode} identity={identity} />}
+                                                </Box>
                                                 <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.projectCode || "-"} · {item.projectName || "Project"}</Typography>
                                                 <Typography sx={subTextSx}>{item.clientName || "-"} · {item.plantCode || "-"}</Typography>
                                             </Box>
@@ -911,10 +992,27 @@ export function MatFlowDashboardPage() {
                                         : productPreExecutionTarget(item);
                                 const canOpenTarget = target &&
                                     canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                                const projectIdentity = getMatFlowKanbanIdentity({
+                                    kind: "PROJECT",
+                                    projectKey: projectKeyOf(item),
+                                });
+                                const identity = getMatFlowKanbanIdentity({
+                                    kind: "PRODUCT",
+                                    projectKey: projectKeyOf(item),
+                                    productKey: item.key || productKeyOf(item),
+                                });
                                 return (
-                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                    <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
                                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
+                                                <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                                    <MatFlowIdentityBadge label="Product" identity={identity} />
+                                                    <MatFlowIdentityBadge
+                                                        label={`Project ${item.projectCode || "Family"}`}
+                                                        identity={projectIdentity}
+                                                        accent={projectIdentity.familyAccent}
+                                                    />
+                                                </Box>
                                                 <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.productName || "Product"}</Typography>
                                                 <Typography sx={subTextSx}>{item.projectCode || "-"} · {item.drawingNo || "-"} · {item.plantCode || "-"}</Typography>
                                             </Box>
@@ -981,10 +1079,19 @@ export function MatFlowDashboardPage() {
                                 roles,
                                 contextPlants
                             );
+                            const identity = getMatFlowKanbanIdentity({
+                                kind: "MATERIAL",
+                                materialCategory: item.materialCategory,
+                                materialKey: item.key || item.materialId || item.materialCode || item.materialName,
+                            });
                             return (
-                                <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                <Card sx={{ ...panelSx, m: 0, p: 1.15, ...matFlowKanbanCardSx(identity) }}>
                                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
                                         <Box sx={{ minWidth: 0 }}>
+                                            <Box sx={{ display: "flex", gap: .45, alignItems: "center", flexWrap: "wrap", mb: .5 }}>
+                                                <MatFlowIdentityBadge label="Material" identity={identity} />
+                                                <MatFlowIdentityBadge label={identity.familyName || readable(item.materialCategory || "Other")} identity={identity} accent={identity.familyAccent} />
+                                            </Box>
                                             <Typography sx={{ ...mainTextSx, fontSize: 13 }}>{item.materialName || "Material"}</Typography>
                                             <Typography sx={subTextSx}>{item.materialCode || "-"} · {readable(item.materialCategory || "OTHER")} · {item.uom || "-"}</Typography>
                                         </Box>

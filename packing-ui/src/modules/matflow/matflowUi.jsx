@@ -687,6 +687,188 @@ export const readable = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+
+const MATFLOW_KANBAN_PROJECT_FAMILIES = Object.freeze([
+  { name: "Sky", base: "#38bdf8", variants: ["#7dd3fc", "#0ea5e9", "#0284c7", "#60a5fa"] },
+  { name: "Indigo", base: "#818cf8", variants: ["#a5b4fc", "#6366f1", "#4f46e5", "#93c5fd"] },
+  { name: "Violet", base: "#a78bfa", variants: ["#c4b5fd", "#8b5cf6", "#7c3aed", "#d8b4fe"] },
+  { name: "Cyan", base: "#22d3ee", variants: ["#67e8f9", "#06b6d4", "#0891b2", "#2dd4bf"] },
+  { name: "Rose", base: "#fb7185", variants: ["#fda4af", "#f43f5e", "#e11d48", "#f9a8d4"] },
+  { name: "Fuchsia", base: "#e879f9", variants: ["#f0abfc", "#d946ef", "#c026d3", "#f5d0fe"] },
+  { name: "Teal", base: "#2dd4bf", variants: ["#5eead4", "#14b8a6", "#0f766e", "#22d3ee"] },
+  { name: "Amber", base: "#f59e0b", variants: ["#fbbf24", "#d97706", "#fb923c", "#facc15"] },
+]);
+
+const MATFLOW_KANBAN_MATERIAL_FAMILIES = Object.freeze({
+  METAL: { name: "Metal", base: "#60a5fa", variants: ["#93c5fd", "#38bdf8", "#3b82f6", "#818cf8"] },
+  WOOD: { name: "Wood / Veneer", base: "#d97706", variants: ["#f59e0b", "#b45309", "#fb923c", "#fbbf24"] },
+  STONE: { name: "Stone / Tile", base: "#94a3b8", variants: ["#cbd5e1", "#64748b", "#a8a29e", "#78716c"] },
+  HARDWARE: { name: "Hardware", base: "#06b6d4", variants: ["#22d3ee", "#0891b2", "#14b8a6", "#67e8f9"] },
+  GLASS: { name: "Glass / Mirror", base: "#67e8f9", variants: ["#a5f3fc", "#22d3ee", "#7dd3fc", "#38bdf8"] },
+  FABRIC: { name: "Fabric / Upholstery", base: "#c084fc", variants: ["#d8b4fe", "#a855f7", "#e879f9", "#f0abfc"] },
+  CHEMICAL: { name: "Paint / Chemical / Polish", base: "#fb7185", variants: ["#fda4af", "#f97316", "#f43f5e", "#fdba74"] },
+  PACKAGING: { name: "Packaging", base: "#fb923c", variants: ["#fdba74", "#f97316", "#f59e0b", "#fbbf24"] },
+  ELECTRICAL: { name: "Electrical / Lighting", base: "#eab308", variants: ["#facc15", "#f59e0b", "#fde047", "#ca8a04"] },
+  RAW: { name: "Raw Material", base: "#34d399", variants: ["#6ee7b7", "#10b981", "#2dd4bf", "#22c55e"] },
+  OTHER: { name: "Other", base: "#64748b", variants: ["#94a3b8", "#475569", "#64748b", "#a1a1aa"] },
+});
+
+const matFlowStableHash = (value) => {
+  const text = clean(value).toUpperCase() || "MATFLOW";
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const matFlowHexToRgba = (hex, alpha) => {
+  const raw = clean(hex).replace("#", "");
+  const normalized = raw.length === 3
+    ? raw.split("").map((part) => `${part}${part}`).join("")
+    : raw.padEnd(6, "0").slice(0, 6);
+  const value = Number.parseInt(normalized, 16);
+  if (!Number.isFinite(value)) return `rgba(96,165,250,${alpha})`;
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red},${green},${blue},${alpha})`;
+};
+
+const materialFamilyKey = (category) => {
+  const value = normalize(category);
+  if (value.includes("METAL") || value.includes("STEEL") || value.includes("ALUMIN")) return "METAL";
+  if (value.includes("WOOD") || value.includes("VENEER") || value.includes("PLY") || value.includes("MDF")) return "WOOD";
+  if (value.includes("STONE") || value.includes("TILE") || value.includes("MARBLE") || value.includes("GRANITE")) return "STONE";
+  if (value.includes("HARDWARE") || value.includes("FITTING") || value.includes("FASTENER")) return "HARDWARE";
+  if (value.includes("GLASS") || value.includes("MIRROR")) return "GLASS";
+  if (value.includes("FABRIC") || value.includes("UPHOLST") || value.includes("LEATHER") || value.includes("FOAM")) return "FABRIC";
+  if (value.includes("PAINT") || value.includes("POLISH") || value.includes("CHEMICAL") || value.includes("ADHESIVE") || value.includes("COATING")) return "CHEMICAL";
+  if (value.includes("PACK") || value.includes("CARTON") || value.includes("FOAM") || value.includes("WRAP")) return "PACKAGING";
+  if (value.includes("ELECTR") || value.includes("LIGHT") || value.includes("LED")) return "ELECTRICAL";
+  if (value.includes("RAW")) return "RAW";
+  return "OTHER";
+};
+
+/**
+ * Deterministic visual identity for entity-wise Kanban cards.
+ * Workflow status colours remain owned by MatFlowStatusChip; these accents only
+ * identify which Project/Product/Material a card belongs to.
+ */
+export const getMatFlowKanbanIdentity = ({
+  kind = "PROJECT",
+  projectKey = "",
+  productKey = "",
+  materialCategory = "",
+  materialKey = "",
+} = {}) => {
+  const entityKind = normalize(kind) || "PROJECT";
+  let accent;
+  let familyAccent;
+  let familyName;
+
+  if (entityKind === "MATERIAL") {
+    const materialFamily = MATFLOW_KANBAN_MATERIAL_FAMILIES[materialFamilyKey(materialCategory)]
+      || MATFLOW_KANBAN_MATERIAL_FAMILIES.OTHER;
+    const variantIndex = matFlowStableHash(materialKey || materialCategory) % materialFamily.variants.length;
+    familyAccent = materialFamily.base;
+    accent = materialFamily.variants[variantIndex];
+    familyName = materialFamily.name;
+  } else {
+    const projectSeed = projectKey || "MATFLOW PROJECT";
+    const familyIndex = matFlowStableHash(projectSeed) % MATFLOW_KANBAN_PROJECT_FAMILIES.length;
+    const projectFamily = MATFLOW_KANBAN_PROJECT_FAMILIES[familyIndex];
+    familyAccent = projectFamily.base;
+    const productVariantIndex = matFlowStableHash(productKey || projectSeed) % projectFamily.variants.length;
+    accent = entityKind === "PRODUCT" ? projectFamily.variants[productVariantIndex] : projectFamily.base;
+    familyName = projectFamily.name;
+  }
+
+  return {
+    kind: entityKind,
+    accent,
+    familyAccent,
+    familyName,
+    border: matFlowHexToRgba(accent, .54),
+    borderSoft: matFlowHexToRgba(accent, .24),
+    soft: matFlowHexToRgba(accent, .075),
+    softStrong: matFlowHexToRgba(accent, .14),
+    glow: matFlowHexToRgba(accent, .16),
+    familySoft: matFlowHexToRgba(familyAccent, .11),
+  };
+};
+
+export const matFlowKanbanCardSx = (identity = {}) => ({
+  position: "relative",
+  overflow: "hidden",
+  borderColor: identity.border || "var(--mf-card-border)",
+  borderLeft: `4px solid ${identity.accent || "var(--mf-primary)"}`,
+  background: `linear-gradient(135deg,${identity.softStrong || "rgba(59,130,246,.10)"} 0%,${identity.soft || "rgba(59,130,246,.04)"} 34%,transparent 68%),var(--mf-card-bg)`,
+  boxShadow: "none",
+  transition: "border-color .16s ease,box-shadow .16s ease,transform .16s ease",
+  "&::after": {
+    content: '\"\"',
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "46%",
+    height: 2,
+    pointerEvents: "none",
+    background: `linear-gradient(90deg,${identity.familyAccent || identity.accent || "var(--mf-primary)"},${identity.accent || "var(--mf-primary)"},transparent)`,
+    opacity: .9,
+  },
+  "&:hover": {
+    borderColor: identity.accent || "var(--mf-card-border-hover)",
+    boxShadow: `0 12px 26px ${identity.glow || "rgba(59,130,246,.12)"}`,
+    transform: "translateY(-1px)",
+  },
+});
+
+export function MatFlowIdentityBadge({ label, identity, accent = "" }) {
+  const resolvedAccent = accent || identity?.accent || "var(--mf-primary)";
+  const soft = accent ? matFlowHexToRgba(accent, .10) : (identity?.softStrong || "var(--mf-primary-soft)");
+  const border = accent ? matFlowHexToRgba(accent, .32) : (identity?.borderSoft || "var(--mf-primary-border)");
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: .45,
+        minHeight: 22,
+        maxWidth: "100%",
+        px: .65,
+        py: .15,
+        borderRadius: 999,
+        border: `1px solid ${border}`,
+        background: soft,
+        color: "var(--mf-text-secondary)",
+        fontSize: 9.5,
+        lineHeight: 1.15,
+        fontWeight: 950,
+        letterSpacing: ".055em",
+        textTransform: "uppercase",
+      }}
+    >
+      <Box
+        component="span"
+        sx={{
+          width: 7,
+          height: 7,
+          flex: "0 0 7px",
+          borderRadius: 999,
+          background: resolvedAccent,
+          boxShadow: `0 0 0 3px ${accent ? matFlowHexToRgba(accent, .10) : (identity?.soft || "var(--mf-primary-soft)")}`,
+        }}
+      />
+      <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {label || readable(identity?.kind || "ENTITY")}
+      </Box>
+    </Box>
+  );
+}
+
 const success = new Set([
   "ACTIVE", "APPROVED", "AVAILABLE", "READY", "RECEIVED", "ACCEPTED",
   "RESERVED", "READY_TO_ISSUE", "ISSUED", "ISSUED_TO_PRODUCTION",
