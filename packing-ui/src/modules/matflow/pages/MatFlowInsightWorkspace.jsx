@@ -2472,58 +2472,240 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
     const navigate = useNavigate();
     const { selectedPlantParam } = useMatFlow();
 
-    const [materials, setMaterials] = useState([]);
+    const [requisitions, setRequisitions] = useState([]);
     const [projects, setProjects] = useState([]);
     const [selectedId, setSelectedId] = useState(materialId || "");
     const [selectedProjectId, setSelectedProjectId] = useState("");
     const [selectedProductId, setSelectedProductId] = useState("");
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [usageIndexLoading, setUsageIndexLoading] = useState(true);
+    const [usageIndexReady, setUsageIndexReady] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [activeOnly, setActiveOnly] = useState(true);
     const [expandedLotKey, setExpandedLotKey] = useState("");
 
+    /*
+     * The Material Tracker selector is intentionally demand-driven.  Do not use
+     * the Material Inventory master here: a material belongs in this selector
+     * only after it is actually referenced by a non-cancelled MR line that the
+     * current user is allowed to read.  This also gives us the exact Project ->
+     * Product relationship for each selectable material without inventing a
+     * second source of truth in the frontend.
+     */
     useEffect(() => {
         let active = true;
+        setUsageIndexLoading(true);
+        setUsageIndexReady(false);
         Promise.all([
-            matflowApi.listMaterials({ active: true }),
+            matflowApi.listRequisitions(),
             matflowApi.listProjects({
-                active: true,
                 plantCode: selectedPlantParam || undefined,
             }),
         ])
-            .then(([materialResponse, projectResponse]) => {
+            .then(([requisitionResponse, projectResponse]) => {
                 if (!active) return;
-                setMaterials(extractMatFlowPage(materialResponse?.data).rows);
-                const projectRows = extractMatFlowPage(projectResponse?.data).rows;
-                setProjects(projectRows);
-                setSelectedProjectId((current) =>
-                    current && projectRows.some((project) => String(project.id) === String(current))
-                        ? current
-                        : ""
-                );
+                setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : []);
+                setProjects(extractMatFlowPage(projectResponse?.data).rows);
+                setUsageIndexReady(true);
             })
             .catch(() => {
                 if (!active) return;
-                setMaterials([]);
+                setRequisitions([]);
                 setProjects([]);
+                setSelectedId("");
                 setSelectedProjectId("");
                 setSelectedProductId("");
+                setData(null);
+                setUsageIndexReady(true);
+            })
+            .finally(() => {
+                if (active) setUsageIndexLoading(false);
             });
         return () => { active = false; };
     }, [selectedPlantParam]);
 
-    const selectedProject = useMemo(
-        () => projects.find((project) => String(project.id) === String(selectedProjectId)) || null,
-        [projects, selectedProjectId]
-    );
+    const productContextById = useMemo(() => {
+        const index = new Map();
+        projects.forEach((project) => {
+            (Array.isArray(project?.products) ? project.products : []).forEach((product) => {
+                if (!product?.id) return;
+                index.set(String(product.id), { project, product });
+            });
+        });
+        return index;
+    }, [projects]);
 
-    const availableProducts = useMemo(
-        () => (Array.isArray(selectedProject?.products) ? selectedProject.products : [])
-            .filter((product) => product?.active !== false),
-        [selectedProject]
-    );
+    const materialUsageIndex = useMemo(() => {
+        const byId = new Map();
+        const selectedPlant = clean(selectedPlantParam).toUpperCase();
+
+        const register = ({
+            materialId: id,
+            materialCode,
+            materialName,
+            materialCategory,
+            uom,
+            requisition,
+            context,
+        }) => {
+            const key = clean(id);
+            if (!key) return;
+
+            let entry = byId.get(key);
+            if (!entry) {
+                entry = {
+                    id: key,
+                    materialId: key,
+                    materialCode: clean(materialCode),
+                    materialName: clean(materialName) || clean(materialCode) || "Material",
+                    materialCategory: clean(materialCategory),
+                    uom: clean(uom),
+                    projectIds: new Set(),
+                    productIds: new Set(),
+                    requisitionIds: new Set(),
+                };
+                byId.set(key, entry);
+            }
+
+            if (!entry.materialCode && materialCode) entry.materialCode = clean(materialCode);
+            if ((!entry.materialName || entry.materialName === "Material") && materialName) entry.materialName = clean(materialName);
+            if (!entry.materialCategory && materialCategory) entry.materialCategory = clean(materialCategory);
+            if (!entry.uom && uom) entry.uom = clean(uom);
+
+            if (requisition?.id) entry.requisitionIds.add(String(requisition.id));
+            if (context?.project?.id) entry.projectIds.add(String(context.project.id));
+            if (context?.product?.id) entry.productIds.add(String(context.product.id));
+        };
+
+        (Array.isArray(requisitions) ? requisitions : []).forEach((requisition) => {
+            if (!requisition || normalize(requisition.status) === "CANCELLED") return;
+            const demandPlant = clean(requisition.destinationPlantCode).toUpperCase();
+            if (selectedPlant && demandPlant !== selectedPlant) return;
+
+            const context = productContextById.get(String(requisition.projectDrawingId || "")) || null;
+            (Array.isArray(requisition.lines) ? requisition.lines : []).forEach((line) => {
+                if (!line || normalize(line.status) === "CANCELLED") return;
+
+                // Original BOM/MR material.
+                register({
+                    materialId: line.materialId,
+                    materialCode: line.materialCode,
+                    materialName: line.materialName,
+                    materialCategory: line.materialCategory,
+                    uom: line.uom,
+                    requisition,
+                    context,
+                });
+
+                // A processed/output material can become the issued material for
+                // the same demand line.  It is also genuinely used by that
+                // Project/Product, so expose it as a selectable tracked material.
+                if (line.issuedMaterialId && String(line.issuedMaterialId) !== String(line.materialId || "")) {
+                    register({
+                        materialId: line.issuedMaterialId,
+                        materialCode: line.issuedMaterialCode,
+                        materialName: line.issuedMaterialName,
+                        materialCategory: line.materialCategory,
+                        uom: line.uom,
+                        requisition,
+                        context,
+                    });
+                }
+            });
+        });
+
+        const rows = Array.from(byId.values())
+            .map((entry) => ({
+                ...entry,
+                projectCount: entry.projectIds.size,
+                productCount: entry.productIds.size,
+                requisitionCount: entry.requisitionIds.size,
+            }))
+            .sort((a, b) =>
+                clean(a.materialName).localeCompare(clean(b.materialName), undefined, { sensitivity: "base" })
+                || clean(a.materialCode).localeCompare(clean(b.materialCode), undefined, { sensitivity: "base" })
+            );
+
+        return { rows, byId };
+    }, [requisitions, productContextById, selectedPlantParam]);
+
+    const usedMaterials = materialUsageIndex.rows;
+    const effectiveSelectedMaterialId = clean(selectedId || materialId);
+    const selectedMaterialUsage = effectiveSelectedMaterialId
+        ? materialUsageIndex.byId.get(effectiveSelectedMaterialId) || null
+        : null;
+
+    const availableProjects = useMemo(() => {
+        if (!selectedMaterialUsage) return [];
+        return projects
+            .filter((project) => project?.id && selectedMaterialUsage.projectIds.has(String(project.id)))
+            .sort((a, b) =>
+                clean(a.projectCode).localeCompare(clean(b.projectCode), undefined, { sensitivity: "base", numeric: true })
+                || clean(a.projectName).localeCompare(clean(b.projectName), undefined, { sensitivity: "base" })
+            );
+    }, [projects, selectedMaterialUsage]);
+
+    const availableProducts = useMemo(() => {
+        if (!selectedMaterialUsage) return [];
+        const sourceProjects = selectedProjectId
+            ? availableProjects.filter((project) => String(project.id) === String(selectedProjectId))
+            : availableProjects;
+
+        return sourceProjects
+            .flatMap((project) =>
+                (Array.isArray(project?.products) ? project.products : [])
+                    .filter((product) => product?.id && selectedMaterialUsage.productIds.has(String(product.id)))
+                    .map((product) => ({
+                        ...product,
+                        trackerProjectId: project.id,
+                        trackerProjectCode: project.projectCode,
+                        trackerProjectName: project.projectName,
+                    }))
+            )
+            .sort((a, b) =>
+                clean(a.trackerProjectCode).localeCompare(clean(b.trackerProjectCode), undefined, { sensitivity: "base", numeric: true })
+                || clean(a.productName).localeCompare(clean(b.productName), undefined, { sensitivity: "base" })
+                || clean(a.drawingNo).localeCompare(clean(b.drawingNo), undefined, { sensitivity: "base", numeric: true })
+            );
+    }, [availableProjects, selectedMaterialUsage, selectedProjectId]);
+
+    useEffect(() => {
+        const incoming = clean(materialId);
+        if (!incoming || incoming === clean(selectedId)) return;
+        // Once the used-material index is ready, never resurrect a stale or
+        // inventory-only material ID from an old URL/bookmark.
+        if (usageIndexReady && !materialUsageIndex.byId.has(incoming)) return;
+        setSelectedId(incoming);
+        setSelectedProjectId("");
+        setSelectedProductId("");
+        setExpandedLotKey("");
+    }, [materialId, selectedId, usageIndexReady, materialUsageIndex]);
+
+    useEffect(() => {
+        if (!usageIndexReady || !selectedId) return;
+        if (!materialUsageIndex.byId.has(clean(selectedId))) {
+            setSelectedId("");
+            setSelectedProjectId("");
+            setSelectedProductId("");
+            setExpandedLotKey("");
+            setData(null);
+            if (embedded && onMaterialChange) {
+                onMaterialChange("");
+            } else if (!embedded) {
+                navigate("/matflow/dashboard?view=materials", { replace: true });
+            }
+        }
+    }, [usageIndexReady, selectedId, materialUsageIndex, embedded, onMaterialChange, navigate]);
+
+    useEffect(() => {
+        if (!selectedProjectId) return;
+        if (!availableProjects.some((project) => String(project.id) === String(selectedProjectId))) {
+            setSelectedProjectId("");
+            setSelectedProductId("");
+        }
+    }, [availableProjects, selectedProjectId]);
 
     useEffect(() => {
         if (!selectedProductId) return;
@@ -2533,8 +2715,15 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
     }, [availableProducts, selectedProductId]);
 
     const load = useCallback(async () => {
-        const id = selectedId || materialId;
+        const id = clean(selectedId || materialId);
         if (!id) {
+            setData(null);
+            return;
+        }
+        // The dropdown is the authoritative selector for this page.  Once its
+        // usage index has loaded, an inventory-only/stale ID must not trigger a
+        // tracker request behind the scenes.
+        if (usageIndexReady && !materialUsageIndex.byId.has(id)) {
             setData(null);
             return;
         }
@@ -2551,7 +2740,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
         } finally {
             setLoading(false);
         }
-    }, [selectedId, materialId, selectedPlantParam, activeOnly]);
+    }, [selectedId, materialId, selectedPlantParam, activeOnly, usageIndexReady, materialUsageIndex]);
 
     useEffect(() => { if (selectedId || materialId) load(); }, [load, selectedId, materialId]);
 
@@ -2604,12 +2793,12 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                 title={identity.materialName || "Track One Material"}
                 subtitle={identity.materialCode
                     ? `${identity.materialCode} · ${identity.category || "-"} · ${identity.uom || "-"}`
-                    : "Select a Material Inventory item to see every Project/Product allocation, current route and next action."}
+                    : "Select a material actually used in MatFlow to see only the Projects/Products that use it, plus every allocation, route and next action."}
                 actions={<Button startIcon={<RefreshIcon />} onClick={load} disabled={!selectedId && !materialId} sx={secondaryBtnSx}>Refresh</Button>}
             />}
             {embedded && (
                 <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                    <Box><Typography sx={{ fontWeight: 950, fontSize: 17 }}>{identity.materialName || "Material Tracker"}</Typography><Typography sx={subTextSx}>{identity.materialCode ? `${identity.materialCode} · ${identity.category || "-"} · ${identity.uom || "-"}` : "Select a Material Inventory item to trace it across Projects, Products, MRs and custody routes."}</Typography></Box>
+                    <Box><Typography sx={{ fontWeight: 950, fontSize: 17 }}>{identity.materialName || "Material Tracker"}</Typography><Typography sx={subTextSx}>{identity.materialCode ? `${identity.materialCode} · ${identity.category || "-"} · ${identity.uom || "-"}` : "Select a material already used in a MatFlow MR. Project and Product filters will then show only where that material is actually used."}</Typography></Box>
                     <Button startIcon={<RefreshIcon />} onClick={load} disabled={!selectedId && !materialId} sx={secondaryBtnSx}>Refresh</Button>
                 </Card>
             )}
@@ -2618,18 +2807,55 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(260px,1.15fr) minmax(210px,.9fr) minmax(230px,1fr) minmax(200px,.9fr) 160px" }, gap: 1 }}>
-                    <TextField select label="Material *" value={selectedId} onChange={(e) => { const id = e.target.value; setSelectedId(id); setExpandedLotKey(""); if (embedded && onMaterialChange) onMaterialChange(id); else navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(id)}`, { replace: true }); }} sx={fieldSx}>
-                        {materials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialName} · {material.materialCode}</MenuItem>)}
+                    <TextField
+                        select
+                        label="Material in Use *"
+                        value={selectedMaterialUsage ? selectedId : ""}
+                        disabled={usageIndexLoading}
+                        helperText={usageIndexLoading
+                            ? "Loading used materials…"
+                            : `${usedMaterials.length} material${usedMaterials.length === 1 ? "" : "s"} used in your current plant/access scope`}
+                        onChange={(e) => {
+                            const id = e.target.value;
+                            setSelectedId(id);
+                            setSelectedProjectId("");
+                            setSelectedProductId("");
+                            setExpandedLotKey("");
+                            if (embedded && onMaterialChange) onMaterialChange(id);
+                            else if (id) navigate(`/matflow/dashboard?view=materials&materialId=${encodeURIComponent(id)}`, { replace: true });
+                            else navigate("/matflow/dashboard?view=materials", { replace: true });
+                        }}
+                        sx={fieldSx}
+                    >
+                        <MenuItem value="" disabled>
+                            {usedMaterials.length === 0 ? "No used materials in this scope" : "Select a used Material"}
+                        </MenuItem>
+                        {usedMaterials.map((material) => (
+                            <MenuItem key={material.materialId} value={material.materialId}>
+                                <Box sx={{ minWidth: 0, py: .15 }}>
+                                    <Typography sx={{ fontSize: 12.2, fontWeight: 850, lineHeight: 1.25 }}>
+                                        {material.materialName || "Material"} · {material.materialCode || "-"}
+                                    </Typography>
+                                    <Typography sx={{ ...subTextSx, fontSize: 9.8, mt: .1 }}>
+                                        {material.projectCount} Project{material.projectCount === 1 ? "" : "s"} · {material.productCount} Product{material.productCount === 1 ? "" : "s"} · {material.requisitionCount} MR{material.requisitionCount === 1 ? "" : "s"}
+                                    </Typography>
+                                </Box>
+                            </MenuItem>
+                        ))}
                     </TextField>
                     <TextField
                         select
-                        label="PD No. / Project"
+                        label="Used in PD No. / Project"
                         value={selectedProjectId}
                         onChange={(e) => { setSelectedProjectId(e.target.value); setSelectedProductId(""); }}
+                        disabled={!selectedMaterialUsage}
+                        helperText={selectedMaterialUsage
+                            ? `${availableProjects.length} Project${availableProjects.length === 1 ? "" : "s"} use this material`
+                            : "Select a used material first"}
                         sx={fieldSx}
                     >
-                        <MenuItem value="">All PDs / Projects</MenuItem>
-                        {projects.map((project) => (
+                        <MenuItem value="">All Projects using this Material</MenuItem>
+                        {availableProjects.map((project) => (
                             <MenuItem key={project.id} value={project.id}>
                                 {project.projectCode || "-"} · {project.projectName || "Project"}
                             </MenuItem>
@@ -2637,15 +2863,19 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                     </TextField>
                     <TextField
                         select
-                        label="Product / Drawing"
+                        label="Used in Product / Drawing"
                         value={selectedProductId}
                         onChange={(e) => setSelectedProductId(e.target.value)}
-                        disabled={!selectedProjectId}
+                        disabled={!selectedMaterialUsage}
+                        helperText={selectedMaterialUsage
+                            ? `${availableProducts.length} Product${availableProducts.length === 1 ? "" : "s"}${selectedProjectId ? " in selected Project" : " use this material"}`
+                            : "Select a used material first"}
                         sx={fieldSx}
                     >
-                        <MenuItem value="">All Products</MenuItem>
+                        <MenuItem value="">All Products using this Material</MenuItem>
                         {availableProducts.map((product) => (
                             <MenuItem key={product.id} value={product.id}>
+                                {!selectedProjectId ? `${product.trackerProjectCode || "-"} · ` : ""}
                                 {product.productName || "Product"} · {product.drawingNo || "-"}
                             </MenuItem>
                         ))}
