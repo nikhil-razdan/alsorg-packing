@@ -15,6 +15,17 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
+import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
+import QueryStatsRoundedIcon from "@mui/icons-material/QueryStatsRounded";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { canAccessMatFlowScreenForContext, useMatFlow } from "../matflowUi";
@@ -932,6 +943,256 @@ function OperationsBoardDrawer({
     );
 }
 
+
+const OVERVIEW_TONES = {
+    primary: {
+        text: "var(--mf-primary-text)",
+        soft: "var(--mf-primary-soft)",
+        border: "var(--mf-primary-border)",
+    },
+    success: {
+        text: "var(--mf-success-text)",
+        soft: "var(--mf-success-soft)",
+        border: "var(--mf-success-border)",
+    },
+    warning: {
+        text: "var(--mf-warning-text)",
+        soft: "var(--mf-warning-soft)",
+        border: "var(--mf-warning-border)",
+    },
+    danger: {
+        text: "var(--mf-danger-text)",
+        soft: "var(--mf-danger-soft)",
+        border: "var(--mf-danger-border)",
+    },
+    purple: {
+        text: "var(--mf-purple-text)",
+        soft: "var(--mf-purple-soft)",
+        border: "var(--mf-purple-border)",
+    },
+};
+
+const percent = (value) => Math.max(0, Math.min(100, Math.round(numeric(value))));
+
+function OverviewMetricCard({ label, value, subtitle, icon: Icon, tone = "primary", progress = null, onClick = null }) {
+    const palette = OVERVIEW_TONES[tone] || OVERVIEW_TONES.primary;
+    return (
+        <Card
+            onClick={onClick || undefined}
+            sx={{
+                ...panelSx,
+                m: 0,
+                p: 1.25,
+                minHeight: 112,
+                display: "grid",
+                gap: .75,
+                cursor: onClick ? "pointer" : "default",
+                position: "relative",
+                overflow: "hidden",
+                transition: "transform .18s ease,border-color .18s ease,box-shadow .18s ease",
+                "&:hover": onClick ? {
+                    transform: "translateY(-2px)",
+                    borderColor: palette.border,
+                    boxShadow: "var(--mf-card-shadow)",
+                } : undefined,
+                "&::after": {
+                    content: '""',
+                    position: "absolute",
+                    width: 84,
+                    height: 84,
+                    borderRadius: "50%",
+                    right: -28,
+                    top: -28,
+                    background: palette.soft,
+                    pointerEvents: "none",
+                },
+            }}
+        >
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: .8, position: "relative", zIndex: 1 }}>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ ...subTextSx, fontSize: 10.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: .45 }}>{label}</Typography>
+                    <Typography sx={{ ...mainTextSx, fontSize: { xs: 22, md: 26 }, lineHeight: 1.05, mt: .35 }}>{value}</Typography>
+                </Box>
+                {Icon && (
+                    <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", background: palette.soft, color: palette.text, border: `1px solid ${palette.border}`, flexShrink: 0 }}>
+                        <Icon sx={{ fontSize: 18 }} />
+                    </Box>
+                )}
+            </Box>
+            <Typography sx={{ ...subTextSx, fontSize: 10.5, position: "relative", zIndex: 1 }}>{subtitle}</Typography>
+            {progress !== null && progress !== undefined && (
+                <LinearProgress
+                    variant="determinate"
+                    value={percent(progress)}
+                    sx={{
+                        height: 5,
+                        borderRadius: 99,
+                        backgroundColor: "var(--mf-surface-strong)",
+                        position: "relative",
+                        zIndex: 1,
+                        "& .MuiLinearProgress-bar": { backgroundColor: palette.text, borderRadius: 99 },
+                    }}
+                />
+            )}
+        </Card>
+    );
+}
+
+function OverviewDonut({ value, label, caption, tone = "primary", size = 152 }) {
+    const palette = OVERVIEW_TONES[tone] || OVERVIEW_TONES.primary;
+    const safeValue = percent(value);
+    return (
+        <Box sx={{ display: "grid", placeItems: "center", gap: .9 }}>
+            <Box
+                sx={{
+                    width: size,
+                    height: size,
+                    borderRadius: "50%",
+                    display: "grid",
+                    placeItems: "center",
+                    background: `conic-gradient(${palette.text} 0deg ${safeValue * 3.6}deg, var(--mf-surface-strong) ${safeValue * 3.6}deg 360deg)`,
+                    boxShadow: `0 0 0 1px ${palette.border}, inset 0 0 0 1px var(--mf-border)`,
+                    position: "relative",
+                    "&::after": {
+                        content: '""',
+                        position: "absolute",
+                        inset: 14,
+                        borderRadius: "50%",
+                        background: "var(--mf-card-bg)",
+                        border: "1px solid var(--mf-border)",
+                    },
+                }}
+            >
+                <Box sx={{ position: "relative", zIndex: 1, textAlign: "center" }}>
+                    <Typography sx={{ ...mainTextSx, fontSize: 28, lineHeight: 1 }}>{safeValue}%</Typography>
+                    <Typography sx={{ ...subTextSx, fontSize: 9.5, mt: .3 }}>{label}</Typography>
+                </Box>
+            </Box>
+            <Typography sx={{ ...subTextSx, fontSize: 10.5, textAlign: "center", maxWidth: 220 }}>{caption}</Typography>
+        </Box>
+    );
+}
+
+function OverviewBarList({ rows, maxValue = null, valueLabel = (value) => value, emptyText = "No data to chart." }) {
+    const calculatedMax = Math.max(1, maxValue || 0, ...rows.map((row) => numeric(row.value)));
+    if (!rows.length) return <EmptyState>{emptyText}</EmptyState>;
+    return (
+        <Box sx={{ display: "grid", gap: .9 }}>
+            {rows.map((row) => {
+                const palette = OVERVIEW_TONES[row.tone] || OVERVIEW_TONES.primary;
+                const width = Math.max(row.value > 0 ? 4 : 0, Math.min(100, (numeric(row.value) / calculatedMax) * 100));
+                return (
+                    <Box key={row.key || row.label} sx={{ display: "grid", gap: .35 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: .55, minWidth: 0 }}>
+                                <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: palette.text, flexShrink: 0 }} />
+                                <Typography sx={{ ...mainTextSx, fontSize: 11.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.label}</Typography>
+                            </Box>
+                            <Typography sx={{ ...mainTextSx, fontSize: 11.2, color: palette.text, flexShrink: 0 }}>{valueLabel(row.value)}</Typography>
+                        </Box>
+                        <Box sx={{ height: 8, borderRadius: 99, background: "var(--mf-surface-strong)", overflow: "hidden", border: "1px solid var(--mf-border)" }}>
+                            <Box sx={{ width: `${width}%`, height: "100%", borderRadius: 99, background: palette.text, transition: "width .25s ease" }} />
+                        </Box>
+                        {row.subtitle && <Typography sx={{ ...subTextSx, fontSize: 9.6 }}>{row.subtitle}</Typography>}
+                    </Box>
+                );
+            })}
+        </Box>
+    );
+}
+
+function OverviewPlantComparison({ rows }) {
+    const metrics = [
+        ["openRequisitions", "Open MRs", "primary"],
+        ["shortageRequisitions", "Shortage", "danger"],
+        ["pendingQcInspections", "QC", "warning"],
+        ["activeProcessingJobs", "Processing", "purple"],
+    ];
+    if (!rows.length) return <EmptyState>No plant dashboard rows available.</EmptyState>;
+    const maximum = Math.max(1, ...rows.flatMap((row) => metrics.map(([key]) => numeric(row?.[key]))));
+    return (
+        <Box sx={{ display: "grid", gap: 1 }}>
+            <Box sx={{ display: "flex", gap: 1.2, flexWrap: "wrap" }}>
+                {metrics.map(([, label, tone]) => {
+                    const palette = OVERVIEW_TONES[tone];
+                    return <Box key={label} sx={{ display: "flex", gap: .45, alignItems: "center" }}><Box sx={{ width: 7, height: 7, borderRadius: "50%", background: palette.text }} /><Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{label}</Typography></Box>;
+                })}
+            </Box>
+            {rows.map((row) => (
+                <Box key={row.plantCode || row.plant || row.code} sx={{ p: .85, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, mb: .65 }}>
+                        <Typography sx={{ ...mainTextSx, fontSize: 11.5 }}>{row.plantCode || row.plant || row.code || "Plant"}</Typography>
+                        <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{numeric(row.activeProjects)} active projects · {numeric(row.stockBalanceLines)} stock lines</Typography>
+                    </Box>
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .45, alignItems: "end", minHeight: 66 }}>
+                        {metrics.map(([key, label, tone]) => {
+                            const palette = OVERVIEW_TONES[tone];
+                            const value = numeric(row?.[key]);
+                            const height = Math.max(value > 0 ? 7 : 2, (value / maximum) * 46);
+                            return (
+                                <Box key={key} sx={{ display: "grid", justifyItems: "center", gap: .25 }} title={`${label}: ${value}`}>
+                                    <Typography sx={{ ...subTextSx, fontSize: 8.7 }}>{value}</Typography>
+                                    <Box sx={{ width: "72%", maxWidth: 42, height: 48, display: "flex", alignItems: "flex-end", borderRadius: "5px 5px 2px 2px", overflow: "hidden", background: "var(--mf-surface-strong)" }}>
+                                        <Box sx={{ width: "100%", height, background: palette.text, borderRadius: "5px 5px 2px 2px", opacity: .88 }} />
+                                    </Box>
+                                </Box>
+                            );
+                        })}
+                    </Box>
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
+function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
+    if (!rows.length) return <EmptyState>No active exceptions or aged material flows need attention.</EmptyState>;
+    return (
+        <Box sx={{ display: "grid", gap: .7 }}>
+            {rows.map((row, index) => {
+                const target = nextActionTarget(row);
+                const canOpenTarget = canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                const breached = ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth));
+                const watch = normalize(row.timingHealth) === "WATCH";
+                const tone = breached ? OVERVIEW_TONES.danger : watch ? OVERVIEW_TONES.warning : numeric(row.shortageQty) > .0005 ? OVERVIEW_TONES.warning : OVERVIEW_TONES.primary;
+                return (
+                    <Card
+                        key={row.requisitionId || `${row.requisitionNumber}:${index}`}
+                        sx={{ ...panelSx, m: 0, p: .9, boxShadow: "none", borderLeft: `3px solid ${tone.text}` }}
+                    >
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={{ ...mainTextSx, fontSize: 11.7 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentLocationCode || row.destinationPlantCode || "-"}</Typography>
+                            </Box>
+                            <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                <TimingHealthChip health={row.timingHealth} />
+                                {numeric(row.shortageQty) > .0005 && <MatFlowStatusChip status="SHORTAGE_PENDING" />}
+                            </Box>
+                        </Box>
+                        <Box sx={{ mt: .65, display: "grid", gridTemplateColumns: "1fr auto", gap: .7, alignItems: "center" }}>
+                            <Box>
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, mb: .3 }}>
+                                    <Typography sx={{ ...subTextSx, fontSize: 9.7 }}>Material ready</Typography>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 9.7 }}>{percent(row.materialReadyPercent)}%</Typography>
+                                </Box>
+                                <LinearProgress variant="determinate" value={percent(row.materialReadyPercent)} sx={{ height: 4, borderRadius: 99, background: "var(--mf-surface-strong)", "& .MuiLinearProgress-bar": { borderRadius: 99 } }} />
+                            </Box>
+                            <Button
+                                endIcon={<ChevronRightRoundedIcon sx={{ fontSize: 16 }} />}
+                                onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)}
+                                sx={{ ...secondaryBtnSx, minHeight: 30, px: .8, fontSize: 9.8 }}
+                            >
+                                {canOpenTarget ? target.label : "Trace"}
+                            </Button>
+                        </Box>
+                    </Card>
+                );
+            })}
+        </Box>
+    );
+}
+
 function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
     return (
         <>
@@ -1543,19 +1804,108 @@ export function MatFlowDashboardPage() {
 
     const totals = data?.totals || {};
     const kpis = tracker?.kpis || {};
-    const liveRows = (tracker?.rows || [])
-        .filter((row) => !["CANCELLED", "PRODUCTION_COMPLETED"].includes(normalize(row.currentStage)))
+    const trackerRows = Array.isArray(tracker?.rows) ? tracker.rows : [];
+    const plantRows = Array.isArray(data?.rows) ? data.rows : [];
+    const activeRows = trackerRows.filter((row) => !["CANCELLED", "PRODUCTION_COMPLETED"].includes(normalize(row.currentStage)));
+
+    const avgMaterialReady = activeRows.length
+        ? activeRows.reduce((sum, row) => sum + percent(row.materialReadyPercent), 0) / activeRows.length
+        : 0;
+    const shortageRows = activeRows.filter((row) => numeric(row.shortageQty) > .0005);
+    const shortageQty = shortageRows.reduce((sum, row) => sum + numeric(row.shortageQty), 0);
+    const breachedRows = activeRows.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth)));
+    const watchRows = activeRows.filter((row) => normalize(row.timingHealth) === "WATCH");
+    const onTrackRows = activeRows.filter((row) => normalize(row.timingHealth) === "ON_TRACK");
+    const notStartedRows = activeRows.filter((row) => ["NOT_STARTED", ""].includes(normalize(row.timingHealth)));
+
+    const workflowLoad = FLOW.map(([key, label], index) => {
+        const count = activeRows.filter((row) => stageBucket(row.currentStage) === key).length;
+        const tone = key === "COMPLETE" ? "success"
+            : key === "PURCHASE" ? "danger"
+                : key === "QC" ? "warning"
+                    : key === "PROCESSING" ? "purple"
+                        : index <= 1 ? "primary" : "success";
+        return { key, label, value: count, tone };
+    });
+
+    const timingHealthRows = [
+        { key: "BREACHED", label: "Breached", value: breachedRows.length, tone: "danger", subtitle: "Already above the workflow timing target" },
+        { key: "WATCH", label: "Watch", value: watchRows.length, tone: "warning", subtitle: "At or above 75% of the stage timing target" },
+        { key: "ON_TRACK", label: "On track", value: onTrackRows.length, tone: "success", subtitle: "Inside the current stage timing target" },
+        { key: "NOT_STARTED", label: "Not started", value: notStartedRows.length, tone: "primary", subtitle: "No stage timing clock started yet" },
+    ];
+
+    const attentionRows = [...activeRows]
+        .filter((row) => ["BREACHED", "WATCH"].includes(normalize(row.timingHealth)) || numeric(row.shortageQty) > .0005 || numeric(row.ageHours) >= 24)
+        .sort((a, b) => {
+            const breachScore = (row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth)) ? 4 : normalize(row.timingHealth) === "WATCH" ? 2 : 0;
+            const shortageScore = (row) => numeric(row.shortageQty) > .0005 ? 2 : 0;
+            return (breachScore(b) + shortageScore(b)) - (breachScore(a) + shortageScore(a)) || numeric(b.ageHours) - numeric(a.ageHours);
+        })
+        .slice(0, 6);
+
+    const liveRows = [...activeRows]
         .sort((a, b) => numeric(b.ageHours) - numeric(a.ageHours))
         .slice(0, 8);
 
-    const cards = [
-        ["Active Projects", totals.activeProjects ?? 0],
-        ["Open MRs", kpis.activeRequisitions ?? totals.openRequisitions ?? 0],
-        ["Shortage MRs", kpis.shortagePending ?? totals.shortageRequisitions ?? 0],
-        ["Material In Transit", kpis.materialInTransit ?? totals.inTransitOutboundTransfers ?? 0],
-        ["Pending QC", totals.pendingQcInspections ?? 0],
-        ["Processing Jobs", totals.activeProcessingJobs ?? 0],
+    const overviewCards = [
+        {
+            label: "Active Projects",
+            value: totals.activeProjects ?? 0,
+            subtitle: `${totals.effectiveBoms ?? 0} effective BOMs in current scope`,
+            icon: FolderOpenRoundedIcon,
+            tone: "primary",
+            onClick: () => changeView("projects"),
+        },
+        {
+            label: "Open Material Requests",
+            value: kpis.activeRequisitions ?? totals.openRequisitions ?? 0,
+            subtitle: `${shortageRows.length} currently carry a shortage`,
+            icon: AssignmentOutlinedIcon,
+            tone: shortageRows.length ? "warning" : "primary",
+            onClick: () => changeView("operations"),
+        },
+        {
+            label: "Material Readiness",
+            value: `${Math.round(avgMaterialReady)}%`,
+            subtitle: `Average readiness across ${activeRows.length} active MRs`,
+            icon: QueryStatsRoundedIcon,
+            tone: avgMaterialReady >= 80 ? "success" : avgMaterialReady >= 50 ? "warning" : "primary",
+            progress: avgMaterialReady,
+        },
+        {
+            label: "Shortage Exposure",
+            value: formatQty(shortageQty),
+            subtitle: `${shortageRows.length} MRs need purchase / supply resolution`,
+            icon: WarningAmberRoundedIcon,
+            tone: shortageRows.length ? "danger" : "success",
+            onClick: () => navigate("/matflow/purchase"),
+        },
+        {
+            label: "Material In Transit",
+            value: kpis.materialInTransit ?? totals.inTransitOutboundTransfers ?? 0,
+            subtitle: `${totals.expectedInboundTransfers ?? 0} expected inbound route(s)`,
+            icon: LocalShippingOutlinedIcon,
+            tone: "purple",
+        },
+        {
+            label: "Quality / Processing",
+            value: `${totals.pendingQcInspections ?? 0} / ${totals.activeProcessingJobs ?? 0}`,
+            subtitle: "Pending QC checks / active processing jobs",
+            icon: FactCheckOutlinedIcon,
+            tone: (totals.pendingQcInspections ?? 0) > 0 ? "warning" : "success",
+        },
     ];
+
+    const workflowLinks = [
+        ["Projects", "Project + Product portfolio", "/matflow/projects", "projects", FolderOpenRoundedIcon, "primary"],
+        ["BOM", "Engineering → Production Review", "/matflow/boms", "boms", AssessmentRoundedIcon, "purple"],
+        ["MR", "Production material demand", "/matflow/production", "production", AssignmentOutlinedIcon, "primary"],
+        ["Store", "Plant routing / Main Store planning", "/matflow/store", "store", Inventory2OutlinedIcon, "success"],
+        ["Purchase", "PI → PO → GRN at Main Store", "/matflow/purchase", "purchase", WarningAmberRoundedIcon, "warning"],
+        ["QC", "Main Store material checklist", "/matflow/qc", "qc", FactCheckOutlinedIcon, "warning"],
+        ["Production", "Receive → account → complete", "/matflow/production-execution", "production-execution", PrecisionManufacturingOutlinedIcon, "purple"],
+    ].filter(([, , , screen]) => canAccessMatFlowScreenForContext(screen, roles, contextPlants));
 
     return (
         <Box sx={pageSx}>
@@ -1563,57 +1913,213 @@ export function MatFlowDashboardPage() {
             <ErrorBox>{error}</ErrorBox>
             {loading ? <LoadingBlock /> : (
                 <>
-                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 1 }}>
-                        {cards.map(([label, value]) => <SummaryCard key={label} label={label} value={value ?? 0} />)}
+                    <Card
+                        sx={{
+                            ...panelSx,
+                            p: { xs: 1.25, md: 1.6 },
+                            overflow: "hidden",
+                            position: "relative",
+                            background: "var(--mf-hero-bg)",
+                            "&::after": {
+                                content: '\"\"',
+                                position: "absolute",
+                                width: 240,
+                                height: 240,
+                                borderRadius: "50%",
+                                right: -90,
+                                top: -120,
+                                background: "var(--mf-primary-soft)",
+                                filter: "blur(2px)",
+                                pointerEvents: "none",
+                            },
+                        }}
+                    >
+                        <Box sx={{ position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1.5fr) minmax(360px,.7fr)" }, gap: 1.5, alignItems: "center" }}>
+                            <Box>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: .55, mb: .7 }}>
+                                    <Box sx={{ width: 28, height: 28, borderRadius: 2, display: "grid", placeItems: "center", background: "var(--mf-primary-soft)", color: "var(--mf-primary-text)", border: "1px solid var(--mf-primary-border)" }}>
+                                        <BoltRoundedIcon sx={{ fontSize: 17 }} />
+                                    </Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 11.5, textTransform: "uppercase", letterSpacing: .75 }}>Operational pulse</Typography>
+                                </Box>
+                                <Typography sx={{ ...mainTextSx, fontSize: { xs: 22, md: 28 }, lineHeight: 1.12 }}>
+                                    {selectedPlantParam ? `${selectedPlantParam} Material Flow Overview` : "Cross-Plant Material Flow Overview"}
+                                </Typography>
+                                <Typography sx={{ ...subTextSx, mt: .65, maxWidth: 760, fontSize: 11.5 }}>
+                                    A live executive view of Project demand, material readiness, shortages, custody movement, QC, processing and Production execution. Charts use the same plant-authorised tracker and dashboard read models as the Operations Board.
+                                </Typography>
+                                <Box sx={{ display: "flex", gap: .6, mt: 1.15, flexWrap: "wrap" }}>
+                                    <Button onClick={() => changeView("operations")} sx={primaryBtnSx}>Open Operations Board</Button>
+                                    <Button onClick={() => changeView("projects")} sx={secondaryBtnSx}>Project Tracker</Button>
+                                    <Button onClick={() => changeView("materials")} sx={secondaryBtnSx}>Material Tracker</Button>
+                                </Box>
+                            </Box>
+                            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: .7 }}>
+                                {[
+                                    ["Active MRs", activeRows.length, "primary"],
+                                    ["Timing Risk", breachedRows.length + watchRows.length, breachedRows.length ? "danger" : "warning"],
+                                    ["Shortage", shortageRows.length, shortageRows.length ? "danger" : "success"],
+                                ].map(([label, value, tone]) => {
+                                    const palette = OVERVIEW_TONES[tone];
+                                    return (
+                                        <Box key={label} sx={{ p: .85, borderRadius: 2, border: `1px solid ${palette.border}`, background: palette.soft, textAlign: "center" }}>
+                                            <Typography sx={{ ...mainTextSx, fontSize: 20, color: palette.text }}>{value}</Typography>
+                                            <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>{label}</Typography>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Box>
+                    </Card>
+
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(3,minmax(0,1fr))", xl: "repeat(6,minmax(0,1fr))" }, gap: 1 }}>
+                        {overviewCards.map((card) => <OverviewMetricCard key={card.label} {...card} />)}
                     </Box>
 
-                    <Card sx={panelSx}>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Live Material Execution</Typography>
-                        <Typography sx={{ ...subTextSx, mb: 1.2 }}>The highest-age active Project/Product MRs and their current material owner/location.</Typography>
-                        <Box sx={tableShellSx}>
-                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 160px 170px 170px 120px 170px 120px" }}>
-                                {["PD No. / Product", "MR", "Current Department", "Current Location", "Ready %", "Blocker / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(280px,.72fr) minmax(420px,1.25fr) minmax(360px,1fr)" }, gap: 1 }}>
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: .95 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Material Readiness</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Average across active Material Requisitions</Typography>
+                                </Box>
+                                <QueryStatsRoundedIcon sx={{ color: "var(--mf-primary-text)", fontSize: 20 }} />
                             </Box>
+                            <OverviewDonut
+                                value={avgMaterialReady}
+                                label="ready"
+                                caption={`${activeRows.filter((row) => row.readyToStartProduction === true).length} MR(s) currently report ready-to-start Production.`}
+                                tone={avgMaterialReady >= 80 ? "success" : avgMaterialReady >= 50 ? "warning" : "primary"}
+                            />
+                            <Divider sx={{ my: 1, borderColor: "var(--mf-border)" }} />
+                            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: .55 }}>
+                                <Detail label="Open MRs" value={activeRows.length} />
+                                <Detail label="Shortage MRs" value={shortageRows.length} />
+                                <Detail label="Ready to Start" value={activeRows.filter((row) => row.readyToStartProduction === true).length} />
+                                <Detail label="Material in Transit" value={kpis.materialInTransit ?? totals.inTransitOutboundTransfers ?? 0} />
+                            </Box>
+                        </Card>
+
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Workflow Load</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Where active Project/Product MRs are currently concentrated</Typography>
+                                </Box>
+                                <AssessmentRoundedIcon sx={{ color: "var(--mf-primary-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewBarList rows={workflowLoad} valueLabel={(value) => `${value} MR${numeric(value) === 1 ? "" : "s"}`} />
+                        </Card>
+
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Timing Health</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Current stage timing against backend operational targets</Typography>
+                                </Box>
+                                <QueryStatsRoundedIcon sx={{ color: "var(--mf-warning-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewBarList rows={timingHealthRows} valueLabel={(value) => `${value}`} />
+                        </Card>
+                    </Box>
+
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(420px,1.08fr) minmax(420px,.92fr)" }, gap: 1 }}>
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Plant Operations Comparison</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Open demand and execution workload by authorised Plant scope</Typography>
+                                </Box>
+                                <PrecisionManufacturingOutlinedIcon sx={{ color: "var(--mf-purple-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewPlantComparison rows={plantRows} />
+                        </Card>
+
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Attention Center</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Highest priority timing, shortage and aged-flow exceptions</Typography>
+                                </Box>
+                                <WarningAmberRoundedIcon sx={{ color: "var(--mf-warning-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewAttentionList rows={attentionRows} navigate={navigate} roles={roles} contextPlants={contextPlants} />
+                        </Card>
+                    </Box>
+
+                    <Card sx={{ ...panelSx, p: 1.25 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1, flexWrap: "wrap" }}>
+                            <Box>
+                                <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Live Material Execution</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .15 }}>Oldest active Project/Product MRs with the current department, location, readiness and next action.</Typography>
+                            </Box>
+                            <Button onClick={() => changeView("operations")} endIcon={<ChevronRightRoundedIcon />} sx={secondaryBtnSx}>Open full Operations Board</Button>
+                        </Box>
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: .75 }}>
                             {liveRows.length === 0 ? <EmptyState>No active Material Requisitions.</EmptyState> : liveRows.map((row) => {
                                 const target = nextActionTarget(row);
+                                const canOpenTarget = canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
                                 return (
-                                    <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "220px 160px 170px 170px 120px 170px 120px" }}>
-                                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.projectCode} · {row.productName}</Typography><Typography sx={subTextSx}>{row.clientName} · {row.drawingNo}</Typography></Box>
-                                        <Box sx={tableCellSx}>{row.requisitionNumber}</Box>
-                                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                        <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
-                                        <Box sx={tableCellSx}>{Math.round(numeric(row.materialReadyPercent))}%</Box>
-                                        <Box sx={tableCellSx}><Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.nextDepartment || row.currentStage)}</Typography></Box>
-                                        <Box sx={tableCellSx}>{canAccessMatFlowScreenForContext(target.screen, roles, contextPlants) ? <Button onClick={() => navigate(target.path)} sx={secondaryBtnSx}>{target.label}</Button> : <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace</Button>}</Box>
-                                    </Box>
+                                    <Card key={row.requisitionId} sx={{ ...panelSx, m: 0, p: .9, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 11.8 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentLocationCode || row.destinationPlantCode || "-"}</Typography>
+                                            </Box>
+                                            <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                                <MatFlowStatusChip status={row.currentStage} />
+                                                <TimingHealthChip health={row.timingHealth} />
+                                            </Box>
+                                        </Box>
+                                        <Box sx={{ mt: .7, display: "grid", gridTemplateColumns: "1fr auto", gap: .8, alignItems: "end" }}>
+                                            <Box>
+                                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, mb: .3 }}>
+                                                    <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{readable(row.currentDepartment || row.responsibleDesk)} · {formatDurationMinutes(numeric(row.ageHours) * 60)}</Typography>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 9.8 }}>{percent(row.materialReadyPercent)}%</Typography>
+                                                </Box>
+                                                <LinearProgress variant="determinate" value={percent(row.materialReadyPercent)} sx={{ height: 5, borderRadius: 99, background: "var(--mf-surface-strong)", "& .MuiLinearProgress-bar": { borderRadius: 99 } }} />
+                                                {row.productionStartBlocker && <Typography sx={{ ...subTextSx, fontSize: 9.5, mt: .4 }}>Blocker: {readable(row.productionStartBlocker)}</Typography>}
+                                            </Box>
+                                            <Button onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)} sx={{ ...secondaryBtnSx, minHeight: 30, fontSize: 9.8 }}>{canOpenTarget ? target.label : "Trace"}</Button>
+                                        </Box>
+                                    </Card>
                                 );
                             })}
                         </Box>
                     </Card>
 
-                    <Card sx={panelSx}>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>Workflow</Typography>
-                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7,minmax(0,1fr))", gap: 1 }}>
-                            {[
-                                ["Projects", "Project + Products", "/matflow/projects", "projects"],
-                                ["BOM", "Engineering → Production Review", "/matflow/boms", "boms"],
-                                ["MR", "Production demand", "/matflow/production", "production"],
-                                ["Store", "Plant routing / Main Store planning", "/matflow/store", "store"],
-                                ["Purchase", "PI → PO → GRN at Main Store", "/matflow/purchase", "purchase"],
-                                ["QC", "Main Store checklist", "/matflow/qc", "qc"],
-                                ["Production", "Receive → account → complete", "/matflow/production-execution", "production-execution"],
-                            ].filter(([, , , screen]) => canAccessMatFlowScreenForContext(screen, roles, contextPlants)).map(([title, subtitle, path]) => (
-                                <Card key={title} onClick={() => navigate(path)} sx={{ ...panelSx, m: 0, cursor: "pointer", boxShadow: "none" }}>
-                                    <Typography sx={mainTextSx}>{title}</Typography>
-                                    <Typography sx={subTextSx}>{subtitle}</Typography>
-                                </Card>
-                            ))}
+                    <Card sx={{ ...panelSx, p: 1.25 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                            <Box>
+                                <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Operational Workspaces</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .15 }}>Jump directly into the authorised desk responsible for the next material action.</Typography>
+                            </Box>
+                            <BoltRoundedIcon sx={{ color: "var(--mf-primary-text)", fontSize: 20 }} />
+                        </Box>
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(3,minmax(0,1fr))", xl: `repeat(${Math.min(7, Math.max(1, workflowLinks.length))},minmax(0,1fr))` }, gap: .75 }}>
+                            {workflowLinks.map(([title, subtitle, path, , Icon, tone]) => {
+                                const palette = OVERVIEW_TONES[tone] || OVERVIEW_TONES.primary;
+                                return (
+                                    <Card
+                                        key={title}
+                                        onClick={() => navigate(path)}
+                                        sx={{ ...panelSx, m: 0, p: .9, boxShadow: "none", cursor: "pointer", transition: "transform .18s ease,border-color .18s ease", "&:hover": { transform: "translateY(-2px)", borderColor: palette.border } }}
+                                    >
+                                        <Box sx={{ width: 31, height: 31, borderRadius: 2, display: "grid", placeItems: "center", background: palette.soft, color: palette.text, border: `1px solid ${palette.border}`, mb: .7 }}>
+                                            <Icon sx={{ fontSize: 17 }} />
+                                        </Box>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 11.5 }}>{title}</Typography>
+                                        <Typography sx={{ ...subTextSx, mt: .18, fontSize: 9.7 }}>{subtitle}</Typography>
+                                    </Card>
+                                );
+                            })}
                         </Box>
                     </Card>
                 </>
             )}
         </Box>
     );
+
 }
 
 export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
@@ -1766,80 +2272,80 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     />
                 )
             ) : (
-            <Box sx={{ display: "grid", gap: 1 }}>
-                {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
-                    const expanded = expandedProjects[project.key] === true;
-                    return (
-                        <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                            <Box
-                                role={!expanded ? "button" : undefined}
-                                tabIndex={!expanded ? 0 : undefined}
-                                onClick={() => {
-                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                }}
-                                onKeyDown={(event) => {
-                                    if (!expanded && (event.key === "Enter" || event.key === " ")) {
-                                        event.preventDefault();
-                                        setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                    }
-                                }}
-                                sx={{
-                                    px: 1.5,
-                                    py: 1.2,
-                                    display: "grid",
-                                    gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
-                                    gap: 1,
-                                    alignItems: "center",
-                                    cursor: expanded ? "default" : "pointer",
-                                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
-                                }}
-                            >
-                                <Box>
-                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
-                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
-                                </Box>
-                                <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
-                                <Box sx={{ display: "grid", placeItems: "center" }}>
-                                    {expanded && (
-                                        <Button
-                                            aria-label="Collapse project"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                setExpandedProjects((current) => ({ ...current, [project.key]: false }));
-                                            }}
-                                            sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
-                                        >
-                                            <ExpandLessIcon fontSize="small" />
-                                        </Button>
-                                    )}
-                                </Box>
-                            </Box>
-
-                            <Collapse in={expanded} unmountOnExit>
-                                <Box sx={tableShellSx}>
-                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                        {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                <Box sx={{ display: "grid", gap: 1 }}>
+                    {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
+                        const expanded = expandedProjects[project.key] === true;
+                        return (
+                            <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                                <Box
+                                    role={!expanded ? "button" : undefined}
+                                    tabIndex={!expanded ? 0 : undefined}
+                                    onClick={() => {
+                                        if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (!expanded && (event.key === "Enter" || event.key === " ")) {
+                                            event.preventDefault();
+                                            setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                        }
+                                    }}
+                                    sx={{
+                                        px: 1.5,
+                                        py: 1.2,
+                                        display: "grid",
+                                        gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        cursor: expanded ? "default" : "pointer",
+                                        background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
+                                    }}
+                                >
+                                    <Box>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
+                                        <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
                                     </Box>
-                                    {project.rows.map((row) => (
-                                        <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                            <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
-                                            <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
-                                            <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
-                                        </Box>
-                                    ))}
+                                    <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
+                                    <Box sx={{ display: "grid", placeItems: "center" }}>
+                                        {expanded && (
+                                            <Button
+                                                aria-label="Collapse project"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setExpandedProjects((current) => ({ ...current, [project.key]: false }));
+                                                }}
+                                                sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
+                                            >
+                                                <ExpandLessIcon fontSize="small" />
+                                            </Button>
+                                        )}
+                                    </Box>
                                 </Box>
-                            </Collapse>
-                        </Card>
-                    );
-                })}
-            </Box>
+
+                                <Collapse in={expanded} unmountOnExit>
+                                    <Box sx={tableShellSx}>
+                                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                            {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                        </Box>
+                                        {project.rows.map((row) => (
+                                            <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
+                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
+                                                <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                                <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </Collapse>
+                            </Card>
+                        );
+                    })}
+                </Box>
             )}
             {!loading && trackerView === "HIERARCHY" && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
         </Box>
