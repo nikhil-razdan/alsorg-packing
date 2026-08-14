@@ -315,7 +315,7 @@ export function MatFlowStoreQueuePage() {
                 <MatFlowViewToggle
                     value={viewMode}
                     onChange={setViewMode}
-                    options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]}
+                    options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]}
                 />
             </Card>
 

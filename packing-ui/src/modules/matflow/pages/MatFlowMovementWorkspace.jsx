@@ -95,9 +95,9 @@ const returnUpdatedAt = (row) =>
 const remainingReturnable = (line) => Math.max(
     0,
     numeric(line?.issuedQty)
-        - numeric(line?.consumedQty)
-        - numeric(line?.productionWasteQty ?? line?.wastageQty)
-        - numeric(line?.returnedQty)
+    - numeric(line?.consumedQty)
+    - numeric(line?.productionWasteQty ?? line?.wastageQty)
+    - numeric(line?.returnedQty)
 );
 
 export function MatFlowReturnsPage() {
@@ -287,8 +287,8 @@ export function MatFlowReturnsPage() {
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Box><Typography sx={mainTextSx}>Return Route View</Typography><Typography sx={subTextSx}>Kanban mirrors the fixed custody route; all state changes still use explicit Dispatch / Receive actions.</Typography></Box>
-                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+                <Box><Typography sx={mainTextSx}>Return Route View</Typography><Typography sx={subTextSx}>The workflow board mirrors the fixed custody route; all state changes still use explicit Dispatch / Receive actions.</Typography></Box>
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]} />
             </Card>
 
             <Card sx={panelSx}>

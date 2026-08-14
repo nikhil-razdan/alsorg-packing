@@ -113,8 +113,8 @@ const nextActionTarget = (row) => {
 };
 
 const UNIVERSAL_DASHBOARD_VIEWS = [
-    ["overview", "Overall View", "KPIs, live execution and workflow health"],
-    ["kanban", "Kanban", "Project-wise · Product-wise · Material-wise workflow control"],
+    ["operations", "Operations Board", "Project-wise · Product-wise · Material-wise workflow control"],
+    ["overview", "Overview", "KPIs, live execution and workflow health"],
     ["projects", "Project Tracker", "Project → Product → MR material readiness"],
     ["materials", "Material Tracker", "One material across Projects, Products and custody routes"],
 ];
@@ -701,10 +701,12 @@ export function MatFlowDashboardPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const { selectedPlantParam, availablePlants, roles } = useMatFlow();
     const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
-    const requestedView = normalize(searchParams.get("view") || "overview").toLowerCase();
-    const view = ["overview", "kanban", "projects", "materials"].includes(requestedView) ? requestedView : "overview";
+    const rawRequestedView = normalize(searchParams.get("view") || "operations").toLowerCase();
+    // Backward compatibility for v7-v9 dashboard bookmarks that used ?view=kanban.
+    const requestedView = rawRequestedView === "kanban" ? "operations" : rawRequestedView;
+    const view = ["operations", "overview", "projects", "materials"].includes(requestedView) ? requestedView : "operations";
     const materialId = clean(searchParams.get("materialId"));
-    const requestedKanbanScope = normalize(searchParams.get("kanbanScope") || "PROJECT");
+    const requestedKanbanScope = normalize(searchParams.get("boardScope") || searchParams.get("kanbanScope") || "PROJECT");
     const kanbanScope = ["PROJECT", "PRODUCT", "MATERIAL"].includes(requestedKanbanScope)
         ? requestedKanbanScope
         : "PROJECT";
@@ -713,14 +715,18 @@ export function MatFlowDashboardPage() {
         const next = new URLSearchParams(searchParams);
         next.set("view", nextView);
         if (nextView !== "materials") next.delete("materialId");
-        if (nextView !== "kanban") next.delete("kanbanScope");
+        if (nextView !== "operations") {
+            next.delete("boardScope");
+            next.delete("kanbanScope");
+        }
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams]);
 
     const changeKanbanScope = useCallback((scope) => {
         const next = new URLSearchParams(searchParams);
-        next.set("view", "kanban");
-        next.set("kanbanScope", normalize(scope) || "PROJECT");
+        next.set("view", "operations");
+        next.set("boardScope", normalize(scope) || "PROJECT");
+        next.delete("kanbanScope");
         setSearchParams(next, { replace: true });
     }, [searchParams, setSearchParams]);
 
@@ -733,7 +739,7 @@ export function MatFlowDashboardPage() {
     const [error, setError] = useState("");
 
     const load = useCallback(async () => {
-        if (!["overview", "kanban"].includes(view)) {
+        if (!["overview", "operations"].includes(view)) {
             setLoading(false);
             return;
         }
@@ -743,10 +749,10 @@ export function MatFlowDashboardPage() {
             const [dashboardResponse, trackerResponse, requisitionResponse, projectResponse] = await Promise.all([
                 matflowApi.dashboardReport({ plantCode: selectedPlantParam }),
                 matflowApi.getTracker({ plantCode: selectedPlantParam }),
-                view === "kanban"
+                view === "operations"
                     ? matflowApi.listRequisitions()
                     : Promise.resolve({ data: [] }),
-                view === "kanban"
+                view === "operations"
                     ? matflowApi.listProjects({
                         active: true,
                         plantCode: selectedPlantParam || undefined,
@@ -768,7 +774,7 @@ export function MatFlowDashboardPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    if (view === "kanban") {
+    if (view === "operations") {
         const trackerRows = (Array.isArray(tracker?.rows) ? tracker.rows : [])
             .filter((row) => normalize(row.currentStage) !== "CANCELLED");
 
@@ -860,9 +866,9 @@ export function MatFlowDashboardPage() {
                 <Card sx={{ ...panelSx, display: "grid", gap: 1.1 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                         <Box>
-                            <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Execution Kanban</Typography>
+                            <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Operations Board</Typography>
                             <Typography sx={subTextSx}>
-                                Switch between Project, Product and Material cards. Stable border/tint identities make each entity visually distinct without changing workflow-state colours. Material-wise cards aggregate the same material across Projects, Products and MRs. The lane is derived from the authoritative backend workflow; cards cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
+                                Switch between Project, Product and Material operational cards. Stable border/tint identities make each entity visually distinct without changing workflow-state colours. Material-wise cards aggregate the same material across Projects, Products and MRs. Every stage is derived from the authoritative backend workflow, so the board cannot bypass Store, Purchase, QC, Processing, routing or Production controls.
                             </Typography>
                         </Box>
                         <MatFlowViewToggle
@@ -1336,12 +1342,12 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                 <Box>
                     <Typography sx={mainTextSx}>Tracker View</Typography>
-                    <Typography sx={subTextSx}>{trackerView === "KANBAN" ? "Detailed MR-level Kanban inside the selected Project/Product tracker. Actions still open the authoritative workflow screen." : "Project hierarchy with collapsible Products and MR detail."}</Typography>
+                    <Typography sx={subTextSx}>{trackerView === "KANBAN" ? "Detailed MR-level workflow board inside the selected Project/Product tracker. Actions still open the authoritative workflow screen." : "Project hierarchy with collapsible Products and MR detail."}</Typography>
                 </Box>
                 <MatFlowViewToggle
                     value={trackerView}
                     onChange={setTrackerView}
-                    options={[{ value: "HIERARCHY", label: "Hierarchy" }, { value: "KANBAN", label: "MR Kanban" }]}
+                    options={[{ value: "HIERARCHY", label: "Hierarchy" }, { value: "KANBAN", label: "MR Workflow Board" }]}
                 />
             </Card>
 

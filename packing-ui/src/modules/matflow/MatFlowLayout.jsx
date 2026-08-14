@@ -62,7 +62,7 @@ const NAV = [
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const HEADER = [
-    ["/matflow/dashboard", "MatFlow Universal Dashboard", "Overall insights + Project-wise / Product-wise / Material-wise Kanban + unified trackers in one plant-aware command center"],
+    ["/matflow/dashboard", "MatFlow Universal Dashboard", "Operations Board + overall insights + Project-wise / Product-wise / Material-wise workflow control + unified trackers in one plant-aware command center"],
     ["/matflow/production-execution", "Production Execution", "Receive material → start Production → consume / waste / return → complete"],
     ["/matflow/boms", "Operational BOMs", "Section-wise MatFlow BOM Builder with Engineering authoring and Production review on the same page"],
     ["/matflow/store", "Store Material Control", "MR availability, reservation, QC choice, Store issue and shortage PI"],

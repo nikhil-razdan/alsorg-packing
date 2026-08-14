@@ -473,8 +473,8 @@ export function MatFlowProcessingPage() {
             </Box>
 
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Box><Typography sx={mainTextSx}>Processing View</Typography><Typography sx={subTextSx}>Kanban is an execution view; Start/Complete still use the validated Processing actions.</Typography></Box>
-                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+                <Box><Typography sx={mainTextSx}>Processing View</Typography><Typography sx={subTextSx}>The workflow board is an execution view; Start/Complete still use the validated Processing actions.</Typography></Box>
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]} />
             </Card>
 
             <Card sx={panelSx}>
@@ -809,7 +809,7 @@ export function MatFlowProductionExecutionPage() {
                     onChange={(e) => setSearch(e.target.value)}
                     sx={{ ...fieldSx, minWidth: 360, flex: "1 1 360px" }}
                 />
-                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]} />
             </Card>
 
             <Card sx={panelSx}>
