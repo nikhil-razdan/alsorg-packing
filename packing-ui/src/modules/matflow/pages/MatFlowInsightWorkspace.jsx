@@ -23,8 +23,10 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     TimingHealthChip,
@@ -86,9 +88,12 @@ const nextActionTarget = (row) => {
         case "AWAITING_MAIN_STORE_PLANNING":
         case "AWAITING_STORE_PLANNING":
         case "MATERIAL_RESERVED":
-        case "SHORTAGE_PENDING":
         case "READY_TO_ISSUE":
             return { label: "Store", path: `/matflow/store/requisitions/${id}`, screen: "store" };
+        case "SHORTAGE_PENDING":
+            return normalize(row?.nextDepartment) === "PURCHASE" || normalize(row?.responsibleDesk) === "PURCHASE"
+                ? { label: "Purchase", path: "/matflow/purchase", screen: "purchase" }
+                : { label: "Store", path: `/matflow/store/requisitions/${id}`, screen: "store" };
         case "QC_PENDING":
         case "QC_ROUTING_PENDING":
             return { label: "QC", path: "/matflow/qc", screen: "qc" };
@@ -106,9 +111,29 @@ const nextActionTarget = (row) => {
 
 const UNIVERSAL_DASHBOARD_VIEWS = [
     ["overview", "Overall View", "KPIs, live execution and workflow health"],
+    ["kanban", "Work Kanban", "Role-aware action board without bypassing workflow controls"],
     ["projects", "Project Tracker", "Project → Product → MR material readiness"],
     ["materials", "Material Tracker", "One material across Projects, Products and custody routes"],
 ];
+
+const WORK_KANBAN_COLUMNS = [
+    { key: "ACTION", label: "Needs Action", subtitle: "The responsible desk can act now" },
+    { key: "PROGRESS", label: "In Progress", subtitle: "Store, Processing or Production work is underway" },
+    { key: "WAITING", label: "Waiting / External", subtitle: "Purchase, transit or another dependency is pending" },
+    { key: "READY", label: "Ready for Next Step", subtitle: "Material is prepared for the next controlled action" },
+    { key: "DONE", label: "Completed", subtitle: "Production material cycle completed" },
+];
+
+const workKanbanLane = (row, roles = [], contextPlants = []) => {
+    const stage = normalize(row?.currentStage);
+    if (stage === "PRODUCTION_COMPLETED") return "DONE";
+    if (["PROCESSING", "PRODUCTION_IN_PROGRESS", "STORE_REVIEW_IN_PROGRESS"].includes(stage)) return "PROGRESS";
+    if (["MATERIAL_RESERVED", "READY_TO_ISSUE", "PRODUCTION_ISSUE"].includes(stage) || row?.readyToStartProduction === true) return "READY";
+    if (stage === "TRANSFER_IN_PROGRESS") return "WAITING";
+    const target = nextActionTarget(row);
+    if (canAccessMatFlowScreenForContext(target.screen, roles, contextPlants)) return "ACTION";
+    return "WAITING";
+};
 
 function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
     return (
@@ -120,7 +145,7 @@ function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refres
                 actions={onRefresh ? <Button startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing} sx={secondaryBtnSx}>Refresh</Button> : null}
             />
             <Card sx={{ ...panelSx, p: 1 }}>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,minmax(0,1fr))" }, gap: .8 }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,minmax(0,1fr))" }, gap: .8 }}>
                     {UNIVERSAL_DASHBOARD_VIEWS.map(([key, label, subtitle]) => {
                         const active = view === key;
                         return (
@@ -154,7 +179,7 @@ export function MatFlowDashboardPage() {
     const { selectedPlantParam, availablePlants, roles } = useMatFlow();
     const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
     const requestedView = normalize(searchParams.get("view") || "overview").toLowerCase();
-    const view = ["overview", "projects", "materials"].includes(requestedView) ? requestedView : "overview";
+    const view = ["overview", "kanban", "projects", "materials"].includes(requestedView) ? requestedView : "overview";
     const materialId = clean(searchParams.get("materialId"));
 
     const changeView = useCallback((nextView) => {
@@ -169,7 +194,7 @@ export function MatFlowDashboardPage() {
     const [error, setError] = useState("");
 
     const load = useCallback(async () => {
-        if (view !== "overview") {
+        if (!["overview", "kanban"].includes(view)) {
             setLoading(false);
             return;
         }
@@ -190,6 +215,63 @@ export function MatFlowDashboardPage() {
     }, [selectedPlantParam, view]);
 
     useEffect(() => { load(); }, [load]);
+
+    if (view === "kanban") {
+        const managementView = roles.some((role) => ["ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR"].includes(normalize(role)));
+        const workRows = (tracker?.rows || [])
+            .filter((row) => normalize(row.currentStage) !== "CANCELLED")
+            .filter((row) => managementView || canAccessMatFlowScreenForContext(nextActionTarget(row).screen, roles, contextPlants))
+            .sort((a, b) => numeric(b.ageHours) - numeric(a.ageHours));
+        return (
+            <Box sx={pageSx}>
+                <UniversalDashboardHeader view={view} onViewChange={changeView} onRefresh={load} refreshing={loading} />
+                <ErrorBox>{error}</ErrorBox>
+                <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Box>
+                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>My Operational Work Board</Typography>
+                        <Typography sx={subTextSx}>Cards are plant/role scoped. Workflow status never changes by dragging; use the controlled action button so backend validation, quantities and audit remain authoritative.</Typography>
+                    </Box>
+                    <Button onClick={() => changeView("overview")} sx={secondaryBtnSx}>Overall View</Button>
+                </Card>
+                {loading ? <LoadingBlock /> : (
+                    <MatFlowKanbanBoard
+                        columns={WORK_KANBAN_COLUMNS}
+                        items={workRows}
+                        laneFor={(row) => workKanbanLane(row, roles, contextPlants)}
+                        minColumnWidth={290}
+                        renderCard={(row) => {
+                            const target = nextActionTarget(row);
+                            const canOpenTarget = canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                            return (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.15, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
+                                            <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                        </Box>
+                                        <MatFlowStatusChip status={row.currentStage} />
+                                    </Box>
+                                    <Box sx={{ mt: .9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .55 }}>
+                                        <Detail label="Owner" value={readable(row.currentDepartment || row.responsibleDesk)} />
+                                        <Detail label="Location" value={row.currentLocationCode || "-"} />
+                                        <Detail label="Ready" value={`${Math.round(numeric(row.materialReadyPercent))}%`} />
+                                        <Detail label="Age" value={`${Math.round(numeric(row.ageHours))} h`} />
+                                    </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .75 }}>{readable(row.productionStartBlocker || row.nextDepartment || row.currentStage)}</Typography>
+                                    <Box sx={{ display: "flex", gap: .55, mt: .9, flexWrap: "wrap" }}>
+                                        <Button onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)} sx={primaryBtnSx}>
+                                            {canOpenTarget ? target.label : "Trace"}
+                                        </Button>
+                                        <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace MR</Button>
+                                    </Box>
+                                </Card>
+                            );
+                        }}
+                    />
+                )}
+            </Box>
+        );
+    }
 
     if (view === "projects") {
         return (
@@ -292,13 +374,15 @@ export function MatFlowDashboardPage() {
 
 export function MatFlowTrackerPage({ embedded = false }) {
     const navigate = useNavigate();
-    const { selectedPlantParam } = useMatFlow();
+    const { selectedPlantParam, availablePlants, roles } = useMatFlow();
+    const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
     const [data, setData] = useState({ kpis: {}, rows: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [stage, setStage] = useState("");
     const [expandedProjects, setExpandedProjects] = useState({});
+    const [trackerView, setTrackerView] = useState("HIERARCHY");
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -373,6 +457,18 @@ export function MatFlowTrackerPage({ embedded = false }) {
                 </Card>
             )}
 
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Box>
+                    <Typography sx={mainTextSx}>Tracker View</Typography>
+                    <Typography sx={subTextSx}>{trackerView === "KANBAN" ? "Workflow-stage Kanban by MR. Actions still open the authoritative workflow screen." : "Project hierarchy with collapsible Products and MR detail."}</Typography>
+                </Box>
+                <MatFlowViewToggle
+                    value={trackerView}
+                    onChange={setTrackerView}
+                    options={[{ value: "HIERARCHY", label: "Hierarchy" }, { value: "KANBAN", label: "Kanban" }]}
+                />
+            </Card>
+
             <ErrorBox>{error}</ErrorBox>
 
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 1 }}>
@@ -393,81 +489,111 @@ export function MatFlowTrackerPage({ embedded = false }) {
                 </Box>
             </Card>
 
-            <Box sx={{ display: "grid", gap: 1 }}>
-                {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
-                    const expanded = expandedProjects[project.key] === true;
-                    return (
-                        <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                            <Box
-                                role={!expanded ? "button" : undefined}
-                                tabIndex={!expanded ? 0 : undefined}
-                                onClick={() => {
-                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                }}
-                                onKeyDown={(event) => {
-                                    if (!expanded && (event.key === "Enter" || event.key === " ")) {
-                                        event.preventDefault();
-                                        setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                    }
-                                }}
-                                sx={{
-                                    px: 1.5,
-                                    py: 1.2,
-                                    display: "grid",
-                                    gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
-                                    gap: 1,
-                                    alignItems: "center",
-                                    cursor: expanded ? "default" : "pointer",
-                                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
-                                }}
-                            >
-                                <Box>
-                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
-                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
-                                </Box>
-                                <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
-                                <Box sx={{ display: "grid", placeItems: "center" }}>
-                                    {expanded && (
-                                        <Button
-                                            aria-label="Collapse project"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                setExpandedProjects((current) => ({ ...current, [project.key]: false }));
-                                            }}
-                                            sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
-                                        >
-                                            <ExpandLessIcon fontSize="small" />
-                                        </Button>
-                                    )}
-                                </Box>
-                            </Box>
-
-                            <Collapse in={expanded} unmountOnExit>
-                                <Box sx={tableShellSx}>
-                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                        {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+            {trackerView === "KANBAN" ? (
+                loading ? <LoadingBlock /> : (
+                    <MatFlowKanbanBoard
+                        columns={FLOW.map(([key, label]) => ({ key, label, subtitle: key === "COMPLETE" ? "Production completed" : "Current workflow ownership" }))}
+                        items={rows}
+                        laneFor={(row) => stageBucket(row.currentStage)}
+                        minColumnWidth={275}
+                        renderCard={(row) => {
+                            const target = nextActionTarget(row);
+                            const canOpenTarget = canAccessMatFlowScreenForContext(target.screen, roles, contextPlants);
+                            return (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                    <Box sx={{ mt: .8, display: "flex", gap: .45, flexWrap: "wrap" }}>
+                                        <MatFlowStatusChip status={row.currentStage} />
+                                        <TimingHealthChip health={row.timingHealth} />
                                     </Box>
-                                    {project.rows.map((row) => (
-                                        <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                            <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
-                                            <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
-                                            <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
-                                        </Box>
-                                    ))}
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Ready {Math.round(numeric(row.materialReadyPercent))}% · Shortage {formatQty(row.shortageQty)}</Typography>
+                                    <Box sx={{ display: "flex", gap: .5, mt: .8, flexWrap: "wrap" }}>
+                                        <Button onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)} sx={primaryBtnSx}>{canOpenTarget ? target.label : "Trace"}</Button>
+                                        <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace</Button>
+                                    </Box>
+                                </Card>
+                            );
+                        }}
+                    />
+                )
+            ) : (
+                <Box sx={{ display: "grid", gap: 1 }}>
+                    {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
+                        const expanded = expandedProjects[project.key] === true;
+                        return (
+                            <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                                <Box
+                                    role={!expanded ? "button" : undefined}
+                                    tabIndex={!expanded ? 0 : undefined}
+                                    onClick={() => {
+                                        if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (!expanded && (event.key === "Enter" || event.key === " ")) {
+                                            event.preventDefault();
+                                            setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                        }
+                                    }}
+                                    sx={{
+                                        px: 1.5,
+                                        py: 1.2,
+                                        display: "grid",
+                                        gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        cursor: expanded ? "default" : "pointer",
+                                        background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
+                                    }}
+                                >
+                                    <Box>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
+                                        <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
+                                    </Box>
+                                    <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
+                                    <Box sx={{ display: "grid", placeItems: "center" }}>
+                                        {expanded && (
+                                            <Button
+                                                aria-label="Collapse project"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setExpandedProjects((current) => ({ ...current, [project.key]: false }));
+                                                }}
+                                                sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
+                                            >
+                                                <ExpandLessIcon fontSize="small" />
+                                            </Button>
+                                        )}
+                                    </Box>
                                 </Box>
-                            </Collapse>
-                        </Card>
-                    );
-                })}
-            </Box>
-            {!loading && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
+
+                                <Collapse in={expanded} unmountOnExit>
+                                    <Box sx={tableShellSx}>
+                                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                            {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                        </Box>
+                                        {project.rows.map((row) => (
+                                            <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
+                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
+                                                <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                                <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </Collapse>
+                            </Card>
+                        );
+                    })}
+                </Box>
+            )}
+            {!loading && trackerView === "HIERARCHY" && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
         </Box>
     );
 }

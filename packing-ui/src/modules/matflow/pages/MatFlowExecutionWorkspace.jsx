@@ -27,8 +27,10 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     clean,
@@ -301,6 +303,39 @@ export function MatFlowQcPage() {
     );
 }
 
+const PROCESSING_KANBAN_COLUMNS = [
+    { key: "PENDING", label: "Ready to Start", subtitle: "Store-routed material queued at Processing" },
+    { key: "IN_PROGRESS", label: "In Processing", subtitle: "Processor has started the batch" },
+    { key: "COMPLETED", label: "Completed", subtitle: "Output/wastage recorded and released" },
+];
+
+const PRODUCTION_KANBAN_COLUMNS = [
+    { key: "BLOCKED", label: "Blocked / Waiting", subtitle: "Material dependency prevents Production start" },
+    { key: "INCOMING", label: "Material Incoming", subtitle: "Store/Processing route requires Production receipt" },
+    { key: "READY", label: "Ready to Start", subtitle: "All required material is ready at Production" },
+    { key: "RUNNING", label: "Production / Accounting", subtitle: "Consume, waste, return and complete" },
+    { key: "DONE", label: "Completed", subtitle: "Production material accounting is closed" },
+];
+
+const productionReceiveLikely = (row) => {
+    const stage = normalize(row?.currentStage);
+    return row?.readyToStartProduction !== true && (
+        stage === "PRODUCTION_ISSUE" ||
+        (stage === "TRANSFER_IN_PROGRESS" &&
+            normalize(row?.currentDepartment) === "IN_TRANSIT" &&
+            normalize(row?.nextDepartment) === "PRODUCTION")
+    );
+};
+
+const productionKanbanLane = (row) => {
+    const stage = normalize(row?.currentStage);
+    if (stage === "PRODUCTION_COMPLETED") return "DONE";
+    if (stage === "PRODUCTION_IN_PROGRESS") return "RUNNING";
+    if (row?.readyToStartProduction === true) return "READY";
+    if (productionReceiveLikely(row)) return "INCOMING";
+    return "BLOCKED";
+};
+
 export function MatFlowProcessingPage() {
     const { hasRole, selectedPlantParam } = useMatFlow();
     const canAct = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PROCESSING);
@@ -309,6 +344,7 @@ export function MatFlowProcessingPage() {
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [dialog, setDialog] = useState(null);
     const [form, setForm] = useState({
         actualInputQty: "",
@@ -436,8 +472,38 @@ export function MatFlowProcessingPage() {
                 <SummaryCard label="Completed" value={counts.completed} />
             </Box>
 
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Box><Typography sx={mainTextSx}>Processing View</Typography><Typography sx={subTextSx}>Kanban is an execution view; Start/Complete still use the validated Processing actions.</Typography></Box>
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+            </Card>
+
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={PROCESSING_KANBAN_COLUMNS}
+                        items={rows}
+                        laneFor={(job) => normalize(job.status)}
+                        minColumnWidth={300}
+                        renderCard={(job) => {
+                            const state = normalize(job.status);
+                            return (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                        <Box><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{job.jobNumber || "-"}</Typography><Typography sx={subTextSx}>{job.requisitionNumber || "-"}</Typography></Box>
+                                        <MatFlowStatusChip status={job.status} />
+                                    </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>{job.locationCode || "-"} · {job.plantCode || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{job.inputMaterialCode || "-"} · Planned {formatQty(job.plannedInputQty)}</Typography>
+                                    <Typography sx={subTextSx}>Output {formatQty(job.outputQty)} · Waste {formatQty(job.wastageQty)}</Typography>
+                                    <Box sx={{ display: "flex", gap: .5, mt: .85, flexWrap: "wrap" }}>
+                                        {canAct && state === "PENDING" && <Button startIcon={<PlayArrowOutlinedIcon />} onClick={() => openStart(job)} sx={primaryBtnSx}>Start</Button>}
+                                        {canAct && state === "IN_PROGRESS" && <Button startIcon={<TaskAltOutlinedIcon />} onClick={() => openComplete(job)} sx={primaryBtnSx}>Mark Done</Button>}
+                                    </Box>
+                                </Card>
+                            );
+                        }}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>
                             {["Job", "MR", "Processing Unit", "Input Material", "Planned", "Output / Waste", "Status", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -462,7 +528,7 @@ export function MatFlowProcessingPage() {
                         })}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Processing Jobs" />}
+                {!loading && viewMode === "TABLE" && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Processing Jobs" />}
             </Card>
 
             <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
@@ -501,6 +567,7 @@ export function MatFlowProductionExecutionPage() {
     const [workingId, setWorkingId] = useState("");
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [dialog, setDialog] = useState(null);
     const [planning, setPlanning] = useState(null);
     const [form, setForm] = useState({ quantities: {}, batches: {}, remarks: "" });
@@ -735,17 +802,51 @@ export function MatFlowProductionExecutionPage() {
                 <SummaryCard label="Blocked Before Start" value={counts.blocked} />
             </Box>
 
-            <Card sx={panelSx}>
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
                 <TextField
                     label="Search PD No. / Product / MR / Material State"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    sx={{ ...fieldSx, minWidth: 360 }}
+                    sx={{ ...fieldSx, minWidth: 360, flex: "1 1 360px" }}
                 />
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
             </Card>
 
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={PRODUCTION_KANBAN_COLUMNS}
+                        items={rows}
+                        laneFor={productionKanbanLane}
+                        minColumnWidth={295}
+                        renderCard={(row) => {
+                            const stage = normalize(row.currentStage);
+                            const canStart = row.readyToStartProduction === true;
+                            const isRunning = stage === "PRODUCTION_IN_PROGRESS";
+                            const isComplete = stage === "PRODUCTION_COMPLETED";
+                            const receiveLikely = productionReceiveLikely(row);
+                            return (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                        <Box sx={{ minWidth: 0 }}><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography></Box>
+                                        <MatFlowStatusChip status={row.currentStage} />
+                                    </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Location: {row.currentLocationCode || "-"} · Ready {Math.round(numeric(row.materialReadyPercent))}%</Typography>
+                                    <Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.currentStage)}</Typography>
+                                    <Box sx={{ display: "flex", gap: .45, mt: .85, flexWrap: "wrap" }}>
+                                        {canAct && receiveLikely && <Button onClick={() => openAction("RECEIVE", row)} sx={primaryBtnSx}>Receive</Button>}
+                                        {canAct && canStart && !isRunning && !isComplete && <Button onClick={() => openAction("START", row)} sx={primaryBtnSx}>Start</Button>}
+                                        {canAct && isRunning && <Button onClick={() => openAction("CONSUME", row)} sx={primaryBtnSx}>Consume</Button>}
+                                        {canAct && isRunning && <Button onClick={() => openAction("WASTE", row)} sx={secondaryBtnSx}>Waste</Button>}
+                                        {canAct && isRunning && <Button onClick={() => navigate("/matflow/returns")} sx={secondaryBtnSx}>Return</Button>}
+                                        {canAct && isRunning && <Button onClick={() => openAction("COMPLETE", row)} sx={secondaryBtnSx}>Complete</Button>}
+                                        {!isComplete && <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace</Button>}
+                                    </Box>
+                                </Card>
+                            );
+                        }}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 190px 170px 150px 100px 210px 210px" }}>
                             {["PD No. / Product", "MR", "Current Material State", "Current Location", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -793,7 +894,7 @@ export function MatFlowProductionExecutionPage() {
                         })}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Production Readiness" />}
+                {!loading && viewMode === "TABLE" && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Production Readiness" />}
             </Card>
 
             <Dialog open={Boolean(dialog)} onClose={() => { if (!workingId) { setDialog(null); setPlanning(null); } }} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>

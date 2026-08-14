@@ -25,8 +25,10 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowDeleteDialog,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     clean,
     dangerBtnSx,
@@ -57,6 +59,23 @@ const MAIN_PLANT = "AL-P1";
 const upperCode = (value) => clean(value).toUpperCase();
 const samePlant = (left, right) => upperCode(left) && upperCode(left) === upperCode(right);
 
+const RETURN_KANBAN_COLUMNS = [
+    { key: "DRAFT", label: "Draft at Production", subtitle: "Production prepares the unused/excess return" },
+    { key: "TO_ORIGIN", label: "To Origin Store", subtitle: "Remote Plant return is travelling to its own Store" },
+    { key: "AT_ORIGIN", label: "At Origin Store", subtitle: "Origin Store has received and must forward" },
+    { key: "TO_MAIN", label: "To AL-P1 Main Store", subtitle: "Return is in final transit to Main Store" },
+    { key: "RECEIVED", label: "Received at AL-P1", subtitle: "Final receipt closes returned quantity" },
+];
+
+const returnKanbanLane = (row) => {
+    const status = normalize(row?.status);
+    if (status === "DRAFT") return "DRAFT";
+    if (status === "IN_TRANSIT_TO_ORIGIN_STORE") return "TO_ORIGIN";
+    if (status === "AT_ORIGIN_STORE") return "AT_ORIGIN";
+    if (["IN_TRANSIT_TO_MAIN_STORE", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status)) return "TO_MAIN";
+    return "RECEIVED";
+};
+
 const rowTouchesPlant = (row, plantCode) => {
     if (!plantCode) return true;
     return [row?.fromPlantCode, row?.viaPlantCode, row?.toPlantCode]
@@ -76,9 +95,9 @@ const returnUpdatedAt = (row) =>
 const remainingReturnable = (line) => Math.max(
     0,
     numeric(line?.issuedQty)
-    - numeric(line?.consumedQty)
-    - numeric(line?.productionWasteQty ?? line?.wastageQty)
-    - numeric(line?.returnedQty)
+        - numeric(line?.consumedQty)
+        - numeric(line?.productionWasteQty ?? line?.wastageQty)
+        - numeric(line?.returnedQty)
 );
 
 export function MatFlowReturnsPage() {
@@ -92,6 +111,7 @@ export function MatFlowReturnsPage() {
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [dialog, setDialog] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [form, setForm] = useState({
@@ -266,8 +286,45 @@ export function MatFlowReturnsPage() {
 
             <ErrorBox>{error}</ErrorBox>
 
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Box><Typography sx={mainTextSx}>Return Route View</Typography><Typography sx={subTextSx}>Kanban mirrors the fixed custody route; all state changes still use explicit Dispatch / Receive actions.</Typography></Box>
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+            </Card>
+
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={RETURN_KANBAN_COLUMNS}
+                        items={rows}
+                        laneFor={returnKanbanLane}
+                        minColumnWidth={300}
+                        renderCard={(row) => {
+                            const status = normalize(row.status);
+                            const productionDispatch = status === "DRAFT" && canProductionAct && canActAtPlant(row.fromPlantCode);
+                            const originReceive = status === "IN_TRANSIT_TO_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
+                            const originForward = status === "AT_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
+                            const mainReceive = ["IN_TRANSIT_TO_MAIN_STORE", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) && canStoreAct && canActAtPlant(row.toPlantCode || MAIN_PLANT);
+                            return (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                        <Box sx={{ minWidth: 0 }}><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.returnNumber || "-"}</Typography><Typography sx={subTextSx}>{row.requisitionNumber || "-"}</Typography></Box>
+                                        <MatFlowStatusChip status={row.status} />
+                                    </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>{returnRouteText(row)}</Typography>
+                                    <Typography sx={subTextSx}>{readable(row.reason)} · {formatDate(returnUpdatedAt(row))}</Typography>
+                                    <Box sx={{ display: "flex", gap: .45, mt: .85, flexWrap: "wrap" }}>
+                                        {productionDispatch && <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>{row.viaLocationCode ? "Send to Plant Store" : "Send to Main Store"}</Button>}
+                                        {productionDispatch && <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} disabled={working} sx={dangerBtnSx}>Delete</Button>}
+                                        {originReceive && <Button onClick={() => act(row, "RECEIVE")} disabled={working} sx={primaryBtnSx}>Receive at Origin</Button>}
+                                        {originForward && <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>Forward to AL-P1</Button>}
+                                        {mainReceive && <Button onClick={() => act(row, "RECEIVE")} disabled={working} sx={primaryBtnSx}>Receive at Main</Button>}
+                                        {status === "RECEIVED" && <Typography sx={subTextSx}>Final receipt complete</Typography>}
+                                    </Box>
+                                </Card>
+                            );
+                        }}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 165px minmax(245px,1fr) 150px 170px 170px 250px" }}>
                             {["Return", "MR", "Fixed Return Route", "Reason", "Status", "Last Movement", "Action / Handoff"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -317,7 +374,7 @@ export function MatFlowReturnsPage() {
                         })}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Returns" />}
+                {!loading && viewMode === "TABLE" && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Returns" />}
             </Card>
 
             <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>

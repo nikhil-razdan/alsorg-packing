@@ -991,6 +991,163 @@ export function SummaryCard({ label, value, helper, tone, colorful = false }) {
   );
 }
 
+
+export function MatFlowViewToggle({ value, onChange, options = [] }) {
+  const safeOptions = Array.isArray(options) ? options : [];
+  return (
+    <Box
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: .35,
+        p: .35,
+        borderRadius: 2.4,
+        border: "1px solid var(--mf-border)",
+        background: "var(--mf-surface)",
+      }}
+    >
+      {safeOptions.map((option) => {
+        const key = String(option?.value || option?.key || "").toUpperCase();
+        const active = String(value || "").toUpperCase() === key;
+        return (
+          <Button
+            key={key}
+            size="small"
+            onClick={() => onChange?.(key)}
+            sx={{
+              ...(active ? primaryBtnSx : secondaryBtnSx),
+              minHeight: 32,
+              px: 1.15,
+              py: .45,
+              boxShadow: "none",
+              borderColor: active ? "transparent" : "transparent",
+            }}
+          >
+            {option?.label || readable(key)}
+          </Button>
+        );
+      })}
+    </Box>
+  );
+}
+
+export function MatFlowKanbanBoard({
+  columns = [],
+  items = [],
+  laneFor,
+  renderCard,
+  emptyText = "No work items in this lane.",
+  minColumnWidth = 270,
+}) {
+  const safeColumns = Array.isArray(columns) ? columns : [];
+  const safeItems = Array.isArray(items) ? items : [];
+  const grouped = safeColumns.reduce((result, column) => {
+    result[String(column?.key || "")] = [];
+    return result;
+  }, {});
+
+  safeItems.forEach((item) => {
+    const lane = String(laneFor?.(item) || "");
+    if (Object.prototype.hasOwnProperty.call(grouped, lane)) grouped[lane].push(item);
+  });
+
+  return (
+    <Box
+      className="mf-kanban-scroll"
+      sx={{
+        display: "grid",
+        gridAutoFlow: "column",
+        gridAutoColumns: `minmax(${minColumnWidth}px, 1fr)`,
+        gap: 1,
+        overflowX: "auto",
+        overflowY: "hidden",
+        pb: .6,
+        scrollSnapType: "x proximity",
+        scrollbarGutter: "stable",
+      }}
+    >
+      {safeColumns.map((column) => {
+        const key = String(column?.key || "");
+        const laneItems = grouped[key] || [];
+        return (
+          <Card
+            key={key}
+            sx={{
+              ...panelSx,
+              m: 0,
+              p: 1,
+              minWidth: minColumnWidth,
+              minHeight: 270,
+              alignSelf: "start",
+              background: "var(--mf-surface)",
+              boxShadow: "none",
+              scrollSnapAlign: "start",
+            }}
+          >
+            <Box
+              sx={{
+                mb: .85,
+                px: .25,
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 1,
+              }}
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{column?.label || readable(key)}</Typography>
+                {column?.subtitle && <Typography sx={subTextSx}>{column.subtitle}</Typography>}
+              </Box>
+              <Box
+                sx={{
+                  minWidth: 28,
+                  height: 28,
+                  px: .75,
+                  borderRadius: 999,
+                  display: "grid",
+                  placeItems: "center",
+                  color: "var(--mf-primary-text)",
+                  background: "var(--mf-primary-soft)",
+                  border: "1px solid var(--mf-primary-border)",
+                  fontSize: 11,
+                  fontWeight: 950,
+                }}
+              >
+                {laneItems.length}
+              </Box>
+            </Box>
+
+            <Box sx={{ display: "grid", gap: .75 }}>
+              {laneItems.length === 0 ? (
+                <Box
+                  sx={{
+                    minHeight: 92,
+                    display: "grid",
+                    placeItems: "center",
+                    textAlign: "center",
+                    px: 1,
+                    borderRadius: 2,
+                    border: "1px dashed var(--mf-border)",
+                    color: "var(--mf-text-muted)",
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                  }}
+                >
+                  {column?.emptyText || emptyText}
+                </Box>
+              ) : laneItems.map((item, index) => (
+                <Box key={item?.id || item?.requisitionId || item?.key || `${key}:${index}`}>
+                  {renderCard?.(item, column)}
+                </Box>
+              ))}
+            </Box>
+          </Card>
+        );
+      })}
+    </Box>
+  );
+}
+
 export function useMatFlowPagination(items, initialPageSize = 20) {
   const source = Array.isArray(items) ? items : [];
   const [page, setPage] = useState(0);

@@ -26,8 +26,10 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     clean,
@@ -58,6 +60,14 @@ const PURCHASE_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLE
 const RECEIVING_ROLES = [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE];
 const upperCode = (value) => clean(value).toUpperCase();
 
+const PURCHASE_KANBAN_COLUMNS = [
+    { key: "NEW_PI", label: "New PI / PO Required", subtitle: "Store shortage waiting for Purchase" },
+    { key: "PO_PLACED", label: "PO Placed", subtitle: "PO created and released to Vendor" },
+    { key: "WAITING", label: "Awaiting Material", subtitle: "Vendor delivery pending at AL-P1 Main Store" },
+    { key: "PARTIAL", label: "Partially Received", subtitle: "Some PO quantity has reached Main Store" },
+    { key: "RECEIVED", label: "Fully Received", subtitle: "PO receipt completed" },
+];
+
 const openIndentLines = (indent) =>
     (Array.isArray(indent?.lines) ? indent.lines : [])
         .map((line) => ({
@@ -79,6 +89,7 @@ export function MatFlowPurchasePage() {
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [poDialog, setPoDialog] = useState(false);
     const [vendorDialog, setVendorDialog] = useState(null);
     const [poForm, setPoForm] = useState({
@@ -161,6 +172,31 @@ export function MatFlowPurchasePage() {
         partial: scopedOrders.filter((order) => normalize(order.status) === "PARTIALLY_RECEIVED").length,
         received: scopedOrders.filter((order) => normalize(order.status) === "RECEIVED").length,
     }), [purchaseReadyIndents, scopedOrders]);
+
+    const purchaseKanbanCards = useMemo(() => {
+        const term = clean(search).toLowerCase();
+        const piCards = purchaseReadyIndents.map((indent) => ({
+            ...indent,
+            _cardType: "PI",
+            _lane: normalize(indent.status) === "PO_CREATED" ? "PO_PLACED" : "NEW_PI",
+        }));
+        const poCards = scopedOrders.map((order) => {
+            const status = normalize(order.status);
+            return {
+                ...order,
+                _cardType: "PO",
+                _lane: status === "RECEIVED" ? "RECEIVED"
+                    : status === "PARTIALLY_RECEIVED" ? "PARTIAL"
+                        : status === "PLACED" ? "WAITING" : "PO_PLACED",
+            };
+        });
+        const cards = [...piCards, ...poCards];
+        if (!term) return cards;
+        return cards.filter((row) => [
+            row.indentNumber, row.poNumber, row.requisitionNumber, row.projectCode,
+            row.productName, row.drawingNo, row.vendorName, row.status,
+        ].some((value) => clean(value).toLowerCase().includes(term)));
+    }, [purchaseReadyIndents, scopedOrders, search]);
 
     const openPo = (indent = null) => {
         const quantities = {};
@@ -319,7 +355,42 @@ export function MatFlowPurchasePage() {
                 <SummaryCard label="Received POs" value={counts.received} />
             </Box>
 
-            <Card sx={panelSx}>
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                <TextField label="Search PI / PO / MR / Vendor / Product" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320, flex: "1 1 320px" }} />
+                <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]} />
+            </Card>
+
+            {viewMode === "KANBAN" && (
+                <Card sx={panelSx}>
+                    {loading ? <LoadingBlock /> : (
+                        <MatFlowKanbanBoard
+                            columns={PURCHASE_KANBAN_COLUMNS}
+                            items={purchaseKanbanCards}
+                            laneFor={(row) => row._lane}
+                            minColumnWidth={280}
+                            renderCard={(row) => (
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                        <Box sx={{ minWidth: 0 }}>
+                                            <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row._cardType === "PI" ? row.indentNumber : row.poNumber}</Typography>
+                                            <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.projectCode || "-"}</Typography>
+                                        </Box>
+                                        <MatFlowStatusChip status={row.status} />
+                                    </Box>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>{row.productName || "-"} · {row.drawingNo || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{row._cardType === "PO" ? `Vendor: ${row.vendorName || "-"}` : `${openIndentLines(row).length} open PI line(s)`}</Typography>
+                                    <Typography sx={subTextSx}>Delivery: {row.deliveryLocationCode || row.deliverToLocationCode || "AL-P1 Main Store"}</Typography>
+                                    {row._cardType === "PI" && canPurchase && (
+                                        <Button onClick={() => openPo(row)} sx={{ ...primaryBtnSx, mt: .85 }}>Raise / Continue PO</Button>
+                                    )}
+                                </Card>
+                            )}
+                        />
+                    )}
+                </Card>
+            )}
+
+            {viewMode === "TABLE" && <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Store-raised Purchase Indents</Typography>
                 <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each PI stays linked to its originating MR, Project/Product and shortage material lines.</Typography>
                 {loading ? <LoadingBlock /> : (
@@ -340,12 +411,12 @@ export function MatFlowPurchasePage() {
                     </Box>
                 )}
                 {!loading && <MatFlowPagination {...indentPagination} onPageChange={indentPagination.setPage} onPageSizeChange={indentPagination.setPageSize} label="Purchase Indents" />}
-            </Card>
+            </Card>}
 
-            <Card sx={panelSx}>
+            {viewMode === "TABLE" && <Card sx={panelSx}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1 }}>
                     <Box><Typography sx={{ fontWeight: 950, fontSize: 17 }}>Purchase Orders</Typography><Typography sx={subTextSx}>PO numbers are generated by the backend as PO/yyyy/MM/dd/n.</Typography></Box>
-                    <TextField label="Search PO / PI / MR / Vendor / Product" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} />
+                    <Typography sx={subTextSx}>Filtered by the search above.</Typography>
                 </Box>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
@@ -365,7 +436,7 @@ export function MatFlowPurchasePage() {
                     </Box>
                 )}
                 {!loading && <MatFlowPagination {...orderPagination} onPageChange={orderPagination.setPage} onPageSizeChange={orderPagination.setPageSize} label="Purchase Orders" />}
-            </Card>
+            </Card>}
 
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>Vendors</Typography>

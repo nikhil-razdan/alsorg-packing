@@ -29,7 +29,9 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowKanbanBoard,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     clean,
@@ -76,6 +78,27 @@ const upperCode = (value) => clean(value).toUpperCase();
 const MAIN_PLANT = "AL-P1";
 const samePlant = (left, right) => Boolean(upperCode(left)) && upperCode(left) === upperCode(right);
 
+const STORE_KANBAN_COLUMNS = [
+    { key: "ACTION", label: "Forward / Plan", subtitle: "MR needs Store action now" },
+    { key: "WAITING", label: "Shortage / Waiting", subtitle: "Purchase or Main Store dependency" },
+    { key: "RESERVED", label: "Reserved", subtitle: "Material allocated and controlled" },
+    { key: "ROUTING", label: "Route / Handoff", subtitle: "Send, receive or hand over material" },
+    { key: "DONE", label: "Issued", subtitle: "MR material issued to Production" },
+];
+
+const storeKanbanLane = (row, { isMainStoreActor = false, selectedPlantParam = "" } = {}) => {
+    const status = normalize(row?.status);
+    const remote = !samePlant(row?.destinationPlantCode, MAIN_PLANT);
+    if (status === "ISSUED_TO_PRODUCTION") return "DONE";
+    if (["READY_TO_ISSUE", "PARTIALLY_ISSUED"].includes(status)) return "ROUTING";
+    if (status === "PARTIALLY_RESERVED") return "RESERVED";
+    if (status === "SHORTAGE_PENDING") return "WAITING";
+    if (remote && !row?.forwardedToMainStoreAt) return "ACTION";
+    if (remote && row?.forwardedToMainStoreAt && !isMainStoreActor && samePlant(row?.destinationPlantCode, selectedPlantParam)) return "WAITING";
+    if (["SUBMITTED_TO_STORE", "STORE_REVIEW_IN_PROGRESS"].includes(status)) return "ACTION";
+    return "WAITING";
+};
+
 export function MatFlowStoreQueuePage() {
     const navigate = useNavigate();
     const { hasRole, selectedPlantParam } = useMatFlow();
@@ -90,6 +113,7 @@ export function MatFlowStoreQueuePage() {
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [stockDialog, setStockDialog] = useState(false);
     const [stockForm, setStockForm] = useState({
         materialId: "",
@@ -281,17 +305,44 @@ export function MatFlowStoreQueuePage() {
                 </Box>
             </Card>
 
-            <Card sx={panelSx}>
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                 <TextField
                     label="Search MR / PI / PD No. / Drawing / BOM / Requester"
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    sx={{ ...fieldSx, minWidth: 360 }}
+                    sx={{ ...fieldSx, minWidth: 360, flex: "1 1 360px" }}
+                />
+                <MatFlowViewToggle
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[{ value: "KANBAN", label: "Kanban" }, { value: "TABLE", label: "Table" }]}
                 />
             </Card>
 
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={STORE_KANBAN_COLUMNS}
+                        items={filtered}
+                        laneFor={(row) => storeKanbanLane(row, { isMainStoreActor, selectedPlantParam })}
+                        minColumnWidth={285}
+                        renderCard={(row) => (
+                            <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                    <Box sx={{ minWidth: 0 }}>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.requisitionNumber || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.projectCode || "-"} · {row.drawingNo || "-"}</Typography>
+                                    </Box>
+                                    <MatFlowStatusChip status={row.status} />
+                                </Box>
+                                <Typography sx={{ ...subTextSx, mt: .7 }}>Production: {row.destinationLocationCode || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                <Typography sx={subTextSx}>Route: {row.originStoreCode || "-"} → {row.mainStoreCode || "AL-P1"}</Typography>
+                                <Typography sx={subTextSx}>{row._linkedPis?.length ? `${row._linkedPis.length} linked PI(s)` : "No linked PI"}</Typography>
+                                <Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={{ ...primaryBtnSx, mt: .85 }}>Open Store Action</Button>
+                            </Card>
+                        )}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 180px 145px minmax(180px,1fr) 165px 150px 135px 95px" }}>
                             {["MR", "PD No. / Drawing", "BOM", "Linked PI(s)", "Production Destination", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
