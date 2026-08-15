@@ -5,8 +5,10 @@ import java.util.Comparator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -87,6 +89,16 @@ public class HardwarePacketService {
 
                 validateCreateRequest(request);
 
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
+
+                /*
+                 * Only the business packing date is selectable. Audit timestamps
+                 * such as Packet.createdAt and hardware-line createdAt remain now.
+                 */
+                LocalDateTime requestedPackedAt = resolveCreationPackingDateTime(
+                                request.packingDate(),
+                                now);
+
                 String plantCode = currentUserService.resolvePlantForWrite(
                                 user,
                                 request.plantCode());
@@ -97,8 +109,6 @@ public class HardwarePacketService {
                                 .stream()
                                 .findFirst()
                                 .orElseThrow(() -> new RuntimeException("No company found"));
-
-                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 String actor = safeActor(user);
 
@@ -176,6 +186,7 @@ public class HardwarePacketService {
                         item.setStatus("CREATED");
                         item.setCreatedBy(actor);
                         item.setPackedBy(null);
+                        item.setPackedAt(requestedPackedAt);
 
                         /*
                          * Hardware-specific fields stay empty.
@@ -1266,6 +1277,43 @@ public class HardwarePacketService {
                 return clean.isBlank()
                                 ? "-"
                                 : clean.replaceAll("\\s+", " ");
+        }
+
+        /**
+         * Resolve the optional yyyy-MM-dd date supplied only when creating a new
+         * hardware master. Missing values keep legacy clients backward-compatible.
+         */
+        private LocalDateTime resolveCreationPackingDateTime(
+                        String packingDate,
+                        LocalDateTime requestNow) {
+
+                LocalDateTime safeNow = requestNow != null
+                                ? requestNow
+                                : LocalDateTime.now(APP_ZONE);
+
+                if (packingDate == null || packingDate.isBlank()) {
+                        return safeNow;
+                }
+
+                final LocalDate selectedDate;
+
+                try {
+                        selectedDate = LocalDate.parse(
+                                        packingDate.trim());
+                } catch (DateTimeParseException exception) {
+                        throw new IllegalArgumentException(
+                                        "Packing date must be in yyyy-MM-dd format");
+                }
+
+                LocalDate today = LocalDate.now(APP_ZONE);
+
+                if (selectedDate.isAfter(today)) {
+                        throw new IllegalArgumentException(
+                                        "Future packing dates are not allowed");
+                }
+
+                return selectedDate.atTime(
+                                safeNow.toLocalTime());
         }
 
         private String safeActor(User user) {

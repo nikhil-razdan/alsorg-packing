@@ -7,8 +7,10 @@ import com.alsorg.packing.repository.MasterItemRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -655,6 +657,20 @@ public class PacketService {
 
                 LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
 
+                /*
+                 * Business packing date selected from Inventory creation.
+                 *
+                 * Backward compatibility:
+                 * - missing/blank packingDate => today's existing behaviour;
+                 * - previous/today date => preserved on PacketItem.packedAt;
+                 * - future date => rejected server-side.
+                 *
+                 * Packet.createdAt remains the real system creation time.
+                 */
+                LocalDateTime requestedPackedAt = resolveCreationPackingDateTime(
+                                req.getPackingDate(),
+                                now);
+
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
@@ -763,6 +779,8 @@ public class PacketService {
                         item.setLocation("FLOOR");
                         item.setStatus("CREATED");
                         item.setCreatedBy(actor);
+                        item.setPackedBy(null);
+                        item.setPackedAt(requestedPackedAt);
 
                         items.add(item);
                 }
@@ -886,6 +904,15 @@ public class PacketService {
                                 java.time.ZoneId.of(
                                                 "Asia/Kolkata"));
 
+                /*
+                 * Preserve an explicit creation/admin-selected packing date.
+                 * Legacy PacketItems that never had packedAt keep the old behaviour
+                 * and receive the actual sticker-generation timestamp.
+                 */
+                LocalDateTime effectivePackedAt = item.getPackedAt() != null
+                                ? item.getPackedAt()
+                                : now;
+
                 String previousStatus = item.getStatus() != null &&
                                 !item.getStatus().isBlank()
                                                 ? item.getStatus()
@@ -951,7 +978,7 @@ public class PacketService {
 
                 item.setWarehouseCode(null);
                 item.setPackedBy(actor);
-                item.setPackedAt(now);
+                item.setPackedAt(effectivePackedAt);
 
                 packetItemRepository.save(item);
 
@@ -1030,7 +1057,7 @@ public class PacketService {
                 dispatchedItem.setFloor(
                                 item.getFloor());
 
-                dispatchedItem.setPackedAt(now);
+                dispatchedItem.setPackedAt(effectivePackedAt);
                 dispatchedItem.setPackedBy(actor);
                 dispatchedItem.setItemType(
                                 item.getItemType() != null
@@ -2219,6 +2246,10 @@ public class PacketService {
 
                 LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
 
+                LocalDateTime requestedPackedAt = resolveCreationPackingDateTime(
+                                req.getPackingDate(),
+                                now);
+
                 Company company = companyRepository
                                 .findAll()
                                 .stream()
@@ -2316,6 +2347,8 @@ public class PacketService {
                 item.setLocation("FLOOR");
                 item.setStatus("CREATED");
                 item.setCreatedBy(actor);
+                item.setPackedBy(null);
+                item.setPackedAt(requestedPackedAt);
 
                 return packetItemRepository.save(item);
         }
@@ -2844,6 +2877,47 @@ public class PacketService {
                 }
 
                 return weight + " kg";
+        }
+
+        /**
+         * Resolve the optional yyyy-MM-dd packing date supplied by the Inventory
+         * creation forms. The date is interpreted in Asia/Kolkata and combined
+         * with the real request time so only the business date is backdated.
+         *
+         * A missing value intentionally falls back to the current timestamp so
+         * older clients/mobile builds continue working without any API change.
+         */
+        private LocalDateTime resolveCreationPackingDateTime(
+                        String packingDate,
+                        LocalDateTime requestNow) {
+
+                LocalDateTime safeNow = requestNow != null
+                                ? requestNow
+                                : LocalDateTime.now(INDIA_ZONE);
+
+                if (packingDate == null || packingDate.isBlank()) {
+                        return safeNow;
+                }
+
+                final LocalDate selectedDate;
+
+                try {
+                        selectedDate = LocalDate.parse(
+                                        packingDate.trim());
+                } catch (DateTimeParseException exception) {
+                        throw new IllegalArgumentException(
+                                        "Packing date must be in yyyy-MM-dd format");
+                }
+
+                LocalDate today = LocalDate.now(INDIA_ZONE);
+
+                if (selectedDate.isAfter(today)) {
+                        throw new IllegalArgumentException(
+                                        "Future packing dates are not allowed");
+                }
+
+                return selectedDate.atTime(
+                                safeNow.toLocalTime());
         }
 
         private String safeActor(String username) {

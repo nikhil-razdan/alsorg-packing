@@ -972,6 +972,32 @@ function InventoryMiniStat({
   );
 }
 
+const getIndiaTodayDateInputValue = () => {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }
+    ).formatToParts(new Date());
+
+  const map = {};
+
+  parts.forEach((part) => {
+    map[part.type] = part.value;
+  });
+
+  return `${map.year}-${map.month}-${map.day}`;
+};
+
+const isIsoCalendarDate = (value) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(
+    String(value || "").trim()
+  );
+
 const createEmptyHardwareLine = (
   lineNo = 1
 ) => ({
@@ -1753,6 +1779,7 @@ function ZohoItemsPage() {
     weight: "",
     remarks: "",
     numberOfPackets: 1,
+    packingDate: getIndiaTodayDateInputValue(),
     showCompanyHeader: true,
   });
   const [editOpen, setEditOpen] = useState(false);
@@ -1849,6 +1876,7 @@ function ZohoItemsPage() {
     clientAddress: "",
     floor: "",
     plantCode: "",
+    packingDate: getIndiaTodayDateInputValue(),
   });
 
   const [
@@ -2251,6 +2279,96 @@ function ZohoItemsPage() {
     return plants.length === 1 ? plants[0].plantCode : "";
   };
 
+  const todayPackingDate =
+    getIndiaTodayDateInputValue();
+
+  const getPackingDateValidationMessage = (
+    value
+  ) => {
+    const cleanValue =
+      String(value || "").trim();
+
+    if (!cleanValue) {
+      return "Packing date is required";
+    }
+
+    if (!isIsoCalendarDate(cleanValue)) {
+      return "Select a valid packing date";
+    }
+
+    if (cleanValue > todayPackingDate) {
+      return "Future packing dates are not allowed";
+    }
+
+    return "";
+  };
+
+  const updateFormPackingDate = (value) => {
+    const cleanValue =
+      String(value || "").trim();
+
+    if (
+      cleanValue &&
+      cleanValue > todayPackingDate
+    ) {
+      setErrors((previous) => ({
+        ...previous,
+        packingDate:
+          "Future packing dates are not allowed",
+      }));
+
+      return;
+    }
+
+    setForm((previous) => ({
+      ...previous,
+      packingDate: cleanValue,
+    }));
+
+    setErrors((previous) => ({
+      ...previous,
+      packingDate: "",
+    }));
+  };
+
+  const renderCreationPackingDateField = () => (
+    <TextField
+      label="Packing Date"
+      type="date"
+      fullWidth
+      value={
+        form.packingDate || ""
+      }
+      onChange={(event) =>
+        updateFormPackingDate(
+          event.target.value
+        )
+      }
+      inputProps={{
+        max: todayPackingDate,
+      }}
+      InputLabelProps={{
+        shrink: true,
+      }}
+      error={
+        !!errors.packingDate
+      }
+      helperText={
+        errors.packingDate ||
+        "Defaults to today. You can select any previous date; future dates are blocked."
+      }
+      sx={{
+        ...formFieldSx(darkMode),
+
+        "& input[type='date']::-webkit-calendar-picker-indicator": {
+          filter: "invert(1)",
+          opacity: 0.8,
+          cursor: "pointer",
+        },
+      }}
+    />
+  );
+
   const getEmptyForm = (plants = myPlants) => ({
     itemName: "",
     pdNo: "",
@@ -2263,6 +2381,7 @@ function ZohoItemsPage() {
     weight: "",
     remarks: "",
     numberOfPackets: 1,
+    packingDate: getIndiaTodayDateInputValue(),
     showCompanyHeader: true,
     factoryFloor: "",
   });
@@ -4326,6 +4445,16 @@ function ZohoItemsPage() {
     if (!form.itemName) err.itemName = "Required";
     if (!form.plantCode) err.plantCode = "Plant location required";
 
+    const packingDateError =
+      getPackingDateValidationMessage(
+        form.packingDate
+      );
+
+    if (packingDateError) {
+      err.packingDate =
+        packingDateError;
+    }
+
     if (!form.numberOfPackets || form.numberOfPackets <= 0)
       err.numberOfPackets = "Invalid";
 
@@ -4992,6 +5121,11 @@ function ZohoItemsPage() {
         ).trim() || null,
     };
 
+    const hardwarePackingDate =
+      String(
+        hardwareForm.packingDate || ""
+      ).trim();
+
     const cleanPlantCode =
       String(
         hardwareForm.plantCode || ""
@@ -5127,6 +5261,9 @@ function ZohoItemsPage() {
 
         plantCode:
           cleanPlantCode,
+
+        packingDate:
+          hardwarePackingDate,
 
         packets:
           normalizedPackets,
@@ -5344,6 +5481,8 @@ function ZohoItemsPage() {
       plants.length === 1
         ? plants[0].plantCode
         : "",
+    packingDate:
+      getIndiaTodayDateInputValue(),
   });
 
   function resetHardwarePacketForm(plants = myPlants) {
@@ -5729,6 +5868,21 @@ function ZohoItemsPage() {
         "Plant is required";
     }
 
+    if (
+      !hardwareEditingItem &&
+      !hardwareAddMaster
+    ) {
+      const packingDateError =
+        getPackingDateValidationMessage(
+          hardwareForm.packingDate
+        );
+
+      if (packingDateError) {
+        nextErrors.hardwarePackingDate =
+          packingDateError;
+      }
+    }
+
     if (hardwareEditingItem) {
       validateHardwareItemRows(
         hardwareLines,
@@ -5814,6 +5968,9 @@ function ZohoItemsPage() {
 
       plantCode:
         row.plantCode || "",
+
+      packingDate:
+        getIndiaTodayDateInputValue(),
     });
 
     setHardwareForm({
@@ -5924,6 +6081,13 @@ function ZohoItemsPage() {
       floor: row?.floor || "",
       plantCode:
         row?.plantCode || "",
+      packingDate:
+        String(
+          row?.packingDate ||
+          row?.packedAt ||
+          ""
+        ).slice(0, 10) ||
+        getIndiaTodayDateInputValue(),
     });
 
     setHardwareLines(
@@ -7767,6 +7931,12 @@ function ZohoItemsPage() {
             )}
 
             <Box sx={formSectionHeaderSx}>
+              Packing Date
+            </Box>
+
+            {renderCreationPackingDateField()}
+
+            <Box sx={formSectionHeaderSx}>
               Plant Assignment
             </Box>
 
@@ -7836,6 +8006,26 @@ function ZohoItemsPage() {
 
                     if (!form.plantCode) {
                       showUiAlert("error", "Please select Plant Location");
+                      return;
+                    }
+
+                    const packingDateError =
+                      getPackingDateValidationMessage(
+                        form.packingDate
+                      );
+
+                    if (packingDateError) {
+                      setErrors((previous) => ({
+                        ...previous,
+                        packingDate:
+                          packingDateError,
+                      }));
+
+                      showUiAlert(
+                        "error",
+                        packingDateError
+                      );
+
                       return;
                     }
 
@@ -7979,15 +8169,44 @@ function ZohoItemsPage() {
                 </Button>
 
                 <Button
-                  disabled={!customPacketNo || !form.plantCode}
+                  disabled={
+                    !customPacketNo ||
+                    !form.plantCode ||
+                    !form.packingDate
+                  }
                   sx={{
                     ...premiumButton,
-                    opacity: !customPacketNo || !form.plantCode ? 0.45 : 1,
+                    opacity:
+                      !customPacketNo ||
+                      !form.plantCode ||
+                      !form.packingDate
+                        ? 0.45
+                        : 1,
                   }}
                   onClick={async () => {
                     try {
                       if (!form.plantCode) {
                         showUiAlert("error", "Please select Plant Location");
+                        return;
+                      }
+
+                      const packingDateError =
+                        getPackingDateValidationMessage(
+                          form.packingDate
+                        );
+
+                      if (packingDateError) {
+                        setErrors((previous) => ({
+                          ...previous,
+                          packingDate:
+                            packingDateError,
+                        }));
+
+                        showUiAlert(
+                          "error",
+                          packingDateError
+                        );
+
                         return;
                       }
 
@@ -8041,6 +8260,12 @@ function ZohoItemsPage() {
                 {itemInfoFields.map((field) =>
                   renderFormTextField(field)
                 )}
+
+                <Box sx={sectionTitleSx}>
+                  Packing Date
+                </Box>
+
+                {renderCreationPackingDateField()}
 
                 <Box sx={sectionTitleSx}>
                   Plant Assignment
@@ -9372,6 +9597,71 @@ function ZohoItemsPage() {
                   }
                   sx={formFieldSx(darkMode)}
                 />
+
+                {!hardwareEditingItem &&
+                  !hardwareAddMaster && (
+                    <TextField
+                      label="Packing Date"
+                      type="date"
+                      fullWidth
+                      value={
+                        hardwareForm.packingDate ||
+                        ""
+                      }
+                      onChange={(event) => {
+                        const value =
+                          String(
+                            event.target.value ||
+                            ""
+                          ).trim();
+
+                        if (
+                          value &&
+                          value > todayPackingDate
+                        ) {
+                          setErrors((previous) => ({
+                            ...previous,
+                            hardwarePackingDate:
+                              "Future packing dates are not allowed",
+                          }));
+
+                          return;
+                        }
+
+                        setHardwareForm((previous) => ({
+                          ...previous,
+                          packingDate: value,
+                        }));
+
+                        setErrors((previous) => ({
+                          ...previous,
+                          hardwarePackingDate: "",
+                        }));
+                      }}
+                      inputProps={{
+                        max: todayPackingDate,
+                      }}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      error={
+                        !!errors.hardwarePackingDate
+                      }
+                      helperText={
+                        errors.hardwarePackingDate ||
+                        "Defaults to today. You can select any previous date; future dates are blocked."
+                      }
+                      sx={{
+                        ...formFieldSx(darkMode),
+
+                        "& input[type='date']::-webkit-calendar-picker-indicator": {
+                          filter: "invert(1)",
+                          opacity: 0.8,
+                          cursor: "pointer",
+                        },
+                      }}
+                    />
+                  )}
 
                 <TextField
                   select

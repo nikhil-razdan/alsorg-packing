@@ -8,94 +8,144 @@ import com.alsorg.packing.domain.common.PacketItemType;
 
 public final class HardwarePacketDtos {
 
-    private HardwarePacketDtos() {
-    }
+        private HardwarePacketDtos() {
+        }
 
-    public record HardwareLineRequest(
-            String itemName,
-            BigDecimal quantity,
-            String uom
-    ) {
-    }
+        // =====================================================
+        // HARDWARE CONTENT ROW
+        // =====================================================
 
-    public record HardwarePacketDraftRequest(
-            List<HardwareLineRequest> items
-    ) {
-    }
+        public record HardwareLineRequest(
+                        String itemName,
+                        BigDecimal quantity,
+                        String uom) {
+        }
 
-    public record HardwarePacketCreateRequest(
-            String itemName,
-            String pdNo,
-            String drawingNo,
-            String clientName,
-            String clientAddress,
-            String floor,
-            String plantCode,
-            List<HardwarePacketDraftRequest> packets
-    ) {
-    }
+        // =====================================================
+        // ONE HARDWARE PACKET DRAFT
+        // =====================================================
 
-    /*
-     * Used when adding Packet 2, Packet 3, etc.
-     * Master-level information comes from the existing MasterItem.
-     */
-    public record HardwarePacketAddRequest(
-            List<HardwarePacketDraftRequest> packets
-    ) {
-    }
+        public record HardwarePacketDraftRequest(
+                        List<HardwareLineRequest> items) {
+        }
 
-    public record HardwarePacketUpdateRequest(
-            String itemName,
-            String pdNo,
-            String drawingNo,
-            String clientName,
-            String clientAddress,
-            String floor,
-            List<HardwareLineRequest> items
-    ) {
-    }
+        // =====================================================
+        // CREATE NEW HARDWARE MASTER + PACKETS
+        // =====================================================
 
-    public record HardwareLineResponse(
-            UUID id,
-            int lineNo,
-            String itemName,
-            BigDecimal quantity,
-            String uom
-    ) {
-    }
+        /*
+         * packingDate:
+         *
+         * Optional business packing date selected by the user
+         * while creating a new Hardware Packet master.
+         *
+         * Expected format:
+         * yyyy-MM-dd
+         *
+         * Example:
+         * 2026-08-12
+         *
+         * If null/blank, HardwarePacketService defaults it
+         * to today's date in Asia/Kolkata.
+         *
+         * IMPORTANT:
+         * This exists ONLY in the top-level Create request.
+         * Existing Add Hardware Packets and Edit Hardware Packet
+         * behaviour remains unchanged.
+         */
+        public record HardwarePacketCreateRequest(
+                        String itemName,
+                        String pdNo,
+                        String drawingNo,
+                        String clientName,
+                        String clientAddress,
+                        String floor,
+                        String plantCode,
+                        String packingDate,
+                        List<HardwarePacketDraftRequest> packets) {
+        }
 
-    public record HardwarePacketResponse(
-            UUID itemId,
-            UUID masterItemId,
+        // =====================================================
+        // ADD PACKETS TO EXISTING HARDWARE MASTER
+        // =====================================================
 
-            PacketItemType itemType,
+        /*
+         * Intentionally no packingDate here.
+         *
+         * This preserves your existing Add Hardware Packets
+         * workflow exactly as it is.
+         */
+        public record HardwarePacketAddRequest(
+                        List<HardwarePacketDraftRequest> packets) {
+        }
 
-            String itemName,
-            String packetNumber,
-            String sku,
+        // =====================================================
+        // EDIT EXISTING HARDWARE PACKET
+        // =====================================================
 
-            String pdNo,
-            String drawingNo,
+        /*
+         * Intentionally no packingDate here.
+         *
+         * Editing the hardware packet should not silently
+         * change its original packing/business date.
+         */
+        public record HardwarePacketUpdateRequest(
+                        String itemName,
+                        String pdNo,
+                        String drawingNo,
+                        String clientName,
+                        String clientAddress,
+                        String floor,
+                        List<HardwareLineRequest> items) {
+        }
 
-            String clientName,
-            String clientAddress,
-            String floor,
+        // =====================================================
+        // HARDWARE LINE RESPONSE
+        // =====================================================
 
-            String description,
+        public record HardwareLineResponse(
+                        UUID id,
+                        int lineNo,
+                        String itemName,
+                        BigDecimal quantity,
+                        String uom) {
+        }
 
-            String plantCode,
-            String location,
-            String packedAreaCode,
-            String currentLocationCode,
+        // =====================================================
+        // HARDWARE PACKET RESPONSE
+        // =====================================================
 
-            String status,
-            String stickerNumber,
-            Long printIteration,
+        public record HardwarePacketResponse(
+                        UUID itemId,
+                        UUID masterItemId,
 
-            String createdBy,
-            Long createdByUserId,
+                        PacketItemType itemType,
 
-            List<HardwareLineResponse> items
-    ) {
-    }
+                        String itemName,
+                        String packetNumber,
+                        String sku,
+
+                        String pdNo,
+                        String drawingNo,
+
+                        String clientName,
+                        String clientAddress,
+                        String floor,
+
+                        String description,
+
+                        String plantCode,
+                        String location,
+                        String packedAreaCode,
+                        String currentLocationCode,
+
+                        String status,
+                        String stickerNumber,
+                        Long printIteration,
+
+                        String createdBy,
+                        Long createdByUserId,
+
+                        List<HardwareLineResponse> items) {
+        }
 }
