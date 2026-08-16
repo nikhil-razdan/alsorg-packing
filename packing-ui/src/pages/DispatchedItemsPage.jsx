@@ -64,39 +64,84 @@ const page = {
 		"linear-gradient(135deg,#020617,#0f172a)",
 };
 
+/*
+ * Dispatch register table geometry.
+ *
+ * VISUAL ONLY:
+ * - every existing column/render function stays unchanged;
+ * - the PackFlow dark/blue/purple palette stays unchanged;
+ * - horizontal scrolling remains available;
+ * - the shell/header/row hierarchy now follows the clean MatFlow Store table language.
+ */
 const dispatchGrid =
-	"70px 350px 280px 140px 180px 250px 220px 120px 180px 210px 240px 540px";
+	"64px minmax(260px,1.25fr) minmax(220px,1fr) 120px 150px minmax(270px,1.25fr) minmax(190px,.9fr) 105px 155px 185px 210px 540px";
 
-const dispatchMinWidth = 2780;
+const dispatchMinWidth = 2580;
 
 const tableHeader = {
 	position: "sticky",
 	top: 0,
-	zIndex: 20,
+	zIndex: 30,
 
 	display: "grid",
 	gridTemplateColumns: dispatchGrid,
 	minWidth: dispatchMinWidth,
 
-	alignItems: "center",
+	alignItems: "stretch",
 
-	padding: "14px 16px",
+	padding: 0,
 
-	background: "#111827",
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.995),rgba(17,24,39,.985))",
 
 	color: "#94a3b8",
 
-	fontWeight: 700,
-	fontSize: 13,
+	fontWeight: 950,
+	fontSize: 10.5,
+	letterSpacing: ".075em",
+	textTransform: "uppercase",
+
+	borderBottom:
+		"1px solid rgba(148,163,184,.14)",
+
+	boxShadow:
+		"0 10px 24px rgba(2,6,23,.20)",
+
+	backdropFilter: "blur(18px)",
+	WebkitBackdropFilter: "blur(18px)",
+};
+
+const dispatchHeaderCellSx = {
+	minWidth: 0,
+	minHeight: 50,
+
+	display: "flex",
+	alignItems: "center",
+
+	px: 1.5,
+	py: 1.15,
+
+	borderRight:
+		"1px solid rgba(255,255,255,.045)",
+
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
 };
 
 const tableCellWrap = {
 	minWidth: 0,
 	overflow: "hidden",
+
 	display: "flex",
 	alignItems: "center",
-	minHeight: 36,
-	paddingRight: 12,
+
+	minHeight: 68,
+
+	padding: "10px 14px",
+
+	borderRight:
+		"1px solid rgba(255,255,255,.038)",
 };
 
 const tableBody = {
@@ -109,18 +154,129 @@ const tableRow = {
 	gridTemplateColumns: dispatchGrid,
 	minWidth: dispatchMinWidth,
 
-	alignItems: "center",
+	alignItems: "stretch",
 
-	padding: "14px 16px",
+	padding: 0,
 
 	color: "#fff",
 
-	borderTop: "1px solid rgba(255,255,255,.06)",
+	borderBottom:
+		"1px solid rgba(148,163,184,.075)",
 
-	minHeight: 58,
+	minHeight: 68,
 
 	fontSize: 13,
+
+	background:
+		"rgba(15,23,42,.40)",
+
+	transition:
+		"background .16s ease, border-color .16s ease, box-shadow .16s ease",
 };
+
+const dispatchTableRowSx = (
+	hardwareRow = false
+) => ({
+	...tableRow,
+
+	...(hardwareRow
+		? {
+			borderLeft:
+				"4px solid #a78bfa",
+
+			background:
+				"linear-gradient(90deg,rgba(139,92,246,.10),rgba(15,23,42,.72))",
+		}
+		: {}),
+
+	"&:nth-of-type(even)": {
+		background: hardwareRow
+			? "linear-gradient(90deg,rgba(139,92,246,.115),rgba(15,23,42,.80))"
+			: "rgba(17,24,39,.48)",
+	},
+
+	"&:hover": {
+		background: hardwareRow
+			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(30,41,59,.72))"
+			: "linear-gradient(90deg,rgba(37,99,235,.075),rgba(30,41,59,.58))",
+
+		borderBottomColor:
+			"rgba(96,165,250,.18)",
+
+		boxShadow:
+			"inset 0 1px 0 rgba(255,255,255,.018), inset 0 -1px 0 rgba(96,165,250,.035)",
+	},
+
+	"&:focus-within": {
+		background: hardwareRow
+			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(30,41,59,.74))"
+			: "linear-gradient(90deg,rgba(37,99,235,.085),rgba(30,41,59,.60))",
+	},
+});
+
+const dispatchSelectCellSx = (
+	hardwareRow = false,
+	header = false
+) => ({
+	minWidth: 0,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+
+	position: "sticky",
+	left: 0,
+	zIndex: header ? 42 : 8,
+
+	minHeight: header
+		? 50
+		: 68,
+
+	background: header
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
+		: hardwareRow
+			? "linear-gradient(90deg,rgba(139,92,246,.16),rgba(15,23,42,.985))"
+			: "rgba(15,23,42,.985)",
+
+	borderRight:
+		"1px solid rgba(148,163,184,.13)",
+
+	boxShadow:
+		"10px 0 22px rgba(2,6,23,.20)",
+});
+
+const dispatchActionCellSx = (
+	hardwareRow = false,
+	header = false
+) => ({
+	minWidth: 0,
+
+	display: "flex",
+	alignItems: "center",
+
+	position: "sticky",
+	right: 0,
+	zIndex: header ? 42 : 8,
+
+	minHeight: header
+		? 50
+		: 68,
+
+	px: header ? 1.5 : 1.25,
+	py: header ? 1.15 : 0.85,
+
+	background: header
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
+		: hardwareRow
+			? "linear-gradient(90deg,rgba(15,23,42,.95),rgba(37,25,60,.985))"
+			: "linear-gradient(90deg,rgba(15,23,42,.95),rgba(15,23,42,.995))",
+
+	borderLeft:
+		"1px solid rgba(148,163,184,.13)",
+
+	boxShadow:
+		"-12px 0 24px rgba(2,6,23,.22)",
+});
 
 const selectHeaderCellSx = {
 	display: "flex",
@@ -1829,16 +1985,31 @@ const subtitle = {
 };
 
 const tableWrapper = {
+	position: "relative",
+
 	overflowX: "auto",
 	overflowY: "visible",
+
+	borderRadius: "18px",
+
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.72),rgba(2,6,23,.46))",
+
+	border:
+		"1px solid rgba(148,163,184,.11)",
+
+	boxShadow:
+		"0 18px 42px rgba(2,6,23,.24)",
 
 	scrollbarWidth: "thin",
 	scrollbarColor: "#3b82f6 #0f172a",
 
 	WebkitOverflowScrolling: "touch",
+	overscrollBehaviorX: "contain",
+	scrollbarGutter: "stable",
 
 	"&::-webkit-scrollbar": {
-		height: 14,
+		height: 12,
 	},
 
 	"&::-webkit-scrollbar-track": {
@@ -1850,7 +2021,7 @@ const tableWrapper = {
 		background: "linear-gradient(90deg,#2563eb,#60a5fa)",
 		borderRadius: 999,
 		border: "2px solid #0f172a",
-		boxShadow: "0 0 16px rgba(59,130,246,.55)",
+		boxShadow: "0 0 14px rgba(59,130,246,.48)",
 	},
 };
 
@@ -2167,9 +2338,26 @@ const bulkBar = {
 const actionContainer = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1,
-	flexWrap: "nowrap",
+	gap: 0.75,
+	flexWrap: "wrap",
 	minWidth: 0,
+	width: "100%",
+
+	/*
+	 * All original row actions stay present; wrapping only prevents
+	 * long action sets from being clipped inside the table cell.
+	 */
+	"& .MuiButton-root": {
+		minHeight: 32,
+		borderRadius: "10px",
+		fontSize: 10.5,
+		lineHeight: 1.1,
+		whiteSpace: "nowrap",
+	},
+
+	"& .MuiChip-root": {
+		flexShrink: 0,
+	},
 };
 
 const actionPrimary = {
@@ -2741,12 +2929,15 @@ const wrap = {
 	background:
 		"linear-gradient(180deg,#0f172a,#111827)",
 
-	borderRadius: 24,
+	borderRadius: 20,
 
-	padding: 24,
+	padding: 16,
 
 	border:
 		"1px solid rgba(255,255,255,.06)",
+
+	boxShadow:
+		"0 18px 46px rgba(2,6,23,.22)",
 };
 
 const pdfPreviewOverlaySx = {
@@ -18538,112 +18729,119 @@ export default function DispatchedItemsPage() {
 
 
 					<Box sx={tableWrapper}>
-						<div
-							style={{
+						<Box
+							sx={{
 								width: "max-content",
 								minWidth: "100%",
 							}}
 						>
 
-							<div style={tableHeader}>
-								<div>{columns[0].renderHeader()}</div>
-								<div>Item Name</div>
-								<div>SKU</div>
-								<div>PD No</div>
-								<div>DWG No</div>
-								<div>Description</div>
-								<div>Client</div>
-								<div>Plant</div>
-								<div>Location</div>
-								<div>Date / Time</div>
-								<div>Status</div>
-								<div>Actions</div>
-							</div>
+							<Box sx={tableHeader}>
+								<Box sx={dispatchSelectCellSx(false, true)}>
+									{columns[0].renderHeader()}
+								</Box>
 
-							<div style={tableBody}>
+								<Box sx={dispatchHeaderCellSx}>Item Name</Box>
+								<Box sx={dispatchHeaderCellSx}>SKU</Box>
+								<Box sx={dispatchHeaderCellSx}>PD No</Box>
+								<Box sx={dispatchHeaderCellSx}>DWG No</Box>
+								<Box sx={dispatchHeaderCellSx}>Description</Box>
+								<Box sx={dispatchHeaderCellSx}>Client</Box>
+								<Box sx={dispatchHeaderCellSx}>Plant</Box>
+								<Box sx={dispatchHeaderCellSx}>Location</Box>
+								<Box sx={dispatchHeaderCellSx}>Date / Time</Box>
+								<Box sx={dispatchHeaderCellSx}>Status</Box>
+
+								<Box sx={dispatchActionCellSx(false, true)}>
+									Actions
+								</Box>
+							</Box>
+
+							<Box sx={tableBody}>
 
 								{paginatedRows.map((row) => (
 
-									<div
+									<Box
 										key={row.zohoItemId}
-										style={{
-											...tableRow,
-
-											...(isHardwareDispatchRow(row)
-												? {
-													borderLeft:
-														"4px solid #a78bfa",
-
-													background:
-														"linear-gradient(90deg,rgba(139,92,246,.10),rgba(15,23,42,.72))",
-												}
-												: {}),
-										}}
+										sx={dispatchTableRowSx(
+											isHardwareDispatchRow(row)
+										)}
 									>
 
-										<div>
+										<Box
+											sx={dispatchSelectCellSx(
+												isHardwareDispatchRow(row)
+											)}
+										>
 											{columns[0].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[1].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[2].renderCell({ value: row.sku, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[3].renderCell({ value: row.pdNo, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[4].renderCell({ value: row.drawingNo, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[5].renderCell({ value: row.description, row })}
-										</div>
+										</Box>
 
-
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[6].renderCell({ value: row.clientName, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[7].renderCell({ value: row.plantCode, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[8].renderCell({ value: row.currentLocationCode, row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[9].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box sx={tableCellWrap}>
 											{columns[10].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div style={tableCellWrap}>
+										<Box
+											sx={dispatchActionCellSx(
+												isHardwareDispatchRow(row)
+											)}
+										>
 											{columns[11].renderCell({ row })}
-										</div>
-									</div>
+										</Box>
+									</Box>
 
 								))}
 
-							</div>
-						</div>
+							</Box>
+						</Box>
 					</Box>
 					<Box
 						sx={{
 							display: "flex",
 							justifyContent: "space-between",
 							alignItems: "center",
-							mt: 4,
+							mt: 1.5,
+							pt: 1.5,
+							px: 0.25,
 							gap: 2,
 							flexWrap: "wrap",
+							borderTop:
+								"1px solid rgba(148,163,184,.08)",
 						}}
 					>
 
