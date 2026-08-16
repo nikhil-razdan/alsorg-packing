@@ -2,6 +2,7 @@ package com.alsorg.packing.controller;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -201,6 +202,143 @@ public class PacketController {
 
                 return ResponseEntity.ok(
                                 items.stream().map(PacketItem::getId).toList());
+        }
+
+        /*
+         * =====================================================
+         * OPTIMIZED INVENTORY REGISTER READ
+         * =====================================================
+         *
+         * Additive endpoint used by the high-volume Inventory frontend.
+         * The original GET /api/packets/items endpoint below remains unchanged
+         * for existing callers and explicit full-register operations.
+         */
+        @GetMapping(value = "/items/search", produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<Map<String, Object>> searchInventoryItems(
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "25") int size,
+                        @RequestParam(defaultValue = "") String search,
+                        @RequestParam(defaultValue = "ALL") String stickerStatus,
+                        @RequestParam(defaultValue = "NONE") String groupBy,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService
+                                .getCurrentUserFromAuth(
+                                                auth);
+
+                currentUserService
+                                .rejectHardwareUserFromNormalInventory(
+                                                user);
+
+                int safePage = Math.max(
+                                page,
+                                0);
+
+                int safeSize = Math.min(
+                                Math.max(
+                                                size,
+                                                1),
+                                200);
+
+                Sort sort = buildInventoryRegisterSort(
+                                groupBy);
+
+                Pageable pageable = PageRequest.of(
+                                safePage,
+                                safeSize,
+                                sort);
+
+                PacketService.InventoryPageResult inventoryPage = packetService
+                                .getVisibleNormalInventoryItemsPaged(
+                                                user,
+                                                currentUserService
+                                                                .allowedPlants(
+                                                                                user),
+                                                search,
+                                                stickerStatus,
+                                                pageable);
+
+                Page<PacketItemResponse> result = inventoryPage.page();
+
+                Map<String, Object> response = new LinkedHashMap<>();
+
+                response.put(
+                                "items",
+                                result.getContent());
+
+                response.put(
+                                "total",
+                                result.getTotalElements());
+
+                response.put(
+                                "totalElements",
+                                result.getTotalElements());
+
+                response.put(
+                                "totalPages",
+                                result.getTotalPages());
+
+                response.put(
+                                "page",
+                                result.getNumber());
+
+                response.put(
+                                "pageSize",
+                                result.getSize());
+
+                response.put(
+                                "hasNext",
+                                result.hasNext());
+
+                response.put(
+                                "maxPacketNumbers",
+                                inventoryPage
+                                                .maxPacketNumbers());
+
+                return ResponseEntity
+                                .ok()
+                                .header(
+                                                "Cache-Control",
+                                                "no-store, no-cache, must-revalidate")
+                                .body(
+                                                response);
+        }
+
+        private Sort buildInventoryRegisterSort(
+                        String groupBy) {
+
+                String cleanGroup = groupBy == null
+                                ? "NONE"
+                                : groupBy.trim()
+                                                .toUpperCase();
+
+                if ("SKU".equals(
+                                cleanGroup)) {
+
+                        return Sort.by(
+                                        Sort.Order.asc(
+                                                        "sku")
+                                                        .ignoreCase(),
+                                        Sort.Order.asc(
+                                                        "itemName")
+                                                        .ignoreCase(),
+                                        Sort.Order.asc(
+                                                        "id"));
+                }
+
+                /*
+                 * Existing NONE and NAME views both originate from the normal
+                 * Inventory repository's case-insensitive item-name /
+                 * packet-number ordering.
+                 */
+                return Sort.by(
+                                Sort.Order.asc(
+                                                "itemName")
+                                                .ignoreCase(),
+                                Sort.Order.asc(
+                                                "packetNumber"),
+                                Sort.Order.asc(
+                                                "id"));
         }
 
         @GetMapping("/items")

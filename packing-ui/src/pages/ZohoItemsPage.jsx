@@ -3,6 +3,7 @@ import {
   useState,
   useMemo,
   useRef,
+  useDeferredValue,
 } from "react";
 
 import {
@@ -1435,6 +1436,87 @@ const INVENTORY_TABLE_COLUMNS = [
 const INVENTORY_CLS_ROW_HEIGHT = 72;
 const INVENTORY_CLS_RESERVED_ROWS = 8;
 
+
+/*
+ * High-volume Inventory performance policy.
+ *
+ * Normal Inventory browsing is database-paged.  The browser keeps only the
+ * visible normal page plus a bounded LRU cache.  Hardware continues through
+ * its existing dedicated API/permission flow and is cached once locally so
+ * search/page navigation does not repeatedly download it.
+ *
+ * Explicit full-register UI such as Master Packet Control still loads the
+ * complete visible set only when the user opens that feature.
+ */
+const INVENTORY_SERVER_SEARCH_DEBOUNCE_MS = 220;
+const INVENTORY_PAGE_CACHE_LIMIT = 18;
+const buildInventorySearchIndex = (
+  row
+) => {
+  const stickerLabel =
+    row?.stickerNumber
+      ? "Sticker Printed"
+      : "Created";
+
+  return [
+    row?.itemName,
+    row?.name,
+    row?.sku,
+    row?.clientName,
+    row?.pdNo,
+    row?.drawingNo,
+    row?.description,
+    row?.remarks,
+    row?.plantCode,
+    row?.packedAreaCode,
+    row?.currentLocationCode,
+    row?.location,
+    stickerLabel,
+  ]
+    .filter(
+      value =>
+        value !== null &&
+        value !== undefined
+    )
+    .join(" ")
+    .toLowerCase();
+};
+
+const attachInventorySearchIndex = (
+  row
+) => ({
+  ...row,
+  __inventorySearchIndex:
+    buildInventorySearchIndex(
+      row
+    ),
+});
+
+const inventoryRowMatchesSearch = (
+  row,
+  value
+) => {
+  const query =
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  if (!query) {
+    return true;
+  }
+
+  const haystack =
+    row?.__inventorySearchIndex ||
+    buildInventorySearchIndex(
+      row
+    );
+
+  return haystack.includes(
+    query
+  );
+};
+
+
 const createDefaultInventoryColumnWidths =
   () => {
     return Object.fromEntries(
@@ -1766,6 +1848,83 @@ function ZohoItemsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  const [
+    inventoryServerSearch,
+    setInventoryServerSearch,
+  ] = useState("");
+
+  const [
+    normalInventoryMeta,
+    setNormalInventoryMeta,
+  ] = useState({
+    totalElements: 0,
+    totalPages: 1,
+    pageNumber: 0,
+    pageSize: 25,
+  });
+
+  const [
+    normalPageMaxPacketMap,
+    setNormalPageMaxPacketMap,
+  ] = useState({});
+
+  const [
+    inventoryHardwareRows,
+    setInventoryHardwareRows,
+  ] = useState([]);
+
+  const [
+    inventoryHardwareLoaded,
+    setInventoryHardwareLoaded,
+  ] = useState(false);
+
+  const [
+    inventoryHardwareLoading,
+    setInventoryHardwareLoading,
+  ] = useState(false);
+
+  const [
+    inventoryFullModeRows,
+    setInventoryFullModeRows,
+  ] = useState([]);
+
+  const [
+    inventoryFullModeLoading,
+    setInventoryFullModeLoading,
+  ] = useState(false);
+
+  const [
+    masterWorkbenchRows,
+    setMasterWorkbenchRows,
+  ] = useState([]);
+
+  const [
+    masterWorkbenchLoading,
+    setMasterWorkbenchLoading,
+  ] = useState(false);
+
+  const [
+    itemDetailsOpen,
+    setItemDetailsOpen,
+  ] = useState(false);
+
+  const [
+    itemDetailsRow,
+    setItemDetailsRow,
+  ] = useState(null);
+
+  const inventoryPageCacheRef =
+    useRef(new Map());
+
+  const inventoryPrefetchAbortRef =
+    useRef(null);
+
+  const inventoryHardwareAbortRef =
+    useRef(null);
+
+  const inventoryHardwarePromiseRef =
+    useRef(null);
   const [descriptions, setDescriptions] = useState([]);
   const [form, setForm] = useState({
     itemName: "",
@@ -1966,7 +2125,7 @@ function ZohoItemsPage() {
       raw?.id ||
       "";
 
-    return {
+    const normalizedRow = {
       ...raw,
 
       itemId,
@@ -2044,6 +2203,10 @@ function ZohoItemsPage() {
       dimensions: "",
       remarks: "",
     };
+
+    return attachInventorySearchIndex(
+      normalizedRow
+    );
   };
 
   const hardwarePacketBasePath =
@@ -2664,7 +2827,7 @@ function ZohoItemsPage() {
       row?.id ||
       "";
 
-    return {
+    const normalizedRow = {
       ...row,
 
       itemId,
@@ -2700,6 +2863,10 @@ function ZohoItemsPage() {
           .trim()
           .toUpperCase(),
     };
+
+    return attachInventorySearchIndex(
+      normalizedRow
+    );
   };
 
   const mergeInventoryRowSources = (
@@ -2736,88 +2903,560 @@ function ZohoItemsPage() {
     );
   };
 
-  const fetchItems = async () => {
-    const requestId =
-      inventoryRequestIdRef.current + 1;
+  const extractInventoryServerPage =
+    (payload) => {
+      if (
+        payload &&
+        !Array.isArray(payload)
+      ) {
+        const items =
+          Array.isArray(payload.content)
+            ? payload.content
+            : Array.isArray(payload.items)
+              ? payload.items
+              : Array.isArray(payload.rows)
+                ? payload.rows
+                : [];
 
-    inventoryRequestIdRef.current =
-      requestId;
-
-    /*
-     * Cancel any older inventory request.
-     */
-    if (
-      inventoryAbortControllerRef
-        .current
-    ) {
-      inventoryAbortControllerRef
-        .current
-        .abort();
-    }
-
-    const controller =
-      new AbortController();
-
-    inventoryAbortControllerRef.current =
-      controller;
-
-    try {
-      setLoading(true);
-
-      let finalRows = [];
-
-      if (isHardwareOnly) {
-        const hardwareRows =
-          await fetchInventoryRowsFromPath(
-            "/api/hardware-packets",
-            controller.signal
-          );
-
-        finalRows =
-          hardwareRows.map(
-            normalizeHardwarePacketRow
-          );
+        return {
+          items,
+          totalElements:
+            Number(
+              payload.totalElements ??
+              payload.total ??
+              items.length
+            ) || 0,
+          totalPages:
+            Math.max(
+              1,
+              Number(
+                payload.totalPages ??
+                1
+              ) || 1
+            ),
+          pageNumber:
+            Math.max(
+              0,
+              Number(
+                payload.page ??
+                payload.pageNumber ??
+                0
+              ) || 0
+            ),
+          pageSize:
+            Math.max(
+              1,
+              Number(
+                payload.pageSize ??
+                payload.size ??
+                pageSize
+              ) || pageSize
+            ),
+          hasNext:
+            typeof payload.hasNext ===
+              "boolean"
+              ? payload.hasNext
+              : null,
+          maxPacketNumbers:
+            payload.maxPacketNumbers &&
+              typeof payload.maxPacketNumbers ===
+              "object"
+              ? payload.maxPacketNumbers
+              : {},
+        };
       }
 
-      else if (
+      const items =
+        Array.isArray(payload)
+          ? payload
+          : [];
+
+      return {
+        items,
+        totalElements:
+          items.length,
+        totalPages: 1,
+        pageNumber: 0,
+        pageSize:
+          Math.max(
+            1,
+            pageSize
+          ),
+        hasNext: false,
+        maxPacketNumbers: {},
+      };
+    };
+
+  const buildInventoryServerSignature =
+    ({
+      searchValue =
+      inventoryServerSearch,
+      statusValue =
+      statusFilter,
+      groupValue =
+      groupBy,
+    } = {}) => {
+      return JSON.stringify([
+        currentUser?.id || "",
+        effectiveRoleKey,
+        String(
+          searchValue || ""
+        ).trim(),
+        isAdmin
+          ? String(
+            statusValue ||
+            "ALL"
+          )
+            .trim()
+            .toUpperCase()
+          : "ALL",
+        String(
+          groupValue ||
+          "NONE"
+        )
+          .trim()
+          .toUpperCase(),
+      ]);
+    };
+
+  const getInventoryPageCacheKey =
+    (
+      signature,
+      backendPage,
+      size
+    ) => {
+      return [
+        signature,
+        Number(size) || 0,
+        Number(backendPage) || 0,
+      ].join("|");
+    };
+
+  const putInventoryPageCache =
+    (
+      cacheKey,
+      value
+    ) => {
+      const cache =
+        inventoryPageCacheRef.current;
+
+      if (
+        cache.has(
+          cacheKey
+        )
+      ) {
+        cache.delete(
+          cacheKey
+        );
+      }
+
+      cache.set(
+        cacheKey,
+        value
+      );
+
+      while (
+        cache.size >
+        INVENTORY_PAGE_CACHE_LIMIT
+      ) {
+        const oldestKey =
+          cache.keys()
+            .next()
+            .value;
+
+        if (
+          oldestKey ===
+          undefined
+        ) {
+          break;
+        }
+
+        cache.delete(
+          oldestKey
+        );
+      }
+    };
+
+  const fetchNormalInventoryServerPage =
+    async ({
+      backendPage,
+      size,
+      signal,
+      searchValue =
+      inventoryServerSearch,
+      statusValue =
+      statusFilter,
+      groupValue =
+      groupBy,
+    }) => {
+      if (
+        isHardwareOnly
+      ) {
+        return {
+          items: [],
+          totalElements: 0,
+          totalPages: 1,
+          pageNumber: 0,
+          pageSize: size,
+          hasNext: false,
+          maxPacketNumbers: {},
+        };
+      }
+
+      const query =
+        new URLSearchParams({
+          page:
+            String(
+              Math.max(
+                0,
+                Number(
+                  backendPage
+                ) || 0
+              )
+            ),
+          size:
+            String(
+              Math.max(
+                1,
+                Number(size) ||
+                pageSize
+              )
+            ),
+          search:
+            String(
+              searchValue || ""
+            ).trim(),
+          stickerStatus:
+            isAdmin
+              ? String(
+                statusValue ||
+                "ALL"
+              )
+                .trim()
+                .toUpperCase()
+              : "ALL",
+          groupBy:
+            String(
+              groupValue ||
+              "NONE"
+            )
+              .trim()
+              .toUpperCase(),
+        });
+
+      const response =
+        await authFetch(
+          `${API_BASE_URL}/api/packets/items/search?${query.toString()}`,
+          {
+            method: "GET",
+            headers: {
+              Accept:
+                "application/json",
+            },
+            signal,
+          }
+        );
+
+      if (!response.ok) {
+        const responseText =
+          await response.text();
+
+        let message =
+          "Failed to load Inventory page";
+
+        if (
+          responseText
+        ) {
+          try {
+            const parsed =
+              JSON.parse(
+                responseText
+              );
+
+            message =
+              parsed?.message ||
+              parsed?.error ||
+              responseText;
+          } catch {
+            message =
+              responseText;
+          }
+        }
+
+        throw new Error(
+          message
+        );
+      }
+
+      const payload =
+        await response.json();
+
+      const parsed =
+        extractInventoryServerPage(
+          payload
+        );
+
+      return {
+        ...parsed,
+
+        items:
+          (
+            Array.isArray(
+              parsed.items
+            )
+              ? parsed.items
+              : []
+          ).map(
+            normalizeNormalInventoryRow
+          ),
+      };
+    };
+
+  const prefetchNormalInventoryPage =
+    ({
+      backendPage,
+      size,
+      signature,
+      searchValue =
+      inventoryServerSearch,
+      statusValue =
+      statusFilter,
+    }) => {
+      if (
+        isHardwareOnly ||
+        backendPage < 0
+      ) {
+        return;
+      }
+
+      const cacheKey =
+        getInventoryPageCacheKey(
+          signature,
+          backendPage,
+          size
+        );
+
+      if (
+        inventoryPageCacheRef
+          .current
+          .has(
+            cacheKey
+          )
+      ) {
+        return;
+      }
+
+      inventoryPrefetchAbortRef
+        .current
+        ?.abort();
+
+      const controller =
+        new AbortController();
+
+      inventoryPrefetchAbortRef.current =
+        controller;
+
+      window.setTimeout(
+        async () => {
+          try {
+            const result =
+              await fetchNormalInventoryServerPage(
+                {
+                  backendPage,
+                  size,
+                  signal:
+                    controller.signal,
+                  searchValue,
+                  statusValue,
+                  groupValue:
+                    "NONE",
+                }
+              );
+
+            putInventoryPageCache(
+              cacheKey,
+              result
+            );
+          } catch (error) {
+            if (
+              error?.name !==
+              "AbortError"
+            ) {
+              console.debug(
+                "Inventory next-page prefetch skipped:",
+                error
+              );
+            }
+          } finally {
+            if (
+              inventoryPrefetchAbortRef
+                .current ===
+              controller
+            ) {
+              inventoryPrefetchAbortRef.current =
+                null;
+            }
+          }
+        },
+        0
+      );
+    };
+
+  const shouldLoadHardwareInventory =
+    () => {
+      return (
+        isHardwareOnly ||
+        isAdmin ||
+        isHardwarePacking
+      );
+    };
+
+  const ensureHardwareInventoryRows =
+    async ({
+      force = false,
+    } = {}) => {
+      if (
+        !shouldLoadHardwareInventory()
+      ) {
+        setInventoryHardwareRows(
+          []
+        );
+        setInventoryHardwareLoaded(
+          true
+        );
+
+        return [];
+      }
+
+      if (
+        !force &&
+        inventoryHardwareLoaded
+      ) {
+        return inventoryHardwareRows;
+      }
+
+      if (
+        !force &&
+        inventoryHardwarePromiseRef
+          .current
+      ) {
+        return inventoryHardwarePromiseRef
+          .current;
+      }
+
+      inventoryHardwareAbortRef
+        .current
+        ?.abort();
+
+      const controller =
+        new AbortController();
+
+      inventoryHardwareAbortRef.current =
+        controller;
+
+      setInventoryHardwareLoading(
+        true
+      );
+
+      const promise =
+        fetchInventoryRowsFromPath(
+          "/api/hardware-packets",
+          controller.signal
+        )
+          .then((hardwareRows) => {
+            const normalized =
+              (
+                Array.isArray(
+                  hardwareRows
+                )
+                  ? hardwareRows
+                  : []
+              ).map(
+                normalizeHardwarePacketRow
+              );
+
+            if (
+              !controller.signal
+                .aborted
+            ) {
+              setInventoryHardwareRows(
+                normalized
+              );
+
+              setInventoryHardwareLoaded(
+                true
+              );
+            }
+
+            return normalized;
+          })
+          .finally(() => {
+            if (
+              inventoryHardwareAbortRef
+                .current ===
+              controller
+            ) {
+              inventoryHardwareAbortRef.current =
+                null;
+            }
+
+            if (
+              inventoryHardwarePromiseRef
+                .current ===
+              promise
+            ) {
+              inventoryHardwarePromiseRef.current =
+                null;
+            }
+
+            setInventoryHardwareLoading(
+              false
+            );
+          });
+
+      inventoryHardwarePromiseRef.current =
+        promise;
+
+      return promise;
+    };
+
+  /*
+   * Existing complete Inventory loader retained for explicit operations whose
+   * semantics require the complete register (Master Packet Control and global
+   * SKU/Name sort).  It is no longer the normal page-load path.
+   */
+  const fetchAllInventoryRowsLegacy =
+    async () => {
+      if (
+        isHardwareOnly
+      ) {
+        return ensureHardwareInventoryRows({
+          force: true,
+        });
+      }
+
+      if (
         isAdmin ||
         isHardwarePacking
       ) {
-        /*
-         * CLS FIX:
-         * Fetch normal + hardware inventory concurrently,
-         * but publish them to React only ONCE.
-         *
-         * Previously:
-         *   normal response   -> setRows()
-         *   hardware response -> setRows()
-         *   final merge       -> setRows()
-         *
-         * That generated multiple visible table layouts during
-         * the same initial page load.
-         */
         const [
           normalResult,
           hardwareResult,
-        ] = await Promise.allSettled([
-          fetchInventoryRowsFromPath(
-            "/api/packets/items",
-            controller.signal
-          ),
-
-          fetchInventoryRowsFromPath(
-            "/api/hardware-packets",
-            controller.signal
-          ),
-        ]);
-
-        if (controller.signal.aborted) {
-          return [];
-        }
+        ] =
+          await Promise.allSettled([
+            fetchInventoryRowsFromPath(
+              "/api/packets/items"
+            ),
+            ensureHardwareInventoryRows({
+              force: true,
+            }),
+          ]);
 
         if (
-          normalResult.status === "rejected" &&
-          hardwareResult.status === "rejected"
+          normalResult.status ===
+          "rejected" &&
+          hardwareResult.status ===
+          "rejected"
         ) {
           throw (
             normalResult.reason ||
@@ -2828,15 +3467,10 @@ function ZohoItemsPage() {
           );
         }
 
-        let loadedNormalRows = [];
-        let loadedHardwareRows = [];
-
-        if (
+        const normalRows =
           normalResult.status ===
-          "fulfilled"
-        ) {
-          loadedNormalRows =
-            (
+            "fulfilled"
+            ? (
               Array.isArray(
                 normalResult.value
               )
@@ -2844,158 +3478,499 @@ function ZohoItemsPage() {
                 : []
             ).map(
               normalizeNormalInventoryRow
-            );
-        } else {
-          console.error(
-            "Normal inventory fetch failed:",
-            normalResult.reason
-          );
+            )
+            : [];
 
-          showUiAlert(
-            "error",
-            normalResult.reason?.message ||
-            "Normal inventory could not be loaded"
-          );
-        }
-
-        if (
+        const hardwareRows =
           hardwareResult.status ===
-          "fulfilled"
-        ) {
-          loadedHardwareRows =
-            (
+            "fulfilled"
+            ? (
               Array.isArray(
                 hardwareResult.value
               )
                 ? hardwareResult.value
                 : []
-            ).map(
-              normalizeHardwarePacketRow
-            );
-        } else {
-          console.error(
-            "Hardware inventory fetch failed:",
-            hardwareResult.reason
-          );
+            )
+            : [];
 
-          showUiAlert(
-            "error",
-            hardwareResult.reason?.message ||
-            "Hardware inventory could not be loaded"
+        if (
+          normalResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Normal inventory full fetch failed:",
+            normalResult.reason
           );
         }
 
-        /*
-         * IMPORTANT:
-         * Do not call setRows() here.
-         *
-         * The common setRows(finalRows) below this branch
-         * will commit the complete inventory once.
-         */
-        finalRows =
-          mergeInventoryRowSources(
-            loadedNormalRows,
-            loadedHardwareRows
+        if (
+          hardwareResult.status ===
+          "rejected"
+        ) {
+          console.error(
+            "Hardware inventory full fetch failed:",
+            hardwareResult.reason
           );
+        }
+
+        return mergeInventoryRowSources(
+          normalRows,
+          hardwareRows
+        );
       }
 
-      /*
-       * NORMAL PACKFLOW USERS:
-       * Preserve existing normal inventory behaviour.
-       */
-      else {
-        const normalRows =
-          await fetchInventoryRowsFromPath(
-            "/api/packets/items",
-            controller.signal
-          );
+      const normalRows =
+        await fetchInventoryRowsFromPath(
+          "/api/packets/items"
+        );
 
-        finalRows =
-          normalRows.map(
-            normalizeNormalInventoryRow
-          );
-      }
+      return (
+        Array.isArray(
+          normalRows
+        )
+          ? normalRows
+          : []
+      ).map(
+        normalizeNormalInventoryRow
+      );
+    };
 
-      /*
-       * Ignore this result when a newer request has
-       * already started.
-       */
+  /*
+   * Main Inventory refresh entry point used by existing create/edit/delete/
+   * sticker actions.  Default browsing is server-paged; global sort modes
+   * deliberately fall back to the preserved complete loader so their existing
+   * cross-normal/hardware ordering stays exact.
+   */
+  const fetchItems =
+    async ({
+      preferCache = false,
+      refreshHardware = true,
+    } = {}) => {
+      const requestId =
+        inventoryRequestIdRef.current +
+        1;
+
+      inventoryRequestIdRef.current =
+        requestId;
+
+      inventoryAbortControllerRef
+        .current
+        ?.abort();
+
+      inventoryPrefetchAbortRef
+        .current
+        ?.abort();
+
+      const controller =
+        new AbortController();
+
+      inventoryAbortControllerRef.current =
+        controller;
+
+      const useServerPaging =
+        groupBy ===
+        "NONE";
+
       if (
-        requestId !==
-        inventoryRequestIdRef.current
+        !useServerPaging
       ) {
-        return [];
+        try {
+          setLoading(
+            true
+          );
+
+          setInventoryFullModeLoading(
+            true
+          );
+
+          const fullRows =
+            await fetchAllInventoryRowsLegacy();
+
+          if (
+            requestId !==
+            inventoryRequestIdRef
+              .current
+          ) {
+            return fullRows;
+          }
+
+          setInventoryFullModeRows(
+            fullRows
+          );
+
+          /*
+           * Keep rows synchronized for existing action code that optimistically
+           * updates/removes the local array before the authoritative refresh.
+           */
+          setRows(
+            fullRows
+          );
+
+          setRowCount(
+            fullRows.length
+          );
+
+          return fullRows;
+
+        } catch (error) {
+          if (
+            error?.name !==
+            "AbortError"
+          ) {
+            console.error(
+              "Inventory full-mode fetch failed:",
+              error
+            );
+
+            showUiAlert(
+              "error",
+              error?.message ||
+              "Failed to load inventory"
+            );
+          }
+
+          return [];
+
+        } finally {
+          if (
+            requestId ===
+            inventoryRequestIdRef
+              .current
+          ) {
+            setLoading(
+              false
+            );
+
+            setInventoryFullModeLoading(
+              false
+            );
+          }
+
+          if (
+            inventoryAbortControllerRef
+              .current ===
+            controller
+          ) {
+            inventoryAbortControllerRef.current =
+              null;
+          }
+        }
       }
 
-      setRows(
-        finalRows
-      );
-
-      setRowCount(
-        finalRows.length
-      );
-
-      return finalRows;
-    } catch (error) {
-      if (
-        error?.name ===
-        "AbortError" ||
-        controller.signal.aborted
-      ) {
-        return [];
-      }
-
-      console.error(
-        "Inventory fetch failed:",
-        error
+      setInventoryFullModeRows(
+        []
       );
 
       /*
-       * Preserve already loaded rows during a refresh failure.
-       * Do not blank the complete table.
+       * Hardware is an independent workflow.  Reuse the cached list during
+       * page/search navigation and refresh it only on first load or when an
+       * existing mutation/PackFlow refresh explicitly asks for fresh data.
        */
+      let hardwarePromise =
+        Promise.resolve(
+          inventoryHardwareRows
+        );
+
       if (
-        requestId ===
-        inventoryRequestIdRef.current
+        shouldLoadHardwareInventory()
+      ) {
+        hardwarePromise =
+          ensureHardwareInventoryRows({
+            force:
+              refreshHardware,
+          });
+
+        hardwarePromise.catch(
+          (error) => {
+            if (
+              error?.name !==
+              "AbortError"
+            ) {
+              console.error(
+                "Hardware inventory fetch failed:",
+                error
+              );
+
+              showUiAlert(
+                "error",
+                error?.message ||
+                "Hardware inventory could not be loaded"
+              );
+            }
+          }
+        );
+      }
+
+      if (
+        isHardwareOnly
+      ) {
+        try {
+          setLoading(
+            !inventoryHardwareLoaded
+          );
+
+          const hardwareRows =
+            await hardwarePromise;
+
+          setRows(
+            []
+          );
+
+          setNormalInventoryMeta({
+            totalElements: 0,
+            totalPages: 1,
+            pageNumber: 0,
+            pageSize,
+          });
+
+          setNormalPageMaxPacketMap(
+            {}
+          );
+
+          setRowCount(
+            hardwareRows.length
+          );
+
+          return hardwareRows;
+        } finally {
+          if (
+            requestId ===
+            inventoryRequestIdRef
+              .current
+          ) {
+            setLoading(
+              false
+            );
+          }
+        }
+      }
+
+      const backendPage =
+        Math.max(
+          0,
+          Number(
+            pageNo || 1
+          ) - 1
+        );
+
+      const signature =
+        buildInventoryServerSignature({
+          groupValue:
+            "NONE",
+        });
+
+      const cacheKey =
+        getInventoryPageCacheKey(
+          signature,
+          backendPage,
+          pageSize
+        );
+
+      const cached =
+        inventoryPageCacheRef
+          .current
+          .get(
+            cacheKey
+          );
+
+      const existingRowsSnapshot =
+        Array.isArray(rows)
+          ? rows
+          : [];
+
+      if (
+        preferCache &&
+        cached
       ) {
         setRows(
-          previous =>
-            previous.length > 0
-              ? previous
-              : []
+          cached.items
+        );
+
+        setNormalInventoryMeta({
+          totalElements:
+            cached.totalElements ??
+            cached.items.length,
+          totalPages:
+            Math.max(
+              1,
+              Number(
+                cached.totalPages ||
+                1
+              )
+            ),
+          pageNumber:
+            cached.pageNumber ??
+            backendPage,
+          pageSize:
+            cached.pageSize ??
+            pageSize,
+        });
+
+        setNormalPageMaxPacketMap(
+          cached.maxPacketNumbers ||
+          {}
+        );
+
+        setLoading(
+          false
+        );
+      } else {
+        setLoading(
+          true
+        );
+      }
+
+      try {
+        const result =
+          await fetchNormalInventoryServerPage(
+            {
+              backendPage,
+              size:
+                pageSize,
+              signal:
+                controller.signal,
+              groupValue:
+                "NONE",
+            }
+          );
+
+        if (
+          requestId !==
+          inventoryRequestIdRef
+            .current
+        ) {
+          return result.items;
+        }
+
+        putInventoryPageCache(
+          cacheKey,
+          result
+        );
+
+        setRows(
+          result.items
+        );
+
+        setNormalInventoryMeta({
+          totalElements:
+            result.totalElements,
+          totalPages:
+            result.totalPages,
+          pageNumber:
+            result.pageNumber,
+          pageSize:
+            result.pageSize,
+        });
+
+        setNormalPageMaxPacketMap(
+          result.maxPacketNumbers ||
+          {}
         );
 
         setRowCount(
-          previous =>
-            previous > 0
-              ? previous
-              : 0
+          result.totalElements
         );
+
+        if (
+          backendPage + 1 <
+          result.totalPages
+        ) {
+          prefetchNormalInventoryPage({
+            backendPage:
+              backendPage + 1,
+            size:
+              pageSize,
+            signature,
+          });
+        }
+
+        return result.items;
+
+      } catch (error) {
+        if (
+          error?.name ===
+          "AbortError"
+        ) {
+          return (
+            cached?.items ||
+            existingRowsSnapshot
+          );
+        }
+
+        console.error(
+          "Inventory server-page fetch failed:",
+          error
+        );
+
+        if (
+          !cached &&
+          existingRowsSnapshot.length ===
+          0
+        ) {
+          setRows(
+            []
+          );
+        }
 
         showUiAlert(
           "error",
           error?.message ||
           "Failed to load inventory"
         );
-      }
 
-      return [];
-    } finally {
-      if (
-        requestId ===
-        inventoryRequestIdRef.current
-      ) {
-        setLoading(
-          false
+        return (
+          cached?.items ||
+          existingRowsSnapshot
         );
+
+      } finally {
+        if (
+          requestId ===
+          inventoryRequestIdRef
+            .current
+        ) {
+          setLoading(
+            false
+          );
+        }
+
+        if (
+          inventoryAbortControllerRef
+            .current ===
+          controller
+        ) {
+          inventoryAbortControllerRef.current =
+            null;
+        }
       }
-    }
-  };
+    };
+
 
   usePackFlowDataRefresh(
     "inventory",
     async () => {
-      await fetchItems();
+      await fetchItems({
+        preferCache: false,
+        refreshHardware: true,
+      });
+
+      if (
+        masterWorkbenchOpen
+      ) {
+        try {
+          const completeRows =
+            await fetchAllInventoryRowsLegacy();
+
+          setMasterWorkbenchRows(
+            completeRows
+          );
+        } catch (error) {
+          console.error(
+            "Master Packet Control refresh failed:",
+            error
+          );
+        }
+      }
     }
   );
 
@@ -3241,31 +4216,6 @@ function ZohoItemsPage() {
     closeHistoryPdfPreview();
   };
 
-  const maxPacketMap = useMemo(() => {
-    const map = {};
-
-    rows.forEach((r) => {
-      const key =
-        r?.masterItemId ||
-        [
-          getInventoryRowItemType(r),
-          r?.itemName,
-          r?.pdNo,
-          r?.drawingNo,
-        ]
-          .filter(Boolean)
-          .join("|");
-      const pktNo =
-        getInventoryPacketNumber(r);
-
-      if (!map[key] || pktNo > map[key]) {
-        map[key] = pktNo;
-      }
-    });
-
-    return map;
-  }, [rows]);
-
   const getStickerStatusKey = (row) => {
     return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
   };
@@ -3274,85 +4224,484 @@ function ZohoItemsPage() {
     return row?.stickerNumber ? "Sticker Printed" : "Created";
   };
 
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    let list = Array.isArray(rows) ? [...rows] : [];
-
-    if (q) {
-      list = list.filter((r) => {
-        return (
-          (r.itemName || "").toLowerCase().includes(q) ||
-          (r.sku || "").toLowerCase().includes(q) ||
-          (r.clientName || "").toLowerCase().includes(q) ||
-          (r.pdNo || "").toLowerCase().includes(q) ||
-          (r.drawingNo || "").toLowerCase().includes(q) ||
-          (r.description || "").toLowerCase().includes(q) ||
-          (r.remarks || "").toLowerCase().includes(q) ||
-          (r.plantCode || "").toLowerCase().includes(q) ||
-          (r.packedAreaCode || "").toLowerCase().includes(q) ||
-          (r.currentLocationCode || "").toLowerCase().includes(q) ||
-          (r.location || "").toLowerCase().includes(q) ||
-          getStickerStatusLabel(r).toLowerCase().includes(q)
-        );
-      });
-    }
-
-    if (isAdmin && statusFilter !== "ALL") {
-      list = list.filter((r) => {
-        return getStickerStatusKey(r) === statusFilter;
-      });
-    }
-
-    if (groupBy === "SKU") {
-      list.sort((a, b) =>
-        (a.sku || "").localeCompare(b.sku || "")
-      );
-    }
-
-    if (groupBy === "NAME") {
-      list.sort((a, b) =>
-        (a.itemName || "").localeCompare(b.itemName || "")
-      );
-    }
-
-    return list;
-  }, [
-    rows,
-    search,
-    groupBy,
-    statusFilter,
-    isAdmin,
-  ]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / pageSize)
-  );
-
-  const safePageNo = Math.min(pageNo, totalPages);
-
-  const paginatedRows = useMemo(() => {
-    const start = (safePageNo - 1) * pageSize;
-
-    return filteredRows.slice(
-      start,
-      start + pageSize
+  const deferredInventoryClientSearch =
+    useDeferredValue(
+      search
     );
-  }, [filteredRows, safePageNo, pageSize]);
 
+  const filterInventoryRowsClient =
+    (
+      sourceRows,
+      searchValue,
+      statusValue,
+      groupValue
+    ) => {
+      let list =
+        Array.isArray(
+          sourceRows
+        )
+          ? [...sourceRows]
+          : [];
 
-  useEffect(() => {
-    setPageNo((currentPage) =>
-      Math.min(
+      const query =
+        String(
+          searchValue || ""
+        ).trim();
+
+      if (
+        query
+      ) {
+        list =
+          list.filter(
+            row =>
+              inventoryRowMatchesSearch(
+                row,
+                query
+              )
+          );
+      }
+
+      if (
+        isAdmin &&
+        statusValue !==
+        "ALL"
+      ) {
+        list =
+          list.filter(
+            row =>
+              getStickerStatusKey(
+                row
+              ) ===
+              statusValue
+          );
+      }
+
+      if (
+        groupValue ===
+        "SKU"
+      ) {
+        list.sort(
+          (left, right) =>
+            String(
+              left?.sku || ""
+            ).localeCompare(
+              String(
+                right?.sku || ""
+              )
+            )
+        );
+      }
+
+      if (
+        groupValue ===
+        "NAME"
+      ) {
+        list.sort(
+          (left, right) =>
+            String(
+              left?.itemName || ""
+            ).localeCompare(
+              String(
+                right?.itemName || ""
+              )
+            )
+        );
+      }
+
+      return list;
+    };
+
+  /*
+   * Hardware keeps its dedicated backend workflow.  It is fetched once and
+   * searched locally from a prebuilt text index so normal page navigation does
+   * not repeatedly download the same hardware register.
+   */
+  const filteredHardwareRows =
+    useMemo(() => {
+      return filterInventoryRowsClient(
+        inventoryHardwareRows,
+        inventoryServerSearch,
+        statusFilter,
+        "NONE"
+      );
+    }, [
+      inventoryHardwareRows,
+      inventoryServerSearch,
+      statusFilter,
+      isAdmin,
+    ]);
+
+  const inventoryUsesServerPaging =
+    groupBy ===
+    "NONE";
+
+  /*
+   * Existing default ordering is normal Inventory first, then hardware.
+   * Preserve that exact ordering while holding only one normal server page.
+   */
+  const serverCombinedPageRows =
+    useMemo(() => {
+      if (
+        !inventoryUsesServerPaging
+      ) {
+        return [];
+      }
+
+      const normalRows =
+        isHardwareOnly
+          ? []
+          : (
+            Array.isArray(rows)
+              ? rows
+              : []
+          );
+
+      const normalTotal =
+        isHardwareOnly
+          ? 0
+          : Math.max(
+            0,
+            Number(
+              normalInventoryMeta
+                .totalElements
+            ) || 0
+          );
+
+      const overallOffset =
         Math.max(
-          1,
-          currentPage
-        ),
-        totalPages
+          0,
+          (
+            Math.max(
+              1,
+              Number(pageNo) ||
+              1
+            ) - 1
+          ) *
+          pageSize
+        );
+
+      let hardwareStart =
+        0;
+
+      if (
+        overallOffset >=
+        normalTotal
+      ) {
+        hardwareStart =
+          overallOffset -
+          normalTotal;
+      } else {
+        hardwareStart =
+          Math.max(
+            0,
+            overallOffset +
+            normalRows.length -
+            normalTotal
+          );
+      }
+
+      const hardwareSlots =
+        Math.max(
+          0,
+          pageSize -
+          normalRows.length
+        );
+
+      const hardwarePageRows =
+        hardwareSlots > 0
+          ? filteredHardwareRows.slice(
+            hardwareStart,
+            hardwareStart +
+            hardwareSlots
+          )
+          : [];
+
+      return [
+        ...normalRows,
+        ...hardwarePageRows,
+      ];
+    }, [
+      inventoryUsesServerPaging,
+      rows,
+      normalInventoryMeta.totalElements,
+      filteredHardwareRows,
+      pageNo,
+      pageSize,
+      isHardwareOnly,
+    ]);
+
+  const clientFilteredFullModeRows =
+    useMemo(() => {
+      if (
+        inventoryUsesServerPaging
+      ) {
+        return [];
+      }
+
+      return filterInventoryRowsClient(
+        inventoryFullModeRows,
+        deferredInventoryClientSearch,
+        statusFilter,
+        groupBy
+      );
+    }, [
+      inventoryUsesServerPaging,
+      inventoryFullModeRows,
+      deferredInventoryClientSearch,
+      statusFilter,
+      groupBy,
+      isAdmin,
+    ]);
+
+  const inventoryMatchingRowCount =
+    inventoryUsesServerPaging
+      ? (
+        (
+          isHardwareOnly
+            ? 0
+            : Math.max(
+              0,
+              Number(
+                normalInventoryMeta
+                  .totalElements
+              ) || 0
+            )
+        ) +
+        filteredHardwareRows.length
+      )
+      : clientFilteredFullModeRows.length;
+
+  /*
+   * Keep the historical filteredRows variable for existing rendering and
+   * workbench-compatible code, but in server mode it now represents only the
+   * already-filtered visible page.
+   */
+  const filteredRows =
+    useMemo(() => {
+      return inventoryUsesServerPaging
+        ? serverCombinedPageRows
+        : clientFilteredFullModeRows;
+    }, [
+      inventoryUsesServerPaging,
+      serverCombinedPageRows,
+      clientFilteredFullModeRows,
+    ]);
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        inventoryMatchingRowCount /
+        pageSize
       )
     );
-  }, [totalPages]);
+
+  const safePageNo =
+    Math.min(
+      Math.max(
+        1,
+        pageNo
+      ),
+      totalPages
+    );
+
+  const paginatedRows =
+    useMemo(() => {
+      if (
+        inventoryUsesServerPaging
+      ) {
+        return filteredRows;
+      }
+
+      const start =
+        (safePageNo - 1) *
+        pageSize;
+
+      return filteredRows.slice(
+        start,
+        start + pageSize
+      );
+    }, [
+      inventoryUsesServerPaging,
+      filteredRows,
+      safePageNo,
+      pageSize,
+    ]);
+
+  /*
+   * "Last packet" is a workflow-facing UI rule.  Preserve it exactly:
+   * - normal server pages receive a backend-computed visible-master maximum;
+   * - hardware uses its complete cached visible set;
+   * - full sort mode uses the complete preserved dataset.
+   */
+  const maxPacketMap =
+    useMemo(() => {
+      const map = {};
+
+      if (
+        inventoryUsesServerPaging
+      ) {
+        Object.entries(
+          normalPageMaxPacketMap ||
+          {}
+        ).forEach(
+          ([
+            key,
+            value,
+          ]) => {
+            map[key] =
+              Number(value) || 0;
+          }
+        );
+
+        inventoryHardwareRows.forEach(
+          row => {
+            const key =
+              row?.masterItemId ||
+              [
+                getInventoryRowItemType(
+                  row
+                ),
+                row?.itemName,
+                row?.pdNo,
+                row?.drawingNo,
+              ]
+                .filter(Boolean)
+                .join("|");
+
+            const packetNo =
+              getInventoryPacketNumber(
+                row
+              );
+
+            if (
+              !map[key] ||
+              packetNo >
+              map[key]
+            ) {
+              map[key] =
+                packetNo;
+            }
+          }
+        );
+
+        /*
+         * Legacy normal rows without a master cannot use the batch master map.
+         * Keep the prior local fallback for those rows.
+         */
+        (
+          Array.isArray(rows)
+            ? rows
+            : []
+        ).forEach(
+          row => {
+            if (
+              row?.masterItemId
+            ) {
+              return;
+            }
+
+            const key =
+              [
+                getInventoryRowItemType(
+                  row
+                ),
+                row?.itemName,
+                row?.pdNo,
+                row?.drawingNo,
+              ]
+                .filter(Boolean)
+                .join("|");
+
+            const packetNo =
+              getInventoryPacketNumber(
+                row
+              );
+
+            if (
+              !map[key] ||
+              packetNo >
+              map[key]
+            ) {
+              map[key] =
+                packetNo;
+            }
+          }
+        );
+
+        return map;
+      }
+
+      inventoryFullModeRows.forEach(
+        row => {
+          const key =
+            row?.masterItemId ||
+            [
+              getInventoryRowItemType(
+                row
+              ),
+              row?.itemName,
+              row?.pdNo,
+              row?.drawingNo,
+            ]
+              .filter(Boolean)
+              .join("|");
+
+          const packetNo =
+            getInventoryPacketNumber(
+              row
+            );
+
+          if (
+            !map[key] ||
+            packetNo >
+            map[key]
+          ) {
+            map[key] =
+              packetNo;
+          }
+        }
+      );
+
+      return map;
+    }, [
+      inventoryUsesServerPaging,
+      normalPageMaxPacketMap,
+      inventoryHardwareRows,
+      inventoryFullModeRows,
+      rows,
+    ]);
+
+  useEffect(() => {
+    setPageNo(
+      currentPage =>
+        Math.min(
+          Math.max(
+            1,
+            currentPage
+          ),
+          totalPages
+        )
+    );
+  }, [
+    totalPages,
+  ]);
+
+  const masterWorkbenchFilteredRows =
+    useMemo(() => {
+      return filterInventoryRowsClient(
+        masterWorkbenchRows,
+        deferredInventoryClientSearch,
+        statusFilter,
+        groupBy
+      );
+    }, [
+      masterWorkbenchRows,
+      deferredInventoryClientSearch,
+      statusFilter,
+      groupBy,
+      isAdmin,
+    ]);
 
   const normalizeHistorySearch = (value) => {
     return String(value ?? "")
@@ -6209,6 +7558,83 @@ function ZohoItemsPage() {
     }
   };
 
+  /*
+   * Keep typing immediate, but wait briefly before changing the database query.
+   * This prevents one Inventory request per keystroke.
+   */
+  useEffect(() => {
+    const timer =
+      window.setTimeout(
+        () => {
+          setInventoryServerSearch(
+            String(
+              search || ""
+            ).trim()
+          );
+        },
+        INVENTORY_SERVER_SEARCH_DEBOUNCE_MS
+      );
+
+    return () => {
+      window.clearTimeout(
+        timer
+      );
+    };
+  }, [
+    search,
+  ]);
+
+  /*
+   * User/role changes must never reuse data cached under another visibility
+   * scope.
+   */
+  useEffect(() => {
+    inventoryPageCacheRef
+      .current
+      .clear();
+
+    setInventoryHardwareRows(
+      []
+    );
+
+    setInventoryHardwareLoaded(
+      false
+    );
+
+    setInventoryFullModeRows(
+      []
+    );
+
+    setMasterWorkbenchRows(
+      []
+    );
+
+    setNormalPageMaxPacketMap(
+      {}
+    );
+
+    setNormalInventoryMeta({
+      totalElements: 0,
+      totalPages: 1,
+      pageNumber: 0,
+      pageSize,
+    });
+
+    setPageNo(
+      1
+    );
+  }, [
+    currentUser?.id,
+    effectiveRoleKey,
+  ]);
+
+  /*
+   * High-volume register loader.
+   *
+   * NONE = server-paged normal Inventory + cached hardware.
+   * SKU / NAME = preserved full-register mode because those options sort
+   * normal + hardware together globally and must keep their old semantics.
+   */
   useEffect(() => {
     if (
       authLoading ||
@@ -6218,7 +7644,50 @@ function ZohoItemsPage() {
       return;
     }
 
-    fetchItems();
+    if (
+      groupBy !==
+      "NONE"
+    ) {
+      if (
+        inventoryFullModeRows.length ===
+        0 &&
+        !inventoryFullModeLoading
+      ) {
+        fetchItems({
+          preferCache: false,
+          refreshHardware:
+            !inventoryHardwareLoaded,
+        });
+      }
+
+      return;
+    }
+
+    fetchItems({
+      preferCache: true,
+      refreshHardware:
+        !inventoryHardwareLoaded,
+    });
+  }, [
+    authLoading,
+    currentUser?.id,
+    effectiveRoleKey,
+    groupBy,
+    pageNo,
+    pageSize,
+    inventoryServerSearch,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    if (
+      authLoading ||
+      !currentUser?.id ||
+      !effectiveRoleKey
+    ) {
+      return;
+    }
+
     fetchMyPlants();
   }, [
     authLoading,
@@ -6289,6 +7758,14 @@ function ZohoItemsPage() {
       inventoryAbortControllerRef
         .current
         ?.abort();
+
+      inventoryPrefetchAbortRef
+        .current
+        ?.abort();
+
+      inventoryHardwareAbortRef
+        .current
+        ?.abort();
     };
   }, []);
 
@@ -6305,6 +7782,195 @@ function ZohoItemsPage() {
 
     return () => clearTimeout(timer);
   }, [uiAlert]);
+
+  const loadMasterWorkbenchRows =
+    async ({
+      force = false,
+    } = {}) => {
+      if (
+        !force &&
+        masterWorkbenchRows.length > 0
+      ) {
+        return masterWorkbenchRows;
+      }
+
+      try {
+        setMasterWorkbenchLoading(
+          true
+        );
+
+        const completeRows =
+          await fetchAllInventoryRowsLegacy();
+
+        setMasterWorkbenchRows(
+          completeRows
+        );
+
+        return completeRows;
+
+      } catch (error) {
+        console.error(
+          "Master Packet Control inventory load failed:",
+          error
+        );
+
+        showUiAlert(
+          "error",
+          error?.message ||
+          "Failed to load Master Packet Control"
+        );
+
+        return [];
+
+      } finally {
+        setMasterWorkbenchLoading(
+          false
+        );
+      }
+    };
+
+  const openMasterWorkbenchView =
+    async () => {
+      setMasterWorkbenchOpen(
+        true
+      );
+
+      await loadMasterWorkbenchRows({
+        force: true,
+      });
+    };
+
+  const isInventoryInteractiveTarget =
+    (
+      target
+    ) => {
+      if (
+        !target ||
+        typeof target.closest !==
+        "function"
+      ) {
+        return false;
+      }
+
+      return Boolean(
+        target.closest(
+          [
+            "button",
+            "a",
+            "input",
+            "select",
+            "textarea",
+            "[role='button']",
+            "[role='checkbox']",
+            "[role='menuitem']",
+            ".MuiButtonBase-root",
+            ".MuiChip-clickable",
+            "[data-inventory-no-row-open='true']",
+          ].join(",")
+        )
+      );
+    };
+
+  const openInventoryItemDetails =
+    (
+      row
+    ) => {
+      if (
+        !row
+      ) {
+        return;
+      }
+
+      setItemDetailsRow(
+        row
+      );
+
+      setItemDetailsOpen(
+        true
+      );
+    };
+
+  const closeInventoryItemDetails =
+    () => {
+      setItemDetailsOpen(
+        false
+      );
+    };
+
+  const handleInventoryTableRowClick =
+    (
+      event,
+      row
+    ) => {
+      if (
+        isInventoryInteractiveTarget(
+          event?.target
+        )
+      ) {
+        return;
+      }
+
+      openInventoryItemDetails(
+        row
+      );
+    };
+
+  const itemDetailsHardware =
+    isHardwarePacketRow(
+      itemDetailsRow
+    );
+
+  const itemDetailsStickerGenerated =
+    Boolean(
+      String(
+        itemDetailsRow?.stickerNumber ||
+        ""
+      ).trim()
+    );
+
+  const itemDetailsCanManage =
+    itemDetailsRow
+      ? canManageInventoryRow(
+        itemDetailsRow
+      )
+      : false;
+
+  const itemDetailsGenerateLocked =
+    !itemDetailsRow ||
+    !canGenerateInventorySticker(
+      itemDetailsRow
+    ) ||
+    (
+      itemDetailsStickerGenerated &&
+      !isAdmin
+    );
+
+  const itemDetailsEditLocked =
+    !itemDetailsRow ||
+    !itemDetailsCanManage ||
+    (
+      itemDetailsHardware &&
+      itemDetailsStickerGenerated
+    );
+
+  const itemDetailsLastPacket =
+    itemDetailsRow
+      ? isLastPacket(
+        itemDetailsRow
+      )
+      : false;
+
+  const itemDetailsHardwareLines =
+    Array.isArray(
+      itemDetailsRow?.hardwareLines
+    )
+      ? itemDetailsRow.hardwareLines
+      : Array.isArray(
+        itemDetailsRow?.items
+      )
+        ? itemDetailsRow.items
+        : [];
+
   /* ===================== RENDER ===================== */
   return (
     <div
@@ -6384,10 +8050,8 @@ function ZohoItemsPage() {
           >
             {canUseMasterWorkbench && (
               <Button
-                onClick={() =>
-                  setMasterWorkbenchOpen(
-                    true
-                  )
+                onClick={
+                  openMasterWorkbenchView
                 }
                 sx={historyHeaderButtonSx}
               >
@@ -6416,7 +8080,7 @@ function ZohoItemsPage() {
                     "tabular-nums",
                 }}
               >
-                {filteredRows.length}
+                {inventoryMatchingRowCount}
               </span>
             </Box>
 
@@ -6630,7 +8294,7 @@ function ZohoItemsPage() {
             }}
             aria-hidden="true"
           >
-            {(authLoading || loading) && (
+            {(authLoading || loading || inventoryHardwareLoading || inventoryFullModeLoading) && (
               <LinearProgress
                 sx={{
                   height: 3,
@@ -6738,6 +8402,19 @@ function ZohoItemsPage() {
                             column
                           )
                         }
+                        onDoubleClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+
+                          setInventoryColumnWidths(
+                            previous => ({
+                              ...previous,
+                              [column.key]:
+                                column.width,
+                            })
+                          );
+                        }}
+                        title="Drag to resize • Double-click to reset"
                         style={{
                           position:
                             "absolute",
@@ -6879,6 +8556,30 @@ function ZohoItemsPage() {
                         ) ||
                         row.sku
                       }
+                      tabIndex={0}
+                      onClick={(event) =>
+                        handleInventoryTableRowClick(
+                          event,
+                          row
+                        )
+                      }
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter" ||
+                          event.key === " "
+                        ) {
+                          if (
+                            !isInventoryInteractiveTarget(
+                              event.target
+                            )
+                          ) {
+                            event.preventDefault();
+                            openInventoryItemDetails(
+                              row
+                            );
+                          }
+                        }
+                      }}
                       style={{
                         ...tableRow,
 
@@ -6902,6 +8603,15 @@ function ZohoItemsPage() {
 
                         alignItems:
                           "stretch",
+
+                        cursor:
+                          "pointer",
+
+                        background:
+                          "rgba(15,23,42,.42)",
+
+                        transition:
+                          "background .16s ease, border-color .16s ease, box-shadow .16s ease",
 
                         ...(isHardwarePacketRow(row)
                           ? {
@@ -7544,10 +9254,17 @@ function ZohoItemsPage() {
           footer={
             <>
               <Button
-                onClick={() => fetchItems()}
+                disabled={masterWorkbenchLoading}
+                onClick={() =>
+                  loadMasterWorkbenchRows({
+                    force: true,
+                  })
+                }
                 sx={modalSecondaryButtonSx}
               >
-                Refresh
+                {masterWorkbenchLoading
+                  ? "Refreshing..."
+                  : "Refresh"}
               </Button>
 
               <Button
@@ -7560,8 +9277,27 @@ function ZohoItemsPage() {
           }
         >
           <Box sx={masterWorkbenchModalBodySx}>
+            {masterWorkbenchLoading && (
+              <Box
+                sx={{
+                  mb: 1.5,
+                  p: 1.2,
+                  borderRadius: "14px",
+                  color: "#bfdbfe",
+                  fontSize: 12,
+                  fontWeight: 850,
+                  background:
+                    "rgba(59,130,246,.09)",
+                  border:
+                    "1px solid rgba(96,165,250,.18)",
+                }}
+              >
+                Loading complete visible Inventory for Master Packet Control…
+              </Box>
+            )}
+
             <InventoryMasterWorkbench
-              rows={filteredRows}
+              rows={masterWorkbenchFilteredRows}
               isAdmin={isAdmin}
               canCreateNormalPackets={
                 canCreateNormalPackets
@@ -7599,6 +9335,519 @@ function ZohoItemsPage() {
             />
           </Box>
         </InventoryModal>
+
+        {/* ===================== ITEM DETAILS ===================== */}
+        <InventorySidePanel
+          open={itemDetailsOpen}
+          onClose={closeInventoryItemDetails}
+          icon={
+            itemDetailsHardware
+              ? "🔩"
+              : "📦"
+          }
+          title="Inventory Item Details"
+          subtitle="Packet identity, location, sticker status and existing actions"
+        >
+          <Box sx={stickerHeroCardSx}>
+            <Box sx={stickerHeroTopSx}>
+              <Chip
+                size="small"
+                label={
+                  itemDetailsHardware
+                    ? "🔩 HARDWARE PACKET"
+                    : "NORMAL PACKET"
+                }
+                sx={
+                  itemDetailsHardware
+                    ? inventoryLabelChipSx
+                    : inventorySoftChipSx
+                }
+              />
+
+              <Chip
+                size="small"
+                label={
+                  getStickerStatusLabel(
+                    itemDetailsRow
+                  )
+                }
+                sx={
+                  itemDetailsStickerGenerated
+                    ? printedChipSx
+                    : createdChipSx
+                }
+              />
+            </Box>
+
+            <Box sx={stickerSkuSx}>
+              {getSafeValue(
+                itemDetailsRow?.sku
+              )}
+            </Box>
+
+            <Box sx={stickerItemNameSx}>
+              {getSafeValue(
+                itemDetailsRow?.itemName ||
+                itemDetailsRow?.name
+              )}
+            </Box>
+
+            <Box sx={stickerClientMiniSx}>
+              {getSafeValue(
+                itemDetailsRow?.clientName
+              )}
+            </Box>
+          </Box>
+
+          <Box sx={drawerSectionCardSx}>
+            <Box sx={drawerSectionTitleSx}>
+              Item & Packet
+            </Box>
+
+            <Box sx={detailGridSx}>
+              {[
+                [
+                  "Packet",
+                  itemDetailsRow?.packetNumber ||
+                  (
+                    itemDetailsRow?.sku
+                      ?.match(
+                        /Pkt-\d+/i
+                      )?.[0]
+                  ),
+                ],
+                [
+                  "PD No.",
+                  itemDetailsRow?.pdNo,
+                ],
+                [
+                  "Drawing No.",
+                  itemDetailsRow?.drawingNo,
+                ],
+                [
+                  "Plant",
+                  itemDetailsRow?.plantCode,
+                ],
+                [
+                  "Location",
+                  itemDetailsRow?.currentLocationCode ||
+                  itemDetailsRow?.location ||
+                  itemDetailsRow?.packedAreaCode,
+                ],
+                [
+                  "Sticker No.",
+                  itemDetailsRow?.stickerNumber,
+                ],
+              ].map(
+                ([
+                  label,
+                  value,
+                ]) => (
+                  <Box
+                    key={label}
+                    sx={detailMiniCardSx}
+                  >
+                    <Box sx={detailLabelSx}>
+                      {label}
+                    </Box>
+
+                    <Box sx={detailValueSx}>
+                      {getSafeValue(
+                        value
+                      )}
+                    </Box>
+                  </Box>
+                )
+              )}
+            </Box>
+          </Box>
+
+          <Box sx={drawerSectionCardSx}>
+            <Box sx={drawerSectionTitleSx}>
+              Client & Specification
+            </Box>
+
+            <Box sx={detailGridSx}>
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  Client
+                </Box>
+                <Box sx={detailValueSx}>
+                  {getSafeValue(
+                    itemDetailsRow?.clientName
+                  )}
+                </Box>
+              </Box>
+
+              <Box sx={detailMiniCardSx}>
+                <Box sx={detailLabelSx}>
+                  Floor / Area
+                </Box>
+                <Box sx={detailValueSx}>
+                  {getSafeValue(
+                    itemDetailsRow?.floor
+                  )}
+                </Box>
+              </Box>
+
+              {!itemDetailsHardware && (
+                <>
+                  <Box sx={detailMiniCardSx}>
+                    <Box sx={detailLabelSx}>
+                      Dimensions
+                    </Box>
+                    <Box sx={detailValueSx}>
+                      {getSafeValue(
+                        itemDetailsRow?.dimensions
+                      )}
+                    </Box>
+                  </Box>
+
+                  <Box sx={detailMiniCardSx}>
+                    <Box sx={detailLabelSx}>
+                      Weight
+                    </Box>
+                    <Box sx={detailValueSx}>
+                      {getSafeValue(
+                        itemDetailsRow?.weight
+                      )}
+                    </Box>
+                  </Box>
+                </>
+              )}
+            </Box>
+
+            <Box sx={descriptionBoxSx}>
+              <Box sx={detailLabelSx}>
+                Client Address
+              </Box>
+              <Box sx={descriptionTextSx}>
+                {getSafeValue(
+                  itemDetailsRow?.clientAddress
+                )}
+              </Box>
+            </Box>
+
+            <Box sx={descriptionBoxSx}>
+              <Box sx={detailLabelSx}>
+                Description
+              </Box>
+              <Box
+                sx={{
+                  ...descriptionTextSx,
+                  whiteSpace:
+                    "pre-wrap",
+                }}
+              >
+                {getSafeValue(
+                  itemDetailsRow?.description
+                )}
+              </Box>
+            </Box>
+
+            {!itemDetailsHardware && (
+              <Box sx={descriptionBoxSx}>
+                <Box sx={detailLabelSx}>
+                  Remarks
+                </Box>
+                <Box
+                  sx={{
+                    ...descriptionTextSx,
+                    whiteSpace:
+                      "pre-wrap",
+                  }}
+                >
+                  {getSafeValue(
+                    itemDetailsRow?.remarks
+                  )}
+                </Box>
+              </Box>
+            )}
+          </Box>
+
+          {itemDetailsHardware &&
+            itemDetailsHardwareLines.length > 0 && (
+              <Box sx={drawerSectionCardSx}>
+                <Box sx={drawerSectionTitleSx}>
+                  Hardware Contents
+                </Box>
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 1,
+                  }}
+                >
+                  {itemDetailsHardwareLines.map(
+                    (
+                      line,
+                      index
+                    ) => (
+                      <Box
+                        key={
+                          line?.id ||
+                          line?.lineNo ||
+                          index
+                        }
+                        sx={{
+                          p: 1.15,
+                          borderRadius:
+                            "13px",
+                          background:
+                            "rgba(139,92,246,.07)",
+                          border:
+                            "1px solid rgba(167,139,250,.14)",
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            color:
+                              "#f5f3ff",
+                            fontSize: 12,
+                            fontWeight: 900,
+                          }}
+                        >
+                          {line?.lineNo ||
+                            index + 1}
+                          .{" "}
+                          {getSafeValue(
+                            line?.itemName
+                          )}
+                        </Box>
+
+                        <Box
+                          sx={{
+                            mt: 0.35,
+                            color:
+                              "#a78bfa",
+                            fontSize: 11,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Qty:{" "}
+                          {getSafeValue(
+                            line?.quantity
+                          )}{" "}
+                          {getSafeValue(
+                            line?.uom
+                          )}
+                        </Box>
+                      </Box>
+                    )
+                  )}
+                </Box>
+              </Box>
+            )}
+
+          <Box sx={drawerSectionCardSx}>
+            <Box sx={drawerSectionTitleSx}>
+              Available Actions
+            </Box>
+
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 1,
+              }}
+            >
+              <Button
+                size="small"
+                disabled={
+                  generating ||
+                  itemDetailsGenerateLocked
+                }
+                onClick={() => {
+                  const row =
+                    itemDetailsRow;
+
+                  closeInventoryItemDetails();
+
+                  openGenerateStickerPanel(
+                    row
+                  );
+                }}
+                sx={{
+                  ...actionPrimary,
+                  ...tableActionButton,
+                  opacity:
+                    itemDetailsGenerateLocked
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                {itemDetailsStickerGenerated
+                  ? isAdmin
+                    ? "Reprint"
+                    : "Generated"
+                  : "Generate"}
+              </Button>
+
+              {itemDetailsStickerGenerated && (
+                <>
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      previewExistingStickerPdf(
+                        itemDetailsRow
+                      )
+                    }
+                    sx={{
+                      ...actionSecondary,
+                      ...smallActionButton,
+                    }}
+                  >
+                    Preview
+                  </Button>
+
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      downloadExistingStickerPdf(
+                        itemDetailsRow
+                      )
+                    }
+                    sx={{
+                      ...actionPrimary,
+                      ...smallActionButton,
+                    }}
+                  >
+                    Download
+                  </Button>
+                </>
+              )}
+
+              {itemDetailsHardware ? (
+                itemDetailsLastPacket &&
+                canManageHardwarePackets && (
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      const row =
+                        itemDetailsRow;
+
+                      closeInventoryItemDetails();
+
+                      openHardwareAddPacketsModal(
+                        row
+                      );
+                    }}
+                    sx={{
+                      ...actionSecondary,
+                      ...smallActionButton,
+                      color: "#ddd6fe",
+                      background:
+                        "rgba(139,92,246,.16)",
+                      border:
+                        "1px solid rgba(167,139,250,.28)",
+                    }}
+                  >
+                    + Add Hardware Packets
+                  </Button>
+                )
+              ) : (
+                itemDetailsLastPacket &&
+                canCreateNormalPackets && (
+                  <>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        const row =
+                          itemDetailsRow;
+
+                        closeInventoryItemDetails();
+
+                        openAddPacketsModal(
+                          row
+                        );
+                      }}
+                      sx={{
+                        ...actionPrimary,
+                        ...smallActionButton,
+                      }}
+                    >
+                      + Add
+                    </Button>
+
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        const row =
+                          itemDetailsRow;
+
+                        closeInventoryItemDetails();
+
+                        openCustomAddModal(
+                          row
+                        );
+                      }}
+                      sx={{
+                        ...actionSuccess,
+                        ...smallActionButton,
+                      }}
+                    >
+                      + Custom
+                    </Button>
+                  </>
+                )
+              )}
+
+              <Button
+                size="small"
+                disabled={
+                  itemDetailsEditLocked
+                }
+                onClick={() => {
+                  const row =
+                    itemDetailsRow;
+
+                  closeInventoryItemDetails();
+
+                  openEditModal(
+                    row
+                  );
+                }}
+                sx={{
+                  ...actionWarning,
+                  ...tableActionButton,
+                  opacity:
+                    itemDetailsEditLocked
+                      ? 0.45
+                      : 1,
+                }}
+              >
+                {itemDetailsHardware &&
+                  itemDetailsStickerGenerated
+                  ? "Locked"
+                  : itemDetailsCanManage
+                    ? "Edit"
+                    : "Read Only"}
+              </Button>
+
+              <Button
+                type="button"
+                size="small"
+                onClick={() => {
+                  const row =
+                    itemDetailsRow;
+
+                  closeInventoryItemDetails();
+
+                  openDeleteConfirm(
+                    row
+                  );
+                }}
+                sx={{
+                  ...actionDanger,
+                  ...tableActionButton,
+                }}
+              >
+                Delete
+              </Button>
+            </Box>
+          </Box>
+        </InventorySidePanel>
 
         {/* ===================== DRAWER ===================== */}
         <InventorySidePanel
@@ -8178,8 +10427,8 @@ function ZohoItemsPage() {
                     ...premiumButton,
                     opacity:
                       !customPacketNo ||
-                      !form.plantCode ||
-                      !form.packingDate
+                        !form.plantCode ||
+                        !form.packingDate
                         ? 0.45
                         : 1,
                   }}
@@ -10317,6 +12566,8 @@ const wrap = {
   padding: 24,
   border:
     "1px solid rgba(255,255,255,.06)",
+  boxShadow:
+    "0 18px 46px rgba(2,6,23,.22)",
 };
 
 const searchPanel = {
@@ -10420,15 +12671,27 @@ const selectMenuSlotProps = {
 };
 
 const tableWrapper = {
+  position: "relative",
   overflowX: "auto",
+  overflowY: "visible",
+
+  borderRadius: "18px",
+  background:
+    "linear-gradient(180deg,rgba(15,23,42,.72),rgba(2,6,23,.46))",
+  border:
+    "1px solid rgba(148,163,184,.11)",
+  boxShadow:
+    "0 18px 42px rgba(2,6,23,.24)",
 
   scrollbarWidth: "thin",
   scrollbarColor: "#3b82f6 #0f172a",
 
   WebkitOverflowScrolling: "touch",
+  overscrollBehaviorX: "contain",
+  scrollbarGutter: "stable",
 
   "&::-webkit-scrollbar": {
-    height: 14,
+    height: 12,
   },
 
   "&::-webkit-scrollbar-track": {
@@ -10451,16 +12714,25 @@ const tableWrapper = {
 const tableHeader = {
   position: "sticky",
   top: 0,
-  zIndex: 20,
+  zIndex: 30,
   display: "grid",
   gridTemplateColumns: inventoryGrid,
   minWidth: inventoryMinWidth,
   alignItems: "center",
   padding: "14px 16px",
-  background: "#111827",
+  background:
+    "linear-gradient(180deg,rgba(15,23,42,.995),rgba(17,24,39,.985))",
   color: "#94a3b8",
-  fontWeight: 700,
-  fontSize: 13,
+  fontWeight: 950,
+  fontSize: 10.5,
+  letterSpacing: ".075em",
+  textTransform: "uppercase",
+  borderBottom:
+    "1px solid rgba(148,163,184,.14)",
+  boxShadow:
+    "0 10px 24px rgba(2,6,23,.20)",
+  backdropFilter: "blur(18px)",
+  WebkitBackdropFilter: "blur(18px)",
 };
 
 const tableBody = {
@@ -10475,9 +12747,14 @@ const tableRow = {
   alignItems: "center",
   padding: "14px 16px",
   color: "#fff",
-  borderTop: "1px solid rgba(255,255,255,.06)",
+  borderBottom:
+    "1px solid rgba(148,163,184,.075)",
   minHeight: 58,
   fontSize: 13,
+  background:
+    "rgba(15,23,42,.40)",
+  transition:
+    "background .16s ease, border-color .16s ease, box-shadow .16s ease",
 };
 
 const tableCellWrap = {

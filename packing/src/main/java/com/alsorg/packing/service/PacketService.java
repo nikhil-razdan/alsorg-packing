@@ -11,6 +11,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +21,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +47,8 @@ import com.alsorg.packing.repository.StickerHistoryRepository;
 import java.util.Set;
 import java.util.Objects;
 import org.springframework.security.access.AccessDeniedException;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Expression;
 import com.alsorg.packing.domain.users.User;
 
 @Service
@@ -332,6 +338,486 @@ public class PacketService {
                                 .map(
                                                 this::toInventoryPacketItemResponse)
                                 .toList();
+        }
+
+        /**
+         * Server-paged normal Inventory read.
+         *
+         * This is additive to getVisibleNormalInventoryItems(). The legacy
+         * full-list method remains unchanged for existing callers and for
+         * explicit full-register operations. This method applies the same
+         * visibility/ownership rules before pagination so the browser receives
+         * only the rows needed for the current page.
+         */
+        @Transactional(readOnly = true)
+        public InventoryPageResult getVisibleNormalInventoryItemsPaged(
+                        User user,
+                        Set<String> allowedPlants,
+                        String search,
+                        String stickerStatus,
+                        Pageable pageable) {
+
+                if (user == null) {
+                        throw new AccessDeniedException(
+                                        "Authentication is required");
+                }
+
+                if (currentUserService
+                                .isHardwareOnlyPackingUser(user)) {
+
+                        throw new AccessDeniedException(
+                                        "Hardware-only packing users cannot access normal inventory");
+                }
+
+                if (pageable == null) {
+                        throw new IllegalArgumentException(
+                                        "Inventory pageable is required");
+                }
+
+                /*
+                 * allowedPlants is intentionally not applied here.
+                 *
+                 * This preserves the current Inventory rule:
+                 * - ADMIN sees the complete normal Inventory candidate set;
+                 * - a normal user sees only their own newly created/unprinted rows.
+                 *
+                 * Plant access continues to be enforced by the existing creation and
+                 * mutation workflows exactly as before.
+                 */
+                Specification<PacketItem> specification = buildNormalInventoryPageSpecification(
+                                user,
+                                search,
+                                stickerStatus);
+
+                Page<PacketItem> entityPage = packetItemRepository.findAll(
+                                specification,
+                                pageable);
+
+                Map<String, Integer> maxPacketNumbers = getInventoryMaxPacketNumbersForPage(
+                                entityPage.getContent(),
+                                user);
+
+                Page<PacketItemResponse> responsePage = entityPage.map(
+                                this::toInventoryPacketItemResponse);
+
+                return new InventoryPageResult(
+                                responsePage,
+                                maxPacketNumbers);
+        }
+
+        public record InventoryPageResult(
+                        Page<PacketItemResponse> page,
+                        Map<String, Integer> maxPacketNumbers) {
+        }
+
+        private Specification<PacketItem> buildNormalInventoryPageSpecification(
+                        User user,
+                        String search,
+                        String stickerStatus) {
+
+                final boolean admin = currentUserService.isAdmin(
+                                user);
+
+                final Long userId = user.getId();
+
+                final String username = user.getUsername() == null
+                                ? ""
+                                : user.getUsername().trim();
+
+                final String cleanSearch = cleanInventoryValue(
+                                search)
+                                .toLowerCase();
+
+                final String cleanStickerStatus = cleanInventoryValue(
+                                stickerStatus)
+                                .toUpperCase();
+
+                return (root, query, criteriaBuilder) -> {
+
+                        List<Predicate> predicates = new ArrayList<>();
+
+                        /*
+                         * NORMAL includes legacy rows where itemType was not
+                         * populated yet.
+                         */
+                        predicates.add(
+                                        criteriaBuilder.or(
+                                                        criteriaBuilder.isNull(
+                                                                        root.get(
+                                                                                        "itemType")),
+                                                        criteriaBuilder.equal(
+                                                                        root.get(
+                                                                                        "itemType"),
+                                                                        PacketItemType.NORMAL)));
+
+                        Expression<String> statusExpression = criteriaBuilder.upper(
+                                        criteriaBuilder.trim(
+                                                        criteriaBuilder.coalesce(
+                                                                        root.<String>get(
+                                                                                        "status"),
+                                                                        "")));
+
+                        Expression<String> stickerExpression = criteriaBuilder.trim(
+                                        criteriaBuilder.coalesce(
+                                                        root.<String>get(
+                                                                        "stickerNumber"),
+                                                        ""));
+
+                        if (admin) {
+
+                                Expression<String> currentLocation = criteriaBuilder.upper(
+                                                criteriaBuilder.trim(
+                                                                criteriaBuilder.coalesce(
+                                                                                root.<String>get(
+                                                                                                "currentLocationCode"),
+                                                                                "")));
+
+                                Expression<String> legacyLocation = criteriaBuilder.upper(
+                                                criteriaBuilder.trim(
+                                                                criteriaBuilder.coalesce(
+                                                                                root.<String>get(
+                                                                                                "location"),
+                                                                                "")));
+
+                                Expression<String> finalLocation = criteriaBuilder.<String>selectCase()
+                                                .when(
+                                                                criteriaBuilder.notEqual(
+                                                                                currentLocation,
+                                                                                ""),
+                                                                currentLocation)
+                                                .otherwise(
+                                                                legacyLocation);
+
+                                Expression<String> packedArea = criteriaBuilder.upper(
+                                                criteriaBuilder.trim(
+                                                                criteriaBuilder.coalesce(
+                                                                                root.<String>get(
+                                                                                                "packedAreaCode"),
+                                                                                "")));
+
+                                Expression<String> fgArea = criteriaBuilder.upper(
+                                                criteriaBuilder.trim(
+                                                                criteriaBuilder.coalesce(
+                                                                                root.<String>get(
+                                                                                                "fgAreaCode"),
+                                                                                "")));
+
+                                Predicate inFg = criteriaBuilder.and(
+                                                criteriaBuilder.notEqual(
+                                                                fgArea,
+                                                                ""),
+                                                criteriaBuilder.or(
+                                                                criteriaBuilder.equal(
+                                                                                finalLocation,
+                                                                                fgArea),
+                                                                criteriaBuilder.like(
+                                                                                finalLocation,
+                                                                                criteriaBuilder.concat(
+                                                                                                fgArea,
+                                                                                                "-%")),
+                                                                criteriaBuilder.like(
+                                                                                finalLocation,
+                                                                                criteriaBuilder.concat(
+                                                                                                fgArea,
+                                                                                                " %"))));
+
+                                Predicate inConfiguredPackedArea = criteriaBuilder.and(
+                                                criteriaBuilder.notEqual(
+                                                                packedArea,
+                                                                ""),
+                                                criteriaBuilder.or(
+                                                                criteriaBuilder.equal(
+                                                                                finalLocation,
+                                                                                packedArea),
+                                                                criteriaBuilder.like(
+                                                                                finalLocation,
+                                                                                criteriaBuilder.concat(
+                                                                                                packedArea,
+                                                                                                "-%")),
+                                                                criteriaBuilder.like(
+                                                                                finalLocation,
+                                                                                criteriaBuilder.concat(
+                                                                                                packedArea,
+                                                                                                " %"))));
+
+                                Predicate inLegacyPackedArea = criteriaBuilder.and(
+                                                criteriaBuilder.equal(
+                                                                packedArea,
+                                                                ""),
+                                                criteriaBuilder.like(
+                                                                finalLocation,
+                                                                "PKD%"));
+
+                                Predicate readyAndStillInPackedArea = criteriaBuilder.and(
+                                                criteriaBuilder.equal(
+                                                                statusExpression,
+                                                                "READY"),
+                                                criteriaBuilder.notEqual(
+                                                                finalLocation,
+                                                                ""),
+                                                criteriaBuilder.not(
+                                                                inFg),
+                                                criteriaBuilder.or(
+                                                                inConfiguredPackedArea,
+                                                                inLegacyPackedArea));
+
+                                predicates.add(
+                                                criteriaBuilder.or(
+                                                                criteriaBuilder.equal(
+                                                                                statusExpression,
+                                                                                "CREATED"),
+                                                                criteriaBuilder.equal(
+                                                                                statusExpression,
+                                                                                "RESTORED"),
+                                                                readyAndStillInPackedArea));
+
+                        } else {
+
+                                /*
+                                 * Preserve the exact owner-scoped normal-user
+                                 * Inventory behaviour from
+                                 * findOwnedCreatedUnprintedNormalInventory().
+                                 */
+                                if (userId == null) {
+                                        throw new AccessDeniedException(
+                                                        "Authenticated user ID is missing");
+                                }
+
+                                predicates.add(
+                                                criteriaBuilder.equal(
+                                                                statusExpression,
+                                                                "CREATED"));
+
+                                predicates.add(
+                                                criteriaBuilder.equal(
+                                                                stickerExpression,
+                                                                ""));
+
+                                Predicate modernOwner = criteriaBuilder.equal(
+                                                root.get(
+                                                                "createdByUserId"),
+                                                userId);
+
+                                Predicate legacyOwner = username.isBlank()
+                                                ? criteriaBuilder.disjunction()
+                                                : criteriaBuilder.and(
+                                                                criteriaBuilder.isNull(
+                                                                                root.get(
+                                                                                                "createdByUserId")),
+                                                                criteriaBuilder.equal(
+                                                                                criteriaBuilder.lower(
+                                                                                                criteriaBuilder.trim(
+                                                                                                                criteriaBuilder.coalesce(
+                                                                                                                                root.<String>get(
+                                                                                                                                                "createdBy"),
+                                                                                                                                ""))),
+                                                                                username.toLowerCase()));
+
+                                predicates.add(
+                                                criteriaBuilder.or(
+                                                                modernOwner,
+                                                                legacyOwner));
+                        }
+
+                        /*
+                         * Existing Admin-only Created / Sticker Printed filter.
+                         */
+                        if (admin &&
+                                        "CREATED".equals(
+                                                        cleanStickerStatus)) {
+
+                                predicates.add(
+                                                criteriaBuilder.equal(
+                                                                stickerExpression,
+                                                                ""));
+
+                        } else if (admin &&
+                                        "STICKER_PRINTED".equals(
+                                                        cleanStickerStatus)) {
+
+                                predicates.add(
+                                                criteriaBuilder.notEqual(
+                                                                stickerExpression,
+                                                                ""));
+                        }
+
+                        if (!cleanSearch.isBlank()) {
+
+                                String contains = "%"
+                                                + cleanSearch
+                                                + "%";
+
+                                List<Predicate> searchPredicates = new ArrayList<>();
+
+                                String[] searchableFields = {
+                                                "itemName",
+                                                "sku",
+                                                "clientName",
+                                                "pdNo",
+                                                "drawingNo",
+                                                "description",
+                                                "remarks",
+                                                "plantCode",
+                                                "packedAreaCode",
+                                                "currentLocationCode",
+                                                "location"
+                                };
+
+                                for (String field : searchableFields) {
+                                        searchPredicates.add(
+                                                        criteriaBuilder.like(
+                                                                        criteriaBuilder.lower(
+                                                                                        criteriaBuilder.coalesce(
+                                                                                                        root.<String>get(
+                                                                                                                        field),
+                                                                                                        "")),
+                                                                        contains));
+                                }
+
+                                /*
+                                 * The current React search also searches the
+                                 * derived Sticker status label.
+                                 */
+                                if ("sticker printed".contains(
+                                                cleanSearch)) {
+
+                                        searchPredicates.add(
+                                                        criteriaBuilder.notEqual(
+                                                                        stickerExpression,
+                                                                        ""));
+                                }
+
+                                if ("created".contains(
+                                                cleanSearch)) {
+
+                                        searchPredicates.add(
+                                                        criteriaBuilder.equal(
+                                                                        stickerExpression,
+                                                                        ""));
+                                }
+
+                                predicates.add(
+                                                criteriaBuilder.or(
+                                                                searchPredicates.toArray(
+                                                                                Predicate[]::new)));
+                        }
+
+                        return criteriaBuilder.and(
+                                        predicates.toArray(
+                                                        Predicate[]::new));
+                };
+        }
+
+        /**
+         * Highest packet number by master for only the masters represented by the
+         * supplied visible page. Used by the frontend to preserve the existing
+         * rule that Add / Custom Add is shown only on the final packet.
+         *
+         * The calculation starts from the entity page itself so it does not depend
+         * on any additional DTO accessor. It then batch-loads only those masters
+         * and reapplies the exact current Inventory visibility rule before taking
+         * the maximum packet number.
+         */
+        private Map<String, Integer> getInventoryMaxPacketNumbersForPage(
+                        List<PacketItem> visiblePageItems,
+                        User user) {
+
+                if (visiblePageItems == null ||
+                                visiblePageItems.isEmpty()) {
+                        return Map.of();
+                }
+
+                if (user == null) {
+                        throw new AccessDeniedException(
+                                        "Authentication is required");
+                }
+
+                Set<UUID> masterItemIds = visiblePageItems.stream()
+                                .map(
+                                                PacketItem::getMasterItem)
+                                .filter(
+                                                Objects::nonNull)
+                                .map(
+                                                MasterItem::getId)
+                                .filter(
+                                                Objects::nonNull)
+                                .collect(
+                                                Collectors.toCollection(
+                                                                LinkedHashSet::new));
+
+                if (masterItemIds.isEmpty()) {
+                        return Map.of();
+                }
+
+                boolean admin = currentUserService.isAdmin(
+                                user);
+
+                Map<String, Integer> result = new LinkedHashMap<>();
+
+                for (PacketItem item : packetItemRepository
+                                .findByMasterItemIdsForInventoryPage(
+                                                masterItemIds)) {
+
+                        if (item == null ||
+                                        item.getMasterItem() == null ||
+                                        item.getMasterItem().getId() == null) {
+                                continue;
+                        }
+
+                        boolean visible;
+
+                        if (admin) {
+
+                                visible = isVisibleOnNormalInventoryPage(
+                                                item);
+
+                        } else {
+
+                                String status = cleanInventoryValue(
+                                                item.getStatus())
+                                                .toUpperCase();
+
+                                boolean stickerMissing = item.getStickerNumber() == null ||
+                                                item.getStickerNumber().isBlank();
+
+                                visible = effectiveItemType(
+                                                item) != PacketItemType.HARDWARE &&
+                                                "CREATED".equals(
+                                                                status)
+                                                &&
+                                                stickerMissing &&
+                                                isNormalPacketOwnedByUser(
+                                                                item,
+                                                                user);
+                        }
+
+                        if (!visible) {
+                                continue;
+                        }
+
+                        int packetNumber = parsePacketNumberSafely(
+                                        item.getPacketNumber());
+
+                        if (packetNumber <= 0) {
+                                packetNumber = parsePacketNumberSafely(
+                                                item.getSku());
+                        }
+
+                        if (packetNumber <= 0) {
+                                continue;
+                        }
+
+                        String masterKey = item.getMasterItem()
+                                        .getId()
+                                        .toString();
+
+                        result.merge(
+                                        masterKey,
+                                        packetNumber,
+                                        Math::max);
+                }
+
+                return result;
         }
 
         private PacketItemResponse toInventoryPacketItemResponse(

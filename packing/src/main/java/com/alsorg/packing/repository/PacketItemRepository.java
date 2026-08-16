@@ -12,9 +12,11 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -22,7 +24,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface PacketItemRepository
-        extends JpaRepository<PacketItem, UUID> {
+        extends JpaRepository<PacketItem, UUID>,
+        JpaSpecificationExecutor<PacketItem> {
+
+    /*
+     * =====================================================
+     * OPTIMIZED INVENTORY PAGE READ
+     * =====================================================
+     *
+     * EntityGraph keeps MasterItem available while a filtered page is mapped
+     * to PacketItemResponse, avoiding one lazy master lookup per visible row.
+     */
+    @Override
+    @EntityGraph(attributePaths = {
+            "masterItem"
+    })
+    Page<PacketItem> findAll(
+            Specification<PacketItem> specification,
+            Pageable pageable);
 
     /*
      * =====================================================
@@ -572,6 +591,22 @@ public interface PacketItemRepository
             """)
     List<String> findPacketNumbersByMasterItemId(
             @Param("masterItemId") UUID masterItemId);
+
+    /*
+     * Load all PacketItems belonging to the masters represented on one
+     * Inventory page. PacketService applies the same role/visibility rules
+     * before calculating the highest currently visible packet number.
+     */
+    @EntityGraph(attributePaths = {
+            "masterItem"
+    })
+    @Query("""
+            SELECT p
+            FROM PacketItem p
+            WHERE p.masterItem.id IN :masterItemIds
+            """)
+    List<PacketItem> findByMasterItemIdsForInventoryPage(
+            @Param("masterItemIds") Collection<UUID> masterItemIds);
 
     /*
      * =====================================================
