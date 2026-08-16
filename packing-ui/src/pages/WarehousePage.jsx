@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
-import { Button, TextField, Box, Chip, MenuItem } from "@mui/material";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { Button, TextField, Box, Chip, MenuItem, Drawer, IconButton } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config"; import {
 	canOpenWarehousePage,
@@ -8,6 +8,67 @@ import { API_BASE_URL } from "../config"; import {
 import { useAuth } from "../auth/AuthContext";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
+
+
+/*
+ * Warehouse register table geometry — frontend only.
+ *
+ * The existing columns[] renderers remain the source of truth for values,
+ * permissions and every warehouse action. This layout controls presentation
+ * and resize limits only, mirroring the cleaner Dispatch register treatment.
+ */
+const WAREHOUSE_COLUMN_LAYOUT = [
+	{ key: "select", label: "", width: 64, min: 54, max: 110 },
+	{ key: "name", label: "Item Name", width: 300, min: 210, max: 680 },
+	{ key: "sku", label: "SKU", width: 210, min: 150, max: 560 },
+	{ key: "pdNo", label: "PD No", width: 130, min: 90, max: 300 },
+	{ key: "drawingNo", label: "DWG No.", width: 155, min: 105, max: 360 },
+	{ key: "description", label: "Description", width: 300, min: 180, max: 760 },
+	{ key: "clientName", label: "Client", width: 210, min: 150, max: 560 },
+	{ key: "plantCode", label: "Plant", width: 155, min: 110, max: 300 },
+	{ key: "location", label: "Location", width: 210, min: 130, max: 460 },
+	{ key: "status", label: "Movement Status", width: 310, min: 220, max: 560 },
+	{ key: "factoryFloor", label: "Factory Floor", width: 155, min: 110, max: 320 },
+	{ key: "warehouseCode", label: "Warehouse", width: 200, min: 130, max: 420 },
+	{ key: "actions", label: "Actions", width: 540, min: 340, max: 900 },
+];
+
+const getWarehouseDrawerStatusLabel = (row) => {
+	const status = String(
+		row?.status ||
+		row?.movementStatus ||
+		""
+	).trim().toUpperCase();
+
+	const labels = {
+		ON_FLOOR: "On Floor / WIP Packed",
+		READY_TO_STORE: "Ready To Store",
+		WAREHOUSE_REQUESTED: "Warehouse Requested",
+		IN_WAREHOUSE: "Stored in Warehouse",
+		WAREHOUSE_RETURN_REQUESTED: "Return Requested",
+	};
+
+	return labels[status] || status || "—";
+};
+
+const formatWarehouseDrawerDateTime = (value) => {
+	if (!value) return "—";
+
+	const date = new Date(value);
+
+	if (Number.isNaN(date.getTime())) {
+		return String(value);
+	}
+
+	return new Intl.DateTimeFormat("en-IN", {
+		day: "2-digit",
+		month: "short",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: true,
+	}).format(date);
+};
 
 
 function WarehousePage() {
@@ -100,6 +161,23 @@ function WarehousePage() {
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(20);
 
+	const [
+		warehouseColumnWidths,
+		setWarehouseColumnWidths,
+	] = useState(() =>
+		WAREHOUSE_COLUMN_LAYOUT.map(
+			(column) => column.width
+		)
+	);
+
+	const warehouseColumnResizeRef =
+		useRef(null);
+
+	const [
+		warehouseItemDrawerRow,
+		setWarehouseItemDrawerRow,
+	] = useState(null);
+
 
 	const [plants, setPlants] = useState([]);
 	const [assignmentDrafts, setAssignmentDrafts] = useState({});
@@ -163,6 +241,12 @@ function WarehousePage() {
 
 			setRows(
 				combined.map((item) => ({
+					/*
+					 * Keep backend-supplied read-only metadata available to the
+					 * details drawer while preserving the existing normalized
+					 * Warehouse fields below as the authoritative values.
+					 */
+					...item,
 					id: item.zohoItemId || item.sku,
 					zohoItemId: item.zohoItemId || item.sku,
 					name: item.name || item.itemName,
@@ -920,6 +1004,537 @@ function WarehousePage() {
 			safePageNo,
 			pageSize,
 		]);
+
+	const warehouseGridTemplate =
+		useMemo(
+			() =>
+				warehouseColumnWidths
+					.map(
+						(width) =>
+							`${Math.round(width)}px`
+					)
+					.join(" "),
+			[
+				warehouseColumnWidths,
+			]
+		);
+
+	const warehouseTableWidth =
+		useMemo(
+			() =>
+				warehouseColumnWidths.reduce(
+					(total, width) =>
+						total +
+						Number(width || 0),
+					0
+				),
+			[
+				warehouseColumnWidths,
+			]
+		);
+
+	const stopWarehouseColumnResize =
+		() => {
+			const active =
+				warehouseColumnResizeRef.current;
+
+			if (!active) {
+				return;
+			}
+
+			window.removeEventListener(
+				"pointermove",
+				active.onMove
+			);
+
+			window.removeEventListener(
+				"pointerup",
+				active.onUp
+			);
+
+			window.removeEventListener(
+				"pointercancel",
+				active.onUp
+			);
+
+			warehouseColumnResizeRef.current =
+				null;
+
+			document.body.style.cursor =
+				"";
+
+			document.body.style.userSelect =
+				"";
+		};
+
+	const beginWarehouseColumnResize =
+		(event, columnIndex) => {
+			event.preventDefault();
+			event.stopPropagation();
+
+			stopWarehouseColumnResize();
+
+			const config =
+				WAREHOUSE_COLUMN_LAYOUT[
+				columnIndex
+				];
+
+			if (!config) {
+				return;
+			}
+
+			const startX =
+				event.clientX;
+
+			const startWidth =
+				warehouseColumnWidths[
+				columnIndex
+				] ??
+				config.width;
+
+			const onMove =
+				(moveEvent) => {
+					moveEvent.preventDefault();
+
+					const nextWidth =
+						Math.max(
+							config.min,
+							Math.min(
+								config.max,
+								startWidth +
+								(moveEvent.clientX -
+									startX)
+							)
+						);
+
+					setWarehouseColumnWidths(
+						(previous) => {
+							if (
+								previous[
+								columnIndex
+								] ===
+								nextWidth
+							) {
+								return previous;
+							}
+
+							const next =
+								[
+									...previous,
+								];
+
+							next[
+								columnIndex
+							] =
+								nextWidth;
+
+							return next;
+						}
+					);
+				};
+
+			const onUp =
+				() => {
+					stopWarehouseColumnResize();
+				};
+
+			warehouseColumnResizeRef.current =
+			{
+				onMove,
+				onUp,
+			};
+
+			document.body.style.cursor =
+				"col-resize";
+
+			document.body.style.userSelect =
+				"none";
+
+			window.addEventListener(
+				"pointermove",
+				onMove,
+				{
+					passive: false,
+				}
+			);
+
+			window.addEventListener(
+				"pointerup",
+				onUp
+			);
+
+			window.addEventListener(
+				"pointercancel",
+				onUp
+			);
+		};
+
+	const resetWarehouseColumnWidth =
+		(columnIndex) => {
+			const config =
+				WAREHOUSE_COLUMN_LAYOUT[
+				columnIndex
+				];
+
+			if (!config) {
+				return;
+			}
+
+			setWarehouseColumnWidths(
+				(previous) => {
+					const next =
+						[
+							...previous,
+						];
+
+					next[
+						columnIndex
+					] =
+						config.width;
+
+					return next;
+				}
+			);
+		};
+
+	const renderWarehouseResizeHandle =
+		(columnIndex) => (
+			<Box
+				className="warehouse-column-resize-handle"
+				data-warehouse-no-row-open="true"
+				title="Drag to resize • Double-click to reset"
+				onPointerDown={(event) =>
+					beginWarehouseColumnResize(
+						event,
+						columnIndex
+					)
+				}
+				onDoubleClick={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+
+					resetWarehouseColumnWidth(
+						columnIndex
+					);
+				}}
+				sx={warehouseColumnResizeHandleSx}
+			/>
+		);
+
+	const isWarehouseRowInteractiveTarget =
+		(target) => {
+			if (
+				!target ||
+				typeof target.closest !==
+				"function"
+			) {
+				return false;
+			}
+
+			return Boolean(
+				target.closest(
+					[
+						"button",
+						"a",
+						"input",
+						"select",
+						"textarea",
+						"[role='button']",
+						"[role='checkbox']",
+						"[role='menuitem']",
+						".MuiButtonBase-root",
+						".MuiChip-clickable",
+						"[data-warehouse-no-row-open='true']",
+					].join(",")
+				)
+			);
+		};
+
+	const handleWarehouseRowClick =
+		(event, row) => {
+			if (
+				isWarehouseRowInteractiveTarget(
+					event.target
+				)
+			) {
+				return;
+			}
+
+			setWarehouseItemDrawerRow(
+				row
+			);
+		};
+
+	const getWarehouseDrawerValue =
+		(...values) => {
+			for (const value of values) {
+				if (
+					value !== null &&
+					value !== undefined &&
+					String(value).trim() !== ""
+				) {
+					return String(value);
+				}
+			}
+
+			return "—";
+		};
+
+	const buildWarehouseItemDrawerSections =
+		(row) => [
+			{
+				title: "Item & Packet",
+				fields: [
+					{
+						label: "Item Name",
+						value: getWarehouseDrawerValue(
+							row?.name,
+							row?.itemName
+						),
+						full: true,
+					},
+					{
+						label: "SKU",
+						value: getWarehouseDrawerValue(
+							row?.sku
+						),
+					},
+					{
+						label: "Packet No.",
+						value: getWarehouseDrawerValue(
+							row?.packetNumber,
+							row?.packetNo,
+							row?.pktNo
+						),
+					},
+					{
+						label: "PD No.",
+						value: getWarehouseDrawerValue(
+							row?.pdNo,
+							row?.pdNumber
+						),
+					},
+					{
+						label: "Drawing No.",
+						value: getWarehouseDrawerValue(
+							row?.drawingNo,
+							row?.dwgNo
+						),
+					},
+					{
+						label: "Description",
+						value: getWarehouseDrawerValue(
+							row?.description
+						),
+						full: true,
+					},
+				],
+			},
+			{
+				title: "Client & Factory",
+				fields: [
+					{
+						label: "Client",
+						value: getWarehouseDrawerValue(
+							row?.clientName,
+							row?.client
+						),
+					},
+					{
+						label: "Factory Floor",
+						value: getWarehouseDrawerValue(
+							row?.factoryFloor,
+							row?.floor
+						),
+					},
+					{
+						label: "Client Address",
+						value: getWarehouseDrawerValue(
+							row?.clientAddress,
+							row?.address,
+							row?.siteAddress,
+							row?.deliveryAddress
+						),
+						full: true,
+					},
+				],
+			},
+			{
+				title: "Plant & Warehouse Location",
+				fields: [
+					{
+						label: "Plant",
+						value: getWarehouseDrawerValue(
+							getPlantLabel(
+								row?.plantCode
+							)
+						),
+					},
+					{
+						label: "Current Location",
+						value: getWarehouseDrawerValue(
+							row?.currentLocationCode,
+							row?.location
+						),
+					},
+					{
+						label: "Packed Area",
+						value: getWarehouseDrawerValue(
+							row?.packedAreaCode
+						),
+					},
+					{
+						label: "FG Area",
+						value: getWarehouseDrawerValue(
+							row?.fgAreaCode
+						),
+					},
+					{
+						label: "FG Zone",
+						value: getWarehouseDrawerValue(
+							row?.fgZoneCode
+						),
+					},
+					{
+						label: "Warehouse",
+						value: getWarehouseDrawerValue(
+							row?.warehouseCode
+						),
+					},
+				],
+			},
+			{
+				title: "Movement & Gate Pass",
+				fields: [
+					{
+						label: "Movement Status",
+						value: getWarehouseDrawerStatusLabel(
+							row
+						),
+					},
+					{
+						label: "Gate Pass",
+						value: getWarehouseDrawerValue(
+							row?.gatePassNumber,
+							row?.gatePass,
+							row?.gatePassNo
+						),
+					},
+					{
+						label: "Packing Date / Time",
+						value: formatWarehouseDrawerDateTime(
+							row?.packedAt ||
+							row?.packingDate ||
+							row?.packedDate
+						),
+					},
+					{
+						label: "Created",
+						value: formatWarehouseDrawerDateTime(
+							row?.createdAt
+						),
+					},
+					{
+						label: "Last Updated",
+						value: formatWarehouseDrawerDateTime(
+							row?.updatedAt
+						),
+					},
+				],
+			},
+			{
+				title: "Physical Details",
+				fields: [
+					{
+						label: "Dimensions",
+						value: getWarehouseDrawerValue(
+							row?.dimensions
+						),
+					},
+					{
+						label: "Weight",
+						value: getWarehouseDrawerValue(
+							row?.weight
+						),
+					},
+					{
+						label: "Remarks",
+						value: getWarehouseDrawerValue(
+							row?.remarks
+						),
+						full: true,
+					},
+				],
+			},
+			{
+				title: "Record Reference",
+				fields: [
+					{
+						label: "Warehouse Item ID",
+						value: getWarehouseDrawerValue(
+							getWarehouseRowId(
+								row
+							)
+						),
+						full: true,
+					},
+					{
+						label: "Packet Item ID",
+						value: getWarehouseDrawerValue(
+							row?.packetItemId
+						),
+						full: true,
+					},
+				],
+			},
+		];
+
+	useEffect(() => {
+		return () => {
+			stopWarehouseColumnResize();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!warehouseItemDrawerRow) {
+			return;
+		}
+
+		const currentId =
+			String(
+				getWarehouseRowId(
+					warehouseItemDrawerRow
+				) || ""
+			).trim();
+
+		if (!currentId) {
+			return;
+		}
+
+		const refreshedRow =
+			(rows || []).find(
+				(row) =>
+					String(
+						getWarehouseRowId(
+							row
+						) || ""
+					).trim() ===
+					currentId
+			);
+
+		if (
+			refreshedRow &&
+			refreshedRow !==
+			warehouseItemDrawerRow
+		) {
+			setWarehouseItemDrawerRow(
+				refreshedRow
+			);
+		}
+	}, [
+		rows,
+		warehouseItemDrawerRow,
+	]);
 
 	useEffect(() => {
 		setPageNo(1);
@@ -1897,7 +2512,7 @@ function WarehousePage() {
 						size="small"
 						value={statusFilter}
 						onChange={(e) => {
-							setSearch(
+							setStatusFilter(
 								e.target.value
 							);
 
@@ -2333,109 +2948,193 @@ function WarehousePage() {
 							</div>
 						)}
 					<Box sx={tableWrapper}>
-						<div style={{ width: "max-content", minWidth: "100%" }}>
-
-							<div style={tableHeader}>
-								<div>
+						<Box
+							sx={{
+								width: `${warehouseTableWidth}px`,
+								minWidth: "100%",
+							}}
+						>
+							<Box
+								sx={{
+									...tableHeader,
+									gridTemplateColumns:
+										warehouseGridTemplate,
+									minWidth:
+										warehouseTableWidth,
+								}}
+							>
+								<Box
+									sx={{
+										...warehouseSelectCellSx(
+											true
+										),
+										"&:hover .warehouse-column-resize-handle":
+										{
+											opacity: 1,
+										},
+									}}
+								>
 									{columns[0].renderHeader()}
-								</div>
-								<div>Item Name</div>
-								<div>SKU</div>
-								<div>PD No</div>
-								<div>DWG No.</div>
-								<div>Description</div>
-								<div>Client</div>
-								<div>Plant</div>
-								<div>Location</div>
-								<div>Movement Status</div>
-								<div>Factory Floor</div>
-								<div>Warehouse</div>
-								<div>Actions</div>
-							</div>
+									{renderWarehouseResizeHandle(0)}
+								</Box>
 
-							<div style={tableBody}>
+								{WAREHOUSE_COLUMN_LAYOUT
+									.slice(1, 12)
+									.map((column, index) => {
+										const columnIndex =
+											index + 1;
+
+										return (
+											<Box
+												key={column.key}
+												sx={warehouseResizableHeaderCellSx}
+											>
+												<Box
+													component="span"
+													sx={{
+														minWidth: 0,
+														overflow: "hidden",
+														textOverflow: "ellipsis",
+													}}
+												>
+													{column.label}
+												</Box>
+
+												{renderWarehouseResizeHandle(
+													columnIndex
+												)}
+											</Box>
+										);
+									})}
+
+								<Box
+									sx={{
+										...warehouseActionCellSx(
+											true
+										),
+										pr: 2.1,
+										"&:hover .warehouse-column-resize-handle":
+										{
+											opacity: 1,
+										},
+									}}
+								>
+									Actions
+									{renderWarehouseResizeHandle(12)}
+								</Box>
+							</Box>
+
+							<Box sx={tableBody}>
 								{paginatedRows.map((row) => (
-									<div
+									<Box
 										key={getWarehouseRowId(row)}
-										style={tableRow}
+										onClick={(event) =>
+											handleWarehouseRowClick(
+												event,
+												row
+											)
+										}
+										sx={{
+											...warehouseTableRowSx,
+											gridTemplateColumns:
+												warehouseGridTemplate,
+											minWidth:
+												warehouseTableWidth,
+										}}
 									>
-										<div>
+										<Box
+											data-warehouse-no-row-open="true"
+											sx={warehouseSelectCellSx(
+												false
+											)}
+										>
 											{columns[0].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[1].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[2].renderCell({
 												value: row.sku,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[3].renderCell({
 												value: row.pdNo,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[4].renderCell({
 												value: row.drawingNo,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[5].renderCell({
 												value: row.description,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[6].renderCell({
 												value: row.clientName,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[7].renderCell({
 												value: row.plantCode,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[8].renderCell({
-												value: row.location,
+												value:
+													row.currentLocationCode ||
+													row.location,
 												row,
 											})}
-										</div>
+										</Box>
 
-										<div style={movementStatusCellWrap}>
+										<Box
+											sx={{
+												...warehouseTableCellWrap,
+												...movementStatusCellWrap,
+											}}
+										>
 											{columns[9].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[10].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div>
+										<Box sx={warehouseTableCellWrap}>
 											{columns[11].renderCell({ row })}
-										</div>
+										</Box>
 
-										<div>
+										<Box
+											data-warehouse-no-row-open="true"
+											sx={warehouseActionCellSx(
+												false
+											)}
+										>
 											{columns[12].renderCell({ row })}
-										</div>
-									</div>
+										</Box>
+									</Box>
 								))}
-							</div>
-
-						</div>
+							</Box>
+						</Box>
 					</Box>
 					<Box
 						sx={{
@@ -2611,6 +3310,352 @@ function WarehousePage() {
 					</Box>
 				</div>
 			</div>
+			<Drawer
+				anchor="right"
+				open={Boolean(
+					warehouseItemDrawerRow
+				)}
+				onClose={() =>
+					setWarehouseItemDrawerRow(
+						null
+					)
+				}
+				PaperProps={{
+					sx: warehouseItemDrawerPaperSx,
+				}}
+				ModalProps={{
+					keepMounted: true,
+				}}
+			>
+				{warehouseItemDrawerRow && (
+					<>
+						<Box sx={warehouseItemDrawerHeaderSx}>
+							<Box sx={{ minWidth: 0, flex: 1 }}>
+								<Box
+									component="span"
+									sx={{
+										color: "#93c5fd",
+										fontSize: 10,
+										fontWeight: 950,
+										letterSpacing: ".11em",
+										textTransform: "uppercase",
+									}}
+								>
+									Warehouse Item Details
+								</Box>
+
+								<Box
+									sx={{
+										mt: 0.55,
+										color: "#fff",
+										fontSize: 20,
+										fontWeight: 950,
+										lineHeight: 1.15,
+										wordBreak: "break-word",
+									}}
+								>
+									{warehouseItemDrawerRow?.name ||
+										warehouseItemDrawerRow?.itemName ||
+										"Warehouse Item"}
+								</Box>
+
+								<Box
+									sx={{
+										mt: 0.75,
+										display: "flex",
+										alignItems: "center",
+										gap: 0.8,
+										flexWrap: "wrap",
+									}}
+								>
+									<Chip
+										size="small"
+										label={getWarehouseDrawerStatusLabel(
+											warehouseItemDrawerRow
+										)}
+										sx={warehouseDrawerStatusChipSx(
+											warehouseItemDrawerRow?.status
+										)}
+									/>
+
+									<Box
+										component="span"
+										sx={{
+											color: "#94a3b8",
+											fontSize: 11,
+											fontWeight: 800,
+										}}
+									>
+										{warehouseItemDrawerRow?.pdNo ||
+											"PD —"}
+										{" • "}
+										{warehouseItemDrawerRow?.sku ||
+											"SKU —"}
+									</Box>
+								</Box>
+							</Box>
+
+							<IconButton
+								aria-label="Close warehouse item details"
+								onClick={() =>
+									setWarehouseItemDrawerRow(
+										null
+									)
+								}
+								sx={warehouseDrawerCloseButtonSx}
+							>
+								<Box
+									component="span"
+									sx={{
+										fontSize: 22,
+										lineHeight: 1,
+									}}
+								>
+									×
+								</Box>
+							</IconButton>
+						</Box>
+
+						<Box sx={warehouseItemDrawerBodySx}>
+							{isAdmin &&
+								isAssignmentEditing(
+									warehouseItemDrawerRow
+								) && (
+									<Box sx={warehouseItemDrawerSectionSx}>
+										<Box sx={warehouseItemDrawerSectionTitleSx}>
+											Admin Location Editor
+										</Box>
+
+										<Box sx={warehouseItemDrawerGridSx}>
+											<TextField
+												select
+												size="small"
+												label="Plant"
+												value={
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.plantCode || ""
+												}
+												onChange={(e) =>
+													updateAssignmentDraft(
+														warehouseItemDrawerRow,
+														"plantCode",
+														e.target.value
+													)
+												}
+												sx={warehouseDrawerEditFieldSx}
+											>
+												{plants.map((plant) => (
+													<MenuItem
+														key={plant.plantCode}
+														value={plant.plantCode}
+													>
+														{plant.plantCode}
+													</MenuItem>
+												))}
+											</TextField>
+
+											<TextField
+												select
+												size="small"
+												label="Location"
+												value={
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.currentLocationCode || ""
+												}
+												onChange={(e) =>
+													updateAssignmentDraft(
+														warehouseItemDrawerRow,
+														"currentLocationCode",
+														e.target.value
+													)
+												}
+												sx={warehouseDrawerEditFieldSx}
+												SelectProps={{
+													displayEmpty: true,
+													MenuProps: {
+														PaperProps: {
+															sx: warehouseSelectMenuSx,
+														},
+													},
+												}}
+											>
+												<MenuItem value="">
+													Select Location
+												</MenuItem>
+
+												{getLocationOptions(
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.plantCode ||
+													warehouseItemDrawerRow?.plantCode,
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.currentLocationCode ||
+													warehouseItemDrawerRow?.currentLocationCode ||
+													warehouseItemDrawerRow?.location
+												).map((location) => (
+													<MenuItem
+														key={location}
+														value={location}
+													>
+														{location}
+													</MenuItem>
+												))}
+											</TextField>
+
+											<TextField
+												select
+												size="small"
+												label="Warehouse"
+												value={
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.warehouseCode || ""
+												}
+												onChange={(e) =>
+													updateAssignmentDraft(
+														warehouseItemDrawerRow,
+														"warehouseCode",
+														e.target.value
+													)
+												}
+												sx={warehouseDrawerEditFieldSx}
+												SelectProps={{
+													displayEmpty: true,
+													MenuProps: {
+														PaperProps: {
+															sx: warehouseSelectMenuSx,
+														},
+													},
+												}}
+											>
+												<MenuItem value="">
+													Select Warehouse
+												</MenuItem>
+
+												{getWarehouseOptions(
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.plantCode ||
+													warehouseItemDrawerRow?.plantCode,
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.warehouseCode ||
+													warehouseItemDrawerRow?.warehouseCode
+												).map((warehouse) => (
+													<MenuItem
+														key={warehouse}
+														value={warehouse}
+													>
+														{warehouse}
+													</MenuItem>
+												))}
+											</TextField>
+
+											<TextField
+												size="small"
+												label="FG Zone"
+												value={
+													getAssignmentDraft(
+														warehouseItemDrawerRow
+													)?.fgZoneCode || ""
+												}
+												onChange={(e) =>
+													updateAssignmentDraft(
+														warehouseItemDrawerRow,
+														"fgZoneCode",
+														e.target.value
+													)
+												}
+												sx={warehouseDrawerEditFieldSx}
+											/>
+										</Box>
+									</Box>
+								)}
+
+							<Box sx={warehouseItemDrawerHeroSx}>
+								<Box sx={warehouseItemDrawerSectionTitleSx}>
+									Movement / Gate Pass
+								</Box>
+
+								<Box
+									sx={{
+										...warehouseItemDrawerActionPanelSx,
+										background:
+											"rgba(37,99,235,.055)",
+										borderColor:
+											"rgba(96,165,250,.14)",
+									}}
+								>
+									{columns[9].renderCell({
+										row:
+											warehouseItemDrawerRow,
+									})}
+								</Box>
+							</Box>
+
+							{buildWarehouseItemDrawerSections(
+								warehouseItemDrawerRow
+							).map((section) => (
+								<Box
+									key={section.title}
+									sx={warehouseItemDrawerSectionSx}
+								>
+									<Box sx={warehouseItemDrawerSectionTitleSx}>
+										{section.title}
+									</Box>
+
+									<Box sx={warehouseItemDrawerGridSx}>
+										{section.fields.map((field) => (
+											<Box
+												key={field.label}
+												sx={{
+													...warehouseItemDrawerFieldSx,
+													gridColumn:
+														field.full
+															? "1 / -1"
+															: "auto",
+												}}
+											>
+												<Box sx={warehouseItemDrawerFieldLabelSx}>
+													{field.label}
+												</Box>
+
+												<Box
+													sx={warehouseItemDrawerFieldValueSx}
+													title={String(
+														field.value ||
+														""
+													)}
+												>
+													{field.value ||
+														"—"}
+												</Box>
+											</Box>
+										))}
+									</Box>
+								</Box>
+							))}
+
+							<Box sx={warehouseItemDrawerSectionSx}>
+								<Box sx={warehouseItemDrawerSectionTitleSx}>
+									Available Actions
+								</Box>
+
+								<Box sx={warehouseItemDrawerActionPanelSx}>
+									{columns[12].renderCell({
+										row:
+											warehouseItemDrawerRow,
+									})}
+								</Box>
+							</Box>
+						</Box>
+					</>
+				)}
+			</Drawer>
+
 			{bulkLocationOpen && (
 				<div
 					style={popupOverlay}
@@ -3122,46 +4167,59 @@ const content = {
 
 const wrap = {
 	background:
-		"linear-gradient(180deg,#0f172a,#111827)",
+		"linear-gradient(180deg,rgba(15,23,42,.76),rgba(2,6,23,.48))",
 	borderRadius: 20,
 	padding: 16,
 	border:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(148,163,184,.10)",
+	boxShadow:
+		"0 18px 46px rgba(2,6,23,.24)",
 };
 
 const tableHeader = {
 	position: "sticky",
 	top: 0,
-	zIndex: 20,
+	zIndex: 30,
 
 	display: "grid",
 	gridTemplateColumns: warehouseGrid,
+	alignItems: "stretch",
 
-	padding: "11px 12px",
+	padding: 0,
 
-	background: "#111827",
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.995),rgba(17,24,39,.985))",
 	color: "#94a3b8",
 
-	fontWeight: 800,
-	fontSize: 13,
+	fontWeight: 950,
+	fontSize: 10.5,
+	letterSpacing: ".075em",
+	textTransform: "uppercase",
+
+	borderBottom:
+		"1px solid rgba(148,163,184,.14)",
+
+	boxShadow:
+		"0 10px 24px rgba(2,6,23,.20)",
+
+	backdropFilter: "blur(18px)",
+	WebkitBackdropFilter: "blur(18px)",
 };
 
 const tableRow = {
 	display: "grid",
 	gridTemplateColumns: warehouseGrid,
-
-	alignItems: "center",
-
-	padding: "10px 12px",
-
+	alignItems: "stretch",
+	padding: 0,
 	color: "#fff",
-
-	borderTop:
-		"1px solid rgba(255,255,255,.06)",
-
-	minHeight: 48,
-
+	borderBottom:
+		"1px solid rgba(148,163,184,.075)",
+	minHeight: 68,
 	fontSize: 13,
+	background:
+		"rgba(15,23,42,.40)",
+	transition:
+		"background .16s ease, border-color .16s ease, box-shadow .16s ease",
 };
 
 const searchPanel = {
@@ -3241,13 +4299,30 @@ const compactActionFieldSx = {
 };
 
 const tableWrapper = {
+	position: "relative",
 	overflowX: "auto",
+	overflowY: "visible",
+
+	borderRadius: "18px",
+
+	background:
+		"linear-gradient(180deg,rgba(15,23,42,.72),rgba(2,6,23,.46))",
+
+	border:
+		"1px solid rgba(148,163,184,.11)",
+
+	boxShadow:
+		"0 18px 42px rgba(2,6,23,.24)",
+
 	scrollbarWidth: "thin",
 	scrollbarColor: "#3b82f6 #0f172a",
+
 	WebkitOverflowScrolling: "touch",
+	overscrollBehaviorX: "contain",
+	scrollbarGutter: "stable",
 
 	"&::-webkit-scrollbar": {
-		height: 14,
+		height: 12,
 	},
 
 	"&::-webkit-scrollbar-track": {
@@ -3263,7 +4338,7 @@ const tableWrapper = {
 		border:
 			"2px solid #0f172a",
 		boxShadow:
-			"0 0 16px rgba(59,130,246,.55)",
+			"0 0 14px rgba(59,130,246,.48)",
 	},
 
 	"&::-webkit-scrollbar-thumb:hover": {
@@ -3275,6 +4350,414 @@ const tableWrapper = {
 const tableBody = {
 	display: "flex",
 	flexDirection: "column",
+};
+
+
+const warehouseResizableHeaderCellSx = {
+	minWidth: 0,
+	minHeight: 50,
+	position: "relative",
+
+	display: "flex",
+	alignItems: "center",
+
+	px: 1.5,
+	py: 1.15,
+	pr: 2.1,
+
+	borderRight:
+		"1px solid rgba(255,255,255,.045)",
+
+	whiteSpace: "nowrap",
+	overflow: "visible",
+
+	"&:hover .warehouse-column-resize-handle": {
+		opacity: 1,
+	},
+};
+
+const warehouseColumnResizeHandleSx = {
+	position: "absolute",
+	top: 0,
+	right: -4,
+	width: 9,
+	height: "100%",
+	zIndex: 60,
+	cursor: "col-resize",
+	touchAction: "none",
+	opacity: 0,
+	transition:
+		"opacity .14s ease, background .14s ease",
+	background:
+		"linear-gradient(90deg,transparent,rgba(96,165,250,.58),transparent)",
+
+	"&::after": {
+		content: '""',
+		position: "absolute",
+		top: "20%",
+		bottom: "20%",
+		left: "4px",
+		width: "1px",
+		borderRadius: 999,
+		background: "#60a5fa",
+		boxShadow:
+			"0 0 10px rgba(96,165,250,.72)",
+	},
+
+	"&:hover": {
+		opacity: 1,
+		background:
+			"linear-gradient(90deg,transparent,rgba(96,165,250,.92),transparent)",
+	},
+};
+
+const warehouseTableCellWrap = {
+	minWidth: 0,
+	overflow: "hidden",
+
+	display: "flex",
+	alignItems: "center",
+
+	minHeight: 68,
+
+	padding: "10px 14px",
+
+	borderRight:
+		"1px solid rgba(255,255,255,.038)",
+};
+
+const warehouseTableRowSx = {
+	...tableRow,
+
+	"&:nth-of-type(even)": {
+		background:
+			"rgba(17,24,39,.48)",
+	},
+
+	"&:hover": {
+		background:
+			"linear-gradient(90deg,rgba(37,99,235,.075),rgba(30,41,59,.58))",
+
+		borderBottomColor:
+			"rgba(96,165,250,.18)",
+
+		boxShadow:
+			"inset 0 1px 0 rgba(255,255,255,.018), inset 0 -1px 0 rgba(96,165,250,.035)",
+
+		cursor: "pointer",
+	},
+
+	"&:focus-within": {
+		background:
+			"linear-gradient(90deg,rgba(37,99,235,.085),rgba(30,41,59,.60))",
+	},
+};
+
+const warehouseSelectCellSx = (
+	header = false
+) => ({
+	minWidth: 0,
+
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+
+	position: "sticky",
+	left: 0,
+	zIndex: header ? 42 : 8,
+
+	minHeight: header ? 50 : 68,
+
+	background: header
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
+		: "rgba(15,23,42,.985)",
+
+	borderRight:
+		"1px solid rgba(148,163,184,.13)",
+
+	boxShadow:
+		"10px 0 22px rgba(2,6,23,.20)",
+});
+
+const warehouseActionCellSx = (
+	header = false
+) => ({
+	minWidth: 0,
+
+	display: "flex",
+	alignItems: "center",
+
+	position: "sticky",
+	right: 0,
+	zIndex: header ? 42 : 8,
+
+	minHeight: header ? 50 : 68,
+
+	px: header ? 1.5 : 1.25,
+	py: header ? 1.15 : 0.85,
+
+	background: header
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
+		: "linear-gradient(90deg,rgba(15,23,42,.95),rgba(15,23,42,.995))",
+
+	borderLeft:
+		"1px solid rgba(148,163,184,.13)",
+
+	boxShadow:
+		"-12px 0 24px rgba(2,6,23,.22)",
+
+	"& > *": {
+		minWidth: 0,
+	},
+});
+
+const warehouseItemDrawerPaperSx = {
+	width: "min(760px, 96vw)",
+	maxWidth: "96vw",
+	color: "#fff",
+	background:
+		"radial-gradient(circle at top right,rgba(59,130,246,.16),transparent 34%),linear-gradient(180deg,#08111f,#0f172a 46%,#111827)",
+	borderLeft:
+		"1px solid rgba(96,165,250,.18)",
+	boxShadow:
+		"-28px 0 80px rgba(2,6,23,.58)",
+};
+
+const warehouseItemDrawerHeaderSx = {
+	position: "sticky",
+	top: 0,
+	zIndex: 4,
+
+	px: 2.5,
+	py: 2,
+
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 2,
+
+	background:
+		"linear-gradient(180deg,rgba(8,17,31,.99),rgba(15,23,42,.96))",
+
+	borderBottom:
+		"1px solid rgba(255,255,255,.07)",
+
+	backdropFilter: "blur(18px)",
+};
+
+const warehouseItemDrawerBodySx = {
+	p: 2.25,
+	overflowY: "auto",
+	scrollbarWidth: "thin",
+	scrollbarColor:
+		"#60a5fa rgba(15,23,42,.78)",
+
+	"&::-webkit-scrollbar": {
+		width: 10,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background:
+			"rgba(15,23,42,.92)",
+		borderRadius: 999,
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			"linear-gradient(180deg,#2563eb,#60a5fa)",
+		borderRadius: 999,
+		border:
+			"2px solid rgba(15,23,42,.95)",
+	},
+};
+
+const warehouseItemDrawerHeroSx = {
+	mb: 1.5,
+	p: 1.55,
+	borderRadius: "18px",
+
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.15),rgba(255,255,255,.025))",
+
+	border:
+		"1px solid rgba(96,165,250,.18)",
+
+	boxShadow:
+		"0 14px 32px rgba(2,6,23,.22)",
+};
+
+const warehouseItemDrawerSectionSx = {
+	mb: 1.4,
+	p: 1.45,
+	borderRadius: "17px",
+	background:
+		"rgba(255,255,255,.026)",
+	border:
+		"1px solid rgba(255,255,255,.065)",
+};
+
+const warehouseItemDrawerSectionTitleSx = {
+	mb: 1,
+	color: "#93c5fd",
+	fontSize: 10,
+	fontWeight: 950,
+	letterSpacing: ".11em",
+	textTransform: "uppercase",
+};
+
+const warehouseItemDrawerGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		sm: "repeat(2,minmax(0,1fr))",
+	},
+	gap: 0.85,
+};
+
+const warehouseItemDrawerFieldSx = {
+	minWidth: 0,
+	p: 1.05,
+	borderRadius: "12px",
+	background:
+		"rgba(2,6,23,.28)",
+	border:
+		"1px solid rgba(255,255,255,.055)",
+};
+
+const warehouseItemDrawerFieldLabelSx = {
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 950,
+	letterSpacing: ".07em",
+	textTransform: "uppercase",
+};
+
+const warehouseItemDrawerFieldValueSx = {
+	mt: 0.4,
+	color: "#f8fafc",
+	fontSize: 11.5,
+	fontWeight: 850,
+	lineHeight: 1.42,
+	wordBreak: "break-word",
+	whiteSpace: "pre-wrap",
+};
+
+const warehouseItemDrawerActionPanelSx = {
+	p: 1.35,
+	borderRadius: "15px",
+
+	background:
+		"linear-gradient(135deg,rgba(16,185,129,.08),rgba(255,255,255,.025))",
+
+	border:
+		"1px solid rgba(16,185,129,.14)",
+
+	"& .MuiButton-root": {
+		minHeight: 34,
+	},
+
+	"& > .MuiBox-root": {
+		flexWrap: "wrap",
+	},
+};
+
+const warehouseDrawerCloseButtonSx = {
+	width: 36,
+	height: 36,
+	borderRadius: "8px",
+	color: "#94a3b8",
+	background:
+		"rgba(255,255,255,.04)",
+	border:
+		"1px solid rgba(255,255,255,.06)",
+
+	"&:hover": {
+		color: "#fff",
+		background:
+			"rgba(239,68,68,.16)",
+		borderColor:
+			"rgba(239,68,68,.28)",
+	},
+};
+
+const warehouseDrawerEditFieldSx = {
+	"& .MuiInputLabel-root": {
+		color: "#94a3b8",
+		fontSize: 11,
+		fontWeight: 800,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "#93c5fd",
+	},
+
+	"& .MuiOutlinedInput-root": {
+		minHeight: 42,
+		borderRadius: "12px",
+		color: "#fff",
+		background:
+			"rgba(255,255,255,.04)",
+
+		"& fieldset": {
+			borderColor:
+				"rgba(255,255,255,.09)",
+		},
+
+		"&:hover fieldset": {
+			borderColor:
+				"rgba(96,165,250,.36)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#60a5fa",
+			boxShadow:
+				"0 0 0 3px rgba(96,165,250,.12)",
+		},
+	},
+
+	"& input, & .MuiSelect-select": {
+		color: "#fff",
+		fontSize: 11.5,
+		fontWeight: 850,
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
+};
+
+const warehouseDrawerStatusChipSx = (
+	status
+) => {
+	const cleanStatus =
+		String(status || "")
+			.trim()
+			.toUpperCase();
+
+	if (
+		cleanStatus ===
+		"IN_WAREHOUSE"
+	) {
+		return {
+			...statusStored,
+			height: 25,
+		};
+	}
+
+	if (
+		cleanStatus ===
+		"WAREHOUSE_RETURN_REQUESTED"
+	) {
+		return {
+			...returnChip,
+			height: 25,
+		};
+	}
+
+	return {
+		...pendingChip,
+		height: 25,
+	};
 };
 
 const compactToolbar = {
@@ -3613,8 +5096,10 @@ const actionCell = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1,
-	flexWrap: "nowrap",
+	flexWrap: "wrap",
 	whiteSpace: "nowrap",
+	minWidth: 0,
+	width: "100%",
 };
 
 const movementStatusCellWrap = {
