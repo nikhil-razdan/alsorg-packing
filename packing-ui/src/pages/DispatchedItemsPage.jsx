@@ -19,6 +19,7 @@ import {
 	Collapse,
 	Checkbox,
 	ListItemText,
+	CircularProgress,
 	Popover,
 	Drawer,
 } from "@mui/material";
@@ -2566,6 +2567,50 @@ const searchPanel = {
 
 	border:
 		"1px solid rgba(255,255,255,.06)",
+};
+
+const searchActivitySlotSx = {
+	width: 126,
+	minWidth: 126,
+	height: 34,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	flexShrink: 0,
+
+	"@media (max-width: 900px)": {
+		width: 116,
+		minWidth: 116,
+	},
+};
+
+const searchActivityPillSx = {
+	height: 30,
+	px: 1.25,
+	borderRadius: "999px",
+	display: "inline-flex",
+	alignItems: "center",
+	gap: 0.8,
+	color: "#dbeafe",
+	fontSize: 10.5,
+	fontWeight: 950,
+	letterSpacing: ".02em",
+	whiteSpace: "nowrap",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.22),rgba(59,130,246,.10))",
+	border:
+		"1px solid rgba(96,165,250,.30)",
+	boxShadow:
+		"0 8px 22px rgba(37,99,235,.18)",
+};
+
+const activeSearchPanelSx = {
+	borderColor:
+		"rgba(96,165,250,.34)",
+	boxShadow:
+		"0 0 0 3px rgba(59,130,246,.055), 0 14px 32px rgba(2,6,23,.18)",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.075),rgba(255,255,255,.028))",
 };
 
 
@@ -5798,6 +5843,11 @@ export default function DispatchedItemsPage() {
 	const [dispatchServerSearch, setDispatchServerSearch] =
 		useState("");
 
+	const [
+		dispatchSearchNetworkPending,
+		setDispatchSearchNetworkPending,
+	] = useState(false);
+
 	const [dispatchServerMeta, setDispatchServerMeta] =
 		useState({
 			totalElements: 0,
@@ -6112,6 +6162,20 @@ export default function DispatchedItemsPage() {
 			window.clearTimeout(timer);
 		};
 	}, [search]);
+
+	/*
+	 * Visible feedback for both debounce and live server-search phases.
+	 * This changes presentation only; the existing query flow is untouched.
+	 */
+	const dispatchSearchPending =
+		Boolean(
+			String(search || "").trim()
+		) &&
+		(
+			String(search || "").trim() !==
+			String(dispatchServerSearch || "").trim() ||
+			dispatchSearchNetworkPending
+		);
 
 	const dispatchStatusQuery =
 		useMemo(
@@ -10220,6 +10284,18 @@ export default function DispatchedItemsPage() {
 			const abortController = new AbortController();
 			dispatchFetchAbortRef.current = abortController;
 
+			/*
+			 * Even if cached rows paint instantly, keep the search indicator on
+			 * until the fresh server response has actually completed.
+			 */
+			setDispatchSearchNetworkPending(
+				Boolean(
+					String(
+						dispatchServerSearch || ""
+					).trim()
+				)
+			);
+
 			if (preferCache && cached) {
 				setRows(cached.items);
 				setDispatchServerMeta({
@@ -10343,6 +10419,7 @@ export default function DispatchedItemsPage() {
 					requestId === dispatchFetchRequestRef.current
 				) {
 					setLoading(false);
+					setDispatchSearchNetworkPending(false);
 				}
 
 				if (
@@ -17715,10 +17792,22 @@ export default function DispatchedItemsPage() {
 
 				</div>
 
-				<Box sx={searchPanel}>
+				<Box
+					sx={{
+						...searchPanel,
+						...(dispatchSearchPending
+							? activeSearchPanelSx
+							: {}),
+					}}
+				>
 					<SearchIcon
 						sx={{
-							color: "rgba(255,255,255,.45)",
+							color:
+								dispatchSearchPending
+									? "#60a5fa"
+									: "rgba(255,255,255,.45)",
+							transition:
+								"color .16s ease",
 						}}
 					/>
 
@@ -17747,6 +17836,30 @@ export default function DispatchedItemsPage() {
 							},
 						}}
 					/>
+
+					<Box
+						sx={searchActivitySlotSx}
+						aria-live="polite"
+						aria-atomic="true"
+						title={
+							dispatchSearchPending
+								? `Searching for "${String(search || "").trim()}"`
+								: ""
+						}
+					>
+						{dispatchSearchPending ? (
+							<Box sx={searchActivityPillSx}>
+								<CircularProgress
+									size={13}
+									thickness={5}
+									sx={{
+										color: "#60a5fa",
+									}}
+								/>
+								Searching…
+							</Box>
+						) : null}
+					</Box>
 
 					{search ? (
 						<Button

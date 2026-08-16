@@ -15,6 +15,7 @@ import {
   IconButton,
   Collapse,
   LinearProgress,
+  CircularProgress,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
@@ -1855,6 +1856,11 @@ function ZohoItemsPage() {
   ] = useState("");
 
   const [
+    inventorySearchNetworkPending,
+    setInventorySearchNetworkPending,
+  ] = useState(false);
+
+  const [
     normalInventoryMeta,
     setNormalInventoryMeta,
   ] = useState({
@@ -3567,6 +3573,18 @@ function ZohoItemsPage() {
       inventoryAbortControllerRef.current =
         controller;
 
+      /*
+       * Keep the search indicator active through the real server request.
+       * Cached data can still render immediately underneath it.
+       */
+      setInventorySearchNetworkPending(
+        Boolean(
+          String(
+            inventoryServerSearch || ""
+          ).trim()
+        )
+      );
+
       const useServerPaging =
         groupBy ===
         "NONE";
@@ -3642,6 +3660,10 @@ function ZohoItemsPage() {
             );
 
             setInventoryFullModeLoading(
+              false
+            );
+
+            setInventorySearchNetworkPending(
               false
             );
           }
@@ -3739,6 +3761,10 @@ function ZohoItemsPage() {
               .current
           ) {
             setLoading(
+              false
+            );
+
+            setInventorySearchNetworkPending(
               false
             );
           }
@@ -3930,6 +3956,10 @@ function ZohoItemsPage() {
             .current
         ) {
           setLoading(
+            false
+          );
+
+          setInventorySearchNetworkPending(
             false
           );
         }
@@ -4227,6 +4257,33 @@ function ZohoItemsPage() {
   const deferredInventoryClientSearch =
     useDeferredValue(
       search
+    );
+
+  const inventorySearchPending =
+    Boolean(
+      String(
+        search || ""
+      ).trim()
+    ) &&
+    (
+      String(
+        search || ""
+      ).trim() !==
+      String(
+        inventoryServerSearch || ""
+      ).trim() ||
+      inventorySearchNetworkPending ||
+      inventoryHardwareLoading ||
+      (
+        groupBy !==
+        "NONE" &&
+        String(
+          deferredInventoryClientSearch || ""
+        ).trim() !==
+        String(
+          search || ""
+        ).trim()
+      )
     );
 
   const filterInventoryRowsClient =
@@ -8156,10 +8213,22 @@ function ZohoItemsPage() {
           </Box>
         </div>
 
-        <Box sx={searchPanel}>
+        <Box
+          sx={{
+            ...searchPanel,
+            ...(inventorySearchPending
+              ? activeSearchPanelSx
+              : {}),
+          }}
+        >
           <SearchIcon
             sx={{
-              color: "rgba(255,255,255,.45)",
+              color:
+                inventorySearchPending
+                  ? "#60a5fa"
+                  : "rgba(255,255,255,.45)",
+              transition:
+                "color .16s ease",
             }}
           />
 
@@ -8174,6 +8243,30 @@ function ZohoItemsPage() {
             InputProps={{ disableUnderline: true }}
             sx={searchInputSx}
           />
+
+          <Box
+            sx={searchActivitySlotSx}
+            aria-live="polite"
+            aria-atomic="true"
+            title={
+              inventorySearchPending
+                ? `Searching for "${String(search || "").trim()}"`
+                : ""
+            }
+          >
+            {inventorySearchPending ? (
+              <Box sx={searchActivityPillSx}>
+                <CircularProgress
+                  size={13}
+                  thickness={5}
+                  sx={{
+                    color: "#60a5fa",
+                  }}
+                />
+                Searching…
+              </Box>
+            ) : null}
+          </Box>
 
           <TextField
             select
@@ -8483,7 +8576,9 @@ function ZohoItemsPage() {
                 {loading &&
                   rows.length === 0 && (
                     <div style={emptyTableState}>
-                      Loading inventory items...
+                      {inventorySearchPending
+                        ? "Searching inventory…"
+                        : "Loading inventory items..."}
                     </div>
                   )}
 
@@ -12580,6 +12675,50 @@ const searchPanel = {
   background: "rgba(255,255,255,0.03)",
   border:
     "1px solid rgba(255,255,255,.06)",
+};
+
+const searchActivitySlotSx = {
+  width: 126,
+  minWidth: 126,
+  height: 34,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  flexShrink: 0,
+
+  "@media (max-width: 900px)": {
+    width: 116,
+    minWidth: 116,
+  },
+};
+
+const searchActivityPillSx = {
+  height: 30,
+  px: 1.25,
+  borderRadius: "999px",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 0.8,
+  color: "#dbeafe",
+  fontSize: 10.5,
+  fontWeight: 950,
+  letterSpacing: ".02em",
+  whiteSpace: "nowrap",
+  background:
+    "linear-gradient(135deg,rgba(37,99,235,.22),rgba(59,130,246,.10))",
+  border:
+    "1px solid rgba(96,165,250,.30)",
+  boxShadow:
+    "0 8px 22px rgba(37,99,235,.18)",
+};
+
+const activeSearchPanelSx = {
+  borderColor:
+    "rgba(96,165,250,.34)",
+  boxShadow:
+    "0 0 0 3px rgba(59,130,246,.055), 0 14px 32px rgba(2,6,23,.18)",
+  background:
+    "linear-gradient(135deg,rgba(37,99,235,.075),rgba(255,255,255,.028))",
 };
 
 const searchInputSx = {
