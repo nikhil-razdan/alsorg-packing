@@ -20,6 +20,7 @@ import {
 	Checkbox,
 	ListItemText,
 	Popover,
+	Drawer,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -77,6 +78,27 @@ const dispatchGrid =
 	"64px minmax(260px,1.25fr) minmax(220px,1fr) 120px 150px minmax(270px,1.25fr) minmax(190px,.9fr) 105px 155px 185px 210px 540px";
 
 const dispatchMinWidth = 2580;
+
+/*
+ * Frontend-only resizable Dispatch table columns.
+ *
+ * Existing columns[] renderers remain the source of truth for values,
+ * permissions and actions. This configuration controls visual width only.
+ */
+const DISPATCH_COLUMN_LAYOUT = [
+	{ key: "select", label: "", width: 64, min: 54, max: 110 },
+	{ key: "item", label: "Item Name", width: 320, min: 210, max: 680 },
+	{ key: "sku", label: "SKU", width: 280, min: 180, max: 620 },
+	{ key: "pdNo", label: "PD No", width: 130, min: 90, max: 300 },
+	{ key: "drawingNo", label: "DWG No", width: 160, min: 100, max: 360 },
+	{ key: "description", label: "Description", width: 320, min: 180, max: 760 },
+	{ key: "client", label: "Client", width: 220, min: 150, max: 560 },
+	{ key: "plant", label: "Plant", width: 110, min: 82, max: 240 },
+	{ key: "location", label: "Location", width: 170, min: 120, max: 380 },
+	{ key: "dateTime", label: "Date / Time", width: 200, min: 150, max: 420 },
+	{ key: "status", label: "Status", width: 230, min: 160, max: 460 },
+	{ key: "actions", label: "Actions", width: 540, min: 360, max: 900 },
+];
 
 const tableHeader = {
 	position: "sticky",
@@ -603,7 +625,9 @@ const itemNameCell = {
 
 const itemNameText = {
 	...simpleCellText,
-	maxWidth: 245,
+	maxWidth: "100%",
+	flex: 1,
+	minWidth: 0,
 };
 
 const tableIconButton = {
@@ -2938,6 +2962,173 @@ const wrap = {
 
 	boxShadow:
 		"0 18px 46px rgba(2,6,23,.22)",
+};
+
+const dispatchResizableHeaderCellSx = {
+	...dispatchHeaderCellSx,
+	position: "relative",
+	overflow: "visible",
+	pr: 2.1,
+
+	"&:hover .dispatch-column-resize-handle": {
+		opacity: 1,
+	},
+};
+
+const dispatchColumnResizeHandleSx = {
+	position: "absolute",
+	top: 0,
+	right: -4,
+	width: 9,
+	height: "100%",
+	zIndex: 60,
+	cursor: "col-resize",
+	touchAction: "none",
+	opacity: 0,
+	transition: "opacity .14s ease, background .14s ease",
+	background:
+		"linear-gradient(90deg,transparent,rgba(96,165,250,.58),transparent)",
+
+	"&::after": {
+		content: '""',
+		position: "absolute",
+		top: "20%",
+		bottom: "20%",
+		left: "4px",
+		width: "1px",
+		borderRadius: 999,
+		background: "#60a5fa",
+		boxShadow: "0 0 10px rgba(96,165,250,.72)",
+	},
+
+	"&:hover": {
+		opacity: 1,
+		background:
+			"linear-gradient(90deg,transparent,rgba(96,165,250,.92),transparent)",
+	},
+};
+
+const dispatchItemDrawerPaperSx = {
+	width: "min(760px, 96vw)",
+	maxWidth: "96vw",
+	color: "#fff",
+	background:
+		"radial-gradient(circle at top right,rgba(59,130,246,.16),transparent 34%),linear-gradient(180deg,#08111f,#0f172a 46%,#111827)",
+	borderLeft: "1px solid rgba(96,165,250,.18)",
+	boxShadow: "-28px 0 80px rgba(2,6,23,.58)",
+};
+
+const dispatchItemDrawerHeaderSx = {
+	position: "sticky",
+	top: 0,
+	zIndex: 4,
+	px: 2.5,
+	py: 2,
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 2,
+	background:
+		"linear-gradient(180deg,rgba(8,17,31,.99),rgba(15,23,42,.96))",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
+	backdropFilter: "blur(18px)",
+};
+
+const dispatchItemDrawerBodySx = {
+	p: 2.25,
+	overflowY: "auto",
+	...premiumScrollbarSx("#60a5fa"),
+};
+
+const dispatchItemDrawerHeroSx = {
+	mb: 1.5,
+	p: 1.55,
+	borderRadius: "18px",
+	background:
+		"linear-gradient(135deg,rgba(37,99,235,.15),rgba(255,255,255,.025))",
+	border: "1px solid rgba(96,165,250,.18)",
+	boxShadow: "0 14px 32px rgba(2,6,23,.22)",
+};
+
+const dispatchItemDrawerSectionSx = {
+	mb: 1.4,
+	p: 1.45,
+	borderRadius: "17px",
+	background: "rgba(255,255,255,.026)",
+	border: "1px solid rgba(255,255,255,.065)",
+};
+
+const dispatchItemDrawerSectionTitleSx = {
+	mb: 1,
+	color: "#93c5fd",
+	fontSize: 10,
+	fontWeight: 950,
+	letterSpacing: ".11em",
+	textTransform: "uppercase",
+};
+
+const dispatchItemDrawerGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		sm: "repeat(2,minmax(0,1fr))",
+	},
+	gap: 0.85,
+};
+
+const dispatchItemDrawerFieldSx = {
+	minWidth: 0,
+	p: 1.05,
+	borderRadius: "12px",
+	background: "rgba(2,6,23,.28)",
+	border: "1px solid rgba(255,255,255,.055)",
+};
+
+const dispatchItemDrawerFieldLabelSx = {
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 950,
+	letterSpacing: ".07em",
+	textTransform: "uppercase",
+};
+
+const dispatchItemDrawerFieldValueSx = {
+	mt: 0.4,
+	color: "#f8fafc",
+	fontSize: 11.5,
+	fontWeight: 850,
+	lineHeight: 1.42,
+	wordBreak: "break-word",
+};
+
+const dispatchItemDrawerActionPanelSx = {
+	p: 1.35,
+	borderRadius: "15px",
+	background:
+		"linear-gradient(135deg,rgba(16,185,129,.08),rgba(255,255,255,.025))",
+	border: "1px solid rgba(16,185,129,.14)",
+
+	"& .MuiButton-root": {
+		minHeight: 34,
+	},
+};
+
+const dispatchDrawerQuickActionSx = {
+	height: 34,
+	px: 1.35,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontSize: 10.5,
+	fontWeight: 900,
+	color: "#dbeafe",
+	background: "rgba(59,130,246,.10)",
+	border: "1px solid rgba(96,165,250,.20)",
+
+	"&:hover": {
+		color: "#fff",
+		background: "rgba(59,130,246,.20)",
+		borderColor: "rgba(96,165,250,.38)",
+	},
 };
 
 const pdfPreviewOverlaySx = {
@@ -5592,6 +5783,24 @@ export default function DispatchedItemsPage() {
 	const [bulkStatusModal, setBulkStatusModal] = useState(false);
 	const [pageNo, setPageNo] = useState(1);
 	const [pageSize, setPageSize] = useState(25);
+
+	const [
+		dispatchColumnWidths,
+		setDispatchColumnWidths,
+	] = useState(() =>
+		DISPATCH_COLUMN_LAYOUT.map(
+			(column) => column.width
+		)
+	);
+
+	const dispatchColumnResizeRef =
+		useRef(null);
+
+	const [
+		dispatchItemDrawerRow,
+		setDispatchItemDrawerRow,
+	] = useState(null);
+
 	const scannerInputRef = useRef(null);
 	const scanTimerRef = useRef(null);
 	const dispatchFetchRequestRef = useRef(0);
@@ -6313,6 +6522,283 @@ export default function DispatchedItemsPage() {
 			pageSize,
 		]);
 
+	const dispatchGridTemplate =
+		useMemo(
+			() =>
+				dispatchColumnWidths
+					.map(
+						(width) =>
+							`${Math.round(width)}px`
+					)
+					.join(" "),
+			[
+				dispatchColumnWidths,
+			]
+		);
+
+	const dispatchTableWidth =
+		useMemo(
+			() =>
+				dispatchColumnWidths.reduce(
+					(total, width) =>
+						total +
+						Number(width || 0),
+					0
+				),
+			[
+				dispatchColumnWidths,
+			]
+		);
+
+	const stopDispatchColumnResize =
+		() => {
+			const active =
+				dispatchColumnResizeRef.current;
+
+			if (!active) {
+				return;
+			}
+
+			window.removeEventListener(
+				"pointermove",
+				active.onMove
+			);
+
+			window.removeEventListener(
+				"pointerup",
+				active.onUp
+			);
+
+			window.removeEventListener(
+				"pointercancel",
+				active.onUp
+			);
+
+			dispatchColumnResizeRef.current =
+				null;
+
+			document.body.style.cursor =
+				"";
+
+			document.body.style.userSelect =
+				"";
+		};
+
+	const beginDispatchColumnResize =
+		(event, columnIndex) => {
+			event.preventDefault();
+			event.stopPropagation();
+
+			stopDispatchColumnResize();
+
+			const config =
+				DISPATCH_COLUMN_LAYOUT[
+				columnIndex
+				];
+
+			if (!config) {
+				return;
+			}
+
+			const startX =
+				event.clientX;
+
+			const startWidth =
+				dispatchColumnWidths[
+				columnIndex
+				] ??
+				config.width;
+
+			const onMove =
+				(moveEvent) => {
+					moveEvent.preventDefault();
+
+					const nextWidth =
+						Math.max(
+							config.min,
+							Math.min(
+								config.max,
+								startWidth +
+								(moveEvent.clientX -
+									startX)
+							)
+						);
+
+					setDispatchColumnWidths(
+						(previous) => {
+							if (
+								previous[
+								columnIndex
+								] ===
+								nextWidth
+							) {
+								return previous;
+							}
+
+							const next =
+								[
+									...previous,
+								];
+
+							next[
+								columnIndex
+							] =
+								nextWidth;
+
+							return next;
+						}
+					);
+				};
+
+			const onUp =
+				() => {
+					stopDispatchColumnResize();
+				};
+
+			dispatchColumnResizeRef.current =
+			{
+				onMove,
+				onUp,
+			};
+
+			document.body.style.cursor =
+				"col-resize";
+
+			document.body.style.userSelect =
+				"none";
+
+			window.addEventListener(
+				"pointermove",
+				onMove,
+				{
+					passive: false,
+				}
+			);
+
+			window.addEventListener(
+				"pointerup",
+				onUp
+			);
+
+			window.addEventListener(
+				"pointercancel",
+				onUp
+			);
+		};
+
+	const resetDispatchColumnWidth =
+		(columnIndex) => {
+			const config =
+				DISPATCH_COLUMN_LAYOUT[
+				columnIndex
+				];
+
+			if (!config) {
+				return;
+			}
+
+			setDispatchColumnWidths(
+				(previous) => {
+					const next =
+						[
+							...previous,
+						];
+
+					next[
+						columnIndex
+					] =
+						config.width;
+
+					return next;
+				}
+			);
+		};
+
+	const renderDispatchResizeHandle =
+		(columnIndex) => (
+			<Box
+				className="dispatch-column-resize-handle"
+				data-dispatch-no-row-open="true"
+				title="Drag to resize • Double-click to reset"
+				onPointerDown={(event) =>
+					beginDispatchColumnResize(
+						event,
+						columnIndex
+					)
+				}
+				onDoubleClick={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+
+					resetDispatchColumnWidth(
+						columnIndex
+					);
+				}}
+				sx={dispatchColumnResizeHandleSx}
+			/>
+		);
+
+	const isDispatchRowInteractiveTarget =
+		(target) => {
+			if (
+				!target ||
+				typeof target.closest !==
+				"function"
+			) {
+				return false;
+			}
+
+			return Boolean(
+				target.closest(
+					[
+						"button",
+						"a",
+						"input",
+						"select",
+						"textarea",
+						"[role='button']",
+						"[role='checkbox']",
+						"[role='menuitem']",
+						".MuiButtonBase-root",
+						".MuiChip-clickable",
+						"[data-dispatch-no-row-open='true']",
+					].join(",")
+				)
+			);
+		};
+
+	const openDispatchItemDrawer =
+		(row) => {
+			if (!row) {
+				return;
+			}
+
+			setDispatchItemDrawerRow(
+				row
+			);
+		};
+
+	const handleDispatchRowClick =
+		(event, row) => {
+			if (
+				isDispatchRowInteractiveTarget(
+					event.target
+				)
+			) {
+				return;
+			}
+
+			openDispatchItemDrawer(
+				row
+			);
+		};
+
+	useEffect(() => {
+		return () => {
+			stopDispatchColumnResize();
+		};
+	}, []);
+
 	useEffect(() => {
 		return () => {
 			dispatchFetchAbortRef.current?.abort();
@@ -6322,6 +6808,55 @@ export default function DispatchedItemsPage() {
 	useEffect(() => {
 		setPageNo(1);
 	}, [pageSize]);
+
+	useEffect(() => {
+		if (!dispatchItemDrawerRow) {
+			return;
+		}
+
+		const currentId =
+			String(
+				dispatchItemDrawerRow
+					?.zohoItemId ||
+				dispatchItemDrawerRow
+					?.dispatchedItemId ||
+				dispatchItemDrawerRow
+					?.packetItemId ||
+				dispatchItemDrawerRow
+					?.id ||
+				""
+			).trim();
+
+		if (!currentId) {
+			return;
+		}
+
+		const refreshedRow =
+			(rows || []).find(
+				(row) =>
+					String(
+						row?.zohoItemId ||
+						row?.dispatchedItemId ||
+						row?.packetItemId ||
+						row?.id ||
+						""
+					).trim() ===
+					currentId
+			);
+
+		if (
+			refreshedRow &&
+			refreshedRow !==
+			dispatchItemDrawerRow
+		) {
+			setDispatchItemDrawerRow(
+				refreshedRow
+			);
+		}
+	}, [
+		rows,
+		dispatchItemDrawerRow,
+	]);
 
 	useEffect(() => {
 		setPageNo(1);
@@ -12531,6 +13066,133 @@ export default function DispatchedItemsPage() {
 		},
 	];
 
+	const getDispatchDrawerPacketNumber =
+		(row) => {
+			const direct =
+				String(
+					row?.packetNumber ||
+					row?.packetNo ||
+					row?.pktNo ||
+					row?.packetCode ||
+					""
+				).trim();
+
+			if (direct) {
+				return direct;
+			}
+
+			const parsed =
+				getAdminEditPacketNumber(
+					row
+				);
+
+			return parsed
+				? `Pkt-${parsed}`
+				: "—";
+		};
+
+	const buildDispatchItemDrawerSections =
+		(row) => {
+			if (!row) {
+				return [];
+			}
+
+			const dateValue =
+				(value) =>
+					formatDispatchTableDateTime(
+						value
+					);
+
+			const textValue =
+				(...values) => {
+					for (
+						const value of values
+					) {
+						if (
+							value !== null &&
+							value !== undefined &&
+							String(value).trim() !==
+							""
+						) {
+							return String(
+								value
+							);
+						}
+					}
+
+					return "—";
+				};
+
+			return [
+				{
+					title: "Item & Packet",
+					fields: [
+						{ label: "Item Name", value: textValue(row?.name, row?.itemName) },
+						{ label: "Packet No.", value: getDispatchDrawerPacketNumber(row) },
+						{ label: "SKU", value: textValue(row?.sku) },
+						{ label: "Type", value: resolveDispatchItemType(row) },
+						{ label: "PD No.", value: textValue(row?.pdNo) },
+						{ label: "Drawing No.", value: textValue(row?.drawingNo) },
+						{ label: "Floor", value: textValue(row?.floor) },
+						{ label: "Quantity", value: textValue(row?.quantity, row?.qty) },
+					],
+				},
+				{
+					title: "Client",
+					fields: [
+						{ label: "Client Name", value: textValue(row?.clientName) },
+						{ label: "Client Address", value: textValue(row?.clientAddress, row?.address), full: true },
+					],
+				},
+				{
+					title: "Plant & Location",
+					fields: [
+						{ label: "Plant", value: textValue(row?.plantCode) },
+						{ label: "Current Location", value: textValue(row?.currentLocationCode, row?.location) },
+						{ label: "Packed Area", value: textValue(row?.packedAreaCode) },
+						{ label: "FG Area", value: textValue(row?.fgAreaCode) },
+						{ label: "FG Zone", value: textValue(row?.fgZoneCode, row?.fgZone) },
+						{ label: "Warehouse", value: textValue(row?.warehouseCode) },
+						{ label: "Gate Pass", value: textValue(row?.gatePassNumber, row?.gatePass) },
+					],
+				},
+				{
+					title: "Dispatch",
+					fields: [
+						{ label: "Status", value: getDisplayStatus(row)?.label || textValue(row?.status) },
+						{ label: "Approval Status", value: textValue(row?.approvalStatus) },
+						{ label: "Challan No.", value: textValue(getDispatchChallanNo(row)) },
+						{ label: "Driver", value: textValue(row?.driverName, row?.assignedDriverName) },
+						{ label: "Vehicle", value: textValue(row?.vehicleNumber, row?.vehicleNo) },
+						{ label: "Helpers / Loaders", value: textValue(row?.helperLoaderCount, row?.helpersCount) },
+						{ label: "Packing Date / Time", value: dateValue(row?.packedAt || row?.packingDate || row?.packedDate) },
+						{ label: "Dispatch Date / Time", value: dateValue(row?.dispatchedAt || row?.dispatchDate) },
+						{ label: "Trip Started", value: dateValue(row?.tripStartedAt) },
+						{ label: "Trip Ended", value: dateValue(row?.tripEndedAt) },
+						{ label: "Delivered", value: dateValue(row?.deliveredAt) },
+					],
+				},
+				{
+					title: "Packet Details",
+					fields: [
+						{ label: "Description", value: textValue(row?.description), full: true },
+						{ label: "Dimensions", value: textValue(row?.dimensions) },
+						{ label: "Weight", value: textValue(row?.weight) },
+						{ label: "Remarks", value: textValue(row?.remarks), full: true },
+					],
+				},
+				{
+					title: "System References",
+					fields: [
+						{ label: "Dispatch Item ID", value: textValue(row?.zohoItemId, row?.dispatchedItemId, row?.id) },
+						{ label: "Packet Item ID", value: textValue(row?.packetItemId) },
+						{ label: "Created", value: dateValue(row?.createdAt) },
+						{ label: "Updated", value: dateValue(row?.updatedAt) },
+					],
+				},
+			];
+		};
+
 
 	useEffect(() => {
 		if (
@@ -18731,29 +19393,80 @@ export default function DispatchedItemsPage() {
 					<Box sx={tableWrapper}>
 						<Box
 							sx={{
-								width: "max-content",
+								width: `${dispatchTableWidth}px`,
 								minWidth: "100%",
 							}}
 						>
 
-							<Box sx={tableHeader}>
-								<Box sx={dispatchSelectCellSx(false, true)}>
+							<Box
+								sx={{
+									...tableHeader,
+									gridTemplateColumns:
+										dispatchGridTemplate,
+									minWidth:
+										dispatchTableWidth,
+								}}
+							>
+								<Box
+									sx={{
+										...dispatchSelectCellSx(
+											false,
+											true
+										),
+										"&:hover .dispatch-column-resize-handle":
+										{
+											opacity: 1,
+										},
+									}}
+								>
 									{columns[0].renderHeader()}
+									{renderDispatchResizeHandle(0)}
 								</Box>
 
-								<Box sx={dispatchHeaderCellSx}>Item Name</Box>
-								<Box sx={dispatchHeaderCellSx}>SKU</Box>
-								<Box sx={dispatchHeaderCellSx}>PD No</Box>
-								<Box sx={dispatchHeaderCellSx}>DWG No</Box>
-								<Box sx={dispatchHeaderCellSx}>Description</Box>
-								<Box sx={dispatchHeaderCellSx}>Client</Box>
-								<Box sx={dispatchHeaderCellSx}>Plant</Box>
-								<Box sx={dispatchHeaderCellSx}>Location</Box>
-								<Box sx={dispatchHeaderCellSx}>Date / Time</Box>
-								<Box sx={dispatchHeaderCellSx}>Status</Box>
+								{DISPATCH_COLUMN_LAYOUT
+									.slice(1, 11)
+									.map((column, index) => {
+										const columnIndex =
+											index + 1;
 
-								<Box sx={dispatchActionCellSx(false, true)}>
+										return (
+											<Box
+												key={column.key}
+												sx={dispatchResizableHeaderCellSx}
+											>
+												<Box
+													component="span"
+													sx={{
+														minWidth: 0,
+														overflow: "hidden",
+														textOverflow: "ellipsis",
+													}}
+												>
+													{column.label}
+												</Box>
+
+												{renderDispatchResizeHandle(
+													columnIndex
+												)}
+											</Box>
+										);
+									})}
+
+								<Box
+									sx={{
+										...dispatchActionCellSx(
+											false,
+											true
+										),
+										pr: 2.1,
+										"&:hover .dispatch-column-resize-handle":
+										{
+											opacity: 1,
+										},
+									}}
+								>
 									Actions
+									{renderDispatchResizeHandle(11)}
 								</Box>
 							</Box>
 
@@ -18762,10 +19475,28 @@ export default function DispatchedItemsPage() {
 								{paginatedRows.map((row) => (
 
 									<Box
-										key={row.zohoItemId}
-										sx={dispatchTableRowSx(
-											isHardwareDispatchRow(row)
-										)}
+										key={
+											row.zohoItemId ||
+											row.dispatchedItemId ||
+											row.packetItemId ||
+											row.id
+										}
+										onClick={(event) =>
+											handleDispatchRowClick(
+												event,
+												row
+											)
+										}
+										sx={{
+											...dispatchTableRowSx(
+												isHardwareDispatchRow(row)
+											),
+											gridTemplateColumns:
+												dispatchGridTemplate,
+											minWidth:
+												dispatchTableWidth,
+											cursor: "pointer",
+										}}
 									>
 
 										<Box
@@ -25858,6 +26589,222 @@ export default function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				<Drawer
+					anchor="right"
+					open={Boolean(dispatchItemDrawerRow)}
+					onClose={() => setDispatchItemDrawerRow(null)}
+					PaperProps={{
+						sx: dispatchItemDrawerPaperSx,
+					}}
+					ModalProps={{
+						keepMounted: true,
+					}}
+				>
+					{dispatchItemDrawerRow && (
+						<>
+							<Box sx={dispatchItemDrawerHeaderSx}>
+								<Box sx={{ minWidth: 0, flex: 1 }}>
+									<Box
+										sx={{
+											display: "flex",
+											alignItems: "center",
+											gap: 0.8,
+											flexWrap: "wrap",
+										}}
+									>
+										<Box
+											component="span"
+											sx={{
+												color: "#93c5fd",
+												fontSize: 10,
+												fontWeight: 950,
+												letterSpacing: ".11em",
+												textTransform: "uppercase",
+											}}
+										>
+											Dispatch Item Details
+										</Box>
+
+										{isHardwareDispatchRow(
+											dispatchItemDrawerRow
+										) && (
+												<Chip
+													size="small"
+													label="🔩 HARDWARE"
+													sx={{
+														height: 21,
+														color: "#ddd6fe",
+														fontSize: 9,
+														fontWeight: 950,
+														background: "rgba(139,92,246,.18)",
+														border: "1px solid rgba(167,139,250,.28)",
+													}}
+												/>
+											)}
+									</Box>
+
+									<Box
+										sx={{
+											mt: 0.55,
+											color: "#fff",
+											fontSize: 20,
+											fontWeight: 950,
+											lineHeight: 1.15,
+											wordBreak: "break-word",
+										}}
+									>
+										{dispatchItemDrawerRow?.name ||
+											dispatchItemDrawerRow?.itemName ||
+											"Dispatch Item"}
+									</Box>
+
+									<Box
+										sx={{
+											mt: 0.65,
+											display: "flex",
+											alignItems: "center",
+											gap: 0.8,
+											flexWrap: "wrap",
+										}}
+									>
+										<Chip
+											size="small"
+											label={
+												getDisplayStatus(
+													dispatchItemDrawerRow
+												)?.label || "—"
+											}
+											sx={
+												getDisplayStatus(
+													dispatchItemDrawerRow
+												)?.sx || pendingStatusChip
+											}
+										/>
+
+										<Box
+											component="span"
+											sx={{
+												color: "#94a3b8",
+												fontSize: 11,
+												fontWeight: 800,
+											}}
+										>
+											{getDispatchDrawerPacketNumber(
+												dispatchItemDrawerRow
+											)}
+											{" • "}
+											{dispatchItemDrawerRow?.pdNo || "PD —"}
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									aria-label="Close item details"
+									onClick={() => setDispatchItemDrawerRow(null)}
+									sx={modalCloseButtonSx}
+								>
+									<Box
+										component="span"
+										sx={{ fontSize: 22, lineHeight: 1 }}
+									>
+										×
+									</Box>
+								</IconButton>
+							</Box>
+
+							<Box sx={dispatchItemDrawerBodySx}>
+								<Box sx={dispatchItemDrawerHeroSx}>
+									<Box sx={dispatchItemDrawerSectionTitleSx}>
+										Quick History
+									</Box>
+
+									<Box
+										sx={{
+											display: "flex",
+											gap: 0.8,
+											flexWrap: "wrap",
+										}}
+									>
+										<Button
+											onClick={() =>
+												openStickerHistory(
+													dispatchItemDrawerRow
+												)
+											}
+											sx={dispatchDrawerQuickActionSx}
+										>
+											Sticker History
+										</Button>
+
+										<Button
+											disabled={!dispatchItemDrawerRow?.zohoItemId}
+											onClick={() => {
+												if (dispatchItemDrawerRow?.zohoItemId) {
+													openAuditLogs(
+														dispatchItemDrawerRow.zohoItemId
+													);
+												}
+											}}
+											sx={dispatchDrawerQuickActionSx}
+										>
+											Activity Logs
+										</Button>
+									</Box>
+								</Box>
+
+								{buildDispatchItemDrawerSections(
+									dispatchItemDrawerRow
+								).map((section) => (
+									<Box
+										key={section.title}
+										sx={dispatchItemDrawerSectionSx}
+									>
+										<Box sx={dispatchItemDrawerSectionTitleSx}>
+											{section.title}
+										</Box>
+
+										<Box sx={dispatchItemDrawerGridSx}>
+											{section.fields.map((field) => (
+												<Box
+													key={field.label}
+													sx={{
+														...dispatchItemDrawerFieldSx,
+														gridColumn: field.full
+															? "1 / -1"
+															: "auto",
+													}}
+												>
+													<Box sx={dispatchItemDrawerFieldLabelSx}>
+														{field.label}
+													</Box>
+													<Box
+														sx={dispatchItemDrawerFieldValueSx}
+														title={String(field.value || "")}
+													>
+														{field.value || "—"}
+													</Box>
+												</Box>
+											))}
+										</Box>
+									</Box>
+								))}
+
+								<Box sx={dispatchItemDrawerSectionSx}>
+									<Box sx={dispatchItemDrawerSectionTitleSx}>
+										Available Actions
+									</Box>
+
+									<Box sx={dispatchItemDrawerActionPanelSx}>
+										{columns[11].renderCell({
+											row: dispatchItemDrawerRow,
+										})}
+									</Box>
+								</Box>
+							</Box>
+						</>
+					)}
+				</Drawer>
+
 				<Suspense fallback={null}>
 					<MasterItemsModal
 						open={masterItemsModalOpen}
