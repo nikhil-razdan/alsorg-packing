@@ -9,7 +9,7 @@ import {
   fetchDashboardActivity,
   fetchDailyThroughputUsers,
   fetchDashboardTrace,
-} from "../dashboard/api/dashboardApi"
+} from "../dashboard/api/dashboardApi";
 
 import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 import InventorySidebar from
