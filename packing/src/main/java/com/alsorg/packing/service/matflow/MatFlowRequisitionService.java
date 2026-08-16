@@ -23,10 +23,9 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreForwar
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAvailabilityResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineReviewRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreSourceAllocationRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreStockOptionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.TransferResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.RouteStepType;
+import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.StoreAvailabilityDecision;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreApprovedRouteStepResponse;
 import com.alsorg.packing.domain.matflow.MatFlowBom;
 import com.alsorg.packing.domain.matflow.MatFlowBomLine;
@@ -82,7 +81,6 @@ import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -104,14 +102,11 @@ public class MatFlowRequisitionService {
         private static final int LINE_NUMBER_INCREMENT = 10;
 
         /**
-         * Store planning may reserve only stock that is physically under Store custody.
-         *
-         * Store decides whether the newly allocated lot needs QC.
-         * Production/QC/Processing
-         * balances are execution stock and must never be reused as fresh Store planning
-         * sources.
+         * Tally is the physical stock authority. MatFlow keeps only hidden
+         * MR-scoped custody balances required by QC/Processing/issue execution.
+         * These balances are not reusable Store stock and are never entered by Store
+         * users.
          */
-        private static final Set<LocationType> PLANNING_SOURCE_TYPES = EnumSet.of(LocationType.STORE);
 
         private final MatFlowMaterialRequisitionRepository requisitionRepository;
         private final MatFlowRequisitionLineRepository requisitionLineRepository;
@@ -304,6 +299,12 @@ public class MatFlowRequisitionService {
          * =====================================================
          */
 
+        /**
+         * Creates one Production MR from one or more approved BOM lines. The request
+         * may contain a single material, any selected subset, or the full remaining
+         * BOM. Cumulative quantity protection below prevents separate MRs from
+         * requisitioning more than the approved BOM quantity for the same BOM line.
+         */
         @Transactional
         public RequisitionResponse createRequisition(
                         RequisitionCreateRequest request) {
@@ -1069,6 +1070,7 @@ public class MatFlowRequisitionService {
                 plantRoutingService.requireMainStorePlanningActor();
                 MatFlowMaterialRequisition requisition = requireRequisitionForMainStore(requisitionId);
                 requireAtMainStore(requisition);
+
                 MatFlowLocation mainStore = requisition.mainStore == null
                                 ? plantRoutingService.requireMainStore()
                                 : requisition.mainStore;
@@ -1090,33 +1092,10 @@ public class MatFlowRequisitionService {
                                         .map(this::toStoreApprovedRouteStepResponse)
                                         .toList();
 
-                        List<MatFlowStockBalance> balances = stockRepository.findPlanningCandidates(
-                                        line.material.getId(),
-                                        Set.of(MatFlowPlantRoutingService.MAIN_STORE_PLANT),
-                                        PLANNING_SOURCE_TYPES);
-
-                        List<StoreStockOptionResponse> stockOptions = balances == null ? List.of()
-                                        : balances.stream()
-                                                        .filter(balance -> balance != null && balance.location != null)
-                                                        .filter(balance -> mainStore.getId()
-                                                                        .equals(balance.location.getId()))
-                                                        .map(balance -> new StoreStockOptionResponse(
-                                                                        balance.getId(),
-                                                                        line.material.getId(),
-                                                                        line.material.getMaterialCode(),
-                                                                        line.material.getMaterialName(),
-                                                                        balance.location.getId(),
-                                                                        balance.location.getLocationCode(),
-                                                                        balance.location.getLocationName(),
-                                                                        balance.location.getPlantCode(),
-                                                                        balance.location.getLocationType(),
-                                                                        zero(balance.onHandQty),
-                                                                        zero(balance.reservedQty),
-                                                                        zero(balance.blockedQty),
-                                                                        zero(balance.availableQty()),
-                                                                        false, false, true))
-                                                        .toList();
-
+                        /*
+                         * Deliberately do NOT expose on-hand/free-stock values here.
+                         * Store checks Tally and records FULL / PARTIAL / NOT AVAILABLE.
+                         */
                         return new StoreLineAvailabilityResponse(
                                         line.getId(), line.lineNo,
                                         line.material.getId(), line.material.getMaterialCode(),
@@ -1125,7 +1104,7 @@ public class MatFlowRequisitionService {
                                         zero(line.requestedQty), zero(line.reservedQty), zero(line.shortageQty),
                                         requisition.destinationLocation.getId(),
                                         requisition.destinationLocation.getLocationCode(),
-                                        approvedOptions, stockOptions);
+                                        approvedOptions);
                 }).toList();
         }
 
@@ -1134,6 +1113,70 @@ public class MatFlowRequisitionService {
          * INDENT AND LEDGER
          * =====================================================
          */
+
+        /**
+         * Creates/locks the hidden technical custody balance used only to execute
+         * an MR lot after Main Store has declared availability from Tally.
+         * This is NOT a MatFlow stock master and must never be offered as free stock
+         * to a later MR.
+         */
+        private MatFlowStockBalance lockOrCreateDeclaredCustodyBalance(
+                        MatFlowMaterial material,
+                        MatFlowLocation mainStore,
+                        String actor) {
+                MatFlowStockBalance balance = stockRepository
+                                .lockBalance(material.getId(), mainStore.getId())
+                                .orElse(null);
+
+                if (balance != null) {
+                        return balance;
+                }
+
+                MatFlowStockBalance created = new MatFlowStockBalance();
+                created.material = material;
+                created.location = mainStore;
+                created.onHandQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                created.reservedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                created.blockedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                created.inTransitQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                created.setCreatedBy(actor);
+                created.setUpdatedBy(actor);
+                return stockRepository.saveAndFlush(created);
+        }
+
+        private void saveStoreAvailabilityDeclarationLedger(
+                        MatFlowStockBalance balance,
+                        MatFlowMaterialRequisition requisition,
+                        MatFlowRequisitionLine line,
+                        StoreAvailabilityDecision decision,
+                        BigDecimal declaredAvailableQty,
+                        String actor) {
+                MatFlowStockLedger ledger = new MatFlowStockLedger();
+                ledger.material = balance.material;
+                ledger.location = balance.location;
+                ledger.movementType = MovementType.STORE_AVAILABILITY_DECLARED;
+                ledger.quantityChange = zero(declaredAvailableQty);
+                ledger.reservedChange = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                ledger.blockedChange = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                ledger.inTransitChange = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                ledger.onHandAfter = zero(balance.onHandQty);
+                ledger.reservedAfter = zero(balance.reservedQty);
+                ledger.blockedAfter = zero(balance.blockedQty);
+                ledger.inTransitAfter = zero(balance.inTransitQty);
+                ledger.referenceType = "MATFLOW_TALLY_AVAILABILITY";
+                ledger.referenceId = line.getId();
+                ledger.referenceNumber = requisition.requisitionNumber;
+                ledger.projectCode = requisition.projectDrawing == null
+                                ? null
+                                : requisition.projectDrawing.getProjectCode();
+                ledger.drawingNo = requisition.projectDrawing == null
+                                ? null
+                                : requisition.projectDrawing.getDrawingNo();
+                ledger.remarks = "Main Store Tally availability declaration: " + decision.name()
+                                + ". Internal custody lot only; not a physical stock balance.";
+                ledger.actor = actor;
+                ledgerRepository.save(ledger);
+        }
 
         private void saveReservationLedger(
                         MatFlowStockBalance balance,
@@ -2377,7 +2420,8 @@ public class MatFlowRequisitionService {
                 String demandPlant = plantRoutingService.normalizeFactoryPlant(
                                 requisition.destinationLocation.getPlantCode());
 
-                List<MatFlowRequisitionLine> lines = requisitionLineRepository.lockByRequisitionId(requisition.getId());
+                List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                                .lockByRequisitionId(requisition.getId());
                 Map<UUID, MatFlowRequisitionLine> lineById = lines.stream()
                                 .collect(java.util.stream.Collectors.toMap(
                                                 MatFlowRequisitionLine::getId, value -> value,
@@ -2414,69 +2458,88 @@ public class MatFlowRequisitionService {
                                                 + " is already fully allocated to this MR");
                         }
 
-                        List<MatFlowBomRouteStep> processingOptions = routingService.routeForLine(line.bomLine.getId());
-                        processingOptions = processingOptions == null ? List.of() : processingOptions;
-                        validateRoute(processingOptions);
-                        MatFlowBomRouteStep selectedProcessingStep = validateStoreRouteConfirmation(
-                                        lineReview, processingOptions, line.material);
+                        StoreAvailabilityDecision decision = lineReview.availabilityDecision();
+                        if (decision == null) {
+                                throw badRequest("Choose Fully Available, Partially Available or Not Available for "
+                                                + line.material.getMaterialCode());
+                        }
 
-                        MatFlowLocation firstDestination = selectedProcessingStep == null
-                                        ? (plantRoutingService.requiresOriginStoreHop(demandPlant)
-                                                        ? plantRoutingService.requireOriginStore(demandPlant)
-                                                        : requisition.destinationLocation)
-                                        : selectedProcessingStep.location;
-
-                        List<StoreSourceAllocationRequest> allocations = lineReview.allocations() == null
-                                        ? List.of()
-                                        : lineReview.allocations();
-                        Set<UUID> usedSources = new LinkedHashSet<>();
-                        BigDecimal allocatedThisReview = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
-
-                        for (StoreSourceAllocationRequest allocation : allocations) {
-                                if (allocation == null || allocation.sourceLocationId() == null) {
-                                        throw badRequest("A Main Store allocation contains no source location");
+                        BigDecimal declaredAvailableQty;
+                        switch (decision) {
+                                case FULLY_AVAILABLE -> {
+                                        if (lineReview.availableQty() != null) {
+                                                throw badRequest("Do not enter quantity for Fully Available material "
+                                                                + line.material.getMaterialCode());
+                                        }
+                                        declaredAvailableQty = remainingDemand;
                                 }
-                                if (!usedSources.add(allocation.sourceLocationId())) {
-                                        throw badRequest(
-                                                        "The same Main Store source cannot be selected twice for one material line");
+                                case NOT_AVAILABLE -> {
+                                        if (lineReview.availableQty() != null) {
+                                                throw badRequest("Do not enter quantity for Not Available material "
+                                                                + line.material.getMaterialCode());
+                                        }
+                                        declaredAvailableQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
                                 }
-                                BigDecimal qty = positive(allocation.reserveQty(), "Reserve quantity");
-                                if (allocatedThisReview.add(qty).compareTo(remainingDemand) > 0) {
-                                        throw badRequest("Store allocation exceeds remaining MR demand for "
-                                                        + line.material.getMaterialCode());
+                                case PARTIALLY_AVAILABLE -> {
+                                        BigDecimal partialQty = positive(lineReview.availableQty(),
+                                                        "Partial available quantity");
+                                        if (partialQty.compareTo(remainingDemand) >= 0) {
+                                                throw badRequest("Partial available quantity for "
+                                                                + line.material.getMaterialCode()
+                                                                + " must be less than remaining requirement "
+                                                                + remainingDemand);
+                                        }
+                                        declaredAvailableQty = partialQty;
                                 }
+                                default -> throw badRequest("Unsupported Store availability decision");
+                        }
 
-                                MatFlowLocation source = locationRepository.findById(allocation.sourceLocationId())
-                                                .orElseThrow(() -> notFound("Store source location not found"));
-                                plantRoutingService.assertMainStoreLocation(source, "MR stock reservation");
-                                if (!mainStore.getId().equals(source.getId())) {
-                                        throw badRequest(
-                                                        "MR stock may be reserved only from the configured AL-P1 Main Store");
-                                }
+                        boolean hasAvailableLot = declaredAvailableQty.compareTo(BigDecimal.ZERO) > 0;
+                        MatFlowBomRouteStep selectedProcessingStep = null;
+                        MatFlowLocation firstDestination = null;
 
-                                MatFlowStockBalance balance = stockRepository
-                                                .lockBalance(line.material.getId(), source.getId())
-                                                .orElseThrow(() -> conflict("No stock balance exists for "
-                                                                + line.material.getMaterialCode() + " at "
-                                                                + source.getLocationCode()));
-                                BigDecimal available = zero(balance.availableQty());
-                                if (available.compareTo(qty) < 0) {
-                                        throw conflict("Available Main Store stock is " + available
-                                                        + ", requested reserve is " + qty);
-                                }
+                        if (hasAvailableLot) {
+                                List<MatFlowBomRouteStep> processingOptions = routingService
+                                                .routeForLine(line.bomLine.getId());
+                                processingOptions = processingOptions == null ? List.of() : processingOptions;
+                                validateRoute(processingOptions);
+                                selectedProcessingStep = validateStoreRouteConfirmation(
+                                                lineReview, processingOptions, line.material);
 
-                                balance.reservedQty = zero(balance.reservedQty).add(qty)
+                                firstDestination = selectedProcessingStep == null
+                                                ? (plantRoutingService.requiresOriginStoreHop(demandPlant)
+                                                                ? plantRoutingService.requireOriginStore(demandPlant)
+                                                                : requisition.destinationLocation)
+                                                : selectedProcessingStep.location;
+
+                                MatFlowStockBalance balance = lockOrCreateDeclaredCustodyBalance(
+                                                line.material, mainStore, actor);
+
+                                /*
+                                 * Internal execution custody only. This quantity came from Store's
+                                 * Tally declaration; MatFlow never checks/reuses it as free stock.
+                                 */
+                                balance.onHandQty = zero(balance.onHandQty)
+                                                .add(declaredAvailableQty)
                                                 .setScale(3, RoundingMode.HALF_UP);
                                 balance.setUpdatedBy(actor);
-                                balance = stockRepository.save(balance);
+                                balance = stockRepository.saveAndFlush(balance);
+                                saveStoreAvailabilityDeclarationLedger(
+                                                balance, requisition, line, decision, declaredAvailableQty, actor);
+
+                                balance.reservedQty = zero(balance.reservedQty)
+                                                .add(declaredAvailableQty)
+                                                .setScale(3, RoundingMode.HALF_UP);
+                                balance.setUpdatedBy(actor);
+                                balance = stockRepository.saveAndFlush(balance);
 
                                 MatFlowReservation reservation = new MatFlowReservation();
                                 reservation.requisitionLine = line;
                                 reservation.material = line.material;
-                                reservation.sourceLocation = source;
+                                reservation.sourceLocation = mainStore;
                                 reservation.firstDestinationLocation = firstDestination;
                                 reservation.demandPlantCode = demandPlant;
-                                reservation.reservedQty = qty;
+                                reservation.reservedQty = declaredAvailableQty;
                                 reservation.issuedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
                                 reservation.status = ReservationStatus.ACTIVE;
                                 reservation.routeSnapshotJson = routeSnapshot(
@@ -2487,27 +2550,27 @@ public class MatFlowRequisitionService {
                                 reservation.setUpdatedBy(actor);
                                 reservation = reservationRepository.saveAndFlush(reservation);
 
-                                saveReservationLedger(balance, requisition, reservation, qty, actor);
-                                createTransferChain(requisition, reservation, selectedProcessingStep, qty,
-                                                Boolean.TRUE.equals(lineReview.qcRequired()), actor);
+                                saveReservationLedger(balance, requisition, reservation, declaredAvailableQty, actor);
+                                createTransferChain(requisition, reservation, selectedProcessingStep,
+                                                declaredAvailableQty, Boolean.TRUE.equals(lineReview.qcRequired()),
+                                                actor);
                                 if (Boolean.TRUE.equals(lineReview.qcRequired())) {
-                                        createQcCheck(requisition, reservation, qty, actor);
+                                        createQcCheck(requisition, reservation, declaredAvailableQty, actor);
                                 }
-                                allocatedThisReview = allocatedThisReview.add(qty)
-                                                .setScale(3, RoundingMode.HALF_UP);
+                        } else {
+                                if (Boolean.TRUE.equals(lineReview.qcRequired())
+                                                || Boolean.TRUE.equals(lineReview.processingRequired())
+                                                || lineReview.processingRouteStepId() != null) {
+                                        throw badRequest(
+                                                        "QC/Processing cannot be selected when material is Not Available: "
+                                                                        + line.material.getMaterialCode());
+                                }
                         }
 
-                        BigDecimal newAllocatedTotal = alreadyAllocated.add(allocatedThisReview)
+                        BigDecimal newAllocatedTotal = alreadyAllocated.add(declaredAvailableQty)
                                         .min(requestedQty).setScale(3, RoundingMode.HALF_UP);
                         BigDecimal shortage = requestedQty.subtract(newAllocatedTotal)
                                         .max(BigDecimal.ZERO).setScale(3, RoundingMode.HALF_UP);
-
-                        if (shortage.compareTo(BigDecimal.ZERO) > 0
-                                        && !Boolean.TRUE.equals(lineReview.createIndentForShortage())) {
-                                throw badRequest("Material " + line.material.getMaterialCode()
-                                                + " still has shortage " + shortage
-                                                + ". Keep/create a linked Main Store PI for the shortage.");
-                        }
 
                         line.reservedQty = newAllocatedTotal;
                         line.shortageQty = shortage;
@@ -2517,10 +2580,27 @@ public class MatFlowRequisitionService {
                         requisitionLineRepository.save(line);
 
                         if (shortage.compareTo(BigDecimal.ZERO) > 0) {
-                                ensureLinkedIndentLine(requisition, line, shortage,
-                                                lineReview.indentDeliveryLocationId(), request.remarks(),
-                                                lineReview.remarks(), actor);
+                                /* Every shortage automatically becomes/updates the linked PI. */
+                                ensureLinkedIndentLine(
+                                                requisition, line, shortage, null,
+                                                request.remarks(), lineReview.remarks(), actor);
                         }
+
+                        auditService.record(
+                                        "REQUISITION_LINE", line.getId(), "MAIN_STORE_TALLY_AVAILABILITY_RECORDED",
+                                        MatFlowPlantRoutingService.MAIN_STORE_PLANT,
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getProjectCode(),
+                                        requisition.projectDrawing == null ? null
+                                                        : requisition.projectDrawing.getDrawingNo(),
+                                        auditService.details(
+                                                        "requisitionNumber", requisition.requisitionNumber,
+                                                        "materialCode", line.material.getMaterialCode(),
+                                                        "availabilityDecision", decision,
+                                                        "remainingDemandBeforeReview", remainingDemand,
+                                                        "declaredAvailableQty", declaredAvailableQty,
+                                                        "linkedPiShortageQty", shortage,
+                                                        "tallyIsStockAuthority", true));
                         reviewedLines++;
                 }
 
@@ -2549,6 +2629,7 @@ public class MatFlowRequisitionService {
                                                 "originPlant", demandPlant,
                                                 "mainStoreCode", mainStore.getLocationCode(),
                                                 "reviewedLines", reviewedLines,
+                                                "availabilitySource", "TALLY",
                                                 "status", refreshed.status));
 
                 return toPlanningResponse(refreshed);

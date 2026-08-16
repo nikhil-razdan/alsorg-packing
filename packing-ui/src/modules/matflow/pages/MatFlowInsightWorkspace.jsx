@@ -1122,7 +1122,7 @@ function OverviewPlantComparison({ rows }) {
                 <Box key={row.plantCode || row.plant || row.code} sx={{ p: .85, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, mb: .65 }}>
                         <Typography sx={{ ...mainTextSx, fontSize: 11.5 }}>{row.plantCode || row.plant || row.code || "Plant"}</Typography>
-                        <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{numeric(row.activeProjects)} active projects · {numeric(row.stockBalanceLines)} stock lines</Typography>
+                        <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{numeric(row.activeProjects)} active projects · {numeric(row.stockBalanceLines)} internal custody lines</Typography>
                     </Box>
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .45, alignItems: "end", minHeight: 66 }}>
                         {metrics.map(([key, label, tone]) => {
@@ -2488,7 +2488,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
     /*
      * The Material Tracker selector is intentionally demand-driven.  Do not use
-     * the Material Inventory master here: a material belongs in this selector
+     * the Material Catalogue here: a material belongs in this selector
      * only after it is actually referenced by a non-cancelled MR line that the
      * current user is allowed to read.  This also gives us the exact Project ->
      * Product relationship for each selectable material without inventing a
@@ -2895,7 +2895,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                         <SummaryCard label="Products" value={visibleKpis.productCount} />
                         <SummaryCard label="Live Lots" value={visibleKpis.liveLotCount} />
                         <SummaryCard label="Shortage Qty" value={formatQty(visibleKpis.shortageQty)} />
-                        <SummaryCard label="Available Stock (Plant)" value={formatQty(kpis.availableQty)} />
+                        <SummaryCard label="Store Declared / Allocated" value={formatQty(visibleKpis.reservedQty)} />
                         <SummaryCard label="Delayed Lots" value={visibleKpis.delayedLotCount} />
                     </Box>
 
@@ -2966,12 +2966,40 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
     );
 }
 
+const MATERIAL_USAGE_PERIODS = [
+    { value: "TODAY", label: "Today" },
+    { value: "WEEK", label: "Last 7 Days" },
+    { value: "MONTH", label: "Last 30 Days" },
+    { value: "YEAR", label: "Last 365 Days" },
+    { value: "ALL", label: "All Time" },
+];
+
+const localUsageDateTime = (date) => {
+    const pad = (value) => String(value).padStart(2, "0");
+    return [
+        date.getFullYear(), "-", pad(date.getMonth() + 1), "-", pad(date.getDate()),
+        "T", pad(date.getHours()), ":", pad(date.getMinutes()), ":", pad(date.getSeconds()),
+    ].join("");
+};
+
+const materialUsageRange = (period) => {
+    if (period === "ALL") return {};
+    const now = new Date();
+    const from = new Date(now);
+    if (period === "TODAY") from.setHours(0, 0, 0, 0);
+    else if (period === "WEEK") from.setDate(from.getDate() - 7);
+    else if (period === "MONTH") from.setDate(from.getDate() - 30);
+    else if (period === "YEAR") from.setDate(from.getDate() - 365);
+    return { from: localUsageDateTime(from), to: localUsageDateTime(now) };
+};
+
 export function MatFlowMaterialRegisterPage() {
     const { selectedPlantParam } = useMatFlow();
     const [data, setData] = useState({ rows: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [usagePeriod, setUsagePeriod] = useState("MONTH");
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -2980,6 +3008,7 @@ export function MatFlowMaterialRegisterPage() {
             setData((await matflowApi.materialRegister({
                 plantCode: selectedPlantParam,
                 search: clean(search) || undefined,
+                ...materialUsageRange(usagePeriod),
             }))?.data || { rows: [] });
         } catch (requestError) {
             setData({ rows: [] });
@@ -2987,71 +3016,79 @@ export function MatFlowMaterialRegisterPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedPlantParam, search]);
+    }, [selectedPlantParam, search, usagePeriod]);
 
     useEffect(() => { load(); }, [load]);
 
     const rows = Array.isArray(data?.rows) ? data.rows : [];
     const pagination = useMatFlowPagination(rows, 20);
 
-    const totals = useMemo(() => rows.reduce((sum, row) => ({
-        purchased: sum.purchased + numeric(row.purchasedQty),
-        issued: sum.issued + numeric(row.issuedQty),
-        consumed: sum.consumed + numeric(row.consumedQty),
-        waste: sum.waste + numeric(row.productionWastedQty) + numeric(row.processingWastedQty),
-        onHand: sum.onHand + numeric(row.onHandQty),
-    }), { purchased: 0, issued: 0, consumed: 0, waste: 0, onHand: 0 }), [rows]);
+    const totals = useMemo(() => rows.reduce((sum, row) => {
+        const waste = numeric(row.productionWastedQty) + numeric(row.processingWastedQty);
+        return {
+            purchased: sum.purchased + numeric(row.purchasedQty),
+            issued: sum.issued + numeric(row.issuedQty),
+            consumed: sum.consumed + numeric(row.consumedQty),
+            waste: sum.waste + waste,
+            used: sum.used + numeric(row.consumedQty) + waste,
+            returned: sum.returned + numeric(row.returnedQty),
+        };
+    }, { purchased: 0, issued: 0, consumed: 0, waste: 0, used: 0, returned: 0 }), [rows]);
 
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="DERIVED INVENTORY HELPER"
-                title="Material Register"
-                subtitle="Calculated from immutable stock ledger, balances and Processing records—purchased, issued, consumed, wasted, returned and current stock are never maintained in a duplicate register table."
+                badge="MATERIAL USAGE"
+                title="Material Usage Register"
+                subtitle="MatFlow reports actual material flow and usage by period. Physical Store balances, minimum stock and reorder controls remain exclusively in Tally."
                 actions={
                     <>
-                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Register", sheetName: "Material Register", title: "MatFlow Material Register", rows })} sx={secondaryBtnSx}>Export Excel</Button>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Usage", sheetName: "Material Usage", title: "MatFlow Material Usage Register", rows })} sx={secondaryBtnSx}>Export Excel</Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                     </>
                 }
             />
             <ErrorBox>{error}</ErrorBox>
 
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: 1 }}>
-                <SummaryCard label="Purchased" value={formatQty(totals.purchased)} />
-                <SummaryCard label="Issued to Production" value={formatQty(totals.issued)} />
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 1 }}>
+                <SummaryCard label="Total Used" value={formatQty(totals.used)} />
                 <SummaryCard label="Consumed" value={formatQty(totals.consumed)} />
-                <SummaryCard label="Total Waste" value={formatQty(totals.waste)} />
-                <SummaryCard label="On Hand" value={formatQty(totals.onHand)} />
+                <SummaryCard label="Process / Prod Waste" value={formatQty(totals.waste)} />
+                <SummaryCard label="Issued to Production" value={formatQty(totals.issued)} />
+                <SummaryCard label="Returned" value={formatQty(totals.returned)} />
+                <SummaryCard label="Purchased / Received" value={formatQty(totals.purchased)} />
             </Box>
 
-            <Card sx={panelSx}>
-                <TextField label="Search Material" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} />
+            <Card sx={{ ...panelSx, display: "flex", gap: 1.2, alignItems: "center", flexWrap: "wrap" }}>
+                <TextField label="Search Material" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320, flex: "1 1 320px" }} />
+                <TextField select label="Usage Period" value={usagePeriod} onChange={(e) => setUsagePeriod(e.target.value)} sx={{ ...fieldSx, minWidth: 190 }}>
+                    {MATERIAL_USAGE_PERIODS.map((period) => <MenuItem key={period.value} value={period.value}>{period.label}</MenuItem>)}
+                </TextField>
+                <Typography sx={subTextSx}>Used = consumed + Production wastage + Processing wastage for the selected period.</Typography>
             </Card>
 
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "210px 110px 110px 110px 110px 110px 110px 110px 110px 140px" }}>
-                            {["Material", "Purchased", "Issued", "Consumed", "Prod Waste", "Proc Waste", "Returned", "On Hand", "Available", "Last Movement"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 115px 110px 110px 110px 110px 110px 110px 145px" }}>
+                            {["Material", "Used", "Consumed", "Prod Waste", "Proc Waste", "Issued", "Returned", "Purchased", "Last Movement"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
-                            <Box key={row.materialId} sx={{ ...tableRowSx, gridTemplateColumns: "210px 110px 110px 110px 110px 110px 110px 110px 110px 140px" }}>
+                            <Box key={row.materialId} sx={{ ...tableRowSx, gridTemplateColumns: "220px 115px 110px 110px 110px 110px 110px 110px 145px" }}>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.materialCode} · {row.uom}</Typography></Box>
-                                <Box sx={tableCellSx}>{formatQty(row.purchasedQty)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.issuedQty)}</Box>
+                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(numeric(row.consumedQty) + numeric(row.productionWastedQty) + numeric(row.processingWastedQty))}</Typography></Box>
                                 <Box sx={tableCellSx}>{formatQty(row.consumedQty)}</Box>
                                 <Box sx={tableCellSx}>{formatQty(row.productionWastedQty)}</Box>
                                 <Box sx={tableCellSx}>{formatQty(row.processingWastedQty)}</Box>
+                                <Box sx={tableCellSx}>{formatQty(row.issuedQty)}</Box>
                                 <Box sx={tableCellSx}>{formatQty(row.returnedQty)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box>
+                                <Box sx={tableCellSx}>{formatQty(row.purchasedQty)}</Box>
                                 <Box sx={tableCellSx}>{formatDate(row.lastMovementAt)}</Box>
                             </Box>
                         ))}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Register" />}
+                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Usage" />}
             </Card>
         </Box>
     );
@@ -3079,7 +3116,7 @@ export function MatFlowLedgerPage() {
             }))?.data));
         } catch (requestError) {
             setData({ rows: [], page: 0, totalPages: 0, totalElements: 0 });
-            setError(readMatFlowError(requestError, "Unable to load Stock Ledger."));
+            setError(readMatFlowError(requestError, "Unable to load Material Movement Audit."));
         } finally {
             setLoading(false);
         }
@@ -3090,12 +3127,12 @@ export function MatFlowLedgerPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="IMMUTABLE STOCK HISTORY"
-                title="Stock Ledger"
-                subtitle="Physical stock, reservation, QC, issue, consumption, wastage and return movements with reference and actor traceability."
+                badge="IMMUTABLE MATERIAL HISTORY"
+                title="Material Movement Audit"
+                subtitle="Immutable MatFlow custody and usage events for audit/reference. This is not a physical stock balance; Tally remains the stock authority."
                 actions={
                     <>
-                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Stock_Ledger", sheetName: "Ledger", title: "MatFlow Stock Ledger", rows: data.rows || [] })} sx={secondaryBtnSx}>Export Page</Button>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Movement_Audit", sheetName: "Movements", title: "MatFlow Material Movement Audit", rows: data.rows || [] })} sx={secondaryBtnSx}>Export Page</Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                     </>
                 }
@@ -3112,16 +3149,15 @@ export function MatFlowLedgerPage() {
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "180px 170px 150px 150px 110px 130px 170px 140px" }}>
-                            {["Material", "Location", "Movement", "Qty Change", "On Hand", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
+                            {["Material", "Location", "Movement", "Qty Change", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {(data.rows || []).length === 0 ? <EmptyState /> : data.rows.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "180px 170px 150px 150px 110px 130px 170px 140px" }}>
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.materialCode}</Typography></Box>
                                 <Box sx={tableCellSx}>{row.locationCode} · {row.plantCode}</Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
                                 <Box sx={tableCellSx}>{formatQty(row.quantityChange)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.onHandAfter)}</Box>
                                 <Box sx={tableCellSx}>{row.referenceNumber || row.referenceType || "-"}</Box>
                                 <Box sx={tableCellSx}>{row.projectCode || "-"} · {row.drawingNo || "-"}</Box>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.actor || "-"}</Typography><Typography sx={subTextSx}>{formatDate(row.actionAt)}</Typography></Box>
@@ -3131,7 +3167,7 @@ export function MatFlowLedgerPage() {
                 )}
 
                 <Box sx={{ mt: 1.5, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Typography sx={subTextSx}>{data.totalElements || 0} ledger rows</Typography>
+                    <Typography sx={subTextSx}>{data.totalElements || 0} movement rows</Typography>
                     <Box sx={{ display: "flex", gap: 1 }}>
                         <Button disabled={page <= 0} onClick={() => setPage((value) => Math.max(0, value - 1))} sx={secondaryBtnSx}>Previous</Button>
                         <Button disabled={page + 1 >= (data.totalPages || 0)} onClick={() => setPage((value) => value + 1)} sx={secondaryBtnSx}>Next</Button>
@@ -3175,7 +3211,7 @@ export function MatFlowReportsPage() {
             <PageHero
                 badge="REPORTING"
                 title="Operational Reports"
-                subtitle="Shortage ageing and recent audit activity. Material stock roll-up lives in Material Register and physical movement detail lives in Stock Ledger."
+                subtitle="Shortage ageing and recent audit activity. Material usage roll-up lives in Material Usage Register; immutable MatFlow events live in Material Movement Audit. Physical stock remains in Tally."
                 actions={<Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>}
             />
             <ErrorBox>{error}</ErrorBox>

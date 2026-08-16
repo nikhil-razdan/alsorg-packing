@@ -39,6 +39,15 @@ public final class MatFlowPlanningTypes {
     }
 
     /**
+     * Store does not maintain physical stock quantities in MatFlow.
+     * AL-P1 Main Store checks Tally and records only this MR availability decision.
+     * Quantity input is required only for PARTIALLY_AVAILABLE.
+     */
+    public enum StoreAvailabilityDecision {
+        FULLY_AVAILABLE, PARTIALLY_AVAILABLE, NOT_AVAILABLE
+    }
+
+    /**
      * BOM route rows are now used only for approved PROCESSING options.
      * QC and PRODUCTION remain for historical-row compatibility.
      */
@@ -47,13 +56,16 @@ public final class MatFlowPlanningTypes {
     }
 
     public enum MovementType {
-        OPENING_BALANCE, ADJUSTMENT_IN, ADJUSTMENT_OUT, RESERVE, RELEASE_RESERVATION,
+        OPENING_BALANCE, ADJUSTMENT_IN, ADJUSTMENT_OUT, STORE_AVAILABILITY_DECLARED, RESERVE, RELEASE_RESERVATION,
         RECEIPT, TRANSFER_OUT, TRANSFER_RECEIPT_CLEAR, TRANSFER_IN,
         PROCESS_CONSUMPTION, PROCESS_OUTPUT, ISSUE_TO_PRODUCTION, RETURN_TO_STORE,
         QC_HOLD, QC_RELEASE, RETURN_TO_VENDOR, PROCESS_WASTAGE,
         PRODUCTION_CONSUMPTION, MATERIAL_RETURN_OUT, MATERIAL_RETURN_RECEIPT_CLEAR,
         MATERIAL_RETURN_IN,
-        /** Intermediate remote-Plant return custody; not counted as final returned stock. */
+        /**
+         * Intermediate remote-Plant return custody; not counted as final returned
+         * stock.
+         */
         MATERIAL_RETURN_ROUTE_IN, MATERIAL_RETURN_ROUTE_OUT, MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR,
         QC_REWORK_RELEASE, SCRAP
     }

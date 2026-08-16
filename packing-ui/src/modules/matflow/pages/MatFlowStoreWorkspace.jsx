@@ -14,7 +14,6 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
-import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
@@ -22,7 +21,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
-import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
+import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import { downloadMatFlowExcel } from "../api/matflowExcel";
 import {
     Detail,
@@ -81,7 +80,7 @@ const samePlant = (left, right) => Boolean(upperCode(left)) && upperCode(left) =
 const STORE_KANBAN_COLUMNS = [
     { key: "ACTION", label: "Forward / Plan", subtitle: "MR needs Store action now" },
     { key: "WAITING", label: "Shortage / Waiting", subtitle: "Purchase or Main Store dependency" },
-    { key: "RESERVED", label: "Reserved", subtitle: "Material allocated and controlled" },
+    { key: "RESERVED", label: "Allocated", subtitle: "Tally-declared material allocated and controlled" },
     { key: "ROUTING", label: "Route / Handoff", subtitle: "Send, receive or hand over material" },
     { key: "DONE", label: "Issued", subtitle: "MR material issued to Production" },
 ];
@@ -106,33 +105,18 @@ export function MatFlowStoreQueuePage() {
 
     const [rows, setRows] = useState([]);
     const [purchaseIndents, setPurchaseIndents] = useState([]);
-    const [stockRows, setStockRows] = useState([]);
-    const [materials, setMaterials] = useState([]);
-    const [storeLocations, setStoreLocations] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [viewMode, setViewMode] = useState("KANBAN");
-    const [stockDialog, setStockDialog] = useState(false);
-    const [stockForm, setStockForm] = useState({
-        materialId: "",
-        locationId: "",
-        adjustmentQty: "",
-        batchNo: "",
-        remarks: "",
-    });
 
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const [queueResponse, indentResponse, stockResponse, materialResponse, locationResponse] = await Promise.all([
+            const [queueResponse, indentResponse] = await Promise.all([
                 matflowApi.listStoreQueue(isMainStoreActor ? {} : { plantCode: selectedPlantParam }),
                 matflowApi.listPurchaseIndents(isMainStoreActor ? {} : { plantCode: selectedPlantParam }),
-                matflowApi.listStock({ plantCode: selectedPlantParam }),
-                matflowApi.listMaterials({ active: true }),
-                matflowApi.listLocations({ active: true }),
             ]);
 
             const indentRows = Array.isArray(indentResponse?.data) ? indentResponse.data : [];
@@ -153,25 +137,10 @@ export function MatFlowStoreQueuePage() {
                     ...row,
                     _linkedPis: indentsByMr.get(String(row.id)) || [],
                 })));
-
-            const allLocations = extractMatFlowPage(locationResponse?.data).rows;
-            const stores = allLocations.filter((location) =>
-                location?.active !== false &&
-                location?.supportsStock !== false &&
-                normalize(location?.locationType) === "STORE" &&
-                (!selectedPlantParam || upperCode(location?.plantCode) === upperCode(selectedPlantParam))
-            );
-            setStoreLocations(stores);
-            setMaterials(extractMatFlowPage(materialResponse?.data).rows.filter((row) => row?.active !== false));
-
-            const storeIds = new Set(stores.map((location) => String(location.id)));
-            setStockRows((Array.isArray(stockResponse?.data) ? stockResponse.data : [])
-                .filter((balance) => storeIds.has(String(balance.locationId))));
         } catch (requestError) {
             setRows([]);
             setPurchaseIndents([]);
-            setStockRows([]);
-            setError(readMatFlowError(requestError, "Unable to load Store queue and inventory."));
+            setError(readMatFlowError(requestError, "Unable to load Store material requisitions."));
         } finally {
             setLoading(false);
         }
@@ -200,59 +169,12 @@ export function MatFlowStoreQueuePage() {
         activeIssue: rows.filter((row) => ["PARTIALLY_RESERVED", "READY_TO_ISSUE", "PARTIALLY_ISSUED"].includes(normalize(row.status))).length,
     }), [rows]);
 
-    const openStock = () => {
-        setStockForm({
-            materialId: "",
-            locationId: storeLocations.length === 1 ? storeLocations[0].id : "",
-            adjustmentQty: "",
-            batchNo: "",
-            remarks: "",
-        });
-        setStockDialog(true);
-        setError("");
-    };
-
-    const saveStock = async () => {
-        const qty = Number(stockForm.adjustmentQty);
-        if (!stockForm.materialId || !stockForm.locationId || !Number.isFinite(qty) || Math.abs(qty) < .0005) {
-            setError("Material, Store location and a non-zero stock adjustment are required.");
-            return;
-        }
-        const existing = stockRows.find((row) =>
-            String(row.materialId) === String(stockForm.materialId) &&
-            String(row.locationId) === String(stockForm.locationId)
-        );
-        if (!existing && qty < 0) {
-            setError("Opening stock must be positive.");
-            return;
-        }
-
-        setWorking(true);
-        setError("");
-        try {
-            await matflowApi.adjustStock({
-                materialId: stockForm.materialId,
-                locationId: stockForm.locationId,
-                adjustmentQty: qty,
-                batchNo: clean(stockForm.batchNo) || null,
-                remarks: clean(stockForm.remarks) || (existing ? "Store stock adjustment" : "Opening Store stock"),
-                rowVersion: existing?.rowVersion ?? null,
-            });
-            setStockDialog(false);
-            await load();
-        } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to adjust Store stock."));
-        } finally {
-            setWorking(false);
-        }
-    };
-
     return (
         <Box sx={pageSx}>
             <PageHero
                 badge="STORE"
-                title="Material Requisitions & Store Inventory"
-                subtitle="Remote Plant Stores forward the same MR to AL-P1 Main Store. AL-P1 Main Store alone checks stock, reserves, raises shortage PI and starts the approved outbound route. Remote Stores later receive and hand material to Production."
+                title="Material Requisitions & Store Control"
+                subtitle="Tally is the stock authority. Remote Plant Stores forward the same MR to AL-P1 Main Store; Main Store records only Full / Partial / Not Available against the MR, and MatFlow automatically preserves the available-vs-PI trail."
                 actions={
                     <>
                         <Button
@@ -268,9 +190,6 @@ export function MatFlowStoreQueuePage() {
                             Export Excel
                         </Button>
                         <Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-                        <Button startIcon={<AddOutlinedIcon />} onClick={openStock} disabled={!storeLocations.length} sx={primaryBtnSx}>
-                            Opening / Adjust Stock
-                        </Button>
                     </>
                 }
             />
@@ -280,29 +199,15 @@ export function MatFlowStoreQueuePage() {
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}>
                 <SummaryCard label="Needs Store Action" value={counts.review} />
                 <SummaryCard label="Linked PIs" value={purchaseIndents.length} />
-                <SummaryCard label="Reserved / Send Action" value={counts.activeIssue} />
+                <SummaryCard label="Allocated / Send Action" value={counts.activeIssue} />
             </Box>
 
             <Card sx={panelSx}>
-                <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Store Stock</Typography>
-                <Typography sx={{ ...subTextSx, mb: 1.2 }}>
-                    Available = On Hand − Reserved − Blocked. Opening/adjustment is an audited inventory action.
+                <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Tally-Authoritative Availability</Typography>
+                <Typography sx={{ ...subTextSx, mt: .35 }}>
+                    MatFlow does not maintain physical Store stock, minimum stock or reorder quantities. Store checks the actual quantity in Tally and records only the MR decision:
+                    <b> Fully Available</b>, <b>Partially Available</b>, or <b>Not Available</b>. Quantity entry is required only for a partial case; MatFlow automatically raises the linked PI for the balance.
                 </Typography>
-                <Box sx={tableShellSx}>
-                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 150px 100px 100px 100px 100px" }}>
-                        {["Material", "Store", "On Hand", "Reserved", "Blocked", "Available"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
-                    </Box>
-                    {stockRows.length === 0 ? <EmptyState>No Store stock recorded for this scope.</EmptyState> : stockRows.map((row) => (
-                        <Box key={row.id || `${row.materialId}:${row.locationId}`} sx={{ ...tableRowSx, gridTemplateColumns: "200px 150px 100px 100px 100px 100px" }}>
-                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName || "-"}</Typography><Typography sx={subTextSx}>{row.materialCode || "-"}</Typography></Box>
-                            <Box sx={tableCellSx}>{row.locationCode || "-"}</Box>
-                            <Box sx={tableCellSx}>{formatQty(row.onHandQty)}</Box>
-                            <Box sx={tableCellSx}>{formatQty(row.reservedQty)}</Box>
-                            <Box sx={tableCellSx}>{formatQty(row.blockedQty)}</Box>
-                            <Box sx={tableCellSx}>{formatQty(row.availableQty)}</Box>
-                        </Box>
-                    ))}
-                </Box>
             </Card>
 
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
@@ -381,44 +286,9 @@ export function MatFlowStoreQueuePage() {
                 )}
             </Card>
 
-            <Dialog open={stockDialog} onClose={() => !working && setStockDialog(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>Store Opening / Stock Adjustment</DialogTitle>
-                <DialogContent sx={dialogContentSx}>
-                    <Box sx={{ display: "grid", gap: 1.5 }}>
-                        <TextField select label="Material *" value={stockForm.materialId} onChange={(e) => setStockForm((c) => ({ ...c, materialId: e.target.value }))} sx={fieldSx}>
-                            {materials.map((material) => <MenuItem key={material.id} value={material.id}>{material.materialName} · {material.materialCode} · {material.uom}</MenuItem>)}
-                        </TextField>
-                        <TextField select label="Store Location *" value={stockForm.locationId} onChange={(e) => setStockForm((c) => ({ ...c, locationId: e.target.value }))} sx={fieldSx}>
-                            {storeLocations.map((location) => <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName}</MenuItem>)}
-                        </TextField>
-                        <TextField type="number" label="Adjustment Qty *" value={stockForm.adjustmentQty} onChange={(e) => setStockForm((c) => ({ ...c, adjustmentQty: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Batch No." value={stockForm.batchNo} onChange={(e) => setStockForm((c) => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} />
-                        <TextField multiline minRows={2} label="Remarks" value={stockForm.remarks} onChange={(e) => setStockForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={dialogActionsSx}>
-                    <Button onClick={() => setStockDialog(false)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveStock} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Post Adjustment"}</Button>
-                </DialogActions>
-            </Dialog>
         </Box>
     );
 }
-
-const autoAllocate = (line, availability) => {
-    const needed = Math.max(0, numeric(line?.requestedQty) - numeric(line?.reservedQty));
-    let remaining = needed;
-    const quantities = {};
-
-    for (const option of Array.isArray(availability?.stockOptions) ? availability.stockOptions : []) {
-        const free = Math.max(0, numeric(option?.availableQty));
-        if (!option?.locationId || free <= 0 || remaining <= .0005) continue;
-        const take = Math.min(free, remaining);
-        quantities[String(option.locationId)] = String(Math.round(take * 1000) / 1000);
-        remaining -= take;
-    }
-    return quantities;
-};
 
 export function MatFlowStoreDetailPage() {
     const { requisitionId } = useParams();
@@ -428,7 +298,6 @@ export function MatFlowStoreDetailPage() {
 
     const [snapshot, setSnapshot] = useState(null);
     const [availability, setAvailability] = useState([]);
-    const [locations, setLocations] = useState([]);
     const [forms, setForms] = useState({});
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
@@ -443,13 +312,9 @@ export function MatFlowStoreDetailPage() {
         setLoading(true);
         setError("");
         try {
-            const [detailResponse, locationResponse] = await Promise.all([
-                matflowApi.getStoreReview(requisitionId),
-                matflowApi.listLocations({ active: true }),
-            ]);
+            const detailResponse = await matflowApi.getStoreReview(requisitionId);
 
             const nextSnapshot = detailResponse?.data || null;
-            const nextLocations = extractMatFlowPage(locationResponse?.data).rows.filter((row) => row?.active !== false);
             const requisition = nextSnapshot?.requisition || null;
             const originPlant = upperCode(requisition?.destinationPlantCode);
             const remote = Boolean(originPlant) && originPlant !== MAIN_PLANT;
@@ -473,21 +338,15 @@ export function MatFlowStoreDetailPage() {
 
             setSnapshot(nextSnapshot);
             setAvailability(nextAvailability);
-            setLocations(nextLocations);
 
             const nextForms = {};
             (requisition?.lines || []).forEach((line) => {
-                const entry = nextAvailability.find((item) => String(item.requisitionLineId) === String(line.id));
-                const allocation = autoAllocate(line, entry);
-                const allocated = Object.values(allocation).reduce((sum, value) => sum + numeric(value), 0);
-                const needed = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
                 nextForms[String(line.id)] = {
-                    allocations: allocation,
+                    availabilityDecision: "",
+                    availableQty: "",
                     qcRequired: false,
                     processingRequired: false,
                     processingRouteStepId: "",
-                    createIndentForShortage: allocated + .0005 < needed,
-                    indentDeliveryLocationId: requisition?.mainStoreId || "",
                     remarks: "",
                 };
             });
@@ -495,7 +354,6 @@ export function MatFlowStoreDetailPage() {
         } catch (requestError) {
             setSnapshot(null);
             setAvailability([]);
-            setLocations([]);
             setError(readMatFlowError(requestError, "Unable to load Store MR workbench."));
         } finally {
             setLoading(false);
@@ -543,31 +401,31 @@ export function MatFlowStoreDetailPage() {
                     const lineKey = String(line.id);
                     const config = forms[lineKey] || {};
                     const entry = availabilityByLine.get(lineKey);
-                    const sourceOptions = Array.isArray(entry?.stockOptions) ? entry.stockOptions : [];
-                    const sourceById = new Map(sourceOptions.map((option) => [String(option.locationId), option]));
-                    const allocations = Object.entries(config.allocations || {})
-                        .map(([sourceLocationId, value]) => ({
-                            sourceLocationId,
-                            reserveQty: numeric(value),
-                            option: sourceById.get(String(sourceLocationId)),
-                        }))
-                        .filter((item) => item.option && item.reserveQty > .0005);
-
-                    const newlyReserved = allocations.reduce((sum, item) => sum + item.reserveQty, 0);
                     const outstanding = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
+                    const decision = normalize(config.availabilityDecision);
 
-                    for (const allocation of allocations) {
-                        if (allocation.reserveQty > numeric(allocation.option.availableQty) + .0005) {
-                            throw new Error(`${allocation.option.locationCode} does not have enough available ${line.materialCode}.`);
+                    if (!["FULLY_AVAILABLE", "PARTIALLY_AVAILABLE", "NOT_AVAILABLE"].includes(decision)) {
+                        throw new Error(`Choose Full, Partial or Not Available for ${line.materialCode}.`);
+                    }
+
+                    let availableQty = null;
+                    let allocatedQty = 0;
+
+                    if (decision === "FULLY_AVAILABLE") {
+                        allocatedQty = outstanding;
+                    } else if (decision === "PARTIALLY_AVAILABLE") {
+                        availableQty = numeric(config.availableQty);
+                        if (!(availableQty > .0005 && availableQty < outstanding - .0005)) {
+                            throw new Error(
+                                `For ${line.materialCode}, partial available quantity must be greater than 0 and less than the remaining requirement ${formatQty(outstanding)} ${line.uom || ""}.`
+                            );
                         }
-                    }
-                    if (newlyReserved > outstanding + .0005) {
-                        throw new Error(`New reservation exceeds the remaining MR demand for ${line.materialCode}.`);
+                        allocatedQty = availableQty;
                     }
 
-                    const hasNewAllocation = newlyReserved > .0005;
+                    const hasAvailableLot = allocatedQty > .0005;
                     const processingOptions = Array.isArray(entry?.processingOptions) ? entry.processingOptions : [];
-                    if (hasNewAllocation && config.processingRequired) {
+                    if (hasAvailableLot && config.processingRequired) {
                         if (!config.processingRouteStepId) {
                             throw new Error(`Select one approved Processing Unit for ${line.materialCode}.`);
                         }
@@ -576,35 +434,25 @@ export function MatFlowStoreDetailPage() {
                         }
                     }
 
-                    const shortageAfterAllocation = Math.max(0, outstanding - newlyReserved);
-                    const createIndent = shortageAfterAllocation > .0005 && config.createIndentForShortage !== false;
-                    if (createIndent && !config.indentDeliveryLocationId) {
-                        throw new Error(`AL-P1 Main Store is not resolved as the PI delivery location for ${line.materialCode}. Refresh master data.`);
-                    }
-
                     return {
                         requisitionLineId: line.id,
                         rowVersion: line.rowVersion,
-                        allocations: allocations.map(({ sourceLocationId, reserveQty }) => ({
-                            sourceLocationId,
-                            reserveQty,
-                        })),
-                        qcRequired: hasNewAllocation ? config.qcRequired === true : false,
-                        processingRequired: hasNewAllocation ? config.processingRequired === true : false,
-                        processingRouteStepId: hasNewAllocation && config.processingRequired
+                        availabilityDecision: decision,
+                        availableQty: decision === "PARTIALLY_AVAILABLE" ? availableQty : null,
+                        qcRequired: hasAvailableLot ? config.qcRequired === true : false,
+                        processingRequired: hasAvailableLot ? config.processingRequired === true : false,
+                        processingRouteStepId: hasAvailableLot && config.processingRequired
                             ? config.processingRouteStepId
                             : null,
-                        createIndentForShortage: createIndent,
-                        indentDeliveryLocationId: createIndent ? config.indentDeliveryLocationId : null,
                         remarks: clean(config.remarks) || null,
                     };
                 });
 
             if (!reviewLines.length) {
-                throw new Error("Every MR material line is already fully allocated. No Store re-review is required until a shortage/replacement demand reopens.");
+                throw new Error("Every MR material line is already fully allocated.");
             }
         } catch (validationError) {
-            setError(validationError?.message || "Store review data is invalid.");
+            setError(validationError?.message || "Store availability review is invalid.");
             return;
         }
 
@@ -619,7 +467,7 @@ export function MatFlowStoreDetailPage() {
             if (response?.data) setSnapshot(response.data);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to complete Store review."));
+            setError(readMatFlowError(requestError, "Unable to complete Tally-based Store availability review."));
         } finally {
             setWorking(false);
         }
@@ -716,7 +564,7 @@ export function MatFlowStoreDetailPage() {
 
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 1 }}>
                 <SummaryCard label="Requested" value={formatQty(totals.requested)} />
-                <SummaryCard label="Reserved" value={formatQty(totals.reserved)} />
+                <SummaryCard label="Declared / Allocated" value={formatQty(totals.reserved)} />
                 <SummaryCard label="Shortage" value={formatQty(totals.shortage)} />
                 <SummaryCard label="Issued / Received by Production" value={formatQty(totals.issued)} />
             </Box>
@@ -737,7 +585,7 @@ export function MatFlowStoreDetailPage() {
                             {working ? "Forwarding..." : "Forward Same MR to AL-P1"}
                         </Button>
                     }>
-                        This is the origin Plant Store step. Do not perform stock reservation here. Forward this same MR unchanged to AL-P1 Main Store; project, Product, quantities and Production requester remain linked.
+                        This is the origin Plant Store step. Do not perform the Tally availability review here. Forward this same MR unchanged to AL-P1 Main Store; project, Product, quantities and Production requester remain linked.
                     </Alert>
                 )}
                 {remoteMr && forwardedToMain && (
@@ -747,163 +595,191 @@ export function MatFlowStoreDetailPage() {
                 )}
                 {reviewable && (
                     <Alert severity="info" sx={{ mt: 1.5 }}>
-                        For each newly allocated lot, Store makes two independent choices: <b>QC Check Required: Yes/No</b> and <b>Processing Required: Yes/No</b>. QC never chooses the route. If Processing is required, Store selects one BOM-approved Processing Unit.
+                        For each material, first record the <b>Tally availability decision</b>. For any quantity declared available, Store then makes two independent choices: <b>QC Check Required: Yes/No</b> and <b>Processing Required: Yes/No</b>.
                     </Alert>
                 )}
             </Card>
 
             {reviewable && (
                 <Card sx={panelSx}>
-                    <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Availability Review</Typography>
+                    <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Tally Availability Review</Typography>
                     <Typography sx={{ ...subTextSx, mb: 1.3 }}>
-                        After a GRN adds Store stock, reopen this same MR and allocate the newly available shortage quantity.
+                        Check the physical quantity in Tally. MatFlow does not maintain Store stock. Choose the availability result for each outstanding material. Only a genuine partial case requires quantity entry; every shortage automatically becomes a linked PI delivered to AL-P1 Main Store.
                     </Typography>
 
                     <Box sx={{ display: "grid", gap: 1.3 }}>
-                        {lines.map((line) => {
-                            const key = String(line.id);
-                            const entry = availabilityByLine.get(key);
-                            const config = forms[key] || {};
-                            const outstanding = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
-                            const allocated = Object.values(config.allocations || {}).reduce((sum, value) => sum + numeric(value), 0);
-                            const shortageAfter = Math.max(0, outstanding - allocated);
+                        {lines
+                            .filter((line) => Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty)) > .0005)
+                            .map((line) => {
+                                const key = String(line.id);
+                                const entry = availabilityByLine.get(key);
+                                const config = forms[key] || {};
+                                const outstanding = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
+                                const decision = normalize(config.availabilityDecision);
+                                const declaredAvailable = decision === "FULLY_AVAILABLE"
+                                    ? outstanding
+                                    : decision === "PARTIALLY_AVAILABLE"
+                                        ? Math.min(outstanding, Math.max(0, numeric(config.availableQty)))
+                                        : 0;
+                                const shortageAfter = Math.max(0, outstanding - declaredAvailable);
+                                const hasAvailableLot = declaredAvailable > .0005;
 
-                            return (
-                                <Card key={line.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
-                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                                        <Box>
-                                            <Typography sx={mainTextSx}>{line.materialName} · {line.materialCode}</Typography>
-                                            <Typography sx={subTextSx}>
-                                                Requested {formatQty(line.requestedQty)} {line.uom} · Already reserved {formatQty(line.reservedQty)} · Remaining {formatQty(outstanding)}
-                                            </Typography>
-                                        </Box>
-                                        <MatFlowStatusChip status={line.status} />
-                                    </Box>
-
-                                    <Box sx={{ mt: 1, display: "grid", gap: .8 }}>
-                                        {(entry?.stockOptions || []).length === 0 ? (
-                                            <Alert severity="warning">No free Store stock is currently available for this material.</Alert>
-                                        ) : (entry.stockOptions || []).map((option) => (
-                                            <Box key={option.locationId} sx={{ display: "grid", gridTemplateColumns: "minmax(220px,1fr) 130px 150px", gap: 1, alignItems: "center" }}>
-                                                <Box>
-                                                    <Typography sx={mainTextSx}>{option.locationCode} · {option.locationName}</Typography>
-                                                    <Typography sx={subTextSx}>Available {formatQty(option.availableQty)} · On hand {formatQty(option.onHandQty)}</Typography>
-                                                </Box>
-                                                <Typography sx={subTextSx}>Reserve now</Typography>
-                                                <TextField
-                                                    size="small"
-                                                    type="number"
-                                                    value={config.allocations?.[String(option.locationId)] || ""}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: {
-                                                            ...current[key],
-                                                            allocations: {
-                                                                ...(current[key]?.allocations || {}),
-                                                                [String(option.locationId)]: event.target.value,
-                                                            },
-                                                        },
-                                                    }))}
-                                                    sx={fieldSx}
-                                                />
+                                return (
+                                    <Card key={line.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                                            <Box>
+                                                <Typography sx={mainTextSx}>{line.materialName} · {line.materialCode}</Typography>
+                                                <Typography sx={subTextSx}>
+                                                    Requested {formatQty(line.requestedQty)} {line.uom} · Previously allocated {formatQty(line.reservedQty)} · Remaining decision {formatQty(outstanding)} {line.uom}
+                                                </Typography>
                                             </Box>
-                                        ))}
-                                    </Box>
+                                            <MatFlowStatusChip status={line.status} />
+                                        </Box>
 
-                                    <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={config.qcRequired === true}
-                                                    disabled={allocated <= .0005}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: { ...current[key], qcRequired: event.target.checked },
-                                                    }))}
-                                                />
-                                            }
-                                            label="QC check required"
-                                        />
+                                        <Alert severity="info" sx={{ mt: 1 }}>
+                                            Physical stock is checked in <b>Tally</b>. Do not enter the Store balance in MatFlow.
+                                        </Alert>
 
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={config.processingRequired === true}
-                                                    disabled={allocated <= .0005}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: {
-                                                            ...current[key],
-                                                            processingRequired: event.target.checked,
-                                                            processingRouteStepId: event.target.checked
-                                                                ? (current[key]?.processingRouteStepId || "")
-                                                                : "",
-                                                        },
-                                                    }))}
-                                                />
-                                            }
-                                            label="Processing required before Production"
-                                        />
+                                        <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
+                                            {[
+                                                ["FULLY_AVAILABLE", "Fully Available", `Full remaining ${formatQty(outstanding)} ${line.uom || ""} can be issued`],
+                                                ["PARTIALLY_AVAILABLE", "Partially Available", "Some quantity is available; enter it once"],
+                                                ["NOT_AVAILABLE", "Not Available", "Full remaining quantity must be purchased"],
+                                            ].map(([value, label, helper]) => {
+                                                const selected = decision === value;
+                                                return (
+                                                    <Card
+                                                        key={value}
+                                                        onClick={() => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: {
+                                                                ...current[key],
+                                                                availabilityDecision: value,
+                                                                availableQty: value === "PARTIALLY_AVAILABLE" ? (current[key]?.availableQty || "") : "",
+                                                                qcRequired: value === "NOT_AVAILABLE" ? false : current[key]?.qcRequired === true,
+                                                                processingRequired: value === "NOT_AVAILABLE" ? false : current[key]?.processingRequired === true,
+                                                                processingRouteStepId: value === "NOT_AVAILABLE" ? "" : (current[key]?.processingRouteStepId || ""),
+                                                            },
+                                                        }))}
+                                                        sx={{
+                                                            p: 1.3,
+                                                            cursor: "pointer",
+                                                            border: selected ? "1px solid rgba(56,189,248,.85)" : "1px solid rgba(148,163,184,.18)",
+                                                            bgcolor: selected ? "rgba(14,165,233,.10)" : "rgba(15,23,42,.22)",
+                                                            boxShadow: selected ? "0 0 0 1px rgba(56,189,248,.12)" : "none",
+                                                        }}
+                                                    >
+                                                        <Typography sx={{ ...mainTextSx, color: selected ? "#7dd3fc" : undefined }}>{label}</Typography>
+                                                        <Typography sx={{ ...subTextSx, mt: .35 }}>{helper}</Typography>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </Box>
 
-                                        <TextField
-                                            select
-                                            label="Processing Unit"
-                                            value={config.processingRouteStepId || ""}
-                                            disabled={!config.processingRequired || allocated <= .0005}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], processingRouteStepId: event.target.value },
-                                            }))}
-                                            helperText={config.processingRequired && !(entry?.processingOptions || []).length
-                                                ? "No Processing Unit is approved on this BOM material line."
-                                                : "Independent of QC. Choose only when this material needs pre-processing."}
-                                            sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
-                                        >
-                                            {(entry?.processingOptions || []).map((option) => (
-                                                <MenuItem key={option.routeStepId} value={option.routeStepId}>
-                                                    {option.locationCode} · {option.locationName}{option.processCode ? ` · ${option.processCode}` : ""}
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
+                                        {decision === "PARTIALLY_AVAILABLE" && (
+                                            <TextField
+                                                type="number"
+                                                label={`Available Quantity * (${line.uom || ""})`}
+                                                value={config.availableQty || ""}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], availableQty: event.target.value },
+                                                }))}
+                                                helperText={`Enter only the quantity physically available in Tally. MatFlow will derive PI quantity = ${formatQty(outstanding)} − available.`}
+                                                sx={{ ...fieldSx, mt: 1.2, maxWidth: 420 }}
+                                            />
+                                        )}
 
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={shortageAfter > .0005 && config.createIndentForShortage !== false}
-                                                    disabled={shortageAfter <= .0005}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: { ...current[key], createIndentForShortage: event.target.checked },
-                                                    }))}
-                                                />
-                                            }
-                                            label={`Raise linked PI for shortage ${formatQty(shortageAfter)} ${line.uom || ""}`}
-                                        />
+                                        {decision && (
+                                            <Box sx={{
+                                                mt: 1.2,
+                                                display: "grid",
+                                                gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" },
+                                                gap: 1,
+                                            }}>
+                                                <Card sx={{ p: 1.1, bgcolor: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.18)" }}>
+                                                    <Typography sx={subTextSx}>DECLARED AVAILABLE FOR THIS REVIEW</Typography>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(declaredAvailable)} {line.uom || ""}</Typography>
+                                                </Card>
+                                                <Card sx={{ p: 1.1, bgcolor: shortageAfter > .0005 ? "rgba(245,158,11,.07)" : "rgba(15,23,42,.22)", border: "1px solid rgba(245,158,11,.18)" }}>
+                                                    <Typography sx={subTextSx}>AUTO LINKED PI QUANTITY</Typography>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(shortageAfter)} {line.uom || ""}</Typography>
+                                                    <Typography sx={subTextSx}>{shortageAfter > .0005 ? `PI will be raised automatically to ${requisition.mainStoreCode || "AL-P1 Main Store"}.` : "No PI required."}</Typography>
+                                                </Card>
+                                            </Box>
+                                        )}
 
-                                        <TextField
-                                            label="PI Delivery Store"
-                                            value={requisition.mainStoreCode || "AL-P1 Main Store"}
-                                            helperText="Fixed by MatFlow API v6. Every shortage PI is delivered to AL-P1 Main Store."
-                                            InputProps={{ readOnly: true }}
-                                            disabled={shortageAfter <= .0005 || config.createIndentForShortage === false}
-                                            sx={fieldSx}
-                                        />
+                                        <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={config.qcRequired === true}
+                                                        disabled={!hasAvailableLot}
+                                                        onChange={(event) => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: { ...current[key], qcRequired: event.target.checked },
+                                                        }))}
+                                                    />
+                                                }
+                                                label="QC check required for available lot"
+                                            />
 
-                                        <TextField
-                                            multiline
-                                            minRows={2}
-                                            label="Line Remarks"
-                                            value={config.remarks || ""}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], remarks: event.target.value },
-                                            }))}
-                                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                                        />
-                                    </Box>
-                                </Card>
-                            );
-                        })}
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={config.processingRequired === true}
+                                                        disabled={!hasAvailableLot}
+                                                        onChange={(event) => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: {
+                                                                ...current[key],
+                                                                processingRequired: event.target.checked,
+                                                                processingRouteStepId: event.target.checked
+                                                                    ? (current[key]?.processingRouteStepId || "")
+                                                                    : "",
+                                                            },
+                                                        }))}
+                                                    />
+                                                }
+                                                label="Processing required before Production"
+                                            />
+
+                                            <TextField
+                                                select
+                                                label="Processing Unit"
+                                                value={config.processingRouteStepId || ""}
+                                                disabled={!hasAvailableLot || !config.processingRequired}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], processingRouteStepId: event.target.value },
+                                                }))}
+                                                helperText={config.processingRequired && !(entry?.processingOptions || []).length
+                                                    ? "No Processing Unit is approved on this BOM material line."
+                                                    : "Independent of QC. Choose only a BOM-approved Processing Unit."}
+                                                sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
+                                            >
+                                                {(entry?.processingOptions || []).map((option) => (
+                                                    <MenuItem key={option.routeStepId} value={option.routeStepId}>
+                                                        {option.locationCode} · {option.locationName}{option.processCode ? ` · ${option.processCode}` : ""}
+                                                    </MenuItem>
+                                                ))}
+                                            </TextField>
+
+                                            <TextField
+                                                multiline
+                                                minRows={2}
+                                                label="Line Remarks"
+                                                value={config.remarks || ""}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], remarks: event.target.value },
+                                                }))}
+                                                sx={{ ...fieldSx, gridColumn: "1 / -1" }}
+                                            />
+                                        </Box>
+                                    </Card>
+                                );
+                            })}
                     </Box>
 
                     <TextField
@@ -917,7 +793,7 @@ export function MatFlowStoreDetailPage() {
                     />
                     <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1.3 }}>
                         <Button onClick={confirmReview} disabled={working} sx={primaryBtnSx}>
-                            {working ? "Saving Review..." : "Confirm Store Review"}
+                            {working ? "Saving Review..." : "Confirm Tally Availability Review"}
                         </Button>
                     </Box>
                 </Card>
@@ -926,11 +802,11 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Allocated Material Lots</Typography>
                 <Typography sx={{ ...subTextSx, mb: 1.2 }}>
-                    Store sends each reserved lot along the Processing/Production route saved during review. A required QC check only gates the send action; it does not change custody or routing. Internal custody records remain hidden.
+                    Store sends each allocated lot along the Processing/Production route saved during review. A required QC check only gates the send action; it does not change custody or routing. Internal custody records remain hidden.
                 </Typography>
                 <Box sx={tableShellSx}>
                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
-                        {["Material", "Source Store", "Planned Destination", "QC Check", "Processing", "Reserved", "State / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        {["Material", "Source Store", "Planned Destination", "QC Check", "Processing", "Allocated Qty", "State / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                     </Box>
                     {reservations.length === 0 ? <EmptyState>No Store allocation has been created yet.</EmptyState> : reservations.map((reservation) => {
                         const pendingStoreLeg = internalTransfers

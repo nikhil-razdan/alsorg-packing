@@ -4,6 +4,7 @@ import {
     Box,
     Button,
     Card,
+    Checkbox,
     Dialog,
     DialogActions,
     DialogContent,
@@ -245,9 +246,14 @@ export function MatFlowRequisitionCreatePage() {
     const [selectedBomId, setSelectedBomId] = useState(initialBomId);
     const [selectedBom, setSelectedBom] = useState(null);
     const [destinationLocationId, setDestinationLocationId] = useState("");
+    const [selectionMode, setSelectionMode] = useState("FULL_BOM");
+    const [selectedLineIds, setSelectedLineIds] = useState({});
     const [lineInputs, setLineInputs] = useState({});
+    const [alreadyRequestedByLineId, setAlreadyRequestedByLineId] = useState({});
+    const [remainingByLineId, setRemainingByLineId] = useState({});
     const [remarks, setRemarks] = useState("");
     const [loading, setLoading] = useState(true);
+    const [bomLoading, setBomLoading] = useState(false);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
 
@@ -285,36 +291,80 @@ export function MatFlowRequisitionCreatePage() {
     useEffect(() => {
         if (!selectedBomId) {
             setSelectedBom(null);
+            setSelectedLineIds({});
             setLineInputs({});
+            setAlreadyRequestedByLineId({});
+            setRemainingByLineId({});
+            setSelectionMode("FULL_BOM");
             return;
         }
 
         let active = true;
         (async () => {
+            setBomLoading(true);
             setError("");
             try {
-                const response = await matflowApi.getBom(selectedBomId);
-                const loaded = response?.data || null;
+                const [bomResponse, requisitionResponse] = await Promise.all([
+                    matflowApi.getBom(selectedBomId),
+                    matflowApi.listRequisitions().catch(() => ({ data: [] })),
+                ]);
+                const loaded = bomResponse?.data || null;
                 if (!active) return;
                 if (!loaded || normalize(loaded.status) !== "APPROVED" || loaded.effective !== true) {
                     throw new Error("Only a Production-reviewed effective BOM can be requisitioned.");
                 }
-                setSelectedBom(loaded);
-                const next = {};
+
+                const priorRequested = {};
+                const existingMrs = Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : [];
+                existingMrs
+                    .filter((mr) => String(mr?.bomId || "") === String(loaded.id) && normalize(mr?.status) !== "CANCELLED")
+                    .forEach((mr) => {
+                        (Array.isArray(mr?.lines) ? mr.lines : []).forEach((line) => {
+                            const key = String(line?.bomLineId || "");
+                            if (!key) return;
+                            priorRequested[key] = numeric(priorRequested[key]) + numeric(line?.requestedQty);
+                        });
+                    });
+
+                const remaining = {};
+                const nextSelected = {};
+                const nextInputs = {};
                 (loaded.lines || []).forEach((line) => {
-                    next[String(line.id)] = numeric(line.netRequiredQty) > 0 ? String(line.netRequiredQty) : "";
+                    const key = String(line.id);
+                    const approvedQty = Math.max(0, numeric(line.netRequiredQty));
+                    const usedQty = Math.min(approvedQty, Math.max(0, numeric(priorRequested[key])));
+                    const remainingQty = Math.max(0, approvedQty - usedQty);
+                    priorRequested[key] = usedQty;
+                    remaining[key] = remainingQty;
+                    nextSelected[key] = remainingQty > 0.0005;
+                    nextInputs[key] = remainingQty > 0.0005 ? String(Number(remainingQty.toFixed(3))) : "";
                 });
-                setLineInputs(next);
+
+                setSelectedBom(loaded);
+                setAlreadyRequestedByLineId(priorRequested);
+                setRemainingByLineId(remaining);
+                setSelectedLineIds(nextSelected);
+                setLineInputs(nextInputs);
+                setSelectionMode("FULL_BOM");
 
                 const plant = upperCode(loaded?.project?.plantCode);
                 const matching = locations.filter((location) => upperCode(location.plantCode) === plant);
-                if (matching.length === 1) setDestinationLocationId(String(matching[0].id));
+                if (matching.length === 1) {
+                    setDestinationLocationId(String(matching[0].id));
+                } else {
+                    setDestinationLocationId((current) => matching.some((location) => String(location.id) === String(current)) ? current : "");
+                }
             } catch (requestError) {
                 if (active) {
                     setSelectedBom(null);
+                    setSelectedLineIds({});
                     setLineInputs({});
+                    setAlreadyRequestedByLineId({});
+                    setRemainingByLineId({});
                     setError(readMatFlowError(requestError, requestError?.message || "Unable to load selected BOM."));
                 }
+            } finally {
+                if (active) setBomLoading(false);
             }
         })();
         return () => { active = false; };
@@ -325,31 +375,119 @@ export function MatFlowRequisitionCreatePage() {
         !project?.plantCode || upperCode(location.plantCode) === upperCode(project.plantCode)
     );
 
+    const lineRows = useMemo(() => (selectedBom?.lines || []).map((line) => {
+        const key = String(line.id);
+        const approvedQty = Math.max(0, numeric(line.netRequiredQty));
+        const alreadyRequestedQty = Math.max(0, numeric(alreadyRequestedByLineId[key]));
+        const remainingQty = Math.max(0, numeric(remainingByLineId[key]));
+        return {
+            ...line,
+            key,
+            approvedQty,
+            alreadyRequestedQty,
+            remainingQty,
+            fullyRequisitioned: remainingQty <= 0.0005,
+        };
+    }), [selectedBom, alreadyRequestedByLineId, remainingByLineId]);
+
+    const remainingLineCount = useMemo(
+        () => lineRows.filter((line) => !line.fullyRequisitioned).length,
+        [lineRows]
+    );
+    const alreadyCompleteLineCount = lineRows.length - remainingLineCount;
+    const selectedCount = useMemo(
+        () => lineRows.filter((line) => !line.fullyRequisitioned && Boolean(selectedLineIds[line.key])).length,
+        [lineRows, selectedLineIds]
+    );
+
+    const useFullBom = () => {
+        const nextSelected = {};
+        const nextInputs = {};
+        lineRows.forEach((line) => {
+            nextSelected[line.key] = !line.fullyRequisitioned;
+            nextInputs[line.key] = line.fullyRequisitioned ? "" : String(Number(line.remainingQty.toFixed(3)));
+        });
+        setSelectionMode("FULL_BOM");
+        setSelectedLineIds(nextSelected);
+        setLineInputs(nextInputs);
+        setError("");
+    };
+
+    const useSelectedMaterials = () => {
+        const nextSelected = {};
+        lineRows.forEach((line) => { nextSelected[line.key] = false; });
+        setSelectionMode("SELECTED_MATERIALS");
+        setSelectedLineIds(nextSelected);
+        setError("");
+    };
+
+    const selectAllRemaining = () => {
+        const nextSelected = {};
+        const nextInputs = { ...lineInputs };
+        lineRows.forEach((line) => {
+            nextSelected[line.key] = !line.fullyRequisitioned;
+            if (!line.fullyRequisitioned && numeric(nextInputs[line.key]) <= 0) {
+                nextInputs[line.key] = String(Number(line.remainingQty.toFixed(3)));
+            }
+        });
+        setSelectedLineIds(nextSelected);
+        setLineInputs(nextInputs);
+    };
+
+    const clearSelectedMaterials = () => {
+        const nextSelected = {};
+        lineRows.forEach((line) => { nextSelected[line.key] = false; });
+        setSelectedLineIds(nextSelected);
+    };
+
+    const toggleMaterial = (line, checked) => {
+        if (selectionMode !== "SELECTED_MATERIALS" || line.fullyRequisitioned) return;
+        setSelectedLineIds((current) => ({ ...current, [line.key]: checked }));
+        if (checked && numeric(lineInputs[line.key]) <= 0) {
+            setLineInputs((current) => ({
+                ...current,
+                [line.key]: String(Number(line.remainingQty.toFixed(3))),
+            }));
+        }
+    };
+
     const create = async () => {
         if (!selectedBom?.id || !destinationLocationId) {
             setError("Select an effective BOM and Production destination.");
             return;
         }
 
-        const requestLines = (selectedBom.lines || [])
-            .map((line) => ({
-                bomLineId: line.id,
-                requestedQty: Number(lineInputs[String(line.id)] || 0),
-                remarks: null,
-            }))
-            .filter((line) => Number.isFinite(line.requestedQty) && line.requestedQty > 0);
+        const selectedRows = lineRows.filter((line) =>
+            !line.fullyRequisitioned && Boolean(selectedLineIds[line.key])
+        );
 
-        if (!requestLines.length) {
-            setError("Enter at least one requested material quantity.");
+        if (!selectedRows.length) {
+            setError(selectionMode === "FULL_BOM"
+                ? "There is no remaining BOM material quantity available to requisition."
+                : "Select at least one material. You can select one material or any number of materials.");
             return;
         }
 
-        for (const requestLine of requestLines) {
-            const bomLine = selectedBom.lines.find((line) => String(line.id) === String(requestLine.bomLineId));
-            if (requestLine.requestedQty > numeric(bomLine?.netRequiredQty) + .0005) {
-                setError(`Requested quantity exceeds BOM quantity for ${bomLine?.materialCode || "material"}.`);
+        const requestLines = [];
+        for (const line of selectedRows) {
+            const requestedQty = selectionMode === "FULL_BOM"
+                ? line.remainingQty
+                : Number(lineInputs[line.key] || 0);
+
+            if (!Number.isFinite(requestedQty) || requestedQty <= 0) {
+                setError(`Enter a requested quantity greater than zero for ${line.materialCode || line.materialName || "material"}.`);
                 return;
             }
+            if (requestedQty > line.remainingQty + 0.0005) {
+                setError(`Requested quantity for ${line.materialCode || line.materialName || "material"} exceeds the remaining BOM quantity ${formatQty(line.remainingQty)} ${line.uom || ""}.`);
+                return;
+            }
+
+            requestLines.push({
+                bomLineId: line.id,
+                requestedQty: Number(requestedQty.toFixed(3)),
+                remarks: null,
+            });
         }
 
         setWorking(true);
@@ -378,14 +516,28 @@ export function MatFlowRequisitionCreatePage() {
             <PageHero
                 badge="NEW MR"
                 title="Create Material Requisition"
-                subtitle="Production requests materials against an effective BOM. The MR number is generated by the backend in MR/yyyy/MM/dd/n format."
+                subtitle="Production can requisition one BOM material, any selected materials, or the full remaining BOM. Separate MRs stay linked to the same approved Product/BOM and cannot exceed its approved quantities."
                 actions={<Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/matflow/production")} sx={secondaryBtnSx}>Back</Button>}
             />
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.4fr 1fr" }, gap: 1.5 }}>
-                    <TextField select label="Reviewed Effective BOM *" value={selectedBomId} onChange={(e) => { setSelectedBomId(e.target.value); setDestinationLocationId(""); }} sx={fieldSx}>
+                    <TextField
+                        select
+                        label="Reviewed Effective BOM *"
+                        value={selectedBomId}
+                        onChange={(event) => {
+                            setSelectedBomId(event.target.value);
+                            setSelectedBom(null);
+                            setDestinationLocationId("");
+                            setSelectedLineIds({});
+                            setLineInputs({});
+                            setAlreadyRequestedByLineId({});
+                            setRemainingByLineId({});
+                        }}
+                        sx={fieldSx}
+                    >
                         {boms.map((bom) => (
                             <MenuItem key={bom.id} value={bom.id}>
                                 {bom.bomNumber} Rev {bom.revisionNo} · {bom.projectCode} · {bom.productName} · {bom.drawingNo}
@@ -401,7 +553,9 @@ export function MatFlowRequisitionCreatePage() {
                 </Box>
             </Card>
 
-            {selectedBom && (
+            {bomLoading && <LoadingBlock />}
+
+            {selectedBom && !bomLoading && (
                 <>
                     <Card sx={panelSx}>
                         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 1 }}>
@@ -414,33 +568,129 @@ export function MatFlowRequisitionCreatePage() {
                     </Card>
 
                     <Card sx={panelSx}>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>Requested Material Quantities</Typography>
-                        <Box sx={tableShellSx}>
-                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "210px 160px minmax(220px,1fr) 110px 150px" }}>
-                                {["Material", "Category", "Specification", "BOM Qty", "Request Qty"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
-                            </Box>
-                            {(selectedBom.lines || []).map((line) => (
-                                <Box key={line.id} sx={{ ...tableRowSx, gridTemplateColumns: "210px 160px minmax(220px,1fr) 110px 150px" }}>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{line.materialName}</Typography><Typography sx={subTextSx}>{line.materialCode} · {line.uom}</Typography></Box>
-                                    <Box sx={tableCellSx}>{readable(line.materialCategorySnapshot)}</Box>
-                                    <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>{line.specification || "-"}</Box>
-                                    <Box sx={tableCellSx}>{formatQty(line.netRequiredQty)}</Box>
-                                    <Box sx={tableCellSx}>
-                                        <TextField
-                                            type="number"
-                                            size="small"
-                                            value={lineInputs[String(line.id)] || ""}
-                                            onChange={(event) => setLineInputs((current) => ({ ...current, [String(line.id)]: event.target.value }))}
-                                            sx={fieldSx}
-                                        />
-                                    </Box>
-                                </Box>
-                            ))}
+                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Requisition Scope</Typography>
+                        <Typography sx={{ ...subTextSx, mt: .35 }}>
+                            Choose the whole remaining BOM, or explicitly select one / multiple materials for this MR.
+                        </Typography>
+
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.25 }}>
+                            <Button onClick={useFullBom} sx={selectionMode === "FULL_BOM" ? primaryBtnSx : secondaryBtnSx}>
+                                Full Remaining BOM
+                            </Button>
+                            <Button onClick={useSelectedMaterials} sx={selectionMode === "SELECTED_MATERIALS" ? primaryBtnSx : secondaryBtnSx}>
+                                Selected Materials
+                            </Button>
+                            {selectionMode === "SELECTED_MATERIALS" && (
+                                <>
+                                    <Button onClick={selectAllRemaining} sx={secondaryBtnSx}>Select All Remaining</Button>
+                                    <Button onClick={clearSelectedMaterials} sx={secondaryBtnSx}>Clear Selection</Button>
+                                </>
+                            )}
                         </Box>
 
-                        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1.5 }}>
-                            <Button startIcon={<AddIcon />} onClick={create} disabled={working} sx={primaryBtnSx}>
-                                {working ? "Creating..." : "Create Draft MR"}
+                        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 1, mt: 1.25 }}>
+                            <Detail label="BOM Material Lines" value={lineRows.length} />
+                            <Detail label="Remaining Lines" value={remainingLineCount} />
+                            <Detail label="Already Fully Requisitioned" value={alreadyCompleteLineCount} />
+                            <Detail label="Selected For This MR" value={selectedCount} />
+                        </Box>
+
+                        <Alert severity="info" sx={{ mt: 1.25 }}>
+                            {selectionMode === "FULL_BOM"
+                                ? `This MR will include all ${remainingLineCount} BOM material line(s) that still have unrequisitioned quantity. Previously requisitioned quantities are automatically excluded.`
+                                : "Tick one row for a single-material MR, or tick any number of rows for a multi-material MR. Requested quantity can be lower than the remaining BOM quantity if Production only needs part of that material now."}
+                        </Alert>
+
+                        {remainingLineCount === 0 && (
+                            <Alert severity="warning" sx={{ mt: 1 }}>
+                                Every material on this BOM has already been fully requisitioned across non-cancelled MRs. Create another MR only after the BOM requirement changes through the approved revision workflow.
+                            </Alert>
+                        )}
+                    </Card>
+
+                    <Card sx={panelSx}>
+                        <Typography sx={{ fontWeight: 950, fontSize: 17, mb: 1 }}>BOM Materials</Typography>
+                        <Box sx={tableShellSx}>
+                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "70px 210px 145px minmax(210px,1fr) 105px 120px 105px 145px" }}>
+                                {[
+                                    "Use",
+                                    "Material",
+                                    "Category",
+                                    "Specification",
+                                    "BOM Qty",
+                                    "Already MR'd",
+                                    "Remaining",
+                                    "Request Qty",
+                                ].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            </Box>
+                            {lineRows.map((line) => {
+                                const checked = Boolean(selectedLineIds[line.key]) && !line.fullyRequisitioned;
+                                return (
+                                    <Box
+                                        key={line.id}
+                                        sx={{
+                                            ...tableRowSx,
+                                            gridTemplateColumns: "70px 210px 145px minmax(210px,1fr) 105px 120px 105px 145px",
+                                            opacity: line.fullyRequisitioned ? .58 : 1,
+                                        }}
+                                    >
+                                        <Box sx={{ ...tableCellSx, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                            <Checkbox
+                                                checked={checked}
+                                                disabled={selectionMode === "FULL_BOM" || line.fullyRequisitioned}
+                                                onChange={(event) => toggleMaterial(line, event.target.checked)}
+                                                inputProps={{ "aria-label": `Select ${line.materialName || line.materialCode || "material"}` }}
+                                                sx={{ color: "var(--mf-muted)" }}
+                                            />
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={mainTextSx}>{line.materialName}</Typography>
+                                            <Typography sx={subTextSx}>{line.materialCode} · {line.uom}</Typography>
+                                            {line.fullyRequisitioned && <Typography sx={{ ...subTextSx, color: "var(--mf-success, #65d890)" }}>Fully requisitioned</Typography>}
+                                        </Box>
+                                        <Box sx={tableCellSx}>{readable(line.materialCategorySnapshot)}</Box>
+                                        <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>{line.specification || "-"}</Box>
+                                        <Box sx={tableCellSx}>{formatQty(line.approvedQty)}</Box>
+                                        <Box sx={tableCellSx}>{formatQty(line.alreadyRequestedQty)}</Box>
+                                        <Box sx={tableCellSx}>
+                                            <Typography sx={line.remainingQty > 0.0005 ? mainTextSx : subTextSx}>
+                                                {formatQty(line.remainingQty)}
+                                            </Typography>
+                                        </Box>
+                                        <Box sx={tableCellSx}>
+                                            <TextField
+                                                type="number"
+                                                size="small"
+                                                value={lineInputs[line.key] || ""}
+                                                disabled={line.fullyRequisitioned || selectionMode === "FULL_BOM" || !checked}
+                                                onChange={(event) => setLineInputs((current) => ({ ...current, [line.key]: event.target.value }))}
+                                                inputProps={{ min: 0.001, max: line.remainingQty, step: 0.001 }}
+                                                helperText={selectionMode === "FULL_BOM" && !line.fullyRequisitioned ? "Full remaining" : undefined}
+                                                sx={fieldSx}
+                                            />
+                                        </Box>
+                                    </Box>
+                                );
+                            })}
+                        </Box>
+
+                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 1.5 }}>
+                            <Typography sx={subTextSx}>
+                                Backend protection remains authoritative: cumulative non-cancelled MRs can never exceed the approved quantity of any BOM line.
+                            </Typography>
+                            <Button
+                                startIcon={<AddIcon />}
+                                onClick={create}
+                                disabled={working || remainingLineCount === 0 || selectedCount === 0}
+                                sx={primaryBtnSx}
+                            >
+                                {working
+                                    ? "Creating..."
+                                    : selectionMode === "FULL_BOM"
+                                        ? "Create Full BOM MR"
+                                        : selectedCount === 1
+                                            ? "Create Single-Material MR"
+                                            : `Create ${selectedCount}-Material MR`}
                             </Button>
                         </Box>
                     </Card>
@@ -628,7 +878,7 @@ export function MatFlowRequisitionDetailPage() {
 
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Execution Branches</Typography>
-                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Store allocations, linked PIs and route lineage are shown together without exposing a separate Transfer workflow.</Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Store Tally declarations/allocations, linked PIs and route lineage are shown together without exposing a separate Transfer workflow.</Typography>
 
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 1.2 }}>
                     <Box>

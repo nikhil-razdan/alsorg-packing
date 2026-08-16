@@ -56,6 +56,7 @@ import {
     formatQty,
     mainTextSx,
     normalize,
+    numeric,
     pageSx,
     panelSx,
     primaryBtnSx,
@@ -78,9 +79,35 @@ const emptyMaterial = {
     specification: "",
     uom: "",
     preferredSupplier: "",
-    minimumStock: "0",
-    reorderLevel: "0",
     active: true,
+};
+
+const MATERIAL_USAGE_PERIODS = [
+    { value: "TODAY", label: "Today" },
+    { value: "WEEK", label: "Last 7 Days" },
+    { value: "MONTH", label: "Last 30 Days" },
+    { value: "YEAR", label: "Last 365 Days" },
+    { value: "ALL", label: "All Time" },
+];
+
+const localDateTimeParam = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return undefined;
+    const pad = (value) => String(value).padStart(2, "0");
+    return [
+        date.getFullYear(), "-", pad(date.getMonth() + 1), "-", pad(date.getDate()),
+        "T", pad(date.getHours()), ":", pad(date.getMinutes()), ":", pad(date.getSeconds()),
+    ].join("");
+};
+
+const usageRangeParams = (period) => {
+    if (period === "ALL") return {};
+    const now = new Date();
+    const from = new Date(now);
+    if (period === "TODAY") from.setHours(0, 0, 0, 0);
+    else if (period === "WEEK") from.setDate(from.getDate() - 7);
+    else if (period === "MONTH") from.setDate(from.getDate() - 30);
+    else if (period === "YEAR") from.setDate(from.getDate() - 365);
+    return { from: localDateTimeParam(from), to: localDateTimeParam(now) };
 };
 
 const emptyLocation = {
@@ -582,11 +609,13 @@ export function MatFlowProjectsPage() {
 }
 
 export function MatFlowMaterialsPage() {
-    const { hasRole } = useMatFlow();
+    const { hasRole, selectedPlantParam } = useMatFlow();
     const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE);
     const fileRef = useRef(null);
 
     const [rows, setRows] = useState([]);
+    const [usageRows, setUsageRows] = useState([]);
+    const [usagePeriod, setUsagePeriod] = useState("MONTH");
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
@@ -598,14 +627,24 @@ export function MatFlowMaterialsPage() {
         setLoading(true);
         setError("");
         try {
-            setRows(extractMatFlowPage((await matflowApi.listMaterials({ search: clean(search) || undefined }))?.data).rows);
+            const [materialResponse, usageResponse] = await Promise.all([
+                matflowApi.listMaterials({ search: clean(search) || undefined }),
+                matflowApi.materialRegister({
+                    plantCode: selectedPlantParam || undefined,
+                    search: clean(search) || undefined,
+                    ...usageRangeParams(usagePeriod),
+                }),
+            ]);
+            setRows(extractMatFlowPage(materialResponse?.data).rows);
+            setUsageRows(Array.isArray(usageResponse?.data?.rows) ? usageResponse.data.rows : []);
         } catch (requestError) {
             setRows([]);
-            setError(readMatFlowError(requestError, "Unable to load Material Inventory."));
+            setUsageRows([]);
+            setError(readMatFlowError(requestError, "Unable to load Material Catalogue and usage."));
         } finally {
             setLoading(false);
         }
-    }, [search]);
+    }, [search, usagePeriod, selectedPlantParam]);
 
     useEffect(() => { load(); }, [load]);
     const pagination = useMatFlowPagination(rows, 20);
@@ -637,8 +676,6 @@ export function MatFlowMaterialsPage() {
                 specification: clean(form.specification) || null,
                 uom: upperCode(form.uom),
                 preferredSupplier: clean(form.preferredSupplier) || null,
-                minimumStock: Number(form.minimumStock || 0),
-                reorderLevel: Number(form.reorderLevel || 0),
                 active: form.active === true,
                 rowVersion: dialog?.row?.rowVersion ?? null,
             };
@@ -675,8 +712,6 @@ export function MatFlowMaterialsPage() {
                         specification: clean(row.specification) || null,
                         uom: upperCode(row.uom || "PCS"),
                         preferredSupplier: clean(row.preferredSupplier) || null,
-                        minimumStock: Number(row.minimumStock || 0),
-                        reorderLevel: Number(row.reorderLevel || 0),
                         active: row.active !== false,
                         rowVersion: null,
                     });
@@ -696,15 +731,40 @@ export function MatFlowMaterialsPage() {
         }
     };
 
+    const usageByMaterial = useMemo(() => {
+        const map = new Map();
+        usageRows.forEach((row) => {
+            if (!row?.materialId) return;
+            map.set(String(row.materialId), {
+                ...row,
+                usedQty: numeric(row.consumedQty) + numeric(row.productionWastedQty) + numeric(row.processingWastedQty),
+                wasteQty: numeric(row.productionWastedQty) + numeric(row.processingWastedQty),
+            });
+        });
+        return map;
+    }, [usageRows]);
+
+    const exportRows = useMemo(() => rows.map((row) => {
+        const usage = usageByMaterial.get(String(row.id)) || {};
+        return {
+            ...row,
+            periodUsedQty: numeric(usage.usedQty),
+            periodConsumedQty: numeric(usage.consumedQty),
+            periodWasteQty: numeric(usage.wasteQty),
+            periodIssuedQty: numeric(usage.issuedQty),
+            periodReturnedQty: numeric(usage.returnedQty),
+        };
+    }), [rows, usageByMaterial]);
+
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="MATERIAL INVENTORY"
+                badge="MATERIAL CATALOGUE & USAGE"
                 title="Material Master"
-                subtitle="Materials used in BOMs and Store inventory. Specifications and UOM flow into BOM/MR traceability."
+                subtitle="Master material identity for BOM/MR traceability plus MatFlow usage reporting. Physical stock, minimum levels and reorder controls remain in Tally."
                 actions={
                     <>
-                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Materials", sheetName: "Materials", title: "MatFlow Material Inventory", rows })} sx={secondaryBtnSx}>Export Excel</Button>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Catalogue_Usage", sheetName: "Materials", title: "MatFlow Material Catalogue & Usage", rows: exportRows })} sx={secondaryBtnSx}>Export Excel</Button>
                         {canManage && <Button onClick={() => downloadMaterialImportTemplate()} sx={secondaryBtnSx}>Import Template</Button>}
                         {canManage && <Button startIcon={<FileUploadOutlinedIcon />} onClick={() => fileRef.current?.click()} disabled={working} sx={secondaryBtnSx}>Import</Button>}
                         <input ref={fileRef} type="file" hidden accept=".xlsx,.xls" onChange={importMaterials} />
@@ -714,25 +774,36 @@ export function MatFlowMaterialsPage() {
                 }
             />
             <ErrorBox>{error}</ErrorBox>
-            <Card sx={panelSx}><TextField label="Search Material" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} /></Card>
+            <Card sx={{ ...panelSx, display: "flex", gap: 1.2, alignItems: "center", flexWrap: "wrap" }}>
+                <TextField label="Search Material" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320, flex: "1 1 320px" }} />
+                <TextField select label="Usage Period" value={usagePeriod} onChange={(e) => setUsagePeriod(e.target.value)} sx={{ ...fieldSx, minWidth: 190 }}>
+                    {MATERIAL_USAGE_PERIODS.map((period) => <MenuItem key={period.value} value={period.value}>{period.label}</MenuItem>)}
+                </TextField>
+                <Typography sx={subTextSx}>Used = Production consumption + Production wastage + Processing wastage. Stock balances are maintained in Tally.</Typography>
+            </Card>
 
             <Card sx={panelSx}>
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 220px 160px minmax(220px,1fr) 90px 120px 120px 110px" }}>
-                            {["Code", "Material", "Category", "Specification", "UOM", "Min Stock", "Reorder", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "145px 210px 145px minmax(190px,1fr) 80px 105px 105px 105px 105px 95px" }}>
+                            {["Code", "Material", "Category", "Specification", "UOM", "Used", "Consumed", "Waste", "Returned", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 220px 160px minmax(220px,1fr) 90px 120px 120px 110px" }}>
-                                <Box sx={tableCellSx}>{row.materialCode}</Box>
-                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.preferredSupplier || "-"}</Typography></Box>
-                                <Box sx={tableCellSx}>{readable(row.category)}</Box>
-                                <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>{row.specification || "-"}</Box>
-                                <Box sx={tableCellSx}>{row.uom}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.minimumStock)}</Box>
-                                <Box sx={tableCellSx}>{formatQty(row.reorderLevel)}</Box>
-                                <Box sx={tableCellSx}>{canManage && <Button onClick={() => open(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
-                            </Box>
+                            (() => {
+                                const usage = usageByMaterial.get(String(row.id)) || {};
+                                return <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "145px 210px 145px minmax(190px,1fr) 80px 105px 105px 105px 105px 95px" }}>
+                                    <Box sx={tableCellSx}>{row.materialCode}</Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.preferredSupplier || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}>{readable(row.category)}</Box>
+                                    <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>{row.specification || "-"}</Box>
+                                    <Box sx={tableCellSx}>{row.uom}</Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(usage.usedQty || 0)}</Typography><Typography sx={subTextSx}>{row.uom}</Typography></Box>
+                                    <Box sx={tableCellSx}>{formatQty(usage.consumedQty || 0)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(usage.wasteQty || 0)}</Box>
+                                    <Box sx={tableCellSx}>{formatQty(usage.returnedQty || 0)}</Box>
+                                    <Box sx={tableCellSx}>{canManage && <Button onClick={() => open(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
+                                </Box>;
+                            })()
                         ))}
                     </Box>
                 )}
@@ -750,8 +821,6 @@ export function MatFlowMaterialsPage() {
                         </TextField>
                         <TextField label="UOM *" value={form.uom} onChange={(e) => setForm((c) => ({ ...c, uom: e.target.value }))} sx={fieldSx} />
                         <TextField label="Preferred Supplier" value={form.preferredSupplier} onChange={(e) => setForm((c) => ({ ...c, preferredSupplier: e.target.value }))} sx={fieldSx} />
-                        <TextField type="number" label="Minimum Stock" value={form.minimumStock} onChange={(e) => setForm((c) => ({ ...c, minimumStock: e.target.value }))} sx={fieldSx} />
-                        <TextField type="number" label="Reorder Level" value={form.reorderLevel} onChange={(e) => setForm((c) => ({ ...c, reorderLevel: e.target.value }))} sx={fieldSx} />
                         <FormControlLabel control={<Switch checked={form.active === true} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
                         <TextField multiline minRows={3} label="Specification" value={form.specification} onChange={(e) => setForm((c) => ({ ...c, specification: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>
@@ -874,7 +943,7 @@ export function MatFlowLocationsPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
-                            {["Code", "Location", "Plant", "Type", "Ownership", "Stock", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["Code", "Location", "Plant", "Type", "Ownership", "Custody Tracking", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
@@ -910,7 +979,7 @@ export function MatFlowLocationsPage() {
                         <TextField label="Contact Person" value={form.contactPerson} onChange={(e) => setForm((c) => ({ ...c, contactPerson: e.target.value }))} sx={fieldSx} />
                         <TextField label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm((c) => ({ ...c, contactPhone: e.target.value }))} sx={fieldSx} />
                         <TextField multiline minRows={2} label="Address" value={form.address} onChange={(e) => setForm((c) => ({ ...c, address: e.target.value }))} sx={fieldSx} />
-                        <FormControlLabel control={<Switch checked={form.supportsStock === true} onChange={(e) => setForm((c) => ({ ...c, supportsStock: e.target.checked }))} />} label="Supports Stock" />
+                        <FormControlLabel control={<Switch checked={form.supportsStock === true} onChange={(e) => setForm((c) => ({ ...c, supportsStock: e.target.checked }))} />} label="Supports MatFlow Custody Tracking" />
                         <FormControlLabel control={<Switch checked={form.active === true} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
                     </Box>
                 </DialogContent>

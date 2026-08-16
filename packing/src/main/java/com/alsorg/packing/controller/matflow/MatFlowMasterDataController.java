@@ -5,8 +5,6 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowMetadataDtos.MetadataResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StockAdjustmentRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StockBalanceResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorResponse;
 import com.alsorg.packing.service.matflow.MatFlowMasterDataService;
@@ -27,9 +25,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Consolidated MatFlow master-data controller.
+ * MatFlow master/reference controller.
  *
- * Replaces the former Master, Inventory, Vendor and Metadata controllers.
+ * Tally is the physical stock authority. Therefore this controller
+ * intentionally
+ * exposes no Store stock balance, opening balance or stock-adjustment
+ * endpoints.
+ * MatFlow material master is identity/specification/UOM only; usage is reported
+ * through /material-register.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -63,12 +66,9 @@ public class MatFlowMasterDataController {
         return service.updateMaterial(id, request);
     }
 
-    /* -------------------- Projects -------------------- */
-
-    /**
-     * Project/Product writes were intentionally removed from this master-data
-     * controller. The canonical hierarchy is now owned only by
-     * MatFlowProjectController at /api/matflow/projects.
+    /*
+     * Project/Product writes are owned only by MatFlowProjectController at
+     * /api/matflow/projects.
      */
 
     /* -------------------- Locations -------------------- */
@@ -92,21 +92,10 @@ public class MatFlowMasterDataController {
         return service.updateLocation(id, request);
     }
 
-    /* -------------------- Inventory -------------------- */
-
-    @GetMapping("/stock")
-    public List<StockBalanceResponse> stock(
-            @RequestParam(required = false) UUID materialId,
-            @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) String plantCode) {
-        return service.listStock(materialId, locationId, plantCode);
-    }
-
-    @PostMapping("/stock/adjustments")
-    public StockBalanceResponse adjustStock(
-            @Valid @RequestBody StockAdjustmentRequest request) {
-        return service.adjustStock(request);
-    }
+    /*
+     * No /stock and no /stock/adjustments endpoints by design.
+     * Store checks actual stock in Tally.
+     */
 
     /* -------------------- Vendors -------------------- */
 

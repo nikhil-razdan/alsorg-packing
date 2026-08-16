@@ -344,9 +344,9 @@ public class MatFlowProcurementService {
                         receiptLine.purchaseOrderLine = poLine;
                         receiptLine.material = poLine.material;
                         receiptLine.receivedQty = receivedQty;
-                        // No pre-allocation QC gate: inward quantity is physically usable Store stock.
-                        // When Store later allocates it to an MR, Store explicitly chooses QC or direct
-                        // issue.
+                        // GRN records the commercial/physical inward event only. Tally is the
+                        // physical stock authority. When Main Store later reviews the linked MR,
+                        // Store checks Tally and declares FULL / PARTIAL / NOT AVAILABLE.
                         receiptLine.acceptedQty = receivedQty;
                         receiptLine.rejectedQty = BigDecimal.ZERO;
                         receiptLine.returnedQty = BigDecimal.ZERO;
@@ -369,8 +369,13 @@ public class MatFlowProcurementService {
                         indentLine.setUpdatedBy(actor);
                         indentLineRepository.save(indentLine);
 
+                        /*
+                         * Keep a zero/free-running technical balance row only because the immutable
+                         * MatFlow ledger and downstream custody model reference a location balance.
+                         * GRN must NOT increase MatFlow Store on-hand quantity: Tally owns the actual
+                         * stock balance. The RECEIPT ledger event remains for PI/PO/GRN usage history.
+                         */
                         MatFlowStockBalance balance = lockOrCreateBalance(poLine.material, receiptLocation, actor);
-                        balance.onHandQty = scale(balance.onHandQty).add(receivedQty).setScale(3, RoundingMode.HALF_UP);
                         balance.setUpdatedBy(actor);
                         balance = stockRepository.save(balance);
 
@@ -379,7 +384,7 @@ public class MatFlowProcurementService {
                                         receivedQty, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                                         "MATFLOW_GRN", receipt.getId(), receipt.grnNumber,
                                         receiptLine.batchNo,
-                                        "Vendor material inwarded to Store; QC decision deferred until MR allocation",
+                                        "Vendor receipt recorded against PI/PO/GRN; physical Store stock remains in Tally",
                                         actor);
                 }
 
