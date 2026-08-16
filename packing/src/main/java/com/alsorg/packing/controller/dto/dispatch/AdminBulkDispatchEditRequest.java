@@ -8,11 +8,26 @@ import java.util.UUID;
 import jakarta.validation.constraints.NotEmpty;
 
 public record AdminBulkDispatchEditRequest(
-        @NotEmpty(message = "Select at least one dispatch item") List<String> itemIds,
+        @NotEmpty(message = "Select at least one dispatch item")
+        List<String> itemIds,
 
-        @NotEmpty(message = "Select at least one field to update") Set<AdminDispatchEditField> fields,
+        @NotEmpty(message = "Select at least one field to update")
+        Set<AdminDispatchEditField> fields,
 
         String itemName,
+
+        /*
+         * Admin-editable packet number.
+         *
+         * Accepted examples:
+         * 1
+         * 12
+         * Pkt-12
+         *
+         * The service normalizes this to Pkt-N.
+         */
+        String packetNumber,
+
         String pdNo,
         String drawingNo,
         String clientName,
@@ -30,5 +45,11 @@ public record AdminBulkDispatchEditRequest(
         UUID vehicleId,
         String vehicleNumber,
 
-        LocalDateTime dispatchDateTime) {
+        /*
+         * Business-local date/time in Asia/Kolkata.
+         * Frontend datetime-local example:
+         * 2026-08-16T14:30
+         */
+        LocalDateTime dispatchDateTime
+) {
 }

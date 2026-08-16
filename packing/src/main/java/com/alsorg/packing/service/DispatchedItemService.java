@@ -1793,6 +1793,23 @@ public class DispatchedItemService {
         boolean updateDispatchDateTime = fields.contains(
                 AdminDispatchEditField.DISPATCH_DATE_TIME);
 
+        boolean updatePacketNumber = fields.contains(
+                AdminDispatchEditField.PACKET_NUMBER);
+
+        if (updatePacketNumber) {
+            if (requestedIds.size() != 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Packet No. can be changed for one dispatch item at a time");
+            }
+
+            /*
+             * Validate before any entity is modified.
+             */
+            parseAdminPacketNumber(
+                    request.packetNumber());
+        }
+
         if (updateDispatchDateTime
                 && request.dispatchDateTime() == null) {
 
@@ -2081,6 +2098,26 @@ public class DispatchedItemService {
             }
 
             if (fields.contains(
+                    AdminDispatchEditField.PACKET_NUMBER)) {
+
+                int packetNo = parseAdminPacketNumber(
+                        request.packetNumber());
+
+                /*
+                 * DispatchedItem has no separate packet-number column.
+                 * Keep packet identity synchronized through its SKU.
+                 * Linked PacketItems are synchronized canonically below.
+                 */
+                item.setSku(
+                        rebuildAdminDispatchSku(
+                                item.getSku(),
+                                item.getPdNo(),
+                                item.getDrawingNo(),
+                                packetNo,
+                                item.getItemType()));
+            }
+
+            if (fields.contains(
                     AdminDispatchEditField.CLIENT_NAME)) {
 
                 item.setClientName(
@@ -2220,6 +2257,49 @@ public class DispatchedItemService {
                 packetItem.setDrawingNo(
                         cleanNullable(
                                 request.drawingNo()));
+            }
+
+            if (fields.contains(
+                    AdminDispatchEditField.PACKET_NUMBER)) {
+
+                int packetNo = parseAdminPacketNumber(
+                        request.packetNumber());
+
+                String newPacketNumber =
+                        "Pkt-" + packetNo;
+
+                if (packetItem.getMasterItem() != null
+                        && packetItem.getMasterItem().getId() != null
+                        && (packetItem.getPacketNumber() == null
+                                || !newPacketNumber.equalsIgnoreCase(
+                                        packetItem.getPacketNumber()))
+                        && packetItemRepo.existsByMasterItemIdAndPacketNumber(
+                                packetItem.getMasterItem().getId(),
+                                newPacketNumber)) {
+
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Packet number already exists in this master item: "
+                                    + newPacketNumber);
+                }
+
+                packetItem.setPacketNumber(
+                        newPacketNumber);
+
+                packetItem.setSku(
+                        buildAdminPacketItemSku(
+                                packetItem.getPdNo(),
+                                packetItem.getDrawingNo(),
+                                packetNo,
+                                packetItem.getItemType(),
+                                packetItem.getSku()));
+
+                /*
+                 * Keep the Dispatch register in exact sync with the linked
+                 * PacketItem after rebuilding packet number + SKU.
+                 */
+                dispatchedItem.setSku(
+                        packetItem.getSku());
             }
 
             if (fields.contains(
@@ -2517,6 +2597,162 @@ public class DispatchedItemService {
      * INTERNAL HELPERS
      * ============================================================
      */
+
+    private int parseAdminPacketNumber(
+            String value) {
+
+        String clean = cleanNullable(
+                value);
+
+        if (clean == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Packet No. is required");
+        }
+
+        clean = clean
+                .replaceFirst(
+                        "(?i)^Pkt[-\\s]*",
+                        "")
+                .trim();
+
+        if (!clean.matches("\\d+")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Packet No. must be a positive whole number");
+        }
+
+        final int packetNo;
+
+        try {
+            packetNo = Integer.parseInt(
+                    clean);
+        } catch (NumberFormatException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Packet No. is too large");
+        }
+
+        if (packetNo <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Packet No. must be greater than zero");
+        }
+
+        return packetNo;
+    }
+
+    private String rebuildAdminDispatchSku(
+            String existingSku,
+            String pdNo,
+            String drawingNo,
+            int packetNo,
+            PacketItemType itemType) {
+
+        String existing = cleanNullable(
+                existingSku);
+
+        /*
+         * Preserve existing imported/legacy SKU prefixes when a Pkt-N
+         * suffix already exists.
+         */
+        if (existing != null
+                && existing.matches("(?i).*Pkt-\\d+.*")) {
+
+            return existing.replaceFirst(
+                    "(?i)Pkt-\\d+",
+                    "Pkt-" + packetNo);
+        }
+
+        /*
+         * Standalone Warehouse-import/legacy row:
+         * preserve its existing SKU/code exactly and append only packet identity.
+         * Linked PacketItems are rebuilt canonically by buildAdminPacketItemSku().
+         */
+        if (existing != null) {
+            return existing
+                    + "/Pkt-"
+                    + packetNo;
+        }
+
+        boolean hardware =
+                itemType == PacketItemType.HARDWARE;
+
+        String cleanPdNo = cleanSkuPart(
+                pdNo);
+
+        String cleanDrawingNo = cleanSkuPart(
+                drawingNo)
+                .replace(
+                        "/",
+                        "-");
+
+        if (!"-".equals(cleanPdNo)
+                || !"-".equals(cleanDrawingNo)) {
+
+            return hardware
+                    ? cleanPdNo
+                            + "/"
+                            + cleanDrawingNo
+                            + "/HW/Pkt-"
+                            + packetNo
+                    : cleanPdNo
+                            + "/"
+                            + cleanDrawingNo
+                            + "/Pkt-"
+                            + packetNo;
+        }
+
+        return "Pkt-" + packetNo;
+    }
+
+    private String buildAdminPacketItemSku(
+            String pdNo,
+            String drawingNo,
+            int packetNo,
+            PacketItemType itemType,
+            String existingSku) {
+
+        boolean hardware =
+                itemType == PacketItemType.HARDWARE
+                        || (existingSku != null
+                                && existingSku.toUpperCase()
+                                        .contains("/HW/"));
+
+        String cleanPdNo = cleanSkuPart(
+                pdNo);
+
+        String cleanDrawingNo = cleanSkuPart(
+                drawingNo)
+                .replace(
+                        "/",
+                        "-");
+
+        return hardware
+                ? cleanPdNo
+                        + "/"
+                        + cleanDrawingNo
+                        + "/HW/Pkt-"
+                        + packetNo
+                : cleanPdNo
+                        + "/"
+                        + cleanDrawingNo
+                        + "/Pkt-"
+                        + packetNo;
+    }
+
+    private String cleanSkuPart(
+            String value) {
+
+        String clean = cleanNullable(
+                value);
+
+        return clean == null
+                ? "-"
+                : clean.replaceAll(
+                        "\\s+",
+                        " ");
+    }
 
     private String safe(
             Object value) {

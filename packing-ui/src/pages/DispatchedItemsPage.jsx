@@ -65,9 +65,9 @@ const page = {
 };
 
 const dispatchGrid =
-	"70px 350px 280px 140px 180px 250px 100px 220px 120px 180px 210px 240px 540px";
+	"70px 350px 280px 140px 180px 250px 220px 120px 180px 210px 240px 540px";
 
-const dispatchMinWidth = 2880;
+const dispatchMinWidth = 2780;
 
 const tableHeader = {
 	position: "sticky",
@@ -5073,6 +5073,7 @@ const dispatchPlantMatches = (
 
 const ADMIN_EDIT_API_FIELDS = {
 	itemName: "ITEM_NAME",
+	packetNumber: "PACKET_NUMBER",
 	pdNo: "PD_NO",
 	drawingNo: "DRAWING_NO",
 	clientName: "CLIENT_NAME",
@@ -5092,6 +5093,10 @@ const ADMIN_EDIT_TEXT_FIELDS = [
 	{
 		key: "itemName",
 		label: "Item Name",
+	},
+	{
+		key: "packetNumber",
+		label: "Packet No.",
 	},
 	{
 		key: "pdNo",
@@ -5138,8 +5143,39 @@ const ADMIN_EDIT_TEXT_FIELDS = [
 	},
 ];
 
+
+const getAdminEditPacketNumber = (row) => {
+	const directValue = String(
+		row?.packetNumber ||
+		row?.packetNo ||
+		row?.pktNo ||
+		""
+	).trim();
+
+	if (directValue) {
+		const directMatch =
+			directValue.match(/^(?:Pkt[-\s]*)?(\d+)$/i);
+
+		if (directMatch) {
+			return directMatch[1];
+		}
+	}
+
+	const sku = String(
+		row?.sku || ""
+	).trim();
+
+	const skuMatch =
+		sku.match(/Pkt[-\s]*(\d+)/i);
+
+	return skuMatch
+		? skuMatch[1]
+		: "";
+};
+
 const createEmptyAdminEditForm = () => ({
 	itemName: "",
+	packetNumber: "",
 	pdNo: "",
 	drawingNo: "",
 	clientName: "",
@@ -5163,6 +5199,7 @@ const createEmptyAdminEditForm = () => ({
 
 const createEmptyAdminEditApplyState = () => ({
 	itemName: false,
+	packetNumber: false,
 	pdNo: false,
 	drawingNo: false,
 	clientName: false,
@@ -11885,24 +11922,6 @@ export default function DispatchedItemsPage() {
 			},
 		},
 		{
-			field: "stock",
-			headerName: "Stock",
-			width: 100,
-			renderHeader: () => (
-				<span>Stock</span>
-			),
-			renderCell: (params) => (
-				<span
-					style={{
-						fontWeight: 700,
-						color: params.value === 0 ? "#ff6b6b" : "#4caf50",
-					}}
-				>
-					{params.value}
-				</span>
-			),
-		},
-		{
 			field: "clientName",
 			headerName: "Client",
 			minWidth: 180,
@@ -13111,6 +13130,15 @@ export default function DispatchedItemsPage() {
 						row?.name
 				),
 
+			packetNumber:
+				getAdminEditCommonValue(
+					cleanRows,
+					(row) =>
+						getAdminEditPacketNumber(
+							row
+						)
+				),
+
 			pdNo:
 				getAdminEditCommonValue(
 					cleanRows,
@@ -13211,6 +13239,7 @@ export default function DispatchedItemsPage() {
 			singleRow
 				? {
 					itemName: true,
+					packetNumber: false,
 					pdNo: true,
 					drawingNo: true,
 					clientName: true,
@@ -13367,6 +13396,37 @@ export default function DispatchedItemsPage() {
 				return;
 			}
 
+
+			const cleanPacketNumber =
+				String(
+					adminEditForm.packetNumber ||
+					""
+				).trim();
+
+			if (
+				adminEditApply.packetNumber &&
+				!/^(?:Pkt[-\s]*)?\d+$/i.test(
+					cleanPacketNumber
+				)
+			) {
+				alert(
+					"Packet No. must be a positive number, for example 1 or Pkt-1"
+				);
+
+				return;
+			}
+
+			if (
+				adminEditApply.packetNumber &&
+				itemIds.length !== 1
+			) {
+				alert(
+					"Packet No. can be changed for one item at a time"
+				);
+
+				return;
+			}
+
 			const payload = {
 				itemIds,
 				fields,
@@ -13376,6 +13436,11 @@ export default function DispatchedItemsPage() {
 						adminEditForm.itemName ||
 						""
 					).trim(),
+
+				packetNumber:
+					adminEditApply.packetNumber
+						? cleanPacketNumber
+						: null,
 
 				pdNo:
 					String(
@@ -13573,6 +13638,16 @@ export default function DispatchedItemsPage() {
 					} else {
 						shouldReloadDispatchRows = true;
 					}
+				}
+
+
+				/*
+				 * Packet No. is canonically stored on PacketItem and reflected
+				 * into Dispatch through SKU. Reload once so the table receives
+				 * the authoritative synchronized packet identity.
+				 */
+				if (adminEditApply.packetNumber) {
+					shouldReloadDispatchRows = true;
 				}
 
 				if (packingDateSelected) {
@@ -18477,7 +18552,6 @@ export default function DispatchedItemsPage() {
 								<div>PD No</div>
 								<div>DWG No</div>
 								<div>Description</div>
-								<div>Stock</div>
 								<div>Client</div>
 								<div>Plant</div>
 								<div>Location</div>
@@ -18531,20 +18605,21 @@ export default function DispatchedItemsPage() {
 											{columns[5].renderCell({ value: row.description, row })}
 										</div>
 
+
 										<div style={tableCellWrap}>
-											{columns[6].renderCell({ value: row.stock, row })}
+											{columns[6].renderCell({ value: row.clientName, row })}
 										</div>
 
 										<div style={tableCellWrap}>
-											{columns[7].renderCell({ value: row.clientName, row })}
+											{columns[7].renderCell({ value: row.plantCode, row })}
 										</div>
 
 										<div style={tableCellWrap}>
-											{columns[8].renderCell({ value: row.plantCode, row })}
+											{columns[8].renderCell({ value: row.currentLocationCode, row })}
 										</div>
 
 										<div style={tableCellWrap}>
-											{columns[9].renderCell({ value: row.currentLocationCode, row })}
+											{columns[9].renderCell({ row })}
 										</div>
 
 										<div style={tableCellWrap}>
@@ -18553,10 +18628,6 @@ export default function DispatchedItemsPage() {
 
 										<div style={tableCellWrap}>
 											{columns[11].renderCell({ row })}
-										</div>
-
-										<div style={tableCellWrap}>
-											{columns[12].renderCell({ row })}
 										</div>
 									</div>
 

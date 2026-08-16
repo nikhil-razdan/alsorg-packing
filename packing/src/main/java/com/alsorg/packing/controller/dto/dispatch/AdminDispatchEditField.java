@@ -2,6 +2,7 @@ package com.alsorg.packing.controller.dto.dispatch;
 
 public enum AdminDispatchEditField {
     ITEM_NAME,
+    PACKET_NUMBER,
     PD_NO,
     DRAWING_NO,
     CLIENT_NAME,
