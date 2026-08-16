@@ -58,6 +58,243 @@ public class DispatchedItemsController {
         private static final int DEFAULT_DISPATCH_PAGE_SIZE = 200;
         private static final int MAX_DISPATCH_PAGE_SIZE = 200;
 
+        /*
+         * ============================================================
+         * OPTIMIZED DISPATCH REGISTER SEARCH / PAGINATION
+         * ============================================================
+         *
+         * Backward-compatible addition.
+         *
+         * IMPORTANT:
+         * - The existing GET /api/dispatched endpoint remains unchanged.
+         * - Existing clients and workflows can continue to use it.
+         * - The optimized React Dispatch register uses /search so the
+         * database performs filtering + pagination before JSON is sent.
+         * - No Dispatch business state is changed by this read endpoint.
+         */
+        @GetMapping(value = "/search", produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<List<DispatchedItem>> searchDispatchedItems(
+
+                        @RequestParam(defaultValue = "0") int page,
+
+                        @RequestParam(defaultValue = "25") int size,
+
+                        @RequestParam(defaultValue = "") String search,
+
+                        @RequestParam(defaultValue = "ALL") String statuses,
+
+                        @RequestParam(defaultValue = "ALL") String plant,
+
+                        @RequestParam(defaultValue = "ACTIVITY") String dateMode,
+
+                        @RequestParam(defaultValue = "") String dateFrom,
+
+                        @RequestParam(defaultValue = "") String dateTo,
+
+                        @RequestParam(defaultValue = "") String timeFrom,
+
+                        @RequestParam(defaultValue = "") String timeTo,
+
+                        @RequestParam(defaultValue = "NONE") String groupBy,
+
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(
+                                auth);
+
+                int safePage = Math.max(
+                                page,
+                                0);
+
+                int safeSize = Math.min(
+                                Math.max(
+                                                size,
+                                                1),
+                                MAX_DISPATCH_PAGE_SIZE);
+
+                Pageable pageable = PageRequest.of(
+                                safePage,
+                                safeSize,
+                                buildDispatchRegisterSort(
+                                                groupBy));
+
+                boolean admin = currentUserService.isAdmin(
+                                user);
+
+                boolean dispatchUser = currentUserService.isDispatch(
+                                user);
+
+                boolean completeRegisterAccess = admin ||
+                                dispatchUser;
+
+                Set<String> allowedPlants = completeRegisterAccess
+                                ? Set.of()
+                                : currentUserService.allowedPlants(
+                                                user);
+
+                Page<DispatchedItem> result = dispatchedItemService.searchDispatchRegister(
+                                pageable,
+                                search,
+                                parseDispatchStatusFilter(
+                                                statuses),
+                                plant,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                completeRegisterAccess,
+                                allowedPlants);
+
+                return ResponseEntity
+                                .ok()
+                                .contentType(
+                                                MediaType.APPLICATION_JSON)
+                                .header(
+                                                HttpHeaders.CACHE_CONTROL,
+                                                "no-store, no-cache, must-revalidate")
+                                .header(
+                                                "X-Total-Pages",
+                                                String.valueOf(
+                                                                result.getTotalPages()))
+                                .header(
+                                                "X-Total-Elements",
+                                                String.valueOf(
+                                                                result.getTotalElements()))
+                                .header(
+                                                "X-Page-Number",
+                                                String.valueOf(
+                                                                result.getNumber()))
+                                .header(
+                                                "X-Page-Size",
+                                                String.valueOf(
+                                                                result.getSize()))
+                                .header(
+                                                "X-Has-Next",
+                                                String.valueOf(
+                                                                result.hasNext()))
+                                .header(
+                                                "X-Dispatch-Query",
+                                                "server-paged")
+                                .body(
+                                                result.getContent());
+        }
+
+        /*
+         * Keep the table's existing grouping choices stable while pushing
+         * ordering into PostgreSQL. zohoItemId is always the final
+         * tie-breaker so page boundaries cannot randomly shuffle rows.
+         */
+        private Sort buildDispatchRegisterSort(
+                        String groupBy) {
+
+                String cleanGroup = groupBy == null
+                                ? "NONE"
+                                : groupBy.trim()
+                                                .toUpperCase();
+
+                Sort tieBreaker = Sort.by(
+                                Sort.Direction.ASC,
+                                "zohoItemId");
+
+                if ("STATUS".equals(
+                                cleanGroup)) {
+
+                        return Sort.by(
+                                        Sort.Order.asc(
+                                                        "status"),
+                                        Sort.Order.asc(
+                                                        "name"),
+                                        Sort.Order.desc(
+                                                        "createdAt"))
+                                        .and(
+                                                        tieBreaker);
+                }
+
+                if ("CLIENT".equals(
+                                cleanGroup)) {
+
+                        return Sort.by(
+                                        Sort.Order.asc(
+                                                        "clientName"),
+                                        Sort.Order.asc(
+                                                        "name"),
+                                        Sort.Order.desc(
+                                                        "createdAt"))
+                                        .and(
+                                                        tieBreaker);
+                }
+
+                if ("PLANT".equals(
+                                cleanGroup)) {
+
+                        return Sort.by(
+                                        Sort.Order.asc(
+                                                        "plantCode"),
+                                        Sort.Order.asc(
+                                                        "name"),
+                                        Sort.Order.desc(
+                                                        "createdAt"))
+                                        .and(
+                                                        tieBreaker);
+                }
+
+                return Sort.by(
+                                Sort.Direction.DESC,
+                                "createdAt")
+                                .and(
+                                                tieBreaker);
+        }
+
+        /*
+         * Empty list means "ALL", matching the existing frontend semantics.
+         */
+        private List<ItemDispatchStatus> parseDispatchStatusFilter(
+                        String value) {
+
+                if (value == null ||
+                                value.isBlank()) {
+
+                        return List.of();
+                }
+
+                String[] values = value.split(",");
+
+                java.util.LinkedHashSet<ItemDispatchStatus> parsed = new java.util.LinkedHashSet<>();
+
+                for (String rawValue : values) {
+
+                        String clean = rawValue == null
+                                        ? ""
+                                        : rawValue.trim()
+                                                        .toUpperCase();
+
+                        if (clean.isBlank() ||
+                                        "ALL".equals(
+                                                        clean)) {
+
+                                return List.of();
+                        }
+
+                        try {
+
+                                parsed.add(
+                                                ItemDispatchStatus.valueOf(
+                                                                clean));
+
+                        } catch (IllegalArgumentException exception) {
+
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Invalid dispatch status: "
+                                                                + clean);
+                        }
+                }
+
+                return List.copyOf(
+                                parsed);
+        }
+
         @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<List<DispatchedItem>> getDispatchedItems(
 
