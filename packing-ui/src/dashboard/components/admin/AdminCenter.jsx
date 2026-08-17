@@ -1156,28 +1156,6 @@ function AdminPacketRollbackPanel({
     const [result, setResult] =
         useState(null);
 
-    const warehouseBulkIds =
-        useMemo(
-            () =>
-                warehouseBulkTargets
-                    .map((target) =>
-                        String(
-                            target?.id || ""
-                        ).trim()
-                    )
-                    .filter(Boolean),
-            [warehouseBulkTargets]
-        );
-
-    const warehouseBulkIdSet =
-        useMemo(
-            () =>
-                new Set(
-                    warehouseBulkIds
-                ),
-            [warehouseBulkIds]
-        );
-
     const requiredConfirmation =
         preview?.requiredConfirmation || "";
 
@@ -2028,6 +2006,28 @@ function AdminCenter({
         warehouseBulkTargets,
         setWarehouseBulkTargets,
     ] = useState([]);
+
+    const warehouseBulkIds =
+        useMemo(
+            () =>
+                warehouseBulkTargets
+                    .map((target) =>
+                        String(
+                            target?.id || ""
+                        ).trim()
+                    )
+                    .filter(Boolean),
+            [warehouseBulkTargets]
+        );
+
+    const warehouseBulkIdSet =
+        useMemo(
+            () =>
+                new Set(
+                    warehouseBulkIds
+                ),
+            [warehouseBulkIds]
+        );
 
     const [query, setQuery] =
         useState("");
@@ -3265,14 +3265,14 @@ function AdminCenter({
                                                             selected={
                                                                 targetType ===
                                                                     "WAREHOUSE_ITEM" &&
-                                                                    warehouseBulkMode
+                                                                warehouseBulkMode
                                                                     ? warehouseBulkIdSet.has(
                                                                         String(
                                                                             target.id
                                                                         )
                                                                     )
                                                                     : selectedTarget?.id ===
-                                                                    target.id
+                                                                        target.id
                                                             }
                                                             disabled={
                                                                 deleting
@@ -3376,7 +3376,7 @@ function AdminCenter({
                                                 >
                                                     {targetType ===
                                                         "WAREHOUSE_ITEM" &&
-                                                        warehouseBulkMode
+                                                    warehouseBulkMode
                                                         ? "Select Warehouse records"
                                                         : "Select a record"}
                                                 </div>
@@ -3388,7 +3388,7 @@ function AdminCenter({
                                                 >
                                                     {targetType ===
                                                         "WAREHOUSE_ITEM" &&
-                                                        warehouseBulkMode
+                                                    warehouseBulkMode
                                                         ? "Click Warehouse search results to build the bulk selection, then preview the combined deletion impact."
                                                         : "The backend will calculate every linked row before the delete button is enabled."}
                                                 </div>
@@ -3559,10 +3559,10 @@ function AdminCenter({
                                                 targetType
                                             ) !==
                                                 "WAREHOUSE_BULK" && (
-                                                    <LifecycleMetaPanel
-                                                        row={preview}
-                                                    />
-                                                )}
+                                                <LifecycleMetaPanel
+                                                    row={preview}
+                                                />
+                                            )}
 
                                             {preview.warning && (
                                                 <div
