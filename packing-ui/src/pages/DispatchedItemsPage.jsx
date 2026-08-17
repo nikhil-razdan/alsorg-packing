@@ -2553,7 +2553,34 @@ const searchPanel = {
 
 	alignItems: "center",
 
-	flexWrap: "wrap",
+	/*
+	 * Keep the search/filter dock on one compact row even when browser
+	 * zoom reduces the available CSS viewport width. Previously flexWrap
+	 * pushed controls onto extra rows, making the whole search area grow
+	 * vertically. Horizontal overflow is contained inside this dock only.
+	 */
+	flexWrap: "nowrap",
+	maxWidth: "100%",
+	boxSizing: "border-box",
+	overflowX: "auto",
+	overflowY: "hidden",
+	overscrollBehaviorX: "contain",
+	scrollbarWidth: "thin",
+	scrollbarColor:
+		"rgba(96,165,250,.34) transparent",
+
+	"&::-webkit-scrollbar": {
+		height: 5,
+	},
+
+	"&::-webkit-scrollbar-track": {
+		background: "transparent",
+	},
+
+	"&::-webkit-scrollbar-thumb": {
+		background: "rgba(96,165,250,.30)",
+		borderRadius: 999,
+	},
 
 	gap: 12,
 
@@ -17823,7 +17850,13 @@ export default function DispatchedItemsPage() {
 						}}
 						InputProps={{ disableUnderline: true }}
 						sx={{
-							flex: 1,
+							/*
+							 * Prevent the search input itself from becoming an oversized
+							 * flex item while still letting it shrink cleanly at zoom.
+							 */
+							flex: "1 1 420px",
+							minWidth: 220,
+							maxWidth: 600,
 
 							"& .MuiInputBase-root": {
 								color: "#fff",
