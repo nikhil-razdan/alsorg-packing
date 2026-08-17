@@ -210,10 +210,21 @@ function KanbanIdentityLegend({ scope }) {
 const FLOW_KANBAN_COLUMNS = FLOW.map(([key, label]) => ({
     key,
     label,
-    subtitle: key === "COMPLETE"
-        ? "Fully accounted / completed"
-        : "Current workflow bottleneck",
+    subtitle: ({
+        DEMAND: "MR / demand intake",
+        STORE: "Availability & reservation",
+        PURCHASE: "Shortage procurement",
+        QC: "Inspection & routing",
+        PROCESSING: "Approved processing",
+        PRODUCTION: "Issue & execution",
+        COMPLETE: "Accounted & closed",
+    })[key] || "Current workflow stage",
 }));
+
+const OPERATIONS_BOARD_COLUMN_WIDTH = {
+    COMPACT: 168,
+    COMFORTABLE: 248,
+};
 
 const FLOW_INDEX = FLOW.reduce((result, [key], index) => {
     result[key] = index;
@@ -1383,6 +1394,12 @@ export function MatFlowDashboardPage() {
             .filter((item) => boardFilterMatch(item, boardFilter))
             .sort(boardPrioritySort);
 
+        const workflowLaneCounts = FLOW.map(([key, label]) => ({
+            key,
+            label,
+            count: activeItems.filter((item) => normalize(item?.lane) === key).length,
+        }));
+
         const kanbanKpis = kanbanScope === "PROJECT"
             ? [
                 ["Projects", projectItems.length],
@@ -1414,7 +1431,7 @@ export function MatFlowDashboardPage() {
                         <Box sx={{ minWidth: 0, flex: "1 1 420px" }}>
                             <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Operations Board</Typography>
                             <Typography sx={subTextSx}>
-                                Scalable Project, Product and Material workflow control. The board stays within the working viewport, each stage scrolls independently, completed work is intentionally limited to recent records, and large lanes progressively reveal more cards without flooding the page.
+                                Scalable Project, Product and Material workflow control. Compact mode keeps the complete seven-stage flow visible across a normal desktop viewport, while each lane still scrolls independently for its own cards. Comfortable mode remains available when you want wider, more detailed cards.
                             </Typography>
                         </Box>
                         <MatFlowViewToggle
@@ -1455,7 +1472,7 @@ export function MatFlowDashboardPage() {
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                         <KanbanIdentityLegend scope={kanbanScope} />
                         <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                            Priority order: timing risk → shortage → longest waiting. Compact is the recommended daily operating density.
+                            Priority order: timing risk → shortage → longest waiting. Compact is optimized to keep all seven workflow stages visible without horizontal scrolling on a normal desktop view.
                         </Typography>
                     </Box>
                 </Card>
@@ -1466,12 +1483,85 @@ export function MatFlowDashboardPage() {
                     ))}
                 </Box>
 
+                {!loading && (
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(4,minmax(0,1fr))", md: "repeat(7,minmax(0,1fr))" },
+                            gap: .65,
+                        }}
+                    >
+                        {workflowLaneCounts.map((stage, index) => {
+                            const stageTone = ({
+                                DEMAND: "primary",
+                                STORE: "purple",
+                                PURCHASE: "warning",
+                                QC: "success",
+                                PROCESSING: "purple",
+                                PRODUCTION: "primary",
+                                COMPLETE: "success",
+                            })[stage.key] || "primary";
+                            const palette = OVERVIEW_TONES[stageTone] || OVERVIEW_TONES.primary;
+                            return (
+                                <Box
+                                    key={stage.key}
+                                    sx={{
+                                        minWidth: 0,
+                                        px: .8,
+                                        py: .65,
+                                        borderRadius: 2,
+                                        border: `1px solid ${palette.border}`,
+                                        background: palette.soft,
+                                        display: "grid",
+                                        gridTemplateColumns: "auto 1fr auto",
+                                        gap: .5,
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <Box
+                                        sx={{
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: "50%",
+                                            display: "grid",
+                                            placeItems: "center",
+                                            background: "var(--mf-card-bg)",
+                                            border: `1px solid ${palette.border}`,
+                                            color: palette.text,
+                                            fontSize: 9,
+                                            fontWeight: 950,
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        {index + 1}
+                                    </Box>
+                                    <Typography
+                                        sx={{
+                                            ...mainTextSx,
+                                            minWidth: 0,
+                                            fontSize: 10.4,
+                                            whiteSpace: "nowrap",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                        }}
+                                    >
+                                        {stage.label}
+                                    </Typography>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 11, color: palette.text }}>
+                                        {stage.count}
+                                    </Typography>
+                                </Box>
+                            );
+                        })}
+                    </Box>
+                )}
+
                 {loading ? <LoadingBlock /> : (
                     <MatFlowKanbanBoard
                         columns={FLOW_KANBAN_COLUMNS}
                         items={activeItems}
                         laneFor={(item) => item.lane}
-                        minColumnWidth={boardDensity === "COMPACT" ? 285 : 315}
+                        minColumnWidth={OPERATIONS_BOARD_COLUMN_WIDTH[boardDensity] || OPERATIONS_BOARD_COLUMN_WIDTH.COMPACT}
                         boardHeight={{ xs: 620, md: "clamp(540px, calc(100vh - 300px), 780px)" }}
                         initialItemsPerLane={boardDensity === "COMPACT" ? 24 : 12}
                         loadMoreStep={boardDensity === "COMPACT" ? 24 : 12}
@@ -2276,80 +2366,80 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     />
                 )
             ) : (
-            <Box sx={{ display: "grid", gap: 1 }}>
-                {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
-                    const expanded = expandedProjects[project.key] === true;
-                    return (
-                        <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                            <Box
-                                role={!expanded ? "button" : undefined}
-                                tabIndex={!expanded ? 0 : undefined}
-                                onClick={() => {
-                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                }}
-                                onKeyDown={(event) => {
-                                    if (!expanded && (event.key === "Enter" || event.key === " ")) {
-                                        event.preventDefault();
-                                        setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                    }
-                                }}
-                                sx={{
-                                    px: 1.5,
-                                    py: 1.2,
-                                    display: "grid",
-                                    gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
-                                    gap: 1,
-                                    alignItems: "center",
-                                    cursor: expanded ? "default" : "pointer",
-                                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
-                                }}
-                            >
-                                <Box>
-                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
-                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
-                                </Box>
-                                <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
-                                <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
-                                <Box sx={{ display: "grid", placeItems: "center" }}>
-                                    {expanded && (
-                                        <Button
-                                            aria-label="Collapse project"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                setExpandedProjects((current) => ({ ...current, [project.key]: false }));
-                                            }}
-                                            sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
-                                        >
-                                            <ExpandLessIcon fontSize="small" />
-                                        </Button>
-                                    )}
-                                </Box>
-                            </Box>
-
-                            <Collapse in={expanded} unmountOnExit>
-                                <Box sx={tableShellSx}>
-                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                        {["Product / Drawing", "MR", "Current Owner", "Production User / Plant", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                <Box sx={{ display: "grid", gap: 1 }}>
+                    {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
+                        const expanded = expandedProjects[project.key] === true;
+                        return (
+                            <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                                <Box
+                                    role={!expanded ? "button" : undefined}
+                                    tabIndex={!expanded ? 0 : undefined}
+                                    onClick={() => {
+                                        if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (!expanded && (event.key === "Enter" || event.key === " ")) {
+                                            event.preventDefault();
+                                            setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                        }
+                                    }}
+                                    sx={{
+                                        px: 1.5,
+                                        py: 1.2,
+                                        display: "grid",
+                                        gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        cursor: expanded ? "default" : "pointer",
+                                        background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
+                                    }}
+                                >
+                                    <Box>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
+                                        <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
                                     </Box>
-                                    {project.rows.map((row) => (
-                                        <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                            <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
-                                            <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
-                                            <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
-                                        </Box>
-                                    ))}
+                                    <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
+                                    <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
+                                    <Box sx={{ display: "grid", placeItems: "center" }}>
+                                        {expanded && (
+                                            <Button
+                                                aria-label="Collapse project"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    setExpandedProjects((current) => ({ ...current, [project.key]: false }));
+                                                }}
+                                                sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
+                                            >
+                                                <ExpandLessIcon fontSize="small" />
+                                            </Button>
+                                        )}
+                                    </Box>
                                 </Box>
-                            </Collapse>
-                        </Card>
-                    );
-                })}
-            </Box>
+
+                                <Collapse in={expanded} unmountOnExit>
+                                    <Box sx={tableShellSx}>
+                                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                            {["Product / Drawing", "MR", "Current Owner", "Production User / Plant", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                        </Box>
+                                        {project.rows.map((row) => (
+                                            <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
+                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
+                                                <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
+                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                                <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                </Collapse>
+                            </Card>
+                        );
+                    })}
+                </Box>
             )}
             {!loading && trackerView === "HIERARCHY" && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
         </Box>
