@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Production execution boundary: Store-selected processing jobs, explicit
+ * Production execution boundary: BOM-defined processing jobs, explicit
  * Production start/completion, material consumption and wastage.
  * Processing never raises Purchase Indents; replacement demand returns to
  * Store.
@@ -430,10 +430,39 @@ public class MatFlowProductionService {
                         MatFlowReservation reservation = reservationRepository.findById(reservationId)
                                         .orElseThrow(() -> notFound("Reservation not found"));
                         reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+
+                        if (reservation.requisitionLine != null) {
+                                reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                reservation.requisitionLine);
+                                if (reservation.requisitionLine.bomLine != null) {
+                                        reservation.requisitionLine.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                        reservation.requisitionLine.bomLine);
+                                }
+                                if (reservation.requisitionLine.requisition != null) {
+                                        reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                                        reservation.requisitionLine.requisition);
+                                }
+                        }
+                        if (reservation.material != null) {
+                                reservation.material = (MatFlowMaterial) Hibernate.unproxy(reservation.material);
+                        }
+
                         MatFlowBomRouteStep rawRouteStep = routeRepository.findById(routeStepId)
                                         .orElseThrow(() -> notFound("Processing route step not found"));
                         final MatFlowBomRouteStep routeStep = (MatFlowBomRouteStep) Hibernate.unproxy(rawRouteStep);
+                        if (routeStep.bomLine != null) {
+                                routeStep.bomLine = (MatFlowBomLine) Hibernate.unproxy(routeStep.bomLine);
+                        }
+                        if (routeStep.location != null) {
+                                routeStep.location = (MatFlowLocation) Hibernate.unproxy(routeStep.location);
+                        }
 
+                        if (reservation.requisitionLine == null
+                                        || reservation.requisitionLine.requisition == null
+                                        || reservation.requisitionLine.bomLine == null
+                                        || reservation.material == null) {
+                                throw conflict("Reservation is incomplete for Processing execution");
+                        }
                         if (routeStep.stepType != RouteStepType.PROCESSING) {
                                 throw badRequest("Selected BOM route step is not a Processing step");
                         }
@@ -444,7 +473,7 @@ public class MatFlowProductionService {
                                 throw conflict("Processing route step does not belong to the reserved BOM material line");
                         }
                         /*
-                         * The job is auto-created by the Store-selected route after the
+                         * The job is auto-created by the BOM-defined route after the
                          * material reaches the processor. Do not require the Store actor
                          * to be assigned to the processor plant; Processing access is
                          * enforced when a processor starts/completes the job.
@@ -544,8 +573,8 @@ public class MatFlowProductionService {
                                         request.actualInputQty(),
                                         "Actual input quantity");
 
-                        if (inputQty.compareTo(
-                                        job.plannedInputQty) != 0) {
+                        BigDecimal plannedInputQty = scale(job.plannedInputQty);
+                        if (inputQty.compareTo(plannedInputQty) != 0) {
                                 throw conflict(
                                                 "Actual input quantity must equal the planned input quantity");
                         }
@@ -557,32 +586,33 @@ public class MatFlowProductionService {
                                         .orElseThrow(() -> conflict(
                                                         "Processing input stock not found"));
 
-                        BigDecimal usableOnHand = balance.onHandQty
-                                        .subtract(
-                                                        balance.blockedQty);
+                        /*
+                         * Movement receipt keeps a transient technical balance at the
+                         * Processing Unit. Older rows can still contain nullable numeric
+                         * columns, so never perform raw BigDecimal arithmetic here.
+                         */
+                        BigDecimal onHand = scale(balance.onHandQty);
+                        BigDecimal blocked = scale(balance.blockedQty);
+                        BigDecimal reserved = scale(balance.reservedQty);
+                        BigDecimal usableOnHand = onHand.subtract(blocked)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
-                        if (usableOnHand.compareTo(
-                                        inputQty) < 0) {
+                        if (usableOnHand.compareTo(inputQty) < 0) {
                                 throw conflict(
                                                 "Insufficient usable physical stock for processing");
                         }
 
-                        if (balance.reservedQty
-                                        .compareTo(
-                                                        inputQty) < 0) {
+                        if (reserved.compareTo(inputQty) < 0) {
                                 throw conflict(
                                                 "Insufficient reserved stock for processing");
                         }
 
                         String actor = accessService.actor();
 
-                        balance.onHandQty = scale(
-                                        balance.onHandQty
-                                                        .subtract(inputQty));
-
-                        balance.reservedQty = scale(
-                                        balance.reservedQty
-                                                        .subtract(inputQty));
+                        balance.onHandQty = scale(onHand.subtract(inputQty));
+                        balance.reservedQty = scale(reserved.subtract(inputQty));
+                        balance.blockedQty = blocked;
+                        balance.inTransitQty = scale(balance.inTransitQty);
 
                         balance.setUpdatedBy(actor);
 
@@ -662,10 +692,10 @@ public class MatFlowProductionService {
                                         request.wastageQty(),
                                         "Wastage quantity");
 
-                        BigDecimal accountedInput = outputQty.add(wastageQty);
+                        BigDecimal accountedInput = outputQty.add(wastageQty)
+                                        .setScale(3, RoundingMode.HALF_UP);
 
-                        if (accountedInput.compareTo(
-                                        job.actualInputQty) != 0) {
+                        if (accountedInput.compareTo(scale(job.actualInputQty)) != 0) {
                                 throw badRequest(
                                                 "Output and wastage quantities must equal actual input quantity");
                         }
@@ -677,19 +707,18 @@ public class MatFlowProductionService {
                                         job.location,
                                         actor);
 
-                        outputBalance.onHandQty = scale(
-                                        outputBalance.onHandQty
-                                                        .add(outputQty));
+                        BigDecimal outputOnHand = scale(outputBalance.onHandQty);
+                        BigDecimal outputReserved = scale(outputBalance.reservedQty);
+                        BigDecimal outputBlocked = scale(outputBalance.blockedQty);
 
-                        outputBalance.reservedQty = scale(
-                                        outputBalance.reservedQty
-                                                        .add(outputQty));
+                        outputBalance.onHandQty = scale(outputOnHand.add(outputQty));
+                        outputBalance.reservedQty = scale(outputReserved.add(outputQty));
+                        outputBalance.blockedQty = outputBlocked;
+                        outputBalance.inTransitQty = scale(outputBalance.inTransitQty);
 
                         if (outputBalance.reservedQty
-                                        .add(
-                                                        outputBalance.blockedQty)
-                                        .compareTo(
-                                                        outputBalance.onHandQty) > 0) {
+                                        .add(outputBalance.blockedQty)
+                                        .compareTo(outputBalance.onHandQty) > 0) {
                                 throw conflict(
                                                 "Processing output would make reserved and blocked stock exceed physical stock");
                         }
@@ -897,10 +926,108 @@ public class MatFlowProductionService {
                         requisitionService.refreshState(requisition.getId(), actor);
                 }
 
+                /**
+                 * Processing entities use public JPA association fields in this module.
+                 * Hibernate proxies therefore must be unwrapped before those fields are
+                 * read; otherwise a valid FK-backed association can appear null and
+                 * produce an unhandled NullPointerException/HTTP 500.
+                 */
+                private MatFlowProcessingJob hydrateProcessingJob(
+                                MatFlowProcessingJob raw) {
+                        if (raw == null || raw.getId() == null) {
+                                throw conflict("Processing job is invalid");
+                        }
+
+                        MatFlowProcessingJob job = (MatFlowProcessingJob) Hibernate.unproxy(raw);
+
+                        if (job.reservation != null) {
+                                job.reservation = (MatFlowReservation) Hibernate.unproxy(job.reservation);
+
+                                if (job.reservation.material != null) {
+                                        job.reservation.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                        job.reservation.material);
+                                }
+
+                                if (job.reservation.sourceLocation != null) {
+                                        job.reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        job.reservation.sourceLocation);
+                                }
+
+                                if (job.reservation.requisitionLine != null) {
+                                        job.reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                        job.reservation.requisitionLine);
+
+                                        if (job.reservation.requisitionLine.requisition != null) {
+                                                job.reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate
+                                                                .unproxy(job.reservation.requisitionLine.requisition);
+                                        }
+
+                                        if (job.reservation.requisitionLine.bomLine != null) {
+                                                job.reservation.requisitionLine.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                                job.reservation.requisitionLine.bomLine);
+                                        }
+                                }
+                        }
+
+                        if (job.requisition != null) {
+                                job.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(job.requisition);
+
+                                if (job.requisition.projectDrawing != null) {
+                                        job.requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
+                                                        job.requisition.projectDrawing);
+                                }
+
+                                if (job.requisition.destinationLocation != null) {
+                                        job.requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        job.requisition.destinationLocation);
+                                }
+                        }
+
+                        if (job.routeStep != null) {
+                                job.routeStep = (MatFlowBomRouteStep) Hibernate.unproxy(job.routeStep);
+                                if (job.routeStep.location != null) {
+                                        job.routeStep.location = (MatFlowLocation) Hibernate.unproxy(
+                                                        job.routeStep.location);
+                                }
+                                if (job.routeStep.bomLine != null) {
+                                        job.routeStep.bomLine = (MatFlowBomLine) Hibernate.unproxy(
+                                                        job.routeStep.bomLine);
+                                }
+                        }
+
+                        if (job.location != null) {
+                                job.location = (MatFlowLocation) Hibernate.unproxy(job.location);
+                        }
+                        if (job.inputMaterial != null) {
+                                job.inputMaterial = (MatFlowMaterial) Hibernate.unproxy(job.inputMaterial);
+                        }
+                        if (job.outputMaterial != null) {
+                                job.outputMaterial = (MatFlowMaterial) Hibernate.unproxy(job.outputMaterial);
+                        }
+
+                        if (job.reservation == null
+                                        || job.requisition == null
+                                        || job.routeStep == null
+                                        || job.location == null
+                                        || job.inputMaterial == null
+                                        || job.outputMaterial == null) {
+                                throw conflict(
+                                                "Processing job is incomplete. Refresh the job or recreate the reservation route.");
+                        }
+
+                        if (job.reservation.material == null) {
+                                throw conflict(
+                                                "Processing reservation material is missing. Refresh the job or recreate the reservation route.");
+                        }
+
+                        return job;
+                }
+
                 private MatFlowProcessingJob requireJob(
                                 UUID id) {
                         MatFlowProcessingJob job = jobRepository
                                         .findById(id)
+                                        .map(this::hydrateProcessingJob)
                                         .orElseThrow(() -> notFound(
                                                         "Processing job not found"));
 
@@ -921,6 +1048,10 @@ public class MatFlowProductionService {
                                         .orElse(null);
 
                         if (balance != null) {
+                                balance.onHandQty = scale(balance.onHandQty);
+                                balance.reservedQty = scale(balance.reservedQty);
+                                balance.blockedQty = scale(balance.blockedQty);
+                                balance.inTransitQty = scale(balance.inTransitQty);
                                 return balance;
                         }
 
@@ -928,10 +1059,10 @@ public class MatFlowProductionService {
 
                         created.material = material;
                         created.location = location;
-                        created.onHandQty = BigDecimal.ZERO;
-                        created.reservedQty = BigDecimal.ZERO;
-                        created.blockedQty = BigDecimal.ZERO;
-                        created.inTransitQty = BigDecimal.ZERO;
+                        created.onHandQty = scale(BigDecimal.ZERO);
+                        created.reservedQty = scale(BigDecimal.ZERO);
+                        created.blockedQty = scale(BigDecimal.ZERO);
+                        created.inTransitQty = scale(BigDecimal.ZERO);
 
                         created.setCreatedBy(actor);
                         created.setUpdatedBy(actor);
@@ -991,19 +1122,21 @@ public class MatFlowProductionService {
                         ledger.blockedChange = BigDecimal.ZERO;
                         ledger.inTransitChange = BigDecimal.ZERO;
 
-                        ledger.onHandAfter = balance.onHandQty;
-                        ledger.reservedAfter = balance.reservedQty;
-                        ledger.blockedAfter = balance.blockedQty;
-                        ledger.inTransitAfter = balance.inTransitQty;
+                        ledger.onHandAfter = scale(balance.onHandQty);
+                        ledger.reservedAfter = scale(balance.reservedQty);
+                        ledger.blockedAfter = scale(balance.blockedQty);
+                        ledger.inTransitAfter = scale(balance.inTransitQty);
 
                         ledger.referenceType = "MATFLOW_PROCESSING_JOB";
                         ledger.referenceId = job.getId();
                         ledger.referenceNumber = job.jobNumber;
                         ledger.batchNo = clean(batchNo);
-                        ledger.projectCode = job.requisition.projectDrawing
-                                        .getProjectCode();
-                        ledger.drawingNo = job.requisition.projectDrawing
-                                        .getDrawingNo();
+                        ledger.projectCode = job.requisition == null || job.requisition.projectDrawing == null
+                                        ? null
+                                        : job.requisition.projectDrawing.getProjectCode();
+                        ledger.drawingNo = job.requisition == null || job.requisition.projectDrawing == null
+                                        ? null
+                                        : job.requisition.projectDrawing.getDrawingNo();
                         ledger.actor = actor;
 
                         ledgerRepository.save(ledger);
