@@ -67,7 +67,10 @@ public final class MatFlowPlanningTypes {
         QC_HOLD, QC_RELEASE, RETURN_TO_VENDOR, PROCESS_WASTAGE,
         PRODUCTION_CONSUMPTION, MATERIAL_RETURN_OUT, MATERIAL_RETURN_RECEIPT_CLEAR,
         MATERIAL_RETURN_IN,
-        /** Intermediate remote-Plant return custody; not counted as final returned stock. */
+        /**
+         * Intermediate remote-Plant return custody; not counted as final returned
+         * stock.
+         */
         MATERIAL_RETURN_ROUTE_IN, MATERIAL_RETURN_ROUTE_OUT, MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR,
         QC_REWORK_RELEASE, SCRAP
     }
