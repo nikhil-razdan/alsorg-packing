@@ -34,117 +34,116 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("isAuthenticated()")
 public class MatFlowInsightController {
 
-    private final MatFlowInsightService service;
+        private final MatFlowInsightService service;
 
-    public MatFlowInsightController(MatFlowInsightService service) {
-        this.service = service;
-    }
+        public MatFlowInsightController(MatFlowInsightService service) {
+                this.service = service;
+        }
 
-    /* -------------------- Reports -------------------- */
+        /* -------------------- Reports -------------------- */
 
-    @GetMapping("/reports/dashboard")
-    public DashboardResponse dashboard(
-            @RequestParam(required = false) String plantCode) {
-        return service.dashboard(plantCode);
-    }
+        @GetMapping("/reports/dashboard")
+        public DashboardResponse dashboard(
+                        @RequestParam(required = false) String plantCode) {
+                return service.dashboard(plantCode);
+        }
 
-    @GetMapping("/reports/products/{projectDrawingId}")
-    public ProjectTrackingResponse projectTracking(
-            @PathVariable UUID projectDrawingId) {
-        return service.projectTracking(projectDrawingId);
-    }
+        @GetMapping("/reports/products/{projectDrawingId}")
+        public ProjectTrackingResponse projectTracking(
+                        @PathVariable UUID projectDrawingId) {
+                return service.projectTracking(projectDrawingId);
+        }
 
-    @GetMapping("/reports/shortages")
-    public List<ShortageAgeingRow> shortages(
-            @RequestParam(required = false) String plantCode,
-            @RequestParam(required = false) Integer minimumAgeDays) {
-        return service.shortageAgeing(plantCode, minimumAgeDays);
-    }
+        @GetMapping("/reports/shortages")
+        public List<ShortageAgeingRow> shortages(
+                        @RequestParam(required = false) String plantCode,
+                        @RequestParam(required = false) Integer minimumAgeDays) {
+                return service.shortageAgeing(plantCode, minimumAgeDays);
+        }
 
-    @GetMapping("/reports/stock-ledger")
-    public PageResponse<StockLedgerRow> stockLedger(
-            @RequestParam(required = false) String plantCode,
-            @RequestParam(required = false) UUID materialId,
-            @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) MovementType movementType,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-        return service.stockLedger(
-                plantCode,
-                materialId,
-                locationId,
-                movementType,
-                fromDate,
-                toDate,
-                search,
-                page,
-                size);
-    }
+        @GetMapping("/reports/stock-ledger")
+        public PageResponse<StockLedgerRow> stockLedger(
+                        @RequestParam(required = false) String plantCode,
+                        @RequestParam(required = false) UUID materialId,
+                        @RequestParam(required = false) UUID locationId,
+                        @RequestParam(required = false) MovementType movementType,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+                        @RequestParam(required = false) String search,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "25") int size) {
+                return service.stockLedger(
+                                plantCode,
+                                materialId,
+                                movementType,
+                                fromDate,
+                                toDate,
+                                search,
+                                page,
+                                size);
+        }
 
-    @GetMapping("/reports/audit")
-    public PageResponse<AuditLogRow> audit(
-            @RequestParam(required = false) String plantCode,
-            @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) UUID entityId,
-            @RequestParam(required = false) String action,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-        return service.auditLogs(
-                plantCode,
-                entityType,
-                entityId,
-                action,
-                fromDate,
-                toDate,
-                search,
-                page,
-                size);
-    }
+        @GetMapping("/reports/audit")
+        public PageResponse<AuditLogRow> audit(
+                        @RequestParam(required = false) String plantCode,
+                        @RequestParam(required = false) String entityType,
+                        @RequestParam(required = false) UUID entityId,
+                        @RequestParam(required = false) String action,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+                        @RequestParam(required = false) String search,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "25") int size) {
+                return service.auditLogs(
+                                plantCode,
+                                entityType,
+                                entityId,
+                                action,
+                                fromDate,
+                                toDate,
+                                search,
+                                page,
+                                size);
+        }
 
-    /* -------------------- Smart tracker -------------------- */
+        /* -------------------- Smart tracker -------------------- */
 
-    /**
-     * Production Execution read model.
-     *
-     * This endpoint is intentionally kept separate from /tracker because the
-     * Production Execution workspace has a stable API contract at
-     * GET /api/matflow/production-readiness.
-     */
-    @GetMapping("/production-readiness")
-    public TrackerResponse productionReadiness(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String plantCode) {
-        return service.tracker(search, plantCode, null);
-    }
+        /**
+         * Production Execution read model.
+         *
+         * This endpoint is intentionally kept separate from /tracker because the
+         * Production Execution workspace has a stable API contract at
+         * GET /api/matflow/production-readiness.
+         */
+        @GetMapping("/production-readiness")
+        public TrackerResponse productionReadiness(
+                        @RequestParam(required = false) String search,
+                        @RequestParam(required = false) String plantCode) {
+                return service.tracker(search, plantCode, null);
+        }
 
-    @GetMapping("/tracker")
-    public TrackerResponse tracker(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String plantCode,
-            @RequestParam(required = false) String stage) {
-        return service.tracker(search, plantCode, stage);
-    }
+        @GetMapping("/tracker")
+        public TrackerResponse tracker(
+                        @RequestParam(required = false) String search,
+                        @RequestParam(required = false) String plantCode,
+                        @RequestParam(required = false) String stage) {
+                return service.tracker(search, plantCode, stage);
+        }
 
-    /**
-     * Full requisition/project/material control-tower timeline.
-     */
-    @GetMapping("/tracker/requisitions/{requisitionId}")
-    public TrackerDetailResponse trackerDetail(
-            @PathVariable UUID requisitionId) {
-        return service.trackerDetail(requisitionId);
-    }
+        /**
+         * Full requisition/project/material control-tower timeline.
+         */
+        @GetMapping("/tracker/requisitions/{requisitionId}")
+        public TrackerDetailResponse trackerDetail(
+                        @PathVariable UUID requisitionId) {
+                return service.trackerDetail(requisitionId);
+        }
 
-    /* -------------------- Integrity -------------------- */
+        /* -------------------- Integrity -------------------- */
 
-    @GetMapping("/admin/integrity")
-    public IntegrityReport integrity(
-            @RequestParam(required = false) String plantCode) {
-        return service.inspectIntegrity(plantCode);
-    }
+        @GetMapping("/admin/integrity")
+        public IntegrityReport integrity(
+                        @RequestParam(required = false) String plantCode) {
+                return service.inspectIntegrity(plantCode);
+        }
 }
