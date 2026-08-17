@@ -220,7 +220,15 @@ public final class MatFlowPlanningDtos {
                         @NotNull(message = "Store availability decision is required.") StoreAvailabilityDecision availabilityDecision,
                         @DecimalMin(value = "0.001", inclusive = true, message = "Partial available quantity must be greater than zero.") BigDecimal availableQty,
                         @NotNull(message = "QC decision is required.") Boolean qcRequired,
-                        @NotNull(message = "Processing decision is required.") Boolean processingRequired,
+                        /*
+                         * Backward-compatible transport fields only.
+                         *
+                         * Processing is now defined once on the BOM material line. Store does
+                         * not choose or override Processing during availability review.
+                         * Older clients may still send these values; the service deliberately
+                         * ignores them.
+                         */
+                        Boolean processingRequired,
                         UUID processingRouteStepId,
                         @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
         }

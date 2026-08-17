@@ -28,10 +28,11 @@ public class MatFlowWorkflowCoordinatorService {
     }
 
     /**
-     * A Store sends the current complete reservation lot. At AL-P1 Main Store
-     * that may mean Main Store -> Processing, Main Store -> origin Plant Store,
-     * or Main Store -> AL-P1 Production. At AL-P2/3/4 Store it means the final
-     * Plant Store -> specific Production user handover.
+     * A Store sends the current complete reservation lot. Processing is never
+     * selected here: the route was already fixed on the BOM material line.
+     * A BOM-processed lot goes to that Processing Unit; a non-processed lot
+     * follows the normal Store -> Production route (including the remote Plant
+     * Store hop where applicable).
      */
     @Transactional
     public PlanningResponse issueStoreReservation(
@@ -40,8 +41,9 @@ public class MatFlowWorkflowCoordinatorService {
         PlanningResponse response = movementService.advanceStoreReservation(reservationId, request);
 
         /*
-         * Idempotent: once a Processing destination has actually received the lot,
-         * createProcessingJobForReservation returns the existing job on later calls.
+         * Idempotent: when the BOM-defined Processing destination has physically
+         * received the lot, queue its job automatically. Repeated calls return the
+         * same reservation/route-step job instead of creating duplicates.
          */
         UUID processingRouteStepId = movementService.processingRouteStepId(reservationId);
         if (processingRouteStepId != null) {
@@ -62,9 +64,10 @@ public class MatFlowWorkflowCoordinatorService {
     }
 
     /**
-     * Processor completes the job and the output is returned into AL-P1 Main
-     * Store custody. The next plant-issue leg becomes ready but is not silently
-     * dispatched on behalf of Main Store.
+     * Processor completion is the only Processing execution decision. After the
+     * job is completed, its output is automatically handed to the exact MR
+     * Production destination; it does not return to Main Store for a second
+     * routing/selection decision.
      */
     @Transactional
     public ProcessingJobResponse completeProcessing(

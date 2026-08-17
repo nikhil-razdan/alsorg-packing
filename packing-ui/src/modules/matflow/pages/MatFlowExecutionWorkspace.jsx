@@ -147,7 +147,7 @@ export function MatFlowQcPage() {
             <PageHero
                 badge="QUALITY CHECK"
                 title="MR Material QC Checklist"
-                subtitle="QC is only a check/tick against an MR material lot at AL-P1 Main Store. It does not create a separate routing step and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
+                subtitle="QC is only a check/tick against an MR material lot at AL-P1 Main Store. It does not create a separate routing step and makes no route decision. Processing is already fixed by the BOM material line: a defined Processing Unit is mandatory for that lot; otherwise the route is direct to Production."
                 actions={
                     <>
                         <Button
@@ -304,7 +304,7 @@ export function MatFlowQcPage() {
 }
 
 const PROCESSING_KANBAN_COLUMNS = [
-    { key: "PENDING", label: "Ready to Start", subtitle: "Store-routed material queued at Processing" },
+    { key: "PENDING", label: "Ready to Start", subtitle: "BOM-routed material queued at Processing" },
     { key: "IN_PROGRESS", label: "In Processing", subtitle: "Processor has started the batch" },
     { key: "COMPLETED", label: "Completed", subtitle: "Output/wastage recorded and released" },
 ];
@@ -461,7 +461,7 @@ export function MatFlowProcessingPage() {
             <PageHero
                 badge="PROCESSING UNIT"
                 title="Material Processing Jobs"
-                subtitle="Only Store-selected Processing lots appear here. Processing may be required with or without QC; the Processor starts the queued job, records output/wastage, then completion releases the material toward Production."
+                subtitle="Only BOM-defined Processing lots appear here. Store does not choose the Processing Unit. After Store sends an available lot to its BOM unit, the job is queued automatically; the Processor starts it, records output/wastage, and completion automatically issues the processed output to the exact MR Production destination."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Processing_Jobs", sheetName: "Processing", title: "MatFlow Processing Jobs", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -514,7 +514,7 @@ export function MatFlowProcessingPage() {
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>
                             {["Job", "MR", "Processing Unit", "Input Material", "Planned", "Output / Waste", "Status", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
-                        {pagination.pageItems.length === 0 ? <EmptyState>No Store-selected Processing jobs.</EmptyState> : pagination.pageItems.map((job) => {
+                        {pagination.pageItems.length === 0 ? <EmptyState>No BOM-defined Processing jobs.</EmptyState> : pagination.pageItems.map((job) => {
                             const state = normalize(job.status);
                             return (
                                 <Box key={job.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>

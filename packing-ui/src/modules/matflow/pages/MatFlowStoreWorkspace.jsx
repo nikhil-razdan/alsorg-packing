@@ -418,8 +418,6 @@ export function MatFlowStoreDetailPage() {
                     availabilityDecision: "",
                     availableQty: "",
                     qcRequired: false,
-                    processingRequired: false,
-                    processingRouteStepId: "",
                     remarks: "",
                 };
             });
@@ -496,14 +494,13 @@ export function MatFlowStoreDetailPage() {
                     }
 
                     const hasAvailableLot = allocatedQty > .0005;
-                    const processingOptions = Array.isArray(entry?.processingOptions) ? entry.processingOptions : [];
-                    if (hasAvailableLot && config.processingRequired) {
-                        if (!config.processingRouteStepId) {
-                            throw new Error(`Select one approved Processing Unit for ${line.materialCode}.`);
-                        }
-                        if (!processingOptions.some((option) => String(option.routeStepId) === String(config.processingRouteStepId))) {
-                            throw new Error(`The selected Processing Unit is no longer approved for ${line.materialCode}. Refresh the MR.`);
-                        }
+                    const processingRoute = Array.isArray(entry?.processingOptions)
+                        ? entry.processingOptions.filter(Boolean)
+                        : [];
+                    if (processingRoute.length > 1) {
+                        throw new Error(
+                            `${line.materialCode} has multiple Processing Units on its BOM. Keep one BOM Processing Unit before Store execution.`
+                        );
                     }
 
                     return {
@@ -512,10 +509,10 @@ export function MatFlowStoreDetailPage() {
                         availabilityDecision: decision,
                         availableQty: decision === "PARTIALLY_AVAILABLE" ? availableQty : null,
                         qcRequired: hasAvailableLot ? config.qcRequired === true : false,
-                        processingRequired: hasAvailableLot ? config.processingRequired === true : false,
-                        processingRouteStepId: hasAvailableLot && config.processingRequired
-                            ? config.processingRouteStepId
-                            : null,
+                        /*
+                         * Processing is intentionally not submitted by Store.
+                         * Backend derives the route from the approved BOM material line.
+                         */
                         remarks: clean(config.remarks) || null,
                     };
                 });
@@ -728,8 +725,6 @@ export function MatFlowStoreDetailPage() {
                                                                 availabilityDecision: value,
                                                                 availableQty: value === "PARTIALLY_AVAILABLE" ? (current[key]?.availableQty || "") : "",
                                                                 qcRequired: value === "NOT_AVAILABLE" ? false : current[key]?.qcRequired === true,
-                                                                processingRequired: value === "NOT_AVAILABLE" ? false : current[key]?.processingRequired === true,
-                                                                processingRouteStepId: value === "NOT_AVAILABLE" ? "" : (current[key]?.processingRouteStepId || ""),
                                                             },
                                                         }))}
                                                         sx={{
@@ -795,46 +790,44 @@ export function MatFlowStoreDetailPage() {
                                                 label="QC check required for available lot"
                                             />
 
-                                            <FormControlLabel
-                                                control={
-                                                    <Checkbox
-                                                        checked={config.processingRequired === true}
-                                                        disabled={!hasAvailableLot}
-                                                        onChange={(event) => setForms((current) => ({
-                                                            ...current,
-                                                            [key]: {
-                                                                ...current[key],
-                                                                processingRequired: event.target.checked,
-                                                                processingRouteStepId: event.target.checked
-                                                                    ? (current[key]?.processingRouteStepId || "")
-                                                                    : "",
-                                                            },
-                                                        }))}
-                                                    />
-                                                }
-                                                label="Processing required before Production"
-                                            />
-
-                                            <TextField
-                                                select
-                                                label="Processing Unit"
-                                                value={config.processingRouteStepId || ""}
-                                                disabled={!hasAvailableLot || !config.processingRequired}
-                                                onChange={(event) => setForms((current) => ({
-                                                    ...current,
-                                                    [key]: { ...current[key], processingRouteStepId: event.target.value },
-                                                }))}
-                                                helperText={config.processingRequired && !(entry?.processingOptions || []).length
-                                                    ? "No Processing Unit is approved on this BOM material line."
-                                                    : "Independent of QC. Choose only a BOM-approved Processing Unit."}
-                                                sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
+                                            <Card
+                                                sx={{
+                                                    p: 1.05,
+                                                    gridColumn: { xs: "1 / -1", md: "1 / -1" },
+                                                    bgcolor: "rgba(139,92,246,.06)",
+                                                    border: "1px solid rgba(139,92,246,.20)",
+                                                    boxShadow: "none",
+                                                }}
                                             >
-                                                {(entry?.processingOptions || []).map((option) => (
-                                                    <MenuItem key={option.routeStepId} value={option.routeStepId}>
-                                                        {option.processingUnitCode} · {option.processingUnitName}{option.processCode ? ` · ${option.processCode}` : ""}
-                                                    </MenuItem>
-                                                ))}
-                                            </TextField>
+                                                {(() => {
+                                                    const routes = Array.isArray(entry?.processingOptions)
+                                                        ? entry.processingOptions.filter(Boolean)
+                                                        : [];
+                                                    const route = routes[0] || null;
+                                                    return (
+                                                        <>
+                                                            <Typography sx={{ ...subTextSx, fontWeight: 900, letterSpacing: .35 }}>
+                                                                BOM PROCESSING ROUTE · AUTOMATIC
+                                                            </Typography>
+                                                            <Typography sx={{ ...mainTextSx, mt: .35 }}>
+                                                                {route
+                                                                    ? `${route.processingUnitCode || "Processing Unit"} · ${route.processingUnitName || "Defined Unit"}${route.processCode ? ` · ${route.processCode}` : ""}`
+                                                                    : "No Processing Unit on BOM · Direct to Production"}
+                                                            </Typography>
+                                                            <Typography sx={{ ...subTextSx, mt: .35 }}>
+                                                                {route
+                                                                    ? "Engineering defined this Processing Unit on the BOM material line. Store only confirms availability/QC; after Store sends the lot, the Processing job is queued automatically."
+                                                                    : "Engineering did not define Processing for this material. The available lot follows the direct Production route."}
+                                                            </Typography>
+                                                            {routes.length > 1 && (
+                                                                <Typography sx={{ ...subTextSx, mt: .4, color: "var(--mf-danger-text)", fontWeight: 900 }}>
+                                                                    Invalid BOM: multiple Processing Units are configured. Correct the BOM before confirming Store review.
+                                                                </Typography>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </Card>
 
                                             <TextField
                                                 multiline

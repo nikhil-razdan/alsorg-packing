@@ -1550,6 +1550,14 @@ public class MatFlowBomService {
 
                         validateRequest(request);
 
+                        List<MatFlowBomRouteStep> existingProcessingRoute = routeRepository
+                                        .findByBomLine_IdOrderBySequenceNoAsc(lineId);
+                        if (existingProcessingRoute != null && !existingProcessingRoute.isEmpty()) {
+                                throw conflict(
+                                                "This BOM material line already has a Processing Unit. " +
+                                                                "Edit or remove the existing Processing route instead of adding another one.");
+                        }
+
                         if (routeRepository
                                         .existsByBomLine_IdAndSequenceNo(
                                                         lineId,
@@ -1757,7 +1765,14 @@ public class MatFlowBomService {
                                         ? "UNKNOWN MATERIAL"
                                         : safeLabel(line.getMaterialCodeSnapshot(), line.getId());
                         if (steps == null || steps.isEmpty()) {
-                                return; // Direct/QC choice belongs to Store at MR execution time.
+                                return; // No Processing route means direct Store -> Production execution.
+                        }
+
+                        if (steps.size() > 1) {
+                                throw badRequest(
+                                                "Only one Processing Unit may be defined for a BOM material line. " +
+                                                                "Material " + materialLabel +
+                                                                " has multiple Processing routes. Keep the required unit and remove the others.");
                         }
 
                         String bomPlantCode = requireBomPlantCode(bom);
@@ -1767,17 +1782,17 @@ public class MatFlowBomService {
                         for (MatFlowBomRouteStep step : steps) {
                                 if (step == null || step.location == null || step.stepType == null) {
                                         throw badRequest(
-                                                        "BOM Processing options contain an incomplete step for material "
+                                                        "BOM Processing route contains an incomplete step for material "
                                                                         + materialLabel);
                                 }
                                 if (step.stepType != RouteStepType.PROCESSING) {
                                         throw badRequest(
-                                                        "BOM material routes may contain only PROCESSING options. Store decides QC and the MR owns Production destination. Material: "
+                                                        "A BOM material route may contain only one PROCESSING step. Store decides QC; Processing Unit comes from the BOM and the MR owns the Production destination. Material: "
                                                                         + materialLabel);
                                 }
                                 if (step.sequenceNo == null || step.sequenceNo <= previousSequence) {
                                         throw badRequest(
-                                                        "Processing option sequence must be strictly increasing for material "
+                                                        "Processing route sequence is invalid for material "
                                                                         + materialLabel);
                                 }
                                 previousSequence = step.sequenceNo;
@@ -1789,10 +1804,10 @@ public class MatFlowBomService {
 
                                 String routePlantCode = requirePlantCode(
                                                 step.location.getPlantCode(),
-                                                "Processing option " + safeLabel(step.location.getLocationCode(),
+                                                "Processing Unit " + safeLabel(step.location.getLocationCode(),
                                                                 step.location.getId()));
                                 if (!bomPlantCode.equals(routePlantCode)) {
-                                        throw badRequest("Processing option must belong to the BOM plant for material "
+                                        throw badRequest("Processing Unit must belong to the BOM plant for material "
                                                         + materialLabel);
                                 }
                                 if (!step.location.isActive()) {
@@ -1808,7 +1823,7 @@ public class MatFlowBomService {
                                 MatFlowLocation location) {
                         if (stepType != RouteStepType.PROCESSING) {
                                 throw badRequest(
-                                                "Only PROCESSING options are configured on a BOM. Store decides QC and the MR defines Production destination.");
+                                                "Only one PROCESSING route is configured on a BOM material line. Store decides QC and the MR defines the Production destination.");
                         }
                         if (location == null) {
                                 throw badRequest("Processing Unit is required");

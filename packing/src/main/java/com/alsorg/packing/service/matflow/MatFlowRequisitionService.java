@@ -805,40 +805,53 @@ public class MatFlowRequisitionService {
                 MatFlowTransferOrder predecessor = null;
                 int sequence = LINE_NUMBER_INCREMENT;
 
+                /*
+                 * Processing is a one-time BOM decision.
+                 *
+                 * The Store never chooses it again. Once the available lot is sent,
+                 * the hidden route is:
+                 *
+                 *   Main Store -> BOM Processing Unit -> MR Production
+                 *
+                 * Processing completion releases the processed output directly to the
+                 * exact MR Production destination/requester. It does NOT bounce back
+                 * through AL-P1 Main Store.
+                 */
                 if (selectedProcessingStep != null) {
                         MatFlowLocation processingLocation = selectedProcessingStep.location;
                         if (processingLocation == null) {
-                                throw conflict("Selected Processing option has no location");
+                                throw conflict("BOM Processing route has no Processing Unit");
                         }
 
                         predecessor = createPlannedTransfer(
                                         requisition, reservation, mainStore, processingLocation,
                                         selectedProcessingStep.getId(), null, sequence, quantity, qcRequired,
                                         qcRequired
-                                                        ? "Main Store lot is reserved; waiting for QC tick before Processing"
-                                                        : "Main Store lot is ready for the selected Processing Unit",
+                                                        ? "Main Store lot is reserved; waiting for QC tick before BOM-defined Processing"
+                                                        : "Main Store lot is ready for the BOM-defined Processing Unit",
                                         actor);
                         sequence += LINE_NUMBER_INCREMENT;
 
-                        /* Processing output returns to Main Store before plant issue. */
-                        predecessor = createPlannedTransfer(
-                                        requisition, reservation, processingLocation, mainStore,
+                        createPlannedTransfer(
+                                        requisition, reservation, processingLocation, production,
                                         null, predecessor.getId(), sequence, quantity, true,
-                                        "Processing output returns to AL-P1 Main Store for plant issue", actor);
-                        sequence += LINE_NUMBER_INCREMENT;
+                                        "Processing completion automatically releases output to the MR Production destination",
+                                        actor);
+                        return;
                 }
 
+                /*
+                 * No Processing route on the BOM: normal direct Store issue flow.
+                 * Remote factory plants retain their physical origin-Store custody hop.
+                 */
                 if (remotePlant) {
                         predecessor = createPlannedTransfer(
                                         requisition, reservation, mainStore, originStore, null,
-                                        predecessor == null ? null : predecessor.getId(),
-                                        sequence, quantity,
-                                        predecessor != null || qcRequired,
-                                        predecessor != null
-                                                        ? "Ready lot awaits AL-P1 Main Store release to the originating Plant Store"
-                                                        : qcRequired
-                                                                        ? "Main Store lot waits for QC before inter-plant issue"
-                                                                        : "Main Store lot is ready for inter-plant issue to the originating Plant Store",
+                                        null, sequence, quantity,
+                                        qcRequired,
+                                        qcRequired
+                                                        ? "Main Store lot waits for QC before inter-plant issue"
+                                                        : "Main Store lot is ready for inter-plant issue to the originating Plant Store",
                                         actor);
                         sequence += LINE_NUMBER_INCREMENT;
 
@@ -850,14 +863,11 @@ public class MatFlowRequisitionService {
                 } else {
                         createPlannedTransfer(
                                         requisition, reservation, mainStore, production, null,
-                                        predecessor == null ? null : predecessor.getId(),
-                                        sequence, quantity,
-                                        predecessor != null || qcRequired,
-                                        predecessor != null
-                                                        ? "Ready lot awaits AL-P1 Main Store release to Production"
-                                                        : qcRequired
-                                                                        ? "Main Store lot waits for QC before Production issue"
-                                                                        : "Main Store lot is ready for direct AL-P1 Production issue",
+                                        null, sequence, quantity,
+                                        qcRequired,
+                                        qcRequired
+                                                        ? "Main Store lot waits for QC before Production issue"
+                                                        : "Main Store lot is ready for direct AL-P1 Production issue",
                                         actor);
                 }
         }
@@ -1066,6 +1076,7 @@ public class MatFlowRequisitionService {
                         List<MatFlowBomRouteStep> processingOptions = routingService.routeForLine(line.bomLine.getId());
                         processingOptions = processingOptions == null ? List.of() : processingOptions;
                         validateRoute(processingOptions);
+                        resolveBomProcessingStep(processingOptions, line.material);
 
                         List<StoreApprovedRouteStepResponse> approvedOptions = processingOptions.stream()
                                         .map(this::toStoreApprovedRouteStepResponse)
@@ -1214,55 +1225,52 @@ public class MatFlowRequisitionService {
                                 ledger);
         }
 
-        private MatFlowBomRouteStep validateStoreRouteConfirmation(
-                        StoreLineReviewRequest lineReview,
-                        List<MatFlowBomRouteStep> approvedProcessingOptions,
+        /**
+         * Resolve the one authoritative Processing route from the approved BOM
+         * material line.
+         *
+         * Store is intentionally not allowed to select, disable or override
+         * Processing during MR availability review. Zero BOM routes means direct
+         * Production. One route means mandatory Processing through that unit.
+         */
+        private MatFlowBomRouteStep resolveBomProcessingStep(
+                        List<MatFlowBomRouteStep> approvedProcessingRoute,
                         MatFlowMaterial material) {
-                if (lineReview == null) {
-                        throw badRequest("Store review line is required");
+                List<MatFlowBomRouteStep> route = approvedProcessingRoute == null
+                                ? List.of()
+                                : approvedProcessingRoute.stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .toList();
+
+                if (route.isEmpty()) {
+                        return null;
                 }
 
                 String materialLabel = material == null
                                 ? "selected material"
                                 : safeLabel(material.getMaterialCode(), material.getId());
 
-                if (lineReview.qcRequired() == null) {
-                        throw badRequest("Store must decide whether QC is required for material " + materialLabel);
+                if (route.size() > 1) {
+                        throw conflict(
+                                        "BOM material " + materialLabel +
+                                                        " has multiple Processing Units. " +
+                                                        "Keep exactly one Processing Unit on the BOM material line before execution.");
                 }
-                if (lineReview.processingRequired() == null) {
-                        throw badRequest("Store must decide whether Processing is required for material "
+
+                MatFlowBomRouteStep selected = route.get(0);
+                if (selected.stepType != RouteStepType.PROCESSING || selected.location == null) {
+                        throw conflict("BOM Processing route is incomplete for material " + materialLabel);
+                }
+
+                LocationType type = selected.location.getLocationType();
+                if (type != LocationType.PROCESSING && type != LocationType.EXTERNAL_PROCESSOR) {
+                        throw conflict("BOM Processing route does not point to a valid Processing Unit for material "
                                         + materialLabel);
                 }
-
-                List<MatFlowBomRouteStep> options = approvedProcessingOptions == null
-                                ? List.of()
-                                : approvedProcessingOptions;
-
-                if (!Boolean.TRUE.equals(lineReview.processingRequired())) {
-                        if (lineReview.processingRouteStepId() != null) {
-                                throw badRequest(
-                                                "Processing Unit must be empty when Processing is not required for material "
-                                                                + materialLabel);
-                        }
-                        return null;
+                if (!selected.location.isActive()) {
+                        throw conflict("BOM Processing Unit is inactive for material " + materialLabel);
                 }
 
-                if (lineReview.processingRouteStepId() == null) {
-                        throw badRequest("Select one approved Processing Unit for material " + materialLabel);
-                }
-
-                MatFlowBomRouteStep selected = options.stream()
-                                .filter(step -> step != null
-                                                && step.getId() != null
-                                                && step.getId().equals(lineReview.processingRouteStepId()))
-                                .findFirst()
-                                .orElseThrow(() -> badRequest(
-                                                "Selected Processing Unit is not approved on this BOM material line: "
-                                                                + materialLabel));
-
-                if (selected.stepType != RouteStepType.PROCESSING || selected.location == null) {
-                        throw conflict("Selected BOM option is not a valid Processing Unit");
-                }
                 return selected;
         }
 
@@ -1287,16 +1295,16 @@ public class MatFlowRequisitionService {
                 }
                 for (MatFlowBomRouteStep step : route) {
                         if (step == null || step.location == null) {
-                                throw conflict("BOM Processing option contains an incomplete step");
+                                throw conflict("BOM Processing route contains an incomplete step");
                         }
                         if (step.stepType != RouteStepType.PROCESSING) {
                                 throw conflict(
                                                 "BOM execution route is invalid for the current MatFlow workflow. " +
-                                                                "Only Processing options belong on the BOM; Store decides QC.");
+                                                                "Only a PROCESSING route belongs on the BOM; Store decides QC.");
                         }
                         LocationType type = step.location.getLocationType();
                         if (type != LocationType.PROCESSING && type != LocationType.EXTERNAL_PROCESSOR) {
-                                throw conflict("Configured Processing option is not a Processing location");
+                                throw conflict("Configured BOM Processing route is not a Processing Unit");
                         }
                         /*
                          * AL-P1 Main Store may route a central lot to any BOM-approved
@@ -1306,10 +1314,10 @@ public class MatFlowRequisitionService {
                          */
                         requirePlantCode(
                                         step.location.getPlantCode(),
-                                        "BOM Processing option " + safeLabel(step.location.getLocationCode(),
+                                        "BOM Processing Unit " + safeLabel(step.location.getLocationCode(),
                                                         step.location.getId()));
                         if (!step.location.isActive()) {
-                                throw conflict("BOM Processing option is inactive: " + step.location.getLocationCode());
+                                throw conflict("BOM Processing Unit is inactive: " + step.location.getLocationCode());
                         }
                 }
         }
@@ -1777,68 +1785,6 @@ public class MatFlowRequisitionService {
                                 lines);
         }
 
-        /**
-         * Defensive read hydration for PlanningResponse / Production Execution.
-         *
-         * Store issue and Production receipt often touch the same reservation/transfer
-         * aggregate in one persistence context. Because MatFlow entities expose public
-         * JPA backing fields, a managed Hibernate proxy can otherwise make valid linked
-         * fields appear null while the database foreign keys are intact.
-         */
-        private MatFlowReservation hydrateReservationForRead(MatFlowReservation raw) {
-                if (raw == null) {
-                        return null;
-                }
-                MatFlowReservation reservation = (MatFlowReservation) Hibernate.unproxy(raw);
-                if (reservation.requisitionLine != null) {
-                        reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
-                                        reservation.requisitionLine);
-                        if (reservation.requisitionLine.requisition != null) {
-                                reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
-                                                reservation.requisitionLine.requisition);
-                        }
-                        if (reservation.requisitionLine.material != null) {
-                                reservation.requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
-                                                reservation.requisitionLine.material);
-                        }
-                        if (reservation.requisitionLine.issuedMaterial != null) {
-                                reservation.requisitionLine.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
-                                                reservation.requisitionLine.issuedMaterial);
-                        }
-                }
-                if (reservation.material != null) {
-                        reservation.material = (MatFlowMaterial) Hibernate.unproxy(reservation.material);
-                }
-                if (reservation.sourceLocation != null) {
-                        reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(reservation.sourceLocation);
-                }
-                if (reservation.firstDestinationLocation != null) {
-                        reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
-                                        reservation.firstDestinationLocation);
-                }
-                return reservation;
-        }
-
-        private MatFlowTransferOrder hydrateTransferForRead(MatFlowTransferOrder raw) {
-                if (raw == null) {
-                        return null;
-                }
-                MatFlowTransferOrder transfer = (MatFlowTransferOrder) Hibernate.unproxy(raw);
-                if (transfer.requisition != null) {
-                        transfer.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(transfer.requisition);
-                }
-                if (transfer.reservation != null) {
-                        transfer.reservation = hydrateReservationForRead(transfer.reservation);
-                }
-                if (transfer.fromLocation != null) {
-                        transfer.fromLocation = (MatFlowLocation) Hibernate.unproxy(transfer.fromLocation);
-                }
-                if (transfer.toLocation != null) {
-                        transfer.toLocation = (MatFlowLocation) Hibernate.unproxy(transfer.toLocation);
-                }
-                return transfer;
-        }
-
         private boolean isReservationIssueReady(
                         MatFlowReservation reservation,
                         MatFlowLocation destination) {
@@ -1864,10 +1810,7 @@ public class MatFlowRequisitionService {
 
                 List<MatFlowTransferOrder> transfers = transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                                                reservation.getId())
-                                .stream()
-                                .map(this::hydrateTransferForRead)
-                                .toList();
+                                                reservation.getId());
 
                 if (transfers == null ||
                                 transfers.isEmpty()) {
@@ -1901,7 +1844,6 @@ public class MatFlowRequisitionService {
                 return transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
                                 .stream()
-                                .map(this::hydrateTransferForRead)
                                 .filter(transfer -> transfer != null && transfer.toLocation != null)
                                 .filter(transfer -> productionDestination.getId().equals(transfer.toLocation.getId()))
                                 .anyMatch(transfer -> transfer.status == TransferStatus.IN_TRANSIT
@@ -1914,14 +1856,16 @@ public class MatFlowRequisitionService {
                 if (reservation == null) {
                         throw conflict("Reservation is required");
                 }
-                reservation = hydrateReservationForRead(reservation);
+                reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
                 if (reservation.requisitionLine == null || reservation.material == null
                                 || reservation.sourceLocation == null
                                 || reservation.firstDestinationLocation == null) {
                         throw conflict("Reservation record is incomplete");
                 }
 
-                MatFlowRequisitionLine reservationLine = reservation.requisitionLine;
+                MatFlowRequisitionLine reservationLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                reservation.requisitionLine);
+                reservation.requisitionLine = reservationLine;
                 if (reservationLine.requisition == null || reservationLine.requisition.getId() == null) {
                         throw conflict("Reservation requisition link is missing");
                 }
@@ -1929,10 +1873,7 @@ public class MatFlowRequisitionService {
                                 reservationLine.requisition.getId());
 
                 List<MatFlowTransferOrder> route = transferRepository
-                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
-                                .stream()
-                                .map(this::hydrateTransferForRead)
-                                .toList();
+                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
                 MatFlowTransferOrder nextTransfer = route.stream()
                                 .filter(transfer -> transfer != null
                                                 && transfer.status != TransferStatus.RECEIVED
@@ -2065,7 +2006,6 @@ public class MatFlowRequisitionService {
                 return transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
                                 .stream()
-                                .map(this::hydrateTransferForRead)
                                 .filter(transfer -> transfer != null
                                                 && transfer.toLocation != null
                                                 && (transfer.toLocation.getLocationType() == LocationType.PROCESSING
@@ -2491,8 +2431,9 @@ public class MatFlowRequisitionService {
                                                 .routeForLine(line.bomLine.getId());
                                 processingOptions = processingOptions == null ? List.of() : processingOptions;
                                 validateRoute(processingOptions);
-                                selectedProcessingStep = validateStoreRouteConfirmation(
-                                                lineReview, processingOptions, line.material);
+                                selectedProcessingStep = resolveBomProcessingStep(
+                                                processingOptions, line.material);
+                                boolean processingRequired = selectedProcessingStep != null;
 
                                 firstDestination = selectedProcessingStep == null
                                                 ? (plantRoutingService.requiresOriginStoreHop(demandPlant)
@@ -2532,7 +2473,7 @@ public class MatFlowRequisitionService {
                                 reservation.status = ReservationStatus.ACTIVE;
                                 reservation.routeSnapshotJson = routeSnapshot(
                                                 Boolean.TRUE.equals(lineReview.qcRequired()),
-                                                Boolean.TRUE.equals(lineReview.processingRequired()),
+                                                processingRequired,
                                                 selectedProcessingStep, requisition.destinationLocation);
                                 reservation.setCreatedBy(actor);
                                 reservation.setUpdatedBy(actor);
@@ -2545,12 +2486,16 @@ public class MatFlowRequisitionService {
                                         createQcCheck(requisition, reservation, declaredAvailableQty, actor);
                                 }
                         } else {
-                                if (Boolean.TRUE.equals(lineReview.qcRequired())
-                                                || Boolean.TRUE.equals(lineReview.processingRequired())
-                                                || lineReview.processingRouteStepId() != null) {
-                                        throw badRequest("QC/Processing cannot be selected when material is Not Available: "
+                                if (Boolean.TRUE.equals(lineReview.qcRequired())) {
+                                        throw badRequest("QC cannot be selected when material is Not Available: "
                                                         + line.material.getMaterialCode());
                                 }
+                                /*
+                                 * processingRequired / processingRouteStepId are legacy client
+                                 * transport fields and are ignored. The BOM route remains
+                                 * authoritative even while this particular lot has no available
+                                 * quantity to move.
+                                 */
                         }
 
                         BigDecimal newAllocatedTotal = alreadyAllocated.add(declaredAvailableQty)
@@ -2586,6 +2531,12 @@ public class MatFlowRequisitionService {
                                                         "remainingDemandBeforeReview", remainingDemand,
                                                         "declaredAvailableQty", declaredAvailableQty,
                                                         "linkedPiShortageQty", shortage,
+                                                        "processingRequired", selectedProcessingStep != null,
+                                                        "processingUnitCode",
+                                                        selectedProcessingStep == null || selectedProcessingStep.location == null
+                                                                        ? null
+                                                                        : selectedProcessingStep.location.getLocationCode(),
+                                                        "processingRouteSource", "BOM_MATERIAL_LINE",
                                                         "tallyIsStockAuthority", true));
                         reviewedLines++;
                 }
@@ -3597,7 +3548,6 @@ public class MatFlowRequisitionService {
                         }
                         return transferRepository.findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
                                         reservation.getId()).stream()
-                                        .map(this::hydrateTransferForRead)
                                         .anyMatch(transfer -> transfer != null
                                                         && transfer.toLocation != null
                                                         && (transfer.toLocation
@@ -3628,8 +3578,7 @@ public class MatFlowRequisitionService {
                                 return false;
                         }
                         List<MatFlowTransferOrder> routeTransfers = transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
-                                        .stream().map(this::hydrateTransferForRead).toList();
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
                         return routeTransfers.stream().noneMatch(transfer -> transfer != null
                                         && transfer.status != TransferStatus.CANCELLED
                                         && transfer.fromLocation != null
@@ -3638,7 +3587,6 @@ public class MatFlowRequisitionService {
 
                 boolean receivedAtQc = reservations.stream().anyMatch(reservation -> transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId()).stream()
-                                .map(this::hydrateTransferForRead)
                                 .anyMatch(transfer -> transfer != null
                                                 && transfer.toLocation != null
                                                 && transfer.toLocation.getLocationType() == LocationType.QC

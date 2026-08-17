@@ -84,7 +84,7 @@ const upperCode = (value) => clean(value).toUpperCase();
 const bomWorkflow = (bom) => {
     const status = normalize(bom?.status);
     if (status === "DRAFT") {
-        return ["Engineering", "Add material lines and optional Processing Unit choices, then submit."];
+        return ["Engineering", "Add material lines and define one Processing Unit only where the material needs preprocessing, then submit."];
     }
     if (status === "RETURNED") {
         return ["Engineering", "Correct the returned BOM and resubmit to Production."];
@@ -602,7 +602,7 @@ export function MatFlowBomCreatePage() {
                         <Typography sx={builderSideTitleSx}>After Draft Creation</Typography>
                         <Box sx={{ mt: 1 }}>
                             <BuilderWorkflowItem number="1" title="Engineering" subtitle="Add material lines from Material Inventory." active />
-                            <BuilderWorkflowItem number="2" title="Processing Options" subtitle="Optionally register approved Processing Units per material." />
+                            <BuilderWorkflowItem number="2" title="Processing Route" subtitle="Define the one Processing Unit for a material; leave empty for direct Production." />
                             <BuilderWorkflowItem number="3" title="Production Review" subtitle="Production reviews or returns the submitted BOM on the same page." />
                         </Box>
                     </Card>
@@ -797,23 +797,32 @@ export function MatFlowBomDetailPage() {
 
     const openRoute = (line, step = null) => {
         const current = processingByLine.get(String(line.id)) || [];
-        const nextSequence = current.length ? Math.max(...current.map((item) => numeric(item.sequenceNo))) + 1 : 1;
-        setRouteDialog({ line, step });
+        /*
+         * One authoritative Processing Unit per BOM material line.
+         * Clicking Processing again edits the existing route instead of creating
+         * a competing Store-selectable option.
+         */
+        const effectiveStep = step || current[0] || null;
+        if (!step && current.length > 1) {
+            setError("This BOM material line has multiple Processing routes. Remove the extra routes before continuing.");
+            return;
+        }
+        setRouteDialog({ line, step: effectiveStep });
         setRouteForm({
-            sequenceNo: String(step?.sequenceNo ?? nextSequence),
-            processingUnitId: step?.processingUnitId || "",
-            processCode: step?.processCode || "",
-            expectedYieldPercent: String(step?.expectedYieldPercent ?? 100),
-            remarks: step?.remarks || "",
+            sequenceNo: String(effectiveStep?.sequenceNo ?? 1),
+            processingUnitId: effectiveStep?.processingUnitId || "",
+            processCode: effectiveStep?.processCode || "",
+            expectedYieldPercent: String(effectiveStep?.expectedYieldPercent ?? 100),
+            remarks: effectiveStep?.remarks || "",
         });
         setError("");
     };
 
     const saveRoute = async () => {
-        const sequenceNo = Number(routeForm.sequenceNo);
+        const sequenceNo = 1;
         const expectedYieldPercent = Number(routeForm.expectedYieldPercent);
-        if (!Number.isInteger(sequenceNo) || sequenceNo <= 0 || !routeForm.processingUnitId || !clean(routeForm.processCode)) {
-            setError("Processing sequence, Processing Unit and process code are required.");
+        if (!routeForm.processingUnitId || !clean(routeForm.processCode)) {
+            setError("Processing Unit and process code are required.");
             return;
         }
         if (!Number.isFinite(expectedYieldPercent) || expectedYieldPercent <= 0 || expectedYieldPercent > 100) {
@@ -841,7 +850,7 @@ export function MatFlowBomDetailPage() {
             setRouteDialog(null);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to save Processing option."));
+            setError(readMatFlowError(requestError, "Unable to save Processing route."));
         } finally {
             setWorking(false);
         }
@@ -855,7 +864,7 @@ export function MatFlowBomDetailPage() {
             await matflowApi.deleteBomRouteStep(bom.id, line.id, step.id, step.rowVersion);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to remove Processing option."));
+            setError(readMatFlowError(requestError, "Unable to remove Processing route."));
         } finally {
             setWorking(false);
         }
@@ -944,7 +953,7 @@ export function MatFlowBomDetailPage() {
 
                     <Typography sx={builderPageTitleSx}>{project?.productName || bom?.bomNumber || "Operational BOM"}</Typography>
                     <Typography sx={builderPageSubSx}>
-                        Section-wise operational material BOM for {project?.projectCode || "the selected PD"}. Engineering owns material structure and optional Processing Unit choices; Production performs the final review on this same page. Store later makes two independent decisions for each allocated lot: whether a QC check is required and whether one approved Processing option is required before Production.
+                        Section-wise operational material BOM for {project?.projectCode || "the selected PD"}. Engineering owns material structure and the Processing route on this same page. If a material has one Processing Unit here, every available MR lot follows that unit automatically; if none is defined, it routes directly to Production. Store only confirms availability and the QC check.
                     </Typography>
 
                     <Box sx={builderMetaRowSx}>
@@ -991,7 +1000,7 @@ export function MatFlowBomDetailPage() {
             <Box sx={builderSummaryGridSx}>
                 <BuilderMiniStat icon={<Inventory2OutlinedIcon />} title="Material Lines" value={lines.length} subtitle="Across operational sections" accent="#60a5fa" />
                 <BuilderMiniStat icon={<RuleOutlinedIcon />} title="Categories" value={materialSections.length} subtitle="Material structure groups" accent="#22c55e" />
-                <BuilderMiniStat icon={<AccountTreeOutlinedIcon />} title="Processing Options" value={processingOptionCount} subtitle="Optional Store-selected units" accent="#a78bfa" />
+                <BuilderMiniStat icon={<AccountTreeOutlinedIcon />} title="Processing Routes" value={processingOptionCount} subtitle="BOM-defined automatic routes" accent="#a78bfa" />
                 <BuilderMiniStat icon={<CheckCircleOutlineIcon />} title="Current Owner" value={workflow[0]} subtitle={readable(status)} accent="#f59e0b" />
             </Box>
 
@@ -1033,7 +1042,7 @@ export function MatFlowBomDetailPage() {
                                                 <Chip label={`${section.rows.length} ${section.rows.length === 1 ? "Item" : "Items"}`} size="small" sx={builderCountChipSx} />
                                             </Box>
                                             <Typography sx={builderSectionSubSx}>
-                                                {section.processingCount} optional Processing Unit choice{section.processingCount === 1 ? "" : "s"}
+                                                {section.processingCount ? `${section.processingCount} Processing route` : "Direct to Production"}
                                             </Typography>
                                         </Box>
                                     </Box>
@@ -1047,7 +1056,7 @@ export function MatFlowBomDetailPage() {
                                     <Box sx={builderSectionTableShellSx}>
                                         <Box sx={{ ...builderSectionTableHeaderSx, gridTemplateColumns: "54px minmax(190px,1.1fr) minmax(150px,.9fr) 70px 90px 82px 95px minmax(210px,1.2fr) 150px" }}>
                                             {[
-                                                "Line", "Material", "Specification", "UOM", "Required", "Waste %", "Net Qty", "Processing Options", "Action",
+                                                "Line", "Material", "Specification", "UOM", "Required", "Waste %", "Net Qty", "Processing Route", "Action",
                                             ].map((heading) => <Box key={heading} sx={builderSectionCellSx}>{heading}</Box>)}
                                         </Box>
 
@@ -1067,7 +1076,7 @@ export function MatFlowBomDetailPage() {
                                                     <Box sx={builderSectionCellSx}>{formatQty(line.netRequiredQty)}</Box>
                                                     <Box sx={builderSectionCellSx}>
                                                         {steps.length === 0 ? (
-                                                            <Typography sx={subTextSx}>None configured</Typography>
+                                                            <Typography sx={subTextSx}>Direct to Production</Typography>
                                                         ) : (
                                                             <Box sx={{ display: "flex", gap: .45, flexWrap: "wrap" }}>
                                                                 {steps.map((step) => (
@@ -1086,7 +1095,7 @@ export function MatFlowBomDetailPage() {
                                                         {canEdit ? (
                                                             <>
                                                                 <Button onClick={() => openLine(line)} sx={secondaryBtnSx}>Edit</Button>
-                                                                <Button onClick={() => openRoute(line)} sx={secondaryBtnSx}>Processing</Button>
+                                                                <Button onClick={() => openRoute(line)} sx={secondaryBtnSx}>{steps.length ? "Edit Processing" : "Set Processing"}</Button>
                                                                 <IconButton onClick={() => deleteLine(line)} disabled={working} sx={builderDeleteIconSx}><DeleteOutlineIcon fontSize="small" /></IconButton>
                                                             </>
                                                         ) : <Typography sx={subTextSx}>Read only</Typography>}
@@ -1188,7 +1197,7 @@ export function MatFlowBomDetailPage() {
                             <AccountTreeOutlinedIcon sx={{ color: "#93c5fd" }} />
                         </Box>
                         <Alert severity="info" sx={{ mt: 1, borderRadius: 2 }}>
-                            Store independently decides whether a reserved MR lot needs a QC check and whether it needs Processing. If Processing is required, Store selects one of the Processing Units configured for that material here. QC is only a check/tick and never chooses this route.
+                            Processing is defined once here on the BOM material line. Store does not choose it again. A configured Processing Unit becomes the automatic route for every available lot; no configured unit means direct Production. Store only decides the QC check.
                         </Alert>
                     </Card>
 
@@ -1263,13 +1272,13 @@ export function MatFlowBomDetailPage() {
             </Dialog>
 
             <Dialog open={Boolean(routeDialog)} onClose={() => !working && setRouteDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Processing Option" : "Add Processing Option"}</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>{routeDialog?.step ? "Edit Processing Route" : "Set Processing Route"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Alert severity="info" sx={{ mb: 1.5, borderRadius: 2 }}>
-                        This is an approved Processing Unit option only. Store may select it for an MR lot whether QC is required or not. Direct to Production remains valid when Processing is not required.
+                        This Processing Unit is the authoritative route for this BOM material line. Store will not select it again. Leave the material without a Processing route when it should go directly to Production.
                     </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
-                        <TextField type="number" label="Option Sequence *" value={routeForm.sequenceNo} onChange={(event) => setRouteForm((current) => ({ ...current, sequenceNo: event.target.value }))} sx={fieldSx} />
+
                         <TextField select label="Processing Unit *" value={routeForm.processingUnitId} onChange={(event) => setRouteForm((current) => ({ ...current, processingUnitId: event.target.value }))} sx={fieldSx}>
                             {processingUnits.map((unit) => (
                                 <MenuItem key={unit.id} value={unit.id}>
@@ -1284,11 +1293,11 @@ export function MatFlowBomDetailPage() {
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
                     {routeDialog?.step && (
-                        <Button onClick={async () => { const line = routeDialog.line; const step = routeDialog.step; setRouteDialog(null); await deleteRoute(line, step); }} disabled={working} sx={dangerBtnSx}>Delete Option</Button>
+                        <Button onClick={async () => { const line = routeDialog.line; const step = routeDialog.step; setRouteDialog(null); await deleteRoute(line, step); }} disabled={working} sx={dangerBtnSx}>Delete Route</Button>
                     )}
                     <Box sx={{ flex: 1 }} />
                     <Button onClick={() => setRouteDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveRoute} disabled={working || processingUnits.length === 0} sx={primaryBtnSx}>{working ? "Saving..." : "Save Option"}</Button>
+                    <Button onClick={saveRoute} disabled={working || processingUnits.length === 0} sx={primaryBtnSx}>{working ? "Saving..." : "Save Route"}</Button>
                 </DialogActions>
             </Dialog>
 

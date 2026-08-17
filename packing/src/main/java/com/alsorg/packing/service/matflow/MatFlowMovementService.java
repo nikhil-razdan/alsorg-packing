@@ -147,8 +147,8 @@ public class MatFlowMovementService {
          * completion. The caller service has already enforced the owning desk role.
          */
         /**
-         * Returns the Store-selected Processing BOM step for this reservation, if
-         * Processing is part of its saved route. Used only to queue the Processing
+         * Returns the BOM-defined Processing step for this reservation, if
+         * Processing is part of its saved route. Used to queue the Processing
          * job after Store has physically sent the lot to the processor.
          */
         @Transactional(readOnly = true)
@@ -279,7 +279,6 @@ public class MatFlowMovementService {
                         return transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
                                         .stream()
-                                        .map(this::hydrateTransfer)
                                         .filter(transfer -> transfer != null
                                                         && transfer.toLocation != null
                                                         && (transfer.toLocation
@@ -304,8 +303,7 @@ public class MatFlowMovementService {
                         MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
 
                         List<MatFlowTransferOrder> route = transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
-                                        .stream().map(this::hydrateTransfer).toList();
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
                         MatFlowTransferOrder next = route.stream()
                                         .filter(item -> item != null
                                                         && item.status != TransferStatus.RECEIVED
@@ -420,18 +418,40 @@ public class MatFlowMovementService {
                         MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
                         List<MatFlowTransferOrder> route = transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
+
                         MatFlowTransferOrder next = route.stream()
                                         .filter(item -> item != null
                                                         && item.status != TransferStatus.RECEIVED
                                                         && item.status != TransferStatus.CANCELLED)
                                         .findFirst()
-                                        .orElseThrow(() -> conflict("No pending post-Processing hand-off exists"));
+                                        .orElse(null);
+
+                        /*
+                         * A zero-output Processing completion may cancel the downstream
+                         * transfer while replacement shortage is raised. Completion must
+                         * still succeed in that case.
+                         */
+                        if (next == null) {
+                                if (reservation.requisitionLine != null
+                                                && reservation.requisitionLine.requisition != null) {
+                                        requisitionService.refreshState(
+                                                        reservation.requisitionLine.requisition.getId(),
+                                                        accessService.actor());
+                                }
+                                return;
+                        }
 
                         if (next.fromLocation == null
                                         || (next.fromLocation.getLocationType() != LocationType.PROCESSING
                                                         && next.fromLocation.getLocationType() != LocationType.EXTERNAL_PROCESSOR)) {
                                 throw conflict("The next hand-off is not owned by Processing");
                         }
+                        if (next.toLocation == null
+                                        || next.toLocation.getLocationType() != LocationType.PRODUCTION) {
+                                throw conflict(
+                                                "BOM Processing output must route directly to the MR Production destination");
+                        }
+
                         accessService.requireTransferDispatch(next.fromLocation);
 
                         String actor = accessService.actor();
@@ -452,7 +472,11 @@ public class MatFlowMovementService {
                                                                 || reservation.requisitionLine.requisition.projectDrawing == null
                                                                                 ? null
                                                                                 : reservation.requisitionLine.requisition.projectDrawing.getDrawingNo(),
-                                                auditService.details("reservationId", reservationId));
+                                                auditService.details(
+                                                                "reservationId", reservationId,
+                                                                "automaticProductionIssue", true,
+                                                                "productionDestination",
+                                                                next.toLocation.getLocationCode()));
                         }
 
                         MatFlowTransferLine line = requireLockedTransferLine(next.getId());
@@ -461,6 +485,7 @@ public class MatFlowMovementService {
                         if (remaining.compareTo(ZERO) <= 0) {
                                 return;
                         }
+
                         BigDecimal inTransit = zero(line.dispatchedQty).subtract(zero(line.receivedQty))
                                         .max(ZERO).setScale(3, RoundingMode.HALF_UP);
                         BigDecimal dispatchNeeded = remaining.subtract(inTransit).max(ZERO)
@@ -469,11 +494,15 @@ public class MatFlowMovementService {
                                 dispatch(next.getId(), new TransferActionRequest(
                                                 next.getRowVersion(), dispatchNeeded, null, remarks));
                         }
+
+                        /*
+                         * Processing completion is the final routing decision for a
+                         * BOM-processed lot. Receive the dispatched output internally at
+                         * the exact Production destination so the standard final-receipt
+                         * code records ISSUE_TO_PRODUCTION, updates the reservation/MR
+                         * line and makes the lot available for Production consumption.
+                         */
                         MatFlowTransferOrder afterDispatch = requireLockedTransfer(next.getId());
-                        if (afterDispatch.toLocation == null
-                                        || !plantRoutingService.isMainStoreLocation(afterDispatch.toLocation)) {
-                                throw conflict("Processing output must return to AL-P1 Main Store before plant issue");
-                        }
                         receiveOutstandingInternally(afterDispatch, remaining, null, remarks);
                 }
 
@@ -514,7 +543,6 @@ public class MatFlowMovementService {
                         MatFlowTransferOrder productionTransfer = transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
                                         .stream()
-                                        .map(this::hydrateTransfer)
                                         .filter(transfer -> transfer != null && transfer.toLocation != null)
                                         .filter(transfer -> transfer.toLocation
                                                         .getLocationType() == LocationType.PRODUCTION)
@@ -557,39 +585,10 @@ public class MatFlowMovementService {
                                 reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate
                                                 .unproxy(reservation.requisitionLine);
                                 if (reservation.requisitionLine.requisition != null) {
-                                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
-                                                        .unproxy(reservation.requisitionLine.requisition);
-                                        if (requisition.projectDrawing != null) {
-                                                requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
-                                                                requisition.projectDrawing);
-                                        }
-                                        if (requisition.bom != null) {
-                                                requisition.bom = (MatFlowBom) Hibernate.unproxy(requisition.bom);
-                                        }
-                                        if (requisition.destinationLocation != null) {
-                                                requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
-                                                                requisition.destinationLocation);
-                                        }
-                                        reservation.requisitionLine.requisition = requisition;
+                                        reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate
+                                                        .unproxy(
+                                                                        reservation.requisitionLine.requisition);
                                 }
-                                if (reservation.requisitionLine.material != null) {
-                                        reservation.requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
-                                                        reservation.requisitionLine.material);
-                                }
-                                if (reservation.requisitionLine.issuedMaterial != null) {
-                                        reservation.requisitionLine.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
-                                                        reservation.requisitionLine.issuedMaterial);
-                                }
-                        }
-                        if (reservation.material != null) {
-                                reservation.material = (MatFlowMaterial) Hibernate.unproxy(reservation.material);
-                        }
-                        if (reservation.sourceLocation != null) {
-                                reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(reservation.sourceLocation);
-                        }
-                        if (reservation.firstDestinationLocation != null) {
-                                reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
-                                                reservation.firstDestinationLocation);
                         }
                         return reservation;
                 }
@@ -1401,19 +1400,35 @@ public class MatFlowMovementService {
                                                 "Transfer destination location is inactive");
                         }
 
-                        if (!transfer.fromLocation
-                                        .isSupportsStock()) {
-
-                                throw conflict(
-                                                "Transfer source does not support stock");
+                        /*
+                         * Do NOT gate internal MatFlow custody by supportsStock.
+                         *
+                         * Store locations are business stock points, while Processing
+                         * Units and Production nodes intentionally have supportsStock=false
+                         * because they are not user-maintained inventory masters. The
+                         * movement engine still keeps transient technical balances there
+                         * for dispatch/receipt, Processing consumption/output and final
+                         * Production consumption.
+                         *
+                         * Route validity is enforced when the BOM/MR transfer chain is
+                         * created; active source/destination nodes are sufficient here.
+                         */
+                        LocationType fromType = transfer.fromLocation.getLocationType();
+                        LocationType toType = transfer.toLocation.getLocationType();
+                        if (!isInternalCustodyType(fromType)) {
+                                throw conflict("Unsupported transfer source custody: " + fromType);
                         }
-
-                        if (!transfer.toLocation
-                                        .isSupportsStock()) {
-
-                                throw conflict(
-                                                "Transfer destination does not support stock");
+                        if (!isInternalCustodyType(toType)) {
+                                throw conflict("Unsupported transfer destination custody: " + toType);
                         }
+                }
+
+                private boolean isInternalCustodyType(LocationType type) {
+                        return type == LocationType.STORE
+                                        || type == LocationType.PRODUCTION
+                                        || type == LocationType.PROCESSING
+                                        || type == LocationType.EXTERNAL_PROCESSOR
+                                        || type == LocationType.QC;
                 }
 
                 private void validateTransferQuantities(
@@ -1580,8 +1595,8 @@ public class MatFlowMovementService {
                                 UUID id) {
 
                         return transferRepository
-                                        .lockById(id)
-                                        .map(this::hydrateTransfer)
+                                        .lockById(
+                                                        id)
                                         .orElseThrow(() -> notFound(
                                                         "Transfer order not found"));
                 }
@@ -1590,8 +1605,8 @@ public class MatFlowMovementService {
                                 UUID id) {
 
                         return transferRepository
-                                        .findById(id)
-                                        .map(this::hydrateTransfer)
+                                        .findById(
+                                                        id)
                                         .orElseThrow(() -> notFound(
                                                         "Transfer order not found"));
                 }
@@ -1654,67 +1669,7 @@ public class MatFlowMovementService {
                                                 "Transfer must contain exactly one material line");
                         }
 
-                        MatFlowTransferLine line = (MatFlowTransferLine) Hibernate.unproxy(lines.get(0));
-                        if (line.material != null) {
-                                line.material = (MatFlowMaterial) Hibernate.unproxy(line.material);
-                        }
-                        if (line.transferOrder != null) {
-                                line.transferOrder = hydrateTransfer(line.transferOrder);
-                        }
-                        return line;
-                }
-
-                /**
-                 * Always unwrap the transfer aggregate before any workflow code reads its
-                 * public JPA backing fields. A lock/query can resolve to an already-managed
-                 * Hibernate proxy after Store dispatch; reading proxy fields directly is the
-                 * recurring source of false-null runtime failures in MatFlow.
-                 */
-                private MatFlowTransferOrder hydrateTransfer(MatFlowTransferOrder raw) {
-                        if (raw == null) {
-                                return null;
-                        }
-                        MatFlowTransferOrder transfer = (MatFlowTransferOrder) Hibernate.unproxy(raw);
-                        if (transfer.requisition != null) {
-                                transfer.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(transfer.requisition);
-                                if (transfer.requisition.projectDrawing != null) {
-                                        transfer.requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
-                                                        transfer.requisition.projectDrawing);
-                                }
-                                if (transfer.requisition.bom != null) {
-                                        transfer.requisition.bom = (MatFlowBom) Hibernate.unproxy(transfer.requisition.bom);
-                                }
-                                if (transfer.requisition.destinationLocation != null) {
-                                        transfer.requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
-                                                        transfer.requisition.destinationLocation);
-                                }
-                        }
-                        if (transfer.reservation != null) {
-                                transfer.reservation = (MatFlowReservation) Hibernate.unproxy(transfer.reservation);
-                                if (transfer.reservation.requisitionLine != null) {
-                                        transfer.reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
-                                                        transfer.reservation.requisitionLine);
-                                }
-                                if (transfer.reservation.material != null) {
-                                        transfer.reservation.material = (MatFlowMaterial) Hibernate.unproxy(
-                                                        transfer.reservation.material);
-                                }
-                                if (transfer.reservation.sourceLocation != null) {
-                                        transfer.reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(
-                                                        transfer.reservation.sourceLocation);
-                                }
-                                if (transfer.reservation.firstDestinationLocation != null) {
-                                        transfer.reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
-                                                        transfer.reservation.firstDestinationLocation);
-                                }
-                        }
-                        if (transfer.fromLocation != null) {
-                                transfer.fromLocation = (MatFlowLocation) Hibernate.unproxy(transfer.fromLocation);
-                        }
-                        if (transfer.toLocation != null) {
-                                transfer.toLocation = (MatFlowLocation) Hibernate.unproxy(transfer.toLocation);
-                        }
-                        return transfer;
+                        return lines.get(0);
                 }
 
                 private void saveTransferLedger(
