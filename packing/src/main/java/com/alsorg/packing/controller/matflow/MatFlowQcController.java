@@ -1,15 +1,17 @@
 package com.alsorg.packing.controller.matflow;
 
+import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.QcDispositionRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowControlDtos.QcDispositionResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.QcDecisionRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.QcInspectionResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorReturnRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorReturnResponse;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcInspectionStatus;
 import com.alsorg.packing.service.matflow.MatFlowQcEvidenceService;
 import com.alsorg.packing.service.matflow.MatFlowQcService;
-
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
-
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,65 +28,70 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Simple MR-linked QC check boundary.
+ * AL-P1 Main Store QC checklist.
  *
- * There is deliberately no QC location endpoint and no QC routing endpoint.
- * Store owns the Processing/Production route. QC only completes the requested
- * check and may attach one optional picture as evidence.
+ * QC is a check gate, not a Location. Normal workflow exposes only the check,
+ * optional photo evidence, and rejected-lot actions.
  */
 @RestController
 @RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowQcController {
-
     private final MatFlowQcService service;
-    private final MatFlowQcEvidenceService evidenceService;
+    private final MatFlowQcEvidenceService evidence;
 
-    public MatFlowQcController(
-            MatFlowQcService service,
-            MatFlowQcEvidenceService evidenceService) {
+    public MatFlowQcController(MatFlowQcService service, MatFlowQcEvidenceService evidence) {
         this.service = service;
-        this.evidenceService = evidenceService;
+        this.evidence = evidence;
     }
 
     @GetMapping("/qc")
-    public List<QcInspectionResponse> list(
+    public List<QcInspectionResponse> inspections(
             @RequestParam(required = false) QcInspectionStatus status) {
         return service.listInspections(status);
     }
 
-    /** Tick / complete the QC check. */
     @PostMapping("/qc/{id}/decision")
-    public QcInspectionResponse complete(
+    public QcInspectionResponse decide(
             @PathVariable UUID id,
             @Valid @RequestBody QcDecisionRequest request) {
         return service.decide(id, request);
     }
 
-    /** Optional picture evidence; uploading again replaces the existing picture. */
     @PostMapping(value = "/qc/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public QcInspectionResponse uploadPhoto(
             @PathVariable UUID id,
             @RequestPart("file") MultipartFile file) {
-        evidenceService.save(id, file);
+        evidence.save(id, file);
         return service.getInspection(id);
     }
 
     @GetMapping("/qc/{id}/photo")
     public ResponseEntity<Resource> photo(@PathVariable UUID id) {
-        Resource resource = evidenceService.load(id);
-        String type = evidenceService.contentType(id);
-        MediaType mediaType;
-        try {
-            mediaType = MediaType.parseMediaType(type);
-        } catch (IllegalArgumentException ignored) {
-            mediaType = MediaType.APPLICATION_OCTET_STREAM;
-        }
+        Resource resource = evidence.load(id);
         return ResponseEntity.ok()
-                .contentType(mediaType)
+                .contentType(MediaType.parseMediaType(evidence.contentType(id)))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=\"" + evidenceService.fileName(id).replace("\"", "") + "\"")
+                        "inline; filename=\"" + evidence.fileName(id).replace("\"", "") + "\"")
                 .body(resource);
     }
+
+    @PostMapping("/qc/{id}/return-to-vendor")
+    public VendorReturnResponse returnToVendor(
+            @PathVariable UUID id,
+            @Valid @RequestBody VendorReturnRequest request) {
+        return service.returnToVendor(id, request);
+    }
+
+    @GetMapping("/qc-dispositions")
+    public List<QcDispositionResponse> dispositions() {
+        return service.listDispositions();
+    }
+
+    @PostMapping("/qc-dispositions/{inspectionId}")
+    public QcDispositionResponse decideDisposition(
+            @PathVariable UUID inspectionId,
+            @Valid @RequestBody QcDispositionRequest request) {
+        return service.decideDisposition(inspectionId, request);
+    }
 }
-    

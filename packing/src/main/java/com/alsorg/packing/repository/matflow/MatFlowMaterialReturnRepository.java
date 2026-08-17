@@ -18,7 +18,7 @@ public interface MatFlowMaterialReturnRepository extends JpaRepository<MatFlowMa
 
     List<MatFlowMaterialReturn> findAllByOrderByUpdatedAtDesc();
 
-    @EntityGraph(attributePaths = { "requisition", "fromLocation", "viaLocation", "toLocation" })
+    @EntityGraph(attributePaths = {"requisition", "fromLocation", "viaLocation", "toLocation"})
     @Query("""
             select materialReturn
             from MatFlowMaterialReturn materialReturn
@@ -31,7 +31,7 @@ public interface MatFlowMaterialReturnRepository extends JpaRepository<MatFlowMa
      * operators cannot advance the same custody leg concurrently.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = { "requisition", "fromLocation", "viaLocation", "toLocation" })
+    @EntityGraph(attributePaths = {"requisition", "fromLocation", "viaLocation", "toLocation"})
     @Query("""
             select materialReturn
             from MatFlowMaterialReturn materialReturn

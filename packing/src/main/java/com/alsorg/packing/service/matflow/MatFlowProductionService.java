@@ -60,7 +60,6 @@ public class MatFlowProductionService {
                         MatFlowMaterialRequisitionRepository requisitionRepository,
                         MatFlowProductionConsumptionRepository consumptionRepository,
                         MatFlowProductionConsumptionLineRepository consumptionLineRepository,
-                        MatFlowLocationRepository locationRepository,
                         MatFlowAccessService accessService,
                         MatFlowAuditService auditService,
                         MatFlowRequisitionService requisitionService) {
@@ -88,7 +87,6 @@ public class MatFlowProductionService {
                                 consumptionLineRepository,
                                 requisitionRepository,
                                 requisitionLineRepository,
-                                locationRepository,
                                 stockRepository,
                                 ledgerRepository,
                                 accessService,
@@ -1117,7 +1115,6 @@ public class MatFlowProductionService {
                 private final MatFlowProductionConsumptionLineRepository consumptionLineRepository;
                 private final MatFlowMaterialRequisitionRepository requisitionRepository;
                 private final MatFlowRequisitionLineRepository requisitionLineRepository;
-                private final MatFlowLocationRepository locationRepository;
                 private final MatFlowStockBalanceRepository stockRepository;
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowAccessService accessService;
@@ -1129,7 +1126,6 @@ public class MatFlowProductionService {
                                 MatFlowProductionConsumptionLineRepository consumptionLineRepository,
                                 MatFlowMaterialRequisitionRepository requisitionRepository,
                                 MatFlowRequisitionLineRepository requisitionLineRepository,
-                                MatFlowLocationRepository locationRepository,
                                 MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowAccessService accessService,
@@ -1142,8 +1138,6 @@ public class MatFlowProductionService {
                         this.requisitionRepository = requisitionRepository;
 
                         this.requisitionLineRepository = requisitionLineRepository;
-
-                        this.locationRepository = locationRepository;
 
                         this.stockRepository = stockRepository;
 
@@ -1174,11 +1168,10 @@ public class MatFlowProductionService {
 
                         if (request == null ||
                                         request.requisitionId() == null ||
-                                        request.productionLocationId() == null ||
                                         request.lines() == null ||
                                         request.lines().isEmpty()) {
                                 throw badRequest(
-                                                "Requisition, production location and consumption lines are required");
+                                                "Requisition and consumption lines are required");
                         }
 
                         MatFlowMaterialRequisition requisition = requisitionRepository
@@ -1212,29 +1205,15 @@ public class MatFlowProductionService {
 
                         accessService.requireProductionOwnership(requisition.requestedBy);
 
-                        MatFlowLocation productionLocation = locationRepository
-                                        .findById(
-                                                        request.productionLocationId())
-                                        .orElseThrow(() -> notFound(
-                                                        "Production location not found"));
-
-                        productionLocation = (MatFlowLocation) Hibernate.unproxy(
-                                        productionLocation);
-
-                        accessService.requirePlantAccess(
-                                        productionLocation.getPlantCode());
-
+                        /*
+                         * Production custody is derived from the MR's plant and requester.
+                         * Operators never choose a Location. destinationLocation is only the
+                         * hidden technical node retained for existing stock/ledger FKs.
+                         */
+                        MatFlowLocation productionLocation = requisition.destinationLocation;
+                        accessService.requirePlantAccess(productionLocation.getPlantCode());
                         if (productionLocation.getLocationType() != LocationType.PRODUCTION) {
-                                throw badRequest(
-                                                "Consumption location must be a production location");
-                        }
-
-                        if (!productionLocation.getId()
-                                        .equals(
-                                                        requisition.destinationLocation
-                                                                        .getId())) {
-                                throw conflict(
-                                                "Consumption location does not match the requisition destination");
+                                throw conflict("MR does not contain a valid Production custody node");
                         }
 
                         if (requisition.status != RequisitionStatus.PRODUCTION_STARTED) {
@@ -1452,9 +1431,8 @@ public class MatFlowProductionService {
                 ProductionWasteResponse recordWaste(ProductionWasteRequest request) {
                         accessService.requireProductionRequest();
                         if (request == null || request.requisitionId() == null ||
-                                        request.productionLocationId() == null || request.lines() == null ||
-                                        request.lines().isEmpty()) {
-                                throw badRequest("Requisition, Production location and wastage lines are required");
+                                        request.lines() == null || request.lines().isEmpty()) {
+                                throw badRequest("Requisition and wastage lines are required");
                         }
 
                         MatFlowMaterialRequisition requisition = requisitionRepository.findById(request.requisitionId())
@@ -1473,14 +1451,13 @@ public class MatFlowProductionService {
                                 throw conflict("Production wastage can be recorded only after Production has started");
                         }
 
-                        MatFlowLocation location = locationRepository.findById(request.productionLocationId())
-                                        .orElseThrow(() -> notFound("Production location not found"));
-                        location = (MatFlowLocation) Hibernate.unproxy(location);
+                        if (requisition.destinationLocation == null) {
+                                throw conflict("MR has no Production custody node");
+                        }
+                        MatFlowLocation location = requisition.destinationLocation;
                         accessService.requirePlantAccess(location.getPlantCode());
-                        if (location.getLocationType() != LocationType.PRODUCTION ||
-                                        requisition.destinationLocation == null ||
-                                        !location.getId().equals(requisition.destinationLocation.getId())) {
-                                throw conflict("Wastage must be recorded at the requisition Production location");
+                        if (location.getLocationType() != LocationType.PRODUCTION) {
+                                throw conflict("MR does not contain a valid Production custody node");
                         }
 
                         String actor = accessService.actor();
@@ -1580,7 +1557,7 @@ public class MatFlowProductionService {
 
                         return new ProductionWasteResponse(
                                         requisition.getId(), requisition.requisitionNumber,
-                                        location.getId(), location.getLocationCode(), location.getPlantCode(),
+                                        location.getPlantCode(),
                                         actor, now, clean(request.remarks()), List.copyOf(responses));
                 }
 
@@ -1619,9 +1596,6 @@ public class MatFlowProductionService {
                                         consumption.consumptionNumber,
                                         consumption.requisition.getId(),
                                         consumption.requisition.requisitionNumber,
-                                        consumption.productionLocation
-                                                        .getId(),
-                                        consumption.productionLocation.getLocationCode(),
                                         consumption.productionLocation.getPlantCode(),
                                         consumption.consumedBy,
                                         consumption.consumedAt,

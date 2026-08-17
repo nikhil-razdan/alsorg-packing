@@ -380,7 +380,7 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 projectCode: row.projectCode,
                 projectName: row.projectName,
                 clientName: row.clientName,
-                plantCode: row.destinationPlantCode,
+                plantCode: (row.productionPlantCode || row.destinationPlantCode),
                 portfolioStage: null,
                 products: [],
                 rows: [],
@@ -490,7 +490,7 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 clientName: row.clientName,
                 productName: row.productName,
                 drawingNo: row.drawingNo,
-                plantCode: row.destinationPlantCode,
+                plantCode: (row.productionPlantCode || row.destinationPlantCode),
                 latestBomId: null,
                 latestBomNumber: null,
                 latestBomStatus: null,
@@ -587,7 +587,7 @@ const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantPa
     return (Array.isArray(requisitions) ? requisitions : []).flatMap((requisition) => {
         if (!requisition?.id || normalize(requisition.status) === "CANCELLED") return [];
         const tracker = trackerByRequisition.get(String(requisition.id)) || null;
-        const plantCode = clean(tracker?.destinationPlantCode || requisition.destinationPlantCode).toUpperCase();
+        const plantCode = clean(tracker?.destinationPlantCode || (requisition.productionPlantCode || requisition.destinationPlantCode)).toUpperCase();
         if (selectedPlant && plantCode !== selectedPlant) return [];
 
         const parentStage = tracker?.currentStage || requisitionStatusStage(requisition.status);
@@ -614,7 +614,6 @@ const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantPa
                 destinationPlantCode: plantCode,
                 currentStage: parentStage,
                 currentDepartment: tracker?.currentDepartment || tracker?.responsibleDesk,
-                currentLocationCode: tracker?.currentLocationCode || requisition.destinationLocationCode,
                 timingHealth: tracker?.timingHealth,
                 ageHours: tracker?.ageHours,
                 requestedQty: line.requestedQty,
@@ -1163,7 +1162,7 @@ function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
                             <Box sx={{ minWidth: 0 }}>
                                 <Typography sx={{ ...mainTextSx, fontSize: 11.7 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
-                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentLocationCode || row.destinationPlantCode || "-"}</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentDepartment || row.currentStage || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography>
                             </Box>
                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                 <TimingHealthChip health={row.timingHealth} />
@@ -1365,7 +1364,6 @@ export function MatFlowDashboardPage() {
                 item.bottleneck?.requisitionNumber,
                 item.bottleneck?.lineStatus,
                 item.bottleneck?.currentDepartment,
-                item.bottleneck?.currentLocationCode,
             ].some((value) => clean(value).toLowerCase().includes(term)))
             .sort(boardPrioritySort);
 
@@ -2051,7 +2049,7 @@ export function MatFlowDashboardPage() {
                         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1, flexWrap: "wrap" }}>
                             <Box>
                                 <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Live Material Execution</Typography>
-                                <Typography sx={{ ...subTextSx, mt: .15 }}>Oldest active Project/Product MRs with the current department, location, readiness and next action.</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .15 }}>Oldest active Project/Product MRs with the current department, plant/custody, readiness and next action.</Typography>
                             </Box>
                             <Button onClick={() => changeView("operations")} endIcon={<ChevronRightRoundedIcon />} sx={secondaryBtnSx}>Open full Operations Board</Button>
                         </Box>
@@ -2064,7 +2062,7 @@ export function MatFlowDashboardPage() {
                                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
                                                 <Typography sx={{ ...mainTextSx, fontSize: 11.8 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
-                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentLocationCode || row.destinationPlantCode || "-"}</Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentDepartment || row.currentStage || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography>
                                             </Box>
                                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                                 <MatFlowStatusChip status={row.currentStage} />
@@ -2172,7 +2170,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     projectCode: row.projectCode,
                     projectName: row.projectName,
                     clientName: row.clientName,
-                    plantCode: row.destinationPlantCode,
+                    plantCode: (row.productionPlantCode || row.destinationPlantCode),
                     rows: [],
                 });
             }
@@ -2193,7 +2191,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
             {!embedded && <PageHero
                 badge="PROJECT / PRODUCT TRACKER"
                 title="Material Execution Tracker"
-                subtitle="One row per MR with Product context, current material department/location, readiness, shortage and the next responsible action."
+                subtitle="One row per MR with Product context, current material department/plant custody, readiness, shortage and the next responsible action."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Project_Tracker", sheetName: "Tracker", title: "MatFlow Project Material Tracker", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -2256,7 +2254,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                             return (
                                 <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
                                     <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
-                                    <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {(row.productionPlantCode || row.destinationPlantCode) || "-"}</Typography>
                                     <Box sx={{ mt: .8, display: "flex", gap: .45, flexWrap: "wrap" }}>
                                         <MatFlowStatusChip status={row.currentStage} />
                                         <TimingHealthChip health={row.timingHealth} />
@@ -2272,80 +2270,80 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     />
                 )
             ) : (
-                <Box sx={{ display: "grid", gap: 1 }}>
-                    {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
-                        const expanded = expandedProjects[project.key] === true;
-                        return (
-                            <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-                                <Box
-                                    role={!expanded ? "button" : undefined}
-                                    tabIndex={!expanded ? 0 : undefined}
-                                    onClick={() => {
-                                        if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                    }}
-                                    onKeyDown={(event) => {
-                                        if (!expanded && (event.key === "Enter" || event.key === " ")) {
-                                            event.preventDefault();
-                                            setExpandedProjects((current) => ({ ...current, [project.key]: true }));
-                                        }
-                                    }}
-                                    sx={{
-                                        px: 1.5,
-                                        py: 1.2,
-                                        display: "grid",
-                                        gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
-                                        gap: 1,
-                                        alignItems: "center",
-                                        cursor: expanded ? "default" : "pointer",
-                                        background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
-                                    }}
-                                >
-                                    <Box>
-                                        <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
-                                        <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
-                                    </Box>
-                                    <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
-                                    <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
-                                    <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
-                                    <Box sx={{ display: "grid", placeItems: "center" }}>
-                                        {expanded && (
-                                            <Button
-                                                aria-label="Collapse project"
-                                                onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    setExpandedProjects((current) => ({ ...current, [project.key]: false }));
-                                                }}
-                                                sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
-                                            >
-                                                <ExpandLessIcon fontSize="small" />
-                                            </Button>
-                                        )}
-                                    </Box>
+            <Box sx={{ display: "grid", gap: 1 }}>
+                {loading ? <LoadingBlock /> : projectPagination.pageItems.length === 0 ? <EmptyState /> : projectPagination.pageItems.map((project) => {
+                    const expanded = expandedProjects[project.key] === true;
+                    return (
+                        <Card key={project.key} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+                            <Box
+                                role={!expanded ? "button" : undefined}
+                                tabIndex={!expanded ? 0 : undefined}
+                                onClick={() => {
+                                    if (!expanded) setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                }}
+                                onKeyDown={(event) => {
+                                    if (!expanded && (event.key === "Enter" || event.key === " ")) {
+                                        event.preventDefault();
+                                        setExpandedProjects((current) => ({ ...current, [project.key]: true }));
+                                    }
+                                }}
+                                sx={{
+                                    px: 1.5,
+                                    py: 1.2,
+                                    display: "grid",
+                                    gridTemplateColumns: "minmax(260px,1fr) 110px 120px 120px 48px",
+                                    gap: 1,
+                                    alignItems: "center",
+                                    cursor: expanded ? "default" : "pointer",
+                                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-bg)",
+                                }}
+                            >
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
+                                    <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
                                 </Box>
+                                <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
+                                <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
+                                <Box><Typography sx={mainTextSx}>{formatQty(project.shortageQty)}</Typography><Typography sx={subTextSx}>{project.riskCount ? `${project.riskCount} timing risk` : `${project.readyCount} ready`}</Typography></Box>
+                                <Box sx={{ display: "grid", placeItems: "center" }}>
+                                    {expanded && (
+                                        <Button
+                                            aria-label="Collapse project"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setExpandedProjects((current) => ({ ...current, [project.key]: false }));
+                                            }}
+                                            sx={{ ...secondaryBtnSx, minWidth: 38, width: 38, px: 0 }}
+                                        >
+                                            <ExpandLessIcon fontSize="small" />
+                                        </Button>
+                                    )}
+                                </Box>
+                            </Box>
 
-                                <Collapse in={expanded} unmountOnExit>
-                                    <Box sx={tableShellSx}>
-                                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                            {["Product / Drawing", "MR", "Current Owner", "Current Location", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
-                                        </Box>
-                                        {project.rows.map((row) => (
-                                            <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
-                                                <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
-                                                <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
-                                            </Box>
-                                        ))}
+                            <Collapse in={expanded} unmountOnExit>
+                                <Box sx={tableShellSx}>
+                                    <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                        {["Product / Drawing", "MR", "Current Owner", "Plant / Custody", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                     </Box>
-                                </Collapse>
-                            </Card>
-                        );
-                    })}
-                </Box>
+                                    {project.rows.map((row) => (
+                                        <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
+                                            <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
+                                            <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                            <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
+                                        </Box>
+                                    ))}
+                                </Box>
+                            </Collapse>
+                        </Card>
+                    );
+                })}
+            </Box>
             )}
             {!loading && trackerView === "HIERARCHY" && <MatFlowPagination {...projectPagination} onPageChange={projectPagination.setPage} onPageSizeChange={projectPagination.setPageSize} label="Projects" />}
         </Box>
@@ -2412,7 +2410,7 @@ export function MatFlowTrackerDetailPage() {
                     {stages.map((stage) => (
                         <Card key={stage.key} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
                             <Typography sx={mainTextSx}>{stage.label}</Typography>
-                            <Typography sx={subTextSx}>{stage.department} · {stage.locationCode || "-"}</Typography>
+                            <Typography sx={subTextSx}>{stage.department} · {readable(stage.state || "-")}</Typography>
                             <Box sx={{ mt: .8, display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}>
                                 <MatFlowStatusChip status={stage.state} />
                                 <TimingHealthChip health={stage.timingHealth} />
@@ -2428,7 +2426,7 @@ export function MatFlowTrackerDetailPage() {
                 <Typography sx={{ ...subTextSx, mb: 1.1 }}>Specific material custody and next hand-off; internal transfer records are represented only as route state.</Typography>
                 <Box sx={tableShellSx}>
                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 110px 110px 110px 180px 170px 180px" }}>
-                        {["Material", "Requested", "Shortage", "Tracked Qty", "Current", "Location / State", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        {["Material", "Requested", "Shortage", "Tracked Qty", "Current", "Custody / State", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                     </Box>
                     {materials.length === 0 ? <EmptyState /> : materials.map((row, index) => (
                         <Box key={`${row.requisitionLineId}:${row.reservationId || index}`} sx={{ ...tableRowSx, gridTemplateColumns: "200px 110px 110px 110px 180px 170px 180px" }}>
@@ -2437,8 +2435,8 @@ export function MatFlowTrackerDetailPage() {
                             <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
                             <Box sx={tableCellSx}>{formatQty(row.trackedQty)}</Box>
                             <Box sx={tableCellSx}>{readable(row.currentDepartment)}</Box>
-                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.movementState)}</Typography></Box>
-                            <Box sx={tableCellSx}>{readable(row.nextDepartment)}{row.nextLocationCode ? ` · ${row.nextLocationCode}` : ""}</Box>
+                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.movementState)}</Typography></Box>
+                            <Box sx={tableCellSx}>{readable(row.nextDepartment || row.nextAction)}</Box>
                         </Box>
                     ))}
                 </Box>
@@ -2581,7 +2579,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
         (Array.isArray(requisitions) ? requisitions : []).forEach((requisition) => {
             if (!requisition || normalize(requisition.status) === "CANCELLED") return;
-            const demandPlant = clean(requisition.destinationPlantCode).toUpperCase();
+            const demandPlant = clean(requisition.productionPlantCode || requisition.destinationPlantCode).toUpperCase();
             if (selectedPlant && demandPlant !== selectedPlant) return;
 
             const context = productContextById.get(String(requisition.projectDrawingId || "")) || null;
@@ -2765,7 +2763,6 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                 row.requisitionNumber,
                 row.currentStage,
                 row.currentDepartment,
-                row.currentLocationCode,
                 row.nextDepartment,
                 row.nextAction,
             ].some((value) => clean(value).toLowerCase().includes(term));
@@ -2904,7 +2901,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                         <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material, including Store, Purchase, QC, Processing and Production custody.</Typography>
                         <Box sx={tableShellSx}>
                             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 175px 130px 180px 150px 190px 150px 105px" }}>
-                                {["PD No. / Product", "MR", "Tracked Qty", "Current", "Location", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                {["PD No. / Product", "MR", "Tracked Qty", "Current", "Plant / Custody", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                             </Box>
                             {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                                 const history = Array.isArray(row.history) ? row.history : [];
@@ -2916,7 +2913,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                                             <Box sx={tableCellSx}>{row.requisitionNumber || "-"}</Box>
                                             <Box sx={tableCellSx}>{formatQty(row.trackedQty)}</Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.nextAction)}</Typography></Box>
                                             <Box sx={tableCellSx}><TimingHealthChip health={row.timingHealth} /><Typography sx={subTextSx}>{formatDurationMinutes(row.currentDwellMinutes)}</Typography></Box>
                                             <Box sx={tableCellSx}>
@@ -2936,13 +2933,13 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                                                 ) : (
                                                     <Box sx={tableShellSx}>
                                                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "70px 190px 170px 170px 145px 145px 125px 150px" }}>
-                                                            {["#", "State", "Department / Location", "Time In", "Time Out", "Duration", "Actor", "Reference"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                                            {["#", "State", "Department / Plant", "Time In", "Time Out", "Duration", "Actor", "Reference"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                                         </Box>
                                                         {history.map((event) => (
                                                             <Box key={`${row.lotKey}:${event.sequence}`} sx={{ ...tableRowSx, gridTemplateColumns: "70px 190px 170px 170px 145px 145px 125px 150px" }}>
                                                                 <Box sx={tableCellSx}>{event.sequence}</Box>
                                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{event.label || readable(event.state)}</Typography><Typography sx={subTextSx}>{readable(event.state)} · {formatQty(event.quantity)} {row.uom || ""}</Typography></Box>
-                                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(event.department)}</Typography><Typography sx={subTextSx}>{event.locationCode || event.locationName || "Administrative / external"}</Typography></Box>
+                                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(event.department)}</Typography><Typography sx={subTextSx}>{event.plantCode || event.department || "Administrative / external"}</Typography></Box>
                                                                 <Box sx={tableCellSx}>{formatDate(event.enteredAt)}</Box>
                                                                 <Box sx={tableCellSx}>{event.exitedAt ? formatDate(event.exitedAt) : "Current"}</Box>
                                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatDurationMinutes(event.durationMinutes)}</Typography><TimingHealthChip health={event.timingHealth} /></Box>
@@ -3150,12 +3147,12 @@ export function MatFlowLedgerPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
-                            {["Material", "Location", "Movement", "Qty Change", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["Material", "Plant / Custody", "Movement", "Qty Change", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {(data.rows || []).length === 0 ? <EmptyState /> : data.rows.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.materialCode}</Typography></Box>
-                                <Box sx={tableCellSx}>{row.locationCode} · {row.plantCode}</Box>
+                                <Box sx={tableCellSx}>{row.plantCode || "-"} · {readable(row.department || row.responsibleDepartment || "Custody")}</Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
                                 <Box sx={tableCellSx}>{formatQty(row.quantityChange)}</Box>
                                 <Box sx={tableCellSx}>{row.referenceNumber || row.referenceType || "-"}</Box>

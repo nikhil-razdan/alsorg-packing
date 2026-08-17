@@ -6,451 +6,339 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * MatFlow planning/execution API contracts.
+ * MatFlow planning/execution contracts.
  *
- * Public Store workflow now models the four-plant channel explicitly while
- * keeping physical transfer rows internal:
- * Production -> origin Plant Store -> AL-P1 Main Store -> origin Plant Store
- * -> Production. AL-P1 skips both origin-Store forwarding hops.
+ * Business rule:
+ * - MatFlow has no user-facing Location master or Location selector.
+ * - Plant + requisition requester determine Store/Production routing.
+ * - AL-P1 Store is the Main Store.
+ * - AL-P2/3/4 route through their own Store before/after the Main Store.
+ * - Processing Units are the only configurable physical routing master.
+ *
+ * Existing database custody rows may still use hidden technical routing nodes
+ * internally, but those identifiers are intentionally not exposed by this API.
  */
 public final class MatFlowPlanningDtos {
-    private MatFlowPlanningDtos() {
-    }
+        private MatFlowPlanningDtos() {
+        }
 
-    public record LocationRequest(
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            Boolean supportsStock,
-            String address,
-            String contactPerson,
-            String contactPhone,
-            Boolean active,
-            Long rowVersion) {
-    }
+        /* =========================== PROCESSING =========================== */
 
-    public record LocationResponse(
-            UUID id,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            boolean supportsStock,
-            String address,
-            String contactPerson,
-            String contactPhone,
-            boolean active,
-            Long rowVersion) {
-    }
+        public record ProcessingUnitRequest(
+                        @NotNull(message = "Processing Unit code is required.") String processingUnitCode,
+                        @NotNull(message = "Processing Unit name is required.") String processingUnitName,
+                        @NotNull(message = "Plant code is required.") String plantCode,
+                        Boolean external,
+                        String address,
+                        String contactPerson,
+                        String contactPhone,
+                        Boolean active,
+                        Long rowVersion) {
+        }
 
-    public record RouteStepRequest(
-            Integer sequenceNo,
-            RouteStepType stepType,
-            UUID locationId,
-            String processCode,
-            BigDecimal expectedYieldPercent,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record ProcessingUnitResponse(
+                        UUID id,
+                        String processingUnitCode,
+                        String processingUnitName,
+                        String plantCode,
+                        boolean external,
+                        String address,
+                        String contactPerson,
+                        String contactPhone,
+                        boolean active,
+                        Long rowVersion) {
+        }
 
-    public record RouteStepResponse(
-            UUID id,
-            UUID bomId,
-            UUID bomLineId,
-            Integer bomLineNo,
-            Integer sequenceNo,
-            RouteStepType stepType,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            OwnershipType ownershipType,
-            String processCode,
-            BigDecimal expectedYieldPercent,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record RouteStepRequest(
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        @NotNull(message = "Processing Unit is required.") UUID processingUnitId,
+                        String processCode,
+                        BigDecimal expectedYieldPercent,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    public record StockAdjustmentRequest(
-            UUID materialId,
-            UUID locationId,
-            BigDecimal adjustmentQty,
-            String batchNo,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record RouteStepResponse(
+                        UUID id,
+                        UUID bomId,
+                        UUID bomLineId,
+                        Integer bomLineNo,
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        UUID processingUnitId,
+                        String processingUnitCode,
+                        String processingUnitName,
+                        String plantCode,
+                        boolean external,
+                        String processCode,
+                        BigDecimal expectedYieldPercent,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    public record StockBalanceResponse(
-            UUID id,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            String uom,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            BigDecimal onHandQty,
-            BigDecimal reservedQty,
-            BigDecimal blockedQty,
-            BigDecimal inTransitQty,
-            BigDecimal availableQty,
-            Long rowVersion) {
-    }
+        /* ========================== REQUISITION =========================== */
 
-    public record RequisitionLineRequest(
-            @NotNull(message = "BOM line ID is required.") UUID bomLineId,
-            @NotNull(message = "Requested quantity is required.")
-            @DecimalMin(value = "0.001", inclusive = true, message = "Requested quantity must be greater than zero.") BigDecimal requestedQty,
-            @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
-    }
+        public record RequisitionLineRequest(
+                        @NotNull(message = "BOM line ID is required.") UUID bomLineId,
+                        @NotNull(message = "Requested quantity is required.") @DecimalMin(value = "0.001", inclusive = true, message = "Requested quantity must be greater than zero.") BigDecimal requestedQty,
+                        @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
+        }
 
-    public record StoreStockOptionResponse(
-            UUID stockBalanceId,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            BigDecimal onHandQty,
-            BigDecimal reservedQty,
-            BigDecimal blockedQty,
-            BigDecimal availableQty,
-            boolean firstRouteDestination,
-            boolean productionDestination,
-            boolean transferRequired) {
-    }
+        /**
+         * One line = one material MR; multiple selected lines = subset MR;
+         * all remaining BOM lines = full remaining BOM MR.
+         */
+        public record RequisitionCreateRequest(
+                        @NotNull(message = "Project product ID is required.") UUID projectDrawingId,
+                        @NotNull(message = "Operational BOM ID is required.") UUID bomId,
+                        @Size(max = 2000, message = "Requisition remarks cannot exceed 2000 characters.") String remarks,
+                        @NotEmpty(message = "At least one material line is required.") List<@Valid RequisitionLineRequest> lines) {
+        }
 
-    public record StoreApprovedRouteStepResponse(
-            UUID routeStepId,
-            Integer sequenceNo,
-            RouteStepType stepType,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            String processCode) {
-    }
+        public record RequisitionActionRequest(
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
+                        @Size(max = 2000, message = "Action remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-    /**
-     * Store availability read model. Physical stock quantities are intentionally
-     * absent: Tally is the stock authority. MatFlow exposes only MR demand, the
-     * quantity already declared/allocated to this MR, shortage and approved
-     * Processing options.
-     */
-    public record StoreLineAvailabilityResponse(
-            UUID requisitionLineId,
-            Integer lineNo,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            String materialCategory,
-            String uom,
-            BigDecimal requestedQty,
-            BigDecimal reservedQty,
-            BigDecimal shortageQty,
-            UUID productionDestinationLocationId,
-            String productionDestinationLocationCode,
-            List<StoreApprovedRouteStepResponse> processingOptions) {
-    }
+        public record RequisitionLineResponse(
+                        UUID id,
+                        Integer lineNo,
+                        UUID bomLineId,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        String materialCategory,
+                        UUID issuedMaterialId,
+                        String issuedMaterialCode,
+                        String issuedMaterialName,
+                        String uom,
+                        BigDecimal bomRequiredQty,
+                        BigDecimal requestedQty,
+                        BigDecimal reservedQty,
+                        BigDecimal shortageQty,
+                        BigDecimal issuedQty,
+                        BigDecimal consumedQty,
+                        BigDecimal returnedQty,
+                        RequisitionLineStatus status,
+                        String remarks,
+                        Long rowVersion) {
+        }
 
-    /** Store forwards the same MR; no duplicate document is created. */
-    public record StoreForwardRequest(
-            @NotNull(message = "Requisition row version is required.") Long rowVersion,
-            @Size(max = 2000, message = "Forwarding remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        /**
+         * The Production recipient is the exact user who raised the MR (`requestedBy`)
+         * and the Production plant is derived from the Product/BOM.
+         */
+        public record RequisitionResponse(
+                        UUID id,
+                        String requisitionNumber,
+                        UUID projectDrawingId,
+                        String projectCode,
+                        String drawingNo,
+                        UUID bomId,
+                        String bomNumber,
+                        Integer bomRevisionNo,
+                        String productionPlantCode,
+                        String originStorePlantCode,
+                        String mainStorePlantCode,
+                        RequisitionStatus status,
+                        String requestedBy,
+                        LocalDateTime requestedAt,
+                        String submittedBy,
+                        LocalDateTime submittedAt,
+                        String forwardedToMainStoreBy,
+                        LocalDateTime forwardedToMainStoreAt,
+                        String forwardingRemarks,
+                        String plannedBy,
+                        LocalDateTime plannedAt,
+                        String remarks,
+                        String cancelledBy,
+                        LocalDateTime cancelledAt,
+                        String cancellationReason,
+                        Long rowVersion,
+                        List<RequisitionLineResponse> lines) {
+        }
 
-    /** Store sends one complete allocated lot along the saved route. */
-    public record StoreIssueRequest(
-            @NotNull(message = "Reservation row version is required.") Long rowVersion,
-            @DecimalMin(value = "0.001", inclusive = true, message = "Issue quantity must be greater than zero.") BigDecimal quantity,
-            @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
-            @Size(max = 2000, message = "Issue remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        /* ============================== STORE ============================== */
 
-    /** AL-P2/3/4 Store explicitly receives the inter-plant lot from AL-P1. */
-    public record StoreReceiveRequest(
-            @NotNull(message = "Reservation row version is required.") Long rowVersion,
-            @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
-            @Size(max = 2000, message = "Receipt remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        public record StoreApprovedRouteStepResponse(
+                        UUID routeStepId,
+                        Integer sequenceNo,
+                        RouteStepType stepType,
+                        UUID processingUnitId,
+                        String processingUnitCode,
+                        String processingUnitName,
+                        String plantCode,
+                        boolean external,
+                        String processCode) {
+        }
 
-    /**
-     * Production may raise an MR for exactly one BOM material, any selected subset
-     * of BOM materials, or every remaining BOM material. The lines collection is
-     * therefore intentionally variable-length; the service validates every line
-     * against the approved BOM and prevents cumulative requisition beyond the
-     * approved BOM quantity.
-     */
-    public record RequisitionCreateRequest(
-            @NotNull(message = "Project product ID is required.") UUID projectDrawingId,
-            @NotNull(message = "Operational BOM ID is required.") UUID bomId,
-            @NotNull(message = "Production destination location is required.") UUID destinationLocationId,
-            @Size(max = 2000, message = "Requisition remarks cannot exceed 2000 characters.") String remarks,
-            @NotEmpty(message = "At least one material line is required.") List<@Valid RequisitionLineRequest> lines) {
-    }
+        public record StoreLineAvailabilityResponse(
+                        UUID requisitionLineId,
+                        Integer lineNo,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        String materialCategory,
+                        String uom,
+                        BigDecimal requestedQty,
+                        BigDecimal reservedQty,
+                        BigDecimal shortageQty,
+                        String productionPlantCode,
+                        String productionUser,
+                        List<StoreApprovedRouteStepResponse> processingOptions) {
+        }
 
-    public record RequisitionActionRequest(
-            @NotNull(message = "Requisition row version is required.") Long rowVersion,
-            @Size(max = 2000, message = "Action remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        public record StoreForwardRequest(
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
+                        @Size(max = 2000, message = "Forwarding remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-    public record RequisitionLineResponse(
-            UUID id,
-            Integer lineNo,
-            UUID bomLineId,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            String materialCategory,
-            UUID issuedMaterialId,
-            String issuedMaterialCode,
-            String issuedMaterialName,
-            String uom,
-            BigDecimal bomRequiredQty,
-            BigDecimal requestedQty,
-            BigDecimal reservedQty,
-            BigDecimal shortageQty,
-            BigDecimal issuedQty,
-            BigDecimal consumedQty,
-            BigDecimal returnedQty,
-            RequisitionLineStatus status,
-            String remarks,
-            Long rowVersion) {
-    }
+        public record StoreIssueRequest(
+                        @NotNull(message = "Reservation row version is required.") Long rowVersion,
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Issue quantity must be greater than zero.") BigDecimal quantity,
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+                        @Size(max = 2000, message = "Issue remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-    /**
-     * MR identity plus persisted four-plant Store routing. destination* remains
-     * the final Production destination; originStore/mainStore describe the Store
-     * channel used to reach centralized planning and to return issued material.
-     */
-    public record RequisitionResponse(
-            UUID id,
-            String requisitionNumber,
-            UUID projectDrawingId,
-            String projectCode,
-            String drawingNo,
-            UUID bomId,
-            String bomNumber,
-            Integer bomRevisionNo,
-            UUID destinationLocationId,
-            String destinationLocationCode,
-            String destinationLocationName,
-            String destinationPlantCode,
-            UUID originStoreId,
-            String originStoreCode,
-            String originStorePlantCode,
-            UUID mainStoreId,
-            String mainStoreCode,
-            String mainStorePlantCode,
-            RequisitionStatus status,
-            String requestedBy,
-            LocalDateTime requestedAt,
-            String submittedBy,
-            LocalDateTime submittedAt,
-            String forwardedToMainStoreBy,
-            LocalDateTime forwardedToMainStoreAt,
-            String forwardingRemarks,
-            String plannedBy,
-            LocalDateTime plannedAt,
-            String remarks,
-            String cancelledBy,
-            LocalDateTime cancelledAt,
-            String cancellationReason,
-            Long rowVersion,
-            List<RequisitionLineResponse> lines) {
-    }
+        public record StoreReceiveRequest(
+                        @NotNull(message = "Reservation row version is required.") Long rowVersion,
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+                        @Size(max = 2000, message = "Receipt remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-    public record ReservationResponse(
-            UUID id,
-            UUID requisitionLineId,
-            String materialCode,
-            UUID sourceLocationId,
-            String sourceLocationCode,
-            String sourcePlantCode,
-            UUID firstDestinationLocationId,
-            String firstDestinationLocationCode,
-            String demandPlantCode,
-            BigDecimal reservedQty,
-            ReservationStatus status,
-            Long rowVersion,
-            BigDecimal issuedQty,
-            BigDecimal remainingIssueQty,
-            boolean issueReady,
-            UUID issueLocationId,
-            String issueLocationCode,
-            String responsibleDepartment,
-            String nextAction,
-            boolean qcRequired,
-            boolean qcCompleted,
-            boolean processingRequired,
-            UUID processingRouteStepId,
-            String processingLocationCode) {
-    }
+        public record StoreLineReviewRequest(
+                        @NotNull(message = "Requisition line ID is required.") UUID requisitionLineId,
+                        @NotNull(message = "Requisition line row version is required.") Long rowVersion,
+                        @NotNull(message = "Store availability decision is required.") StoreAvailabilityDecision availabilityDecision,
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Partial available quantity must be greater than zero.") BigDecimal availableQty,
+                        @NotNull(message = "QC decision is required.") Boolean qcRequired,
+                        @NotNull(message = "Processing decision is required.") Boolean processingRequired,
+                        UUID processingRouteStepId,
+                        @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
+        }
 
-    public record IndentLineResponse(
-            UUID id,
-            UUID requisitionLineId,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            BigDecimal requiredQty,
-            BigDecimal orderedQty,
-            BigDecimal receivedQty,
-            String uom) {
-    }
+        public record StoreReviewRequest(
+                        @NotNull(message = "Requisition row version is required.") Long rowVersion,
+                        @NotEmpty(message = "At least one Store review line is required.") List<@Valid StoreLineReviewRequest> lines,
+                        @Size(max = 2000, message = "Store review remarks cannot exceed 2000 characters.") String remarks) {
+        }
 
-    public record IndentResponse(
-            UUID id,
-            String indentNumber,
-            UUID requisitionId,
-            String requisitionNumber,
-            UUID projectDrawingId,
-            String projectCode,
-            String drawingNo,
-            String productName,
-            String clientName,
-            UUID deliverToLocationId,
-            String deliverToLocationCode,
-            String deliverToPlantCode,
-            IndentStatus status,
-            boolean storeRaised,
-            Long rowVersion,
-            List<IndentLineResponse> lines) {
-    }
+        /* =========================== EXECUTION ============================ */
 
-    /** Internal custody history only; there is no public Transfers desk. */
-    public record TransferResponse(
-            UUID id,
-            String transferNumber,
-            UUID requisitionId,
-            String requisitionNumber,
-            UUID projectDrawingId,
-            String projectCode,
-            String drawingNo,
-            String productName,
-            String clientName,
-            UUID bomId,
-            String bomNumber,
-            Integer bomRevisionNo,
-            UUID reservationId,
-            UUID requisitionLineId,
-            UUID fromLocationId,
-            String fromLocationCode,
-            String fromPlantCode,
-            LocationType fromLocationType,
-            UUID toLocationId,
-            String toLocationCode,
-            String toPlantCode,
-            LocationType toLocationType,
-            Integer routeSequenceNo,
-            UUID predecessorTransferId,
-            TransferPurpose purpose,
-            TransferStatus status,
-            UUID materialId,
-            String materialCode,
-            String materialName,
-            BigDecimal plannedQty,
-            BigDecimal dispatchedQty,
-            BigDecimal receivedQty,
-            String uom,
-            String responsibleDepartment,
-            String nextAction,
-            Long rowVersion) {
-    }
+        public record ReservationResponse(
+                        UUID id,
+                        UUID requisitionLineId,
+                        String materialCode,
+                        String sourceCustody,
+                        String sourcePlantCode,
+                        String firstDestinationCustody,
+                        String firstDestinationPlantCode,
+                        String demandPlantCode,
+                        BigDecimal reservedQty,
+                        ReservationStatus status,
+                        Long rowVersion,
+                        BigDecimal issuedQty,
+                        BigDecimal remainingIssueQty,
+                        boolean issueReady,
+                        String issueFromCustody,
+                        String issueFromPlantCode,
+                        String responsibleDepartment,
+                        String nextAction,
+                        boolean qcRequired,
+                        boolean qcCompleted,
+                        boolean processingRequired,
+                        UUID processingRouteStepId,
+                        String processingUnitCode) {
+        }
 
-    public record PlanningResponse(
-            RequisitionResponse requisition,
-            List<ReservationResponse> reservations,
-            List<IndentResponse> indents,
-            List<TransferResponse> transfers) {
-    }
+        /* =========================== PROCUREMENT ========================== */
 
-    /** Internal movement command used only by MatFlow service orchestration. */
-    public record TransferActionRequest(
-            @NotNull(message = "Row version is required.") Long rowVersion,
-            @DecimalMin(value = "0.001", inclusive = true, message = "Quantity must be greater than zero.") BigDecimal quantity,
-            @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
-            @Size(max = 2000, message = "Remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        public record IndentLineResponse(
+                        UUID id,
+                        UUID requisitionLineId,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        BigDecimal requiredQty,
+                        BigDecimal orderedQty,
+                        BigDecimal receivedQty,
+                        String uom) {
+        }
 
-    /** @deprecated Physical stock allocation is no longer a Store input; retained for binary/source compatibility only. */
-    @Deprecated
-    public record StoreSourceAllocationRequest(
-            @NotNull(message = "Source location is required.") UUID sourceLocationId,
-            @NotNull(message = "Reserve quantity is required.")
-            @DecimalMin(value = "0.001", inclusive = true, message = "Reserve quantity must be greater than zero.") BigDecimal reserveQty) {
-    }
+        public record IndentResponse(
+                        UUID id,
+                        String indentNumber,
+                        UUID requisitionId,
+                        String requisitionNumber,
+                        UUID projectDrawingId,
+                        String projectCode,
+                        String drawingNo,
+                        String productName,
+                        String clientName,
+                        String deliverToPlantCode,
+                        IndentStatus status,
+                        boolean storeRaised,
+                        Long rowVersion,
+                        List<IndentLineResponse> lines) {
+        }
 
-    /**
-     * Tally-authoritative Main Store review.
-     *
-     * FULLY_AVAILABLE     -> availableQty must be empty; full outstanding MR qty is declared available.
-     * NOT_AVAILABLE       -> availableQty must be empty; full outstanding MR qty becomes linked PI shortage.
-     * PARTIALLY_AVAILABLE -> availableQty is mandatory and must be > 0 and < outstanding MR qty.
-     *
-     * QC and Processing decisions apply only to the quantity declared available.
-     * Every shortage automatically creates/updates the linked PI; there is no PI checkbox.
-     */
-    public record StoreLineReviewRequest(
-            @NotNull(message = "Requisition line ID is required.") UUID requisitionLineId,
-            @NotNull(message = "Requisition line row version is required.") Long rowVersion,
-            @NotNull(message = "Store availability decision is required.") StoreAvailabilityDecision availabilityDecision,
-            @DecimalMin(value = "0.001", inclusive = true, message = "Partial available quantity must be greater than zero.") BigDecimal availableQty,
-            @NotNull(message = "QC decision is required.") Boolean qcRequired,
-            @NotNull(message = "Processing decision is required.") Boolean processingRequired,
-            UUID processingRouteStepId,
-            @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
-    }
+        /* ======================== INTERNAL CUSTODY TRACE =================== */
 
-    public record StoreReviewRequest(
-            @NotNull(message = "Requisition row version is required.") Long rowVersion,
-            @NotEmpty(message = "At least one Store review line is required.") List<@Valid StoreLineReviewRequest> lines,
-            @Size(max = 2000, message = "Store review remarks cannot exceed 2000 characters.") String remarks) {
-    }
+        public record TransferResponse(
+                        UUID id,
+                        String transferNumber,
+                        UUID requisitionId,
+                        String requisitionNumber,
+                        UUID projectDrawingId,
+                        String projectCode,
+                        String drawingNo,
+                        String productName,
+                        String clientName,
+                        UUID bomId,
+                        String bomNumber,
+                        Integer bomRevisionNo,
+                        UUID reservationId,
+                        UUID requisitionLineId,
+                        String fromCustody,
+                        String fromPlantCode,
+                        String toCustody,
+                        String toPlantCode,
+                        Integer routeSequenceNo,
+                        UUID predecessorTransferId,
+                        TransferPurpose purpose,
+                        TransferStatus status,
+                        UUID materialId,
+                        String materialCode,
+                        String materialName,
+                        BigDecimal plannedQty,
+                        BigDecimal dispatchedQty,
+                        BigDecimal receivedQty,
+                        String uom,
+                        String responsibleDepartment,
+                        String nextAction,
+                        Long rowVersion) {
+        }
 
-    /* Compatibility read models retained for existing Store UI composition. */
-    public record StockOptionResponse(
-            UUID materialId,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String plantCode,
-            LocationType locationType,
-            BigDecimal onHandQty,
-            BigDecimal reservedQty,
-            BigDecimal blockedQty,
-            BigDecimal availableQty,
-            boolean sameAsProductionDestination,
-            boolean transferRequired) {
-    }
+        public record PlanningResponse(
+                        RequisitionResponse requisition,
+                        List<ReservationResponse> reservations,
+                        List<IndentResponse> indents,
+                        List<TransferResponse> transfers) {
+        }
 
-    public record StoreLinePlanningResponse(
-            RequisitionLineResponse requisitionLine,
-            List<StockOptionResponse> stockOptions,
-            List<ReservationResponse> reservations,
-            List<TransferResponse> transfers,
-            List<IndentLineResponse> indentLines) {
-    }
-
-    public record StorePlanningResponse(
-            RequisitionResponse requisition,
-            List<StoreLinePlanningResponse> lines,
-            List<IndentResponse> indents) {
-    }
+        /** Internal service command; not a Location API. */
+        public record TransferActionRequest(
+                        @NotNull(message = "Row version is required.") Long rowVersion,
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Quantity must be greater than zero.") BigDecimal quantity,
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+                        @Size(max = 2000, message = "Remarks cannot exceed 2000 characters.") String remarks) {
+        }
 }

@@ -110,18 +110,6 @@ const usageRangeParams = (period) => {
     return { from: localDateTimeParam(from), to: localDateTimeParam(now) };
 };
 
-const emptyLocation = {
-    locationCode: "",
-    locationName: "",
-    plantCode: "",
-    locationType: "STORE",
-    ownershipType: "INTERNAL",
-    supportsStock: true,
-    address: "",
-    contactPerson: "",
-    contactPhone: "",
-    active: true,
-};
 
 const emptyProject = {
     projectCode: "",
@@ -834,90 +822,91 @@ export function MatFlowMaterialsPage() {
     );
 }
 
-export function MatFlowLocationsPage() {
-    const { hasRole, availablePlants, selectedPlantParam } = useMatFlow();
-    const canManage = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE);
+const emptyProcessingUnit = {
+    processingUnitCode: "",
+    processingUnitName: "",
+    plantCode: "AL-P1",
+    external: false,
+    address: "",
+    contactPerson: "",
+    contactPhone: "",
+    active: true,
+};
+
+/** Processing Unit master for BOM-approved internal/external processors. */
+export function MatFlowProcessingUnitsPage() {
+    const { availablePlants = [], hasRole } = useMatFlow();
+    const canEdit = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING);
     const [rows, setRows] = useState([]);
-    const [metadata, setMetadata] = useState({ locationType: [], ownershipType: [] });
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [dialog, setDialog] = useState(null);
-    const [form, setForm] = useState(emptyLocation);
+    const [form, setForm] = useState(emptyProcessingUnit);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const [locationResponse, metaResponse] = await Promise.all([
-                matflowApi.listLocations({ search: clean(search) || undefined }),
-                matflowApi.metadata(),
-            ]);
-            setRows(extractMatFlowPage(locationResponse?.data).rows.filter((row) =>
-                normalize(row?.locationType) !== "QC" &&
-                (!selectedPlantParam || upperCode(row.plantCode) === upperCode(selectedPlantParam))
-            ));
-            setMetadata({
-                locationType: (metaResponse?.data?.enums?.locationType || ["STORE", "PROCESSING", "EXTERNAL_PROCESSOR", "PRODUCTION"]).filter((value) => normalize(value) !== "QC"),
-                ownershipType: metaResponse?.data?.enums?.ownershipType || ["INTERNAL", "EXTERNAL"],
-            });
+            const response = await matflowApi.listProcessingUnits({ search: clean(search) || undefined });
+            setRows(extractMatFlowPage(response?.data).rows);
         } catch (requestError) {
             setRows([]);
-            setError(readMatFlowError(requestError, "Unable to load Locations."));
+            setError(readMatFlowError(requestError, "Unable to load Processing Units."));
         } finally {
             setLoading(false);
         }
-    }, [search, selectedPlantParam]);
+    }, [search]);
 
     useEffect(() => { load(); }, [load]);
-    const pagination = useMatFlowPagination(rows, 20);
 
-    const open = (row = null) => {
-        setDialog({ row });
+    const openCreate = () => {
+        setForm({ ...emptyProcessingUnit, plantCode: availablePlants?.[0] || "AL-P1" });
+        setDialog({ mode: "CREATE" });
+        setError("");
+    };
+
+    const openEdit = (row) => {
         setForm({
-            ...emptyLocation,
-            locationCode: row?.locationCode || "",
-            locationName: row?.locationName || "",
-            plantCode: row?.plantCode || selectedPlantParam || availablePlants[0] || "",
-            locationType: row?.locationType || "STORE",
-            ownershipType: row?.ownershipType || "INTERNAL",
-            supportsStock: row?.supportsStock !== false,
-            address: row?.address || "",
-            contactPerson: row?.contactPerson || "",
-            contactPhone: row?.contactPhone || "",
-            active: row?.active !== false,
+            processingUnitCode: row.processingUnitCode || "",
+            processingUnitName: row.processingUnitName || "",
+            plantCode: row.plantCode || availablePlants?.[0] || "AL-P1",
+            external: Boolean(row.external),
+            address: row.address || "",
+            contactPerson: row.contactPerson || "",
+            contactPhone: row.contactPhone || "",
+            active: row.active !== false,
+            rowVersion: row.rowVersion,
         });
+        setDialog({ mode: "EDIT", row });
         setError("");
     };
 
     const save = async () => {
-        if (![form.locationCode, form.locationName, form.plantCode, form.locationType, form.ownershipType].every((value) => clean(value))) {
-            setError("Location code, name, Plant, type and ownership are required.");
+        if (!clean(form.processingUnitCode) || !clean(form.processingUnitName) || !clean(form.plantCode)) {
+            setError("Processing Unit code, name and plant are required.");
             return;
         }
         setWorking(true);
         setError("");
         try {
             const body = {
-                locationCode: upperCode(form.locationCode),
-                locationName: clean(form.locationName),
+                ...form,
+                processingUnitCode: clean(form.processingUnitCode),
+                processingUnitName: clean(form.processingUnitName),
                 plantCode: upperCode(form.plantCode),
-                locationType: normalize(form.locationType),
-                ownershipType: normalize(form.ownershipType),
-                supportsStock: form.supportsStock === true,
                 address: clean(form.address) || null,
                 contactPerson: clean(form.contactPerson) || null,
                 contactPhone: clean(form.contactPhone) || null,
-                active: form.active === true,
-                rowVersion: dialog?.row?.rowVersion ?? null,
+                rowVersion: dialog?.mode === "EDIT" ? dialog?.row?.rowVersion : null,
             };
-            if (dialog?.row?.id) await matflowApi.updateLocation(dialog.row.id, body);
-            else await matflowApi.createLocation(body);
+            if (dialog?.mode === "EDIT") await matflowApi.updateProcessingUnit(dialog.row.id, body);
+            else await matflowApi.createProcessingUnit(body);
             setDialog(null);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, "Unable to save Location."));
+            setError(readMatFlowError(requestError, "Unable to save Processing Unit."));
         } finally {
             setWorking(false);
         }
@@ -926,61 +915,52 @@ export function MatFlowLocationsPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="LOCATION MASTER"
-                title="MatFlow Locations"
-                subtitle="Define Store, Processing and Production locations used by material custody. QC is intentionally not a location; it is an AL-P1 Main Store checklist against an MR material lot."
-                actions={
+                title="Processing Unit Master"
+                subtitle="Only Processing Units are configurable. Store and Production routing is derived automatically from the MR plant and Production requester."
+                actions={(
                     <>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-                        {canManage && <Button startIcon={<AddIcon />} onClick={() => open()} sx={primaryBtnSx}>Add Location</Button>}
+                        {canEdit && <Button startIcon={<AddIcon />} onClick={openCreate} sx={primaryBtnSx}>Add Processing Unit</Button>}
                     </>
-                }
+                )}
             />
             <ErrorBox>{error}</ErrorBox>
-            <Card sx={panelSx}><TextField label="Search Location" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ ...fieldSx, minWidth: 320 }} /></Card>
-
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                <TextField label="Search Processing Units" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} fullWidth />
+            </Card>
+            {loading ? <LoadingBlock /> : (
+                <Card sx={panelSx}>
                     <Box sx={tableShellSx}>
-                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
-                            {["Code", "Location", "Plant", "Type", "Ownership", "Custody Tracking", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 1.4fr 110px 110px 110px" }}>
+                            {["Unit Code", "Processing Unit", "Plant", "Type", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
-                        {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
-                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "150px 220px 120px 160px 130px 110px 120px" }}>
-                                <Box sx={tableCellSx}>{row.locationCode}</Box>
-                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.locationName}</Typography><Typography sx={subTextSx}>{row.contactPerson || row.address || "-"}</Typography></Box>
-                                <Box sx={tableCellSx}>{row.plantCode}</Box>
-                                <Box sx={tableCellSx}><MatFlowStatusChip status={row.locationType} /></Box>
-                                <Box sx={tableCellSx}>{readable(row.ownershipType)}</Box>
-                                <Box sx={tableCellSx}>{row.supportsStock ? "Yes" : "No"}</Box>
-                                <Box sx={tableCellSx}>{canManage && <Button onClick={() => open(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
+                        {rows.length === 0 ? <EmptyState>No Processing Units found.</EmptyState> : rows.map((row) => (
+                            <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 1.4fr 110px 110px 110px" }}>
+                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.processingUnitCode || "-"}</Typography></Box>
+                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.processingUnitName || "-"}</Typography><Typography sx={subTextSx}>{row.address || ""}</Typography></Box>
+                                <Box sx={tableCellSx}>{row.plantCode || "-"}</Box>
+                                <Box sx={tableCellSx}>{row.external ? "External" : "Internal"}</Box>
+                                <Box sx={tableCellSx}>{canEdit && <Button startIcon={<EditOutlinedIcon />} onClick={() => openEdit(row)} sx={secondaryBtnSx}>Edit</Button>}</Box>
                             </Box>
                         ))}
                     </Box>
-                )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Locations" />}
-            </Card>
+                </Card>
+            )}
 
             <Dialog open={Boolean(dialog)} onClose={() => !working && setDialog(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{dialog?.row ? "Edit Location" : "Add Location"}</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>{dialog?.mode === "EDIT" ? "Edit Processing Unit" : "Add Processing Unit"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
-                        <TextField label="Location Code *" value={form.locationCode} onChange={(e) => setForm((c) => ({ ...c, locationCode: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Location Name *" value={form.locationName} onChange={(e) => setForm((c) => ({ ...c, locationName: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Unit Code *" value={form.processingUnitCode} onChange={(e) => setForm((c) => ({ ...c, processingUnitCode: e.target.value }))} sx={fieldSx} />
+                        <TextField label="Processing Unit Name *" value={form.processingUnitName} onChange={(e) => setForm((c) => ({ ...c, processingUnitName: e.target.value }))} sx={fieldSx} />
                         <TextField select label="Plant *" value={form.plantCode} onChange={(e) => setForm((c) => ({ ...c, plantCode: e.target.value }))} sx={fieldSx}>
-                            {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
+                            {(availablePlants?.length ? availablePlants : ["AL-P1", "AL-P2", "AL-P3", "AL-P4"]).map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                         </TextField>
-                        <TextField select label="Location Type *" value={form.locationType} onChange={(e) => setForm((c) => ({ ...c, locationType: e.target.value }))} sx={fieldSx}>
-                            {metadata.locationType.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
-                        </TextField>
-                        <TextField select label="Ownership *" value={form.ownershipType} onChange={(e) => setForm((c) => ({ ...c, ownershipType: e.target.value }))} sx={fieldSx}>
-                            {metadata.ownershipType.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
-                        </TextField>
+                        <FormControlLabel control={<Switch checked={Boolean(form.external)} onChange={(e) => setForm((c) => ({ ...c, external: e.target.checked }))} />} label="External Processing Unit" />
                         <TextField label="Contact Person" value={form.contactPerson} onChange={(e) => setForm((c) => ({ ...c, contactPerson: e.target.value }))} sx={fieldSx} />
                         <TextField label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm((c) => ({ ...c, contactPhone: e.target.value }))} sx={fieldSx} />
-                        <TextField multiline minRows={2} label="Address" value={form.address} onChange={(e) => setForm((c) => ({ ...c, address: e.target.value }))} sx={fieldSx} />
-                        <FormControlLabel control={<Switch checked={form.supportsStock === true} onChange={(e) => setForm((c) => ({ ...c, supportsStock: e.target.checked }))} />} label="Supports MatFlow Custody Tracking" />
-                        <FormControlLabel control={<Switch checked={form.active === true} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
+                        <TextField multiline minRows={2} label="Address" value={form.address} onChange={(e) => setForm((c) => ({ ...c, address: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
+                        <FormControlLabel control={<Switch checked={Boolean(form.active)} onChange={(e) => setForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>

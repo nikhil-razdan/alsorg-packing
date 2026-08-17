@@ -97,7 +97,7 @@ export function MatFlowRequisitionListPage() {
     const filtered = useMemo(() => {
         const term = clean(search).toLowerCase();
         return rows.filter((row) => {
-            if (selectedPlantParam && upperCode(row.destinationPlantCode) !== upperCode(selectedPlantParam)) return false;
+            if (selectedPlantParam && upperCode(row.productionPlantCode) !== upperCode(selectedPlantParam)) return false;
             if (status && normalize(row.status) !== normalize(status)) return false;
             if (!term) return true;
             return [
@@ -105,7 +105,7 @@ export function MatFlowRequisitionListPage() {
                 row.projectCode,
                 row.drawingNo,
                 row.bomNumber,
-                row.destinationLocationCode,
+                row.requestedBy,
                 row.requestedBy,
                 row.status,
             ].some((value) => clean(value).toLowerCase().includes(term));
@@ -199,11 +199,11 @@ export function MatFlowRequisitionListPage() {
                                     <Typography sx={subTextSx}>Rev {row.bomRevisionNo ?? "-"}</Typography>
                                 </Box>
                                 <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>
-                                    <Typography sx={mainTextSx}>{row.destinationLocationCode || "-"} · {row.destinationPlantCode || "-"}</Typography>
+                                    <Typography sx={mainTextSx}>{row.requestedBy || "-"} · {row.productionPlantCode || "-"}</Typography>
                                     <Typography sx={subTextSx}>
-                                        {isMainPlant(row.destinationPlantCode)
-                                            ? `Direct → ${row.mainStoreCode || "AL-P1 Main Store"}`
-                                            : `${row.originStoreCode || `${row.destinationPlantCode || "Origin"} Store`} → ${row.mainStoreCode || "AL-P1 Main Store"}`}
+                                        {isMainPlant(row.productionPlantCode)
+                                            ? `Direct → AL-P1 Main Store`
+                                            : `${row.productionPlantCode || "Origin"} Store → AL-P1 Main Store`}
                                     </Typography>
                                     {row.forwardedToMainStoreAt && <Typography sx={subTextSx}>Forwarded {formatDate(row.forwardedToMainStoreAt)}</Typography>}
                                 </Box>
@@ -242,10 +242,8 @@ export function MatFlowRequisitionCreatePage() {
 
     const initialBomId = params.get("bomId") || "";
     const [boms, setBoms] = useState([]);
-    const [locations, setLocations] = useState([]);
     const [selectedBomId, setSelectedBomId] = useState(initialBomId);
     const [selectedBom, setSelectedBom] = useState(null);
-    const [destinationLocationId, setDestinationLocationId] = useState("");
     const [selectionMode, setSelectionMode] = useState("FULL_BOM");
     const [selectedLineIds, setSelectedLineIds] = useState({});
     const [lineInputs, setLineInputs] = useState({});
@@ -263,10 +261,7 @@ export function MatFlowRequisitionCreatePage() {
             setLoading(true);
             setError("");
             try {
-                const [bomResponse, locationResponse] = await Promise.all([
-                    matflowApi.listBoms({ status: "APPROVED", latestOnly: false }),
-                    matflowApi.listLocations({ active: true }),
-                ]);
+                const bomResponse = await matflowApi.listBoms({ status: "APPROVED", latestOnly: false });
                 if (!active) return;
 
                 setBoms(extractMatFlowPage(bomResponse?.data).rows.filter((bom) =>
@@ -274,13 +269,8 @@ export function MatFlowRequisitionCreatePage() {
                     bom.effective === true &&
                     (!selectedPlantParam || upperCode(bom.plantCode) === upperCode(selectedPlantParam))
                 ));
-                setLocations(extractMatFlowPage(locationResponse?.data).rows.filter((location) =>
-                    location?.active !== false &&
-                    normalize(location.locationType) === "PRODUCTION" &&
-                    (!selectedPlantParam || upperCode(location.plantCode) === upperCode(selectedPlantParam))
-                ));
             } catch (requestError) {
-                if (active) setError(readMatFlowError(requestError, "Unable to load reviewed BOMs and Production locations."));
+                if (active) setError(readMatFlowError(requestError, "Unable to load reviewed BOMs."));
             } finally {
                 if (active) setLoading(false);
             }
@@ -346,14 +336,6 @@ export function MatFlowRequisitionCreatePage() {
                 setSelectedLineIds(nextSelected);
                 setLineInputs(nextInputs);
                 setSelectionMode("FULL_BOM");
-
-                const plant = upperCode(loaded?.project?.plantCode);
-                const matching = locations.filter((location) => upperCode(location.plantCode) === plant);
-                if (matching.length === 1) {
-                    setDestinationLocationId(String(matching[0].id));
-                } else {
-                    setDestinationLocationId((current) => matching.some((location) => String(location.id) === String(current)) ? current : "");
-                }
             } catch (requestError) {
                 if (active) {
                     setSelectedBom(null);
@@ -368,12 +350,9 @@ export function MatFlowRequisitionCreatePage() {
             }
         })();
         return () => { active = false; };
-    }, [selectedBomId, locations]);
+    }, [selectedBomId]);
 
     const project = selectedBom?.project || {};
-    const availableDestinations = locations.filter((location) =>
-        !project?.plantCode || upperCode(location.plantCode) === upperCode(project.plantCode)
-    );
 
     const lineRows = useMemo(() => (selectedBom?.lines || []).map((line) => {
         const key = String(line.id);
@@ -452,8 +431,8 @@ export function MatFlowRequisitionCreatePage() {
     };
 
     const create = async () => {
-        if (!selectedBom?.id || !destinationLocationId) {
-            setError("Select an effective BOM and Production destination.");
+        if (!selectedBom?.id) {
+            setError("Select an effective BOM.");
             return;
         }
 
@@ -496,7 +475,6 @@ export function MatFlowRequisitionCreatePage() {
             const response = await matflowApi.createRequisition({
                 projectDrawingId: project.id,
                 bomId: selectedBom.id,
-                destinationLocationId,
                 remarks: clean(remarks) || null,
                 lines: requestLines,
             });
@@ -530,7 +508,6 @@ export function MatFlowRequisitionCreatePage() {
                         onChange={(event) => {
                             setSelectedBomId(event.target.value);
                             setSelectedBom(null);
-                            setDestinationLocationId("");
                             setSelectedLineIds({});
                             setLineInputs({});
                             setAlreadyRequestedByLineId({});
@@ -544,11 +521,10 @@ export function MatFlowRequisitionCreatePage() {
                             </MenuItem>
                         ))}
                     </TextField>
-                    <TextField select label="Production Destination *" value={destinationLocationId} disabled={!selectedBom} onChange={(e) => setDestinationLocationId(e.target.value)} sx={fieldSx}>
-                        {availableDestinations.map((location) => (
-                            <MenuItem key={location.id} value={location.id}>{location.locationCode} · {location.locationName} · {location.plantCode}</MenuItem>
-                        ))}
-                    </TextField>
+                    <Box sx={{ ...fieldSx, px: 1.6, py: 1.15, border: "1px solid var(--mf-border)", borderRadius: 2 }}>
+                        <Typography sx={subTextSx}>Production Plant / Requester</Typography>
+                        <Typography sx={mainTextSx}>{selectedBom?.project?.plantCode || "Derived from selected BOM"} · current Production user</Typography>
+                    </Box>
                     <TextField multiline minRows={2} label="MR Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                 </Box>
             </Card>
@@ -812,7 +788,7 @@ export function MatFlowRequisitionDetailPage() {
                         {canAct && status === "DRAFT" && (
                             <>
                                 <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(requisition)} sx={dangerBtnSx}>Delete Draft</Button>
-                                <Button startIcon={<SendOutlinedIcon />} onClick={() => { setAction("SUBMIT"); setActionText(""); }} sx={primaryBtnSx}>{isMainPlant(requisition.destinationPlantCode) ? "Submit to AL-P1 Main Store" : `Submit to ${requisition.originStoreCode || requisition.destinationPlantCode || "Plant Store"}`}</Button>
+                                <Button startIcon={<SendOutlinedIcon />} onClick={() => { setAction("SUBMIT"); setActionText(""); }} sx={primaryBtnSx}>{isMainPlant(requisition.productionPlantCode) ? "Submit to AL-P1 Main Store" : `Submit to ${requisition.productionPlantCode || "Plant"} Store`}</Button>
                             </>
                         )}
                         {canAct && !["DRAFT", "CANCELLED", "PRODUCTION_COMPLETED"].includes(status) && (
@@ -839,20 +815,20 @@ export function MatFlowRequisitionDetailPage() {
                     <Detail label="Requested By" value={requisition.requestedBy || "-"} />
                     <Detail label="Requested At" value={formatDate(requisition.requestedAt)} />
                     <Detail label="Submitted To Store" value={formatDate(requisition.submittedAt)} />
-                    <Detail label="Production Destination" value={`${requisition.destinationLocationCode || "-"} · ${requisition.destinationPlantCode || "-"}`} />
-                    <Detail label="Origin Plant Store" value={`${requisition.originStoreCode || "-"} · ${requisition.originStorePlantCode || requisition.destinationPlantCode || "-"}`} />
-                    <Detail label="AL-P1 Main Store" value={`${requisition.mainStoreCode || "-"} · ${requisition.mainStorePlantCode || MAIN_PLANT}`} />
-                    <Detail label="Forwarded to Main Store" value={requisition.forwardedToMainStoreAt ? `${requisition.forwardedToMainStoreBy || "-"} · ${formatDate(requisition.forwardedToMainStoreAt)}` : (isMainPlant(requisition.destinationPlantCode) ? "Direct on submit" : "Pending origin Store forward")} />
+                    <Detail label="Production User / Plant" value={`${requisition.requestedBy || "-"} · ${requisition.productionPlantCode || "-"}`} />
+                    <Detail label="Origin Plant Store" value={`${requisition.originStorePlantCode || requisition.productionPlantCode || "-"} Store`} />
+                    <Detail label="Main Store" value="AL-P1 Main Store" />
+                    <Detail label="Forwarded to Main Store" value={requisition.forwardedToMainStoreAt ? `${requisition.forwardedToMainStoreBy || "-"} · ${formatDate(requisition.forwardedToMainStoreAt)}` : (isMainPlant(requisition.productionPlantCode) ? "Direct on submit" : "Pending origin Store forward")} />
                     <Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} />
                 </Box>
             </Card>
 
-            <Alert severity={isMainPlant(requisition.destinationPlantCode) ? "info" : (requisition.forwardedToMainStoreAt ? "success" : "warning")}>
-                {isMainPlant(requisition.destinationPlantCode)
-                    ? `Routing: Production → ${requisition.mainStoreCode || "AL-P1 Main Store"}. Main Store owns planning and the material returns on the direct route.`
+            <Alert severity={isMainPlant(requisition.productionPlantCode) ? "info" : (requisition.forwardedToMainStoreAt ? "success" : "warning")}>
+                {isMainPlant(requisition.productionPlantCode)
+                    ? `Routing: ${requisition.requestedBy || "Production"} / AL-P1 → AL-P1 Main Store. Main Store owns planning; issue returns directly to the same Production requester.`
                     : requisition.forwardedToMainStoreAt
-                        ? `Routing: Production → ${requisition.originStoreCode || `${requisition.destinationPlantCode} Store`} → ${requisition.mainStoreCode || "AL-P1 Main Store"}. The same MR was forwarded unchanged; outbound issue returns through the origin Store to the specific Production destination.`
-                        : `Routing: Production → ${requisition.originStoreCode || `${requisition.destinationPlantCode} Store`} first. That Store must forward this same MR unchanged to ${requisition.mainStoreCode || "AL-P1 Main Store"} before availability/reservation.`}
+                        ? `Routing: ${requisition.requestedBy || "Production"} / ${requisition.productionPlantCode || "Origin Plant"} → ${requisition.productionPlantCode || "Origin Plant"} Store → AL-P1 Main Store. The same MR is forwarded unchanged; issue returns through that Plant Store to the same Production requester.`
+                        : `Routing: ${requisition.requestedBy || "Production"} / ${requisition.productionPlantCode || "Origin Plant"} → ${requisition.productionPlantCode || "Origin Plant"} Store first. That Store forwards this same MR unchanged to AL-P1 Main Store before availability review.`}
             </Alert>
 
             <Card sx={panelSx}>
@@ -886,7 +862,7 @@ export function MatFlowRequisitionDetailPage() {
                         {reservations.length === 0 ? <EmptyState>No reserved lots yet.</EmptyState> : reservations.map((row) => (
                             <Box key={row.id} sx={{ p: 1, mt: .6, border: "1px solid var(--mf-border)", borderRadius: 2 }}>
                                 <Typography sx={mainTextSx}>{row.materialCode} · {formatQty(row.reservedQty)}</Typography>
-                                <Typography sx={subTextSx}>{row.sourceLocationCode} → {row.firstDestinationLocationCode} · {readable(row.nextAction)} · owner {readable(row.responsibleDepartment)}</Typography>
+                                <Typography sx={subTextSx}>{readable(row.responsibleDepartment)} · {readable(row.nextAction)} · demand plant {row.demandPlantCode || requisition.productionPlantCode || "-"}</Typography>
                             </Box>
                         ))}
                     </Box>
@@ -896,7 +872,7 @@ export function MatFlowRequisitionDetailPage() {
                         {indents.length === 0 ? <EmptyState>No shortage PI.</EmptyState> : indents.map((row) => (
                             <Box key={row.id} sx={{ p: 1, mt: .6, border: "1px solid var(--mf-border)", borderRadius: 2 }}>
                                 <Typography sx={mainTextSx}>{row.indentNumber}</Typography>
-                                <Typography sx={subTextSx}>{readable(row.status)} · Store {row.deliverToLocationCode} · {row.lines?.length || 0} line(s)</Typography>
+                                <Typography sx={subTextSx}>{readable(row.status)} · Store {row.deliverToPlantCode} · {row.lines?.length || 0} line(s)</Typography>
                             </Box>
                         ))}
                     </Box>
@@ -907,7 +883,7 @@ export function MatFlowRequisitionDetailPage() {
                         <Typography sx={mainTextSx}>Read-only Material Route</Typography>
                         {transfers.map((row) => (
                             <Box key={row.id} sx={{ p: .8, mt: .5, borderLeft: "3px solid var(--mf-primary)", background: "var(--mf-surface)", borderRadius: 1 }}>
-                                <Typography sx={subTextSx}>{row.materialCode} · {row.fromLocationCode} → {row.toLocationCode} · {readable(row.status)}</Typography>
+                                <Typography sx={subTextSx}>{row.materialCode} · {row.fromCustody} → {row.toCustody} · {readable(row.status)}</Typography>
                             </Box>
                         ))}
                     </Box>
@@ -917,7 +893,7 @@ export function MatFlowRequisitionDetailPage() {
             <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
                 <DialogTitle sx={dialogTitleSx}>{action === "SUBMIT" ? "Submit MR to Store" : "Cancel Material Requisition"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    {action === "SUBMIT" && <Alert severity="info" sx={{ mb: 1.5 }}>{isMainPlant(requisition.destinationPlantCode) ? "This MR goes directly to AL-P1 Main Store for availability/reservation." : `This MR goes first to ${requisition.originStoreCode || requisition.destinationPlantCode || "the origin Plant Store"}. That Store forwards the same MR unchanged to AL-P1 Main Store; only Main Store performs availability, reservation and shortage PI planning.`}</Alert>}
+                    {action === "SUBMIT" && <Alert severity="info" sx={{ mb: 1.5 }}>{isMainPlant(requisition.productionPlantCode) ? "This MR goes directly to AL-P1 Main Store for availability/reservation." : `This MR goes first to ${requisition.originStorePlantCode || requisition.productionPlantCode || "the origin Plant Store"}. That Store forwards the same MR unchanged to AL-P1 Main Store; only Main Store performs availability, reservation and shortage PI planning.`}</Alert>}
                     <TextField
                         multiline
                         minRows={3}

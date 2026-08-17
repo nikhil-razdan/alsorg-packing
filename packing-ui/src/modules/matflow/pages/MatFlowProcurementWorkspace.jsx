@@ -154,7 +154,7 @@ export function MatFlowPurchasePage() {
             order.projectCode,
             order.productName,
             order.drawingNo,
-            order.deliveryLocationCode,
+            "AL-P1 Main Store",
             order.status,
         ].some((value) => clean(value).toLowerCase().includes(term)));
     }, [scopedOrders, search]);
@@ -227,10 +227,6 @@ export function MatFlowPurchasePage() {
             setError("Select a Store-raised PI, Vendor and PO date.");
             return;
         }
-        if (!selectedIndent.deliverToLocationId) {
-            setError("The selected PI has no Store delivery location.");
-            return;
-        }
 
         const lines = poLines
             .map((line) => ({
@@ -261,7 +257,6 @@ export function MatFlowPurchasePage() {
                 poDate: poForm.poDate,
                 vendorId: poForm.vendorId,
                 indentId: selectedIndent.id,
-                deliveryLocationId: selectedIndent.deliverToLocationId,
                 lines,
                 remarks: clean(poForm.remarks) || null,
             });
@@ -379,7 +374,7 @@ export function MatFlowPurchasePage() {
                                     </Box>
                                     <Typography sx={{ ...subTextSx, mt: .7 }}>{row.productName || "-"} · {row.drawingNo || "-"}</Typography>
                                     <Typography sx={subTextSx}>{row._cardType === "PO" ? `Vendor: ${row.vendorName || "-"}` : `${openIndentLines(row).length} open PI line(s)`}</Typography>
-                                    <Typography sx={subTextSx}>Delivery: {row.deliveryLocationCode || row.deliverToLocationCode || "AL-P1 Main Store"}</Typography>
+                                    <Typography sx={subTextSx}>Delivery: AL-P1 Main Store</Typography>
                                     {row._cardType === "PI" && canPurchase && (
                                         <Button onClick={() => openPo(row)} sx={{ ...primaryBtnSx, mt: .85 }}>Raise / Continue PO</Button>
                                     )}
@@ -403,7 +398,7 @@ export function MatFlowPurchasePage() {
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{indent.indentNumber}</Typography><Typography sx={subTextSx}>{openIndentLines(indent).length} open line(s)</Typography></Box>
                                 <Box sx={tableCellSx}>{indent.requisitionNumber || "-"}</Box>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{indent.projectCode || "-"}</Typography><Typography sx={subTextSx}>{indent.productName || "-"} · {indent.drawingNo || "-"}</Typography></Box>
-                                <Box sx={tableCellSx}>{indent.deliverToLocationCode || "-"}</Box>
+                                <Box sx={tableCellSx}>AL-P1 Main Store</Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={indent.status} /></Box>
                                 <Box sx={tableCellSx}>{canPurchase && <Button onClick={() => openPo(indent)} sx={primaryBtnSx}>Raise PO</Button>}</Box>
                             </Box>
@@ -429,7 +424,7 @@ export function MatFlowPurchasePage() {
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{order.indentNumber || "-"}</Typography><Typography sx={subTextSx}>{order.requisitionNumber || "-"}</Typography></Box>
                                 <Box sx={tableCellSx}>{order.vendorName || "-"}</Box>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{order.projectCode || "-"}</Typography><Typography sx={subTextSx}>{order.productName || "-"} · {order.drawingNo || "-"}</Typography></Box>
-                                <Box sx={tableCellSx}>{order.deliveryLocationCode || "-"} · {order.plantCode || "-"}</Box>
+                                <Box sx={tableCellSx}>AL-P1 Main Store</Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={order.status} /></Box>
                             </Box>
                         ))}
@@ -472,7 +467,7 @@ export function MatFlowPurchasePage() {
                             {vendors.filter((vendor) => vendor.active !== false).map((vendor) => <MenuItem key={vendor.id} value={vendor.id}>{vendor.vendorName} · {vendor.vendorCode}</MenuItem>)}
                         </TextField>
                         <TextField type="date" label="PO Date *" InputLabelProps={{ shrink: true }} value={poForm.poDate} onChange={(e) => setPoForm((c) => ({ ...c, poDate: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Delivery Store" value={selectedIndent?.deliverToLocationCode || ""} disabled sx={fieldSx} />
+                        <TextField label="Delivery Store" value="AL-P1 Main Store" disabled sx={fieldSx} />
                         <TextField multiline minRows={2} label="Remarks" value={poForm.remarks} onChange={(e) => setPoForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>
 
@@ -590,8 +585,8 @@ export function MatFlowReceivingPage() {
     }, [selectedOrder?.id]);
 
     const createGrn = async () => {
-        if (!selectedOrder?.id || !selectedOrder.deliveryLocationId) {
-            setError("Select an open Purchase Order with a Store delivery location.");
+        if (!selectedOrder?.id) {
+            setError("Select an open Purchase Order.");
             return;
         }
 
@@ -619,7 +614,6 @@ export function MatFlowReceivingPage() {
         try {
             await matflowApi.createGoodsReceipt({
                 purchaseOrderId: selectedOrder.id,
-                receiptLocationId: selectedOrder.deliveryLocationId,
                 vendorChallanNo: clean(form.vendorChallanNo) || null,
                 vendorInvoiceNo: clean(form.vendorInvoiceNo) || null,
                 lines,
@@ -689,7 +683,7 @@ export function MatFlowReceivingPage() {
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{receipt.grnNumber}</Typography><Typography sx={subTextSx}>{formatDate(receipt.receivedAt)}</Typography></Box>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{receipt.poNumber || "-"}</Typography><Typography sx={subTextSx}>{receipt.indentNumber || "-"}</Typography></Box>
                                 <Box sx={tableCellSx}>{receipt.requisitionNumber || "-"}</Box>
-                                <Box sx={tableCellSx}>{receipt.receiptLocationCode || "-"} · {receipt.plantCode || "-"}</Box>
+                                <Box sx={tableCellSx}>AL-P1 Main Store</Box>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{receipt.projectCode || "-"}</Typography><Typography sx={subTextSx}>{receipt.productName || "-"} · {receipt.drawingNo || "-"}</Typography></Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={receipt.status} /></Box>
                             </Box>
@@ -712,7 +706,7 @@ export function MatFlowReceivingPage() {
                         </TextField>
                         <TextField label="Vendor Challan No." value={form.vendorChallanNo} onChange={(e) => setForm((c) => ({ ...c, vendorChallanNo: e.target.value }))} sx={fieldSx} />
                         <TextField label="Vendor Invoice No." value={form.vendorInvoiceNo} onChange={(e) => setForm((c) => ({ ...c, vendorInvoiceNo: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Receipt Store" value={selectedOrder?.deliveryLocationCode || ""} disabled sx={fieldSx} />
+                        <TextField label="Receipt Store" value="AL-P1 Main Store" disabled sx={fieldSx} />
                         <TextField label="Linked MR" value={selectedOrder?.requisitionNumber || ""} disabled sx={fieldSx} />
                         <TextField multiline minRows={2} label="Remarks" value={form.remarks} onChange={(e) => setForm((c) => ({ ...c, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: "1 / -1" }} />
                     </Box>

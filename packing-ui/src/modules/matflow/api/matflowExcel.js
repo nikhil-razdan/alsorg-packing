@@ -97,8 +97,6 @@ const materialRow = ({
     specification,
     uom,
     preferredSupplier,
-    minimumStock = 0,
-    reorderLevel = 0,
     sourceSection = "",
     sourceRow = null,
 }, defaults) => {
@@ -115,8 +113,6 @@ const materialRow = ({
         specification: spec || null,
         uom: normalizedUom,
         preferredSupplier: supplier || null,
-        minimumStock: numberOr(minimumStock, 0),
-        reorderLevel: numberOr(reorderLevel, 0),
         active: true,
         sourceSection,
         sourceRow,
@@ -153,8 +149,6 @@ const parseCanonicalTable = (sheet, defaults) => {
     const uomIdx = indexOfAny("uom", "unit", "units");
     const specIdx = indexOfAny("specification", "spec", "size specification");
     const supplierIdx = indexOfAny("preferred supplier", "supplier", "brand", "vendor");
-    const minIdx = indexOfAny("minimum stock", "min stock", "minimum");
-    const reorderIdx = indexOfAny("reorder level", "reorder", "re order");
 
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         if (rowNumber <= headerRow) return;
@@ -167,8 +161,6 @@ const parseCanonicalTable = (sheet, defaults) => {
             specification: specIdx >= 0 ? cellText(row, specIdx + 1) : "",
             uom: uomIdx >= 0 ? cellText(row, uomIdx + 1) : "",
             preferredSupplier: supplierIdx >= 0 ? cellText(row, supplierIdx + 1) : "",
-            minimumStock: minIdx >= 0 ? cellText(row, minIdx + 1) : 0,
-            reorderLevel: reorderIdx >= 0 ? cellText(row, reorderIdx + 1) : 0,
             sourceSection: "Canonical Material Table",
             sourceRow: rowNumber,
         }, defaults);
@@ -695,8 +687,8 @@ export async function downloadMatFlowBomExcel({ bom, routes = [] } = {}) {
         const processing = routesForBomLine(routes, line?.id)
             .map((step) => {
                 const process = safeText(step?.processCode || "PROCESS");
-                const location = safeText(step?.locationCode || step?.locationName || "PROCESSING UNIT");
-                return `${process} @ ${location}`;
+                const unit = safeText(step?.processingUnitCode || step?.processingUnitName || "PROCESSING UNIT");
+                return `${process} @ ${unit}`;
             })
             .filter(Boolean)
             .join(" | ");
@@ -779,10 +771,10 @@ export async function downloadMatFlowBomExcel({ bom, routes = [] } = {}) {
 
 export async function downloadMaterialImportTemplate() {
     return downloadMatFlowExcel({
-        fileName: "ALSORG_Global_Material_Inventory_Import_Template",
+        fileName: "ALSORG_Material_Catalogue_Import_Template",
         sheetName: "Materials",
-        title: "ALSORG Global Material Inventory — Import Template",
-        subtitle: "Material Name is the primary identity shown to users. Material Code remains the unique business identifier.",
+        title: "ALSORG Material Catalogue — Import Template",
+        subtitle: "Material catalogue only. Physical stock, minimum stock and reorder controls are maintained in Tally.",
         rows: [
             {
                 materialName: "Natural White Ash Veneer",
@@ -791,8 +783,6 @@ export async function downloadMaterialImportTemplate() {
                 uom: "SQFT",
                 specification: "8x4 sheet · selected grain",
                 preferredSupplier: "Example Supplier",
-                minimumStock: 100,
-                reorderLevel: 150,
             },
         ],
         columns: [
@@ -802,8 +792,6 @@ export async function downloadMaterialImportTemplate() {
             { key: "uom", label: "UOM" },
             { key: "specification", label: "Specification" },
             { key: "preferredSupplier", label: "Preferred Supplier / Brand" },
-            { key: "minimumStock", label: "Minimum Stock" },
-            { key: "reorderLevel", label: "Reorder Level" },
         ],
     });
 }

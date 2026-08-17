@@ -78,14 +78,14 @@ const returnKanbanLane = (row) => {
 
 const rowTouchesPlant = (row, plantCode) => {
     if (!plantCode) return true;
-    return [row?.fromPlantCode, row?.viaPlantCode, row?.toPlantCode]
+    return [row?.productionPlantCode, row?.viaStorePlantCode, row?.finalStorePlantCode]
         .some((value) => samePlant(value, plantCode));
 };
 
 const returnRouteText = (row) => {
-    const from = row?.fromLocationCode || row?.fromPlantCode || "Production";
-    const via = row?.viaLocationCode || row?.viaPlantCode;
-    const to = row?.toLocationCode || row?.toPlantCode || "AL-P1 Main Store";
+    const from = `${row?.productionUser || "Production"} / ${row?.productionPlantCode || "Plant"}`;
+    const via = row?.viaStorePlantCode ? `${row.viaStorePlantCode} Store` : null;
+    const to = `${row?.finalStorePlantCode || MAIN_PLANT} Main Store`;
     return via ? `${from} → ${via} → ${to}` : `${from} → ${to}`;
 };
 
@@ -95,9 +95,9 @@ const returnUpdatedAt = (row) =>
 const remainingReturnable = (line) => Math.max(
     0,
     numeric(line?.issuedQty)
-    - numeric(line?.consumedQty)
-    - numeric(line?.productionWasteQty ?? line?.wastageQty)
-    - numeric(line?.returnedQty)
+        - numeric(line?.consumedQty)
+        - numeric(line?.productionWasteQty ?? line?.wastageQty)
+        - numeric(line?.returnedQty)
 );
 
 export function MatFlowReturnsPage() {
@@ -138,7 +138,7 @@ export function MatFlowReturnsPage() {
             const requestRows = Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : [];
             setRequisitions(requestRows.filter((row) =>
                 ["ISSUED_TO_PRODUCTION", "PRODUCTION_STARTED"].includes(normalize(row.status)) &&
-                (!selectedPlantParam || samePlant(row.destinationPlantCode, selectedPlantParam))
+                (!selectedPlantParam || samePlant(row.productionPlantCode, selectedPlantParam))
             ));
 
             const enumReasons = Array.isArray(metaResponse?.data?.enums?.materialReturnReason)
@@ -186,7 +186,7 @@ export function MatFlowReturnsPage() {
     };
 
     const createReturn = async () => {
-        if (!selectedReq?.id || !selectedReq.destinationLocationId || !form.reason) {
+        if (!selectedReq?.id || !form.reason) {
             setError("Production MR and return reason are required.");
             return;
         }
@@ -216,10 +216,8 @@ export function MatFlowReturnsPage() {
         try {
             await matflowApi.createMaterialReturn({
                 requisitionId: selectedReq.id,
-                fromLocationId: selectedReq.destinationLocationId,
                 // API v6 resolves the final destination to AL-P1 Main Store and
                 // inserts the origin Plant Store automatically for remote plants.
-                toLocationId: null,
                 reason: form.reason,
                 remarks: clean(form.remarks) || null,
                 lines,
@@ -300,10 +298,10 @@ export function MatFlowReturnsPage() {
                         minColumnWidth={300}
                         renderCard={(row) => {
                             const status = normalize(row.status);
-                            const productionDispatch = status === "DRAFT" && canProductionAct && canActAtPlant(row.fromPlantCode);
-                            const originReceive = status === "IN_TRANSIT_TO_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
-                            const originForward = status === "AT_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
-                            const mainReceive = ["IN_TRANSIT_TO_MAIN_STORE", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) && canStoreAct && canActAtPlant(row.toPlantCode || MAIN_PLANT);
+                            const productionDispatch = status === "DRAFT" && canProductionAct && canActAtPlant(row.productionPlantCode);
+                            const originReceive = status === "IN_TRANSIT_TO_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaStorePlantCode);
+                            const originForward = status === "AT_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaStorePlantCode);
+                            const mainReceive = ["IN_TRANSIT_TO_MAIN_STORE", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) && canStoreAct && canActAtPlant(row.finalStorePlantCode || MAIN_PLANT);
                             return (
                                 <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
                                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
@@ -313,7 +311,7 @@ export function MatFlowReturnsPage() {
                                     <Typography sx={{ ...subTextSx, mt: .7 }}>{returnRouteText(row)}</Typography>
                                     <Typography sx={subTextSx}>{readable(row.reason)} · {formatDate(returnUpdatedAt(row))}</Typography>
                                     <Box sx={{ display: "flex", gap: .45, mt: .85, flexWrap: "wrap" }}>
-                                        {productionDispatch && <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>{row.viaLocationCode ? "Send to Plant Store" : "Send to Main Store"}</Button>}
+                                        {productionDispatch && <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>{row.viaStorePlantCode ? "Send to Plant Store" : "Send to Main Store"}</Button>}
                                         {productionDispatch && <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} disabled={working} sx={dangerBtnSx}>Delete</Button>}
                                         {originReceive && <Button onClick={() => act(row, "RECEIVE")} disabled={working} sx={primaryBtnSx}>Receive at Origin</Button>}
                                         {originForward && <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>Forward to AL-P1</Button>}
@@ -331,23 +329,23 @@ export function MatFlowReturnsPage() {
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState>No Material Returns.</EmptyState> : pagination.pageItems.map((row) => {
                             const status = normalize(row.status);
-                            const productionDispatch = status === "DRAFT" && canProductionAct && canActAtPlant(row.fromPlantCode);
-                            const originReceive = status === "IN_TRANSIT_TO_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
-                            const originForward = status === "AT_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaPlantCode);
+                            const productionDispatch = status === "DRAFT" && canProductionAct && canActAtPlant(row.productionPlantCode);
+                            const originReceive = status === "IN_TRANSIT_TO_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaStorePlantCode);
+                            const originForward = status === "AT_ORIGIN_STORE" && canStoreAct && canActAtPlant(row.viaStorePlantCode);
                             const mainReceive = ["IN_TRANSIT_TO_MAIN_STORE", "IN_TRANSIT", "PARTIALLY_RECEIVED"].includes(status) &&
-                                canStoreAct && canActAtPlant(row.toPlantCode || MAIN_PLANT);
+                                canStoreAct && canActAtPlant(row.finalStorePlantCode || MAIN_PLANT);
 
                             return (
                                 <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 165px minmax(245px,1fr) 150px 170px 170px 250px" }}>
                                     <Box sx={tableCellSx}>
                                         <Typography sx={mainTextSx}>{row.returnNumber || "-"}</Typography>
-                                        <Typography sx={subTextSx}>{row.fromPlantCode || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.productionPlantCode || "-"}</Typography>
                                     </Box>
                                     <Box sx={tableCellSx}>{row.requisitionNumber || "-"}</Box>
                                     <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>
                                         <Typography sx={mainTextSx}>{returnRouteText(row)}</Typography>
                                         <Typography sx={subTextSx}>
-                                            {row.viaLocationCode
+                                            {row.viaStorePlantCode
                                                 ? `Origin Store received: ${formatDate(row.originStoreReceivedAt)} · Forwarded: ${formatDate(row.forwardedAt)}`
                                                 : "Direct Production → AL-P1 Main Store return"}
                                         </Typography>
@@ -359,7 +357,7 @@ export function MatFlowReturnsPage() {
                                         {productionDispatch && (
                                             <>
                                                 <Button onClick={() => act(row, "DISPATCH")} disabled={working} sx={primaryBtnSx}>
-                                                    {row.viaLocationCode ? "Send to Plant Store" : "Send to Main Store"}
+                                                    {row.viaStorePlantCode ? "Send to Plant Store" : "Send to Main Store"}
                                                 </Button>
                                                 <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} disabled={working} sx={dangerBtnSx}>Delete</Button>
                                             </>
@@ -393,9 +391,9 @@ export function MatFlowReturnsPage() {
                         <TextField
                             label="Resolved Return Route"
                             value={selectedReq
-                                ? (samePlant(selectedReq.destinationPlantCode, MAIN_PLANT)
-                                    ? `${selectedReq.destinationLocationCode || "Production"} → ${selectedReq.mainStoreCode || "AL-P1 Main Store"}`
-                                    : `${selectedReq.destinationLocationCode || "Production"} → ${selectedReq.originStoreCode || `${selectedReq.destinationPlantCode} Store`} → ${selectedReq.mainStoreCode || "AL-P1 Main Store"}`)
+                                ? (samePlant(selectedReq.productionPlantCode, MAIN_PLANT)
+                                    ? `${selectedReq.requestedBy || "Production"} / AL-P1 → AL-P1 Main Store`
+                                    : `${selectedReq.requestedBy || "Production"} / ${selectedReq.productionPlantCode || "Plant"} → ${selectedReq.productionPlantCode || "Plant"} Store → AL-P1 Main Store`)
                                 : "Select an MR"}
                             InputProps={{ readOnly: true }}
                             sx={fieldSx}

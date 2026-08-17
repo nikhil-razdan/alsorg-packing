@@ -14,12 +14,10 @@ import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreLineAv
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReceiveRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.StoreReviewRequest;
 import com.alsorg.packing.service.matflow.MatFlowRequisitionService;
-import com.alsorg.packing.service.matflow.MatFlowSafeDeleteService;
 import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,8 +27,7 @@ import org.springframework.web.bind.annotation.*;
  * P1 Production -> P1 Main Store directly.
  * P2/P3/P4 Production -> own Plant Store -> forward same MR -> P1 Main Store.
  * Only P1 Main Store reviews/reserves/raises PI. Ready material returns through
- * the origin Plant Store before the specific remote Production user receives
- * it.
+ * the origin Plant Store before the specific remote Production user receives it.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -38,15 +35,12 @@ import org.springframework.web.bind.annotation.*;
 public class MatFlowRequisitionController {
     private final MatFlowRequisitionService service;
     private final MatFlowWorkflowCoordinatorService workflowCoordinator;
-    private final MatFlowSafeDeleteService safeDeleteService;
 
     public MatFlowRequisitionController(
             MatFlowRequisitionService service,
-            MatFlowWorkflowCoordinatorService workflowCoordinator,
-            MatFlowSafeDeleteService safeDeleteService) {
+            MatFlowWorkflowCoordinatorService workflowCoordinator) {
         this.service = service;
         this.workflowCoordinator = workflowCoordinator;
-        this.safeDeleteService = safeDeleteService;
     }
 
     @GetMapping("/requisitions")
@@ -70,14 +64,6 @@ public class MatFlowRequisitionController {
         return service.createRequisition(request);
     }
 
-    @DeleteMapping("/requisitions/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteDraftRequisition(
-            @PathVariable UUID id,
-            @RequestParam Long rowVersion) {
-        safeDeleteService.deleteDraftRequisition(id, rowVersion);
-    }
-
     @PostMapping("/requisitions/{id}/submit")
     public RequisitionResponse submitRequisition(
             @PathVariable UUID id,
@@ -98,10 +84,7 @@ public class MatFlowRequisitionController {
         return service.listPurchaseIndents(plantCode);
     }
 
-    /**
-     * Queue is plant-context aware: remote Stores see forwarding/handover work; P1
-     * sees routed MRs.
-     */
+    /** Queue is plant-context aware: remote Stores see forwarding/handover work; P1 sees routed MRs. */
     @GetMapping("/store/requisitions")
     public List<RequisitionResponse> storeQueue(
             @RequestParam(required = false) String plantCode) {
@@ -135,9 +118,7 @@ public class MatFlowRequisitionController {
         return service.reviewRequisition(id, request);
     }
 
-    /**
-     * Current Store sends the complete lot along its already-saved custody route.
-     */
+    /** Current Store sends the complete lot along its already-saved custody route. */
     @PostMapping("/store/reservations/{reservationId}/issue")
     public PlanningResponse issueReservation(
             @PathVariable UUID reservationId,

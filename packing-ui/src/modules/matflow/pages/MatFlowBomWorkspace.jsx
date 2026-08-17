@@ -620,7 +620,7 @@ export function MatFlowBomDetailPage() {
     const [bom, setBom] = useState(null);
     const [routes, setRoutes] = useState([]);
     const [materials, setMaterials] = useState([]);
-    const [processingLocations, setProcessingLocations] = useState([]);
+    const [processingUnits, setProcessingUnits] = useState([]);
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
@@ -630,7 +630,7 @@ export function MatFlowBomDetailPage() {
     const [routeDialog, setRouteDialog] = useState(null);
     const [routeForm, setRouteForm] = useState({
         sequenceNo: "1",
-        locationId: "",
+        processingUnitId: "",
         processCode: "",
         expectedYieldPercent: "100",
         remarks: "",
@@ -679,24 +679,23 @@ export function MatFlowBomDetailPage() {
     useEffect(() => {
         if (!canEdit) {
             setMaterials([]);
-            setProcessingLocations([]);
+            setProcessingUnits([]);
             return;
         }
 
         let active = true;
         (async () => {
             try {
-                const [materialResponse, locationResponse] = await Promise.all([
+                const [materialResponse, processingUnitResponse] = await Promise.all([
                     matflowApi.listMaterials({ active: true }),
-                    matflowApi.listLocations({ active: true }),
+                    matflowApi.listProcessingUnits({ active: true }),
                 ]);
                 if (!active) return;
                 setMaterials(extractMatFlowPage(materialResponse?.data).rows.filter((row) => row?.active !== false));
-                setProcessingLocations(
-                    extractMatFlowPage(locationResponse?.data).rows.filter((location) =>
-                        location?.active !== false &&
-                        ["PROCESSING", "EXTERNAL_PROCESSOR"].includes(normalize(location?.locationType)) &&
-                        (!project?.plantCode || upperCode(location?.plantCode) === upperCode(project.plantCode))
+                setProcessingUnits(
+                    extractMatFlowPage(processingUnitResponse?.data).rows.filter((unit) =>
+                        unit?.active !== false &&
+                        (!project?.plantCode || upperCode(unit?.plantCode) === upperCode(project.plantCode))
                     )
                 );
             } catch (requestError) {
@@ -802,7 +801,7 @@ export function MatFlowBomDetailPage() {
         setRouteDialog({ line, step });
         setRouteForm({
             sequenceNo: String(step?.sequenceNo ?? nextSequence),
-            locationId: step?.locationId || "",
+            processingUnitId: step?.processingUnitId || "",
             processCode: step?.processCode || "",
             expectedYieldPercent: String(step?.expectedYieldPercent ?? 100),
             remarks: step?.remarks || "",
@@ -813,7 +812,7 @@ export function MatFlowBomDetailPage() {
     const saveRoute = async () => {
         const sequenceNo = Number(routeForm.sequenceNo);
         const expectedYieldPercent = Number(routeForm.expectedYieldPercent);
-        if (!Number.isInteger(sequenceNo) || sequenceNo <= 0 || !routeForm.locationId || !clean(routeForm.processCode)) {
+        if (!Number.isInteger(sequenceNo) || sequenceNo <= 0 || !routeForm.processingUnitId || !clean(routeForm.processCode)) {
             setError("Processing sequence, Processing Unit and process code are required.");
             return;
         }
@@ -828,7 +827,7 @@ export function MatFlowBomDetailPage() {
             const body = {
                 sequenceNo,
                 stepType: "PROCESSING",
-                locationId: routeForm.locationId,
+                processingUnitId: routeForm.processingUnitId,
                 processCode: clean(routeForm.processCode).toUpperCase(),
                 expectedYieldPercent,
                 remarks: clean(routeForm.remarks) || null,
@@ -928,7 +927,7 @@ export function MatFlowBomDetailPage() {
     const quickActions = [
         { title: "Material Inventory", subtitle: "Open the source material master.", icon: <Inventory2OutlinedIcon />, path: "/matflow/materials" },
         { title: "Projects & Products", subtitle: "Open the owning PD / Product portfolio.", icon: <RuleOutlinedIcon />, path: "/matflow/projects" },
-        { title: "Project Tracker", subtitle: "Trace material execution after MR submission.", icon: <AccountTreeOutlinedIcon />, path: "/matflow/dashboard?view=projects" },
+        { title: "Project Tracker", subtitle: "Trace material execution after MR submission.", icon: <AccountTreeOutlinedIcon />, path: "/matflow/tracker" },
         { title: "Material Requisitions", subtitle: "Open Production material demand.", icon: <SpeedOutlinedIcon />, path: "/matflow/production" },
     ];
 
@@ -1075,7 +1074,7 @@ export function MatFlowBomDetailPage() {
                                                                     <Chip
                                                                         key={step.id}
                                                                         size="small"
-                                                                        label={`${step.processCode || "PROCESS"} · ${step.locationCode || step.locationName || "UNIT"}`}
+                                                                        label={`${step.processCode || "PROCESS"} · ${step.processingUnitCode || step.processingUnitName || "UNIT"}`}
                                                                         onClick={canEdit ? () => openRoute(line, step) : undefined}
                                                                         sx={builderProcessingChipSx}
                                                                     />
@@ -1271,10 +1270,10 @@ export function MatFlowBomDetailPage() {
                     </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <TextField type="number" label="Option Sequence *" value={routeForm.sequenceNo} onChange={(event) => setRouteForm((current) => ({ ...current, sequenceNo: event.target.value }))} sx={fieldSx} />
-                        <TextField select label="Processing Unit *" value={routeForm.locationId} onChange={(event) => setRouteForm((current) => ({ ...current, locationId: event.target.value }))} sx={fieldSx}>
-                            {processingLocations.map((location) => (
-                                <MenuItem key={location.id} value={location.id}>
-                                    {location.locationCode} · {location.locationName} · {readable(location.locationType)}
+                        <TextField select label="Processing Unit *" value={routeForm.processingUnitId} onChange={(event) => setRouteForm((current) => ({ ...current, processingUnitId: event.target.value }))} sx={fieldSx}>
+                            {processingUnits.map((unit) => (
+                                <MenuItem key={unit.id} value={unit.id}>
+                                    {unit.processingUnitCode} · {unit.processingUnitName} · {unit.external ? "External" : "Internal"}
                                 </MenuItem>
                             ))}
                         </TextField>
@@ -1289,7 +1288,7 @@ export function MatFlowBomDetailPage() {
                     )}
                     <Box sx={{ flex: 1 }} />
                     <Button onClick={() => setRouteDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveRoute} disabled={working || processingLocations.length === 0} sx={primaryBtnSx}>{working ? "Saving..." : "Save Option"}</Button>
+                    <Button onClick={saveRoute} disabled={working || processingUnits.length === 0} sx={primaryBtnSx}>{working ? "Saving..." : "Save Option"}</Button>
                 </DialogActions>
             </Dialog>
 

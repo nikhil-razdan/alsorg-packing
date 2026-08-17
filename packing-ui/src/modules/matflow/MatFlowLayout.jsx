@@ -25,7 +25,6 @@ import { secondaryBtnSx, useMatFlowTheme } from "./matflowUi";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
@@ -46,7 +45,6 @@ const NAV = [
     ["Universal Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
     ["Projects & Products", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Material Inventory", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
-    ["Locations", "/matflow/locations", "locations", <LocationOnOutlinedIcon />],
     ["Operational BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
     ["Production Requisitions", "/matflow/production", "production", <EngineeringOutlinedIcon />],
     ["Store", "/matflow/store", "store", <StorefrontOutlinedIcon />],
@@ -54,6 +52,7 @@ const NAV = [
     ["GRN / Receiving", "/matflow/receiving", "receiving", <LocalShippingOutlinedIcon />],
     ["Quality Control", "/matflow/qc", "qc", <FactCheckOutlinedIcon />],
     ["Processing", "/matflow/processing", "processing", <PrecisionManufacturingOutlinedIcon />],
+    ["Processing Unit Master", "/matflow/processing-units", "processing-units", <PrecisionManufacturingOutlinedIcon />],
     ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
     ["Material Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
@@ -68,16 +67,16 @@ const HEADER = [
     ["/matflow/store", "Store Material Control", "MR availability, reservation, QC choice, Store issue and shortage PI"],
     ["/matflow/production", "Production Material Requisitions", "BOM-backed MR demand and Production ownership"],
     ["/matflow/purchase", "Purchase", "Store-raised PI → vendor PO for exact shortage quantities"],
-    ["/matflow/receiving", "GRN & Receiving", "PO receipt into Store stock before Store re-allocation"],
+    ["/matflow/receiving", "GRN & Receiving", "PO receipt at AL-P1 Main Store before MR re-allocation"],
     ["/matflow/qc", "Quality Control", "MR-linked quality checks with PI / PO / GRN lineage when procurement is involved"],
-    ["/matflow/processing", "Material Processing", "QC-routed jobs only: start, complete and release toward Production"],
+    ["/matflow/processing-units", "Processing Unit Master", "Approved internal/external Processing Units used by BOM material options"],
+    ["/matflow/processing", "Material Processing", "Store-selected jobs: start, complete and release toward Production"],
     ["/matflow/returns", "Material Returns", "Production unused / excess material return control"],
     ["/matflow/material-register", "Material Register", "Derived purchased, issued, consumed, wasted, returned and stock quantities"],
     ["/matflow/ledger", "Stock Ledger", "Immutable physical inventory movement history"],
     ["/matflow/reports", "Reports", "Shortage, Product, stock and audit reporting"],
     ["/matflow/projects", "Projects & Products", "Approval-free Project → Product / Drawing administration"],
-    ["/matflow/materials", "Material Inventory", "Operational material master and stock helper inputs"],
-    ["/matflow/locations", "Locations", "Store, Processing and Production locations (QC is a Main Store checklist, not a location)"],
+    ["/matflow/materials", "Material Inventory", "Operational material catalogue and usage summary; physical stock remains in Tally"],
 ];
 
 export default function MatFlowLayout() {

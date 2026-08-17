@@ -104,8 +104,7 @@ public class MatFlowRequisitionService {
         /**
          * Tally is the physical stock authority. MatFlow keeps only hidden
          * MR-scoped custody balances required by QC/Processing/issue execution.
-         * These balances are not reusable Store stock and are never entered by Store
-         * users.
+         * These balances are not reusable Store stock and are never entered by Store users.
          */
 
         private final MatFlowMaterialRequisitionRepository requisitionRepository;
@@ -383,41 +382,21 @@ public class MatFlowRequisitionService {
                                         "Only the latest effective approved BOM can be requisitioned");
                 }
 
-                MatFlowLocation destination = requireLocation(
-                                request.destinationLocationId());
-
+                /*
+                 * No Location is selected in MatFlow. The Product/BOM plant determines
+                 * the hidden technical Production endpoint, while requestedBy remains
+                 * the exact Production user who owns the MR and final receipt.
+                 */
+                MatFlowLocation destination = plantRoutingService.requireProductionNode(projectPlantCode);
                 String destinationPlantCode = requirePlantCode(
                                 destination.getPlantCode(),
-                                "Production destination " +
-                                                safeLabel(
-                                                                destination.getLocationCode(),
-                                                                destination.getId()));
-
-                if (!projectPlantCode.equals(
-                                destinationPlantCode)) {
-
-                        throw badRequest(
-                                        "Production destination plant " +
-                                                        destinationPlantCode +
-                                                        " does not match project plant " +
-                                                        projectPlantCode);
+                                "Production plant");
+                if (!projectPlantCode.equals(destinationPlantCode)) {
+                        throw conflict("Derived Production routing node does not match project plant " + projectPlantCode);
                 }
 
-                if (destination.getLocationType() != LocationType.PRODUCTION) {
-
-                        throw badRequest(
-                                        "Requisition destination must be a Production location");
-                }
-
-                if (!destination.isActive()) {
-                        throw badRequest(
-                                        "Selected Production destination is inactive");
-                }
-
-                /*
-                 * Persist the Store channel for this MR so later location-master edits
-                 * cannot silently change its origin/Main-Store route.
-                 */
+                /* Persist the Store channel for this MR so the Plant route stays immutable
+                 * for the life of the requisition. */
                 MatFlowLocation originStore = plantRoutingService.requireOriginStore(projectPlantCode);
                 MatFlowLocation mainStore = plantRoutingService.requireMainStore();
 
@@ -586,11 +565,11 @@ public class MatFlowRequisitionService {
                                                 "bomRevisionNo",
                                                 bom.getRevisionNo(),
 
-                                                "destinationLocationId",
-                                                destination.getId(),
+                                                "productionPlant",
+                                                projectPlantCode,
 
-                                                "destinationLocationCode",
-                                                destination.getLocationCode(),
+                                                "productionUser",
+                                                actor,
 
                                                 "lineCount",
                                                 requestBomLineIds.size()));
@@ -1102,8 +1081,8 @@ public class MatFlowRequisitionService {
                                         line.material.getMaterialName(),
                                         clean(line.bomLine.getMaterialCategorySnapshot()), line.material.getUom(),
                                         zero(line.requestedQty), zero(line.reservedQty), zero(line.shortageQty),
-                                        requisition.destinationLocation.getId(),
-                                        requisition.destinationLocation.getLocationCode(),
+                                        requisition.destinationLocation.getPlantCode(),
+                                        requisition.requestedBy,
                                         approvedOptions);
                 }).toList();
         }
@@ -1353,11 +1332,6 @@ public class MatFlowRequisitionService {
                                         "Approved operational BOM is required");
                 }
 
-                if (request.destinationLocationId() == null) {
-                        throw badRequest(
-                                        "Production destination is required");
-                }
-
                 if (request.lines() == null ||
                                 request.lines().isEmpty()) {
 
@@ -1477,15 +1451,13 @@ public class MatFlowRequisitionService {
                 String originPlant = plantRoutingService.normalizeFactoryPlant(destinationPlantCode);
                 if (requisition.originStore != null) {
                         requisition.originStore = locationRepository.findById(requisition.originStore.getId())
-                                        .orElseThrow(() -> conflict(
-                                                        "Material requisition origin Store no longer exists"));
+                                        .orElseThrow(() -> conflict("Material requisition origin Store no longer exists"));
                         plantRoutingService.assertOriginStoreLocation(
                                         requisition.originStore, originPlant, "Material requisition origin Store");
                 }
                 if (requisition.mainStore != null) {
                         requisition.mainStore = locationRepository.findById(requisition.mainStore.getId())
-                                        .orElseThrow(() -> conflict(
-                                                        "Material requisition Main Store no longer exists"));
+                                        .orElseThrow(() -> conflict("Material requisition Main Store no longer exists"));
                         plantRoutingService.assertMainStoreLocation(
                                         requisition.mainStore, "Material requisition Main Store");
                 }
@@ -1512,13 +1484,11 @@ public class MatFlowRequisitionService {
                 }
                 if (requisition.originStore != null) {
                         requisition.originStore = locationRepository.findById(requisition.originStore.getId())
-                                        .orElseThrow(() -> conflict(
-                                                        "Material requisition origin Store no longer exists"));
+                                        .orElseThrow(() -> conflict("Material requisition origin Store no longer exists"));
                 }
                 if (requisition.mainStore != null) {
                         requisition.mainStore = locationRepository.findById(requisition.mainStore.getId())
-                                        .orElseThrow(() -> conflict(
-                                                        "Material requisition Main Store no longer exists"));
+                                        .orElseThrow(() -> conflict("Material requisition Main Store no longer exists"));
                 }
                 return requisition;
         }
@@ -1566,40 +1536,6 @@ public class MatFlowRequisitionService {
                 }
         }
 
-        private MatFlowLocation requireLocation(
-                        UUID id) {
-
-                if (id == null) {
-                        throw badRequest(
-                                        "Location ID is required");
-                }
-
-                MatFlowLocation location = locationRepository
-                                .findById(id)
-                                .orElseThrow(() -> notFound(
-                                                "Location not found"));
-
-                String locationDescription = safeLabel(
-                                location.getLocationCode(),
-                                location.getId());
-
-                String plantCode = requirePlantCode(
-                                location.getPlantCode(),
-                                "Location " +
-                                                locationDescription);
-
-                accessService.requirePlantAccess(
-                                plantCode);
-
-                if (!location.isActive()) {
-                        throw badRequest(
-                                        "Inactive location cannot be selected: " +
-                                                        locationDescription);
-                }
-
-                return location;
-        }
-
         private StoreApprovedRouteStepResponse toStoreApprovedRouteStepResponse(
                         MatFlowBomRouteStep step) {
 
@@ -1614,15 +1550,12 @@ public class MatFlowRequisitionService {
                                 step.getId(),
                                 step.sequenceNo,
                                 step.stepType,
-
                                 step.location.getId(),
                                 step.location.getLocationCode(),
                                 step.location.getLocationName(),
                                 step.location.getPlantCode(),
-                                step.location.getLocationType(),
-
-                                clean(
-                                                step.processCode));
+                                step.location.getLocationType() == LocationType.EXTERNAL_PROCESSOR,
+                                clean(step.processCode));
         }
 
         /*
@@ -1811,23 +1744,13 @@ public class MatFlowRequisitionService {
                                                 .getRevisionNo(),
 
                                 requisition.destinationLocation
-                                                .getId(),
-
-                                requisition.destinationLocation
-                                                .getLocationCode(),
-
-                                requisition.destinationLocation
-                                                .getLocationName(),
-
-                                requisition.destinationLocation
                                                 .getPlantCode(),
-
-                                requisition.originStore == null ? null : requisition.originStore.getId(),
-                                requisition.originStore == null ? null : requisition.originStore.getLocationCode(),
-                                requisition.originStore == null ? null : requisition.originStore.getPlantCode(),
-                                requisition.mainStore == null ? null : requisition.mainStore.getId(),
-                                requisition.mainStore == null ? null : requisition.mainStore.getLocationCode(),
-                                requisition.mainStore == null ? null : requisition.mainStore.getPlantCode(),
+                                requisition.originStore == null
+                                                ? requisition.destinationLocation.getPlantCode()
+                                                : requisition.originStore.getPlantCode(),
+                                requisition.mainStore == null
+                                                ? MatFlowPlantRoutingService.MAIN_STORE_PLANT
+                                                : requisition.mainStore.getPlantCode(),
 
                                 requisition.status,
 
@@ -2016,16 +1939,15 @@ public class MatFlowRequisitionService {
                                 reservation.getId(),
                                 reservation.requisitionLine.getId(),
                                 reservation.material.getMaterialCode(),
-                                reservation.sourceLocation.getId(),
-                                reservation.sourceLocation.getLocationCode(),
+                                custodyLabel(reservation.sourceLocation),
                                 reservation.sourceLocation.getPlantCode(),
-                                reservation.firstDestinationLocation.getId(),
-                                reservation.firstDestinationLocation.getLocationCode(),
+                                custodyLabel(reservation.firstDestinationLocation),
+                                reservation.firstDestinationLocation.getPlantCode(),
                                 reservation.demandPlantCode,
                                 reservedQty, reservation.status, reservation.getRowVersion(),
                                 issuedQty, remainingIssueQty, issueReady,
-                                issueLocation == null ? null : issueLocation.getId(),
-                                issueLocation == null ? null : issueLocation.getLocationCode(),
+                                custodyLabel(issueLocation),
+                                issueLocation == null ? null : issueLocation.getPlantCode(),
                                 responsibleDepartment, nextAction,
                                 qcRequired, qcCompleted, processingRequired,
                                 processingRouteStepIdForReservation(reservation),
@@ -2152,12 +2074,6 @@ public class MatFlowRequisitionService {
                                 linkedProduct == null ? null : linkedProduct.getDrawingNo(),
                                 linkedProduct == null ? null : linkedProduct.getProductName(),
                                 linkedProduct == null ? null : linkedProduct.getClientName(),
-
-                                indent.deliverToLocation
-                                                .getId(),
-
-                                indent.deliverToLocation
-                                                .getLocationCode(),
 
                                 indent.deliverToLocation
                                                 .getPlantCode(),
@@ -2302,29 +2218,10 @@ public class MatFlowRequisitionService {
                                                 : transfer.reservation.requisitionLine
                                                                 .getId(),
 
-                                transfer.fromLocation
-                                                .getId(),
-
-                                transfer.fromLocation
-                                                .getLocationCode(),
-
-                                transfer.fromLocation
-                                                .getPlantCode(),
-
-                                transfer.fromLocation
-                                                .getLocationType(),
-
-                                transfer.toLocation
-                                                .getId(),
-
-                                transfer.toLocation
-                                                .getLocationCode(),
-
-                                transfer.toLocation
-                                                .getPlantCode(),
-
-                                transfer.toLocation
-                                                .getLocationType(),
+                                custodyLabel(transfer.fromLocation),
+                                transfer.fromLocation.getPlantCode(),
+                                custodyLabel(transfer.toLocation),
+                                transfer.toLocation.getPlantCode(),
 
                                 transfer.routeSequenceNo,
                                 transfer.predecessorTransferId,
@@ -2361,6 +2258,29 @@ public class MatFlowRequisitionService {
                                                 line),
 
                                 transfer.getRowVersion());
+        }
+
+        /**
+         * Converts hidden technical custody nodes into business labels. These labels
+         * are read-only trace text; MatFlow exposes no Location master/selector.
+         */
+        private String custodyLabel(MatFlowLocation node) {
+                if (node == null || node.getLocationType() == null) {
+                        return null;
+                }
+
+                return switch (node.getLocationType()) {
+                        case STORE -> plantRoutingService.isMainStoreLocation(node)
+                                        ? "AL-P1 MAIN STORE"
+                                        : requirePlantCode(node.getPlantCode(), "Store custody") + " STORE";
+                        case PRODUCTION -> requirePlantCode(node.getPlantCode(), "Production custody") + " PRODUCTION";
+                        case PROCESSING, EXTERNAL_PROCESSOR -> clean(node.getLocationCode()) == null
+                                        ? "PROCESSING UNIT"
+                                        : node.getLocationCode();
+                        case SUPPLIER -> "SUPPLIER";
+                        case TRANSIT -> "IN TRANSIT";
+                        case QC -> "QC CHECK";
+                };
         }
 
         private String departmentForLocation(
@@ -2552,8 +2472,7 @@ public class MatFlowRequisitionService {
 
                                 saveReservationLedger(balance, requisition, reservation, declaredAvailableQty, actor);
                                 createTransferChain(requisition, reservation, selectedProcessingStep,
-                                                declaredAvailableQty, Boolean.TRUE.equals(lineReview.qcRequired()),
-                                                actor);
+                                                declaredAvailableQty, Boolean.TRUE.equals(lineReview.qcRequired()), actor);
                                 if (Boolean.TRUE.equals(lineReview.qcRequired())) {
                                         createQcCheck(requisition, reservation, declaredAvailableQty, actor);
                                 }
@@ -2561,9 +2480,8 @@ public class MatFlowRequisitionService {
                                 if (Boolean.TRUE.equals(lineReview.qcRequired())
                                                 || Boolean.TRUE.equals(lineReview.processingRequired())
                                                 || lineReview.processingRouteStepId() != null) {
-                                        throw badRequest(
-                                                        "QC/Processing cannot be selected when material is Not Available: "
-                                                                        + line.material.getMaterialCode());
+                                        throw badRequest("QC/Processing cannot be selected when material is Not Available: "
+                                                        + line.material.getMaterialCode());
                                 }
                         }
 
@@ -3229,10 +3147,8 @@ public class MatFlowRequisitionService {
                                                 return false;
                                         }
                                         try {
-                                                return originPlantFilter
-                                                                .equals(plantRoutingService.normalizeFactoryPlant(
-                                                                                linked.destinationLocation
-                                                                                                .getPlantCode()));
+                                                return originPlantFilter.equals(plantRoutingService.normalizeFactoryPlant(
+                                                                linked.destinationLocation.getPlantCode()));
                                         } catch (ResponseStatusException ignored) {
                                                 return false;
                                         }
@@ -4148,56 +4064,30 @@ public class MatFlowRequisitionService {
                                                         3,
                                                         RoundingMode.HALF_UP);
 
+                        MatFlowLocation productionNode =
+                                        reservation.requisitionLine.requisition.destinationLocation;
+
                         return new ReservationResponse(
                                         reservation.getId(),
-
-                                        reservation.requisitionLine
-                                                        .getId(),
-
-                                        reservation.material
-                                                        .getMaterialCode(),
-
-                                        reservation.sourceLocation
-                                                        .getId(),
-
-                                        reservation.sourceLocation
-                                                        .getLocationCode(),
-
-                                        reservation.sourceLocation
-                                                        .getPlantCode(),
-
-                                        reservation.firstDestinationLocation
-                                                        .getId(),
-
-                                        reservation.firstDestinationLocation
-                                                        .getLocationCode(),
-
+                                        reservation.requisitionLine.getId(),
+                                        reservation.material.getMaterialCode(),
+                                        planningService.custodyLabel(reservation.sourceLocation),
+                                        reservation.sourceLocation.getPlantCode(),
+                                        planningService.custodyLabel(reservation.firstDestinationLocation),
+                                        reservation.firstDestinationLocation.getPlantCode(),
                                         reservation.demandPlantCode,
-
                                         reservedQty,
-
                                         reservation.status,
-
                                         reservation.getRowVersion(),
-
                                         issuedQty,
-
                                         remainingIssueQty,
-
                                         false,
-
-                                        reservation.requisitionLine.requisition.destinationLocation
-                                                        .getId(),
-
-                                        reservation.requisitionLine.requisition.destinationLocation
-                                                        .getLocationCode(),
-
+                                        planningService.custodyLabel(productionNode),
+                                        productionNode == null ? null : productionNode.getPlantCode(),
                                         "NONE",
-
                                         reservation.status == ReservationStatus.RELEASED
                                                         ? "RELEASED"
                                                         : "NOT_ISSUE_READY",
-
                                         false,
                                         false,
                                         reservation.firstDestinationLocation != null
@@ -4206,9 +4096,11 @@ public class MatFlowRequisitionService {
                                                                         || reservation.firstDestinationLocation
                                                                                         .getLocationType() == LocationType.EXTERNAL_PROCESSOR),
                                         null,
-                                        reservation.firstDestinationLocation == null
-                                                        ? null
-                                                        : reservation.firstDestinationLocation.getLocationCode());
+                                        reservation.firstDestinationLocation != null
+                                                        && (reservation.firstDestinationLocation.getLocationType() == LocationType.PROCESSING
+                                                                || reservation.firstDestinationLocation.getLocationType() == LocationType.EXTERNAL_PROCESSOR)
+                                                                        ? reservation.firstDestinationLocation.getLocationCode()
+                                                                        : null);
                 }
 
                 private void saveReleaseLedger(

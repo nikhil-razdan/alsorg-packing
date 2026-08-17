@@ -30,6 +30,11 @@ public final class MatFlowPlanningTypes {
         HOLD_UNTIL_SHORTAGE_COMPLETE
     }
 
+    /**
+     * Internal persistence compatibility only. There is no public MatFlow
+     * Location master/selector. STORE and PRODUCTION nodes are derived from
+     * Plant; PROCESSING/EXTERNAL_PROCESSOR back the Processing Unit master.
+     */
     public enum LocationType {
         STORE, PRODUCTION, PROCESSING, QC, TRANSIT, EXTERNAL_PROCESSOR, SUPPLIER
     }
@@ -62,10 +67,7 @@ public final class MatFlowPlanningTypes {
         QC_HOLD, QC_RELEASE, RETURN_TO_VENDOR, PROCESS_WASTAGE,
         PRODUCTION_CONSUMPTION, MATERIAL_RETURN_OUT, MATERIAL_RETURN_RECEIPT_CLEAR,
         MATERIAL_RETURN_IN,
-        /**
-         * Intermediate remote-Plant return custody; not counted as final returned
-         * stock.
-         */
+        /** Intermediate remote-Plant return custody; not counted as final returned stock. */
         MATERIAL_RETURN_ROUTE_IN, MATERIAL_RETURN_ROUTE_OUT, MATERIAL_RETURN_ROUTE_RECEIPT_CLEAR,
         QC_REWORK_RELEASE, SCRAP
     }

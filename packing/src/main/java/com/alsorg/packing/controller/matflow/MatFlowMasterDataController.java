@@ -3,8 +3,8 @@ package com.alsorg.packing.controller.matflow;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.MaterialResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowMetadataDtos.MetadataResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.LocationResponse;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ProcessingUnitRequest;
+import com.alsorg.packing.controller.dto.matflow.MatFlowPlanningDtos.ProcessingUnitResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProcurementDtos.VendorResponse;
 import com.alsorg.packing.service.matflow.MatFlowMasterDataService;
@@ -71,28 +71,32 @@ public class MatFlowMasterDataController {
      * /api/matflow/projects.
      */
 
-    /* -------------------- Locations -------------------- */
+    /* -------------------- Processing Units -------------------- */
 
-    @GetMapping("/locations")
-    public List<LocationResponse> locations(
+    @GetMapping("/processing-units")
+    public List<ProcessingUnitResponse> processingUnits(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active) {
-        return service.listLocations(search, active);
+        return service.listProcessingUnits(search, active);
     }
 
-    @PostMapping("/locations")
-    public LocationResponse createLocation(@Valid @RequestBody LocationRequest request) {
-        return service.createLocation(request);
+    @PostMapping("/processing-units")
+    public ProcessingUnitResponse createProcessingUnit(@Valid @RequestBody ProcessingUnitRequest request) {
+        return service.createProcessingUnit(request);
     }
 
-    @PutMapping("/locations/{id}")
-    public LocationResponse updateLocation(
+    @PutMapping("/processing-units/{id}")
+    public ProcessingUnitResponse updateProcessingUnit(
             @PathVariable UUID id,
-            @Valid @RequestBody LocationRequest request) {
-        return service.updateLocation(id, request);
+            @Valid @RequestBody ProcessingUnitRequest request) {
+        return service.updateProcessingUnit(id, request);
     }
 
     /*
+     * There is intentionally no /locations API. Store and Production routing is
+     * derived from Plant + MR requester. Processing Units are the only physical
+     * routing master exposed to users.
+     *
      * No /stock and no /stock/adjustments endpoints by design.
      * Store checks actual stock in Tally.
      */

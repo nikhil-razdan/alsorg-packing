@@ -22,7 +22,7 @@ import {
 import {
     MatFlowProjectsPage,
     MatFlowMaterialsPage,
-    MatFlowLocationsPage,
+    MatFlowProcessingUnitsPage,
 } from "./pages/MatFlowMasterDataWorkspace";
 import {
     MatFlowBomListPage,
@@ -114,7 +114,7 @@ export default function MatFlowRoutes() {
 
                         <Route path="projects" element={guarded("projects", <MatFlowProjectsPage />)} />
                         <Route path="materials" element={guarded("materials", <MatFlowMaterialsPage />)} />
-                        <Route path="locations" element={guarded("locations", <MatFlowLocationsPage />)} />
+                        <Route path="processing-units" element={guarded("processing-units", <MatFlowProcessingUnitsPage />)} />
 
                         <Route path="boms" element={guarded("boms", <MatFlowBomListPage />)} />
                         <Route path="boms/new" element={guarded("bom-create", <MatFlowBomCreatePage />)} />
@@ -139,7 +139,7 @@ export default function MatFlowRoutes() {
                         <Route path="ledger" element={guarded("ledger", <MatFlowLedgerPage />)} />
                         <Route path="reports" element={guarded("reports", <MatFlowReportsPage />)} />
 
-                        {/* Legacy URLs redirect into the API v6 Universal Dashboard / current workflow. */}
+                        {/* Legacy URLs redirect into the current Universal Dashboard / workflow. */}
                         <Route path="bom-approvals" element={<Navigate to="/matflow/boms" replace />} />
                         <Route path="approvals" element={<Navigate to="/matflow/purchase" replace />} />
                         <Route path="transfers" element={<Navigate to="/matflow/dashboard?view=projects" replace />} />

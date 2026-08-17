@@ -147,7 +147,7 @@ export function MatFlowQcPage() {
             <PageHero
                 badge="QUALITY CHECK"
                 title="MR Material QC Checklist"
-                subtitle="QC is only a check/tick against an MR material lot. It has no QC location and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
+                subtitle="QC is only a check/tick against an MR material lot. It does not create a separate custody step and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
                 actions={
                     <>
                         <Button
@@ -264,7 +264,7 @@ export function MatFlowQcPage() {
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <Alert severity="info">
-                            This is only a QC confirmation against {dialog?.requisitionNumber || "the MR"}. QC does not receive the material at a separate location and does not choose Processing or Production.
+                            This is only a QC confirmation against {dialog?.requisitionNumber || "the MR"}. QC does not take separate physical custody and does not choose Processing or Production.
                         </Alert>
                         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
                             <Detail label="MR" value={dialog?.requisitionNumber || "-"} />
@@ -492,7 +492,7 @@ export function MatFlowProcessingPage() {
                                         <Box><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{job.jobNumber || "-"}</Typography><Typography sx={subTextSx}>{job.requisitionNumber || "-"}</Typography></Box>
                                         <MatFlowStatusChip status={job.status} />
                                     </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .7 }}>{job.locationCode || "-"} · {job.plantCode || "-"}</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>{job.processingUnitCode || "-"} · {job.plantCode || "-"}</Typography>
                                     <Typography sx={subTextSx}>{job.inputMaterialCode || "-"} · Planned {formatQty(job.plannedInputQty)}</Typography>
                                     <Typography sx={subTextSx}>Output {formatQty(job.outputQty)} · Waste {formatQty(job.wastageQty)}</Typography>
                                     <Box sx={{ display: "flex", gap: .5, mt: .85, flexWrap: "wrap" }}>
@@ -514,7 +514,7 @@ export function MatFlowProcessingPage() {
                                 <Box key={job.id} sx={{ ...tableRowSx, gridTemplateColumns: "165px 165px 170px 170px 110px 110px 130px 170px" }}>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{job.jobNumber}</Typography><Typography sx={subTextSx}>{job.processCode || "-"}</Typography></Box>
                                     <Box sx={tableCellSx}>{job.requisitionNumber || "-"}</Box>
-                                    <Box sx={tableCellSx}>{job.locationCode || "-"} · {job.plantCode || "-"}</Box>
+                                    <Box sx={tableCellSx}>{job.processingUnitCode || "-"} · {job.plantCode || "-"}</Box>
                                     <Box sx={tableCellSx}>{job.inputMaterialCode || "-"}</Box>
                                     <Box sx={tableCellSx}>{formatQty(job.plannedInputQty)}</Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{formatQty(job.outputQty)}</Typography><Typography sx={subTextSx}>Waste {formatQty(job.wastageQty)}</Typography></Box>
@@ -698,7 +698,6 @@ export function MatFlowProductionExecutionPage() {
         try {
             await matflowApi.createConsumption({
                 requisitionId: requisition.id,
-                productionLocationId: requisition.destinationLocationId,
                 remarks: clean(form.remarks) || null,
                 lines,
             });
@@ -733,7 +732,6 @@ export function MatFlowProductionExecutionPage() {
         try {
             await matflowApi.recordProductionWaste({
                 requisitionId: requisition.id,
-                productionLocationId: requisition.destinationLocationId,
                 remarks: clean(form.remarks) || null,
                 lines,
             });
@@ -784,7 +782,7 @@ export function MatFlowProductionExecutionPage() {
             <PageHero
                 badge="PRODUCTION EXECUTION"
                 title="Product Material Readiness & Execution"
-                subtitle="See each Project/Product’s material location and readiness, explicitly receive arriving lots, start Production, record consumption/wastage/returns, and complete only after full material accounting."
+                subtitle="See each Project/Product’s material custody and readiness, receive arriving lots for the exact Production requester, start Production, record consumption/wastage/returns, and complete only after full material accounting."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Production_Readiness", sheetName: "Readiness", title: "MatFlow Production Readiness", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -828,10 +826,10 @@ export function MatFlowProductionExecutionPage() {
                             return (
                                 <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
                                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
-                                        <Box sx={{ minWidth: 0 }}><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.destinationPlantCode || "-"}</Typography></Box>
+                                        <Box sx={{ minWidth: 0 }}><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.productionPlantCode || "-"}</Typography></Box>
                                         <MatFlowStatusChip status={row.currentStage} />
                                     </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Location: {row.currentLocationCode || "-"} · Ready {Math.round(numeric(row.materialReadyPercent))}%</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Plant / Custody: {row.plantCode || row.productionPlantCode || "-"} · Ready {Math.round(numeric(row.materialReadyPercent))}%</Typography>
                                     <Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.currentStage)}</Typography>
                                     <Box sx={{ display: "flex", gap: .45, mt: .85, flexWrap: "wrap" }}>
                                         {canAct && receiveLikely && <Button onClick={() => openAction("RECEIVE", row)} sx={primaryBtnSx}>Receive</Button>}
@@ -849,7 +847,7 @@ export function MatFlowProductionExecutionPage() {
                 ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 190px 170px 150px 100px 210px 210px" }}>
-                            {["PD No. / Product", "MR", "Current Material State", "Current Location", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["PD No. / Product", "MR", "Current Material State", "Plant / Custody", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                             const stage = normalize(row.currentStage);
@@ -871,7 +869,7 @@ export function MatFlowProductionExecutionPage() {
                                     </Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>{readable(row.requisitionStatus)}</Typography></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentLocationCode || "-"}</Typography><Typography sx={subTextSx}>{row.currentLocationName || "-"}</Typography></Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.plantCode || row.productionPlantCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.responsibleDepartment || row.currentStage || "Production")}</Typography></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><Typography sx={subTextSx}>{row.readyToStartProduction ? "Ready" : "Not ready"}</Typography></Box>
                                     <Box sx={tableCellSx}>
                                         {isComplete ? <MatFlowStatusChip status="COMPLETED" /> : canStart ? <MatFlowStatusChip status="READY_TO_START" /> : <Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.currentStage)}</Typography>}
@@ -912,7 +910,7 @@ export function MatFlowProductionExecutionPage() {
                                 <Detail label="MR" value={planning.requisition?.requisitionNumber || "-"} />
                                 <Detail label="Project" value={planning.requisition?.projectCode || "-"} />
                                 <Detail label="Drawing" value={planning.requisition?.drawingNo || "-"} />
-                                <Detail label="Production Location" value={planning.requisition?.destinationLocationCode || "-"} />
+                                <Detail label="Production User / Plant" value={`${planning.requisition?.requestedBy || "-"} · ${planning.requisition?.productionPlantCode || "-"}`} />
                             </Box>
 
                             {dialog?.type === "RECEIVE" && (
@@ -922,7 +920,7 @@ export function MatFlowProductionExecutionPage() {
                                         <Box key={reservation.id} sx={{ p: 1, mb: .8, border: "1px solid var(--mf-border)", borderRadius: 2, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
                                             <Box>
                                                 <Typography sx={mainTextSx}>{reservation.materialCode} · {formatQty(reservation.reservedQty)}</Typography>
-                                                <Typography sx={subTextSx}>From route destination {reservation.firstDestinationLocationCode || "-"} · {readable(reservation.nextAction)}</Typography>
+                                                <Typography sx={subTextSx}>{readable(reservation.responsibleDepartment)} · {readable(reservation.nextAction)}</Typography>
                                             </Box>
                                             <Button onClick={() => receiveOne(reservation)} disabled={Boolean(workingId)} sx={primaryBtnSx}>
                                                 {workingId === String(reservation.id) ? "Receiving..." : "Receive"}

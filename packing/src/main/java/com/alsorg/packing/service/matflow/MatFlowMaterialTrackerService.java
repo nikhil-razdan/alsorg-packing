@@ -37,10 +37,11 @@ import org.springframework.web.server.ResponseStatusException;
  * Executive, material-centric MatFlow read model.
  *
  * <p>
- * This service does not create a second workflow and does not mutate stock.
+ * This service does not create a second workflow and does not maintain physical
+ * stock.
  * It reconstructs one material's custody from the existing source-of-truth
  * requisition, reservation, purchase, GRN, QC, transfer, processing,
- * consumption, return, stock-ledger and audit records.
+ * consumption, return, movement-ledger and audit records.
  * </p>
  *
  * <p>
@@ -271,14 +272,6 @@ public class MatFlowMaterialTrackerService {
                 .thenComparing(MaterialTrackerLot::projectCode, Comparator.nullsLast(String::compareToIgnoreCase))
                 .thenComparing(MaterialTrackerLot::productName, Comparator.nullsLast(String::compareToIgnoreCase)));
 
-        List<MaterialStockPosition> inventory = loadInventory(materialId, requestedPlant);
-        BigDecimal onHand = inventory.stream().map(MaterialStockPosition::onHandQty).reduce(ZERO, BigDecimal::add);
-        BigDecimal available = inventory.stream().map(MaterialStockPosition::availableQty).reduce(ZERO,
-                BigDecimal::add);
-        BigDecimal blocked = inventory.stream().map(MaterialStockPosition::blockedQty).reduce(ZERO, BigDecimal::add);
-        BigDecimal inTransit = inventory.stream().map(MaterialStockPosition::inTransitQty).reduce(ZERO,
-                BigDecimal::add);
-
         List<MaterialTrackerLot> liveLots = lots.stream().filter(item -> !item.completed()).toList();
         int delayed = (int) liveLots.stream().filter(item -> isBreach(item.timingHealth())).count();
         long avgDwell = liveLots.isEmpty() ? 0L
@@ -288,7 +281,7 @@ public class MatFlowMaterialTrackerService {
         MaterialTrackerKpis kpis = new MaterialTrackerKpis(
                 projectKeys.size(), productIds.size(), requisitionIds.size(), lots.size(), liveLots.size(), delayed,
                 scale(requested), scale(reserved), scale(shortage), scale(issued), scale(consumed), scale(returned),
-                scale(onHand), scale(available), scale(blocked), scale(inTransit), avgDwell, longestDwell);
+                avgDwell, longestDwell);
 
         MaterialIdentity identity = new MaterialIdentity(
                 material.getId(), material.getMaterialCode(), material.getMaterialName(), material.getCategory(),
@@ -297,7 +290,6 @@ public class MatFlowMaterialTrackerService {
         return new MaterialTrackerResponse(
                 identity,
                 kpis,
-                inventory,
                 List.copyOf(lots),
                 loadLedger(materialId, requestedPlant),
                 LocalDateTime.now());
@@ -731,6 +723,7 @@ public class MatFlowMaterialTrackerService {
                 project == null ? product == null ? null : product.getProjectName() : project.getProjectName(),
                 project == null ? product == null ? null : product.getClientName() : project.getClientName(),
                 product == null ? null : product.getPlantCode(),
+                requisition.requestedBy,
                 product == null ? null : product.getId(),
                 product == null ? null : product.getProductName(),
                 product == null ? null : product.getDrawingNo(),
@@ -747,18 +740,15 @@ public class MatFlowMaterialTrackerService {
                 currentMaterial == null ? selectedMaterial.getUom() : currentMaterial.getUom(),
                 scale(line.requestedQty), scale(line.reservedQty), scale(line.shortageQty), scale(line.issuedQty),
                 scale(line.consumedQty), scale(line.returnedQty), scale(trackedQty),
-                current.stage(), current.department(), locationId(current.location()), locationCode(current.location()),
-                locationName(current.location()), locationType(current.location()), current.state(),
-                current.enteredAt(),
-                dwell, target, variance, health,
+                current.stage(), current.department(), plantCode(current.location()), businessPoint(current.location()),
+                current.state(), current.enteredAt(), dwell, target, variance, health,
                 previous == null ? null : previous.department(),
-                previous == null ? null : previous.locationCode(),
-                previous == null ? null : previous.locationName(),
+                previous == null ? null : previous.plantCode(),
+                previous == null ? null : previous.businessPoint(),
                 previous == null ? null : previous.state(),
-                next.department(), locationId(next.location()), locationCode(next.location()),
-                locationName(next.location()),
-                locationType(next.location()), next.action(), current.referenceType(), current.referenceId(),
-                current.referenceNumber(), current.completed(), lineLevelPostIssueAggregation, history);
+                next.department(), plantCode(next.location()), businessPoint(next.location()), next.action(),
+                current.referenceType(), current.referenceId(), current.referenceNumber(), current.completed(),
+                lineLevelPostIssueAggregation, history);
     }
 
     /*
@@ -873,7 +863,7 @@ public class MatFlowMaterialTrackerService {
                     receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                     scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
                     "REQUISITION_LINE",
-                    "Vendor material inwarded into Store stock. Store will allocate it to the MR and decide QC or direct Production.");
+                    "Vendor material inwarded through Store receiving. Store will allocate it to the MR and decide QC or direct Production.");
         }
     }
 
@@ -924,7 +914,7 @@ public class MatFlowMaterialTrackerService {
                                 receipt.receiptLocation, "GRN_RECEIVED", receipt.receivedAt, receipt.receivedBy,
                                 scale(receiptLine.receivedQty), "GOODS_RECEIPT", receipt.getId(), receipt.grnNumber,
                                 "REQUISITION_LINE",
-                                "Physical receipt into Store stock; Store will allocate this quantity and decide whether QC is required.");
+                                "Physical receipt through Store receiving; Store will allocate this quantity and decide whether QC is required.");
                     }
                     context.inspections().stream()
                             .filter(qc -> receiptLine.getId().equals(qc.sourceLineId))
@@ -1169,11 +1159,10 @@ public class MatFlowMaterialTrackerService {
             long variance = target <= 0 ? 0L : duration - target;
             String health = timingHealth(item.enteredAt(), exit, target, exit != null || terminal);
             result.add(new MaterialCustodyEvent(
-                    i + 1, item.eventType(), item.label(), item.department(), locationId(item.location()),
-                    locationCode(item.location()), locationName(item.location()), locationType(item.location()),
-                    item.state(), item.enteredAt(), exit, duration, target, variance, health, scale(item.quantity()),
-                    item.actor(), item.referenceType(), item.referenceId(), item.referenceNumber(), item.scope(),
-                    item.note()));
+                    i + 1, item.eventType(), item.label(), item.department(), plantCode(item.location()),
+                    businessPoint(item.location()), item.state(), item.enteredAt(), exit, duration, target, variance,
+                    health, scale(item.quantity()), item.actor(), item.referenceType(), item.referenceId(),
+                    item.referenceNumber(), item.scope(), item.note()));
         }
         return List.copyOf(result);
     }
@@ -1510,7 +1499,7 @@ public class MatFlowMaterialTrackerService {
             MatFlowMaterialReturn latestReturn = latestReturnForLine(context, line);
             return next(departmentFor(latestReturn == null ? null : latestReturn.toLocation),
                     latestReturn == null ? null : latestReturn.toLocation,
-                    "Receive the Production return at the destination and reconcile stock.");
+                    "Receive the Production return at the destination and complete the return hand-off.");
         }
         if ("PARTIALLY_ISSUED".equals(current.state())) {
             BigDecimal remaining = scale(reservation.reservedQty)
@@ -1658,45 +1647,26 @@ public class MatFlowMaterialTrackerService {
             case "SHORTAGE_CONFIRMED", "SHORTAGE_PENDING" -> next("PURCHASE", current.location(),
                     "Raise/complete a Purchase Order for the open shortage.");
             default -> next("STORE", current.location(),
-                    "Complete the shortage supply branch, inward through GRN, then let Store allocate the received stock.");
+                    "Complete the shortage supply branch, inward through GRN, then let Store allocate the received material.");
         };
     }
 
     /*
      * ============================================================
-     * Inventory and immutable ledger
+     * Immutable movement / usage audit
      * ============================================================
      */
-
-    private List<MaterialStockPosition> loadInventory(UUID materialId, String requestedPlant) {
-        return entityManager.createQuery(
-                """
-                        select balance
-                        from MatFlowStockBalance balance
-                        where balance.material.id = :materialId
-                        """,
-                MatFlowStockBalance.class)
-                .setParameter("materialId", materialId)
-                .getResultList().stream()
-                .filter(item -> item != null && item.material != null && item.location != null)
-                .filter(item -> canAccessPlant(item.location.getPlantCode(), requestedPlant))
-                .map(item -> new MaterialStockPosition(
-                        item.location.getId(), item.location.getLocationCode(), item.location.getLocationName(),
-                        item.location.getLocationType() == null ? null : item.location.getLocationType().name(),
-                        item.location.getPlantCode(), scale(item.onHandQty), scale(item.reservedQty),
-                        scale(item.blockedQty), scale(item.inTransitQty), scale(item.availableQty()),
-                        item.getUpdatedAt()))
-                .sorted(Comparator.comparing(MaterialStockPosition::plantCode,
-                        Comparator.nullsLast(String::compareToIgnoreCase))
-                        .thenComparing(MaterialStockPosition::locationCode,
-                                Comparator.nullsLast(String::compareToIgnoreCase)))
-                .toList();
-    }
 
     private List<MaterialLedgerEvent> loadLedger(UUID materialId, String requestedPlant) {
         Specification<MatFlowStockLedger> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("material").get("id"), materialId));
+
+            /*
+             * Hidden persistence nodes still carry plant metadata for historical
+             * compatibility. They are used only to enforce plant visibility and are
+             * never exposed as selectable MatFlow Locations or physical stock balances.
+             */
             if (requestedPlant != null) {
                 predicates.add(cb.equal(cb.upper(root.get("location").get("plantCode")), requestedPlant));
             } else {
@@ -1709,17 +1679,20 @@ public class MatFlowMaterialTrackerService {
         return ledgerRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "actionAt")).stream()
                 .limit(300)
                 .map(item -> new MaterialLedgerEvent(
-                        item.id, enumName(item.movementType),
-                        item.location == null ? null : item.location.getId(),
-                        item.location == null ? null : item.location.getLocationCode(),
-                        item.location == null ? null : item.location.getLocationName(),
-                        item.location == null || item.location.getLocationType() == null ? null
-                                : item.location.getLocationType().name(),
-                        item.location == null ? null : item.location.getPlantCode(),
-                        scale(item.quantityChange), scale(item.reservedChange), scale(item.blockedChange),
-                        scale(item.inTransitChange), scale(item.onHandAfter), scale(item.reservedAfter),
-                        scale(item.blockedAfter), scale(item.inTransitAfter), item.referenceType, item.referenceId,
-                        item.referenceNumber, item.projectCode, item.drawingNo, item.batchNo, item.remarks, item.actor,
+                        item.id,
+                        enumName(item.movementType),
+                        departmentFor(item.location),
+                        plantCode(item.location),
+                        businessPoint(item.location),
+                        scale(item.quantityChange),
+                        item.referenceType,
+                        item.referenceId,
+                        item.referenceNumber,
+                        item.projectCode,
+                        item.drawingNo,
+                        item.batchNo,
+                        item.remarks,
+                        item.actor,
                         item.actionAt))
                 .toList();
     }
@@ -2103,15 +2076,6 @@ public class MatFlowMaterialTrackerService {
                 && requisition.status != RequisitionStatus.SUBMITTED_TO_STORE;
     }
 
-    private boolean canAccessPlant(String plant, String requestedPlant) {
-        String normalized = cleanUpper(plant);
-        if (normalized == null)
-            return false;
-        if (requestedPlant != null && !requestedPlant.equals(normalized))
-            return false;
-        return accessService.canAccessPlant(normalized) || plantRoutingService.canActAsMainStore();
-    }
-
     private boolean sameMaterial(MatFlowMaterial material, UUID id) {
         return material != null && id != null && id.equals(material.getId());
     }
@@ -2179,23 +2143,44 @@ public class MatFlowMaterialTrackerService {
     }
 
     private String safeLocationCode(MatFlowLocation location) {
-        return location == null || safe(location.getLocationCode()) == null ? "-" : location.getLocationCode();
+        String code = locationCode(location);
+        return safe(code) == null ? "-" : code;
     }
 
-    private UUID locationId(MatFlowLocation location) {
-        return location == null ? null : location.getId();
+    private String plantCode(MatFlowLocation location) {
+        String plant = location == null ? null : safe(location.getPlantCode());
+        return plant == null ? null : plant.toUpperCase(Locale.ROOT);
     }
 
+    private String businessPoint(MatFlowLocation location) {
+        return locationCode(location);
+    }
+
+    /**
+     * Public tracker values use business custody labels; hidden persistence node
+     * codes are never exposed as generic Locations.
+     */
     private String locationCode(MatFlowLocation location) {
-        return location == null ? null : location.getLocationCode();
-    }
-
-    private String locationName(MatFlowLocation location) {
-        return location == null ? null : location.getLocationName();
-    }
-
-    private String locationType(MatFlowLocation location) {
-        return location == null || location.getLocationType() == null ? null : location.getLocationType().name();
+        if (location == null)
+            return null;
+        String plant = safe(location.getPlantCode());
+        if (plant != null)
+            plant = plant.toUpperCase(Locale.ROOT);
+        LocationType type = location.getLocationType();
+        if (type == null)
+            return plant;
+        return switch (type) {
+            case STORE -> MatFlowPlantRoutingService.MAIN_STORE_PLANT.equals(plant)
+                    ? "AL-P1 MAIN STORE"
+                    : (plant == null ? "PLANT STORE" : plant + " STORE");
+            case PRODUCTION -> plant == null ? "PRODUCTION" : plant + " PRODUCTION";
+            case PROCESSING, EXTERNAL_PROCESSOR -> safe(location.getLocationCode()) == null
+                    ? "PROCESSING UNIT"
+                    : location.getLocationCode();
+            case SUPPLIER -> "SUPPLIER";
+            case TRANSIT -> "IN TRANSIT";
+            case QC -> "QC CHECK";
+        };
     }
 
     private LocalDateTime firstNonNull(LocalDateTime first, LocalDateTime second) {

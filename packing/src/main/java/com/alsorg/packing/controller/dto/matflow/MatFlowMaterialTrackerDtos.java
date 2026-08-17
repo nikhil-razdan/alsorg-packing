@@ -6,14 +6,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Read-only DTO contract for the MatFlow material-centric control tower.
+ * Material-centric read model expressed only in business workflow terms.
  *
- * <p>The tracker deliberately keeps physical execution owned by the existing
- * Store / Purchase / QC / Processing / Production services.  This contract is
- * only an executive read model over those source-of-truth records.</p>
+ * Generic MatFlow Location/stock-position concepts are deliberately absent.
+ * Tally remains the physical stock authority. MatFlow reports Project/Product
+ * demand, declared allocation, shortage, procurement, QC, Processing,
+ * inter-plant hand-off, Production usage/return and immutable movement history.
  */
 public final class MatFlowMaterialTrackerDtos {
-
     private MatFlowMaterialTrackerDtos() {
     }
 
@@ -41,33 +41,15 @@ public final class MatFlowMaterialTrackerDtos {
             BigDecimal issuedQty,
             BigDecimal consumedQty,
             BigDecimal returnedQty,
-            BigDecimal onHandQty,
-            BigDecimal availableQty,
-            BigDecimal blockedQty,
-            BigDecimal inTransitQty,
             long averageCurrentDwellMinutes,
             long longestCurrentDwellMinutes) {
     }
 
-    public record MaterialStockPosition(
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String locationType,
-            String plantCode,
-            BigDecimal onHandQty,
-            BigDecimal reservedQty,
-            BigDecimal blockedQty,
-            BigDecimal inTransitQty,
-            BigDecimal availableQty,
-            LocalDateTime updatedAt) {
-    }
-
     /**
-     * One material trace branch for one Product requisition line. A
-     * reservation-backed row is a real reserved lot. A row with a null
-     * reservationId can represent either the pre-allocation demand/Store-review
-     * stage or the still-open purchase shortage branch.
+     * One business branch of this material inside one Project/Product MR.
+     * BusinessPoint is a human label such as AL-P1 MAIN STORE, AL-P3 STORE,
+     * a Processing Unit, IN TRANSIT or AL-P3 PRODUCTION. It is not a selectable
+     * Location master record.
      */
     public record MaterialTrackerLot(
             String lotKey,
@@ -77,6 +59,7 @@ public final class MatFlowMaterialTrackerDtos {
             String projectName,
             String clientName,
             String plantCode,
+            String productionUser,
             UUID productId,
             String productName,
             String drawingNo,
@@ -104,10 +87,8 @@ public final class MatFlowMaterialTrackerDtos {
             BigDecimal trackedQty,
             String currentStage,
             String currentDepartment,
-            UUID currentLocationId,
-            String currentLocationCode,
-            String currentLocationName,
-            String currentLocationType,
+            String currentPlantCode,
+            String currentBusinessPoint,
             String movementState,
             LocalDateTime enteredCurrentStateAt,
             long currentDwellMinutes,
@@ -115,14 +96,12 @@ public final class MatFlowMaterialTrackerDtos {
             long currentVarianceMinutes,
             String timingHealth,
             String previousDepartment,
-            String previousLocationCode,
-            String previousLocationName,
+            String previousPlantCode,
+            String previousBusinessPoint,
             String previousState,
             String nextDepartment,
-            UUID nextLocationId,
-            String nextLocationCode,
-            String nextLocationName,
-            String nextLocationType,
+            String nextPlantCode,
+            String nextBusinessPoint,
             String nextAction,
             String activeReferenceType,
             UUID activeReferenceId,
@@ -133,19 +112,17 @@ public final class MatFlowMaterialTrackerDtos {
     }
 
     /**
-     * A sequential material custody state. durationMinutes is computed from the
-     * current event's enteredAt to the next event's enteredAt (or now when the
-     * state is still current).
+     * Historical workflow/custody event. The record name is retained for source
+     * compatibility, but it contains no generic Location identifier or stock
+     * balance fields.
      */
     public record MaterialCustodyEvent(
             int sequence,
             String eventType,
             String label,
             String department,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String locationType,
+            String plantCode,
+            String businessPoint,
             String state,
             LocalDateTime enteredAt,
             LocalDateTime exitedAt,
@@ -162,22 +139,17 @@ public final class MatFlowMaterialTrackerDtos {
             String note) {
     }
 
+    /**
+     * Immutable MatFlow movement/usage audit event. This is not a physical stock
+     * balance and intentionally excludes on-hand/available/blocked quantities.
+     */
     public record MaterialLedgerEvent(
             UUID ledgerId,
             String movementType,
-            UUID locationId,
-            String locationCode,
-            String locationName,
-            String locationType,
+            String department,
             String plantCode,
+            String businessPoint,
             BigDecimal quantityChange,
-            BigDecimal reservedChange,
-            BigDecimal blockedChange,
-            BigDecimal inTransitChange,
-            BigDecimal onHandAfter,
-            BigDecimal reservedAfter,
-            BigDecimal blockedAfter,
-            BigDecimal inTransitAfter,
             String referenceType,
             UUID referenceId,
             String referenceNumber,
@@ -192,7 +164,6 @@ public final class MatFlowMaterialTrackerDtos {
     public record MaterialTrackerResponse(
             MaterialIdentity material,
             MaterialTrackerKpis kpis,
-            List<MaterialStockPosition> inventory,
             List<MaterialTrackerLot> lots,
             List<MaterialLedgerEvent> movementHistory,
             LocalDateTime generatedAt) {

@@ -484,7 +484,7 @@ const MATFLOW_SCREEN_ROLES = Object.freeze({
   tracking: ALL_MATFLOW_ROLES,
   projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
   materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE, MATFLOW_ROLES.QC],
-  locations: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE],
+  "processing-units": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
   boms: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
   "bom-create": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
   "bom-edit": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
@@ -1073,7 +1073,7 @@ const semanticSummaryTone = (label) => {
   if (/(reserved|reservation|product|drawing)/.test(text)) {
     return "indigo";
   }
-  if (/(issued|location|department|live|current)/.test(text)) {
+  if (/(issued|department|live|current)/.test(text)) {
     return "sky";
   }
   if (/(requested|request|project|total|progress|records|lots|branches)/.test(text)) {
@@ -2049,11 +2049,11 @@ export function TimingHealthChip({ health }) {
   />;
 }
 
-export function TrackerTimingStrip({ startAt, endAt, durationMinutes, targetMinutes, health, department, location }) {
+export function TrackerTimingStrip({ startAt, endAt, durationMinutes, targetMinutes, health, department, plant }) {
   const elapsed = durationMinutes != null ? Number(durationMinutes) : durationMinutesBetween(startAt, endAt || new Date());
   return <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(5,minmax(0,1fr))" }, gap: .75 }}>
     <Detail label="Department" value={department || "-"} />
-    <Detail label="Location" value={location || "-"} />
+    <Detail label="Plant / Custody" value={plant || "-"} />
     <Detail label="Started" value={startAt ? formatDate(startAt) : "Not started"} />
     <Detail label="Elapsed" value={formatDurationMinutes(elapsed)} />
     <Detail label="Timing" value={<Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}><TimingHealthChip health={health} />{Number(targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(targetMinutes)}</Typography>}</Box>} />

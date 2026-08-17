@@ -123,17 +123,13 @@ export const matflowApi = {
 			{ params: cleanParams({ rowVersion }) }
 		),
 
-	listLocations: (params = {}) =>
-		API.get(`${BASE}/locations`, { params: cleanParams(params) }),
-	createLocation: (body) =>
-		API.post(`${BASE}/locations`, body),
-	updateLocation: (id, body) =>
-		API.put(`${BASE}/locations/${requiredId(id, "Location ID")}`, body),
+	listProcessingUnits: (params = {}) =>
+		API.get(`${BASE}/processing-units`, { params: cleanParams(params) }),
+	createProcessingUnit: (body) =>
+		API.post(`${BASE}/processing-units`, body),
+	updateProcessingUnit: (id, body) =>
+		API.put(`${BASE}/processing-units/${requiredId(id, "Processing Unit ID")}`, body),
 
-	listStock: (params = {}) =>
-		API.get(`${BASE}/stock`, { params: cleanParams(params) }),
-	adjustStock: (body) =>
-		API.post(`${BASE}/stock/adjustments`, body),
 
 	listVendors: (params = {}) =>
 		API.get(`${BASE}/vendors`, { params: cleanParams(params) }),
@@ -269,12 +265,6 @@ export const matflowApi = {
 	},
 	getQcPhoto: (id) =>
 		API.get(`${BASE}/qc/${requiredId(id, "QC record ID")}/photo`, { responseType: "blob" }),
-	listQcRouting: () =>
-		API.get(`${BASE}/qc-routing`),
-	getQcRouting: (id) =>
-		API.get(`${BASE}/qc/${requiredId(id, "QC record ID")}/routing`),
-	routeQcMaterial: (id, body) =>
-		API.post(`${BASE}/qc/${requiredId(id, "QC record ID")}/route`, body),
 	returnQcToVendor: (id, body) =>
 		API.post(`${BASE}/qc/${requiredId(id, "QC record ID")}/return-to-vendor`, body),
 	listQcDispositions: (params = {}) =>

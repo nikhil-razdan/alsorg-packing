@@ -1773,18 +1773,31 @@ public class MatFlowQcService {
                                         inspection.routingDecidedBy,
                                         inspection.routingDecidedAt,
                                         inspection.routingRemarks,
-                                        inspection.location == null ? null : inspection.location.getId(),
-                                        inspection.location == null ? null : inspection.location.getLocationCode(),
+                                        inspection.location == null ? null : custodyLabel(inspection.location),
+                                        inspection.location == null ? null : inspection.location.getPlantCode(),
+                                        requisition == null ? null : requisition.requestedBy,
                                         requisition == null || requisition.destinationLocation == null
                                                         ? null
-                                                        : requisition.destinationLocation.getId(),
-                                        requisition == null || requisition.destinationLocation == null
-                                                        ? null
-                                                        : requisition.destinationLocation.getLocationCode(),
-                                        nextTransfer == null ? null : nextTransfer.getId(),
-                                        nextTransfer == null ? null : nextTransfer.transferNumber,
+                                                        : requisition.destinationLocation.getPlantCode(),
                                         options,
                                         inspection.getRowVersion());
+                }
+
+                private String custodyLabel(MatFlowLocation value) {
+                        if (value == null || value.getLocationType() == null) {
+                                return null;
+                        }
+                        return switch (value.getLocationType()) {
+                                case STORE -> MatFlowPlantRoutingService.MAIN_STORE_PLANT
+                                                .equalsIgnoreCase(value.getPlantCode())
+                                                                ? "AL-P1 MAIN STORE"
+                                                                : value.getPlantCode() + " STORE";
+                                case PRODUCTION -> value.getPlantCode() + " PRODUCTION";
+                                case PROCESSING, EXTERNAL_PROCESSOR -> value.getLocationCode();
+                                case SUPPLIER -> "SUPPLIER";
+                                case TRANSIT -> "IN TRANSIT";
+                                case QC -> "QC CHECK";
+                        };
                 }
 
                 private TransferPurpose determinePurpose(
@@ -2191,9 +2204,9 @@ public class MatFlowQcService {
                                                         .getId(),
                                         vendorReturn.material
                                                         .getMaterialCode(),
-                                        vendorReturn.fromLocation
-                                                        .getId(),
-                                        vendorReturn.fromLocation.locationCode,
+                                        vendorReturn.fromLocation == null
+                                                        ? null
+                                                        : vendorReturn.fromLocation.getPlantCode(),
                                         vendorReturn.returnQty,
                                         vendorReturn.status,
                                         vendorReturn.dispatchedBy,
@@ -2819,10 +2832,14 @@ public class MatFlowQcService {
                                                         disposition.dispositionQty,
                                                         "status",
                                                         disposition.status,
-                                                        "targetLocationId",
+                                                        "targetCustody",
                                                         disposition.targetLocation == null
                                                                         ? null
-                                                                        : disposition.targetLocation.getId()));
+                                                                        : disposition.targetLocation.getLocationCode(),
+                                                        "targetPlantCode",
+                                                        disposition.targetLocation == null
+                                                                        ? null
+                                                                        : disposition.targetLocation.getPlantCode()));
                 }
 
                 private MatFlowLocation resolveTargetLocation(
@@ -2832,30 +2849,21 @@ public class MatFlowQcService {
                                 return sourceTransfer.fromLocation;
                         }
 
-                        if (request.targetLocationId() == null) {
-                                throw badRequest(
-                                                "Target processing location is required for rework");
+                        String targetCustody = clean(request.targetCustody());
+                        if (targetCustody == null) {
+                                throw badRequest("Target Processing Unit is required for rework");
                         }
 
-                        MatFlowLocation target = locationRepository
-                                        .findById(
-                                                        request.targetLocationId())
-                                        .orElseThrow(() -> notFound(
-                                                        "Target location not found"));
+                        MatFlowLocation target = locationRepository.findAll().stream()
+                                        .filter(value -> value != null && value.isActive())
+                                        .filter(value -> value.getLocationCode() != null
+                                                        && value.getLocationCode().equalsIgnoreCase(targetCustody))
+                                        .filter(value -> value.getLocationType() == MatFlowPlanningTypes.LocationType.PROCESSING
+                                                        || value.getLocationType() == MatFlowPlanningTypes.LocationType.EXTERNAL_PROCESSOR)
+                                        .findFirst()
+                                        .orElseThrow(() -> notFound("Processing Unit not found: " + targetCustody));
 
-                        accessService.requirePlantAccess(
-                                        target.getPlantCode());
-
-                        boolean processingLocation = target
-                                        .getLocationType() == MatFlowPlanningTypes.LocationType.PROCESSING
-                                        ||
-                                        target.getLocationType() == MatFlowPlanningTypes.LocationType.EXTERNAL_PROCESSOR;
-
-                        if (!processingLocation) {
-                                throw badRequest(
-                                                "Rework target must be a processing location");
-                        }
-
+                        accessService.requirePlantAccess(target.getPlantCode());
                         return target;
                 }
 
@@ -2871,12 +2879,11 @@ public class MatFlowQcService {
 
                                         disposition.targetLocation == null
                                                         ? null
-                                                        : disposition.targetLocation
-                                                                        .getId(),
+                                                        : disposition.targetLocation.getLocationCode(),
 
                                         disposition.targetLocation == null
                                                         ? null
-                                                        : disposition.targetLocation.locationCode,
+                                                        : disposition.targetLocation.getPlantCode(),
 
                                         disposition.dispositionQty,
 

@@ -9,13 +9,19 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** Purchase, GRN, QC and vendor contracts used by MatFlow. */
+/**
+ * Purchase, GRN and QC contracts.
+ *
+ * PO delivery and GRN receipt are fixed to AL-P1 Main Store by the backend.
+ * No client chooses or submits a Location.
+ */
 public final class MatFlowProcurementDtos {
         private MatFlowProcurementDtos() {
         }
@@ -51,17 +57,11 @@ public final class MatFlowProcurementDtos {
                         String remarks) {
         }
 
-        /**
-         * Purchase creates and places the PO directly against one Store PI and vendor.
-         * poNumber is retained only for old-client wire compatibility; the backend
-         * always generates PO/yyyy/MM/dd/n.
-         */
         public record PurchaseOrderRequest(
                         String poNumber,
                         @NotNull LocalDate poDate,
                         @NotNull UUID vendorId,
                         @NotNull UUID indentId,
-                        @NotNull UUID deliveryLocationId,
                         @NotEmpty List<@Valid PurchaseOrderLineRequest> lines,
                         String remarks) {
         }
@@ -78,7 +78,6 @@ public final class MatFlowProcurementDtos {
                         Long rowVersion) {
         }
 
-        /** No approval fields are exposed because MatFlow has no PO approval desk. */
         public record PurchaseOrderResponse(
                         UUID id,
                         String poNumber,
@@ -95,8 +94,6 @@ public final class MatFlowProcurementDtos {
                         String drawingNo,
                         String productName,
                         String clientName,
-                        UUID deliveryLocationId,
-                        String deliveryLocationCode,
                         String plantCode,
                         PurchaseOrderStatus status,
                         String remarks,
@@ -110,10 +107,8 @@ public final class MatFlowProcurementDtos {
                         String batchNo) {
         }
 
-        /** GRN always inwards vendor material into Store stock. */
         public record GoodsReceiptRequest(
                         @NotNull UUID purchaseOrderId,
-                        @NotNull UUID receiptLocationId,
                         String vendorChallanNo,
                         String vendorInvoiceNo,
                         @NotEmpty List<@Valid GoodsReceiptLineRequest> lines,
@@ -149,8 +144,6 @@ public final class MatFlowProcurementDtos {
                         String drawingNo,
                         String productName,
                         String clientName,
-                        UUID receiptLocationId,
-                        String receiptLocationCode,
                         String plantCode,
                         String vendorChallanNo,
                         String vendorInvoiceNo,
@@ -162,22 +155,21 @@ public final class MatFlowProcurementDtos {
                         List<GoodsReceiptLineResponse> lines) {
         }
 
-        /** QC is a simple completion/tick against the MR material lot. */
+        /**
+         * Active QC is a check/tick against an MR material lot. It is not a Location.
+         */
         public record QcDecisionRequest(
                         @NotNull Long rowVersion,
+                        @NotNull @DecimalMin(value = "0.0") BigDecimal acceptedQty,
+                        @NotNull @DecimalMin(value = "0.0") BigDecimal rejectedQty,
                         String remarks) {
         }
 
-        /**
-         * QC is not a standalone numbered business document.
-         * The UUID remains the technical action key, while the user-facing identity
-         * is the linked MR and, when applicable, its PI / PO / GRN procurement chain.
-         */
         public record QcInspectionResponse(
                         UUID id,
                         UUID requisitionId,
                         String requisitionNumber,
-                        String pdNo,
+                        String projectCode,
                         String drawingNo,
                         String productName,
                         List<String> indentNumbers,
@@ -212,8 +204,7 @@ public final class MatFlowProcurementDtos {
                         String vendorName,
                         UUID materialId,
                         String materialCode,
-                        UUID fromLocationId,
-                        String fromLocationCode,
+                        String fromPlantCode,
                         BigDecimal returnQty,
                         VendorReturnStatus status,
                         String dispatchedBy,

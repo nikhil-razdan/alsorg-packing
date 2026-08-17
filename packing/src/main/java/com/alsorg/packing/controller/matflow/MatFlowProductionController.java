@@ -27,13 +27,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Processing + Production execution controller.
+ * Processing + Production execution boundary.
  *
- * Processing jobs are queued from the Store-selected Processing route, whether
- * or
- * not QC was required. Processing completes the job and sends the material
- * onward. Production explicitly receives each arriving
- * material lot, then starts, consumes/wastes/returns and completes the MR.
+ * Production never selects a Location. Final receipt, consumption and wastage
+ * are bound to the plant and exact Production requester saved on the MR.
  */
 @RestController
 @RequestMapping("/api/matflow")
@@ -71,10 +68,7 @@ public class MatFlowProductionController {
         return workflow.completeProcessing(id, request);
     }
 
-    /**
-     * Production acknowledgement for a lot already sent by Store or Processing.
-     * This is a Production business action, not a generic transfer receipt desk.
-     */
+    /** The MR requester explicitly receives the final material handover. */
     @PostMapping("/production/reservations/{reservationId}/receive")
     public PlanningResponse receiveProductionMaterial(
             @PathVariable UUID reservationId,

@@ -1558,20 +1558,20 @@ public class MatFlowBomService {
                                                 "Route sequence already exists for this BOM line");
                         }
 
-                        MatFlowLocation location = requireLocationForBom(
+                        MatFlowLocation processingUnit = requireProcessingUnitForBom(
                                         bom,
-                                        request.locationId());
+                                        request.processingUnitId());
 
                         validateLocationType(
                                         request.stepType(),
-                                        location);
+                                        processingUnit);
 
                         String actor = accessService.actor();
 
                         MatFlowBomRouteStep step = new MatFlowBomRouteStep();
 
                         step.bomLine = line;
-                        apply(step, request, location);
+                        apply(step, request, processingUnit);
                         step.setCreatedBy(actor);
                         step.setUpdatedBy(actor);
 
@@ -1620,15 +1620,15 @@ public class MatFlowBomService {
                                                 "Route sequence already exists for this BOM line");
                         }
 
-                        MatFlowLocation location = requireLocationForBom(
+                        MatFlowLocation processingUnit = requireProcessingUnitForBom(
                                         bom,
-                                        request.locationId());
+                                        request.processingUnitId());
 
                         validateLocationType(
                                         request.stepType(),
-                                        location);
+                                        processingUnit);
 
-                        apply(step, request, location);
+                        apply(step, request, processingUnit);
 
                         step.setUpdatedBy(
                                         accessService.actor());
@@ -1811,12 +1811,12 @@ public class MatFlowBomService {
                                                 "Only PROCESSING options are configured on a BOM. Store decides QC and the MR defines Production destination.");
                         }
                         if (location == null) {
-                                throw badRequest("Processing location is required");
+                                throw badRequest("Processing Unit is required");
                         }
                         LocationType actualType = location.getLocationType();
                         if (actualType != LocationType.PROCESSING && actualType != LocationType.EXTERNAL_PROCESSOR) {
                                 throw badRequest(
-                                                "Processing option requires PROCESSING or EXTERNAL_PROCESSOR location, but "
+                                                "Selected record is not a Processing Unit: "
                                                                 + safeLabel(location.getLocationCode(),
                                                                                 location.getId())
                                                                 + " is " + actualType);
@@ -1864,9 +1864,9 @@ public class MatFlowBomService {
                                                 "Route step type is required");
                         }
 
-                        if (request.locationId() == null) {
+                        if (request.processingUnitId() == null) {
                                 throw badRequest(
-                                                "Route location is required");
+                                                "Processing Unit is required");
                         }
 
                         BigDecimal yield = request.expectedYieldPercent() == null
@@ -1935,18 +1935,18 @@ public class MatFlowBomService {
                                                         "BOM line not found"));
                 }
 
-                private MatFlowLocation requireLocationForBom(
+                private MatFlowLocation requireProcessingUnitForBom(
                                 MatFlowBom bom,
                                 UUID id) {
                         if (id == null) {
                                 throw badRequest(
-                                                "Route location ID is required");
+                                                "Processing Unit ID is required");
                         }
 
                         MatFlowLocation location = locationRepository
                                         .findById(id)
                                         .orElseThrow(() -> notFound(
-                                                        "Location not found"));
+                                                        "Processing Unit not found"));
 
                         String locationLabel = safeLabel(
                                         location.getLocationCode(),
@@ -1954,7 +1954,7 @@ public class MatFlowBomService {
 
                         String locationPlantCode = requirePlantCode(
                                         location.getPlantCode(),
-                                        "Route location " + locationLabel);
+                                        "Processing Unit " + locationLabel);
 
                         String bomPlantCode = requireBomPlantCode(bom);
 
@@ -1963,17 +1963,17 @@ public class MatFlowBomService {
 
                         if (!bomPlantCode.equals(locationPlantCode)) {
                                 throw conflict(
-                                                "Route location " + locationLabel +
+                                                "Processing Unit " + locationLabel +
                                                                 " belongs to plant " + locationPlantCode +
                                                                 " but BOM " + safeLabel(bom.getBomNumber(), bom.getId())
                                                                 +
                                                                 " belongs to plant " + bomPlantCode +
-                                                                ". Select a route location from the BOM plant.");
+                                                                ". Select a Processing Unit from the BOM plant.");
                         }
 
                         if (!location.isActive()) {
                                 throw badRequest(
-                                                "Inactive location cannot be used in a route: " + locationLabel);
+                                                "Inactive Processing Unit cannot be used in a route: " + locationLabel);
                         }
 
                         return location;
@@ -2044,8 +2044,7 @@ public class MatFlowBomService {
                                         location.getLocationCode(),
                                         location.getLocationName(),
                                         location.getPlantCode(),
-                                        location.getLocationType(),
-                                        location.getOwnershipType(),
+                                        location.getLocationType() == LocationType.EXTERNAL_PROCESSOR,
                                         step.processCode,
                                         step.expectedYieldPercent,
                                         step.remarks,

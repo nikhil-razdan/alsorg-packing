@@ -19,7 +19,6 @@ import com.alsorg.packing.domain.matflow.MatFlowMaterialRequisition;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.GoodsReceiptStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.IndentStatus;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.LocationType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.PurchaseOrderStatus;
 import com.alsorg.packing.domain.matflow.MatFlowPurchaseOrder;
@@ -33,7 +32,6 @@ import com.alsorg.packing.repository.matflow.MatFlowGoodsReceiptLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowGoodsReceiptRepository;
 import com.alsorg.packing.repository.matflow.MatFlowIndentLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowIndentRepository;
-import com.alsorg.packing.repository.matflow.MatFlowLocationRepository;
 import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderLineRepository;
 import com.alsorg.packing.repository.matflow.MatFlowPurchaseOrderRepository;
 import com.alsorg.packing.repository.matflow.MatFlowStockBalanceRepository;
@@ -63,7 +61,6 @@ public class MatFlowProcurementService {
         private final MatFlowIndentRepository indentRepository;
         private final MatFlowIndentLineRepository indentLineRepository;
         private final MatFlowVendorRepository vendorRepository;
-        private final MatFlowLocationRepository locationRepository;
         private final MatFlowGoodsReceiptRepository receiptRepository;
         private final MatFlowGoodsReceiptLineRepository receiptLineRepository;
         private final MatFlowStockBalanceRepository stockRepository;
@@ -80,7 +77,6 @@ public class MatFlowProcurementService {
                         MatFlowIndentRepository indentRepository,
                         MatFlowIndentLineRepository indentLineRepository,
                         MatFlowVendorRepository vendorRepository,
-                        MatFlowLocationRepository locationRepository,
                         MatFlowGoodsReceiptRepository receiptRepository,
                         MatFlowGoodsReceiptLineRepository receiptLineRepository,
                         MatFlowStockBalanceRepository stockRepository,
@@ -99,8 +95,6 @@ public class MatFlowProcurementService {
                 this.indentLineRepository = indentLineRepository;
 
                 this.vendorRepository = vendorRepository;
-
-                this.locationRepository = locationRepository;
 
                 this.receiptRepository = receiptRepository;
 
@@ -159,13 +153,11 @@ public class MatFlowProcurementService {
                         throw badRequest("Inactive vendor cannot be selected");
                 }
 
-                MatFlowLocation location = requireLocation(request.deliveryLocationId());
-                if (location.getLocationType() != LocationType.STORE) {
-                        throw badRequest("Purchase Order delivery location must be a Store location");
-                }
-                plantRoutingService.assertMainStoreLocation(location, "Purchase Order delivery");
-                if (!location.getId().equals(indent.deliverToLocation.getId())) {
-                        throw conflict("PO delivery location must match the linked PI Store location");
+                MatFlowLocation mainStore = plantRoutingService.requireMainStore();
+                plantRoutingService.assertMainStoreLocation(mainStore, "Purchase Order delivery");
+                if (indent.deliverToLocation == null
+                                || !mainStore.getId().equals(indent.deliverToLocation.getId())) {
+                        throw conflict("Linked PI must be delivered to AL-P1 Main Store");
                 }
 
                 String actor = accessService.actor();
@@ -174,11 +166,10 @@ public class MatFlowProcurementService {
                 order.poDate = request.poDate();
                 order.vendor = vendor;
                 order.indent = indent;
-                order.deliveryLocation = location;
+                order.deliveryLocation = mainStore;
                 // Purchase owns PO creation and placement. There is no approval desk.
                 order.status = PurchaseOrderStatus.PLACED;
-                // Legacy columns are retained as placement audit mirrors for existing DB/API
-                // rows.
+                // Legacy columns are retained as placement audit mirrors for existing DB/API rows.
                 order.approvedBy = actor;
                 order.approvedAt = LocalDateTime.now();
                 order.approvalRemarks = "Placed by Purchase";
@@ -238,7 +229,7 @@ public class MatFlowProcurementService {
 
                 auditService.record(
                                 "PURCHASE_ORDER", order.getId(), "PURCHASE_ORDER_PLACED",
-                                location.getPlantCode(),
+                                mainStore.getPlantCode(),
                                 indent.projectDrawing == null ? null : indent.projectDrawing.getProjectCode(),
                                 indent.projectDrawing == null ? null : indent.projectDrawing.getDrawingNo(),
                                 auditService.details(
@@ -281,17 +272,10 @@ public class MatFlowProcurementService {
                         throw conflict("Purchase Order is not open for receipt");
                 }
 
-                MatFlowLocation receiptLocation = requireLocation(request.receiptLocationId());
-                if (receiptLocation.getLocationType() != LocationType.STORE) {
-                        throw badRequest("GRN must inward vendor material into a Store location");
-                }
+                MatFlowLocation receiptLocation = order.deliveryLocation == null
+                                ? plantRoutingService.requireMainStore()
+                                : order.deliveryLocation;
                 plantRoutingService.assertMainStoreLocation(receiptLocation, "GRN inward");
-                if (!receiptLocation.getId().equals(order.deliveryLocation.getId())) {
-                        throw conflict("GRN Store location must match the PO delivery location");
-                }
-                if (!receiptLocation.isSupportsStock()) {
-                        throw badRequest("GRN Store location does not support stock");
-                }
 
                 String actor = accessService.actor();
                 MatFlowGoodsReceipt receipt = new MatFlowGoodsReceipt();
@@ -585,31 +569,13 @@ public class MatFlowProcurementService {
 
                 if (order.deliveryLocation == null) {
                         throw conflict(
-                                        "Purchase order delivery location is missing");
+                                        "Purchase order delivery Store is missing");
                 }
 
                 accessService.requirePlantAccess(
                                 order.deliveryLocation.getPlantCode());
 
                 return order;
-        }
-
-        private MatFlowLocation requireLocation(
-                        UUID id) {
-                MatFlowLocation location = locationRepository
-                                .findById(id)
-                                .orElseThrow(() -> notFound(
-                                                "Location not found"));
-
-                accessService.requirePlantAccess(
-                                location.getPlantCode());
-
-                if (!location.isActive()) {
-                        throw badRequest(
-                                        "Inactive location cannot be selected");
-                }
-
-                return location;
         }
 
         private void validatePurchaseRequest(
@@ -625,10 +591,9 @@ public class MatFlowProcurementService {
                 }
 
                 if (request.vendorId() == null ||
-                                request.indentId() == null ||
-                                request.deliveryLocationId() == null) {
+                                request.indentId() == null) {
                         throw badRequest(
-                                        "Vendor, indent and delivery location are required");
+                                        "Vendor and Purchase Indent are required");
                 }
 
                 if (request.lines() == null ||
@@ -641,10 +606,9 @@ public class MatFlowProcurementService {
         private void validateReceiptRequest(
                         GoodsReceiptRequest request) {
                 if (request == null ||
-                                request.purchaseOrderId() == null ||
-                                request.receiptLocationId() == null) {
+                                request.purchaseOrderId() == null) {
                         throw badRequest(
-                                        "Purchase order and receipt location are required");
+                                        "Purchase Order is required");
                 }
 
                 if (request.lines() == null ||
@@ -719,8 +683,6 @@ public class MatFlowProcurementService {
                                 linkedProduct == null ? null : linkedProduct.getDrawingNo(),
                                 linkedProduct == null ? null : linkedProduct.getProductName(),
                                 linkedProduct == null ? null : linkedProduct.getClientName(),
-                                order.deliveryLocation.getId(),
-                                order.deliveryLocation.getLocationCode(),
                                 order.deliveryLocation.getPlantCode(),
                                 order.status,
                                 order.remarks,
@@ -772,8 +734,6 @@ public class MatFlowProcurementService {
                                 linkedProduct == null ? null : linkedProduct.getDrawingNo(),
                                 linkedProduct == null ? null : linkedProduct.getProductName(),
                                 linkedProduct == null ? null : linkedProduct.getClientName(),
-                                receipt.receiptLocation.getId(),
-                                receipt.receiptLocation.getLocationCode(),
                                 receipt.receiptLocation.getPlantCode(),
                                 receipt.vendorChallanNo,
                                 receipt.vendorInvoiceNo,

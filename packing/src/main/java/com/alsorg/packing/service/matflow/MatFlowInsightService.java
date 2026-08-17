@@ -83,7 +83,6 @@ public class MatFlowInsightService {
                                 transferRepository,
                                 qcRepository,
                                 processingRepository,
-                                stockRepository,
                                 ledgerRepository,
                                 auditRepository,
                                 reservationRepository,
@@ -132,7 +131,6 @@ public class MatFlowInsightService {
         public PageResponse<StockLedgerRow> stockLedger(
                         String plantCode,
                         UUID materialId,
-                        UUID locationId,
                         MovementType movementType,
                         LocalDateTime fromDate,
                         LocalDateTime toDate,
@@ -140,7 +138,7 @@ public class MatFlowInsightService {
                         int page,
                         int size) {
                 return reporting.stockLedger(
-                                plantCode, materialId, locationId, movementType, fromDate, toDate, search, page, size);
+                                plantCode, materialId, movementType, fromDate, toDate, search, page, size);
         }
 
         @Transactional(readOnly = true)
@@ -186,7 +184,6 @@ public class MatFlowInsightService {
                 private final MatFlowTransferOrderRepository transferRepository;
                 private final MatFlowQcInspectionRepository qcRepository;
                 private final MatFlowProcessingJobRepository processingRepository;
-                private final MatFlowStockBalanceRepository stockRepository;
                 private final MatFlowStockLedgerRepository ledgerRepository;
                 private final MatFlowAuditLogRepository auditRepository;
                 private final MatFlowReservationRepository reservationRepository;
@@ -204,7 +201,6 @@ public class MatFlowInsightService {
                                 MatFlowTransferOrderRepository transferRepository,
                                 MatFlowQcInspectionRepository qcRepository,
                                 MatFlowProcessingJobRepository processingRepository,
-                                MatFlowStockBalanceRepository stockRepository,
                                 MatFlowStockLedgerRepository ledgerRepository,
                                 MatFlowAuditLogRepository auditRepository,
                                 MatFlowReservationRepository reservationRepository,
@@ -230,8 +226,6 @@ public class MatFlowInsightService {
 
                         this.processingRepository = processingRepository;
 
-                        this.stockRepository = stockRepository;
-
                         this.ledgerRepository = ledgerRepository;
 
                         this.auditRepository = auditRepository;
@@ -248,145 +242,75 @@ public class MatFlowInsightService {
 
                         Set<String> plants = resolvePlants(plantCode);
 
-                        /* True Project count comes from mf_projects, not Product/Drawing children. */
+                        /* Project/Product ownership decides plant visibility. */
                         List<MatFlowProject> projects = projectHeaderRepository
                                         .findAllByOrderByUpdatedAtDesc()
                                         .stream()
-                                        .filter(project -> project.isActive() &&
-                                                        plants.contains(normalizePlant(project.getPlantCode())))
+                                        .filter(project -> project.isActive()
+                                                        && plants.contains(normalizePlant(project.getPlantCode())))
                                         .toList();
 
-                        List<MatFlowBom> boms = bomRepository
-                                        .findAll()
-                                        .stream()
+                        List<MatFlowBom> boms = bomRepository.findAll().stream()
+                                        .filter(bom -> bom != null && bom.getProjectDrawing() != null)
                                         .filter(bom -> plants.contains(
-                                                        normalizePlant(
-                                                                        bom.getProjectDrawing()
-                                                                                        .getPlantCode())))
+                                                        normalizePlant(bom.getProjectDrawing().getPlantCode())))
                                         .toList();
 
                         List<MatFlowMaterialRequisition> requisitions = requisitionRepository
-                                        .findAllByOrderByUpdatedAtDesc()
-                                        .stream()
-                                        .filter(requisition -> plants.contains(
-                                                        requisitionPlant(requisition)))
+                                        .findAllByOrderByUpdatedAtDesc().stream()
+                                        .filter(requisition -> plants.contains(requisitionPlant(requisition)))
                                         .toList();
 
+                        /*
+                         * Internal transfer/QC/processing persistence may still reference hidden
+                         * compatibility nodes, but dashboard ownership always follows the MR's
+                         * originating Production plant. No generic Location is exposed or used as
+                         * the business filter.
+                         */
                         List<MatFlowTransferOrder> transfers = transferRepository
-                                        .findAllByOrderByUpdatedAtDesc()
-                                        .stream()
-                                        .filter(transfer -> plants.contains(
-                                                        normalizePlant(
-                                                                        transfer.fromLocation.plantCode))
-                                                        ||
-                                                        plants.contains(
-                                                                        normalizePlant(
-                                                                                        transfer.toLocation.plantCode)))
+                                        .findAllByOrderByUpdatedAtDesc().stream()
+                                        .filter(transfer -> plants.contains(transferDemandPlant(transfer)))
                                         .toList();
 
                         List<MatFlowQcInspection> inspections = qcRepository
-                                        .findAllByOrderByCreatedAtDesc()
-                                        .stream()
-                                        .filter(inspection -> plants.contains(
-                                                        normalizePlant(
-                                                                        inspection.location.plantCode)))
+                                        .findAllByOrderByCreatedAtDesc().stream()
+                                        .filter(inspection -> plants.contains(qcDemandPlant(inspection)))
                                         .toList();
 
                         List<MatFlowProcessingJob> jobs = processingRepository
-                                        .findAllByOrderByUpdatedAtDesc()
-                                        .stream()
-                                        .filter(job -> plants.contains(
-                                                        normalizePlant(
-                                                                        job.location.plantCode)))
+                                        .findAllByOrderByUpdatedAtDesc().stream()
+                                        .filter(job -> plants.contains(processingDemandPlant(job)))
                                         .toList();
 
-                        List<MatFlowIndent> indents = indentRepository
-                                        .findAll()
-                                        .stream()
-                                        .filter(indent -> plants.contains(
-                                                        normalizePlant(
-                                                                        indent.deliverToLocation.plantCode)))
+                        List<MatFlowIndent> indents = indentRepository.findAll().stream()
+                                        .filter(indent -> plants.contains(indentDemandPlant(indent)))
                                         .toList();
 
                         List<MatFlowPurchaseOrder> purchaseOrders = purchaseOrderRepository
-                                        .findAllByOrderByUpdatedAtDesc()
-                                        .stream()
-                                        .filter(order -> plants.contains(
-                                                        normalizePlant(
-                                                                        order.deliveryLocation.plantCode)))
+                                        .findAllByOrderByUpdatedAtDesc().stream()
+                                        .filter(order -> plants.contains(orderDemandPlant(order)))
                                         .toList();
-
-                        List<MatFlowStockBalance> balances = stockRepository
-                                        .findVisibleBalances(
-                                                        plants);
 
                         List<PlantDashboardRow> rows = plants.stream()
                                         .sorted()
                                         .map(plant -> buildPlantDashboard(
-                                                        plant,
-                                                        projects,
-                                                        boms,
-                                                        requisitions,
-                                                        transfers,
-                                                        inspections,
-                                                        jobs,
-                                                        indents,
-                                                        purchaseOrders,
-                                                        balances))
+                                                        plant, projects, boms, requisitions, transfers, inspections,
+                                                        jobs, indents, purchaseOrders))
                                         .toList();
 
                         DashboardTotals totals = new DashboardTotals(
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::activeProjects),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::effectiveBoms),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::openRequisitions),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::shortageRequisitions),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::readyOutboundTransfers),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::inTransitOutboundTransfers),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::expectedInboundTransfers),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::pendingQcInspections),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::activeProcessingJobs),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::openIndents),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::openPurchaseOrders),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::stockBalanceLines),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::lowStockLines),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::blockedStockLines),
-                                        sum(
-                                                        rows,
-                                                        PlantDashboardRow::inTransitStockLines));
+                                        sum(rows, PlantDashboardRow::activeProjects),
+                                        sum(rows, PlantDashboardRow::effectiveBoms),
+                                        sum(rows, PlantDashboardRow::openRequisitions),
+                                        sum(rows, PlantDashboardRow::shortageRequisitions),
+                                        sum(rows, PlantDashboardRow::readyToIssueRequisitions),
+                                        sum(rows, PlantDashboardRow::materialInTransitRequisitions),
+                                        sum(rows, PlantDashboardRow::pendingQcInspections),
+                                        sum(rows, PlantDashboardRow::activeProcessingJobs),
+                                        sum(rows, PlantDashboardRow::openIndents),
+                                        sum(rows, PlantDashboardRow::openPurchaseOrders));
 
-                        return new DashboardResponse(
-                                        LocalDateTime.now(),
-                                        plants,
-                                        totals,
-                                        rows);
+                        return new DashboardResponse(LocalDateTime.now(), plants, totals, rows);
                 }
 
                 @Transactional(readOnly = true)
@@ -505,11 +429,8 @@ public class MatFlowInsightService {
                                                                 requisition.getId(),
                                                                 requisition.requisitionNumber,
                                                                 requisition.status,
-
-                                                                requisitionDestinationCode(requisition),
-
                                                                 requisitionPlant(requisition),
-
+                                                                requisition.requestedBy,
                                                                 lines.size(),
                                                                 shortageLines,
                                                                 fullyIssuedLines,
@@ -626,11 +547,8 @@ public class MatFlowInsightService {
                                                                 line.requestedQty,
                                                                 line.reservedQty,
                                                                 line.shortageQty,
-
-                                                                requisitionDestinationCode(line.requisition),
-
                                                                 requisitionPlant(line.requisition),
-
+                                                                line.requisition.requestedBy,
                                                                 line.requisition.status,
                                                                 startedAt,
                                                                 ageDays);
@@ -650,7 +568,6 @@ public class MatFlowInsightService {
                 public PageResponse<StockLedgerRow> stockLedger(
                                 String plantCode,
                                 UUID materialId,
-                                UUID locationId,
                                 MovementType movementType,
                                 LocalDateTime fromDate,
                                 LocalDateTime toDate,
@@ -672,7 +589,6 @@ public class MatFlowInsightService {
                                         stockLedgerSpecification(
                                                         plants,
                                                         materialId,
-                                                        locationId,
                                                         movementType,
                                                         fromDate,
                                                         toDate,
@@ -750,7 +666,6 @@ public class MatFlowInsightService {
                 private Specification<MatFlowStockLedger> stockLedgerSpecification(
                                 Set<String> plants,
                                 UUID materialId,
-                                UUID locationId,
                                 MovementType movementType,
                                 LocalDateTime fromDate,
                                 LocalDateTime toDate,
@@ -770,13 +685,6 @@ public class MatFlowInsightService {
                                                         cb.equal(
                                                                         root.get("material").get("id"),
                                                                         materialId));
-                                }
-
-                                if (locationId != null) {
-                                        predicates.add(
-                                                        cb.equal(
-                                                                        root.get("location").get("id"),
-                                                                        locationId));
                                 }
 
                                 if (movementType != null) {
@@ -908,23 +816,127 @@ public class MatFlowInsightService {
                                 return "";
                         }
 
-                        if (requisition.destinationLocation != null &&
-                                        clean(requisition.destinationLocation.plantCode) != null) {
-                                return normalizePlant(requisition.destinationLocation.plantCode);
+                        /*
+                         * The Product/Project plant is the business owner of an MR and is
+                         * therefore authoritative for reporting. destinationLocation is a
+                         * hidden legacy compatibility association only and is used solely as
+                         * a fallback for historical rows that lost Project context.
+                         */
+                        if (requisition.projectDrawing != null
+                                        && clean(requisition.projectDrawing.getPlantCode()) != null) {
+                                return normalizePlant(requisition.projectDrawing.getPlantCode());
                         }
 
-                        if (requisition.projectDrawing != null) {
-                                return normalizePlant(requisition.projectDrawing.getPlantCode());
+                        if (requisition.destinationLocation != null
+                                        && clean(requisition.destinationLocation.plantCode) != null) {
+                                return normalizePlant(requisition.destinationLocation.plantCode);
                         }
 
                         return "";
                 }
 
-                private String requisitionDestinationCode(
-                                MatFlowMaterialRequisition requisition) {
-                        return requisition != null && requisition.destinationLocation != null
-                                        ? requisition.destinationLocation.locationCode
-                                        : null;
+                private String transferDemandPlant(MatFlowTransferOrder transfer) {
+                        return transfer == null ? "" : requisitionPlant(transfer.requisition);
+                }
+
+                private String processingDemandPlant(MatFlowProcessingJob job) {
+                        return job == null ? "" : requisitionPlant(job.requisition);
+                }
+
+                private String indentDemandPlant(MatFlowIndent indent) {
+                        return indent == null ? "" : requisitionPlant(indent.requisition);
+                }
+
+                private String orderDemandPlant(MatFlowPurchaseOrder order) {
+                        return order == null || order.indent == null ? "" : indentDemandPlant(order.indent);
+                }
+
+                private String qcDemandPlant(MatFlowQcInspection inspection) {
+                        if (inspection == null) {
+                                return "";
+                        }
+
+                        if (inspection.routingReservationId != null) {
+                                MatFlowReservation reservation = reservationRepository
+                                                .findById(inspection.routingReservationId)
+                                                .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (reservation != null && reservation.requisitionLine != null) {
+                                        MatFlowRequisitionLine line = (MatFlowRequisitionLine) Hibernate
+                                                        .unproxy(reservation.requisitionLine);
+                                        if (line.requisition != null) {
+                                                return requisitionPlant((MatFlowMaterialRequisition) Hibernate
+                                                                .unproxy(line.requisition));
+                                        }
+                                }
+                        }
+
+                        if (inspection.sourceType == QcSourceType.TRANSFER_RECEIPT
+                                        && inspection.sourceId != null) {
+                                MatFlowTransferOrder transfer = transferRepository.findById(inspection.sourceId)
+                                                .map(value -> (MatFlowTransferOrder) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (transfer != null) {
+                                        return transferDemandPlant(transfer);
+                                }
+                        }
+
+                        if (inspection.sourceType == QcSourceType.GOODS_RECEIPT
+                                        && inspection.sourceId != null) {
+                                MatFlowGoodsReceipt receipt = receiptRepository.findById(inspection.sourceId)
+                                                .map(value -> (MatFlowGoodsReceipt) Hibernate.unproxy(value))
+                                                .orElse(null);
+                                if (receipt != null && receipt.purchaseOrder != null) {
+                                        MatFlowPurchaseOrder order = (MatFlowPurchaseOrder) Hibernate
+                                                        .unproxy(receipt.purchaseOrder);
+                                        return orderDemandPlant(order);
+                                }
+                        }
+
+                        return "";
+                }
+
+                private String businessDepartment(MatFlowLocation technicalNode) {
+                        if (technicalNode == null || technicalNode.getLocationType() == null) {
+                                return "MATFLOW";
+                        }
+                        return switch (technicalNode.getLocationType()) {
+                                case STORE -> "STORE";
+                                case PRODUCTION -> "PRODUCTION";
+                                case PROCESSING, EXTERNAL_PROCESSOR -> "PROCESSING";
+                                case SUPPLIER -> "SUPPLIER / PURCHASE";
+                                case TRANSIT -> "IN TRANSIT";
+                                case QC -> "QUALITY CONTROL";
+                        };
+                }
+
+                /**
+                 * Converts a hidden compatibility node into a non-selectable business
+                 * point label. No generic Location identifier/code is exposed.
+                 */
+                private String businessPoint(MatFlowLocation technicalNode) {
+                        if (technicalNode == null) {
+                                return null;
+                        }
+                        String plant = clean(technicalNode.getPlantCode());
+                        LocationType type = technicalNode.getLocationType();
+                        if (type == null) {
+                                return plant;
+                        }
+                        return switch (type) {
+                                case STORE -> MatFlowPlantRoutingService.MAIN_STORE_PLANT.equalsIgnoreCase(plant)
+                                                ? "AL-P1 MAIN STORE"
+                                                : (plant == null ? "PLANT STORE" : plant + " STORE");
+                                case PRODUCTION -> plant == null ? "PRODUCTION" : plant + " PRODUCTION";
+                                case PROCESSING, EXTERNAL_PROCESSOR -> clean(technicalNode.getLocationName()) == null
+                                                ? (clean(technicalNode.getLocationCode()) == null
+                                                                ? "PROCESSING UNIT"
+                                                                : technicalNode.getLocationCode())
+                                                : technicalNode.getLocationName();
+                                case SUPPLIER -> "SUPPLIER";
+                                case TRANSIT -> "IN TRANSIT";
+                                case QC -> "QC CHECK";
+                        };
                 }
 
                 private PlantDashboardRow buildPlantDashboard(
@@ -936,187 +948,103 @@ public class MatFlowInsightService {
                                 List<MatFlowQcInspection> inspections,
                                 List<MatFlowProcessingJob> jobs,
                                 List<MatFlowIndent> indents,
-                                List<MatFlowPurchaseOrder> orders,
-                                List<MatFlowStockBalance> balances) {
+                                List<MatFlowPurchaseOrder> orders) {
                         long activeProjects = projects.stream()
-                                        .filter(project -> plantEquals(
-                                                        project.getPlantCode(),
-                                                        plant))
+                                        .filter(project -> plantEquals(project.getPlantCode(), plant))
                                         .count();
 
                         long effectiveBoms = boms.stream()
-                                        .filter(bom -> bom.isEffective() &&
-                                                        plantEquals(
-                                                                        bom.getProjectDrawing()
-                                                                                        .getPlantCode(),
-                                                                        plant))
+                                        .filter(bom -> bom.isEffective()
+                                                        && bom.getProjectDrawing() != null
+                                                        && plantEquals(bom.getProjectDrawing().getPlantCode(), plant))
                                         .count();
 
                         long openRequisitions = requisitions.stream()
-                                        .filter(requisition -> plantEquals(
-                                                        requisitionPlant(requisition),
-                                                        plant) &&
-                                                        requisition.status != RequisitionStatus.CANCELLED &&
-                                                        requisition.status != RequisitionStatus.COMPLETED &&
-                                                        requisition.status != RequisitionStatus.PRODUCTION_COMPLETED)
+                                        .filter(requisition -> plantEquals(requisitionPlant(requisition), plant)
+                                                        && requisition.status != RequisitionStatus.CANCELLED
+                                                        && requisition.status != RequisitionStatus.COMPLETED
+                                                        && requisition.status != RequisitionStatus.PRODUCTION_COMPLETED)
                                         .count();
 
                         long shortageRequisitions = requisitions.stream()
-                                        .filter(requisition -> plantEquals(
-                                                        requisitionPlant(requisition),
-                                                        plant) &&
-                                                        requisition.status == RequisitionStatus.SHORTAGE_PENDING)
+                                        .filter(requisition -> plantEquals(requisitionPlant(requisition), plant)
+                                                        && requisition.status == RequisitionStatus.SHORTAGE_PENDING)
                                         .count();
 
-                        long readyOutbound = transfers.stream()
-                                        .filter(transfer -> plantEquals(
-                                                        transfer.fromLocation.plantCode,
-                                                        plant) &&
-                                                        transfer.status == TransferStatus.READY)
+                        long readyToIssue = requisitions.stream()
+                                        .filter(requisition -> plantEquals(requisitionPlant(requisition), plant)
+                                                        && requisition.status == RequisitionStatus.READY_TO_ISSUE)
                                         .count();
 
-                        long inTransitOutbound = transfers.stream()
-                                        .filter(transfer -> plantEquals(
-                                                        transfer.fromLocation.plantCode,
-                                                        plant) &&
-                                                        (transfer.status == TransferStatus.IN_TRANSIT ||
-                                                                        transfer.status == TransferStatus.PARTIALLY_DISPATCHED
-                                                                        ||
-                                                                        transfer.status == TransferStatus.PARTIALLY_RECEIVED))
-                                        .count();
-
-                        long expectedInbound = transfers.stream()
-                                        .filter(transfer -> plantEquals(
-                                                        transfer.toLocation.plantCode,
-                                                        plant) &&
-                                                        (transfer.status == TransferStatus.IN_TRANSIT ||
-                                                                        transfer.status == TransferStatus.PARTIALLY_DISPATCHED
-                                                                        ||
-                                                                        transfer.status == TransferStatus.PARTIALLY_RECEIVED))
+                        long materialInTransit = transfers.stream()
+                                        .filter(transfer -> plantEquals(transferDemandPlant(transfer), plant))
+                                        .filter(transfer -> transfer != null
+                                                        && (transfer.status == TransferStatus.IN_TRANSIT
+                                                                        || transfer.status == TransferStatus.PARTIALLY_DISPATCHED
+                                                                        || transfer.status == TransferStatus.PARTIALLY_RECEIVED))
+                                        .map(transfer -> transfer.requisition == null ? transfer.getId()
+                                                        : transfer.requisition.getId())
+                                        .filter(java.util.Objects::nonNull)
+                                        .distinct()
                                         .count();
 
                         long pendingQc = inspections.stream()
-                                        .filter(inspection -> plantEquals(
-                                                        inspection.location.plantCode,
-                                                        plant) &&
-                                                        inspection.status == QcInspectionStatus.PENDING)
+                                        .filter(inspection -> plantEquals(qcDemandPlant(inspection), plant)
+                                                        && inspection.status == QcInspectionStatus.PENDING)
                                         .count();
 
                         long activeJobs = jobs.stream()
-                                        .filter(job -> plantEquals(
-                                                        job.location.plantCode,
-                                                        plant) &&
-                                                        job.status != ProcessingJobStatus.COMPLETED &&
-                                                        job.status != ProcessingJobStatus.CANCELLED)
+                                        .filter(job -> plantEquals(processingDemandPlant(job), plant)
+                                                        && job.status != ProcessingJobStatus.COMPLETED
+                                                        && job.status != ProcessingJobStatus.CANCELLED)
                                         .count();
 
                         long openIndents = indents.stream()
-                                        .filter(indent -> plantEquals(
-                                                        indent.deliverToLocation.plantCode,
-                                                        plant) &&
-                                                        indent.status != IndentStatus.RECEIVED &&
-                                                        indent.status != IndentStatus.CANCELLED)
+                                        .filter(indent -> plantEquals(indentDemandPlant(indent), plant)
+                                                        && indent.status != IndentStatus.RECEIVED
+                                                        && indent.status != IndentStatus.CANCELLED)
                                         .count();
 
                         long openOrders = orders.stream()
-                                        .filter(order -> plantEquals(
-                                                        order.deliveryLocation.plantCode,
-                                                        plant) &&
-                                                        order.status != PurchaseOrderStatus.RECEIVED &&
-                                                        order.status != PurchaseOrderStatus.CANCELLED)
-                                        .count();
-
-                        List<MatFlowStockBalance> plantBalances = balances.stream()
-                                        .filter(balance -> plantEquals(
-                                                        balance.location.plantCode,
-                                                        plant))
-                                        .toList();
-
-                        long lowStockLines = plantBalances.stream()
-                                        .filter(this::isLowStock)
-                                        .count();
-
-                        long blockedLines = plantBalances.stream()
-                                        .filter(balance -> balance.blockedQty
-                                                        .compareTo(
-                                                                        BigDecimal.ZERO) > 0)
-                                        .count();
-
-                        long transitLines = plantBalances.stream()
-                                        .filter(balance -> balance.inTransitQty
-                                                        .compareTo(
-                                                                        BigDecimal.ZERO) > 0)
+                                        .filter(order -> plantEquals(orderDemandPlant(order), plant)
+                                                        && order.status != PurchaseOrderStatus.RECEIVED
+                                                        && order.status != PurchaseOrderStatus.CANCELLED)
                                         .count();
 
                         return new PlantDashboardRow(
                                         plant,
-                                        activeProjects,
-                                        effectiveBoms,
-                                        openRequisitions,
-                                        shortageRequisitions,
-                                        readyOutbound,
-                                        inTransitOutbound,
-                                        expectedInbound,
-                                        pendingQc,
-                                        activeJobs,
-                                        openIndents,
-                                        openOrders,
-                                        plantBalances.size(),
-                                        lowStockLines,
-                                        blockedLines,
-                                        transitLines);
-                }
-
-                private boolean isLowStock(
-                                MatFlowStockBalance balance) {
-                        BigDecimal reorderLevel = balance.material
-                                        .getReorderLevel();
-
-                        return reorderLevel != null &&
-                                        reorderLevel.compareTo(
-                                                        BigDecimal.ZERO) > 0
-                                        &&
-                                        balance.availableQty()
-                                                        .compareTo(
-                                                                        reorderLevel) <= 0;
+                                        Math.toIntExact(activeProjects),
+                                        Math.toIntExact(effectiveBoms),
+                                        Math.toIntExact(openRequisitions),
+                                        Math.toIntExact(shortageRequisitions),
+                                        Math.toIntExact(readyToIssue),
+                                        Math.toIntExact(materialInTransit),
+                                        Math.toIntExact(pendingQc),
+                                        Math.toIntExact(activeJobs),
+                                        Math.toIntExact(openIndents),
+                                        Math.toIntExact(openOrders));
                 }
 
                 private StockLedgerRow toLedgerRow(
                                 MatFlowStockLedger ledger) {
+                        MatFlowLocation technicalNode = ledger == null ? null : ledger.location;
                         return new StockLedgerRow(
                                         ledger.id,
-
                                         ledger.material.getId(),
-                                        ledger.material
-                                                        .getMaterialCode(),
-                                        ledger.material
-                                                        .getMaterialName(),
+                                        ledger.material.getMaterialCode(),
+                                        ledger.material.getMaterialName(),
                                         ledger.material.getUom(),
-
-                                        ledger.location.getId(),
-                                        ledger.location.locationCode,
-                                        ledger.location.plantCode,
-
+                                        technicalNode == null ? null : normalizePlant(technicalNode.getPlantCode()),
+                                        businessDepartment(technicalNode),
+                                        businessPoint(technicalNode),
                                         ledger.movementType,
-
                                         ledger.quantityChange,
-                                        ledger.reservedChange,
-                                        ledger.blockedChange,
-                                        ledger.inTransitChange,
-
-                                        ledger.onHandAfter,
-                                        ledger.reservedAfter,
-                                        ledger.blockedAfter,
-                                        ledger.inTransitAfter,
-
                                         ledger.referenceType,
                                         ledger.referenceId,
                                         displayLedgerReferenceNumber(ledger),
-
                                         ledger.projectCode,
                                         ledger.drawingNo,
                                         ledger.batchNo,
-
                                         ledger.remarks,
                                         ledger.actor,
                                         ledger.actionAt);
@@ -1802,8 +1730,8 @@ public class MatFlowInsightService {
 
                 private TrackerStageTiming copyState(TrackerStageTiming stage, String state) {
                         return new TrackerStageTiming(stage.key(), stage.label(), stage.department(),
-                                        stage.locationId(),
-                                        stage.locationCode(), stage.locationName(), stage.locationType(), state,
+                                        stage.custodyId(),
+                                        stage.custodyCode(), stage.custodyName(), stage.custodyType(), state,
                                         stage.startedAt(),
                                         stage.endedAt(), stage.durationMinutes(), stage.targetMinutes(),
                                         stage.varianceMinutes(),
@@ -2416,7 +2344,26 @@ public class MatFlowInsightService {
                 }
 
                 private String locationCode(MatFlowLocation location) {
-                        return location == null ? null : location.getLocationCode();
+                        if (location == null) {
+                                return null;
+                        }
+                        String plant = clean(location.getPlantCode());
+                        LocationType type = location.getLocationType();
+                        if (type == null) {
+                                return plant;
+                        }
+                        return switch (type) {
+                                case STORE -> MatFlowPlantRoutingService.MAIN_STORE_PLANT.equalsIgnoreCase(plant)
+                                                ? "AL-P1 MAIN STORE"
+                                                : (plant == null ? "PLANT STORE" : plant + " STORE");
+                                case PRODUCTION -> plant == null ? "PRODUCTION" : plant + " PRODUCTION";
+                                case PROCESSING, EXTERNAL_PROCESSOR -> clean(location.getLocationCode()) == null
+                                                ? "PROCESSING UNIT"
+                                                : location.getLocationCode();
+                                case SUPPLIER -> "SUPPLIER";
+                                case TRANSIT -> "IN TRANSIT";
+                                case QC -> "QC CHECK";
+                        };
                 }
 
                 private String lastRouteActor(TrackingContext c) {
@@ -2688,13 +2635,13 @@ public class MatFlowInsightService {
                         return contains(row.requisitionNumber(), query) || contains(row.projectCode(), query)
                                         || contains(row.drawingNo(), query) ||
                                         contains(row.bomNumber(), query)
-                                        || contains(row.destinationLocationCode(), query)
-                                        || contains(row.destinationLocationName(), query) ||
-                                        contains(row.destinationPlantCode(), query)
+                                        || contains(row.productionCustodyCode(), query)
+                                        || contains(row.productionCustodyName(), query) ||
+                                        contains(row.productionPlantCode(), query)
                                         || contains(row.currentStage(), query) || contains(row.responsibleDesk(), query)
                                         ||
                                         contains(row.currentDepartment(), query)
-                                        || contains(row.currentLocationCode(), query)
+                                        || contains(row.currentCustodyCode(), query)
                                         || contains(row.nextDepartment(), query);
                 }
 
@@ -2749,6 +2696,19 @@ public class MatFlowInsightService {
                                         if (value != null && (result == null || value.isAfter(result)))
                                                 result = value;
                         return result;
+                }
+
+                /**
+                 * Null-safe text normalizer used by TrackerModule business-label helpers.
+                 * ReportingModule has its own helper because both modules are static siblings.
+                 */
+                private String clean(String value) {
+                        if (value == null) {
+                                return null;
+                        }
+
+                        String result = value.trim();
+                        return result.isBlank() ? null : result;
                 }
 
                 private String normalizeSearch(String value) {
@@ -2835,12 +2795,38 @@ public class MatFlowInsightService {
                 private record Position(String department, UUID locationId, String locationCode, String locationName,
                                 String locationType) {
                         static Position of(String department, MatFlowLocation location) {
-                                return new Position(department,
-                                                location == null ? null : location.getId(),
-                                                location == null ? null : location.getLocationCode(),
-                                                location == null ? null : location.getLocationName(),
-                                                location == null || location.getLocationType() == null ? null
-                                                                : location.getLocationType().name());
+                                if (location == null) {
+                                        return new Position(department, null, null, null, null);
+                                }
+                                String plant = location.getPlantCode() == null ? null
+                                                : location.getPlantCode().trim().toUpperCase(Locale.ROOT);
+                                LocationType type = location.getLocationType();
+                                String businessCode;
+                                String businessName;
+                                if (type == LocationType.STORE) {
+                                        businessCode = MatFlowPlantRoutingService.MAIN_STORE_PLANT.equals(plant)
+                                                        ? "AL-P1 MAIN STORE"
+                                                        : (plant == null ? "PLANT STORE" : plant + " STORE");
+                                        businessName = businessCode;
+                                } else if (type == LocationType.PRODUCTION) {
+                                        businessCode = plant == null ? "PRODUCTION" : plant + " PRODUCTION";
+                                        businessName = businessCode;
+                                } else if (type == LocationType.PROCESSING
+                                                || type == LocationType.EXTERNAL_PROCESSOR) {
+                                        businessCode = location.getLocationCode();
+                                        businessName = location.getLocationName();
+                                } else if (type == LocationType.TRANSIT) {
+                                        businessCode = businessName = "IN TRANSIT";
+                                } else if (type == LocationType.SUPPLIER) {
+                                        businessCode = businessName = "SUPPLIER";
+                                } else if (type == LocationType.QC) {
+                                        businessCode = businessName = "QC CHECK";
+                                } else {
+                                        businessCode = plant;
+                                        businessName = plant;
+                                }
+                                return new Position(department, location.getId(), businessCode, businessName,
+                                                type == null ? null : type.name());
                         }
                 }
 
