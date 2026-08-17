@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -45,6 +47,8 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class MatFlowInsightService {
+
+        private static final Logger LOG = LoggerFactory.getLogger(MatFlowInsightService.class);
 
         private final ReportingModule reporting;
         private final TrackerModule tracker;
@@ -1315,38 +1319,49 @@ public class MatFlowInsightService {
                         List<TrackerRowResponse> rows = new ArrayList<>();
 
                         for (MatFlowMaterialRequisition raw : requisitionRepository.findAllByOrderByUpdatedAtDesc()) {
-                                MatFlowMaterialRequisition requisition = unwrapRequisition(raw);
-                                if (!hasReadableProject(requisition)) {
-                                        continue;
-                                }
-                                if (!canReadTrackerRequisition(requisition)) {
-                                        continue;
-                                }
+                                UUID requisitionId = raw == null ? null : raw.getId();
+                                try {
+                                        MatFlowMaterialRequisition requisition = unwrapRequisition(raw);
+                                        if (!hasReadableProject(requisition)) {
+                                                continue;
+                                        }
+                                        if (!canReadTrackerRequisition(requisition)) {
+                                                continue;
+                                        }
 
-                                /*
-                                 * Tracker plant selection follows the owning Project/Product plant,
-                                 * exactly like Project Portfolio. Destination plant remains a live
-                                 * movement/location attribute and must not decide whether a Product
-                                 * belongs to the selected Project portfolio.
-                                 */
-                                if (requestedPlant != null && !requestedPlant.equals(
-                                                normalizeCode(requisition.projectDrawing.getPlantCode()))) {
-                                        continue;
-                                }
+                                        /*
+                                         * Tracker plant selection follows the owning Project/Product plant,
+                                         * exactly like Project Portfolio. Destination plant remains a live
+                                         * movement/location attribute and must not decide whether a Product
+                                         * belongs to the selected Project portfolio.
+                                         */
+                                        if (requestedPlant != null && !requestedPlant.equals(
+                                                        normalizeCode(requisition.projectDrawing.getPlantCode()))) {
+                                                continue;
+                                        }
 
-                                TrackerRowResponse row = toTrackerRow(requisition);
-                                if (requestedStage != null && !requestedStage.equals(
-                                                normalizeCode(row.currentStage()))) {
-                                        continue;
-                                }
+                                        TrackerRowResponse row = toTrackerRow(requisition);
+                                        if (requestedStage != null && !requestedStage.equals(
+                                                        normalizeCode(row.currentStage()))) {
+                                                continue;
+                                        }
 
-                                if (!query.isBlank()
-                                                && !matchesProjectSearch(requisition, query)
-                                                && !matchesSearch(row, query)) {
-                                        continue;
-                                }
+                                        if (!query.isBlank()
+                                                        && !matchesProjectSearch(requisition, query)
+                                                        && !matchesSearch(row, query)) {
+                                                continue;
+                                        }
 
-                                rows.add(row);
+                                        rows.add(row);
+                                } catch (RuntimeException ex) {
+                                        /*
+                                         * Production Readiness reuses this tracker list. One malformed legacy
+                                         * requisition or one Hibernate proxy with uninitialised public backing
+                                         * fields must not take down the entire Production Execution page.
+                                         * Strict tracker detail / write endpoints still surface the bad record.
+                                         */
+                                        LOG.error("Skipping unreadable MatFlow tracker requisition {} while building list", requisitionId, ex);
+                                }
                         }
 
                         rows = List.copyOf(rows);
@@ -1507,7 +1522,8 @@ public class MatFlowInsightService {
                         List<MatFlowReservation> reservations = reservationRepository
                                         .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(id)
                                         .stream().map(this::unwrapReservation).toList();
-                        List<MatFlowIndent> indents = indentRepository.findByRequisition_IdOrderByCreatedAtAsc(id);
+                        List<MatFlowIndent> indents = indentRepository.findByRequisition_IdOrderByCreatedAtAsc(id)
+                                        .stream().map(this::unwrapIndent).toList();
                         List<MatFlowTransferOrder> transfers = transferRepository
                                         .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(id)
                                         .stream().map(this::unwrapTransfer).toList();
@@ -1523,7 +1539,8 @@ public class MatFlowInsightService {
                         List<MatFlowReservation> reservations = reservationRepository
                                         .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(id)
                                         .stream().map(this::unwrapReservation).toList();
-                        List<MatFlowIndent> indents = indentRepository.findByRequisition_IdOrderByCreatedAtAsc(id);
+                        List<MatFlowIndent> indents = indentRepository.findByRequisition_IdOrderByCreatedAtAsc(id)
+                                        .stream().map(this::unwrapIndent).toList();
                         List<MatFlowPurchaseOrder> orders = indents.stream()
                                         .flatMap(indent -> purchaseOrderRepository.findByIndent_Id(indent.getId())
                                                         .stream())
@@ -1537,7 +1554,8 @@ public class MatFlowInsightService {
                                         .findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(id)
                                         .stream().map(this::unwrapTransfer).toList();
                         List<MatFlowProcessingJob> jobs = processingRepository
-                                        .findByRequisition_IdOrderByCreatedAtAsc(id);
+                                        .findByRequisition_IdOrderByCreatedAtAsc(id)
+                                        .stream().map(this::unwrapProcessingJob).toList();
 
                         Set<UUID> qcSourceIds = new LinkedHashSet<>();
                         receipts.forEach(r -> qcSourceIds.add(r.getId()));
@@ -1547,6 +1565,7 @@ public class MatFlowInsightService {
                                                         && qcSourceIds.contains(qc.sourceId))
                                         .sorted(Comparator.comparing(MatFlowQcInspection::getCreatedAt,
                                                         Comparator.nullsLast(Comparator.naturalOrder())))
+                                        .map(this::unwrapQcInspection)
                                         .toList();
 
                         Set<UUID> referenceIds = new LinkedHashSet<>();
@@ -2502,8 +2521,7 @@ public class MatFlowInsightService {
                                 case "DRAFT", "PRODUCTION_ISSUE", "PRODUCTION_IN_PROGRESS", "PRODUCTION_COMPLETED" ->
                                         "PRODUCTION";
                                 case "ORIGIN_STORE_FORWARDING" -> "ORIGIN PLANT STORE";
-                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
-                                        "AL-P1 MAIN STORE";
+                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "AL-P1 MAIN STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
                                 case "QC_PENDING" -> "QUALITY CONTROL";
                                 case "PROCESSING" -> "PROCESSING";
@@ -2536,8 +2554,7 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> target("DEMAND");
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
-                                        target("STORE");
+                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" -> target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
                                 case "QC_PENDING" -> target("QC");
                                 case "PROCESSING" -> target("PROCESSING");
@@ -2575,8 +2592,7 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> "DEMAND";
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED" ->
-                                        "STORE";
+                                                "MATERIAL_RESERVED" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
                                 case "QC_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
                                                 "READY_TO_ISSUE" ->
@@ -2745,6 +2761,10 @@ public class MatFlowInsightService {
                                 r.bom = (MatFlowBom) Hibernate.unproxy(r.bom);
                         if (r.destinationLocation != null)
                                 r.destinationLocation = (MatFlowLocation) Hibernate.unproxy(r.destinationLocation);
+                        if (r.originStore != null)
+                                r.originStore = (MatFlowLocation) Hibernate.unproxy(r.originStore);
+                        if (r.mainStore != null)
+                                r.mainStore = (MatFlowLocation) Hibernate.unproxy(r.mainStore);
                         return r;
                 }
 
@@ -2752,6 +2772,10 @@ public class MatFlowInsightService {
                         if (raw == null)
                                 return null;
                         MatFlowRequisitionLine line = (MatFlowRequisitionLine) Hibernate.unproxy(raw);
+                        if (line.requisition != null)
+                                line.requisition = unwrapRequisition(line.requisition);
+                        if (line.bomLine != null)
+                                line.bomLine = (MatFlowBomLine) Hibernate.unproxy(line.bomLine);
                         if (line.material != null)
                                 line.material = (MatFlowMaterial) Hibernate.unproxy(line.material);
                         if (line.issuedMaterial != null)
@@ -2764,7 +2788,7 @@ public class MatFlowInsightService {
                                 return null;
                         MatFlowReservation r = (MatFlowReservation) Hibernate.unproxy(raw);
                         if (r.requisitionLine != null)
-                                r.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(r.requisitionLine);
+                                r.requisitionLine = unwrapLine(r.requisitionLine);
                         if (r.material != null)
                                 r.material = (MatFlowMaterial) Hibernate.unproxy(r.material);
                         if (r.sourceLocation != null)
@@ -2775,12 +2799,53 @@ public class MatFlowInsightService {
                         return r;
                 }
 
+                private MatFlowIndent unwrapIndent(MatFlowIndent raw) {
+                        if (raw == null)
+                                return null;
+                        MatFlowIndent indent = (MatFlowIndent) Hibernate.unproxy(raw);
+                        if (indent.requisition != null)
+                                indent.requisition = unwrapRequisition(indent.requisition);
+                        if (indent.projectDrawing != null)
+                                indent.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(indent.projectDrawing);
+                        if (indent.deliverToLocation != null)
+                                indent.deliverToLocation = (MatFlowLocation) Hibernate.unproxy(indent.deliverToLocation);
+                        return indent;
+                }
+
+                private MatFlowProcessingJob unwrapProcessingJob(MatFlowProcessingJob raw) {
+                        if (raw == null)
+                                return null;
+                        MatFlowProcessingJob job = (MatFlowProcessingJob) Hibernate.unproxy(raw);
+                        if (job.requisition != null)
+                                job.requisition = unwrapRequisition(job.requisition);
+                        if (job.reservation != null)
+                                job.reservation = unwrapReservation(job.reservation);
+                        if (job.location != null)
+                                job.location = (MatFlowLocation) Hibernate.unproxy(job.location);
+                        if (job.inputMaterial != null)
+                                job.inputMaterial = (MatFlowMaterial) Hibernate.unproxy(job.inputMaterial);
+                        if (job.outputMaterial != null)
+                                job.outputMaterial = (MatFlowMaterial) Hibernate.unproxy(job.outputMaterial);
+                        return job;
+                }
+
+                private MatFlowQcInspection unwrapQcInspection(MatFlowQcInspection raw) {
+                        if (raw == null)
+                                return null;
+                        MatFlowQcInspection qc = (MatFlowQcInspection) Hibernate.unproxy(raw);
+                        if (qc.location != null)
+                                qc.location = (MatFlowLocation) Hibernate.unproxy(qc.location);
+                        return qc;
+                }
+
                 private MatFlowTransferOrder unwrapTransfer(MatFlowTransferOrder raw) {
                         if (raw == null)
                                 return null;
                         MatFlowTransferOrder t = (MatFlowTransferOrder) Hibernate.unproxy(raw);
+                        if (t.requisition != null)
+                                t.requisition = unwrapRequisition(t.requisition);
                         if (t.reservation != null)
-                                t.reservation = (MatFlowReservation) Hibernate.unproxy(t.reservation);
+                                t.reservation = unwrapReservation(t.reservation);
                         if (t.fromLocation != null)
                                 t.fromLocation = (MatFlowLocation) Hibernate.unproxy(t.fromLocation);
                         if (t.toLocation != null)

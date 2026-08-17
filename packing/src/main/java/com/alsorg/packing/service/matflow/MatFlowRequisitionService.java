@@ -1777,6 +1777,68 @@ public class MatFlowRequisitionService {
                                 lines);
         }
 
+        /**
+         * Defensive read hydration for PlanningResponse / Production Execution.
+         *
+         * Store issue and Production receipt often touch the same reservation/transfer
+         * aggregate in one persistence context. Because MatFlow entities expose public
+         * JPA backing fields, a managed Hibernate proxy can otherwise make valid linked
+         * fields appear null while the database foreign keys are intact.
+         */
+        private MatFlowReservation hydrateReservationForRead(MatFlowReservation raw) {
+                if (raw == null) {
+                        return null;
+                }
+                MatFlowReservation reservation = (MatFlowReservation) Hibernate.unproxy(raw);
+                if (reservation.requisitionLine != null) {
+                        reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                        reservation.requisitionLine);
+                        if (reservation.requisitionLine.requisition != null) {
+                                reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(
+                                                reservation.requisitionLine.requisition);
+                        }
+                        if (reservation.requisitionLine.material != null) {
+                                reservation.requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                reservation.requisitionLine.material);
+                        }
+                        if (reservation.requisitionLine.issuedMaterial != null) {
+                                reservation.requisitionLine.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
+                                                reservation.requisitionLine.issuedMaterial);
+                        }
+                }
+                if (reservation.material != null) {
+                        reservation.material = (MatFlowMaterial) Hibernate.unproxy(reservation.material);
+                }
+                if (reservation.sourceLocation != null) {
+                        reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(reservation.sourceLocation);
+                }
+                if (reservation.firstDestinationLocation != null) {
+                        reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                        reservation.firstDestinationLocation);
+                }
+                return reservation;
+        }
+
+        private MatFlowTransferOrder hydrateTransferForRead(MatFlowTransferOrder raw) {
+                if (raw == null) {
+                        return null;
+                }
+                MatFlowTransferOrder transfer = (MatFlowTransferOrder) Hibernate.unproxy(raw);
+                if (transfer.requisition != null) {
+                        transfer.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(transfer.requisition);
+                }
+                if (transfer.reservation != null) {
+                        transfer.reservation = hydrateReservationForRead(transfer.reservation);
+                }
+                if (transfer.fromLocation != null) {
+                        transfer.fromLocation = (MatFlowLocation) Hibernate.unproxy(transfer.fromLocation);
+                }
+                if (transfer.toLocation != null) {
+                        transfer.toLocation = (MatFlowLocation) Hibernate.unproxy(transfer.toLocation);
+                }
+                return transfer;
+        }
+
         private boolean isReservationIssueReady(
                         MatFlowReservation reservation,
                         MatFlowLocation destination) {
@@ -1802,7 +1864,10 @@ public class MatFlowRequisitionService {
 
                 List<MatFlowTransferOrder> transfers = transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                                                reservation.getId());
+                                                reservation.getId())
+                                .stream()
+                                .map(this::hydrateTransferForRead)
+                                .toList();
 
                 if (transfers == null ||
                                 transfers.isEmpty()) {
@@ -1836,6 +1901,7 @@ public class MatFlowRequisitionService {
                 return transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
                                 .stream()
+                                .map(this::hydrateTransferForRead)
                                 .filter(transfer -> transfer != null && transfer.toLocation != null)
                                 .filter(transfer -> productionDestination.getId().equals(transfer.toLocation.getId()))
                                 .anyMatch(transfer -> transfer.status == TransferStatus.IN_TRANSIT
@@ -1848,16 +1914,14 @@ public class MatFlowRequisitionService {
                 if (reservation == null) {
                         throw conflict("Reservation is required");
                 }
-                reservation = (MatFlowReservation) Hibernate.unproxy(reservation);
+                reservation = hydrateReservationForRead(reservation);
                 if (reservation.requisitionLine == null || reservation.material == null
                                 || reservation.sourceLocation == null
                                 || reservation.firstDestinationLocation == null) {
                         throw conflict("Reservation record is incomplete");
                 }
 
-                MatFlowRequisitionLine reservationLine = (MatFlowRequisitionLine) Hibernate.unproxy(
-                                reservation.requisitionLine);
-                reservation.requisitionLine = reservationLine;
+                MatFlowRequisitionLine reservationLine = reservation.requisitionLine;
                 if (reservationLine.requisition == null || reservationLine.requisition.getId() == null) {
                         throw conflict("Reservation requisition link is missing");
                 }
@@ -1865,7 +1929,10 @@ public class MatFlowRequisitionService {
                                 reservationLine.requisition.getId());
 
                 List<MatFlowTransferOrder> route = transferRepository
-                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
+                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
+                                .stream()
+                                .map(this::hydrateTransferForRead)
+                                .toList();
                 MatFlowTransferOrder nextTransfer = route.stream()
                                 .filter(transfer -> transfer != null
                                                 && transfer.status != TransferStatus.RECEIVED
@@ -1998,6 +2065,7 @@ public class MatFlowRequisitionService {
                 return transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
                                 .stream()
+                                .map(this::hydrateTransferForRead)
                                 .filter(transfer -> transfer != null
                                                 && transfer.toLocation != null
                                                 && (transfer.toLocation.getLocationType() == LocationType.PROCESSING
@@ -3529,6 +3597,7 @@ public class MatFlowRequisitionService {
                         }
                         return transferRepository.findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
                                         reservation.getId()).stream()
+                                        .map(this::hydrateTransferForRead)
                                         .anyMatch(transfer -> transfer != null
                                                         && transfer.toLocation != null
                                                         && (transfer.toLocation
@@ -3559,7 +3628,8 @@ public class MatFlowRequisitionService {
                                 return false;
                         }
                         List<MatFlowTransferOrder> routeTransfers = transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId());
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
+                                        .stream().map(this::hydrateTransferForRead).toList();
                         return routeTransfers.stream().noneMatch(transfer -> transfer != null
                                         && transfer.status != TransferStatus.CANCELLED
                                         && transfer.fromLocation != null
@@ -3568,6 +3638,7 @@ public class MatFlowRequisitionService {
 
                 boolean receivedAtQc = reservations.stream().anyMatch(reservation -> transferRepository
                                 .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId()).stream()
+                                .map(this::hydrateTransferForRead)
                                 .anyMatch(transfer -> transfer != null
                                                 && transfer.toLocation != null
                                                 && transfer.toLocation.getLocationType() == LocationType.QC

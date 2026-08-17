@@ -279,6 +279,7 @@ public class MatFlowMovementService {
                         return transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
                                         .stream()
+                                        .map(this::hydrateTransfer)
                                         .filter(transfer -> transfer != null
                                                         && transfer.toLocation != null
                                                         && (transfer.toLocation
@@ -303,7 +304,8 @@ public class MatFlowMovementService {
                         MatFlowReservation reservation = requireReservationForSnapshot(reservationId);
 
                         List<MatFlowTransferOrder> route = transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId);
+                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
+                                        .stream().map(this::hydrateTransfer).toList();
                         MatFlowTransferOrder next = route.stream()
                                         .filter(item -> item != null
                                                         && item.status != TransferStatus.RECEIVED
@@ -512,6 +514,7 @@ public class MatFlowMovementService {
                         MatFlowTransferOrder productionTransfer = transferRepository
                                         .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservationId)
                                         .stream()
+                                        .map(this::hydrateTransfer)
                                         .filter(transfer -> transfer != null && transfer.toLocation != null)
                                         .filter(transfer -> transfer.toLocation
                                                         .getLocationType() == LocationType.PRODUCTION)
@@ -554,10 +557,39 @@ public class MatFlowMovementService {
                                 reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate
                                                 .unproxy(reservation.requisitionLine);
                                 if (reservation.requisitionLine.requisition != null) {
-                                        reservation.requisitionLine.requisition = (MatFlowMaterialRequisition) Hibernate
-                                                        .unproxy(
-                                                                        reservation.requisitionLine.requisition);
+                                        MatFlowMaterialRequisition requisition = (MatFlowMaterialRequisition) Hibernate
+                                                        .unproxy(reservation.requisitionLine.requisition);
+                                        if (requisition.projectDrawing != null) {
+                                                requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
+                                                                requisition.projectDrawing);
+                                        }
+                                        if (requisition.bom != null) {
+                                                requisition.bom = (MatFlowBom) Hibernate.unproxy(requisition.bom);
+                                        }
+                                        if (requisition.destinationLocation != null) {
+                                                requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                                requisition.destinationLocation);
+                                        }
+                                        reservation.requisitionLine.requisition = requisition;
                                 }
+                                if (reservation.requisitionLine.material != null) {
+                                        reservation.requisitionLine.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                        reservation.requisitionLine.material);
+                                }
+                                if (reservation.requisitionLine.issuedMaterial != null) {
+                                        reservation.requisitionLine.issuedMaterial = (MatFlowMaterial) Hibernate.unproxy(
+                                                        reservation.requisitionLine.issuedMaterial);
+                                }
+                        }
+                        if (reservation.material != null) {
+                                reservation.material = (MatFlowMaterial) Hibernate.unproxy(reservation.material);
+                        }
+                        if (reservation.sourceLocation != null) {
+                                reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(reservation.sourceLocation);
+                        }
+                        if (reservation.firstDestinationLocation != null) {
+                                reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                reservation.firstDestinationLocation);
                         }
                         return reservation;
                 }
@@ -1548,8 +1580,8 @@ public class MatFlowMovementService {
                                 UUID id) {
 
                         return transferRepository
-                                        .lockById(
-                                                        id)
+                                        .lockById(id)
+                                        .map(this::hydrateTransfer)
                                         .orElseThrow(() -> notFound(
                                                         "Transfer order not found"));
                 }
@@ -1558,8 +1590,8 @@ public class MatFlowMovementService {
                                 UUID id) {
 
                         return transferRepository
-                                        .findById(
-                                                        id)
+                                        .findById(id)
+                                        .map(this::hydrateTransfer)
                                         .orElseThrow(() -> notFound(
                                                         "Transfer order not found"));
                 }
@@ -1622,7 +1654,67 @@ public class MatFlowMovementService {
                                                 "Transfer must contain exactly one material line");
                         }
 
-                        return lines.get(0);
+                        MatFlowTransferLine line = (MatFlowTransferLine) Hibernate.unproxy(lines.get(0));
+                        if (line.material != null) {
+                                line.material = (MatFlowMaterial) Hibernate.unproxy(line.material);
+                        }
+                        if (line.transferOrder != null) {
+                                line.transferOrder = hydrateTransfer(line.transferOrder);
+                        }
+                        return line;
+                }
+
+                /**
+                 * Always unwrap the transfer aggregate before any workflow code reads its
+                 * public JPA backing fields. A lock/query can resolve to an already-managed
+                 * Hibernate proxy after Store dispatch; reading proxy fields directly is the
+                 * recurring source of false-null runtime failures in MatFlow.
+                 */
+                private MatFlowTransferOrder hydrateTransfer(MatFlowTransferOrder raw) {
+                        if (raw == null) {
+                                return null;
+                        }
+                        MatFlowTransferOrder transfer = (MatFlowTransferOrder) Hibernate.unproxy(raw);
+                        if (transfer.requisition != null) {
+                                transfer.requisition = (MatFlowMaterialRequisition) Hibernate.unproxy(transfer.requisition);
+                                if (transfer.requisition.projectDrawing != null) {
+                                        transfer.requisition.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(
+                                                        transfer.requisition.projectDrawing);
+                                }
+                                if (transfer.requisition.bom != null) {
+                                        transfer.requisition.bom = (MatFlowBom) Hibernate.unproxy(transfer.requisition.bom);
+                                }
+                                if (transfer.requisition.destinationLocation != null) {
+                                        transfer.requisition.destinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        transfer.requisition.destinationLocation);
+                                }
+                        }
+                        if (transfer.reservation != null) {
+                                transfer.reservation = (MatFlowReservation) Hibernate.unproxy(transfer.reservation);
+                                if (transfer.reservation.requisitionLine != null) {
+                                        transfer.reservation.requisitionLine = (MatFlowRequisitionLine) Hibernate.unproxy(
+                                                        transfer.reservation.requisitionLine);
+                                }
+                                if (transfer.reservation.material != null) {
+                                        transfer.reservation.material = (MatFlowMaterial) Hibernate.unproxy(
+                                                        transfer.reservation.material);
+                                }
+                                if (transfer.reservation.sourceLocation != null) {
+                                        transfer.reservation.sourceLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        transfer.reservation.sourceLocation);
+                                }
+                                if (transfer.reservation.firstDestinationLocation != null) {
+                                        transfer.reservation.firstDestinationLocation = (MatFlowLocation) Hibernate.unproxy(
+                                                        transfer.reservation.firstDestinationLocation);
+                                }
+                        }
+                        if (transfer.fromLocation != null) {
+                                transfer.fromLocation = (MatFlowLocation) Hibernate.unproxy(transfer.fromLocation);
+                        }
+                        if (transfer.toLocation != null) {
+                                transfer.toLocation = (MatFlowLocation) Hibernate.unproxy(transfer.toLocation);
+                        }
+                        return transfer;
                 }
 
                 private void saveTransferLedger(
