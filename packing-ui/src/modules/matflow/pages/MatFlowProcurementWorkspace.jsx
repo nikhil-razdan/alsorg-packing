@@ -643,7 +643,7 @@ export function MatFlowReceivingPage() {
             <PageHero
                 badge="STORE RECEIVING"
                 title="GRN / Goods Receipt"
-                subtitle="GRN/receiving is centralized at AL-P1 Main Store for POs raised from all four plants. Accepted inward quantity enters Main Store stock; QC remains an optional Main Store checklist and routing stays with Store planning."
+                subtitle="GRN/receiving is centralized at AL-P1 Main Store for POs raised from all four plants. MatFlow records the vendor receipt against PI/PO/GRN while Tally remains the physical stock authority; QC is an optional Main Store checklist and Store keeps routing control."
                 actions={
                     <>
                         <Button

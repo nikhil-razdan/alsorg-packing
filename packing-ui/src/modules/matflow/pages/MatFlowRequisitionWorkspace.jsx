@@ -710,7 +710,6 @@ export function MatFlowRequisitionDetailPage() {
     const lines = Array.isArray(requisition?.lines) ? requisition.lines : [];
     const reservations = Array.isArray(snapshot?.reservations) ? snapshot.reservations : [];
     const indents = Array.isArray(snapshot?.indents) ? snapshot.indents : [];
-    const transfers = Array.isArray(snapshot?.transfers) ? snapshot.transfers : [];
 
     const totals = useMemo(() => lines.reduce((sum, line) => ({
         requested: sum.requested + numeric(line.requestedQty),
@@ -854,7 +853,7 @@ export function MatFlowRequisitionDetailPage() {
 
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Execution Branches</Typography>
-                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Store Tally declarations/allocations, linked PIs and route lineage are shown together without exposing a separate Transfer workflow.</Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.2 }}>Store Tally declarations/allocations and linked PIs are shown together. Plant/Store routing comes from the MR plant and exact Production requester; Processing uses only BOM-approved Processing Units.</Typography>
 
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 1.2 }}>
                     <Box>
@@ -878,16 +877,6 @@ export function MatFlowRequisitionDetailPage() {
                     </Box>
                 </Box>
 
-                {transfers.length > 0 && (
-                    <Box sx={{ mt: 1.4 }}>
-                        <Typography sx={mainTextSx}>Read-only Material Route</Typography>
-                        {transfers.map((row) => (
-                            <Box key={row.id} sx={{ p: .8, mt: .5, borderLeft: "3px solid var(--mf-primary)", background: "var(--mf-surface)", borderRadius: 1 }}>
-                                <Typography sx={subTextSx}>{row.materialCode} · {row.fromCustody} → {row.toCustody} · {readable(row.status)}</Typography>
-                            </Box>
-                        ))}
-                    </Box>
-                )}
             </Card>
 
             <Dialog open={Boolean(action)} onClose={() => !working && setAction(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>

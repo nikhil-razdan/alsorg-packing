@@ -119,7 +119,7 @@ const nextActionTarget = (row) => {
         case "PRODUCTION_IN_PROGRESS":
             return { label: "Production", path: "/matflow/production-execution", screen: "production-execution" };
         case "TRANSFER_IN_PROGRESS":
-            return { label: "Track Route", path: `/matflow/tracker/${id}`, screen: "tracking" };
+            return { label: "Track Handoff", path: `/matflow/tracker/${id}`, screen: "tracking" };
         default:
             return { label: "Open MR", path: `/matflow/requisitions/${id}`, screen: "production" };
     }
@@ -129,7 +129,7 @@ const UNIVERSAL_DASHBOARD_VIEWS = [
     ["operations", "Operations Board", "Project-wise · Product-wise · Material-wise workflow control"],
     ["overview", "Overview", "KPIs, live execution and workflow health"],
     ["projects", "Project Tracker", "Project → Product → MR material readiness"],
-    ["materials", "Material Tracker", "One material across Projects, Products and custody routes"],
+    ["materials", "Material Tracker", "One material across Projects, Products and plant/store/processing/production hand-offs"],
 ];
 
 const KANBAN_SCOPE_OPTIONS = [
@@ -339,6 +339,12 @@ const projectKeyOf = (value = {}) =>
         .join("|") ||
     `PROJECT:${value.projectId || value.projectDrawingId || value.requisitionId || "UNKNOWN"}`;
 
+const productionOwnerText = (row) => {
+    const user = row?.productionUser || row?.requestedBy || "Production";
+    const plant = row?.productionPlantCode || row?.plantCode || "-";
+    return `${user} · ${plant}`;
+};
+
 const chooseMaterialBottleneck = (items = []) => {
     const safeItems = (Array.isArray(items) ? items : []).filter((item) => item?.lane);
     if (!safeItems.length) return null;
@@ -380,7 +386,7 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 projectCode: row.projectCode,
                 projectName: row.projectName,
                 clientName: row.clientName,
-                plantCode: (row.productionPlantCode || row.destinationPlantCode),
+                plantCode: row.productionPlantCode,
                 portfolioStage: null,
                 products: [],
                 rows: [],
@@ -490,7 +496,7 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 clientName: row.clientName,
                 productName: row.productName,
                 drawingNo: row.drawingNo,
-                plantCode: (row.productionPlantCode || row.destinationPlantCode),
+                plantCode: row.productionPlantCode,
                 latestBomId: null,
                 latestBomNumber: null,
                 latestBomStatus: null,
@@ -587,7 +593,7 @@ const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantPa
     return (Array.isArray(requisitions) ? requisitions : []).flatMap((requisition) => {
         if (!requisition?.id || normalize(requisition.status) === "CANCELLED") return [];
         const tracker = trackerByRequisition.get(String(requisition.id)) || null;
-        const plantCode = clean(tracker?.destinationPlantCode || (requisition.productionPlantCode || requisition.destinationPlantCode)).toUpperCase();
+        const plantCode = clean(tracker?.productionPlantCode || requisition.productionPlantCode).toUpperCase();
         if (selectedPlant && plantCode !== selectedPlant) return [];
 
         const parentStage = tracker?.currentStage || requisitionStatusStage(requisition.status);
@@ -611,7 +617,7 @@ const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantPa
                 clientName: tracker?.clientName,
                 productName: tracker?.productName,
                 drawingNo: tracker?.drawingNo || requisition.drawingNo,
-                destinationPlantCode: plantCode,
+                productionPlantCode: plantCode,
                 currentStage: parentStage,
                 currentDepartment: tracker?.currentDepartment || tracker?.responsibleDesk,
                 timingHealth: tracker?.timingHealth,
@@ -1121,7 +1127,7 @@ function OverviewPlantComparison({ rows }) {
                 <Box key={row.plantCode || row.plant || row.code} sx={{ p: .85, border: "1px solid var(--mf-border)", borderRadius: 2, background: "var(--mf-surface)" }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, mb: .65 }}>
                         <Typography sx={{ ...mainTextSx, fontSize: 11.5 }}>{row.plantCode || row.plant || row.code || "Plant"}</Typography>
-                        <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{numeric(row.activeProjects)} active projects · {numeric(row.stockBalanceLines)} internal custody lines</Typography>
+                        <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{numeric(row.activeProjects)} active projects · {numeric(row.openRequisitions)} open MRs</Typography>
                     </Box>
                     <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: .45, alignItems: "end", minHeight: 66 }}>
                         {metrics.map(([key, label, tone]) => {
@@ -1162,7 +1168,7 @@ function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
                             <Box sx={{ minWidth: 0 }}>
                                 <Typography sx={{ ...mainTextSx, fontSize: 11.7 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
-                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentDepartment || row.currentStage || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentDepartment || row.currentStage || row.productionPlantCode || "-"}</Typography>
                             </Box>
                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                 <TimingHealthChip health={row.timingHealth} />
@@ -1198,7 +1204,7 @@ function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refres
             <PageHero
                 badge="MATFLOW UNIVERSAL DASHBOARD"
                 title="Material Operations Command Center"
-                subtitle="One plant-aware dashboard for overall operations, Project/Product material execution and material-specific custody tracking. Operational users are automatically limited to their authorised plant scope."
+                subtitle="One plant-aware dashboard for overall operations, Project/Product material execution and material-specific workflow tracking. Store routing comes from the MR plant, Processing uses approved Processing Units, and final issue stays tied to the exact Production requester."
                 actions={onRefresh ? <Button startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing} sx={secondaryBtnSx}>Refresh</Button> : null}
             />
             <Card sx={{ ...panelSx, p: 1 }}>
@@ -1880,9 +1886,9 @@ export function MatFlowDashboardPage() {
             onClick: () => navigate("/matflow/purchase"),
         },
         {
-            label: "Material In Transit",
-            value: kpis.materialInTransit ?? totals.inTransitOutboundTransfers ?? 0,
-            subtitle: `${totals.expectedInboundTransfers ?? 0} expected inbound route(s)`,
+            label: "Material Hand-offs",
+            value: kpis.transfersInProgress ?? totals.materialInTransitRequisitions ?? 0,
+            subtitle: "Active Main Store / Plant Store / Processing / Production hand-offs",
             icon: LocalShippingOutlinedIcon,
             tone: "purple",
         },
@@ -1944,7 +1950,7 @@ export function MatFlowDashboardPage() {
                                     {selectedPlantParam ? `${selectedPlantParam} Material Flow Overview` : "Cross-Plant Material Flow Overview"}
                                 </Typography>
                                 <Typography sx={{ ...subTextSx, mt: .65, maxWidth: 760, fontSize: 11.5 }}>
-                                    A live executive view of Project demand, material readiness, shortages, custody movement, QC, processing and Production execution. Charts use the same plant-authorised tracker and dashboard read models as the Operations Board.
+                                    A live executive view of Project demand, material readiness, shortages, plant/store hand-offs, QC, processing and Production execution. Charts use the same plant-authorised tracker and dashboard read models as the Operations Board.
                                 </Typography>
                                 <Box sx={{ display: "flex", gap: .6, mt: 1.15, flexWrap: "wrap" }}>
                                     <Button onClick={() => changeView("operations")} sx={primaryBtnSx}>Open Operations Board</Button>
@@ -1994,7 +2000,7 @@ export function MatFlowDashboardPage() {
                                 <Detail label="Open MRs" value={activeRows.length} />
                                 <Detail label="Shortage MRs" value={shortageRows.length} />
                                 <Detail label="Ready to Start" value={activeRows.filter((row) => row.readyToStartProduction === true).length} />
-                                <Detail label="Material in Transit" value={kpis.materialInTransit ?? totals.inTransitOutboundTransfers ?? 0} />
+                                <Detail label="Material Hand-offs" value={kpis.transfersInProgress ?? totals.materialInTransitRequisitions ?? 0} />
                             </Box>
                         </Card>
 
@@ -2049,7 +2055,7 @@ export function MatFlowDashboardPage() {
                         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, mb: 1, flexWrap: "wrap" }}>
                             <Box>
                                 <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Live Material Execution</Typography>
-                                <Typography sx={{ ...subTextSx, mt: .15 }}>Oldest active Project/Product MRs with the current department, plant/custody, readiness and next action.</Typography>
+                                <Typography sx={{ ...subTextSx, mt: .15 }}>Oldest active Project/Product MRs with the current department, Production plant/requester, readiness and next action.</Typography>
                             </Box>
                             <Button onClick={() => changeView("operations")} endIcon={<ChevronRightRoundedIcon />} sx={secondaryBtnSx}>Open full Operations Board</Button>
                         </Box>
@@ -2062,7 +2068,7 @@ export function MatFlowDashboardPage() {
                                         <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start" }}>
                                             <Box sx={{ minWidth: 0 }}>
                                                 <Typography sx={{ ...mainTextSx, fontSize: 11.8 }}>{row.projectCode || "-"} · {row.productName || "Product"}</Typography>
-                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentDepartment || row.currentStage || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography>
+                                                <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentDepartment || row.currentStage || row.productionPlantCode || "-"}</Typography>
                                             </Box>
                                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                                 <MatFlowStatusChip status={row.currentStage} />
@@ -2170,7 +2176,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     projectCode: row.projectCode,
                     projectName: row.projectName,
                     clientName: row.clientName,
-                    plantCode: (row.productionPlantCode || row.destinationPlantCode),
+                    plantCode: row.productionPlantCode,
                     rows: [],
                 });
             }
@@ -2191,7 +2197,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
             {!embedded && <PageHero
                 badge="PROJECT / PRODUCT TRACKER"
                 title="Material Execution Tracker"
-                subtitle="One row per MR with Product context, current material department/plant custody, readiness, shortage and the next responsible action."
+                subtitle="One row per MR with Product context, current responsible department, Production plant/requester, readiness, shortage and the next responsible action."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Project_Tracker", sheetName: "Tracker", title: "MatFlow Project Material Tracker", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -2254,7 +2260,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                             return (
                                 <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
                                     <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
-                                    <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {(row.productionPlantCode || row.destinationPlantCode) || "-"}</Typography>
+                                    <Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.productionPlantCode || "-"}</Typography>
                                     <Box sx={{ mt: .8, display: "flex", gap: .45, flexWrap: "wrap" }}>
                                         <MatFlowStatusChip status={row.currentStage} />
                                         <TimingHealthChip health={row.timingHealth} />
@@ -2324,14 +2330,14 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                             <Collapse in={expanded} unmountOnExit>
                                 <Box sx={tableShellSx}>
                                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
-                                        {["Product / Drawing", "MR", "Current Owner", "Plant / Custody", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                        {["Product / Drawing", "MR", "Current Owner", "Production User / Plant", "Ready", "Shortage", "Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                                     </Box>
                                     {project.rows.map((row) => (
                                         <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
                                             <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
                                             <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
@@ -2423,10 +2429,10 @@ export function MatFlowTrackerDetailPage() {
 
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Positions</Typography>
-                <Typography sx={{ ...subTextSx, mb: 1.1 }}>Specific material custody and next hand-off; internal transfer records are represented only as route state.</Typography>
+                <Typography sx={{ ...subTextSx, mb: 1.1 }}>Specific material workflow state and next hand-off, expressed only by department, plant and workflow status.</Typography>
                 <Box sx={tableShellSx}>
                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 110px 110px 110px 180px 170px 180px" }}>
-                        {["Material", "Requested", "Shortage", "Tracked Qty", "Current", "Custody / State", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        {["Material", "Requested", "Shortage", "Tracked Qty", "Current", "Plant / State", "Next"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                     </Box>
                     {materials.length === 0 ? <EmptyState /> : materials.map((row, index) => (
                         <Box key={`${row.requisitionLineId}:${row.reservationId || index}`} sx={{ ...tableRowSx, gridTemplateColumns: "200px 110px 110px 110px 180px 170px 180px" }}>
@@ -2435,7 +2441,7 @@ export function MatFlowTrackerDetailPage() {
                             <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
                             <Box sx={tableCellSx}>{formatQty(row.trackedQty)}</Box>
                             <Box sx={tableCellSx}>{readable(row.currentDepartment)}</Box>
-                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.movementState)}</Typography></Box>
+                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentPlantCode || summary.productionPlantCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.movementState)}</Typography></Box>
                             <Box sx={tableCellSx}>{readable(row.nextDepartment || row.nextAction)}</Box>
                         </Box>
                     ))}
@@ -2579,7 +2585,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
         (Array.isArray(requisitions) ? requisitions : []).forEach((requisition) => {
             if (!requisition || normalize(requisition.status) === "CANCELLED") return;
-            const demandPlant = clean(requisition.productionPlantCode || requisition.destinationPlantCode).toUpperCase();
+            const demandPlant = clean(requisition.productionPlantCode).toUpperCase();
             if (selectedPlant && demandPlant !== selectedPlant) return;
 
             const context = productContextById.get(String(requisition.projectDrawingId || "")) || null;
@@ -2897,11 +2903,11 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                     </Box>
 
                     <Card sx={panelSx}>
-                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Routes by PD / Product</Typography>
-                        <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material, including Store, Purchase, QC, Processing and Production custody.</Typography>
+                        <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Workflow by PD / Product</Typography>
+                        <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material across Store, Purchase, QC, Processing and Production.</Typography>
                         <Box sx={tableShellSx}>
                             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 175px 130px 180px 150px 190px 150px 105px" }}>
-                                {["PD No. / Product", "MR", "Tracked Qty", "Current", "Plant / Custody", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                                {["PD No. / Product", "MR", "Tracked Qty", "Current", "Production User / Plant", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                             </Box>
                             {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                                 const history = Array.isArray(row.history) ? row.history : [];
@@ -2913,7 +2919,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                                             <Box sx={tableCellSx}>{row.requisitionNumber || "-"}</Box>
                                             <Box sx={tableCellSx}>{formatQty(row.trackedQty)}</Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.currentDepartment || row.currentStage || row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography><Typography sx={subTextSx}>{row.plantCode || row.productionPlantCode || row.destinationPlantCode || "-"}</Typography></Box>
+                                            <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.nextAction)}</Typography></Box>
                                             <Box sx={tableCellSx}><TimingHealthChip health={row.timingHealth} /><Typography sx={subTextSx}>{formatDurationMinutes(row.currentDwellMinutes)}</Typography></Box>
                                             <Box sx={tableCellSx}>
@@ -2927,9 +2933,9 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                                         </Box>
                                         <Collapse in={expanded} unmountOnExit>
                                             <Box sx={{ p: 1.2, borderBottom: "1px solid var(--mf-border)", background: "var(--mf-surface)" }}>
-                                                <Typography sx={{ fontWeight: 900, mb: .8 }}>Specific Material Route & Custody History</Typography>
+                                                <Typography sx={{ fontWeight: 900, mb: .8 }}>Specific Material Workflow History</Typography>
                                                 {history.length === 0 ? (
-                                                    <Typography sx={subTextSx}>No custody events have been recorded for this lot yet.</Typography>
+                                                    <Typography sx={subTextSx}>No workflow events have been recorded for this lot yet.</Typography>
                                                 ) : (
                                                     <Box sx={tableShellSx}>
                                                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "70px 190px 170px 170px 145px 145px 125px 150px" }}>
@@ -3104,7 +3110,7 @@ export function MatFlowLedgerPage() {
         setLoading(true);
         setError("");
         try {
-            setData(extractMatFlowPage((await matflowApi.stockLedger({
+            setData(extractMatFlowPage((await matflowApi.materialMovementAudit({
                 plantCode: selectedPlantParam,
                 search: clean(search) || undefined,
                 movementType: movementType || undefined,
@@ -3126,7 +3132,7 @@ export function MatFlowLedgerPage() {
             <PageHero
                 badge="IMMUTABLE MATERIAL HISTORY"
                 title="Material Movement Audit"
-                subtitle="Immutable MatFlow custody and usage events for audit/reference. This is not a physical stock balance; Tally remains the stock authority."
+                subtitle="Immutable MatFlow workflow and usage events for audit/reference. Events are grouped by plant/department only; Tally remains the physical stock authority."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Material_Movement_Audit", sheetName: "Movements", title: "MatFlow Material Movement Audit", rows: data.rows || [] })} sx={secondaryBtnSx}>Export Page</Button>
@@ -3147,12 +3153,12 @@ export function MatFlowLedgerPage() {
                 {loading ? <LoadingBlock /> : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
-                            {["Material", "Plant / Custody", "Movement", "Qty Change", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["Material", "Plant / Department", "Movement", "Qty Change", "Reference", "PD No. / Drawing", "Actor / Time"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {(data.rows || []).length === 0 ? <EmptyState /> : data.rows.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "190px 175px 155px 150px 145px 180px 145px" }}>
                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.materialName}</Typography><Typography sx={subTextSx}>{row.materialCode}</Typography></Box>
-                                <Box sx={tableCellSx}>{row.plantCode || "-"} · {readable(row.department || row.responsibleDepartment || "Custody")}</Box>
+                                <Box sx={tableCellSx}>{row.plantCode || "-"} · {readable(row.department || row.responsibleDepartment || "Workflow")}</Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.movementType} /></Box>
                                 <Box sx={tableCellSx}>{formatQty(row.quantityChange)}</Box>
                                 <Box sx={tableCellSx}>{row.referenceNumber || row.referenceType || "-"}</Box>

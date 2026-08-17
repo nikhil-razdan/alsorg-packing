@@ -95,9 +95,9 @@ const returnUpdatedAt = (row) =>
 const remainingReturnable = (line) => Math.max(
     0,
     numeric(line?.issuedQty)
-        - numeric(line?.consumedQty)
-        - numeric(line?.productionWasteQty ?? line?.wastageQty)
-        - numeric(line?.returnedQty)
+    - numeric(line?.consumedQty)
+    - numeric(line?.productionWasteQty ?? line?.wastageQty)
+    - numeric(line?.returnedQty)
 );
 
 export function MatFlowReturnsPage() {
@@ -216,8 +216,8 @@ export function MatFlowReturnsPage() {
         try {
             await matflowApi.createMaterialReturn({
                 requisitionId: selectedReq.id,
-                // API v6 resolves the final destination to AL-P1 Main Store and
-                // inserts the origin Plant Store automatically for remote plants.
+                // The backend derives the Main Store and any origin-Plant Store hop from the MR plant.
+                // Production never selects a Store destination; the MR plant fixes the route.
                 reason: form.reason,
                 remarks: clean(form.remarks) || null,
                 lines,
@@ -270,7 +270,7 @@ export function MatFlowReturnsPage() {
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="PRODUCTION RETURN · API V6"
+                badge="PRODUCTION RETURN"
                 title="Unused / Excess Material Returns"
                 subtitle="Return routing is fixed by the four-plant workflow: AL-P1 Production returns directly to the Main Store; AL-P2/P3/P4 Production returns through its own Plant Store and then to the AL-P1 Main Store. Returned quantity is finalized only after Main Store receipt."
                 actions={
@@ -285,7 +285,7 @@ export function MatFlowReturnsPage() {
             <ErrorBox>{error}</ErrorBox>
 
             <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Box><Typography sx={mainTextSx}>Return Route View</Typography><Typography sx={subTextSx}>The workflow board mirrors the fixed custody route; all state changes still use explicit Dispatch / Receive actions.</Typography></Box>
+                <Box><Typography sx={mainTextSx}>Return Route View</Typography><Typography sx={subTextSx}>The workflow board mirrors the fixed Plant Store / Main Store route; all state changes still use explicit Dispatch / Receive actions.</Typography></Box>
                 <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]} />
             </Card>
 

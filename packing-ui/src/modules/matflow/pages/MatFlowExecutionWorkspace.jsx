@@ -147,7 +147,7 @@ export function MatFlowQcPage() {
             <PageHero
                 badge="QUALITY CHECK"
                 title="MR Material QC Checklist"
-                subtitle="QC is only a check/tick against an MR material lot. It does not create a separate custody step and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
+                subtitle="QC is only a check/tick against an MR material lot at AL-P1 Main Store. It does not create a separate routing step and makes no route decision. Store already decides whether the lot goes directly to Production or through a BOM-approved Processing Unit."
                 actions={
                     <>
                         <Button
@@ -264,7 +264,7 @@ export function MatFlowQcPage() {
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <Alert severity="info">
-                            This is only a QC confirmation against {dialog?.requisitionNumber || "the MR"}. QC does not take separate physical custody and does not choose Processing or Production.
+                            This is only a QC confirmation against {dialog?.requisitionNumber || "the MR"}. QC does not receive, dispatch or redirect material; Store keeps the routing decision.
                         </Alert>
                         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
                             <Detail label="MR" value={dialog?.requisitionNumber || "-"} />
@@ -319,12 +319,18 @@ const PRODUCTION_KANBAN_COLUMNS = [
 
 const productionReceiveLikely = (row) => {
     const stage = normalize(row?.currentStage);
+    const nextDepartment = normalize(row?.nextDepartment);
     return row?.readyToStartProduction !== true && (
         stage === "PRODUCTION_ISSUE" ||
-        (stage === "TRANSFER_IN_PROGRESS" &&
-            normalize(row?.currentDepartment) === "IN_TRANSIT" &&
-            normalize(row?.nextDepartment) === "PRODUCTION")
+        (["TRANSFER_IN_PROGRESS", "MATERIAL_IN_TRANSIT", "HANDOFF_IN_PROGRESS"].includes(stage) &&
+            nextDepartment === "PRODUCTION")
     );
+};
+
+const productionOwnerLabel = (row) => {
+    const user = row?.productionUser || row?.requestedBy || "Production";
+    const plant = row?.productionPlantCode || row?.plantCode || "-";
+    return `${user} · ${plant}`;
 };
 
 const productionKanbanLane = (row) => {
@@ -595,12 +601,7 @@ export function MatFlowProductionExecutionPage() {
         ready: rows.filter((row) => row.readyToStartProduction === true).length,
         receiving: rows.filter((row) => {
             const stage = normalize(row.currentStage);
-            const currentDepartment = normalize(row.currentDepartment);
-            const nextDepartment = normalize(row.nextDepartment);
-            return !row.readyToStartProduction && (
-                stage === "PRODUCTION_ISSUE" ||
-                (stage === "TRANSFER_IN_PROGRESS" && currentDepartment === "IN_TRANSIT" && nextDepartment === "PRODUCTION")
-            );
+            return productionReceiveLikely(row);
         }).length,
         running: rows.filter((row) => normalize(row.currentStage) === "PRODUCTION_IN_PROGRESS").length,
         blocked: rows.filter((row) =>
@@ -782,7 +783,7 @@ export function MatFlowProductionExecutionPage() {
             <PageHero
                 badge="PRODUCTION EXECUTION"
                 title="Product Material Readiness & Execution"
-                subtitle="See each Project/Product’s material custody and readiness, receive arriving lots for the exact Production requester, start Production, record consumption/wastage/returns, and complete only after full material accounting."
+                subtitle="See each Project/Product’s material readiness and plant hand-offs, receive arriving lots for the exact Production requester who raised the MR, start Production, record consumption/wastage/returns, and complete only after full material accounting."
                 actions={
                     <>
                         <Button startIcon={<FileDownloadOutlinedIcon />} onClick={() => downloadMatFlowExcel({ fileName: "MatFlow_Production_Readiness", sheetName: "Readiness", title: "MatFlow Production Readiness", rows })} sx={secondaryBtnSx}>Export Excel</Button>
@@ -829,7 +830,7 @@ export function MatFlowProductionExecutionPage() {
                                         <Box sx={{ minWidth: 0 }}><Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.requisitionNumber || "-"} · {row.productionPlantCode || "-"}</Typography></Box>
                                         <MatFlowStatusChip status={row.currentStage} />
                                     </Box>
-                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Plant / Custody: {row.plantCode || row.productionPlantCode || "-"} · Ready {Math.round(numeric(row.materialReadyPercent))}%</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .7 }}>Production: {productionOwnerLabel(row)} · Ready {Math.round(numeric(row.materialReadyPercent))}%</Typography>
                                     <Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.currentStage)}</Typography>
                                     <Box sx={{ display: "flex", gap: .45, mt: .85, flexWrap: "wrap" }}>
                                         {canAct && receiveLikely && <Button onClick={() => openAction("RECEIVE", row)} sx={primaryBtnSx}>Receive</Button>}
@@ -847,19 +848,14 @@ export function MatFlowProductionExecutionPage() {
                 ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "200px 190px 170px 150px 100px 210px 210px" }}>
-                            {["PD No. / Product", "MR", "Current Material State", "Plant / Custody", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["PD No. / Product", "MR", "Current Material State", "Production User / Plant", "Ready", "Production Start Blocker", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => {
                             const stage = normalize(row.currentStage);
                             const canStart = row.readyToStartProduction === true;
                             const isRunning = stage === "PRODUCTION_IN_PROGRESS";
                             const isComplete = stage === "PRODUCTION_COMPLETED";
-                            const receiveLikely = !canStart && (
-                                stage === "PRODUCTION_ISSUE" ||
-                                (stage === "TRANSFER_IN_PROGRESS" &&
-                                    normalize(row.currentDepartment) === "IN_TRANSIT" &&
-                                    normalize(row.nextDepartment) === "PRODUCTION")
-                            );
+                            const receiveLikely = productionReceiveLikely(row);
 
                             return (
                                 <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 190px 170px 150px 100px 210px 210px" }}>
@@ -869,7 +865,7 @@ export function MatFlowProductionExecutionPage() {
                                     </Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber || "-"}</Typography><Typography sx={subTextSx}>{readable(row.requisitionStatus)}</Typography></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.plantCode || row.productionPlantCode || "-"}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.responsibleDepartment || row.currentStage || "Production")}</Typography></Box>
+                                    <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerLabel(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.responsibleDepartment || row.currentStage || "Production")}</Typography></Box>
                                     <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><Typography sx={subTextSx}>{row.readyToStartProduction ? "Ready" : "Not ready"}</Typography></Box>
                                     <Box sx={tableCellSx}>
                                         {isComplete ? <MatFlowStatusChip status="COMPLETED" /> : canStart ? <MatFlowStatusChip status="READY_TO_START" /> : <Typography sx={subTextSx}>{readable(row.productionStartBlocker || row.currentStage)}</Typography>}

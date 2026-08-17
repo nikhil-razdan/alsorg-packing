@@ -77,6 +77,79 @@ const upperCode = (value) => clean(value).toUpperCase();
 const MAIN_PLANT = "AL-P1";
 const samePlant = (left, right) => Boolean(upperCode(left)) && upperCode(left) === upperCode(right);
 
+const mrStoreRouteText = (row) => {
+    const plant = upperCode(row?.productionPlantCode);
+    const requester = row?.requestedBy || row?.productionUser || "Production";
+    if (plant === MAIN_PLANT) {
+        return `${requester} / AL-P1 → AL-P1 Main Store`;
+    }
+    return `${requester} / ${plant || "Plant"} → ${plant || "Plant"} Store → AL-P1 Main Store`;
+};
+
+const reservationActionPlant = (reservation) =>
+    upperCode(reservation?.issueFromPlantCode || reservation?.sourcePlantCode || MAIN_PLANT);
+
+const reservationStoreAction = (reservation, requisition, selectedPlantParam) => {
+    const nextAction = normalize(reservation?.nextAction);
+    const responsible = normalize(reservation?.responsibleDepartment);
+    const demandPlant = upperCode(reservation?.demandPlantCode || requisition?.productionPlantCode);
+    const actionPlant = reservationActionPlant(reservation);
+
+    if (nextAction === "RECEIVE_FROM_MAIN_STORE") {
+        return {
+            type: "RECEIVE",
+            label: "Receive from Main Store",
+            plantCode: demandPlant,
+        };
+    }
+
+    if (!responsible.includes("STORE")) return null;
+    if (selectedPlantParam && !samePlant(selectedPlantParam, actionPlant)) return null;
+
+    if (reservation?.qcRequired && !reservation?.qcCompleted) {
+        return { type: "WAIT_QC", label: "Waiting QC Check", plantCode: actionPlant };
+    }
+
+    let label = "Send Material";
+    if (nextAction.includes("PROCESS") || (!nextAction && reservation?.processingRequired)) {
+        label = "Send to Processing";
+    } else if (nextAction.includes("PRODUCTION")) {
+        label = "Hand Over to Production";
+    } else if (demandPlant && demandPlant !== MAIN_PLANT && samePlant(actionPlant, MAIN_PLANT)) {
+        label = `Send to ${demandPlant} Store`;
+    } else if (demandPlant && samePlant(actionPlant, demandPlant)) {
+        label = "Hand Over to Production";
+    }
+
+    return { type: "SEND", label, plantCode: actionPlant };
+};
+
+const reservationNextStepLabel = (reservation, requisition) => {
+    const nextAction = normalize(reservation?.nextAction);
+    const demandPlant = upperCode(reservation?.demandPlantCode || requisition?.productionPlantCode);
+    const requester = requisition?.requestedBy || requisition?.productionUser || "Production";
+
+    if (nextAction === "RECEIVE_FROM_MAIN_STORE") {
+        return `${demandPlant || "Origin Plant"} Store`;
+    }
+    if (nextAction.includes("PROCESS") || (!nextAction && reservation?.processingRequired)) {
+        return reservation?.processingUnitCode || "Processing Unit";
+    }
+    if (nextAction.includes("PRODUCTION")) {
+        return `${requester} / ${demandPlant || "Plant"} Production`;
+    }
+    if (demandPlant && demandPlant !== MAIN_PLANT && samePlant(reservationActionPlant(reservation), MAIN_PLANT)) {
+        return `${demandPlant} Store`;
+    }
+    if (demandPlant && samePlant(reservationActionPlant(reservation), demandPlant)) {
+        return `${requester} / ${demandPlant} Production`;
+    }
+    if (reservation?.processingRequired && reservation?.processingUnitCode) {
+        return reservation.processingUnitCode;
+    }
+    return readable(reservation?.nextAction || reservation?.responsibleDepartment || "Pending Store action");
+};
+
 const STORE_KANBAN_COLUMNS = [
     { key: "ACTION", label: "Forward / Plan", subtitle: "MR needs Store action now" },
     { key: "WAITING", label: "Shortage / Waiting", subtitle: "Purchase or Main Store dependency" },
@@ -241,7 +314,7 @@ export function MatFlowStoreQueuePage() {
                                     <MatFlowStatusChip status={row.status} />
                                 </Box>
                                 <Typography sx={{ ...subTextSx, mt: .7 }}>Production: {row.requestedBy || "-"} · {row.productionPlantCode || "-"}</Typography>
-                                <Typography sx={subTextSx}>Route: {row.productionPlantCode || "-"} Store → AL-P1 Main Store</Typography>
+                                <Typography sx={subTextSx}>Route: {mrStoreRouteText(row)}</Typography>
                                 <Typography sx={subTextSx}>{row._linkedPis?.length ? `${row._linkedPis.length} linked PI(s)` : "No linked PI"}</Typography>
                                 <Button onClick={() => navigate(`/matflow/store/requisitions/${row.id}`)} sx={{ ...primaryBtnSx, mt: .85 }}>Open Store Action</Button>
                             </Card>
@@ -273,7 +346,7 @@ export function MatFlowStoreQueuePage() {
                                 </Box>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>{row.requestedBy || "-"}</Typography>
-                                    <Typography sx={subTextSx}>{row.productionPlantCode || "-"} · {row.productionPlantCode || "-"} Store → AL-P1 Main Store</Typography>
+                                    <Typography sx={subTextSx}>{mrStoreRouteText(row)}</Typography>
                                 </Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
                                 <Box sx={tableCellSx}>{formatDate(row.submittedAt || row.requestedAt)}</Box>
@@ -366,7 +439,6 @@ export function MatFlowStoreDetailPage() {
     const lines = Array.isArray(requisition?.lines) ? requisition.lines : [];
     const reservations = Array.isArray(snapshot?.reservations) ? snapshot.reservations : [];
     const indents = Array.isArray(snapshot?.indents) ? snapshot.indents : [];
-    const internalTransfers = Array.isArray(snapshot?.transfers) ? snapshot.transfers : [];
     const availabilityByLine = useMemo(() => new Map(availability.map((entry) => [String(entry.requisitionLineId), entry])), [availability]);
 
     const plant = upperCode(requisition?.productionPlantCode);
@@ -510,24 +582,23 @@ export function MatFlowStoreDetailPage() {
         }
     };
 
-    const openIssue = (reservation, transfer) => {
-        setIssueDialog({ reservation, transfer });
+    const openIssue = (reservation, actionLabel) => {
+        setIssueDialog({ reservation, actionLabel });
         setIssueForm({ batchNo: "", remarks: "" });
         setError("");
     };
 
     const issueReservation = async () => {
         const reservation = issueDialog?.reservation;
-        const transfer = issueDialog?.transfer;
         if (!reservation?.id || reservation.rowVersion == null) return;
         setWorkingId(String(reservation.id));
         setError("");
         try {
+            const remaining = numeric(reservation.remainingIssueQty);
+            const quantity = remaining > .0005 ? remaining : numeric(reservation.reservedQty);
             await matflowApi.issueStoreReservation(reservation.id, {
                 rowVersion: reservation.rowVersion,
-                quantity: transfer
-                    ? Math.max(0, numeric(transfer.plannedQty) - numeric(transfer.dispatchedQty))
-                    : (reservation.remainingIssueQty || reservation.reservedQty),
+                quantity: quantity > .0005 ? quantity : undefined,
                 batchNo: clean(issueForm.batchNo) || null,
                 remarks: clean(issueForm.remarks) || null,
             });
@@ -574,7 +645,7 @@ export function MatFlowStoreDetailPage() {
                     <Detail label="Status" value={<MatFlowStatusChip status={requisition.status} />} />
                     <Detail label="BOM" value={`${requisition.bomNumber || "-"} · Rev ${requisition.bomRevisionNo ?? "-"}`} />
                     <Detail label="Production User / Plant" value={`${requisition.requestedBy || "-"} · ${requisition.productionPlantCode || "-"}`} />
-                    <Detail label="Origin Store" value={`${requisition.originStorePlantCode || requisition.productionPlantCode || "-"} Store`} />
+                    <Detail label="Request Route" value={remoteMr ? `${requisition.productionPlantCode || "-"} Store → AL-P1 Main Store` : "Direct → AL-P1 Main Store"} />
                     <Detail label="Main Store" value="AL-P1 Main Store" />
                     <Detail label="Submitted" value={formatDate(requisition.submittedAt)} />
                     <Detail label="Forwarded to Main" value={requisition.forwardedToMainStoreAt ? `${requisition.forwardedToMainStoreBy || "-"} · ${formatDate(requisition.forwardedToMainStoreAt)}` : (remoteMr ? "Waiting origin Store" : "Direct")} />
@@ -611,175 +682,175 @@ export function MatFlowStoreDetailPage() {
                         {lines
                             .filter((line) => Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty)) > .0005)
                             .map((line) => {
-                            const key = String(line.id);
-                            const entry = availabilityByLine.get(key);
-                            const config = forms[key] || {};
-                            const outstanding = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
-                            const decision = normalize(config.availabilityDecision);
-                            const declaredAvailable = decision === "FULLY_AVAILABLE"
-                                ? outstanding
-                                : decision === "PARTIALLY_AVAILABLE"
-                                    ? Math.min(outstanding, Math.max(0, numeric(config.availableQty)))
-                                    : 0;
-                            const shortageAfter = Math.max(0, outstanding - declaredAvailable);
-                            const hasAvailableLot = declaredAvailable > .0005;
+                                const key = String(line.id);
+                                const entry = availabilityByLine.get(key);
+                                const config = forms[key] || {};
+                                const outstanding = Math.max(0, numeric(line.requestedQty) - numeric(line.reservedQty));
+                                const decision = normalize(config.availabilityDecision);
+                                const declaredAvailable = decision === "FULLY_AVAILABLE"
+                                    ? outstanding
+                                    : decision === "PARTIALLY_AVAILABLE"
+                                        ? Math.min(outstanding, Math.max(0, numeric(config.availableQty)))
+                                        : 0;
+                                const shortageAfter = Math.max(0, outstanding - declaredAvailable);
+                                const hasAvailableLot = declaredAvailable > .0005;
 
-                            return (
-                                <Card key={line.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
-                                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
-                                        <Box>
-                                            <Typography sx={mainTextSx}>{line.materialName} · {line.materialCode}</Typography>
-                                            <Typography sx={subTextSx}>
-                                                Requested {formatQty(line.requestedQty)} {line.uom} · Previously allocated {formatQty(line.reservedQty)} · Remaining decision {formatQty(outstanding)} {line.uom}
-                                            </Typography>
+                                return (
+                                    <Card key={line.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                                            <Box>
+                                                <Typography sx={mainTextSx}>{line.materialName} · {line.materialCode}</Typography>
+                                                <Typography sx={subTextSx}>
+                                                    Requested {formatQty(line.requestedQty)} {line.uom} · Previously allocated {formatQty(line.reservedQty)} · Remaining decision {formatQty(outstanding)} {line.uom}
+                                                </Typography>
+                                            </Box>
+                                            <MatFlowStatusChip status={line.status} />
                                         </Box>
-                                        <MatFlowStatusChip status={line.status} />
-                                    </Box>
 
-                                    <Alert severity="info" sx={{ mt: 1 }}>
-                                        Physical stock is checked in <b>Tally</b>. Do not enter the Store balance in MatFlow.
-                                    </Alert>
+                                        <Alert severity="info" sx={{ mt: 1 }}>
+                                            Physical stock is checked in <b>Tally</b>. Do not enter the Store balance in MatFlow.
+                                        </Alert>
 
-                                    <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
-                                        {[
-                                            ["FULLY_AVAILABLE", "Fully Available", `Full remaining ${formatQty(outstanding)} ${line.uom || ""} can be issued`],
-                                            ["PARTIALLY_AVAILABLE", "Partially Available", "Some quantity is available; enter it once"],
-                                            ["NOT_AVAILABLE", "Not Available", "Full remaining quantity must be purchased"],
-                                        ].map(([value, label, helper]) => {
-                                            const selected = decision === value;
-                                            return (
-                                                <Card
-                                                    key={value}
-                                                    onClick={() => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: {
-                                                            ...current[key],
-                                                            availabilityDecision: value,
-                                                            availableQty: value === "PARTIALLY_AVAILABLE" ? (current[key]?.availableQty || "") : "",
-                                                            qcRequired: value === "NOT_AVAILABLE" ? false : current[key]?.qcRequired === true,
-                                                            processingRequired: value === "NOT_AVAILABLE" ? false : current[key]?.processingRequired === true,
-                                                            processingRouteStepId: value === "NOT_AVAILABLE" ? "" : (current[key]?.processingRouteStepId || ""),
-                                                        },
-                                                    }))}
-                                                    sx={{
-                                                        p: 1.3,
-                                                        cursor: "pointer",
-                                                        border: selected ? "1px solid rgba(56,189,248,.85)" : "1px solid rgba(148,163,184,.18)",
-                                                        bgcolor: selected ? "rgba(14,165,233,.10)" : "rgba(15,23,42,.22)",
-                                                        boxShadow: selected ? "0 0 0 1px rgba(56,189,248,.12)" : "none",
-                                                    }}
-                                                >
-                                                    <Typography sx={{ ...mainTextSx, color: selected ? "#7dd3fc" : undefined }}>{label}</Typography>
-                                                    <Typography sx={{ ...subTextSx, mt: .35 }}>{helper}</Typography>
+                                        <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
+                                            {[
+                                                ["FULLY_AVAILABLE", "Fully Available", `Full remaining ${formatQty(outstanding)} ${line.uom || ""} can be issued`],
+                                                ["PARTIALLY_AVAILABLE", "Partially Available", "Some quantity is available; enter it once"],
+                                                ["NOT_AVAILABLE", "Not Available", "Full remaining quantity must be purchased"],
+                                            ].map(([value, label, helper]) => {
+                                                const selected = decision === value;
+                                                return (
+                                                    <Card
+                                                        key={value}
+                                                        onClick={() => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: {
+                                                                ...current[key],
+                                                                availabilityDecision: value,
+                                                                availableQty: value === "PARTIALLY_AVAILABLE" ? (current[key]?.availableQty || "") : "",
+                                                                qcRequired: value === "NOT_AVAILABLE" ? false : current[key]?.qcRequired === true,
+                                                                processingRequired: value === "NOT_AVAILABLE" ? false : current[key]?.processingRequired === true,
+                                                                processingRouteStepId: value === "NOT_AVAILABLE" ? "" : (current[key]?.processingRouteStepId || ""),
+                                                            },
+                                                        }))}
+                                                        sx={{
+                                                            p: 1.3,
+                                                            cursor: "pointer",
+                                                            border: selected ? "1px solid rgba(56,189,248,.85)" : "1px solid rgba(148,163,184,.18)",
+                                                            bgcolor: selected ? "rgba(14,165,233,.10)" : "rgba(15,23,42,.22)",
+                                                            boxShadow: selected ? "0 0 0 1px rgba(56,189,248,.12)" : "none",
+                                                        }}
+                                                    >
+                                                        <Typography sx={{ ...mainTextSx, color: selected ? "#7dd3fc" : undefined }}>{label}</Typography>
+                                                        <Typography sx={{ ...subTextSx, mt: .35 }}>{helper}</Typography>
+                                                    </Card>
+                                                );
+                                            })}
+                                        </Box>
+
+                                        {decision === "PARTIALLY_AVAILABLE" && (
+                                            <TextField
+                                                type="number"
+                                                label={`Available Quantity * (${line.uom || ""})`}
+                                                value={config.availableQty || ""}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], availableQty: event.target.value },
+                                                }))}
+                                                helperText={`Enter only the quantity physically available in Tally. MatFlow will derive PI quantity = ${formatQty(outstanding)} − available.`}
+                                                sx={{ ...fieldSx, mt: 1.2, maxWidth: 420 }}
+                                            />
+                                        )}
+
+                                        {decision && (
+                                            <Box sx={{
+                                                mt: 1.2,
+                                                display: "grid",
+                                                gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" },
+                                                gap: 1,
+                                            }}>
+                                                <Card sx={{ p: 1.1, bgcolor: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.18)" }}>
+                                                    <Typography sx={subTextSx}>DECLARED AVAILABLE FOR THIS REVIEW</Typography>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(declaredAvailable)} {line.uom || ""}</Typography>
                                                 </Card>
-                                            );
-                                        })}
-                                    </Box>
+                                                <Card sx={{ p: 1.1, bgcolor: shortageAfter > .0005 ? "rgba(245,158,11,.07)" : "rgba(15,23,42,.22)", border: "1px solid rgba(245,158,11,.18)" }}>
+                                                    <Typography sx={subTextSx}>AUTO LINKED PI QUANTITY</Typography>
+                                                    <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(shortageAfter)} {line.uom || ""}</Typography>
+                                                    <Typography sx={subTextSx}>{shortageAfter > .0005 ? `PI will be raised automatically to AL-P1 Main Store.` : "No PI required."}</Typography>
+                                                </Card>
+                                            </Box>
+                                        )}
 
-                                    {decision === "PARTIALLY_AVAILABLE" && (
-                                        <TextField
-                                            type="number"
-                                            label={`Available Quantity * (${line.uom || ""})`}
-                                            value={config.availableQty || ""}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], availableQty: event.target.value },
-                                            }))}
-                                            helperText={`Enter only the quantity physically available in Tally. MatFlow will derive PI quantity = ${formatQty(outstanding)} − available.`}
-                                            sx={{ ...fieldSx, mt: 1.2, maxWidth: 420 }}
-                                        />
-                                    )}
+                                        <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={config.qcRequired === true}
+                                                        disabled={!hasAvailableLot}
+                                                        onChange={(event) => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: { ...current[key], qcRequired: event.target.checked },
+                                                        }))}
+                                                    />
+                                                }
+                                                label="QC check required for available lot"
+                                            />
 
-                                    {decision && (
-                                        <Box sx={{
-                                            mt: 1.2,
-                                            display: "grid",
-                                            gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" },
-                                            gap: 1,
-                                        }}>
-                                            <Card sx={{ p: 1.1, bgcolor: "rgba(16,185,129,.06)", border: "1px solid rgba(16,185,129,.18)" }}>
-                                                <Typography sx={subTextSx}>DECLARED AVAILABLE FOR THIS REVIEW</Typography>
-                                                <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(declaredAvailable)} {line.uom || ""}</Typography>
-                                            </Card>
-                                            <Card sx={{ p: 1.1, bgcolor: shortageAfter > .0005 ? "rgba(245,158,11,.07)" : "rgba(15,23,42,.22)", border: "1px solid rgba(245,158,11,.18)" }}>
-                                                <Typography sx={subTextSx}>AUTO LINKED PI QUANTITY</Typography>
-                                                <Typography sx={{ ...mainTextSx, fontSize: 17 }}>{formatQty(shortageAfter)} {line.uom || ""}</Typography>
-                                                <Typography sx={subTextSx}>{shortageAfter > .0005 ? `PI will be raised automatically to AL-P1 Main Store.` : "No PI required."}</Typography>
-                                            </Card>
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={config.processingRequired === true}
+                                                        disabled={!hasAvailableLot}
+                                                        onChange={(event) => setForms((current) => ({
+                                                            ...current,
+                                                            [key]: {
+                                                                ...current[key],
+                                                                processingRequired: event.target.checked,
+                                                                processingRouteStepId: event.target.checked
+                                                                    ? (current[key]?.processingRouteStepId || "")
+                                                                    : "",
+                                                            },
+                                                        }))}
+                                                    />
+                                                }
+                                                label="Processing required before Production"
+                                            />
+
+                                            <TextField
+                                                select
+                                                label="Processing Unit"
+                                                value={config.processingRouteStepId || ""}
+                                                disabled={!hasAvailableLot || !config.processingRequired}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], processingRouteStepId: event.target.value },
+                                                }))}
+                                                helperText={config.processingRequired && !(entry?.processingOptions || []).length
+                                                    ? "No Processing Unit is approved on this BOM material line."
+                                                    : "Independent of QC. Choose only a BOM-approved Processing Unit."}
+                                                sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
+                                            >
+                                                {(entry?.processingOptions || []).map((option) => (
+                                                    <MenuItem key={option.routeStepId} value={option.routeStepId}>
+                                                        {option.processingUnitCode} · {option.processingUnitName}{option.processCode ? ` · ${option.processCode}` : ""}
+                                                    </MenuItem>
+                                                ))}
+                                            </TextField>
+
+                                            <TextField
+                                                multiline
+                                                minRows={2}
+                                                label="Line Remarks"
+                                                value={config.remarks || ""}
+                                                onChange={(event) => setForms((current) => ({
+                                                    ...current,
+                                                    [key]: { ...current[key], remarks: event.target.value },
+                                                }))}
+                                                sx={{ ...fieldSx, gridColumn: "1 / -1" }}
+                                            />
                                         </Box>
-                                    )}
-
-                                    <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={config.qcRequired === true}
-                                                    disabled={!hasAvailableLot}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: { ...current[key], qcRequired: event.target.checked },
-                                                    }))}
-                                                />
-                                            }
-                                            label="QC check required for available lot"
-                                        />
-
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={config.processingRequired === true}
-                                                    disabled={!hasAvailableLot}
-                                                    onChange={(event) => setForms((current) => ({
-                                                        ...current,
-                                                        [key]: {
-                                                            ...current[key],
-                                                            processingRequired: event.target.checked,
-                                                            processingRouteStepId: event.target.checked
-                                                                ? (current[key]?.processingRouteStepId || "")
-                                                                : "",
-                                                        },
-                                                    }))}
-                                                />
-                                            }
-                                            label="Processing required before Production"
-                                        />
-
-                                        <TextField
-                                            select
-                                            label="Processing Unit"
-                                            value={config.processingRouteStepId || ""}
-                                            disabled={!hasAvailableLot || !config.processingRequired}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], processingRouteStepId: event.target.value },
-                                            }))}
-                                            helperText={config.processingRequired && !(entry?.processingOptions || []).length
-                                                ? "No Processing Unit is approved on this BOM material line."
-                                                : "Independent of QC. Choose only a BOM-approved Processing Unit."}
-                                            sx={{ ...fieldSx, gridColumn: { xs: "1 / -1", md: "1 / -1" } }}
-                                        >
-                                            {(entry?.processingOptions || []).map((option) => (
-                                                <MenuItem key={option.routeStepId} value={option.routeStepId}>
-                                                    {option.processingUnitCode} · {option.processingUnitName}{option.processCode ? ` · ${option.processCode}` : ""}
-                                                </MenuItem>
-                                            ))}
-                                        </TextField>
-
-                                        <TextField
-                                            multiline
-                                            minRows={2}
-                                            label="Line Remarks"
-                                            value={config.remarks || ""}
-                                            onChange={(event) => setForms((current) => ({
-                                                ...current,
-                                                [key]: { ...current[key], remarks: event.target.value },
-                                            }))}
-                                            sx={{ ...fieldSx, gridColumn: "1 / -1" }}
-                                        />
-                                    </Box>
-                                </Card>
-                            );
-                        })}
+                                    </Card>
+                                );
+                            })}
                     </Box>
 
                     <TextField
@@ -802,45 +873,27 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Allocated Material Lots</Typography>
                 <Typography sx={{ ...subTextSx, mb: 1.2 }}>
-                    Store sends each allocated lot along the Processing/Production route saved during review. A required QC check only gates the send action; it does not change custody or routing. Internal custody records remain hidden.
+                    Store sends each allocated lot using only the MR plant, exact Production requester and any BOM-approved Processing Unit selected during review. A required QC check only gates release; QC never becomes a route point.
                 </Typography>
                 <Box sx={tableShellSx}>
                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
-                        {["Material", "Source Store", "Planned Destination", "QC Check", "Processing", "Allocated Qty", "State / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                        {["Material", "Current Store", "Next Step", "QC Check", "Processing", "Allocated Qty", "State / Next", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                     </Box>
                     {reservations.length === 0 ? <EmptyState>No Store allocation has been created yet.</EmptyState> : reservations.map((reservation) => {
-                        const pendingStoreLeg = internalTransfers
-                            .filter((transfer) => String(transfer?.reservationId || "") === String(reservation.id))
-                            .filter((transfer) => normalize(transfer?.fromCustody).includes("STORE"))
-                            .find((transfer) => {
-                                const status = normalize(transfer?.status);
-                                const remainingDispatch = Math.max(
-                                    0,
-                                    numeric(transfer?.plannedQty) - numeric(transfer?.dispatchedQty)
-                                );
-                                return ["READY", "PARTIALLY_DISPATCHED", "PARTIALLY_RECEIVED"].includes(status) &&
-                                    remainingDispatch > .0005;
-                            });
-                        const storeLegBelongsHere = Boolean(pendingStoreLeg) &&
-                            (!selectedPlantParam || samePlant(pendingStoreLeg.fromPlantCode, selectedPlantParam));
-                        const storeCanSend = storeLegBelongsHere && (!reservation.qcRequired || reservation.qcCompleted);
-                        const originStoreCanReceive = canStoreAct &&
-                            normalize(reservation.nextAction) === "RECEIVE_FROM_MAIN_STORE" &&
-                            (!selectedPlantParam || samePlant(selectedPlantParam, plant));
-                        const sendLabel = pendingStoreLeg
-                            ? (normalize(pendingStoreLeg.toCustody).includes("PRODUCTION")
-                                ? "Hand Over to Production"
-                                : samePlant(pendingStoreLeg.fromPlantCode, MAIN_PLANT) && remoteMr
-                                    ? "Send to Origin Store"
-                                    : normalize(pendingStoreLeg.toCustody).includes("PROCESS")
-                                        ? "Send to Processing"
-                                        : "Send Lot")
-                            : "Send Lot";
+                        const storeAction = canStoreAct
+                            ? reservationStoreAction(reservation, requisition, selectedPlantParam)
+                            : null;
+                        const originStoreCanReceive = storeAction?.type === "RECEIVE" &&
+                            (!selectedPlantParam || samePlant(selectedPlantParam, storeAction.plantCode || plant));
+                        const storeCanSend = storeAction?.type === "SEND";
+                        const sendLabel = storeAction?.label || "Send Material";
+                        const currentStorePlant = reservationActionPlant(reservation);
+                        const nextStep = reservationNextStepLabel(reservation, requisition);
                         return (
                             <Box key={reservation.id} sx={{ ...tableRowSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
                                 <Box sx={tableCellSx}>{reservation.materialCode || "-"}</Box>
-                                <Box sx={tableCellSx}>AL-P1 Main Store</Box>
-                                <Box sx={tableCellSx}>{reservation.processingRequired ? (reservation.processingUnitCode || "Processing Unit") : `${reservation.demandPlantCode || requisition.productionPlantCode || "-"} Production`}</Box>
+                                <Box sx={tableCellSx}>{currentStorePlant ? `${currentStorePlant} Store` : "Store"}</Box>
+                                <Box sx={tableCellSx}>{nextStep}</Box>
                                 <Box sx={tableCellSx}>
                                     <Typography sx={mainTextSx}>
                                         {reservation.qcRequired
@@ -848,7 +901,7 @@ export function MatFlowStoreDetailPage() {
                                             : "Not required"}
                                     </Typography>
                                     {reservation.qcRequired && !reservation.qcCompleted && (
-                                        <Typography sx={subTextSx}>No material movement</Typography>
+                                        <Typography sx={subTextSx}>Store release blocked until QC is checked</Typography>
                                     )}
                                 </Box>
                                 <Box sx={tableCellSx}>
@@ -872,7 +925,7 @@ export function MatFlowStoreDetailPage() {
                                     ) : storeCanSend ? (
                                         <Button
                                             startIcon={<SendOutlinedIcon />}
-                                            onClick={() => openIssue(reservation, pendingStoreLeg)}
+                                            onClick={() => openIssue(reservation, sendLabel)}
                                             disabled={workingId === String(reservation.id)}
                                             sx={primaryBtnSx}
                                         >
@@ -909,28 +962,12 @@ export function MatFlowStoreDetailPage() {
                 </Box>
             </Card>
 
-            {internalTransfers.length > 0 && (
-                <Card sx={panelSx}>
-                    <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Route Trace</Typography>
-                    <Typography sx={subTextSx}>
-                        Read-only internal custody lineage for this MR. There is intentionally no separate Transfers desk.
-                    </Typography>
-                    <Box sx={{ mt: 1, display: "grid", gap: .6 }}>
-                        {internalTransfers.map((transfer) => (
-                            <Box key={transfer.id} sx={{ p: 1, border: "1px solid var(--mf-border)", borderRadius: 2, display: "flex", gap: 1, justifyContent: "space-between", flexWrap: "wrap" }}>
-                                <Typography sx={mainTextSx}>{transfer.materialCode} · {readable(transfer.responsibleDepartment)} → {readable(transfer.nextAction)}</Typography>
-                                <Typography sx={subTextSx}>{readable(transfer.status)} · {formatQty(transfer.receivedQty)}/{formatQty(transfer.plannedQty)}</Typography>
-                            </Box>
-                        ))}
-                    </Box>
-                </Card>
-            )}
 
             <Dialog open={Boolean(issueDialog)} onClose={() => !workingId && setIssueDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{normalize(issueDialog?.transfer?.toCustody).includes("PRODUCTION") ? "Hand Over Material to Production" : "Dispatch Store Route Leg"}</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>{issueDialog?.actionLabel || "Send Material"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Alert severity="info" sx={{ mb: 1.5 }}>
-                        This dispatches only the current Store-owned route leg. Remote routes are Main Store → origin Plant Store → specific Production user. Each receiving step remains explicit and auditable.
+                        MatFlow derives this hand-off from the MR plant and exact Production requester. AL-P1 issues directly to its requester; AL-P2/P3/P4 move through the corresponding Plant Store before the final Production hand-over.
                     </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <TextField label="Batch No." value={issueForm.batchNo} onChange={(e) => setIssueForm((c) => ({ ...c, batchNo: e.target.value }))} sx={fieldSx} />

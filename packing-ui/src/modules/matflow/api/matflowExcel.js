@@ -319,6 +319,29 @@ const asCell = (value) => {
     return JSON.stringify(value);
 };
 
+
+const matFlowExportKeyTokens = (key) =>
+    safeText(key)
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/[^a-zA-Z0-9]+/g, " ")
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+
+/**
+ * Frontend exports intentionally exclude legacy generic routing-node fields.
+ * MatFlow operators work with Plant Store / Main Store / Processing Unit /
+ * exact Production requester only; any old persistence field that contains a
+ * standalone "location" or "custody" token must never leak into generated XLSX.
+ */
+const isPublicMatFlowExportKey = (key) => {
+    const tokens = matFlowExportKeyTokens(key);
+    if (tokens.includes("location") || tokens.includes("custody")) return false;
+    const normalized = normalizeHeader(key);
+    if (["transfers", "transfer orders", "internal transfers"].includes(normalized)) return false;
+    return true;
+};
+
 const columnWidth = (header, rows, key) => {
     const max = Math.max(
         safeText(header).length,
@@ -343,11 +366,12 @@ export async function downloadMatFlowExcel({
         views: [{ state: "frozen", ySplit: 5 }],
     });
 
-    const resolvedColumns = columns.length
+    const resolvedColumns = (columns.length
         ? columns
         : Array.from(new Set(rows.flatMap((row) => Object.keys(row || {}))))
             .filter((key) => !["_raw"].includes(key))
-            .map((key) => ({ key, label: key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ") }));
+            .map((key) => ({ key, label: key.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ") })))
+        .filter((column) => isPublicMatFlowExportKey(column?.key));
 
     const lastCol = Math.max(1, resolvedColumns.length);
     sheet.mergeCells(1, 1, 1, lastCol);

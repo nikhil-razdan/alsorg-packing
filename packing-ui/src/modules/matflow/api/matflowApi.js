@@ -70,7 +70,7 @@ export const readMatFlowError = (
 };
 
 /**
- * MatFlow frontend API v6 (four-plant routing).
+ * MatFlow frontend API v9-compatible four-plant routing.
  *
  * Deliberately absent:
  * - Project/Product approval actions
@@ -78,13 +78,17 @@ export const readMatFlowError = (
  * - Production partial-availability decision
  * - Manual PI submit
  * - PO approval/draft-delete actions
+ * - Generic routing-node / Location CRUD
  * - Public Transfer CRUD
  * - Manual Processing-job creation/delete
+ * - Legacy QC routing/disposition actions
  *
- * Four-plant additions:
- * - P2/P3/P4 origin Store forwards the same MR to AL-P1 Main Store
- * - Origin Store explicitly receives P1-issued material before final Production handoff
- * - Production returns follow Production -> origin Store -> AL-P1 Main Store
+ * Canonical four-plant behavior:
+ * - AL-P1 Production submits directly to AL-P1 Main Store
+ * - AL-P2/P3/P4 Production submits to its own Plant Store, which forwards the same MR unchanged to AL-P1
+ * - Main Store planning is keyed by MR plant + requester; operators never choose a Location
+ * - Final issue returns through the origin Plant Store for remote plants and ends with the exact Production requester
+ * - Production returns follow the reverse Plant Store route back to AL-P1 Main Store
  */
 export const matflowApi = {
 	/* ========================= MASTER / PROJECT ========================= */
@@ -265,16 +269,6 @@ export const matflowApi = {
 	},
 	getQcPhoto: (id) =>
 		API.get(`${BASE}/qc/${requiredId(id, "QC record ID")}/photo`, { responseType: "blob" }),
-	returnQcToVendor: (id, body) =>
-		API.post(`${BASE}/qc/${requiredId(id, "QC record ID")}/return-to-vendor`, body),
-	listQcDispositions: (params = {}) =>
-		API.get(`${BASE}/qc-dispositions`, { params: cleanParams(params) }),
-	decideQcDisposition: (inspectionId, body) =>
-		API.post(
-			`${BASE}/qc-dispositions/${requiredId(inspectionId, "QC record ID")}`,
-			body
-		),
-
 	/* ========================== RETURNS ONLY =========================== */
 	listMaterialReturns: (params = {}) =>
 		API.get(`${BASE}/material-returns`, { params: cleanParams(params) }),
@@ -320,6 +314,10 @@ export const matflowApi = {
 		API.get(`${BASE}/reports/products/${requiredId(projectDrawingId, "Product ID")}`),
 	shortageReport: (params = {}) =>
 		API.get(`${BASE}/reports/shortages`, { params: cleanParams(params) }),
+	materialMovementAudit: (params = {}) =>
+		// Backend route name is retained for compatibility; the payload is a workflow movement audit, not a stock/location screen.
+		API.get(`${BASE}/reports/stock-ledger`, { params: cleanParams(params) }),
+	/** @deprecated Use materialMovementAudit. */
 	stockLedger: (params = {}) =>
 		API.get(`${BASE}/reports/stock-ledger`, { params: cleanParams(params) }),
 	auditLogs: (params = {}) =>

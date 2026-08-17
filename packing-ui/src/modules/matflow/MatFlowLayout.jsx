@@ -55,8 +55,8 @@ const NAV = [
     ["Processing Unit Master", "/matflow/processing-units", "processing-units", <PrecisionManufacturingOutlinedIcon />],
     ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
-    ["Material Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
-    ["Stock Ledger", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
+    ["Material Usage Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
+    ["Material Movement Audit", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
     ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
@@ -72,8 +72,8 @@ const HEADER = [
     ["/matflow/processing-units", "Processing Unit Master", "Approved internal/external Processing Units used by BOM material options"],
     ["/matflow/processing", "Material Processing", "Store-selected jobs: start, complete and release toward Production"],
     ["/matflow/returns", "Material Returns", "Production unused / excess material return control"],
-    ["/matflow/material-register", "Material Register", "Derived purchased, issued, consumed, wasted, returned and stock quantities"],
-    ["/matflow/ledger", "Stock Ledger", "Immutable physical inventory movement history"],
+    ["/matflow/material-register", "Material Usage Register", "Purchased/received, issued, consumed, Production-wasted, Processing-wasted and returned quantities; physical stock remains in Tally"],
+    ["/matflow/ledger", "Material Movement Audit", "Immutable MatFlow workflow and usage events by plant/department; no separate routing master or physical stock balance"],
     ["/matflow/reports", "Reports", "Shortage, Product, stock and audit reporting"],
     ["/matflow/projects", "Projects & Products", "Approval-free Project → Product / Drawing administration"],
     ["/matflow/materials", "Material Inventory", "Operational material catalogue and usage summary; physical stock remains in Tally"],

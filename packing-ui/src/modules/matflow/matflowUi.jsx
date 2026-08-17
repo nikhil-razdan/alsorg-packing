@@ -522,7 +522,7 @@ export const canAccessMatFlowScreenForContext = (screen, roleOrRoles, plantCodes
     .map((value) => String(value ?? "").trim().toUpperCase())
     .filter(Boolean)));
 
-  // Purchase, GRN and QC are centralized at AL-P1 Main Store in API v6.
+  // Purchase, GRN and QC are centralized at AL-P1 Main Store in the four-plant workflow.
   if (["purchase", "receiving", "qc"].includes(screen)) {
     return plants.includes("AL-P1");
   }
@@ -546,7 +546,7 @@ export const matFlowRoleLabel = (roleOrRoles) => {
 
 export const defaultMatFlowPathForRole = (roleOrRoles) => {
   const roles = getMatFlowRoles(roleOrRoles);
-  // API v6 uses one Universal Dashboard as the common MatFlow landing page.
+  // The four-plant workflow uses one Universal Dashboard as the common MatFlow landing page.
   return roles.length ? "/matflow/dashboard" : "/modules";
 };
 
@@ -2053,7 +2053,7 @@ export function TrackerTimingStrip({ startAt, endAt, durationMinutes, targetMinu
   const elapsed = durationMinutes != null ? Number(durationMinutes) : durationMinutesBetween(startAt, endAt || new Date());
   return <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(5,minmax(0,1fr))" }, gap: .75 }}>
     <Detail label="Department" value={department || "-"} />
-    <Detail label="Plant / Custody" value={plant || "-"} />
+    <Detail label="Plant / Step" value={plant || "-"} />
     <Detail label="Started" value={startAt ? formatDate(startAt) : "Not started"} />
     <Detail label="Elapsed" value={formatDurationMinutes(elapsed)} />
     <Detail label="Timing" value={<Box sx={{ display: "flex", gap: .6, alignItems: "center", flexWrap: "wrap" }}><TimingHealthChip health={health} />{Number(targetMinutes || 0) > 0 && <Typography sx={subTextSx}>Target {formatDurationMinutes(targetMinutes)}</Typography>}</Box>} />
