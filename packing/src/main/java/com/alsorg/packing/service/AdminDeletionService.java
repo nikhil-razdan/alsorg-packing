@@ -5,10 +5,12 @@ import com.alsorg.packing.controller.dto.admin.AdminDeleteRequest;
 import com.alsorg.packing.controller.dto.admin.AdminDeleteResultResponse;
 import com.alsorg.packing.controller.dto.admin.AdminDeleteSearchResult;
 import com.alsorg.packing.controller.dto.admin.AdminDeletionHistoryResponse;
+import com.alsorg.packing.controller.dto.admin.AdminWarehouseBulkDeleteRequest;
 import com.alsorg.packing.domain.item.HardwarePacketLine;
 import com.alsorg.packing.repository.HardwarePacketLineRepository;
 import com.alsorg.packing.domain.audit.AdminDeletionAudit;
 import com.alsorg.packing.domain.common.PacketItemType;
+import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.item.MasterItem;
 import com.alsorg.packing.domain.item.PacketItem;
@@ -33,6 +35,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,6 +49,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,6 +61,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import org.springframework.http.HttpStatus;
 
@@ -71,6 +77,21 @@ import org.springframework.web.server.ResponseStatusException;
 public class AdminDeletionService {
 
         private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+
+        private static final UUID NO_MATCH_UUID = new UUID(0L, 0L);
+
+        /*
+         * Warehouse page rows are DispatchedItem records. Excel imports create
+         * standalone rows here without Packet / PacketItem / MasterItem records.
+         * Keep the Admin delete target aligned with what the Warehouse page can
+         * actually show instead of broadening permanent deletion into unrelated
+         * Dispatch history.
+         */
+        private static final Set<ItemDispatchStatus> WAREHOUSE_DELETE_STATUSES = Set.of(
+                        ItemDispatchStatus.ON_FLOOR,
+                        ItemDispatchStatus.WAREHOUSE_REQUESTED,
+                        ItemDispatchStatus.IN_WAREHOUSE,
+                        ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED);
 
         private final PacketItemRepository packetItemRepository;
 
@@ -471,6 +492,254 @@ public class AdminDeletionService {
 
         /*
          * =====================================================
+         * SEARCH WAREHOUSE ITEMS
+         * =====================================================
+         */
+
+        @Transactional(readOnly = true)
+        public Page<AdminDeleteSearchResult> searchWarehouseItems(
+                        String rawQuery,
+                        Pageable pageable,
+                        User user) {
+                assertAdmin(user);
+
+                String query = normalizeSearchQuery(rawQuery);
+
+                DispatchedItem exactItem = dispatchedItemRepository
+                                .findById(query)
+                                .orElse(null);
+
+                if (isWarehouseDeleteCandidate(exactItem)) {
+                        return new PageImpl<>(
+                                        List.of(toWarehouseSearchResult(exactItem)),
+                                        pageable,
+                                        1);
+                }
+
+                String loweredQuery = query.toLowerCase(Locale.ROOT);
+                String likeQuery = "%" + loweredQuery + "%";
+
+                Specification<DispatchedItem> specification = (root, criteriaQuery, cb) -> {
+                        List<Predicate> matches = new ArrayList<>();
+
+                        for (String field : List.of(
+                                        "zohoItemId",
+                                        "name",
+                                        "sku",
+                                        "pdNo",
+                                        "drawingNo",
+                                        "description",
+                                        "clientName",
+                                        "plantCode",
+                                        "currentLocationCode",
+                                        "location",
+                                        "warehouseCode",
+                                        "gatePassNumber")) {
+
+                                Expression<String> value = cb.lower(
+                                                cb.coalesce(
+                                                                root.get(field).as(String.class),
+                                                                ""));
+
+                                matches.add(
+                                                cb.like(
+                                                                value,
+                                                                likeQuery));
+                        }
+
+                        return cb.and(
+                                        root.get("status").in(WAREHOUSE_DELETE_STATUSES),
+                                        cb.or(matches.toArray(Predicate[]::new)));
+                };
+
+                return dispatchedItemRepository
+                                .findAll(specification, pageable)
+                                .map(this::toWarehouseSearchResult);
+        }
+
+        /*
+         * =====================================================
+         * PREVIEW / DELETE ONE WAREHOUSE ITEM
+         * =====================================================
+         */
+
+        @Transactional(readOnly = true)
+        public AdminDeletePreviewResponse previewWarehouseItem(
+                        String itemId,
+                        User user) {
+                assertAdmin(user);
+
+                DispatchedItem item = requireWarehouseDeleteItem(itemId);
+
+                DeletionContext context = buildWarehouseDeletionContext(
+                                List.of(item));
+
+                Map<String, Long> affectedRows = buildAffectedRowPreview(
+                                context,
+                                false);
+
+                String requiredConfirmation = "DELETE WAREHOUSE " + item.getZohoItemId();
+
+                boolean deletesMaster = affectedRows.getOrDefault(
+                                "masterItems",
+                                0L) > 0;
+
+                boolean deletesInternalPacket = affectedRows.getOrDefault(
+                                "internalPackets",
+                                0L) > 0;
+
+                return new AdminDeletePreviewResponse(
+                                "WAREHOUSE_ITEM",
+                                item.getZohoItemId(),
+                                buildWarehouseDisplayName(item),
+                                safe(item.getDescription()),
+                                safe(item.getPdNo()),
+                                safe(item.getDrawingNo()),
+                                "-",
+                                item.getStatus() == null ? "" : item.getStatus().name(),
+                                firstNonBlank(
+                                                item.getCurrentLocationCode(),
+                                                item.getWarehouseCode(),
+                                                item.getLocation(),
+                                                "-"),
+                                requiredConfirmation,
+                                affectedRows,
+                                deletesMaster,
+                                deletesInternalPacket,
+                                buildWarehouseWarning(context));
+        }
+
+        @Transactional
+        public AdminDeleteResultResponse deleteWarehouseItem(
+                        String itemId,
+                        AdminDeleteRequest request,
+                        User user) {
+                assertAdmin(user);
+
+                DispatchedItem item = requireWarehouseDeleteItem(itemId);
+
+                String requiredConfirmation = "DELETE WAREHOUSE " + item.getZohoItemId();
+
+                validateDeleteRequest(
+                                request,
+                                requiredConfirmation);
+
+                DeletionContext context = buildWarehouseDeletionContext(
+                                List.of(item));
+
+                String displayName = buildWarehouseDisplayName(item);
+
+                try {
+                        return executeDeletion(
+                                        context,
+                                        "WAREHOUSE_ITEM",
+                                        item.getZohoItemId(),
+                                        displayName,
+                                        cleanRequiredReason(request.reason()),
+                                        safeActor(user.getUsername()),
+                                        buildWarehouseSnapshotJson(
+                                                        List.of(item),
+                                                        context,
+                                                        "SINGLE"),
+                                        null);
+                } catch (DataIntegrityViolationException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "Warehouse deletion was blocked because another linked database record still exists",
+                                        exception);
+                }
+        }
+
+        /*
+         * =====================================================
+         * PREVIEW / DELETE WAREHOUSE ITEMS IN BULK
+         * =====================================================
+         */
+
+        @Transactional(readOnly = true)
+        public AdminDeletePreviewResponse previewWarehouseItemsBulk(
+                        List<String> itemIds,
+                        User user) {
+                assertAdmin(user);
+
+                List<DispatchedItem> items = requireWarehouseDeleteItems(itemIds);
+
+                DeletionContext context = buildWarehouseDeletionContext(items);
+
+                Map<String, Long> affectedRows = buildAffectedRowPreview(
+                                context,
+                                false);
+
+                String requiredConfirmation = "DELETE WAREHOUSE BULK " + items.size();
+
+                return new AdminDeletePreviewResponse(
+                                "WAREHOUSE_BULK",
+                                "BULK",
+                                items.size() + " Warehouse Items",
+                                "Permanent bulk deletion of the selected Warehouse rows.",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                requiredConfirmation,
+                                affectedRows,
+                                affectedRows.getOrDefault("masterItems", 0L) > 0,
+                                affectedRows.getOrDefault("internalPackets", 0L) > 0,
+                                buildWarehouseWarning(context));
+        }
+
+        @Transactional
+        public AdminDeleteResultResponse deleteWarehouseItemsBulk(
+                        AdminWarehouseBulkDeleteRequest request,
+                        User user) {
+                assertAdmin(user);
+
+                if (request == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Warehouse bulk deletion request is missing");
+                }
+
+                List<DispatchedItem> items = requireWarehouseDeleteItems(
+                                request.itemIds());
+
+                String requiredConfirmation = "DELETE WAREHOUSE BULK " + items.size();
+
+                validateDeleteRequest(
+                                new AdminDeleteRequest(
+                                                request.confirmationText(),
+                                                request.reason()),
+                                requiredConfirmation);
+
+                DeletionContext context = buildWarehouseDeletionContext(items);
+
+                String auditTargetId = "BULK-" + UUID.randomUUID();
+                String displayName = items.size() + " Warehouse Items";
+
+                try {
+                        return executeDeletion(
+                                        context,
+                                        "WAREHOUSE_BULK",
+                                        auditTargetId,
+                                        displayName,
+                                        cleanRequiredReason(request.reason()),
+                                        safeActor(user.getUsername()),
+                                        buildWarehouseSnapshotJson(
+                                                        items,
+                                                        context,
+                                                        "BULK"),
+                                        null);
+                } catch (DataIntegrityViolationException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "Bulk Warehouse deletion was blocked because another linked database record still exists",
+                                        exception);
+                }
+        }
+
+        /*
+         * =====================================================
          * DELETION HISTORY
          * =====================================================
          */
@@ -514,37 +783,52 @@ public class AdminDeletionService {
                  * Child records must be deleted first.
                  */
 
+                Set<UUID> repositoryPacketItemIds = packetItemIdsForRepository(
+                                context.packetItemIds());
+
                 int deletedHardwarePacketLines = context.packetItemIds().isEmpty()
                                 ? 0
                                 : hardwarePacketLineRepository
                                                 .deleteByPacketItemIdsForAdminDeletion(
                                                                 context.packetItemIds());
 
-                int deletedStickerHistory = stickerHistoryRepository
-                                .deleteByPacketItemIdsForAdminDeletion(
-                                                context.packetItemIds());
+                int deletedStickerHistory = context.packetItemIds().isEmpty()
+                                ? 0
+                                : stickerHistoryRepository
+                                                .deleteByPacketItemIdsForAdminDeletion(
+                                                                context.packetItemIds());
 
-                int deletedTripItems = logisticsTripItemRepository
-                                .deleteForAdminDeletion(
-                                                context.packetItemIds(),
-                                                context.lookupIds());
+                int deletedTripItems = context.lookupIds().isEmpty()
+                                ? 0
+                                : logisticsTripItemRepository
+                                                .deleteForAdminDeletion(
+                                                                repositoryPacketItemIds,
+                                                                context.lookupIds());
 
-                int deletedDispatchedItems = dispatchedItemRepository
-                                .deleteForAdminDeletion(
-                                                context.packetItemIds(),
-                                                context.lookupIds());
+                int deletedDispatchedItems = context.lookupIds().isEmpty()
+                                ? 0
+                                : dispatchedItemRepository
+                                                .deleteForAdminDeletion(
+                                                                repositoryPacketItemIds,
+                                                                context.lookupIds());
 
-                int deletedActivityLogs = activityLogRepository
-                                .deleteByZohoItemIdsForAdminDeletion(
-                                                context.lookupIds());
+                int deletedActivityLogs = context.lookupIds().isEmpty()
+                                ? 0
+                                : activityLogRepository
+                                                .deleteByZohoItemIdsForAdminDeletion(
+                                                                context.lookupIds());
 
-                int deletedAuditLogs = auditLogRepository
-                                .deleteByZohoItemIdsForAdminDeletion(
-                                                context.lookupIds());
+                int deletedAuditLogs = context.lookupIds().isEmpty()
+                                ? 0
+                                : auditLogRepository
+                                                .deleteByZohoItemIdsForAdminDeletion(
+                                                                context.lookupIds());
 
-                int deletedPacketItems = packetItemRepository
-                                .deleteByIdsForAdminDeletion(
-                                                context.packetItemIds());
+                int deletedPacketItems = context.packetItemIds().isEmpty()
+                                ? 0
+                                : packetItemRepository
+                                                .deleteByIdsForAdminDeletion(
+                                                                context.packetItemIds());
 
                 /*
                  * JPQL bulk deletes bypass the persistence context.
@@ -635,9 +919,17 @@ public class AdminDeletionService {
                 scheduleFilesForDeletionAfterCommit(
                                 packetResult.filePaths());
 
-                String message = "MASTER_ITEM".equals(targetType)
-                                ? "Master item and all linked packets were permanently deleted"
-                                : "Packet was permanently deleted from all linked operational records";
+                String message;
+
+                if ("MASTER_ITEM".equals(targetType)) {
+                        message = "Master item and all linked packets were permanently deleted";
+                } else if ("WAREHOUSE_BULK".equals(targetType)) {
+                        message = "Selected Warehouse items and all linked operational records were permanently deleted";
+                } else if ("WAREHOUSE_ITEM".equals(targetType)) {
+                        message = "Warehouse item and all linked operational records were permanently deleted";
+                } else {
+                        message = "Packet was permanently deleted from all linked operational records";
+                }
 
                 return new AdminDeleteResultResponse(
                                 deletionAudit.getId(),
@@ -870,6 +1162,153 @@ public class AdminDeletionService {
                                 dispatchedItems,
                                 tripItems,
                                 tripIds);
+        }
+
+        /*
+         * =====================================================
+         * BUILD WAREHOUSE DELETION GRAPH
+         * =====================================================
+         */
+
+        private DeletionContext buildWarehouseDeletionContext(
+                        List<DispatchedItem> warehouseItems) {
+                if (warehouseItems == null || warehouseItems.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "No Warehouse items found for deletion");
+                }
+
+                LinkedHashMap<String, DispatchedItem> requestedRows = new LinkedHashMap<>();
+
+                Set<UUID> linkedPacketItemIds = new LinkedHashSet<>();
+                Set<UUID> packetIds = new LinkedHashSet<>();
+                Set<UUID> masterIds = new LinkedHashSet<>();
+                Set<String> lookupIds = new LinkedHashSet<>();
+
+                for (DispatchedItem item : warehouseItems) {
+                        if (!isWarehouseDeleteCandidate(item)) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Item is not currently visible in Warehouse: "
+                                                                + (item == null ? "unknown" : item.getZohoItemId()));
+                        }
+
+                        requestedRows.put(item.getZohoItemId(), item);
+                        lookupIds.add(item.getZohoItemId());
+
+                        if (item.getPacketItemId() != null) {
+                                linkedPacketItemIds.add(item.getPacketItemId());
+                        }
+
+                        if (item.getLinkedPacketItemId() != null) {
+                                linkedPacketItemIds.add(item.getLinkedPacketItemId());
+                        }
+
+                        if (item.getPacketId() != null) {
+                                packetIds.add(item.getPacketId());
+                        }
+
+                        if (item.getLinkedMasterItemId() != null) {
+                                masterIds.add(item.getLinkedMasterItemId());
+                        }
+                }
+
+                List<PacketItem> packetItems = linkedPacketItemIds.isEmpty()
+                                ? List.of()
+                                : packetItemRepository.findAllById(linkedPacketItemIds);
+
+                Set<UUID> packetItemIds = new LinkedHashSet<>(
+                                linkedPacketItemIds);
+
+                packetItems.stream()
+                                .map(PacketItem::getId)
+                                .filter(Objects::nonNull)
+                                .forEach(packetItemIds::add);
+
+                List<HardwarePacketLine> hardwarePacketLines = packetItemIds.isEmpty()
+                                ? List.of()
+                                : hardwarePacketLineRepository.findForAdminDeletion(packetItemIds);
+
+                for (PacketItem item : packetItems) {
+                        if (item.getId() != null) {
+                                lookupIds.add(item.getId().toString());
+                        }
+
+                        if (hasText(item.getZohoItemId())) {
+                                lookupIds.add(item.getZohoItemId().trim());
+                        }
+
+                        if (item.getPacket() != null && item.getPacket().getId() != null) {
+                                packetIds.add(item.getPacket().getId());
+                        }
+
+                        if (item.getMasterItem() != null && item.getMasterItem().getId() != null) {
+                                masterIds.add(item.getMasterItem().getId());
+                        }
+                }
+
+                List<DispatchedItem> relatedDispatchRows = dispatchedItemRepository
+                                .findForAdminDeletion(
+                                                packetItemIdsForRepository(packetItemIds),
+                                                lookupIds);
+
+                LinkedHashMap<String, DispatchedItem> allDispatchRows = new LinkedHashMap<>(requestedRows);
+
+                for (DispatchedItem row : relatedDispatchRows) {
+                        if (row == null || !hasText(row.getZohoItemId())) {
+                                continue;
+                        }
+
+                        allDispatchRows.put(row.getZohoItemId(), row);
+                        lookupIds.add(row.getZohoItemId());
+
+                        if (row.getPacketId() != null) {
+                                packetIds.add(row.getPacketId());
+                        }
+
+                        if (row.getLinkedMasterItemId() != null) {
+                                masterIds.add(row.getLinkedMasterItemId());
+                        }
+                }
+
+                List<LogisticsTripItem> tripItems = logisticsTripItemRepository
+                                .findForAdminDeletion(
+                                                packetItemIdsForRepository(packetItemIds),
+                                                lookupIds);
+
+                Set<UUID> tripIds = new LinkedHashSet<>();
+
+                for (LogisticsTripItem tripItem : tripItems) {
+                        if (tripItem.getTrip() != null && tripItem.getTrip().getId() != null) {
+                                tripIds.add(tripItem.getTrip().getId());
+                        }
+                }
+
+                for (DispatchedItem row : allDispatchRows.values()) {
+                        if (row.getLogisticsTripId() != null) {
+                                tripIds.add(row.getLogisticsTripId());
+                        }
+                }
+
+                return new DeletionContext(
+                                List.copyOf(packetItems),
+                                packetItemIds,
+                                packetIds,
+                                masterIds,
+                                lookupIds,
+                                List.copyOf(hardwarePacketLines),
+                                List.copyOf(allDispatchRows.values()),
+                                List.copyOf(tripItems),
+                                tripIds);
+        }
+
+        private Set<UUID> packetItemIdsForRepository(
+                        Set<UUID> packetItemIds) {
+                if (packetItemIds == null || packetItemIds.isEmpty()) {
+                        return Set.of(NO_MATCH_UUID);
+                }
+
+                return packetItemIds;
         }
 
         /*
@@ -1480,6 +1919,189 @@ public class AdminDeletionService {
                 return result;
         }
 
+        private DispatchedItem requireWarehouseDeleteItem(
+                        String rawItemId) {
+                String itemId = clean(rawItemId);
+
+                if (itemId == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Warehouse item ID is required");
+                }
+
+                DispatchedItem item = dispatchedItemRepository
+                                .findById(itemId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Warehouse item not found"));
+
+                if (!isWarehouseDeleteCandidate(item)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Item is not currently visible in Warehouse");
+                }
+
+                return item;
+        }
+
+        private List<DispatchedItem> requireWarehouseDeleteItems(
+                        List<String> rawItemIds) {
+                List<String> itemIds = cleanUniqueWarehouseIds(rawItemIds);
+
+                if (itemIds.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Select at least one Warehouse item");
+                }
+
+                if (itemIds.size() > 500) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "A maximum of 500 Warehouse items can be permanently deleted at once");
+                }
+
+                List<DispatchedItem> foundItems = dispatchedItemRepository.findAllById(itemIds);
+
+                Map<String, DispatchedItem> byId = foundItems.stream()
+                                .filter(Objects::nonNull)
+                                .filter(item -> hasText(item.getZohoItemId()))
+                                .collect(Collectors.toMap(
+                                                DispatchedItem::getZohoItemId,
+                                                item -> item,
+                                                (first, second) -> first,
+                                                LinkedHashMap::new));
+
+                List<String> missingIds = itemIds.stream()
+                                .filter(id -> !byId.containsKey(id))
+                                .toList();
+
+                if (!missingIds.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Warehouse items not found: "
+                                                        + String.join(", ", missingIds.stream().limit(10).toList()));
+                }
+
+                List<DispatchedItem> ordered = itemIds.stream()
+                                .map(byId::get)
+                                .toList();
+
+                for (DispatchedItem item : ordered) {
+                        if (!isWarehouseDeleteCandidate(item)) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Bulk deletion can contain only rows currently visible in Warehouse. Item "
+                                                                + item.getZohoItemId()
+                                                                + " is "
+                                                                + (item.getStatus() == null ? "UNKNOWN"
+                                                                                : item.getStatus().name()));
+                        }
+                }
+
+                return ordered;
+        }
+
+        private List<String> cleanUniqueWarehouseIds(
+                        List<String> rawItemIds) {
+                if (rawItemIds == null) {
+                        return List.of();
+                }
+
+                return rawItemIds.stream()
+                                .map(this::clean)
+                                .filter(Objects::nonNull)
+                                .distinct()
+                                .toList();
+        }
+
+        private boolean isWarehouseDeleteCandidate(
+                        DispatchedItem item) {
+                return item != null
+                                && item.getStatus() != null
+                                && WAREHOUSE_DELETE_STATUSES.contains(item.getStatus())
+                                && hasText(item.getZohoItemId());
+        }
+
+        private String buildWarehouseDisplayName(
+                        DispatchedItem item) {
+                String name = firstNonBlank(
+                                item.getName(),
+                                "Warehouse Item");
+
+                String identifier = firstNonBlank(
+                                item.getSku(),
+                                item.getPdNo(),
+                                item.getZohoItemId());
+
+                return name + " | " + identifier;
+        }
+
+        private String buildWarehouseWarning(
+                        DeletionContext context) {
+                if (!context.packetItems().isEmpty()) {
+                        return "This Warehouse row is linked to PackFlow packet data. Permanent deletion will also remove the linked packet, sticker, dispatch/logistics records, and empty parent packet/master records where applicable.";
+                }
+
+                if (!context.tripIds().isEmpty()) {
+                        return "This standalone Warehouse row has logistics history. Permanent deletion will remove the Warehouse record and its linked logistics/activity/audit records.";
+                }
+
+                return "This is a standalone Warehouse/Excel-import record. Permanent deletion removes the row and any matching activity/audit data without creating or changing PackFlow lifecycle records.";
+        }
+
+        private String buildWarehouseSnapshotJson(
+                        List<DispatchedItem> warehouseItems,
+                        DeletionContext context,
+                        String mode) {
+                Map<String, Object> snapshot = new LinkedHashMap<>();
+
+                snapshot.put("mode", mode);
+                snapshot.put("warehouseItems", buildWarehouseItemSnapshots(warehouseItems));
+                snapshot.put("linkedPacketItemIds", context.packetItemIds());
+                snapshot.put("linkedPacketIds", context.packetIds());
+                snapshot.put("linkedMasterItemIds", context.masterIds());
+                snapshot.put("affectedTripIds", context.tripIds());
+                snapshot.put("lookupIds", context.lookupIds());
+
+                return toJson(snapshot);
+        }
+
+        private List<Map<String, Object>> buildWarehouseItemSnapshots(
+                        List<DispatchedItem> items) {
+                List<Map<String, Object>> snapshots = new ArrayList<>();
+
+                for (DispatchedItem item : items) {
+                        Map<String, Object> row = new LinkedHashMap<>();
+
+                        row.put("zohoItemId", item.getZohoItemId());
+                        row.put("packetItemId", item.getPacketItemId());
+                        row.put("packetId", item.getPacketId());
+                        row.put("linkedPacketItemId", item.getLinkedPacketItemId());
+                        row.put("linkedMasterItemId", item.getLinkedMasterItemId());
+                        row.put("name", item.getName());
+                        row.put("sku", item.getSku());
+                        row.put("pdNo", item.getPdNo());
+                        row.put("drawingNo", item.getDrawingNo());
+                        row.put("description", item.getDescription());
+                        row.put("clientName", item.getClientName());
+                        row.put("status", item.getStatus());
+                        row.put("plantCode", item.getPlantCode());
+                        row.put("currentLocationCode", item.getCurrentLocationCode());
+                        row.put("location", item.getLocation());
+                        row.put("warehouseCode", item.getWarehouseCode());
+                        row.put("gatePassNumber", item.getGatePassNumber());
+                        row.put("chalaanNumber", item.getChalaanNumber());
+                        row.put("logisticsTripId", item.getLogisticsTripId());
+                        row.put("createdBy", item.getCreatedBy());
+                        row.put("createdAt", item.getCreatedAt());
+                        row.put("storedAt", item.getStoredAt());
+
+                        snapshots.add(row);
+                }
+
+                return snapshots;
+        }
+
         /*
          * =====================================================
          * DTO MAPPING
@@ -1536,6 +2158,33 @@ public class AdminDeletionService {
                                 null,
                                 master.getPlantCode(),
                                 master.getTotalPackets());
+        }
+
+        private AdminDeleteSearchResult toWarehouseSearchResult(
+                        DispatchedItem item) {
+                return new AdminDeleteSearchResult(
+                                "WAREHOUSE_ITEM",
+                                item.getZohoItemId(),
+                                item.getLinkedMasterItemId() == null
+                                                ? null
+                                                : item.getLinkedMasterItemId().toString(),
+                                item.getName(),
+                                item.getDescription(),
+                                item.getPdNo(),
+                                item.getDrawingNo(),
+                                null,
+                                item.getSku(),
+                                item.getStickerNumber(),
+                                item.getStatus() == null
+                                                ? null
+                                                : item.getStatus().name(),
+                                firstNonBlank(
+                                                item.getCurrentLocationCode(),
+                                                item.getWarehouseCode(),
+                                                item.getLocation(),
+                                                ""),
+                                item.getPlantCode(),
+                                null);
         }
 
         /*

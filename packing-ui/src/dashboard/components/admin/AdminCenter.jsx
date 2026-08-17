@@ -9,6 +9,8 @@ import {
     publishPackFlowDataChanged,
 } from "../../../utils/packFlowDataEvents";
 
+import { API_BASE_URL } from "../../../config";
+
 import {
     executeAdminMasterDeletion,
     executeAdminPacketDeletion,
@@ -21,6 +23,122 @@ import {
     searchAdminMasterItems,
     searchAdminPacketItems,
 } from "../../api/dashboardApi";
+
+async function requestAdminWarehouseDeletion(
+    path,
+    options = {}
+) {
+    const response = await fetch(
+        `${API_BASE_URL}${path}`,
+        {
+            credentials: "include",
+            ...options,
+            headers: {
+                ...(options.body
+                    ? {
+                        "Content-Type":
+                            "application/json",
+                    }
+                    : {}),
+                ...(options.headers || {}),
+            },
+        }
+    );
+
+    const text = await response.text();
+
+    let data = null;
+
+    if (text) {
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = text;
+        }
+    }
+
+    if (!response.ok) {
+        const message =
+            typeof data === "object" && data
+                ? data.message ||
+                data.error ||
+                text
+                : text;
+
+        throw new Error(
+            message ||
+            "Warehouse deletion request failed"
+        );
+    }
+
+    return data;
+}
+
+const searchAdminWarehouseItems = ({
+    query,
+    page = 0,
+    size = 20,
+}) =>
+    requestAdminWarehouseDeletion(
+        `/api/admin/deletions/warehouse-items/search?query=${encodeURIComponent(
+            query || ""
+        )}&page=${Math.max(
+            0,
+            Number(page) || 0
+        )}&size=${Math.max(
+            1,
+            Number(size) || 20
+        )}`
+    );
+
+const previewAdminWarehouseDeletion = (
+    itemId
+) =>
+    requestAdminWarehouseDeletion(
+        `/api/admin/deletions/warehouse-items/${encodeURIComponent(
+            itemId
+        )}/preview`
+    );
+
+const executeAdminWarehouseDeletion = (
+    itemId,
+    payload
+) =>
+    requestAdminWarehouseDeletion(
+        `/api/admin/deletions/warehouse-items/${encodeURIComponent(
+            itemId
+        )}/execute`,
+        {
+            method: "POST",
+            body: JSON.stringify(payload),
+        }
+    );
+
+const previewAdminWarehouseBulkDeletion = (
+    itemIds
+) =>
+    requestAdminWarehouseDeletion(
+        "/api/admin/deletions/warehouse-items/bulk/preview",
+        {
+            method: "POST",
+            body: JSON.stringify(
+                Array.isArray(itemIds)
+                    ? itemIds
+                    : []
+            ),
+        }
+    );
+
+const executeAdminWarehouseBulkDeletion = (
+    payload
+) =>
+    requestAdminWarehouseDeletion(
+        "/api/admin/deletions/warehouse-items/bulk/execute",
+        {
+            method: "POST",
+            body: JSON.stringify(payload),
+        }
+    );
 
 const EMPTY_PAGE = {
     content: [],
@@ -528,9 +646,16 @@ function SearchResultCard({
     onSelect,
     disabled,
 }) {
+    const resolvedTargetType =
+        resolveTargetType(target);
+
     const isMaster =
-        resolveTargetType(target) ===
+        resolvedTargetType ===
         "MASTER_ITEM";
+
+    const isWarehouse =
+        resolvedTargetType ===
+        "WAREHOUSE_ITEM";
 
     const description =
         target.description ||
@@ -572,12 +697,16 @@ function SearchResultCard({
                             style={resultTypeBadge(
                                 isMaster
                                     ? "#a78bfa"
-                                    : "#38bdf8"
+                                    : isWarehouse
+                                        ? "#f59e0b"
+                                        : "#38bdf8"
                             )}
                         >
                             {isMaster
                                 ? "Master Item"
-                                : "Packet Item"}
+                                : isWarehouse
+                                    ? "Warehouse Item"
+                                    : "Packet Item"}
                         </div>
 
                         <div style={resultStatusBadge}>
@@ -631,7 +760,9 @@ function SearchResultCard({
                     <span>
                         {isMaster
                             ? "Total Packets"
-                            : "Packet No."}
+                            : isWarehouse
+                                ? "Warehouse Record"
+                                : "Packet No."}
                     </span>
 
                     <strong>
@@ -639,7 +770,11 @@ function SearchResultCard({
                             ? Number(
                                 target.totalPackets || 0
                             )
-                            : target.packetNumber || "-"}
+                            : isWarehouse
+                                ? target.location ||
+                                target.plantCode ||
+                                "Warehouse"
+                                : target.packetNumber || "-"}
                     </strong>
                 </div>
 
@@ -899,7 +1034,11 @@ function DeletionHistory({
                                                         row.targetType ===
                                                             "MASTER_ITEM"
                                                             ? "#a78bfa"
-                                                            : "#38bdf8"
+                                                            : String(row.targetType || "").startsWith(
+                                                                "WAREHOUSE"
+                                                            )
+                                                                ? "#f59e0b"
+                                                                : "#38bdf8"
                                                     )}
                                                 >
                                                     {formatLabel(
@@ -1016,6 +1155,28 @@ function AdminPacketRollbackPanel({
 
     const [result, setResult] =
         useState(null);
+
+    const warehouseBulkIds =
+        useMemo(
+            () =>
+                warehouseBulkTargets
+                    .map((target) =>
+                        String(
+                            target?.id || ""
+                        ).trim()
+                    )
+                    .filter(Boolean),
+            [warehouseBulkTargets]
+        );
+
+    const warehouseBulkIdSet =
+        useMemo(
+            () =>
+                new Set(
+                    warehouseBulkIds
+                ),
+            [warehouseBulkIds]
+        );
 
     const requiredConfirmation =
         preview?.requiredConfirmation || "";
@@ -1858,6 +2019,16 @@ function AdminCenter({
     const [targetType, setTargetType] =
         useState("PACKET_ITEM");
 
+    const [
+        warehouseBulkMode,
+        setWarehouseBulkMode,
+    ] = useState(false);
+
+    const [
+        warehouseBulkTargets,
+        setWarehouseBulkTargets,
+    ] = useState([]);
+
     const [query, setQuery] =
         useState("");
 
@@ -1938,7 +2109,11 @@ function AdminCenter({
     const targetTypeDescription =
         targetType === "MASTER_ITEM"
             ? "Deletes the selected master and all child packets."
-            : "Deletes one packet and its linked operational history.";
+            : targetType === "WAREHOUSE_ITEM"
+                ? warehouseBulkMode
+                    ? "Bulk mode: select multiple Warehouse-visible rows from the search results, preview the complete combined impact, then permanently delete them in one audited transaction."
+                    : "Deletes one Warehouse-visible row and every linked operational record. Excel-imported rows are supported even when no PacketItem exists."
+                : "Deletes one packet and its linked operational history.";
 
     const selectedTargetId =
         selectedTarget?.id || null;
@@ -2000,10 +2175,16 @@ function AdminCenter({
         setDeleteResult(null);
     };
 
+    const resetWarehouseBulkSelection = () => {
+        setWarehouseBulkTargets([]);
+        setWarehouseBulkMode(false);
+    };
+
     const resetSearch = () => {
         setSearchPage(EMPTY_PAGE);
         setSearchError("");
         resetSelection();
+        resetWarehouseBulkSelection();
     };
 
     const closeModal =
@@ -2059,6 +2240,8 @@ function AdminCenter({
 
         setWorkspaceTab("rollback");
         setTargetType("PACKET_ITEM");
+        setWarehouseBulkMode(false);
+        setWarehouseBulkTargets([]);
         setQuery("");
 
         setSearchPage(EMPTY_PAGE);
@@ -2242,11 +2425,17 @@ function AdminCenter({
                         page: requestedPage,
                         size: pageSize,
                     })
-                    : await searchAdminPacketItems({
-                        query: cleanQuery,
-                        page: requestedPage,
-                        size: pageSize,
-                    });
+                    : targetType === "WAREHOUSE_ITEM"
+                        ? await searchAdminWarehouseItems({
+                            query: cleanQuery,
+                            page: requestedPage,
+                            size: pageSize,
+                        })
+                        : await searchAdminPacketItems({
+                            query: cleanQuery,
+                            page: requestedPage,
+                            size: pageSize,
+                        });
 
             setSearchPage(
                 normalizeTargetPage(
@@ -2270,10 +2459,141 @@ function AdminCenter({
         }
     };
 
+    const toggleWarehouseBulkMode = () => {
+        if (
+            targetType !== "WAREHOUSE_ITEM" ||
+            deleting
+        ) {
+            return;
+        }
+
+        setWarehouseBulkMode(
+            (current) => !current
+        );
+
+        setWarehouseBulkTargets([]);
+        resetSelection();
+    };
+
+    const toggleWarehouseBulkTarget = (
+        target
+    ) => {
+        if (
+            !warehouseBulkMode ||
+            targetType !== "WAREHOUSE_ITEM" ||
+            !target?.id ||
+            deleting
+        ) {
+            return;
+        }
+
+        const cleanId =
+            String(target.id).trim();
+
+        setWarehouseBulkTargets(
+            (current) => {
+                const exists =
+                    current.some(
+                        (item) =>
+                            String(
+                                item?.id || ""
+                            ).trim() === cleanId
+                    );
+
+                if (exists) {
+                    return current.filter(
+                        (item) =>
+                            String(
+                                item?.id || ""
+                            ).trim() !== cleanId
+                    );
+                }
+
+                return [
+                    ...current,
+                    {
+                        ...target,
+                        type: "WAREHOUSE_ITEM",
+                        targetType: "WAREHOUSE_ITEM",
+                    },
+                ];
+            }
+        );
+
+        setPreview(null);
+        setSelectedTarget(null);
+        setPreviewError("");
+        setDeleteError("");
+        setDeleteResult(null);
+        setReason("");
+        setConfirmation("");
+    };
+
+    const loadWarehouseBulkPreview =
+        async () => {
+            if (
+                targetType !== "WAREHOUSE_ITEM" ||
+                !warehouseBulkMode ||
+                warehouseBulkIds.length === 0
+            ) {
+                return;
+            }
+
+            setPreview(null);
+            setPreviewError("");
+            setDeleteError("");
+            setDeleteResult(null);
+            setReason("");
+            setConfirmation("");
+            setPreviewLoading(true);
+
+            setSelectedTarget({
+                id: "__WAREHOUSE_BULK__",
+                type: "WAREHOUSE_BULK",
+                targetType: "WAREHOUSE_BULK",
+                itemName:
+                    `${warehouseBulkIds.length} Warehouse items`,
+            });
+
+            try {
+                const data =
+                    await previewAdminWarehouseBulkDeletion(
+                        warehouseBulkIds
+                    );
+
+                setPreview({
+                    ...data,
+                    targetType:
+                        "WAREHOUSE_BULK",
+                });
+            } catch (error) {
+                console.error(error);
+
+                setSelectedTarget(null);
+
+                setPreviewError(
+                    error?.message ||
+                    "Unable to calculate bulk Warehouse deletion impact."
+                );
+            } finally {
+                setPreviewLoading(false);
+            }
+        };
+
     const loadPreview = async (
         target
     ) => {
         if (!target?.id) return;
+
+        if (
+            targetType === "WAREHOUSE_ITEM" &&
+            warehouseBulkMode
+        ) {
+            toggleWarehouseBulkTarget(
+                target
+            );
+            return;
+        }
 
         const resolvedType =
             resolveTargetType(
@@ -2309,9 +2629,13 @@ function AdminCenter({
                     ? await previewAdminMasterDeletion(
                         normalizedTarget.id
                     )
-                    : await previewAdminPacketDeletion(
-                        normalizedTarget.id
-                    );
+                    : resolvedType === "WAREHOUSE_ITEM"
+                        ? await previewAdminWarehouseDeletion(
+                            normalizedTarget.id
+                        )
+                        : await previewAdminPacketDeletion(
+                            normalizedTarget.id
+                        );
 
             setPreview({
                 ...data,
@@ -2347,9 +2671,26 @@ function AdminCenter({
     };
 
     const executeDeletion = async () => {
+        const previewDeleteType =
+            resolveTargetType(
+                preview,
+                targetType
+            );
+
+        const deletingWarehouseBulk =
+            previewDeleteType ===
+            "WAREHOUSE_BULK";
+
         if (
             !canDelete ||
-            !selectedTargetId
+            (
+                !deletingWarehouseBulk &&
+                !selectedTargetId
+            ) ||
+            (
+                deletingWarehouseBulk &&
+                warehouseBulkIds.length === 0
+            )
         ) {
             return;
         }
@@ -2367,11 +2708,25 @@ function AdminCenter({
                     reason.trim(),
             };
 
+            const resolvedDeleteType =
+                previewDeleteType;
+
             const deletingMaster =
-                resolveTargetType(
-                    preview,
-                    targetType
-                ) === "MASTER_ITEM";
+                resolvedDeleteType ===
+                "MASTER_ITEM";
+
+            const deletingWarehouse =
+                resolvedDeleteType ===
+                "WAREHOUSE_ITEM";
+
+            const deletingWarehouseBulk =
+                resolvedDeleteType ===
+                "WAREHOUSE_BULK";
+
+            const deletedWarehouseIds =
+                deletingWarehouseBulk
+                    ? [...warehouseBulkIds]
+                    : [];
 
             const result =
                 deletingMaster
@@ -2379,12 +2734,40 @@ function AdminCenter({
                         selectedTargetId,
                         payload
                     )
-                    : await executeAdminPacketDeletion(
-                        selectedTargetId,
-                        payload
-                    );
+                    : deletingWarehouseBulk
+                        ? await executeAdminWarehouseBulkDeletion({
+                            itemIds:
+                                deletedWarehouseIds,
+                            ...payload,
+                        })
+                        : deletingWarehouse
+                            ? await executeAdminWarehouseDeletion(
+                                selectedTargetId,
+                                payload
+                            )
+                            : await executeAdminPacketDeletion(
+                                selectedTargetId,
+                                payload
+                            );
 
             setDeleteResult(result);
+
+            const removedIds =
+                deletingWarehouseBulk
+                    ? new Set(
+                        deletedWarehouseIds
+                    )
+                    : new Set([
+                        String(
+                            selectedTargetId ||
+                            ""
+                        ),
+                    ]);
+
+            const removedCount =
+                deletingWarehouseBulk
+                    ? deletedWarehouseIds.length
+                    : 1;
 
             setSearchPage((current) => ({
                 ...current,
@@ -2392,8 +2775,12 @@ function AdminCenter({
                 content:
                     current.content.filter(
                         (item) =>
-                            item.id !==
-                            selectedTargetId
+                            !removedIds.has(
+                                String(
+                                    item?.id ||
+                                    ""
+                                )
+                            )
                     ),
 
                 totalElements:
@@ -2402,7 +2789,7 @@ function AdminCenter({
                         Number(
                             current.totalElements ||
                             0
-                        ) - 1
+                        ) - removedCount
                     ),
             }));
 
@@ -2411,19 +2798,39 @@ function AdminCenter({
             setReason("");
             setConfirmation("");
 
+            if (deletingWarehouseBulk) {
+                setWarehouseBulkTargets([]);
+                setWarehouseBulkMode(false);
+            }
+
             await notifyAdminDataChanged({
                 action:
                     deletingMaster
                         ? "MASTER_ITEM_DELETION"
-                        : "PERMANENT_DELETION",
+                        : deletingWarehouseBulk
+                            ? "WAREHOUSE_BULK_DELETION"
+                            : deletingWarehouse
+                                ? "WAREHOUSE_ITEM_DELETION"
+                                : "PERMANENT_DELETION",
 
                 targetType:
                     deletingMaster
                         ? "MASTER_ITEM"
-                        : "PACKET_ITEM",
+                        : deletingWarehouseBulk
+                            ? "WAREHOUSE_BULK"
+                            : deletingWarehouse
+                                ? "WAREHOUSE_ITEM"
+                                : "PACKET_ITEM",
 
                 targetId:
-                    selectedTargetId,
+                    deletingWarehouseBulk
+                        ? result?.targetId
+                        : selectedTargetId,
+
+                deletedTargetIds:
+                    deletingWarehouseBulk
+                        ? deletedWarehouseIds
+                        : undefined,
 
                 ...result,
             });
@@ -2634,11 +3041,123 @@ function AdminCenter({
                                         >
                                             Master Items
                                         </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                handleTargetTypeChange(
+                                                    "WAREHOUSE_ITEM"
+                                                )
+                                            }
+                                            style={typeTabButton(
+                                                targetType ===
+                                                "WAREHOUSE_ITEM"
+                                            )}
+                                        >
+                                            Warehouse Items
+                                        </button>
                                     </div>
 
                                     <div style={typeDescription}>
                                         {targetTypeDescription}
                                     </div>
+
+                                    {targetType ===
+                                        "WAREHOUSE_ITEM" && (
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    gap: 10,
+                                                    flexWrap: "wrap",
+                                                    marginBottom: 12,
+                                                    padding: 10,
+                                                    borderRadius: 12,
+                                                    background:
+                                                        "rgba(245,158,11,.07)",
+                                                    border:
+                                                        "1px solid rgba(245,158,11,.17)",
+                                                }}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        deleting ||
+                                                        previewLoading
+                                                    }
+                                                    onClick={
+                                                        toggleWarehouseBulkMode
+                                                    }
+                                                    style={typeTabButton(
+                                                        warehouseBulkMode
+                                                    )}
+                                                >
+                                                    {warehouseBulkMode
+                                                        ? "✓ Bulk Selection On"
+                                                        : "Bulk Select Warehouse Items"}
+                                                </button>
+
+                                                {warehouseBulkMode && (
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 8,
+                                                            flexWrap: "wrap",
+                                                        }}
+                                                    >
+                                                        <strong
+                                                            style={{
+                                                                color: "#fbbf24",
+                                                                fontSize: 11,
+                                                            }}
+                                                        >
+                                                            {warehouseBulkIds.length} selected
+                                                        </strong>
+
+                                                        <button
+                                                            type="button"
+                                                            disabled={
+                                                                warehouseBulkIds.length === 0 ||
+                                                                deleting ||
+                                                                previewLoading
+                                                            }
+                                                            onClick={
+                                                                loadWarehouseBulkPreview
+                                                            }
+                                                            style={searchButton(
+                                                                warehouseBulkIds.length === 0 ||
+                                                                deleting ||
+                                                                previewLoading
+                                                            )}
+                                                        >
+                                                            {previewLoading
+                                                                ? "Calculating..."
+                                                                : "Preview Bulk Delete"}
+                                                        </button>
+
+                                                        {warehouseBulkIds.length > 0 && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={
+                                                                    deleting
+                                                                }
+                                                                onClick={() => {
+                                                                    setWarehouseBulkTargets([]);
+                                                                    resetSelection();
+                                                                }}
+                                                                style={paginationButton(
+                                                                    deleting
+                                                                )}
+                                                            >
+                                                                Clear
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                     <form
                                         onSubmit={
@@ -2662,7 +3181,10 @@ function AdminCenter({
                                                 targetType ===
                                                     "MASTER_ITEM"
                                                     ? "Search master name, PD no., drawing, client or UUID"
-                                                    : "Search item, packet no., SKU, sticker, PD no. or UUID"
+                                                    : targetType ===
+                                                        "WAREHOUSE_ITEM"
+                                                        ? "Search warehouse item, SKU, PD, DWG, location, gate pass or ID"
+                                                        : "Search item, packet no., SKU, sticker, PD no. or UUID"
                                             }
                                             style={searchInput}
                                         />
@@ -2741,8 +3263,16 @@ function AdminCenter({
                                                                 target
                                                             }
                                                             selected={
-                                                                selectedTarget?.id ===
-                                                                target.id
+                                                                targetType ===
+                                                                    "WAREHOUSE_ITEM" &&
+                                                                    warehouseBulkMode
+                                                                    ? warehouseBulkIdSet.has(
+                                                                        String(
+                                                                            target.id
+                                                                        )
+                                                                    )
+                                                                    : selectedTarget?.id ===
+                                                                    target.id
                                                             }
                                                             disabled={
                                                                 deleting
@@ -2844,7 +3374,11 @@ function AdminCenter({
                                                         previewPlaceholderTitle
                                                     }
                                                 >
-                                                    Select a record
+                                                    {targetType ===
+                                                        "WAREHOUSE_ITEM" &&
+                                                        warehouseBulkMode
+                                                        ? "Select Warehouse records"
+                                                        : "Select a record"}
                                                 </div>
 
                                                 <div
@@ -2852,11 +3386,11 @@ function AdminCenter({
                                                         previewPlaceholderText
                                                     }
                                                 >
-                                                    The backend will
-                                                    calculate every
-                                                    linked row before
-                                                    the delete button
-                                                    is enabled.
+                                                    {targetType ===
+                                                        "WAREHOUSE_ITEM" &&
+                                                        warehouseBulkMode
+                                                        ? "Click Warehouse search results to build the bulk selection, then preview the combined deletion impact."
+                                                        : "The backend will calculate every linked row before the delete button is enabled."}
                                                 </div>
                                             </div>
                                         )}
@@ -2890,7 +3424,14 @@ function AdminCenter({
                                                                 targetType
                                                             ) === "MASTER_ITEM"
                                                                 ? "#a78bfa"
-                                                                : "#38bdf8"
+                                                                : resolveTargetType(
+                                                                    preview,
+                                                                    targetType
+                                                                ).startsWith(
+                                                                    "WAREHOUSE_"
+                                                                )
+                                                                    ? "#f59e0b"
+                                                                    : "#38bdf8"
                                                         )}
                                                     >
                                                         {formatLabel(
@@ -2909,19 +3450,29 @@ function AdminCenter({
                                                         {preview.displayName ||
                                                             preview.targetId}
                                                     </div>
-                                                    {resolveTargetType(
-                                                        preview,
-                                                        targetType
-                                                    ) === "PACKET_ITEM" && (
+                                                    {[
+                                                        "PACKET_ITEM",
+                                                        "WAREHOUSE_ITEM",
+                                                    ].includes(
+                                                        resolveTargetType(
+                                                            preview,
+                                                            targetType
+                                                        )
+                                                    ) && (
                                                             <div style={previewDescription}>
                                                                 <div style={previewDescriptionLabel}>
-                                                                    Packet Description
+                                                                    {resolveTargetType(
+                                                                        preview,
+                                                                        targetType
+                                                                    ) === "WAREHOUSE_ITEM"
+                                                                        ? "Warehouse Item Description"
+                                                                        : "Packet Description"}
                                                                 </div>
 
                                                                 <div style={previewDescriptionText}>
                                                                     {preview.description ||
                                                                         preview.itemDescription ||
-                                                                        "No description available for this packet."}
+                                                                        "No description available for this record."}
                                                                 </div>
                                                             </div>
                                                         )}
@@ -3003,9 +3554,15 @@ function AdminCenter({
                                                 </div>
                                             </div>
 
-                                            <LifecycleMetaPanel
-                                                row={preview}
-                                            />
+                                            {resolveTargetType(
+                                                preview,
+                                                targetType
+                                            ) !==
+                                                "WAREHOUSE_BULK" && (
+                                                    <LifecycleMetaPanel
+                                                        row={preview}
+                                                    />
+                                                )}
 
                                             {preview.warning && (
                                                 <div
@@ -3148,7 +3705,17 @@ function AdminCenter({
                                                             targetType
                                                         ) === "MASTER_ITEM"
                                                             ? "Delete Master and All Packets"
-                                                            : "Delete Packet Permanently"}
+                                                            : resolveTargetType(
+                                                                preview,
+                                                                targetType
+                                                            ) === "WAREHOUSE_BULK"
+                                                                ? `Delete ${warehouseBulkIds.length} Warehouse Items Permanently`
+                                                                : resolveTargetType(
+                                                                    preview,
+                                                                    targetType
+                                                                ) === "WAREHOUSE_ITEM"
+                                                                    ? "Delete Warehouse Item Permanently"
+                                                                    : "Delete Packet Permanently"}
                                                 </button>
                                             </div>
                                         </div>

@@ -8,6 +8,9 @@ import { API_BASE_URL } from "../config"; import {
 import { useAuth } from "../auth/AuthContext";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
+import {
+	publishPackFlowDataChanged,
+} from "../utils/packFlowDataEvents";
 
 
 /*
@@ -184,6 +187,23 @@ function WarehousePage() {
 	const [savingAssignmentId, setSavingAssignmentId] = useState(null);
 	const [generatingMissingGatePass, setGeneratingMissingGatePass] =
 		useState(false);
+
+	/*
+	 * ADMIN-only permanent Warehouse deletion.
+	 *
+	 * Warehouse Excel imports are standalone DispatchedItem rows and may not
+	 * have PacketItem linkage. The dedicated Admin deletion API resolves both
+	 * standalone imports and linked PackFlow rows safely before deletion.
+	 */
+	const [warehouseDeleteOpen, setWarehouseDeleteOpen] = useState(false);
+	const [warehouseDeleteMode, setWarehouseDeleteMode] = useState("SINGLE");
+	const [warehouseDeleteRows, setWarehouseDeleteRows] = useState([]);
+	const [warehouseDeletePreview, setWarehouseDeletePreview] = useState(null);
+	const [warehouseDeletePreviewLoading, setWarehouseDeletePreviewLoading] = useState(false);
+	const [warehouseDeleteReason, setWarehouseDeleteReason] = useState("");
+	const [warehouseDeleteConfirmation, setWarehouseDeleteConfirmation] = useState("");
+	const [warehouseDeleteExecuting, setWarehouseDeleteExecuting] = useState(false);
+	const [warehouseDeleteError, setWarehouseDeleteError] = useState("");
 	/* ===================== FETCH ===================== */
 
 	const fetchPlants = async () => {
@@ -519,6 +539,23 @@ function WarehousePage() {
 	const getWarehouseStatus = (row) =>
 		row.status || row.movementStatus || "";
 
+	const isWarehouseRowSelectable = (row) => {
+		const id = getWarehouseRowId(row);
+		const status = getWarehouseStatus(row);
+
+		if (!id) {
+			return false;
+		}
+
+		/* ADMIN may select any row visible on this Warehouse page for delete. */
+		if (isAdmin) {
+			return true;
+		}
+
+		/* Preserve the original non-Admin bulk-action selection rules. */
+		return selectableStatuses.includes(status);
+	};
+
 	const getPlantLabel = (plantCode) => {
 		if (!plantCode) return "Not Assigned";
 
@@ -847,13 +884,10 @@ function WarehousePage() {
 	}, [rows, search, statusFilter]);
 
 	const filteredSelectableRows = useMemo(() => {
-		return filteredRows.filter((row) => {
-			const id = getWarehouseRowId(row);
-			const status = getWarehouseStatus(row);
-
-			return !!id && selectableStatuses.includes(status);
-		});
-	}, [filteredRows]);
+		return filteredRows.filter((row) =>
+			isWarehouseRowSelectable(row)
+		);
+	}, [filteredRows, isAdmin]);
 
 	const filteredSelectableIds = useMemo(() => {
 		return filteredSelectableRows.map((row) => getWarehouseRowId(row));
@@ -1623,6 +1657,270 @@ function WarehousePage() {
 		}
 	};
 
+	/* ===================== ADMIN PERMANENT DELETE ===================== */
+
+	const readWarehouseDeleteResponse = async (
+		response,
+		fallbackMessage
+	) => {
+		const text = await response.text();
+
+		let data = null;
+
+		if (text) {
+			try {
+				data = JSON.parse(text);
+			} catch {
+				data = text;
+			}
+		}
+
+		if (!response.ok) {
+			const message =
+				typeof data === "object" && data
+					? data.message || data.error || text
+					: text;
+
+			throw new Error(
+				message || fallbackMessage
+			);
+		}
+
+		return data;
+	};
+
+	const closeWarehouseDelete = () => {
+		if (warehouseDeleteExecuting) {
+			return;
+		}
+
+		setWarehouseDeleteOpen(false);
+		setWarehouseDeleteRows([]);
+		setWarehouseDeletePreview(null);
+		setWarehouseDeleteReason("");
+		setWarehouseDeleteConfirmation("");
+		setWarehouseDeleteError("");
+	};
+
+	const openWarehouseDelete = async (
+		targetRows,
+		mode = "SINGLE"
+	) => {
+		if (!isAdmin) {
+			alert("Only ADMIN can permanently delete Warehouse items");
+			return;
+		}
+
+		const cleanRows = (
+			Array.isArray(targetRows)
+				? targetRows
+				: [targetRows]
+		)
+			.filter(Boolean)
+			.filter((row) =>
+				Boolean(
+					String(
+						getWarehouseRowId(row) || ""
+					).trim()
+				)
+			);
+
+		if (cleanRows.length === 0) {
+			alert("Select at least one Warehouse item");
+			return;
+		}
+
+		const cleanMode =
+			mode === "BULK" || cleanRows.length > 1
+				? "BULK"
+				: "SINGLE";
+
+		setWarehouseDeleteMode(cleanMode);
+		setWarehouseDeleteRows(cleanRows);
+		setWarehouseDeletePreview(null);
+		setWarehouseDeleteReason("");
+		setWarehouseDeleteConfirmation("");
+		setWarehouseDeleteError("");
+		setWarehouseDeleteOpen(true);
+		setWarehouseDeletePreviewLoading(true);
+
+		try {
+			let response;
+
+			if (cleanMode === "BULK") {
+				response = await fetch(
+					`${API_BASE_URL}/api/admin/deletions/warehouse-items/bulk/preview`,
+					{
+						method: "POST",
+						credentials: "include",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify(
+							cleanRows.map((row) =>
+								getWarehouseRowId(row)
+							)
+						),
+					}
+				);
+			} else {
+				const itemId = getWarehouseRowId(cleanRows[0]);
+
+				response = await fetch(
+					`${API_BASE_URL}/api/admin/deletions/warehouse-items/${encodeURIComponent(
+						itemId
+					)}/preview`,
+					{
+						credentials: "include",
+					}
+				);
+			}
+
+			const data = await readWarehouseDeleteResponse(
+				response,
+				"Unable to calculate Warehouse deletion impact"
+			);
+
+			setWarehouseDeletePreview(data);
+		} catch (error) {
+			console.error(
+				"Warehouse delete preview failed",
+				error
+			);
+
+			setWarehouseDeleteError(
+				error?.message ||
+				"Unable to calculate Warehouse deletion impact"
+			);
+		} finally {
+			setWarehouseDeletePreviewLoading(false);
+		}
+	};
+
+	const executeWarehouseDelete = async () => {
+		if (!isAdmin || !warehouseDeletePreview) {
+			return;
+		}
+
+		const reason = warehouseDeleteReason.trim();
+		const confirmation = warehouseDeleteConfirmation.trim();
+		const requiredConfirmation = String(
+			warehouseDeletePreview?.requiredConfirmation || ""
+		).trim();
+
+		if (reason.length < 5) {
+			setWarehouseDeleteError(
+				"Deletion reason must contain at least 5 characters"
+			);
+			return;
+		}
+
+		if (confirmation !== requiredConfirmation) {
+			setWarehouseDeleteError(
+				`Type the exact confirmation: ${requiredConfirmation}`
+			);
+			return;
+		}
+
+		try {
+			setWarehouseDeleteExecuting(true);
+			setWarehouseDeleteError("");
+
+			let response;
+
+			if (warehouseDeleteMode === "BULK") {
+				response = await fetch(
+					`${API_BASE_URL}/api/admin/deletions/warehouse-items/bulk/execute`,
+					{
+						method: "POST",
+						credentials: "include",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							itemIds: warehouseDeleteRows.map((row) =>
+								getWarehouseRowId(row)
+							),
+							confirmationText: confirmation,
+							reason,
+						}),
+					}
+				);
+			} else {
+				const itemId = getWarehouseRowId(
+					warehouseDeleteRows[0]
+				);
+
+				response = await fetch(
+					`${API_BASE_URL}/api/admin/deletions/warehouse-items/${encodeURIComponent(
+						itemId
+					)}/execute`,
+					{
+						method: "POST",
+						credentials: "include",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							confirmationText: confirmation,
+							reason,
+						}),
+					}
+				);
+			}
+
+			const result = await readWarehouseDeleteResponse(
+				response,
+				"Warehouse permanent deletion failed"
+			);
+
+			setWarehouseDeleteOpen(false);
+			setWarehouseDeleteRows([]);
+			setWarehouseDeletePreview(null);
+			setWarehouseDeleteReason("");
+			setWarehouseDeleteConfirmation("");
+			setSelectionModel([]);
+			setWarehouseItemDrawerRow(null);
+
+			await fetchItems();
+
+			publishPackFlowDataChanged({
+				action:
+					warehouseDeleteMode === "BULK"
+						? "WAREHOUSE_BULK_DELETION"
+						: "WAREHOUSE_ITEM_DELETION",
+				targetType:
+					warehouseDeleteMode === "BULK"
+						? "WAREHOUSE_BULK"
+						: "WAREHOUSE_ITEM",
+				result,
+				scopes: [
+					"inventory",
+					"warehouse",
+					"dispatch",
+					"dashboard",
+				],
+			});
+
+			alert(
+				result?.message ||
+				"Warehouse item(s) permanently deleted"
+			);
+		} catch (error) {
+			console.error(
+				"Warehouse permanent deletion failed",
+				error
+			);
+
+			setWarehouseDeleteError(
+				error?.message ||
+				"Warehouse permanent deletion failed"
+			);
+		} finally {
+			setWarehouseDeleteExecuting(false);
+		}
+	};
+
 	/* ===================== COLUMNS ===================== */
 
 	const columns = [
@@ -1646,7 +1944,11 @@ function WarehousePage() {
 							}}
 							checked={allFilteredSelected}
 							disabled={filteredSelectableIds.length === 0}
-							title="Select all filtered warehouse action rows"
+							title={
+								isAdmin
+									? "Select all filtered Warehouse rows"
+									: "Select all filtered warehouse action rows"
+							}
 							style={
 								filteredSelectableIds.length === 0
 									? selectCheckboxDisabledStyle
@@ -1662,10 +1964,9 @@ function WarehousePage() {
 
 			renderCell: (params) => {
 				const id = getWarehouseRowId(params.row);
-				const status = getWarehouseStatus(params.row);
 
 				const isSelectable =
-					!!id && selectableStatuses.includes(status);
+					isWarehouseRowSelectable(params.row);
 
 				return (
 					<Box sx={selectHeaderCellSx}>
@@ -2126,8 +2427,10 @@ function WarehousePage() {
 				const assignmentEditing = isAssignmentEditing(row);
 				const rowId = getWarehouseRowId(row);
 
+				let actionContent = null;
+
 				if (isAdmin && assignmentEditing) {
-					return (
+					actionContent = (
 						<Box sx={actionCell}>
 							<Button
 								size="small"
@@ -2148,21 +2451,17 @@ function WarehousePage() {
 							</Button>
 						</Box>
 					);
-				}
-				// WAREHOUSE REQUESTED
-				if (row.status === "WAREHOUSE_REQUESTED") {
+				} else if (row.status === "WAREHOUSE_REQUESTED") {
 					if (isPacking) {
-						return (
+						actionContent = (
 							<Chip
 								label="Awaiting Warehouse"
 								size="small"
 								sx={pendingChip}
 							/>
 						);
-					}
-
-					if (canApproveWarehouse) {
-						return (
+					} else if (canApproveWarehouse) {
+						actionContent = (
 							<Box
 								sx={{
 									display: "flex",
@@ -2205,34 +2504,26 @@ function WarehousePage() {
 								</Button>
 							</Box>
 						);
-					}
-
-					if (isDispatch) {
-						return (
+					} else if (isDispatch) {
+						actionContent = (
 							<Chip
 								label="Awaiting Warehouse Approval"
 								size="small"
 								sx={pendingChip}
 							/>
 						);
+					} else {
+						actionContent = (
+							<Chip
+								label="Warehouse Requested"
+								size="small"
+								sx={pendingChip}
+							/>
+						);
 					}
-
-					return (
-						<Chip
-							label="Warehouse Requested"
-							size="small"
-							sx={pendingChip}
-						/>
-					);
-				}
-
-				// ===============================
-				// STEP 3: IN WAREHOUSE (FIXED)
-				// ===============================
-				if (row.status === "IN_WAREHOUSE") {
-
+				} else if (row.status === "IN_WAREHOUSE") {
 					if (isAdmin) {
-						return (
+						actionContent = (
 							<Box sx={actionCell}>
 								<Button
 									size="small"
@@ -2251,10 +2542,8 @@ function WarehousePage() {
 								</Button>
 							</Box>
 						);
-					}
-
-					if (isDispatch) {
-						return (
+					} else if (isDispatch) {
+						actionContent = (
 							<Button
 								size="small"
 								onClick={() => requestReturn(row.zohoItemId)}
@@ -2263,19 +2552,14 @@ function WarehousePage() {
 								Request Return
 							</Button>
 						);
+					} else {
+						actionContent = (
+							<Chip label="Stored" size="small" sx={statusStored} />
+						);
 					}
-
-					return (
-						<Chip label="Stored" size="small" sx={statusStored} />
-					);
-				}
-				// ===============================
-				// RETURN REQUEST FLOW
-				// ===============================
-				if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
-
+				} else if (row.status === "WAREHOUSE_RETURN_REQUESTED") {
 					if (isAdmin) {
-						return (
+						actionContent = (
 							<Box sx={actionCell}>
 								<Button
 									size="small"
@@ -2312,14 +2596,17 @@ function WarehousePage() {
 								</Button>
 							</Box>
 						);
+					} else {
+						actionContent = (
+							<Chip
+								label="Awaiting Admin Approval"
+								size="small"
+								sx={pendingChip}
+							/>
+						);
 					}
-
-					return (
-						<Chip label="Awaiting Admin Approval" size="small" sx={pendingChip} />
-					);
-				}
-				if (isAdmin) {
-					return (
+				} else if (isAdmin) {
+					actionContent = (
 						<Button
 							size="small"
 							onClick={() => startAssignmentEdit(row)}
@@ -2329,7 +2616,33 @@ function WarehousePage() {
 						</Button>
 					);
 				}
-				return null;
+
+				if (!isAdmin) {
+					return actionContent;
+				}
+
+				return (
+					<Box sx={actionCell}>
+						{actionContent}
+
+						<Button
+							size="small"
+							disabled={
+								warehouseDeleteExecuting ||
+								warehouseDeletePreviewLoading
+							}
+							onClick={() =>
+								openWarehouseDelete(
+									[row],
+									"SINGLE"
+								)
+							}
+							sx={warehouseDeleteButtonSx}
+						>
+							🗑 Delete
+						</Button>
+					</Box>
+				);
 			},
 		},
 	];
@@ -2922,6 +3235,25 @@ function WarehousePage() {
 										}}
 									>
 										📍 Bulk Edit Location
+									</Button>
+								)}
+
+								{isAdmin && (
+									<Button
+										disabled={
+											selectedWarehouseItems.length === 0 ||
+											warehouseDeleteExecuting ||
+											warehouseDeletePreviewLoading
+										}
+										onClick={() =>
+											openWarehouseDelete(
+												selectedWarehouseItems,
+												"BULK"
+											)
+										}
+										sx={warehouseBulkDeleteButtonSx}
+									>
+										🗑 Bulk Delete
 									</Button>
 								)}
 
@@ -3655,6 +3987,187 @@ function WarehousePage() {
 					</>
 				)}
 			</Drawer>
+
+
+			{warehouseDeleteOpen && isAdmin && (
+				<Box
+					sx={warehouseDeleteOverlaySx}
+					onClick={closeWarehouseDelete}
+				>
+					<Box
+						sx={warehouseDeleteModalSx}
+						onClick={(event) => event.stopPropagation()}
+					>
+						<Box sx={warehouseDeleteHeaderSx}>
+							<Box>
+								<Box sx={warehouseDeleteEyebrowSx}>
+									ADMIN • PERMANENT DELETE
+								</Box>
+
+								<Box sx={warehouseDeleteTitleSx}>
+									{warehouseDeleteMode === "BULK"
+										? `Delete ${warehouseDeleteRows.length} Warehouse Items`
+										: `Delete ${warehouseDeleteRows[0]?.name || "Warehouse Item"}`}
+								</Box>
+
+								<Box sx={warehouseDeleteSubtitleSx}>
+									Deletes the selected Warehouse record(s) and every linked PackFlow operational record discovered by the Admin deletion engine.
+								</Box>
+							</Box>
+
+							<IconButton
+								disabled={warehouseDeleteExecuting}
+								onClick={closeWarehouseDelete}
+								sx={warehouseDeleteCloseSx}
+							>
+								×
+							</IconButton>
+						</Box>
+
+						<Box sx={warehouseDeleteBodySx}>
+							<Box sx={warehouseDeleteSelectionCardSx}>
+								<Box sx={warehouseDeleteSectionLabelSx}>
+									Selected Warehouse Records
+								</Box>
+
+								<Box sx={warehouseDeleteSelectedListSx}>
+									{warehouseDeleteRows.map((row) => (
+										<Box
+											key={getWarehouseRowId(row)}
+											sx={warehouseDeleteSelectedRowSx}
+										>
+											<Box sx={{ minWidth: 0 }}>
+												<Box sx={warehouseDeleteSelectedNameSx}>
+													{row.name || row.itemName || "Warehouse Item"}
+												</Box>
+
+												<Box sx={warehouseDeleteSelectedMetaSx}>
+													{[
+														row.sku,
+														row.pdNo,
+														row.drawingNo,
+														row.warehouseCode || row.location,
+													]
+														.filter(Boolean)
+														.join(" • ") || getWarehouseRowId(row)}
+												</Box>
+											</Box>
+
+											<Chip
+												size="small"
+												label={row.status || "UNKNOWN"}
+												sx={warehouseDeleteStatusChipSx}
+											/>
+										</Box>
+									))}
+								</Box>
+							</Box>
+
+							{warehouseDeletePreviewLoading && (
+								<Box sx={warehouseDeleteLoadingSx}>
+									Calculating every linked record before deletion...
+								</Box>
+							)}
+
+							{warehouseDeleteError && (
+								<Box sx={warehouseDeleteErrorSx}>
+									{warehouseDeleteError}
+								</Box>
+							)}
+
+							{warehouseDeletePreview && (
+								<>
+									<Box sx={warehouseDeleteWarningSx}>
+										<Box sx={{ fontWeight: 950, color: "#fecaca" }}>
+											⚠ This action cannot be undone
+										</Box>
+										<Box sx={{ mt: 0.7, color: "#cbd5e1", fontSize: 12, lineHeight: 1.55 }}>
+											{warehouseDeletePreview.warning}
+										</Box>
+									</Box>
+
+									<Box sx={warehouseDeleteImpactGridSx}>
+										{Object.entries(
+											warehouseDeletePreview.affectedRows || {}
+										)
+											.sort(([a], [b]) => a.localeCompare(b))
+											.map(([key, value]) => (
+												<Box key={key} sx={warehouseDeleteImpactCardSx}>
+													<Box sx={warehouseDeleteImpactLabelSx}>
+														{key.replace(/([a-z])([A-Z])/g, "$1 $2")}
+													</Box>
+													<Box sx={warehouseDeleteImpactValueSx}>
+														{Number(value || 0)}
+													</Box>
+												</Box>
+											))}
+									</Box>
+
+									<TextField
+										fullWidth
+										multiline
+										minRows={2}
+										label="Deletion Reason"
+										placeholder="Required: explain why these Warehouse records should be permanently removed"
+										value={warehouseDeleteReason}
+										onChange={(event) =>
+											setWarehouseDeleteReason(event.target.value)
+										}
+										disabled={warehouseDeleteExecuting}
+										sx={warehouseDeleteFieldSx}
+									/>
+
+									<TextField
+										fullWidth
+										label="Exact Confirmation"
+										value={warehouseDeleteConfirmation}
+										onChange={(event) =>
+											setWarehouseDeleteConfirmation(event.target.value)
+										}
+										placeholder={warehouseDeletePreview.requiredConfirmation}
+										disabled={warehouseDeleteExecuting}
+										sx={warehouseDeleteFieldSx}
+									/>
+
+									<Box sx={warehouseDeleteConfirmationHintSx}>
+										Type exactly: <strong>{warehouseDeletePreview.requiredConfirmation}</strong>
+									</Box>
+								</>
+							)}
+						</Box>
+
+						<Box sx={warehouseDeleteFooterSx}>
+							<Button
+								disabled={warehouseDeleteExecuting}
+								onClick={closeWarehouseDelete}
+								sx={warehouseDeleteCancelSx}
+							>
+								Cancel
+							</Button>
+
+							<Button
+								disabled={
+									!warehouseDeletePreview ||
+									warehouseDeleteExecuting ||
+									warehouseDeleteReason.trim().length < 5 ||
+									warehouseDeleteConfirmation.trim() !==
+									String(
+										warehouseDeletePreview?.requiredConfirmation || ""
+									).trim()
+								}
+								onClick={executeWarehouseDelete}
+								sx={warehouseDeleteConfirmSx}
+							>
+								{warehouseDeleteExecuting
+									? "Deleting permanently..."
+									: warehouseDeleteMode === "BULK"
+										? `Permanently Delete ${warehouseDeleteRows.length} Items`
+										: "Permanently Delete Item"}
+							</Button>
+						</Box>
+					</Box>
+				</Box>
+			)}
 
 			{bulkLocationOpen && (
 				<div
@@ -5383,6 +5896,305 @@ const actionInfo = {
 	"&:hover": {
 		background:
 			"linear-gradient(135deg,#1d4ed8,#2563eb)",
+	},
+};
+
+const warehouseDeleteButtonSx = {
+	...tableActionButton,
+	minWidth: 92,
+	background:
+		"linear-gradient(135deg,rgba(220,38,38,.22),rgba(239,68,68,.12))",
+	color: "#fecaca",
+	border: "1px solid rgba(248,113,113,.28)",
+	boxShadow: "0 10px 22px rgba(127,29,29,.16)",
+
+	"&:hover": {
+		background: "linear-gradient(135deg,#b91c1c,#dc2626)",
+		color: "#fff",
+	},
+};
+
+const warehouseBulkDeleteButtonSx = {
+	minWidth: 160,
+	height: 44,
+	borderRadius: "14px",
+	fontWeight: 900,
+	textTransform: "none",
+	color: "#fff",
+	background: "linear-gradient(180deg,#dc2626,#991b1b)",
+	border: "1px solid rgba(248,113,113,.26)",
+	boxShadow: "0 10px 25px rgba(220,38,38,.28)",
+
+	"&:hover": {
+		background: "linear-gradient(180deg,#ef4444,#b91c1c)",
+	},
+};
+
+const warehouseDeleteOverlaySx = {
+	position: "fixed",
+	inset: 0,
+	zIndex: 12000,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	p: 2,
+	background:
+		"radial-gradient(circle at 20% 10%,rgba(239,68,68,.14),transparent 32%),rgba(2,6,23,.82)",
+	backdropFilter: "blur(14px)",
+};
+
+const warehouseDeleteModalSx = {
+	width: "min(920px,96vw)",
+	maxHeight: "92vh",
+	display: "flex",
+	flexDirection: "column",
+	overflow: "hidden",
+	borderRadius: "24px",
+	color: "#fff",
+	background:
+		"radial-gradient(circle at top right,rgba(220,38,38,.12),transparent 34%),linear-gradient(180deg,#0f172a,#111827)",
+	border: "1px solid rgba(248,113,113,.20)",
+	boxShadow: "0 42px 120px rgba(0,0,0,.72)",
+};
+
+const warehouseDeleteHeaderSx = {
+	px: 2.5,
+	py: 2.1,
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 2,
+	borderBottom: "1px solid rgba(255,255,255,.07)",
+	background: "rgba(127,29,29,.08)",
+};
+
+const warehouseDeleteEyebrowSx = {
+	color: "#fca5a5",
+	fontSize: 9.5,
+	fontWeight: 950,
+	letterSpacing: ".13em",
+};
+
+const warehouseDeleteTitleSx = {
+	mt: 0.5,
+	color: "#fff",
+	fontSize: 22,
+	fontWeight: 950,
+};
+
+const warehouseDeleteSubtitleSx = {
+	mt: 0.55,
+	maxWidth: 690,
+	color: "#94a3b8",
+	fontSize: 11,
+	fontWeight: 650,
+	lineHeight: 1.5,
+};
+
+const warehouseDeleteCloseSx = {
+	width: 36,
+	height: 36,
+	borderRadius: "10px",
+	color: "#fca5a5",
+	background: "rgba(239,68,68,.08)",
+	border: "1px solid rgba(248,113,113,.16)",
+};
+
+const warehouseDeleteBodySx = {
+	flex: 1,
+	minHeight: 0,
+	overflowY: "auto",
+	p: 2.2,
+};
+
+const warehouseDeleteSelectionCardSx = {
+	p: 1.4,
+	mb: 1.4,
+	borderRadius: "16px",
+	background: "rgba(255,255,255,.026)",
+	border: "1px solid rgba(255,255,255,.065)",
+};
+
+const warehouseDeleteSectionLabelSx = {
+	mb: 0.9,
+	color: "#94a3b8",
+	fontSize: 9,
+	fontWeight: 950,
+	letterSpacing: ".10em",
+	textTransform: "uppercase",
+};
+
+const warehouseDeleteSelectedListSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.7,
+	maxHeight: 190,
+	overflowY: "auto",
+};
+
+const warehouseDeleteSelectedRowSx = {
+	p: 1,
+	borderRadius: "12px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1.2,
+	background: "rgba(2,6,23,.34)",
+	border: "1px solid rgba(255,255,255,.055)",
+};
+
+const warehouseDeleteSelectedNameSx = {
+	color: "#f8fafc",
+	fontSize: 11.5,
+	fontWeight: 900,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const warehouseDeleteSelectedMetaSx = {
+	mt: 0.25,
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 700,
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	textOverflow: "ellipsis",
+};
+
+const warehouseDeleteStatusChipSx = {
+	flexShrink: 0,
+	color: "#fde68a",
+	background: "rgba(245,158,11,.10)",
+	border: "1px solid rgba(245,158,11,.20)",
+	fontWeight: 900,
+	fontSize: 9,
+};
+
+const warehouseDeleteLoadingSx = {
+	p: 1.6,
+	mb: 1.3,
+	borderRadius: "14px",
+	textAlign: "center",
+	color: "#bfdbfe",
+	fontSize: 11.5,
+	fontWeight: 800,
+	background: "rgba(37,99,235,.08)",
+	border: "1px solid rgba(96,165,250,.15)",
+};
+
+const warehouseDeleteErrorSx = {
+	p: 1.3,
+	mb: 1.3,
+	borderRadius: "13px",
+	color: "#fecaca",
+	fontSize: 11,
+	fontWeight: 800,
+	background: "rgba(127,29,29,.18)",
+	border: "1px solid rgba(248,113,113,.20)",
+};
+
+const warehouseDeleteWarningSx = {
+	p: 1.4,
+	mb: 1.3,
+	borderRadius: "14px",
+	background: "rgba(127,29,29,.15)",
+	border: "1px solid rgba(248,113,113,.20)",
+};
+
+const warehouseDeleteImpactGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(auto-fit,minmax(125px,1fr))",
+	gap: 0.8,
+	mb: 1.5,
+};
+
+const warehouseDeleteImpactCardSx = {
+	p: 1,
+	borderRadius: "12px",
+	background: "rgba(255,255,255,.025)",
+	border: "1px solid rgba(255,255,255,.06)",
+};
+
+const warehouseDeleteImpactLabelSx = {
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+};
+
+const warehouseDeleteImpactValueSx = {
+	mt: 0.4,
+	color: "#fff",
+	fontSize: 20,
+	fontWeight: 950,
+};
+
+const warehouseDeleteFieldSx = {
+	mb: 1.2,
+
+	"& .MuiInputLabel-root": {
+		color: "#94a3b8",
+	},
+
+	"& .MuiOutlinedInput-root": {
+		borderRadius: "13px",
+		color: "#fff",
+		background: "rgba(255,255,255,.035)",
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.09)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#f87171",
+		},
+	},
+};
+
+const warehouseDeleteConfirmationHintSx = {
+	p: 1,
+	borderRadius: "11px",
+	color: "#fca5a5",
+	fontSize: 10,
+	background: "rgba(239,68,68,.055)",
+	border: "1px dashed rgba(248,113,113,.20)",
+};
+
+const warehouseDeleteFooterSx = {
+	px: 2.4,
+	py: 1.7,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "flex-end",
+	gap: 1,
+	borderTop: "1px solid rgba(255,255,255,.07)",
+	background: "rgba(2,6,23,.28)",
+};
+
+const warehouseDeleteCancelSx = {
+	height: 38,
+	px: 2,
+	borderRadius: "11px",
+	textTransform: "none",
+	fontWeight: 850,
+	color: "#cbd5e1",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.08)",
+};
+
+const warehouseDeleteConfirmSx = {
+	height: 38,
+	px: 2.2,
+	borderRadius: "11px",
+	textTransform: "none",
+	fontWeight: 950,
+	color: "#fff",
+	background: "linear-gradient(135deg,#b91c1c,#dc2626)",
+	boxShadow: "0 10px 24px rgba(220,38,38,.24)",
+
+	"&:hover": {
+		background: "linear-gradient(135deg,#991b1b,#b91c1c)",
 	},
 };
 
