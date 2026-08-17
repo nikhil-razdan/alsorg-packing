@@ -231,6 +231,176 @@ const FLOW_INDEX = FLOW.reduce((result, [key], index) => {
     return result;
 }, {});
 
+
+const MINUTE_MS = 60 * 1000;
+const DAY_MINUTES = 24 * 60;
+
+const parseRequiredDate = (value) => {
+    const raw = clean(value);
+    if (!raw) return null;
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+        const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59, 999);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatRequiredDate = (value) => {
+    const parsed = parseRequiredDate(value);
+    if (!parsed) return "Not set";
+    try {
+        return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(parsed);
+    } catch {
+        return clean(value) || "Not set";
+    }
+};
+
+const formatScheduleDelta = (minutes) => {
+    const absolute = Math.abs(Math.round(numeric(minutes)));
+    const days = Math.floor(absolute / DAY_MINUTES);
+    const hours = Math.floor((absolute % DAY_MINUTES) / 60);
+    const mins = absolute % 60;
+    if (days > 0) return `${days}d${hours ? ` ${hours}h` : ""}`;
+    if (hours > 0) return `${hours}h${mins ? ` ${mins}m` : ""}`;
+    return `${mins}m`;
+};
+
+const deadlineSnapshot = (requiredDate, completedAt = null, completed = false) => {
+    const deadline = parseRequiredDate(requiredDate);
+    if (!deadline) return { health: "NO_DEADLINE", requiredDate: null, deltaMinutes: null, label: "No deadline set", shortLabel: "No deadline", overdue: false, dueSoon: false };
+
+    const completedDate = completedAt ? new Date(completedAt) : null;
+    const useCompleted = completed === true && completedDate && !Number.isNaN(completedDate.getTime());
+    const reference = useCompleted ? completedDate : new Date();
+    const deltaMinutes = Math.round((deadline.getTime() - reference.getTime()) / MINUTE_MS);
+    const distance = formatScheduleDelta(deltaMinutes);
+
+    if (useCompleted) {
+        if (deltaMinutes < 0) return { health: "COMPLETED_LATE", requiredDate, deltaMinutes, label: `Completed ${distance} late`, shortLabel: `${distance} late`, overdue: true, dueSoon: false };
+        return { health: "COMPLETED_EARLY", requiredDate, deltaMinutes, label: `Completed ${distance} early`, shortLabel: `${distance} early`, overdue: false, dueSoon: false };
+    }
+    if (deltaMinutes < 0) return { health: "OVERDUE", requiredDate, deltaMinutes, label: `${distance} late`, shortLabel: `${distance} late`, overdue: true, dueSoon: false };
+    if (deltaMinutes <= 2 * DAY_MINUTES) return { health: "CRITICAL", requiredDate, deltaMinutes, label: `${distance} left`, shortLabel: `${distance} left`, overdue: false, dueSoon: true };
+    if (deltaMinutes <= 7 * DAY_MINUTES) return { health: "DUE_SOON", requiredDate, deltaMinutes, label: `${distance} left`, shortLabel: `${distance} left`, overdue: false, dueSoon: true };
+    return { health: "ON_SCHEDULE", requiredDate, deltaMinutes, label: `${distance} left`, shortLabel: `${distance} left`, overdue: false, dueSoon: false };
+};
+
+const deadlineTone = (health) => {
+    switch (normalize(health)) {
+        case "OVERDUE":
+        case "COMPLETED_LATE":
+            return { text: "var(--mf-danger-text)", soft: "var(--mf-danger-soft)", border: "var(--mf-danger-border)" };
+        case "CRITICAL":
+        case "DUE_SOON":
+            return { text: "var(--mf-warning-text)", soft: "var(--mf-warning-soft)", border: "var(--mf-warning-border)" };
+        case "COMPLETED_EARLY":
+        case "ON_SCHEDULE":
+            return { text: "var(--mf-success-text)", soft: "var(--mf-success-soft)", border: "var(--mf-success-border)" };
+        default:
+            return { text: "var(--mf-muted)", soft: "var(--mf-surface)", border: "var(--mf-border)" };
+    }
+};
+
+function ScheduleDeadlineChip({ requiredDate, completedAt = null, completed = false, compact = false }) {
+    const schedule = deadlineSnapshot(requiredDate, completedAt, completed);
+    const tone = deadlineTone(schedule.health);
+    return (
+        <Box
+            title={requiredDate ? `Required by ${formatRequiredDate(requiredDate)} · ${schedule.label}` : "No required date is configured"}
+            sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: .35,
+                maxWidth: "100%",
+                px: compact ? .55 : .7,
+                py: compact ? .22 : .28,
+                borderRadius: 99,
+                border: `1px solid ${tone.border}`,
+                background: tone.soft,
+                color: tone.text,
+                fontSize: compact ? 9 : 9.7,
+                fontWeight: 900,
+                lineHeight: 1.25,
+                whiteSpace: "nowrap",
+            }}
+        >
+            <Box sx={{ width: 6, height: 6, borderRadius: "50%", background: tone.text, flexShrink: 0 }} />
+            <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                {requiredDate ? `${formatRequiredDate(requiredDate)} · ${schedule.shortLabel}` : "No deadline"}
+            </Box>
+        </Box>
+    );
+}
+
+const rowDwellMinutes = (row) => {
+    if (!row) return 0;
+    if (row.stageMinutes != null) return Math.max(0, numeric(row.stageMinutes));
+    if (row.currentDwellMinutes != null) return Math.max(0, numeric(row.currentDwellMinutes));
+    return Math.max(0, numeric(row.ageHours) * 60);
+};
+
+const itemCurrentDepartment = (item) =>
+    item?.currentDepartment || item?.bottleneckLine?.currentDepartment || item?.bottleneck?.currentDepartment || item?.bottleneck?.responsibleDesk || item?.lane || "Workflow";
+
+const itemDwellMinutes = (item) =>
+    Math.max(rowDwellMinutes(item?.bottleneckLine), rowDwellMinutes(item?.bottleneck), numeric(item?.currentDwellMinutes), numeric(item?.maxAgeHours) * 60);
+
+const itemStageTargetMinutes = (item) =>
+    numeric(item?.bottleneckLine?.targetMinutes || item?.bottleneck?.targetMinutes || item?.targetMinutes);
+
+const earliestRequiredDate = (values = []) => {
+    const valid = (Array.isArray(values) ? values : [])
+        .map((value) => ({ value, parsed: parseRequiredDate(value) }))
+        .filter((entry) => entry.parsed)
+        .sort((a, b) => a.parsed.getTime() - b.parsed.getTime());
+    return valid[0]?.value || null;
+};
+
+const latestDateValue = (values = []) => {
+    const valid = (Array.isArray(values) ? values : [])
+        .map((value) => value ? new Date(value) : null)
+        .filter((value) => value && !Number.isNaN(value.getTime()))
+        .sort((a, b) => b.getTime() - a.getTime());
+    return valid[0] ? valid[0].toISOString() : null;
+};
+
+const buildPortfolioDeadlineIndex = (projects = []) => {
+    const byProductId = new Map();
+    const byProjectKey = new Map();
+    (Array.isArray(projects) ? projects : []).forEach((project) => {
+        if (!project) return;
+        byProjectKey.set(projectKeyOf(project), project);
+        (Array.isArray(project.products) ? project.products : []).forEach((product) => {
+            if (product?.id) byProductId.set(String(product.id), { project, product });
+        });
+    });
+    return { byProductId, byProjectKey };
+};
+
+const enrichTrackerRowsWithDeadlines = (rows = [], projects = []) => {
+    const index = buildPortfolioDeadlineIndex(projects);
+    return (Array.isArray(rows) ? rows : []).map((row) => {
+        const context = row?.projectDrawingId ? index.byProductId.get(String(row.projectDrawingId)) : null;
+        const project = context?.project || index.byProjectKey.get(projectKeyOf(row)) || null;
+        const product = context?.product || null;
+        const projectRequiredDate = project?.requiredDate || null;
+        const productRequiredDate = product?.requiredDate || null;
+        return {
+            ...row,
+            projectRequiredDate,
+            productRequiredDate,
+            requiredDate: productRequiredDate || projectRequiredDate || row?.requiredDate || null,
+        };
+    });
+};
+
+const itemDeadlineRisk = (item) => {
+    const schedule = deadlineSnapshot(item?.requiredDate, item?.completedAt, normalize(item?.lane) === "COMPLETE");
+    return ["OVERDUE", "CRITICAL", "DUE_SOON", "COMPLETED_LATE"].includes(normalize(schedule.health));
+};
+
 const requisitionStatusStage = (status) => {
     switch (normalize(status)) {
         case "DRAFT": return "DRAFT";
@@ -382,6 +552,7 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
             clientName: project.clientName,
             plantCode: project.plantCode,
             portfolioStage: project.portfolioStage,
+            requiredDate: project.requiredDate || null,
             products: Array.isArray(project.products) ? project.products : [],
             rows: [],
         });
@@ -399,6 +570,7 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 clientName: row.clientName,
                 plantCode: row.productionPlantCode,
                 portfolioStage: null,
+                requiredDate: row.requiredDate || row.projectRequiredDate || null,
                 products: [],
                 rows: [],
             });
@@ -427,6 +599,13 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
         const trackedProductCount = new Set(group.rows.map((row) =>
             row.projectDrawingId || `${row.productName || ""}:${row.drawingNo || ""}`
         )).size;
+        const effectiveRequiredDate = group.requiredDate || earliestRequiredDate(
+            (Array.isArray(group.products) ? group.products : []).map((product) => product?.requiredDate)
+        );
+        const completedAt = completed
+            ? latestDateValue([...group.rows.map((row) => row.completedAt), ...groupMaterialLines.map((line) => line.completedAt)])
+            : null;
+        const currentSource = bottleneckLine || bottleneck || null;
         return {
             ...group,
             pendingProduct,
@@ -446,6 +625,13 @@ const projectKanbanGroups = (rows = [], projects = [], materialLines = []) => {
             mrCount: group.rows.length,
             materialLineCount: groupMaterialLines.length,
             readyPercent: aggregateReadyPercent(group.rows),
+            requiredDate: effectiveRequiredDate,
+            completedAt,
+            deadline: deadlineSnapshot(effectiveRequiredDate, completedAt, completed),
+            currentDepartment: currentSource?.currentDepartment || currentSource?.responsibleDesk || (pendingProduct ? "PRODUCTION / BOM" : null),
+            currentDwellMinutes: rowDwellMinutes(currentSource),
+            stageStartedAt: currentSource?.stageStartedAt || null,
+            targetMinutes: currentSource?.targetMinutes || null,
             shortageQty: groupMaterialLines.length
                 ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.shortageQty), 0)
                 : group.rows.reduce((sum, row) => sum + numeric(row.shortageQty), 0),
@@ -490,6 +676,8 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                     latestBomStatus: product.latestBomStatus,
                     bomEffective: product.bomEffective === true,
                     portfolioStage: product.currentDepartment || product.portfolioStage,
+                    requiredDate: product.requiredDate || project.requiredDate || null,
+                    projectRequiredDate: project.requiredDate || null,
                     rows: [],
                 });
             });
@@ -513,6 +701,8 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 latestBomStatus: null,
                 bomEffective: false,
                 portfolioStage: null,
+                requiredDate: row.requiredDate || row.productRequiredDate || row.projectRequiredDate || null,
+                projectRequiredDate: row.projectRequiredDate || null,
                 rows: [],
             });
         }
@@ -529,6 +719,11 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
             : null;
         const bottleneck = rowForLine || chooseBottleneckRow(group.rows);
         const completed = groupMaterialLines.length > 0 && groupMaterialLines.every((line) => line.lane === "COMPLETE");
+        const effectiveRequiredDate = group.requiredDate || earliestRequiredDate(group.rows.map((row) => row.requiredDate));
+        const completedAt = completed
+            ? latestDateValue([...group.rows.map((row) => row.completedAt), ...groupMaterialLines.map((line) => line.completedAt)])
+            : null;
+        const currentSource = bottleneckLine || bottleneck || null;
         return {
             ...group,
             bottleneckLine,
@@ -553,6 +748,13 @@ const productKanbanGroups = (rows = [], projects = [], materialLines = []) => {
                 ? groupMaterialLines.reduce((sum, line) => sum + numeric(line.shortageQty), 0)
                 : group.rows.reduce((sum, row) => sum + numeric(row.shortageQty), 0),
             readyPercent: aggregateReadyPercent(group.rows),
+            requiredDate: effectiveRequiredDate,
+            completedAt,
+            deadline: deadlineSnapshot(effectiveRequiredDate, completedAt, completed),
+            currentDepartment: currentSource?.currentDepartment || currentSource?.responsibleDesk || group.portfolioStage || null,
+            currentDwellMinutes: rowDwellMinutes(currentSource),
+            stageStartedAt: currentSource?.stageStartedAt || null,
+            targetMinutes: currentSource?.targetMinutes || null,
             maxAgeHours: Math.max(
                 group.rows.reduce((max, row) => Math.max(max, numeric(row.ageHours)), 0),
                 groupMaterialLines.reduce((max, line) => Math.max(max, numeric(line.ageHours)), 0)
@@ -593,17 +795,22 @@ const productPreExecutionTarget = (item) => {
     };
 };
 
-const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantParam = "") => {
+const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantParam = "", projects = []) => {
     const trackerByRequisition = new Map(
         (Array.isArray(trackerRows) ? trackerRows : [])
             .filter((row) => row?.requisitionId)
             .map((row) => [String(row.requisitionId), row])
     );
     const selectedPlant = clean(selectedPlantParam).toUpperCase();
+    const deadlineIndex = buildPortfolioDeadlineIndex(projects);
 
     return (Array.isArray(requisitions) ? requisitions : []).flatMap((requisition) => {
         if (!requisition?.id || normalize(requisition.status) === "CANCELLED") return [];
         const tracker = trackerByRequisition.get(String(requisition.id)) || null;
+        const deadlineContext = deadlineIndex.byProductId.get(String(requisition.projectDrawingId || "")) || null;
+        const productRequiredDate = deadlineContext?.product?.requiredDate || null;
+        const projectRequiredDate = deadlineContext?.project?.requiredDate || null;
+        const requiredDate = productRequiredDate || projectRequiredDate || tracker?.requiredDate || null;
         const plantCode = clean(tracker?.productionPlantCode || requisition.productionPlantCode).toUpperCase();
         if (selectedPlant && plantCode !== selectedPlant) return [];
 
@@ -633,6 +840,14 @@ const materialKanbanRows = (requisitions = [], trackerRows = [], selectedPlantPa
                 currentDepartment: tracker?.currentDepartment || tracker?.responsibleDesk,
                 timingHealth: tracker?.timingHealth,
                 ageHours: tracker?.ageHours,
+                stageStartedAt: tracker?.stageStartedAt,
+                stageEndedAt: tracker?.stageEndedAt,
+                stageMinutes: tracker?.stageMinutes,
+                targetMinutes: tracker?.targetMinutes,
+                completedAt: tracker?.completedAt,
+                requiredDate,
+                productRequiredDate,
+                projectRequiredDate,
                 requestedQty: line.requestedQty,
                 reservedQty: line.reservedQty,
                 shortageQty: line.shortageQty,
@@ -670,10 +885,28 @@ const materialKanbanGroups = (lineItems = []) => {
         const projectKeys = new Set(group.lines.map((line) => clean(line.projectCode).toUpperCase()).filter(Boolean));
         const productKeys = new Set(group.lines.map((line) => clean(line.projectDrawingId) || `${clean(line.projectCode).toUpperCase()}|${clean(line.drawingNo).toUpperCase()}`).filter(Boolean));
         const mrKeys = new Set(group.lines.map((line) => clean(line.requisitionId)).filter(Boolean));
+        const activeLines = group.lines.filter((line) => line.lane !== "COMPLETE");
+        const deadlineSource = activeLines.length ? activeLines : group.lines;
+        const requiredDate = earliestRequiredDate(deadlineSource.map((line) => line.requiredDate));
+        const completed = group.lines.length > 0 && group.lines.every((line) => line.lane === "COMPLETE");
+        const completedAt = completed ? latestDateValue(group.lines.map((line) => line.completedAt)) : null;
+        const deadlineDates = new Set(group.lines.map((line) => clean(line.requiredDate)).filter(Boolean));
+        const overdueLineCount = group.lines.filter((line) =>
+            deadlineSnapshot(line.requiredDate, line.completedAt, line.lane === "COMPLETE").overdue
+        ).length;
         return {
             ...group,
             bottleneck,
             lane: bottleneck?.lane || "DEMAND",
+            requiredDate,
+            completedAt,
+            deadline: deadlineSnapshot(requiredDate, completedAt, completed),
+            deadlineCount: deadlineDates.size,
+            overdueLineCount,
+            currentDepartment: bottleneck?.currentDepartment || bottleneck?.lane || null,
+            currentDwellMinutes: rowDwellMinutes(bottleneck),
+            stageStartedAt: bottleneck?.stageStartedAt || null,
+            targetMinutes: bottleneck?.targetMinutes || null,
             lineCount: group.lines.length,
             projectCount: projectKeys.size,
             productCount: productKeys.size,
@@ -693,7 +926,8 @@ const materialKanbanGroups = (lineItems = []) => {
 const BOARD_FILTER_OPTIONS = [
     { value: "ALL", label: "All Work" },
     { value: "ACTIVE", label: "Active Only" },
-    { value: "RISK", label: "Timing Risk" },
+    { value: "DEADLINE", label: "Deadline Risk" },
+    { value: "RISK", label: "Stage Timing Risk" },
     { value: "SHORTAGE", label: "Shortage" },
 ];
 
@@ -706,6 +940,17 @@ const boardPrioritySort = (a, b) => {
     const aComplete = normalize(a?.lane) === "COMPLETE";
     const bComplete = normalize(b?.lane) === "COMPLETE";
     if (aComplete && bComplete) return numeric(a?.maxAgeHours) - numeric(b?.maxAgeHours);
+
+    const deadlineScore = (item) => {
+        const health = normalize(deadlineSnapshot(item?.requiredDate, item?.completedAt, normalize(item?.lane) === "COMPLETE").health);
+        if (health === "OVERDUE" || health === "COMPLETED_LATE") return 5;
+        if (health === "CRITICAL") return 4;
+        if (health === "DUE_SOON") return 3;
+        return 0;
+    };
+    const byDeadline = deadlineScore(b) - deadlineScore(a);
+    if (byDeadline !== 0) return byDeadline;
+
     const byRisk = numeric(b?.riskCount) - numeric(a?.riskCount);
     if (byRisk !== 0) return byRisk;
     const byShortage = numeric(b?.shortageQty) - numeric(a?.shortageQty);
@@ -716,6 +961,7 @@ const boardPrioritySort = (a, b) => {
 const boardFilterMatch = (item, filter) => {
     switch (normalize(filter)) {
         case "ACTIVE": return normalize(item?.lane) !== "COMPLETE";
+        case "DEADLINE": return itemDeadlineRisk(item);
         case "RISK": return numeric(item?.riskCount) > 0;
         case "SHORTAGE": return numeric(item?.shortageQty) > .0005;
         default: return true;
@@ -863,6 +1109,33 @@ function OperationsBoardDrawer({
 
                 <Divider sx={{ borderColor: "var(--mf-border)" }} />
 
+                <Card sx={{ ...panelSx, m: 0, p: 1, boxShadow: "none", background: "var(--mf-surface)" }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                        <Box>
+                            <Typography sx={{ ...mainTextSx, fontSize: 12 }}>Schedule & State Clock</Typography>
+                            <Typography sx={{ ...subTextSx, mt: .15 }}>
+                                Required date is the Project/Product commitment; stage target is the operational control clock.
+                            </Typography>
+                        </Box>
+                        <ScheduleDeadlineChip
+                            requiredDate={item.requiredDate}
+                            completedAt={item.completedAt}
+                            completed={normalize(item.lane) === "COMPLETE"}
+                        />
+                    </Box>
+                    <Box sx={{ mt: .8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: .6 }}>
+                        <Detail label="Current Department" value={readable(itemCurrentDepartment(item))} />
+                        <Detail label="Time in Current State" value={formatDurationMinutes(itemDwellMinutes(item))} />
+                        <Detail label="Required By" value={item.requiredDate ? formatRequiredDate(item.requiredDate) : "Not set"} />
+                        <Detail label="Stage Control Target" value={itemStageTargetMinutes(item) > 0 ? formatDurationMinutes(itemStageTargetMinutes(item)) : "No target"} />
+                    </Box>
+                    {scope === "MATERIAL" && numeric(item.deadlineCount) > 1 && (
+                        <Typography sx={{ ...subTextSx, mt: .6 }}>
+                            This material serves {item.deadlineCount} required dates. The dashboard uses the earliest active deadline; {item.overdueLineCount || 0} demand line(s) are currently late.
+                        </Typography>
+                    )}
+                </Card>
+
                 {scope === "PROJECT" && (
                     <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: .7 }}>
                         <Detail label="Products" value={item.productCount} />
@@ -946,6 +1219,12 @@ function OperationsBoardDrawer({
                                             <Typography sx={{ ...subTextSx, mt: .15 }}>
                                                 {line.requisitionNumber || "MR"} · Req {formatQty(line.requestedQty)} {line.uom || ""} · Reserved {formatQty(line.reservedQty)} · Short {formatQty(line.shortageQty)}
                                             </Typography>
+                                            <Box sx={{ mt: .35, display: "flex", alignItems: "center", gap: .45, flexWrap: "wrap" }}>
+                                                <ScheduleDeadlineChip requiredDate={line.requiredDate} completedAt={line.completedAt} completed={line.lane === "COMPLETE"} compact />
+                                                <Typography sx={{ ...subTextSx, fontSize: 9.5 }}>
+                                                    {readable(line.currentDepartment || line.lane)} · {formatDurationMinutes(rowDwellMinutes(line))}
+                                                </Typography>
+                                            </Box>
                                         </Box>
                                         <MatFlowStatusChip status={line.lineStatus || line.currentStage || line.lane} />
                                     </Box>
@@ -1182,6 +1461,7 @@ function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
                                 <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "MR"} · {readable(row.currentStage)} · {row.currentDepartment || row.currentStage || row.productionPlantCode || "-"}</Typography>
                             </Box>
                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                <ScheduleDeadlineChip requiredDate={row.requiredDate} compact />
                                 <TimingHealthChip health={row.timingHealth} />
                                 {numeric(row.shortageQty) > .0005 && <MatFlowStatusChip status="SHORTAGE_PENDING" />}
                             </Box>
@@ -1189,7 +1469,7 @@ function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
                         <Box sx={{ mt: .65, display: "grid", gridTemplateColumns: "1fr auto", gap: .7, alignItems: "center" }}>
                             <Box>
                                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, mb: .3 }}>
-                                    <Typography sx={{ ...subTextSx, fontSize: 9.7 }}>Material ready</Typography>
+                                    <Typography sx={{ ...subTextSx, fontSize: 9.7 }}>{readable(row.currentDepartment || row.responsibleDesk)} · {formatDurationMinutes(rowDwellMinutes(row))}</Typography>
                                     <Typography sx={{ ...mainTextSx, fontSize: 9.7 }}>{percent(row.materialReadyPercent)}%</Typography>
                                 </Box>
                                 <LinearProgress variant="determinate" value={percent(row.materialReadyPercent)} sx={{ height: 4, borderRadius: 99, background: "var(--mf-surface-strong)", "& .MuiLinearProgress-bar": { borderRadius: 99 } }} />
@@ -1306,12 +1586,10 @@ export function MatFlowDashboardPage() {
                 view === "operations"
                     ? matflowApi.listRequisitions()
                     : Promise.resolve({ data: [] }),
-                view === "operations"
-                    ? matflowApi.listProjects({
-                        active: true,
-                        plantCode: selectedPlantParam || undefined,
-                    })
-                    : Promise.resolve({ data: [] }),
+                matflowApi.listProjects({
+                    active: true,
+                    plantCode: selectedPlantParam || undefined,
+                }),
             ]);
             setData(dashboardResponse?.data || null);
             setTracker(trackerResponse?.data || null);
@@ -1329,15 +1607,18 @@ export function MatFlowDashboardPage() {
     useEffect(() => { load(); }, [load]);
 
     if (view === "operations") {
-        const trackerRows = (Array.isArray(tracker?.rows) ? tracker.rows : [])
-            .filter((row) => normalize(row.currentStage) !== "CANCELLED");
+        const trackerRows = enrichTrackerRowsWithDeadlines(
+            Array.isArray(tracker?.rows) ? tracker.rows : [],
+            projects
+        ).filter((row) => normalize(row.currentStage) !== "CANCELLED");
 
         const term = clean(kanbanSearch).toLowerCase();
 
         const materialLineItems = materialKanbanRows(
             requisitions,
             trackerRows,
-            selectedPlantParam
+            selectedPlantParam,
+            projects
         );
 
         const projectItems = projectKanbanGroups(trackerRows, projects, materialLineItems)
@@ -1405,20 +1686,20 @@ export function MatFlowDashboardPage() {
                 ["Projects", projectItems.length],
                 ["Products", projectItems.reduce((sum, item) => sum + numeric(item.productCount), 0)],
                 ["MRs", projectItems.reduce((sum, item) => sum + numeric(item.mrCount), 0)],
-                ["Timing Risks", projectItems.reduce((sum, item) => sum + numeric(item.riskCount), 0)],
+                ["Deadline Risks", projectItems.filter(itemDeadlineRisk).length],
             ]
             : kanbanScope === "PRODUCT"
                 ? [
                     ["Products", productItems.length],
                     ["MRs", productItems.reduce((sum, item) => sum + numeric(item.mrCount), 0)],
                     ["Shortage Qty", formatQty(productItems.reduce((sum, item) => sum + numeric(item.shortageQty), 0))],
-                    ["Timing Risks", productItems.reduce((sum, item) => sum + numeric(item.riskCount), 0)],
+                    ["Deadline Risks", productItems.filter(itemDeadlineRisk).length],
                 ]
                 : [
                     ["Materials", materialItems.length],
                     ["Demand Lines", materialItems.reduce((sum, item) => sum + numeric(item.lineCount), 0)],
                     ["Shortage Qty", formatQty(materialItems.reduce((sum, item) => sum + numeric(item.shortageQty), 0))],
-                    ["Issued Qty", formatQty(materialItems.reduce((sum, item) => sum + numeric(item.issuedQty), 0))],
+                    ["Deadline Risks", materialItems.filter(itemDeadlineRisk).length],
                 ];
 
         return (
@@ -1472,7 +1753,7 @@ export function MatFlowDashboardPage() {
                     <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
                         <KanbanIdentityLegend scope={kanbanScope} />
                         <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                            Priority order: timing risk → shortage → longest waiting. Compact is optimized to keep all seven workflow stages visible without horizontal scrolling on a normal desktop view.
+                            Priority order: required-date risk → stage timing risk → shortage → longest waiting. Required dates come from the Project/Product portfolio; state clocks come from the tracker.
                         </Typography>
                     </Box>
                 </Card>
@@ -1569,10 +1850,12 @@ export function MatFlowDashboardPage() {
                         completedLaneLimit={12}
                         boardKey={`${kanbanScope}|${boardFilter}|${term}|${selectedPlantParam || "ALL"}`}
                         laneSummary={(laneItems) => {
+                            const deadlineRisk = laneItems.filter(itemDeadlineRisk).length;
                             const risk = laneItems.filter((entry) => numeric(entry.riskCount) > 0).length;
                             const shortage = laneItems.filter((entry) => numeric(entry.shortageQty) > .0005).length;
                             const parts = [];
-                            if (risk) parts.push(`${risk} risk`);
+                            if (deadlineRisk) parts.push(`${deadlineRisk} deadline`);
+                            if (risk) parts.push(`${risk} stage risk`);
                             if (shortage) parts.push(`${shortage} shortage`);
                             return parts.length ? parts.join(" · ") : "No current risk flags";
                         }}
@@ -1630,6 +1913,13 @@ export function MatFlowDashboardPage() {
                                                 <Detail label="Shortage" value={formatQty(item.shortageQty)} />
                                             </Box>
                                         )}
+
+                                        <Box sx={{ mt: compact ? .45 : .7, display: "flex", gap: .45, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                                            <ScheduleDeadlineChip requiredDate={item.requiredDate} completedAt={item.completedAt} completed={item.lane === "COMPLETE"} compact={compact} />
+                                            <Typography sx={{ ...subTextSx, fontSize: compact ? 9.2 : 10 }}>
+                                                {readable(itemCurrentDepartment(item))} · {formatDurationMinutes(itemDwellMinutes(item))}
+                                            </Typography>
+                                        </Box>
 
                                         <Typography
                                             sx={{
@@ -1728,6 +2018,13 @@ export function MatFlowDashboardPage() {
                                             </Box>
                                         )}
 
+                                        <Box sx={{ mt: compact ? .45 : .7, display: "flex", gap: .45, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                                            <ScheduleDeadlineChip requiredDate={item.requiredDate} completedAt={item.completedAt} completed={item.lane === "COMPLETE"} compact={compact} />
+                                            <Typography sx={{ ...subTextSx, fontSize: compact ? 9.2 : 10 }}>
+                                                {readable(itemCurrentDepartment(item))} · {formatDurationMinutes(itemDwellMinutes(item))}
+                                            </Typography>
+                                        </Box>
+
                                         <Typography
                                             sx={{
                                                 ...subTextSx,
@@ -1817,6 +2114,13 @@ export function MatFlowDashboardPage() {
                                         </Box>
                                     )}
 
+                                    <Box sx={{ mt: compact ? .45 : .7, display: "flex", gap: .45, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                                        <ScheduleDeadlineChip requiredDate={item.requiredDate} completedAt={item.completedAt} completed={item.lane === "COMPLETE"} compact={compact} />
+                                        <Typography sx={{ ...subTextSx, fontSize: compact ? 9.2 : 10 }}>
+                                            {readable(itemCurrentDepartment(item))} · {formatDurationMinutes(itemDwellMinutes(item))}
+                                        </Typography>
+                                    </Box>
+
                                     <Typography
                                         sx={{
                                             ...subTextSx,
@@ -1898,7 +2202,10 @@ export function MatFlowDashboardPage() {
 
     const totals = data?.totals || {};
     const kpis = tracker?.kpis || {};
-    const trackerRows = Array.isArray(tracker?.rows) ? tracker.rows : [];
+    const trackerRows = enrichTrackerRowsWithDeadlines(
+        Array.isArray(tracker?.rows) ? tracker.rows : [],
+        projects
+    );
     const plantRows = Array.isArray(data?.rows) ? data.rows : [];
     const activeRows = trackerRows.filter((row) => !["CANCELLED", "PRODUCTION_COMPLETED"].includes(normalize(row.currentStage)));
 
@@ -1930,16 +2237,86 @@ export function MatFlowDashboardPage() {
     ];
 
     const attentionRows = [...activeRows]
-        .filter((row) => ["BREACHED", "WATCH"].includes(normalize(row.timingHealth)) || numeric(row.shortageQty) > .0005 || numeric(row.ageHours) >= 24)
+        .filter((row) => {
+            const deadlineHealth = normalize(deadlineSnapshot(row.requiredDate).health);
+            return ["BREACHED", "WATCH"].includes(normalize(row.timingHealth))
+                || ["OVERDUE", "CRITICAL", "DUE_SOON"].includes(deadlineHealth)
+                || numeric(row.shortageQty) > .0005
+                || rowDwellMinutes(row) >= 24 * 60;
+        })
         .sort((a, b) => {
+            const deadlineScore = (row) => {
+                const health = normalize(deadlineSnapshot(row.requiredDate).health);
+                if (health === "OVERDUE") return 6;
+                if (health === "CRITICAL") return 5;
+                if (health === "DUE_SOON") return 3;
+                return 0;
+            };
             const breachScore = (row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth)) ? 4 : normalize(row.timingHealth) === "WATCH" ? 2 : 0;
             const shortageScore = (row) => numeric(row.shortageQty) > .0005 ? 2 : 0;
-            return (breachScore(b) + shortageScore(b)) - (breachScore(a) + shortageScore(a)) || numeric(b.ageHours) - numeric(a.ageHours);
+            return (deadlineScore(b) + breachScore(b) + shortageScore(b))
+                - (deadlineScore(a) + breachScore(a) + shortageScore(a))
+                || rowDwellMinutes(b) - rowDwellMinutes(a);
         })
         .slice(0, 6);
 
+    const departmentDwellRows = (() => {
+        const grouped = new Map();
+        activeRows.forEach((row) => {
+            const department = readable(row.currentDepartment || row.responsibleDesk || row.currentStage || "Workflow");
+            const minutes = rowDwellMinutes(row);
+            const entry = grouped.get(department) || { department, count: 0, totalMinutes: 0, maxMinutes: 0 };
+            entry.count += 1;
+            entry.totalMinutes += minutes;
+            entry.maxMinutes = Math.max(entry.maxMinutes, minutes);
+            grouped.set(department, entry);
+        });
+        return Array.from(grouped.values())
+            .sort((a, b) => b.maxMinutes - a.maxMinutes)
+            .slice(0, 8)
+            .map((entry) => ({
+                key: entry.department,
+                label: entry.department,
+                value: entry.maxMinutes,
+                tone: entry.maxMinutes >= 48 * 60 ? "danger" : entry.maxMinutes >= 24 * 60 ? "warning" : "primary",
+                subtitle: `${entry.count} active MR${entry.count === 1 ? "" : "s"} · avg ${formatDurationMinutes(entry.count ? Math.round(entry.totalMinutes / entry.count) : 0)}`,
+            }));
+    })();
+
+    const portfolioDeadlineItems = (Array.isArray(projects) ? projects : []).flatMap((project) => {
+        const projectItem = { kind: "PROJECT", requiredDate: project.requiredDate || null };
+        const productItems = (Array.isArray(project.products) ? project.products : [])
+            .filter((product) => product?.active !== false)
+            .map((product) => ({ kind: "PRODUCT", requiredDate: product.requiredDate || project.requiredDate || null }));
+        return [projectItem, ...productItems];
+    });
+
+    const deadlineStatusCounts = portfolioDeadlineItems.reduce((counts, item) => {
+        const health = normalize(deadlineSnapshot(item.requiredDate).health);
+        if (health === "OVERDUE") counts.overdue += 1;
+        else if (health === "CRITICAL" || health === "DUE_SOON") counts.dueSoon += 1;
+        else if (health === "ON_SCHEDULE") counts.onSchedule += 1;
+        else counts.noDeadline += 1;
+        return counts;
+    }, { overdue: 0, dueSoon: 0, onSchedule: 0, noDeadline: 0 });
+
+    const deadlineHealthRows = [
+        { key: "OVERDUE", label: "Overdue", value: deadlineStatusCounts.overdue, tone: "danger", subtitle: "Required date has passed" },
+        { key: "DUE_SOON", label: "Due ≤ 7 days", value: deadlineStatusCounts.dueSoon, tone: "warning", subtitle: "Project/Product deadline is close" },
+        { key: "ON_SCHEDULE", label: "More than 7 days", value: deadlineStatusCounts.onSchedule, tone: "success", subtitle: "Calendar buffer remains" },
+        { key: "NO_DEADLINE", label: "No deadline", value: deadlineStatusCounts.noDeadline, tone: "primary", subtitle: "Required date should be configured" },
+    ];
+
     const liveRows = [...activeRows]
-        .sort((a, b) => numeric(b.ageHours) - numeric(a.ageHours))
+        .sort((a, b) => {
+            const aDeadline = deadlineSnapshot(a.requiredDate);
+            const bDeadline = deadlineSnapshot(b.requiredDate);
+            if (aDeadline.overdue !== bDeadline.overdue) return bDeadline.overdue ? 1 : -1;
+            if (aDeadline.deltaMinutes != null && bDeadline.deltaMinutes != null && aDeadline.deltaMinutes !== bDeadline.deltaMinutes) {
+                return aDeadline.deltaMinutes - bDeadline.deltaMinutes;
+            }
+            return rowDwellMinutes(b) - rowDwellMinutes(a);
+        })
         .slice(0, 8);
 
     const overviewCards = [
@@ -1950,6 +2327,14 @@ export function MatFlowDashboardPage() {
             icon: FolderOpenRoundedIcon,
             tone: "primary",
             onClick: () => changeView("projects"),
+        },
+        {
+            label: "Deadline Risk",
+            value: deadlineStatusCounts.overdue + deadlineStatusCounts.dueSoon,
+            subtitle: `${deadlineStatusCounts.overdue} overdue · ${deadlineStatusCounts.dueSoon} due within 7 days`,
+            icon: WarningAmberRoundedIcon,
+            tone: deadlineStatusCounts.overdue ? "danger" : deadlineStatusCounts.dueSoon ? "warning" : "success",
+            onClick: () => changeView("operations"),
         },
         {
             label: "Open Material Requests",
@@ -2066,7 +2451,7 @@ export function MatFlowDashboardPage() {
                         </Box>
                     </Card>
 
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(3,minmax(0,1fr))", xl: "repeat(6,minmax(0,1fr))" }, gap: 1 }}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(3,minmax(0,1fr))", xl: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
                         {overviewCards.map((card) => <OverviewMetricCard key={card.label} {...card} />)}
                     </Box>
 
@@ -2117,6 +2502,30 @@ export function MatFlowDashboardPage() {
                         </Card>
                     </Box>
 
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 1 }}>
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Department Dwell</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Longest live time currently sitting with each department. Subtitle shows active count and average dwell.</Typography>
+                                </Box>
+                                <QueryStatsRoundedIcon sx={{ color: "var(--mf-purple-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewBarList rows={departmentDwellRows} valueLabel={(value) => formatDurationMinutes(value)} emptyText="No active department clocks." />
+                        </Card>
+
+                        <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
+                                <Box>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 14 }}>Project / Product Deadline Control</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .15 }}>Required dates from the portfolio, kept separate from operational stage targets.</Typography>
+                                </Box>
+                                <WarningAmberRoundedIcon sx={{ color: deadlineStatusCounts.overdue ? "var(--mf-danger-text)" : "var(--mf-warning-text)", fontSize: 20 }} />
+                            </Box>
+                            <OverviewBarList rows={deadlineHealthRows} valueLabel={(value) => `${value}`} />
+                        </Card>
+                    </Box>
+
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(420px,1.08fr) minmax(420px,.92fr)" }, gap: 1 }}>
                         <Card sx={{ ...panelSx, m: 0, p: 1.25 }}>
                             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .8, mb: 1 }}>
@@ -2161,6 +2570,7 @@ export function MatFlowDashboardPage() {
                                                 <Typography sx={{ ...subTextSx, mt: .12 }}>{row.requisitionNumber || "-"} · {row.currentDepartment || row.currentStage || row.productionPlantCode || "-"}</Typography>
                                             </Box>
                                             <Box sx={{ display: "flex", gap: .35, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                                <ScheduleDeadlineChip requiredDate={row.requiredDate} compact />
                                                 <MatFlowStatusChip status={row.currentStage} />
                                                 <TimingHealthChip health={row.timingHealth} />
                                             </Box>
@@ -2168,7 +2578,7 @@ export function MatFlowDashboardPage() {
                                         <Box sx={{ mt: .7, display: "grid", gridTemplateColumns: "1fr auto", gap: .8, alignItems: "end" }}>
                                             <Box>
                                                 <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, mb: .3 }}>
-                                                    <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{readable(row.currentDepartment || row.responsibleDesk)} · {formatDurationMinutes(numeric(row.ageHours) * 60)}</Typography>
+                                                    <Typography sx={{ ...subTextSx, fontSize: 9.8 }}>{readable(row.currentDepartment || row.responsibleDesk)} · {formatDurationMinutes(rowDwellMinutes(row))} in current state</Typography>
                                                     <Typography sx={{ ...mainTextSx, fontSize: 9.8 }}>{percent(row.materialReadyPercent)}%</Typography>
                                                 </Box>
                                                 <LinearProgress variant="determinate" value={percent(row.materialReadyPercent)} sx={{ height: 5, borderRadius: 99, background: "var(--mf-surface-strong)", "& .MuiLinearProgress-bar": { borderRadius: 99 } }} />
@@ -2221,6 +2631,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
     const { selectedPlantParam, availablePlants, roles } = useMatFlow();
     const contextPlants = selectedPlantParam ? [selectedPlantParam] : availablePlants;
     const [data, setData] = useState({ kpis: {}, rows: [] });
+    const [portfolioProjects, setPortfolioProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState(initialSearch || "");
@@ -2236,14 +2647,22 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
         setLoading(true);
         setError("");
         try {
-            const response = await matflowApi.getTracker({
-                plantCode: selectedPlantParam,
-                search: clean(search) || undefined,
-                stage: stage || undefined,
-            });
+            const [response, projectResponse] = await Promise.all([
+                matflowApi.getTracker({
+                    plantCode: selectedPlantParam,
+                    search: clean(search) || undefined,
+                    stage: stage || undefined,
+                }),
+                matflowApi.listProjects({
+                    active: true,
+                    plantCode: selectedPlantParam || undefined,
+                }),
+            ]);
             setData(response?.data || { kpis: {}, rows: [] });
+            setPortfolioProjects(extractMatFlowPage(projectResponse?.data).rows);
         } catch (requestError) {
             setData({ kpis: {}, rows: [] });
+            setPortfolioProjects([]);
             setError(readMatFlowError(requestError, "Unable to load Project Material Tracker."));
         } finally {
             setLoading(false);
@@ -2252,7 +2671,10 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
 
     useEffect(() => { load(); }, [load]);
 
-    const rows = Array.isArray(data?.rows) ? data.rows : [];
+    const rows = useMemo(() => enrichTrackerRowsWithDeadlines(
+        Array.isArray(data?.rows) ? data.rows : [],
+        portfolioProjects
+    ), [data, portfolioProjects]);
     const kpis = data?.kpis || {};
     const routedStorePending = rows.filter((row) => ["ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING", "AWAITING_STORE_PLANNING"].includes(normalize(row.currentStage))).length;
     const stages = useMemo(() => ["", ...Array.from(new Set(rows.map((row) => normalize(row.currentStage)).filter(Boolean))).sort()], [rows]);
@@ -2267,6 +2689,7 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                     projectName: row.projectName,
                     clientName: row.clientName,
                     plantCode: row.productionPlantCode,
+                    requiredDate: row.projectRequiredDate || row.requiredDate || null,
                     rows: [],
                 });
             }
@@ -2278,6 +2701,8 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
             shortageQty: project.rows.reduce((sum, row) => sum + numeric(row.shortageQty), 0),
             readyCount: project.rows.filter((row) => row.readyToStartProduction === true).length,
             riskCount: project.rows.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))).length,
+            currentDwellMinutes: project.rows.reduce((max, row) => Math.max(max, rowDwellMinutes(row)), 0),
+            deadline: deadlineSnapshot(project.requiredDate),
         }));
     }, [rows]);
     const projectPagination = useMatFlowPagination(projectGroups, 8);
@@ -2325,7 +2750,10 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                 <SummaryCard label="Shortage" value={kpis.shortagePending ?? 0} />
                 <SummaryCard label="Reserved" value={kpis.materialReserved ?? 0} />
                 <SummaryCard label="In Transit" value={kpis.materialInTransit ?? 0} />
-                <SummaryCard label="Production" value={kpis.productionInProgress ?? 0} />
+                <SummaryCard label="Deadline Risk" value={rows.filter((row) => {
+                    const health = normalize(deadlineSnapshot(row.requiredDate, row.completedAt, normalize(row.currentStage) === "PRODUCTION_COMPLETED").health);
+                    return ["OVERDUE", "CRITICAL", "DUE_SOON", "COMPLETED_LATE"].includes(health);
+                }).length} />
             </Box>
 
             <Card sx={panelSx}>
@@ -2356,6 +2784,10 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                                         <TimingHealthChip health={row.timingHealth} />
                                     </Box>
                                     <Typography sx={{ ...subTextSx, mt: .7 }}>Ready {Math.round(numeric(row.materialReadyPercent))}% · Shortage {formatQty(row.shortageQty)}</Typography>
+                                    <Box sx={{ mt: .55, display: "flex", gap: .45, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                                        <ScheduleDeadlineChip requiredDate={row.requiredDate} completedAt={row.completedAt} completed={normalize(row.currentStage) === "PRODUCTION_COMPLETED"} compact />
+                                        <Typography sx={{ ...subTextSx, fontSize: 9.6 }}>{readable(row.currentDepartment || row.responsibleDesk)} · {formatDurationMinutes(rowDwellMinutes(row))}</Typography>
+                                    </Box>
                                     <Box sx={{ display: "flex", gap: .5, mt: .8, flexWrap: "wrap" }}>
                                         <Button onClick={() => navigate(canOpenTarget ? target.path : `/matflow/tracker/${row.requisitionId}`)} sx={primaryBtnSx}>{canOpenTarget ? target.label : "Trace"}</Button>
                                         <Button onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Trace</Button>
@@ -2397,6 +2829,10 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                                     <Box>
                                         <Typography sx={{ ...mainTextSx, fontSize: 14 }}>{project.projectCode || "-"} · {project.projectName || "Project"}</Typography>
                                         <Typography sx={subTextSx}>{project.clientName || "-"} · {project.plantCode || "-"}</Typography>
+                                        <Box sx={{ mt: .4, display: "flex", gap: .5, alignItems: "center", flexWrap: "wrap" }}>
+                                            <ScheduleDeadlineChip requiredDate={project.requiredDate} compact />
+                                            <Typography sx={{ ...subTextSx, fontSize: 9.6 }}>Longest current state {formatDurationMinutes(project.currentDwellMinutes)}</Typography>
+                                        </Box>
                                     </Box>
                                     <Box><Typography sx={mainTextSx}>{project.productCount}</Typography><Typography sx={subTextSx}>Products</Typography></Box>
                                     <Box><Typography sx={mainTextSx}>{project.rows.length}</Typography><Typography sx={subTextSx}>MRs</Typography></Box>
@@ -2426,11 +2862,20 @@ export function MatFlowTrackerPage({ embedded = false, initialSearch = "" }) {
                                             <Box key={row.requisitionId} sx={{ ...tableRowSx, gridTemplateColumns: "200px 165px 165px 155px 105px 120px 175px 110px" }}>
                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.productName || "-"}</Typography><Typography sx={subTextSx}>{row.drawingNo || "-"}</Typography></Box>
                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{row.requisitionNumber}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
-                                                <Box sx={tableCellSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Box>
+                                                <Box sx={tableCellSx}>
+                                                    <Typography sx={mainTextSx}>{readable(row.currentDepartment || row.responsibleDesk)}</Typography>
+                                                    <Typography sx={subTextSx}>{formatDurationMinutes(rowDwellMinutes(row))} in state</Typography>
+                                                </Box>
                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
                                                 <Box sx={tableCellSx}><Typography sx={mainTextSx}>{Math.round(numeric(row.materialReadyPercent))}%</Typography><LinearProgress variant="determinate" value={Math.min(100, Math.max(0, numeric(row.materialReadyPercent)))} /></Box>
                                                 <Box sx={tableCellSx}>{formatQty(row.shortageQty)}</Box>
-                                                <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography><TimingHealthChip health={row.timingHealth} /></Box>
+                                                <Box sx={tableCellSx}>
+                                                    <Typography sx={mainTextSx}>{readable(row.nextDepartment || row.productionStartBlocker)}</Typography>
+                                                    <Box sx={{ mt: .3, display: "flex", gap: .35, flexWrap: "wrap" }}>
+                                                        <ScheduleDeadlineChip requiredDate={row.requiredDate} completedAt={row.completedAt} completed={normalize(row.currentStage) === "PRODUCTION_COMPLETED"} compact />
+                                                        <TimingHealthChip health={row.timingHealth} />
+                                                    </Box>
+                                                </Box>
                                                 <Box sx={tableCellSx}><Button endIcon={<ArrowForwardIcon />} onClick={() => navigate(`/matflow/tracker/${row.requisitionId}`)} sx={secondaryBtnSx}>Track</Button></Box>
                                             </Box>
                                         ))}
@@ -2838,7 +3283,19 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
     useEffect(() => { if (selectedId || materialId) load(); }, [load, selectedId, materialId]);
 
-    const lots = Array.isArray(data?.lots) ? data.lots : [];
+    const lots = useMemo(() => (Array.isArray(data?.lots) ? data.lots : []).map((row) => {
+        const context = productContextById.get(String(row?.productId || "")) || null;
+        const productRequiredDate = context?.product?.requiredDate || null;
+        const projectRequiredDate = context?.project?.requiredDate || null;
+        const requiredDate = productRequiredDate || projectRequiredDate || null;
+        return {
+            ...row,
+            productRequiredDate,
+            projectRequiredDate,
+            requiredDate,
+            deadline: deadlineSnapshot(requiredDate, row?.completedAt, row?.completed === true),
+        };
+    }), [data, productContextById]);
     const filteredLots = useMemo(() => {
         const term = clean(search).toLowerCase();
         return lots.filter((row) => {
@@ -2875,7 +3332,9 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
             productCount: new Set(filteredLots.map((row) => row.productId).filter(Boolean)).size,
             liveLotCount: live.length,
             shortageQty: filteredLots.reduce((total, row) => total + numeric(row.lineShortageQty), 0),
+            reservedQty: filteredLots.reduce((total, row) => total + numeric(row.reservedQty || row.lineReservedQty), 0),
             delayedLotCount: live.filter((row) => ["BREACHED", "COMPLETED_LATE"].includes(normalize(row.timingHealth))).length,
+            deadlineRiskCount: live.filter((row) => ["OVERDUE", "CRITICAL", "DUE_SOON"].includes(normalize(row.deadline?.health))).length,
         };
     }, [filteredLots]);
 
@@ -2989,12 +3448,12 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                         <SummaryCard label="Live Lots" value={visibleKpis.liveLotCount} />
                         <SummaryCard label="Shortage Qty" value={formatQty(visibleKpis.shortageQty)} />
                         <SummaryCard label="Store Declared / Allocated" value={formatQty(visibleKpis.reservedQty)} />
-                        <SummaryCard label="Delayed Lots" value={visibleKpis.delayedLotCount} />
+                        <SummaryCard label="Deadline Risk" value={visibleKpis.deadlineRiskCount} />
                     </Box>
 
                     <Card sx={panelSx}>
                         <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Workflow by PD / Product</Typography>
-                        <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material across Store, Purchase, QC, Processing and Production.</Typography>
+                        <Typography sx={{ ...subTextSx, mb: 1.2 }}>Each row follows the actual branch taken by this material across Store, Purchase, QC, Processing and Production, with its live department dwell and inherited Product/Project required date.</Typography>
                         <Box sx={tableShellSx}>
                             <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "220px 175px 130px 180px 150px 190px 150px 105px" }}>
                                 {["PD No. / Product", "MR", "Tracked Qty", "Current", "Production User / Plant", "Next Action", "Timing", "Route"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -3011,7 +3470,13 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.currentDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.currentStage)}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{productionOwnerText(row)}</Typography><Typography sx={subTextSx}>{readable(row.currentDepartment || row.currentStage || "Workflow")}</Typography></Box>
                                             <Box sx={tableCellSx}><Typography sx={mainTextSx}>{readable(row.nextDepartment)}</Typography><Typography sx={subTextSx}>{readable(row.nextAction)}</Typography></Box>
-                                            <Box sx={tableCellSx}><TimingHealthChip health={row.timingHealth} /><Typography sx={subTextSx}>{formatDurationMinutes(row.currentDwellMinutes)}</Typography></Box>
+                                            <Box sx={tableCellSx}>
+                                                <Box sx={{ display: "flex", gap: .3, flexWrap: "wrap", mb: .25 }}>
+                                                    <ScheduleDeadlineChip requiredDate={row.requiredDate} completedAt={row.completedAt} completed={row.completed === true} compact />
+                                                    <TimingHealthChip health={row.timingHealth} />
+                                                </Box>
+                                                <Typography sx={subTextSx}>{formatDurationMinutes(row.currentDwellMinutes)} in {readable(row.currentDepartment || row.currentStage)}</Typography>
+                                            </Box>
                                             <Box sx={tableCellSx}>
                                                 <Button
                                                     onClick={() => setExpandedLotKey((current) => current === row.lotKey ? "" : row.lotKey)}
