@@ -5936,6 +5936,22 @@ export default function DispatchedItemsPage() {
 	const [plantConfigs, setPlantConfigs] = useState([]);
 	const [logisticsDrivers, setLogisticsDrivers] = useState([]);
 	const [logisticsVehicles, setLogisticsVehicles] = useState([]);
+
+	/*
+	 * Logistics masters remain lazy-loaded for Dispatch-page performance.
+	 *
+	 * The loading flag gives challan dropdowns a truthful loading state, while
+	 * the promise ref deduplicates simultaneous Driver + Vehicle master loads
+	 * when multiple challan entry points are opened quickly.
+	 */
+	const [
+		logisticsMastersLoading,
+		setLogisticsMastersLoading,
+	] = useState(false);
+
+	const logisticsMastersPromiseRef =
+		useRef(null);
+
 	const [createDriverOpen, setCreateDriverOpen] =
 		useState(false);
 
@@ -10754,39 +10770,101 @@ export default function DispatchedItemsPage() {
 	};
 
 	const fetchLogisticsMasters = async () => {
-		try {
-			const [drivers, vehicles] =
-				await Promise.all([
+		/*
+		 * Do not start duplicate master requests. Normal Challan, QR Challan,
+		 * Custom Challan and Admin Edit all share the same Driver/Vehicle lists.
+		 */
+		if (logisticsMastersPromiseRef.current) {
+			return logisticsMastersPromiseRef.current;
+		}
+
+		setLogisticsMastersLoading(true);
+
+		const request = (async () => {
+			const results =
+				await Promise.allSettled([
 					fetchDrivers(),
 					fetchVehicles(),
 				]);
 
-			const cleanDrivers =
-				normalizeDriversList(drivers);
+			const [
+				driverResult,
+				vehicleResult,
+			] = results;
 
-			const cleanVehicles =
-				normalizeVehiclesList(vehicles);
+			/*
+			 * Resolve each master independently.
+			 *
+			 * Previously Promise.all() meant one failed Vehicle request also
+			 * erased successfully fetched Drivers (and vice versa), leaving both
+			 * dropdowns blank. Preserve the last known good list for whichever
+			 * request failed.
+			 */
+			let cleanDrivers =
+				logisticsDrivers;
 
-			setLogisticsDrivers(cleanDrivers);
-			setLogisticsVehicles(cleanVehicles);
+			let cleanVehicles =
+				logisticsVehicles;
+
+			if (
+				driverResult.status ===
+				"fulfilled"
+			) {
+				cleanDrivers =
+					normalizeDriversList(
+						driverResult.value
+					);
+
+				setLogisticsDrivers(
+					cleanDrivers
+				);
+			} else {
+				console.error(
+					"Failed to load driver master",
+					driverResult.reason
+				);
+			}
+
+			if (
+				vehicleResult.status ===
+				"fulfilled"
+			) {
+				cleanVehicles =
+					normalizeVehiclesList(
+						vehicleResult.value
+					);
+
+				setLogisticsVehicles(
+					cleanVehicles
+				);
+			} else {
+				console.error(
+					"Failed to load vehicle master",
+					vehicleResult.reason
+				);
+			}
 
 			return {
 				drivers: cleanDrivers,
 				vehicles: cleanVehicles,
 			};
-		} catch (error) {
-			console.error(
-				"Failed to load logistics masters",
-				error
-			);
+		})();
 
-			setLogisticsDrivers([]);
-			setLogisticsVehicles([]);
+		logisticsMastersPromiseRef.current =
+			request;
 
-			return {
-				drivers: [],
-				vehicles: [],
-			};
+		try {
+			return await request;
+		} finally {
+			if (
+				logisticsMastersPromiseRef.current ===
+				request
+			) {
+				logisticsMastersPromiseRef.current =
+					null;
+			}
+
+			setLogisticsMastersLoading(false);
 		}
 	};
 
@@ -14540,13 +14618,14 @@ export default function DispatchedItemsPage() {
 	}) => {
 		clearDispatchReviewPdf();
 
-		/* Load logistics masters only when the dispatch form actually needs them. */
-		if (
-			(isDispatch || isAdmin) &&
-			(logisticsDrivers.length === 0 || logisticsVehicles.length === 0)
-		) {
-			void fetchLogisticsMasters();
-		}
+		/*
+		 * Refresh Driver + Vehicle masters whenever a normal challan form opens.
+		 *
+		 * This stays lazy (nothing is fetched on Dispatch page startup), but it
+		 * also picks up masters added from Driver/Fleet Management after this page
+		 * was first rendered. The shared loader deduplicates overlapping calls.
+		 */
+		void fetchLogisticsMasters();
 
 		const cleanItemIds =
 			Array.from(
@@ -14876,6 +14955,13 @@ export default function DispatchedItemsPage() {
 		setCustomChallanEditingNumber("");
 		resetCustomChallanForm();
 		setCustomChallanOpen(true);
+
+		/*
+		 * Custom Challan uses the same Logistics Driver/Vehicle masters as the
+		 * normal Dispatch Challan. Keep the page fast by loading them only when
+		 * this form is actually opened.
+		 */
+		void fetchLogisticsMasters();
 	};
 
 	const closeCustomChallanModal = () => {
@@ -14913,10 +14999,22 @@ export default function DispatchedItemsPage() {
 		try {
 			setCustomChallanDetailLoading(true);
 
+			/*
+			 * Load the selected challan and refresh Driver/Vehicle masters together.
+			 * A master-load failure never blocks the existing challan detail itself.
+			 */
+			const [
+				detailResult,
+			] =
+				await Promise.all([
+					fetchCustomChallanDetails(
+						challanNumber
+					),
+					fetchLogisticsMasters(),
+				]);
+
 			const detail =
-				await fetchCustomChallanDetails(
-					challanNumber
-				);
+				detailResult;
 
 			setCustomChallanMode("EDIT");
 			setCustomChallanEditingNumber(
@@ -21008,6 +21106,18 @@ export default function DispatchedItemsPage() {
 											>
 												<option value="">No Driver / Leave Blank</option>
 												<option value={CREATE_NEW_DRIVER_OPTION}>＋ Create New Driver</option>
+												{logisticsMastersLoading &&
+													logisticsDrivers.length === 0 && (
+														<option value="" disabled>
+															Loading registered drivers...
+														</option>
+													)}
+												{!logisticsMastersLoading &&
+													logisticsDrivers.length === 0 && (
+														<option value="" disabled>
+															No registered drivers found
+														</option>
+													)}
 												{customChallanForm.driverName &&
 													!logisticsDrivers.some(
 														(driver) =>
@@ -21053,6 +21163,18 @@ export default function DispatchedItemsPage() {
 											>
 												<option value="">No Vehicle / Leave Blank</option>
 												<option value={CREATE_NEW_VEHICLE_OPTION}>＋ Create New Vehicle</option>
+												{logisticsMastersLoading &&
+													logisticsVehicles.length === 0 && (
+														<option value="" disabled>
+															Loading registered vehicles...
+														</option>
+													)}
+												{!logisticsMastersLoading &&
+													logisticsVehicles.length === 0 && (
+														<option value="" disabled>
+															No registered vehicles found
+														</option>
+													)}
 												{customChallanForm.vehicleNumber &&
 													!logisticsVehicles.some(
 														(vehicle) =>
@@ -24429,6 +24551,20 @@ export default function DispatchedItemsPage() {
 														＋ Create New Driver
 													</option>
 
+													{logisticsMastersLoading &&
+														logisticsDrivers.length === 0 && (
+															<option value="" disabled>
+																Loading registered drivers...
+															</option>
+														)}
+
+													{!logisticsMastersLoading &&
+														logisticsDrivers.length === 0 && (
+															<option value="" disabled>
+																No registered drivers found
+															</option>
+														)}
+
 													{logisticsDrivers.map(
 														(driver) => {
 															const driverId =
@@ -24538,6 +24674,20 @@ export default function DispatchedItemsPage() {
 													>
 														＋ Create New Vehicle
 													</option>
+
+													{logisticsMastersLoading &&
+														logisticsVehicles.length === 0 && (
+															<option value="" disabled>
+																Loading registered vehicles...
+															</option>
+														)}
+
+													{!logisticsMastersLoading &&
+														logisticsVehicles.length === 0 && (
+															<option value="" disabled>
+																No registered vehicles found
+															</option>
+														)}
 
 													{logisticsVehicles.map(
 														(vehicle) => {
