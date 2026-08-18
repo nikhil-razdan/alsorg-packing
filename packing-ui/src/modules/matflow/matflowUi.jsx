@@ -482,6 +482,7 @@ export const getMatFlowRole = (roleOrRoles, extraRoles = []) => {
 const MATFLOW_SCREEN_ROLES = Object.freeze({
   dashboard: ALL_MATFLOW_ROLES,
   tracking: ALL_MATFLOW_ROLES,
+  exceptions: ALL_MATFLOW_ROLES,
   projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
   materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE, MATFLOW_ROLES.QC],
   "processing-units": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
@@ -873,13 +874,15 @@ const success = new Set([
   "ACTIVE", "APPROVED", "AVAILABLE", "READY", "RECEIVED", "ACCEPTED",
   "RESERVED", "READY_TO_ISSUE", "ISSUED", "ISSUED_TO_PRODUCTION",
   "CONSUMED", "PRODUCTION_COMPLETED", "COMPLETED", "CLOSED", "PLACED",
+  "RESOLVED", "LOW",
 ]);
 const danger = new Set([
   "REJECTED", "RETURNED", "CANCELLED", "FAILED", "SHORTAGE_IDENTIFIED",
+  "CRITICAL", "WORKFLOW_HOLD",
 ]);
 const purple = new Set([
   "SUPERSEDED", "IN_TRANSIT", "IN_PROCESSING", "PROCESSING_REQUIRED",
-  "ORDERED", "PRODUCTION_STARTED",
+  "ORDERED", "PRODUCTION_STARTED", "RECOVERY_IN_PROGRESS",
 ]);
 
 export function MatFlowStatusChip({ status }) {
@@ -899,7 +902,8 @@ export function MatFlowStatusChip({ status }) {
   } else if (
     value === "DRAFT" || value === "SUBMITTED" || value === "SUBMITTED_TO_STORE" ||
     value === "STORE_REVIEW_IN_PROGRESS" || value === "SHORTAGE_PENDING" ||
-    value === "QC_PENDING" || value.startsWith("PARTIALLY_") || value.startsWith("PENDING_")
+    value === "QC_PENDING" || value === "OPEN" || value === "CONTAINED" || value === "HIGH" || value === "MEDIUM" ||
+    value.startsWith("PARTIALLY_") || value.startsWith("PENDING_")
   ) {
     tone = { color: "var(--mf-warning-text)", background: "var(--mf-warning-soft)", border: "1px solid var(--mf-warning-border)" };
   }

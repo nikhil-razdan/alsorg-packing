@@ -35,6 +35,7 @@ import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionMan
 import KeyboardReturnOutlinedIcon from "@mui/icons-material/KeyboardReturnOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import AppsIcon from "@mui/icons-material/Apps";
 import LogoutIcon from "@mui/icons-material/Logout";
@@ -55,6 +56,7 @@ const NAV = [
     ["Processing Unit Master", "/matflow/processing-units", "processing-units", <PrecisionManufacturingOutlinedIcon />],
     ["Production Execution", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
     ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
+    ["Exceptions & Recovery", "/matflow/exceptions", "exceptions", <WarningAmberOutlinedIcon />],
     ["Material Usage Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
     ["Material Movement Audit", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
     ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
@@ -72,6 +74,7 @@ const HEADER = [
     ["/matflow/processing-units", "Processing Unit Master", "Approved internal/external Processing Units used by BOM material options"],
     ["/matflow/processing", "Material Processing", "Store-selected jobs: start, complete and release toward Production"],
     ["/matflow/returns", "Material Returns", "Production unused / excess material return control"],
+    ["/matflow/exceptions", "Exceptions & Recovery", "Fact-based issue register, workflow containment, safe recovery and immutable root-cause history"],
     ["/matflow/material-register", "Material Usage Register", "Purchased/received, issued, consumed, Production-wasted, Processing-wasted and returned quantities; physical stock remains in Tally"],
     ["/matflow/ledger", "Material Movement Audit", "Immutable MatFlow workflow and usage events by plant/department; no separate routing master or physical stock balance"],
     ["/matflow/reports", "Reports", "Shortage, Product, stock and audit reporting"],
@@ -164,6 +167,13 @@ export default function MatFlowLayout() {
                                 {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                             </TextField>
                         )}
+                        <Button
+                            startIcon={<WarningAmberOutlinedIcon />}
+                            onClick={() => navigate(`/matflow/exceptions?new=1&from=${encodeURIComponent(location.pathname)}`)}
+                            sx={secondaryBtnSx}
+                        >
+                            Report Issue
+                        </Button>
                         <Tooltip title={isDark ? "Switch to light mode" : "Switch to dark mode"}>
                             <Button onClick={toggleMode} sx={{ ...secondaryBtnSx, minWidth: 42, px: 1 }}>
                                 {isDark ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}

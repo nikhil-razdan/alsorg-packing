@@ -39,6 +39,7 @@ import {
     MatFlowStoreDetailPage,
 } from "./pages/MatFlowStoreWorkspace";
 import { MatFlowReturnsPage } from "./pages/MatFlowMovementWorkspace";
+import { MatFlowExceptionPage } from "./pages/MatFlowExceptionWorkspace";
 import {
     MatFlowPurchasePage,
     MatFlowReceivingPage,
@@ -135,6 +136,7 @@ export default function MatFlowRoutes() {
                         <Route path="processing" element={guarded("processing", <MatFlowProcessingPage />)} />
                         <Route path="returns" element={guarded("returns", <MatFlowReturnsPage />)} />
 
+                        <Route path="exceptions" element={guarded("exceptions", <MatFlowExceptionPage />)} />
                         <Route path="material-register" element={guarded("material-register", <MatFlowMaterialRegisterPage />)} />
                         <Route path="ledger" element={guarded("ledger", <MatFlowLedgerPage />)} />
                         <Route path="reports" element={guarded("reports", <MatFlowReportsPage />)} />
