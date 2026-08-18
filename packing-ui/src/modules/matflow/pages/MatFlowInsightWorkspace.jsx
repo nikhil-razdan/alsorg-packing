@@ -146,8 +146,8 @@ function KanbanIdentityLegend({ scope }) {
     const productB = getMatFlowKanbanIdentity({ kind: "PRODUCT", projectKey: "LEGEND-PROJECT-A", productKey: "PRODUCT-B" });
     const materials = [
         ["Metal", "METAL", "LEGEND-METAL"],
-        ["Wood / Veneer", "WOOD / VENEER", "LEGEND-WOOD"],
-        ["Stone / Tile", "STONE / TILE", "LEGEND-STONE"],
+        ["Wood", "WOOD / VENEER", "LEGEND-WOOD"],
+        ["Stone", "STONE / TILE", "LEGEND-STONE"],
         ["Hardware", "HARDWARE", "LEGEND-HARDWARE"],
     ].map(([label, category, key]) => ({
         label,
@@ -163,21 +163,18 @@ function KanbanIdentityLegend({ scope }) {
             sx={{
                 display: "flex",
                 alignItems: "center",
-                gap: .65,
+                gap: .42,
                 flexWrap: "wrap",
-                px: .2,
+                minWidth: 0,
             }}
         >
-            <Typography sx={{ ...subTextSx, fontSize: 10.2, fontWeight: 850, mr: .2 }}>
-                Visual identity:
+            <Typography sx={{ ...subTextSx, fontSize: 8.9, fontWeight: 900, mr: .1 }}>
+                Identity:
             </Typography>
             {scope === "PROJECT" && (
                 <>
                     <MatFlowIdentityBadge label="Project A" identity={projectA} />
                     <MatFlowIdentityBadge label="Project B" identity={projectB} />
-                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                        each Project keeps a stable border and background tint.
-                    </Typography>
                 </>
             )}
             {scope === "PRODUCT" && (
@@ -185,23 +182,13 @@ function KanbanIdentityLegend({ scope }) {
                     <MatFlowIdentityBadge label="Project family" identity={projectA} accent={projectA.familyAccent} />
                     <MatFlowIdentityBadge label="Product 1" identity={productA} />
                     <MatFlowIdentityBadge label="Product 2" identity={productB} />
-                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                        Products stay in their parent Project colour family but use distinct shades.
-                    </Typography>
                 </>
             )}
-            {scope === "MATERIAL" && (
-                <>
-                    {materials.map(({ label, identity }) => (
-                        <MatFlowIdentityBadge key={label} label={label} identity={identity} />
-                    ))}
-                    <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                        category families stay meaningful while each material gets a stable shade.
-                    </Typography>
-                </>
-            )}
-            <Typography sx={{ ...subTextSx, fontSize: 10.2, ml: "auto" }}>
-                Workflow state still uses the existing status chip colours.
+            {scope === "MATERIAL" && materials.map(({ label, identity }) => (
+                <MatFlowIdentityBadge key={label} label={label} identity={identity} />
+            ))}
+            <Typography sx={{ ...subTextSx, fontSize: 8.9 }}>
+                stable colour identity · status chips still show workflow state
             </Typography>
         </Box>
     );
@@ -1491,39 +1478,128 @@ function OverviewAttentionList({ rows, navigate, roles, contextPlants }) {
 
 function UniversalDashboardHeader({ view, onViewChange, onRefresh = null, refreshing = false }) {
     return (
-        <>
-            <PageHero
-                badge="MATFLOW UNIVERSAL DASHBOARD"
-                title="Material Operations Command Center"
-                subtitle="One plant-aware dashboard for overall operations, Project/Product material execution and material-specific workflow tracking. Store routing comes from the MR plant, Processing uses approved Processing Units, and final issue stays tied to the exact Production requester."
-                actions={onRefresh ? <Button startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing} sx={secondaryBtnSx}>Refresh</Button> : null}
-            />
-            <Card sx={{ ...panelSx, p: 1 }}>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,minmax(0,1fr))" }, gap: .8 }}>
-                    {UNIVERSAL_DASHBOARD_VIEWS.map(([key, label, subtitle]) => {
-                        const active = view === key;
-                        return (
-                            <Button
-                                key={key}
-                                onClick={() => onViewChange(key)}
-                                sx={{
-                                    ...(active ? primaryBtnSx : secondaryBtnSx),
-                                    justifyContent: "flex-start",
-                                    textAlign: "left",
-                                    minHeight: 58,
-                                    px: 1.4,
-                                }}
-                            >
-                                <Box>
-                                    <Typography sx={{ fontWeight: 950, fontSize: 13 }}>{label}</Typography>
-                                    <Typography sx={{ fontSize: 10.5, opacity: .78 }}>{subtitle}</Typography>
-                                </Box>
-                            </Button>
-                        );
-                    })}
+        <Card
+            sx={{
+                ...panelSx,
+                p: { xs: .85, md: 1 },
+                display: "grid",
+                gap: .7,
+            }}
+        >
+            <Box
+                sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1,
+                    minWidth: 0,
+                }}
+            >
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: .65, flexWrap: "wrap" }}>
+                        <Typography
+                            sx={{
+                                px: .7,
+                                py: .22,
+                                borderRadius: 99,
+                                color: "var(--mf-primary-text)",
+                                background: "var(--mf-primary-soft)",
+                                border: "1px solid var(--mf-primary-border)",
+                                fontSize: 8.6,
+                                fontWeight: 950,
+                                letterSpacing: .55,
+                                lineHeight: 1.35,
+                            }}
+                        >
+                            MATFLOW UNIVERSAL DASHBOARD
+                        </Typography>
+                        <Typography
+                            sx={{
+                                color: "var(--mf-text)",
+                                fontWeight: 950,
+                                fontSize: { xs: 16.5, md: 18.5 },
+                                lineHeight: 1.12,
+                            }}
+                        >
+                            Material Operations Command Center
+                        </Typography>
+                    </Box>
+                    <Typography
+                        noWrap
+                        sx={{
+                            ...subTextSx,
+                            mt: .35,
+                            maxWidth: "min(1120px, calc(100vw - 420px))",
+                            fontSize: 9.6,
+                        }}
+                    >
+                        Project, Product and Material workflow control with plant-driven Store routing, approved Processing Units and final issue tied to the exact Production requester.
+                    </Typography>
                 </Box>
-            </Card>
-        </>
+                {onRefresh && (
+                    <Button
+                        startIcon={<RefreshIcon />}
+                        onClick={onRefresh}
+                        disabled={refreshing}
+                        sx={{ ...secondaryBtnSx, minHeight: 32, px: 1, flexShrink: 0 }}
+                    >
+                        Refresh
+                    </Button>
+                )}
+            </Box>
+
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" },
+                    gap: .55,
+                }}
+            >
+                {UNIVERSAL_DASHBOARD_VIEWS.map(([key, label, subtitle]) => {
+                    const active = view === key;
+                    return (
+                        <Button
+                            key={key}
+                            onClick={() => onViewChange(key)}
+                            title={subtitle}
+                            sx={{
+                                ...(active ? primaryBtnSx : secondaryBtnSx),
+                                justifyContent: "flex-start",
+                                textAlign: "left",
+                                minHeight: 38,
+                                px: .9,
+                                py: .55,
+                            }}
+                        >
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                    noWrap
+                                    sx={{
+                                        fontWeight: 950,
+                                        fontSize: 11.2,
+                                        lineHeight: 1.15,
+                                    }}
+                                >
+                                    {label}
+                                </Typography>
+                                <Typography
+                                    noWrap
+                                    sx={{
+                                        display: { xs: "none", xl: "block" },
+                                        mt: .12,
+                                        fontSize: 8.8,
+                                        lineHeight: 1.15,
+                                        opacity: .72,
+                                    }}
+                                >
+                                    {subtitle}
+                                </Typography>
+                            </Box>
+                        </Button>
+                    );
+                })}
+            </Box>
+        </Card>
     );
 }
 
@@ -1709,16 +1785,16 @@ export function MatFlowDashboardPage() {
                 ];
 
         return (
-            <Box sx={pageSx}>
+            <Box sx={{ ...pageSx, gap: .72 }}>
                 <UniversalDashboardHeader view={view} onViewChange={changeView} onRefresh={load} refreshing={loading} />
                 <ErrorBox>{error}</ErrorBox>
 
-                <Card sx={{ ...panelSx, display: "grid", gap: 1.05 }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                        <Box sx={{ minWidth: 0, flex: "1 1 420px" }}>
-                            <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Material Operations Board</Typography>
-                            <Typography sx={subTextSx}>
-                                Scalable Project, Product and Material workflow control. Compact mode keeps the complete seven-stage flow visible across a normal desktop viewport, while each lane still scrolls independently for its own cards. Comfortable mode remains available when you want wider, more detailed cards.
+                <Card sx={{ ...panelSx, p: .85, display: "grid", gap: .62 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: .8, alignItems: "center", flexWrap: "wrap" }}>
+                        <Box sx={{ minWidth: 0, flex: "1 1 360px" }}>
+                            <Typography sx={{ fontWeight: 950, fontSize: 14.5, lineHeight: 1.15 }}>Material Operations Board</Typography>
+                            <Typography noWrap sx={{ ...subTextSx, mt: .12, fontSize: 9.2 }}>
+                                Live Project / Product / Material flow · priority: deadline risk → stage timing risk → shortage → longest waiting.
                             </Typography>
                         </Box>
                         <MatFlowViewToggle
@@ -1731,7 +1807,7 @@ export function MatFlowDashboardPage() {
                         />
                     </Box>
 
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(280px,1fr) auto auto" }, gap: .8, alignItems: "center" }}>
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(250px,1fr) auto auto" }, gap: .55, alignItems: "center" }}>
                         <TextField
                             label={
                                 kanbanScope === "PROJECT"
@@ -1742,7 +1818,12 @@ export function MatFlowDashboardPage() {
                             }
                             value={kanbanSearch}
                             onChange={(event) => setKanbanSearch(event.target.value)}
-                            sx={fieldSx}
+                            sx={{
+                                ...fieldSx,
+                                "& .MuiOutlinedInput-root": { height: 36 },
+                                "& .MuiInputLabel-root": { fontSize: 11 },
+                                "& .MuiInputBase-input": { py: .75, fontSize: 11 },
+                            }}
                         />
                         <MatFlowViewToggle
                             value={boardFilter}
@@ -1756,17 +1837,40 @@ export function MatFlowDashboardPage() {
                         />
                     </Box>
 
-                    <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-                        <KanbanIdentityLegend scope={kanbanScope} />
-                        <Typography sx={{ ...subTextSx, fontSize: 10.2 }}>
-                            Priority order: required-date risk → stage timing risk → shortage → longest waiting. Required dates come from the Project/Product portfolio; state clocks come from the tracker.
-                        </Typography>
-                    </Box>
+                    <KanbanIdentityLegend scope={kanbanScope} />
                 </Card>
 
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: .6 }}>
                     {kanbanKpis.map(([label, value]) => (
-                        <SummaryCard key={label} label={label} value={value} />
+                        <Card
+                            key={label}
+                            sx={{
+                                ...panelSx,
+                                m: 0,
+                                p: .65,
+                                minHeight: 50,
+                                boxShadow: "none",
+                                display: "grid",
+                                alignContent: "center",
+                                gap: .12,
+                                borderTop: "2px solid var(--mf-primary)",
+                            }}
+                        >
+                            <Typography
+                                sx={{
+                                    ...subTextSx,
+                                    fontSize: 8.7,
+                                    fontWeight: 950,
+                                    letterSpacing: .45,
+                                    textTransform: "uppercase",
+                                }}
+                            >
+                                {label}
+                            </Typography>
+                            <Typography sx={{ ...mainTextSx, fontSize: 17, lineHeight: 1.05 }}>
+                                {value}
+                            </Typography>
+                        </Card>
                     ))}
                 </Box>
 
@@ -1775,7 +1879,7 @@ export function MatFlowDashboardPage() {
                         sx={{
                             display: "grid",
                             gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", sm: "repeat(4,minmax(0,1fr))", md: "repeat(7,minmax(0,1fr))" },
-                            gap: .65,
+                            gap: .45,
                         }}
                     >
                         {workflowLaneCounts.map((stage, index) => {
@@ -1794,8 +1898,8 @@ export function MatFlowDashboardPage() {
                                     key={stage.key}
                                     sx={{
                                         minWidth: 0,
-                                        px: .8,
-                                        py: .65,
+                                        px: .62,
+                                        py: .38,
                                         borderRadius: 2,
                                         border: `1px solid ${palette.border}`,
                                         background: palette.soft,
@@ -1807,15 +1911,15 @@ export function MatFlowDashboardPage() {
                                 >
                                     <Box
                                         sx={{
-                                            width: 20,
-                                            height: 20,
+                                            width: 18,
+                                            height: 18,
                                             borderRadius: "50%",
                                             display: "grid",
                                             placeItems: "center",
                                             background: "var(--mf-card-bg)",
                                             border: `1px solid ${palette.border}`,
                                             color: palette.text,
-                                            fontSize: 9,
+                                            fontSize: 8.4,
                                             fontWeight: 950,
                                             flexShrink: 0,
                                         }}
@@ -1826,7 +1930,7 @@ export function MatFlowDashboardPage() {
                                         sx={{
                                             ...mainTextSx,
                                             minWidth: 0,
-                                            fontSize: 10.4,
+                                            fontSize: 9.7,
                                             whiteSpace: "nowrap",
                                             overflow: "hidden",
                                             textOverflow: "ellipsis",
@@ -1834,7 +1938,7 @@ export function MatFlowDashboardPage() {
                                     >
                                         {stage.label}
                                     </Typography>
-                                    <Typography sx={{ ...mainTextSx, fontSize: 11, color: palette.text }}>
+                                    <Typography sx={{ ...mainTextSx, fontSize: 10.2, color: palette.text }}>
                                         {stage.count}
                                     </Typography>
                                 </Box>
@@ -1849,7 +1953,7 @@ export function MatFlowDashboardPage() {
                         items={activeItems}
                         laneFor={(item) => item.lane}
                         minColumnWidth={OPERATIONS_BOARD_COLUMN_WIDTH[boardDensity] || OPERATIONS_BOARD_COLUMN_WIDTH.COMPACT}
-                        boardHeight={{ xs: 620, md: "clamp(540px, calc(100vh - 300px), 780px)" }}
+                        boardHeight={{ xs: 620, md: "clamp(600px, calc(100vh - 215px), 860px)" }}
                         initialItemsPerLane={boardDensity === "COMPACT" ? 24 : 12}
                         loadMoreStep={boardDensity === "COMPACT" ? 24 : 12}
                         completedLaneKeys={["COMPLETE"]}
