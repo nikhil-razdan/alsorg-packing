@@ -25,141 +25,150 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * Plant/material reporting plus the integrated Operational Exception & Recovery
- * Register.
- */
+/** Plant/material reporting plus the integrated Operational Exception & Recovery Register. */
 @RestController
 @RequestMapping("/api/matflow")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowInsightController {
-        private final MatFlowInsightService service;
+    private final MatFlowInsightService service;
 
-        public MatFlowInsightController(MatFlowInsightService service) {
-                this.service = service;
-        }
+    public MatFlowInsightController(MatFlowInsightService service) {
+        this.service = service;
+    }
 
-        @GetMapping("/reports/dashboard")
-        public DashboardResponse dashboard(@RequestParam(required = false) String plantCode) {
-                return service.dashboard(plantCode);
-        }
+    @GetMapping("/reports/dashboard")
+    public DashboardResponse dashboard(@RequestParam(required = false) String plantCode) {
+        return service.dashboard(plantCode);
+    }
 
-        @GetMapping("/reports/products/{projectDrawingId}")
-        public ProjectTrackingResponse project(
-                        @PathVariable UUID projectDrawingId) {
-                return service.projectTracking(projectDrawingId);
-        }
+    @GetMapping("/reports/products/{projectDrawingId}")
+    public ProjectTrackingResponse project(
+            @PathVariable UUID projectDrawingId) {
+        return service.projectTracking(projectDrawingId);
+    }
 
-        @GetMapping("/reports/shortages")
-        public List<ShortageAgeingRow> shortages(
-                        @RequestParam(required = false) String plantCode,
-                        @RequestParam(required = false) Integer minimumAgeDays) {
-                return service.shortageAgeing(plantCode, minimumAgeDays);
-        }
+    @GetMapping("/reports/shortages")
+    public List<ShortageAgeingRow> shortages(
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) Integer minimumAgeDays) {
+        return service.shortageAgeing(plantCode, minimumAgeDays);
+    }
 
-        @GetMapping("/reports/stock-ledger")
-        public PageResponse<StockLedgerRow> stockLedger(
-                        @RequestParam(required = false) String plantCode,
-                        @RequestParam(required = false) UUID materialId,
-                        @RequestParam(required = false) MovementType movementType,
-                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-                        @RequestParam(required = false) String search,
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "25") int size) {
-                return service.stockLedger(plantCode, materialId, movementType, fromDate, toDate, search, page, size);
-        }
+    @GetMapping("/reports/stock-ledger")
+    public PageResponse<StockLedgerRow> stockLedger(
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) UUID materialId,
+            @RequestParam(required = false) MovementType movementType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return service.stockLedger(plantCode, materialId, movementType, fromDate, toDate, search, page, size);
+    }
 
-        @GetMapping("/reports/audit")
-        public PageResponse<AuditLogRow> audit(
-                        @RequestParam(required = false) String plantCode,
-                        @RequestParam(required = false) String entityType,
-                        @RequestParam(required = false) UUID entityId,
-                        @RequestParam(required = false) String action,
-                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-                        @RequestParam(required = false) String search,
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "25") int size) {
-                return service.auditLogs(plantCode, entityType, entityId, action, fromDate, toDate, search, page, size);
-        }
+    @GetMapping("/reports/audit")
+    public PageResponse<AuditLogRow> audit(
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) String entityType,
+            @RequestParam(required = false) UUID entityId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return service.auditLogs(plantCode, entityType, entityId, action, fromDate, toDate, search, page, size);
+    }
 
-        @GetMapping("/tracker")
-        public TrackerResponse tracker(
-                        @RequestParam(required = false) String search,
-                        @RequestParam(required = false) String plantCode,
-                        @RequestParam(required = false) String stage) {
-                return service.tracker(search, plantCode, stage);
-        }
+    /**
+     * Production Execution readiness is the Production-facing alias of the
+     * tracker list. The frontend intentionally uses a semantic endpoint so the
+     * Production workspace is decoupled from the general Tracker route while
+     * both continue to share the same authoritative read model.
+     */
+    @GetMapping("/production-readiness")
+    public TrackerResponse productionReadiness(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String plantCode) {
+        return service.productionReadiness(search, plantCode);
+    }
 
-        @GetMapping("/tracker/requisitions/{requisitionId}")
-        public TrackerDetailResponse trackerDetail(@PathVariable UUID requisitionId) {
-                return service.trackerDetail(requisitionId);
-        }
+    @GetMapping("/tracker")
+    public TrackerResponse tracker(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) String stage) {
+        return service.tracker(search, plantCode, stage);
+    }
 
-        @GetMapping("/admin/integrity")
-        public IntegrityReport integrity(@RequestParam(required = false) String plantCode) {
-                return service.inspectIntegrity(plantCode);
-        }
+    @GetMapping("/tracker/requisitions/{requisitionId}")
+    public TrackerDetailResponse trackerDetail(@PathVariable UUID requisitionId) {
+        return service.trackerDetail(requisitionId);
+    }
 
-        /*
-         * ---------------- Operational Exception & Recovery Register ----------------
-         */
+    @GetMapping("/admin/integrity")
+    public IntegrityReport integrity(@RequestParam(required = false) String plantCode) {
+        return service.inspectIntegrity(plantCode);
+    }
 
-        @GetMapping("/exceptions")
-        public List<Map<String, Object>> exceptions(
-                        @RequestParam(required = false) String plantCode,
-                        @RequestParam(required = false) String status,
-                        @RequestParam(required = false) String severity,
-                        @RequestParam(required = false) String search) {
-                return service.workflowExceptions(plantCode, status, severity, search);
-        }
+    /* ---------------- Operational Exception & Recovery Register ---------------- */
 
-        @GetMapping("/exceptions/{id}")
-        public Map<String, Object> exception(@PathVariable UUID id) {
-                return service.workflowException(id);
-        }
+    @GetMapping("/exceptions")
+    public List<Map<String, Object>> exceptions(
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String search) {
+        return service.workflowExceptions(plantCode, status, severity, search);
+    }
 
-        @PostMapping("/exceptions")
-        public Map<String, Object> openException(@RequestBody Map<String, Object> request) {
-                return service.openWorkflowException(request);
-        }
+    @GetMapping("/exceptions/{id}")
+    public Map<String, Object> exception(@PathVariable UUID id) {
+        return service.workflowException(id);
+    }
 
-        @PostMapping("/exceptions/{id}/contain")
-        public Map<String, Object> containException(
-                        @PathVariable UUID id,
-                        @RequestBody(required = false) Map<String, Object> request) {
-                return service.containWorkflowException(id, request);
-        }
+    @PostMapping("/exceptions")
+    public Map<String, Object> openException(@RequestBody Map<String, Object> request) {
+        return service.openWorkflowException(request);
+    }
 
-        @PostMapping("/exceptions/{id}/recovery")
-        @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
-        public Map<String, Object> startRecovery(
-                        @PathVariable UUID id,
-                        @RequestBody(required = false) Map<String, Object> request) {
-                return service.startWorkflowExceptionRecovery(id, request);
-        }
+    @PostMapping("/exceptions/{id}/contain")
+    public Map<String, Object> containException(
+            @PathVariable UUID id,
+            @RequestBody(required = false) Map<String, Object> request) {
+        return service.containWorkflowException(id, request);
+    }
 
-        @PostMapping("/exceptions/{id}/notes")
-        public Map<String, Object> addExceptionNote(
-                        @PathVariable UUID id,
-                        @RequestBody Map<String, Object> request) {
-                return service.addWorkflowExceptionNote(id, request);
-        }
+    @PostMapping("/exceptions/{id}/recovery")
+    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
+    public Map<String, Object> startRecovery(
+            @PathVariable UUID id,
+            @RequestBody(required = false) Map<String, Object> request) {
+        return service.startWorkflowExceptionRecovery(id, request);
+    }
 
-        @PostMapping("/exceptions/{id}/resolve")
-        @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
-        public Map<String, Object> resolveException(
-                        @PathVariable UUID id,
-                        @RequestBody Map<String, Object> request) {
-                return service.resolveWorkflowException(id, request);
-        }
+    @PostMapping("/exceptions/{id}/notes")
+    public Map<String, Object> addExceptionNote(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> request) {
+        return service.addWorkflowExceptionNote(id, request);
+    }
 
-        @PostMapping("/exceptions/{id}/reopen")
-        @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
-        public Map<String, Object> reopenException(
-                        @PathVariable UUID id,
-                        @RequestBody Map<String, Object> request) {
-                return service.reopenWorkflowException(id, request);
-        }
+    @PostMapping("/exceptions/{id}/resolve")
+    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
+    public Map<String, Object> resolveException(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> request) {
+        return service.resolveWorkflowException(id, request);
+    }
+
+    @PostMapping("/exceptions/{id}/reopen")
+    @PreAuthorize("hasAnyAuthority('ADMIN','MATFLOW_MANAGER')")
+    public Map<String, Object> reopenException(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> request) {
+        return service.reopenWorkflowException(id, request);
+    }
 }
+

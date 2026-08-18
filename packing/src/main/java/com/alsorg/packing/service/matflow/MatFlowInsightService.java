@@ -176,6 +176,16 @@ public class MatFlowInsightService {
                                 plantCode, entityType, entityId, action, fromDate, toDate, search, page, size);
         }
 
+        /**
+         * Production-facing readiness list. This deliberately reuses the tracker
+         * read model so Production Execution and the global Tracker cannot drift
+         * into different material-readiness calculations.
+         */
+        @Transactional(readOnly = true)
+        public TrackerResponse productionReadiness(String search, String plantCode) {
+                return tracker.getTracker(search, plantCode, null);
+        }
+
         @Transactional(readOnly = true)
         public TrackerResponse tracker(String search, String plantCode, String stage) {
                 return tracker.getTracker(search, plantCode, stage);
