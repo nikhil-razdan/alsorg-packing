@@ -16,6 +16,10 @@ import {
   fetchMasterItemReport,
 } from "../../api/dashboardApi";
 
+import {
+  fetchPackingVolumeReport,
+} from "../../../api/packingReportApi";
+
 const pad = (value) =>
   String(value).padStart(2, "0");
 
@@ -52,6 +56,36 @@ const safeDivide = (a, b) =>
 
 const formatPercent = (value) =>
   `${Math.round(value * 100)}%`;
+
+const roundCbm = (value) =>
+  Math.round(numberValue(value) * 1000) / 1000;
+
+const formatCbm = (value) =>
+  roundCbm(value).toLocaleString("en-IN", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
+
+const hasMeasuredVolume = (row) => {
+  const raw = row?.volumeCbm;
+
+  if (
+    raw === null ||
+    raw === undefined ||
+    raw === ""
+  ) {
+    return false;
+  }
+
+  const value = Number(raw);
+
+  return Number.isFinite(value) && value >= 0;
+};
+
+const getVolumeCbm = (row) =>
+  hasMeasuredVolume(row)
+    ? Number(row.volumeCbm)
+    : 0;
 
 const rowValue = (
   row,
@@ -349,6 +383,24 @@ const getItemStatus = (row, fallback = "-") =>
     ],
     fallback
   );
+
+const volumeDetailColumns = [
+  ["serialNumber", "S.No."],
+  ["packedAt", "Packing Date / Time"],
+  ["packedBy", "Packed By"],
+  ["plantCode", "Plant"],
+  ["clientName", "Client"],
+  ["pdNo", "PD No."],
+  ["drawingNo", "Dwg No."],
+  ["sku", "SKU / Code"],
+  ["itemName", "Item Name"],
+  ["packetNumber", "Packet No."],
+  ["quantity", "Qty"],
+  ["dimensions", "Dimensions (L × B × H in)"],
+  ["volumeCbm", "Packed Volume (m³)"],
+  ["status", "Status"],
+  ["stickerNumber", "Sticker No."],
+];
 
 const itemPacketColumns = [
   ["module", "Module"],
@@ -733,6 +785,29 @@ const makeSearchText = (row) =>
     .join(" ")
     .toLowerCase();
 
+const formatReportCell = (key, value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "-";
+  }
+
+  if (
+    key === "volumeCbm" ||
+    key === "avgCbmPerPacket"
+  ) {
+    const numeric = Number(value);
+
+    if (Number.isFinite(numeric)) {
+      return formatCbm(numeric);
+    }
+  }
+
+  return value;
+};
+
 const extractReportRows = (
   payload
 ) => {
@@ -827,6 +902,9 @@ function InventoryReports() {
   const [error, setError] =
     useState("");
 
+  const [volumeError, setVolumeError] =
+    useState("");
+
   const [fromDate, setFromDate] =
     useState(monthStartDate());
 
@@ -843,6 +921,9 @@ function InventoryReports() {
     useState({});
 
   const [packingRows, setPackingRows] =
+    useState([]);
+
+  const [packingVolumeRows, setPackingVolumeRows] =
     useState([]);
 
   const [dispatchRows, setDispatchRows] =
@@ -869,6 +950,20 @@ function InventoryReports() {
     Promise.all([
       fetchDashboardStats().catch(() => ({})),
       fetchPackingReport(from, to).catch(() => []),
+      fetchPackingVolumeReport(from, to).catch((volumeLoadError) => {
+        console.error(
+          "Packing volume report load failed:",
+          volumeLoadError
+        );
+
+        if (active) {
+          setVolumeError(
+            "Packing volume data could not be loaded. Deploy the /api/reports/packing/volume backend fix to enable cubic-metre reporting."
+          );
+        }
+
+        return [];
+      }),
       fetchDispatchReport(from, to).catch(() => []),
       fetchCombinedReport(from, to).catch(() => []),
       fetchInventoryAging().catch(() => []),
@@ -882,6 +977,7 @@ function InventoryReports() {
         ([
           statsData,
           packingData,
+          packingVolumeData,
           dispatchData,
           combinedData,
           agingData,
@@ -895,6 +991,11 @@ function InventoryReports() {
           setPackingRows(
             Array.isArray(packingData)
               ? packingData
+              : []
+          );
+          setPackingVolumeRows(
+            Array.isArray(packingVolumeData)
+              ? packingVolumeData
               : []
           );
           setDispatchRows(
@@ -942,6 +1043,7 @@ function InventoryReports() {
     try {
       setLoading(true);
       setError("");
+      setVolumeError("");
 
       const from =
         toStartDateTime(fromDate);
@@ -952,6 +1054,7 @@ function InventoryReports() {
       const [
         statsData,
         packingData,
+        packingVolumeData,
         dispatchData,
         combinedData,
         agingData,
@@ -959,6 +1062,16 @@ function InventoryReports() {
       ] = await Promise.all([
         fetchDashboardStats().catch(() => ({})),
         fetchPackingReport(from, to).catch(() => []),
+        fetchPackingVolumeReport(from, to).catch((volumeLoadError) => {
+          console.error(
+            "Packing volume report load failed:",
+            volumeLoadError
+          );
+          setVolumeError(
+            "Packing volume data could not be loaded. Deploy the /api/reports/packing/volume backend fix to enable cubic-metre reporting."
+          );
+          return [];
+        }),
         fetchDispatchReport(from, to).catch(() => []),
         fetchCombinedReport(from, to).catch(() => []),
         fetchInventoryAging().catch(() => []),
@@ -975,6 +1088,11 @@ function InventoryReports() {
       setPackingRows(
         Array.isArray(packingData)
           ? packingData
+          : []
+      );
+      setPackingVolumeRows(
+        Array.isArray(packingVolumeData)
+          ? packingVolumeData
           : []
       );
       setDispatchRows(
@@ -1200,6 +1318,323 @@ function InventoryReports() {
       );
   }, [packingRows, dispatchRows]);
 
+  const volumeDetailRows = useMemo(() => {
+    return packingVolumeRows.map(
+      (row, index) => ({
+        key:
+          row?.packetItemId ||
+          `packing-volume-${index}`,
+        serialNumber: index + 1,
+        packetItemId:
+          row?.packetItemId || "-",
+        zohoItemId: rowValue(
+          row,
+          ["zohoItemId"],
+          "-"
+        ),
+        pdNo: getPdNo(row),
+        drawingNo: getDrawingNo(row),
+        sku: rowValue(
+          row,
+          ["sku"],
+          "-"
+        ),
+        itemName: rowValue(
+          row,
+          ["itemName"],
+          "-"
+        ),
+        description: rowValue(
+          row,
+          ["description"],
+          "-"
+        ),
+        clientName: rowValue(
+          row,
+          ["clientName", "client"],
+          "-"
+        ),
+        clientAddress: rowValue(
+          row,
+          ["clientAddress"],
+          "-"
+        ),
+        plantCode: rowValue(
+          row,
+          ["plantCode"],
+          "-"
+        ),
+        floor: rowValue(
+          row,
+          ["floor"],
+          "-"
+        ),
+        packetNumber: getPacketNumber(row),
+        quantity: numberValue(
+          rowValue(row, ["quantity"], 1)
+        ),
+        dimensions: rowValue(
+          row,
+          ["dimensions"],
+          "-"
+        ),
+        volumeCbm: hasMeasuredVolume(row)
+          ? roundCbm(row.volumeCbm)
+          : "-",
+        packedAt: getExcelDateTime(
+          rowValue(row, ["packedAt"], null)
+        ),
+        packedBy: rowValue(
+          row,
+          ["packedBy"],
+          "UNKNOWN"
+        ),
+        status: getItemStatus(row, "PACKED"),
+        stickerNumber: rowValue(
+          row,
+          ["stickerNumber"],
+          "-"
+        ),
+      })
+    );
+  }, [packingVolumeRows]);
+
+  const volumeDateRows = useMemo(() => {
+    const map = new Map();
+
+    packingVolumeRows.forEach((row) => {
+      const packedAt = rowValue(
+        row,
+        ["packedAt"],
+        null
+      );
+      const key = getDateKey(packedAt);
+      const current = map.get(key) || {
+        key,
+        date: formatDate(packedAt),
+        packets: 0,
+        measuredPackets: 0,
+        missingDimensions: 0,
+        volumeCbm: 0,
+        users: new Set(),
+      };
+
+      current.packets += 1;
+      current.users.add(
+        rowValue(row, ["packedBy"], "UNKNOWN")
+      );
+
+      if (hasMeasuredVolume(row)) {
+        current.measuredPackets += 1;
+        current.volumeCbm += getVolumeCbm(row);
+      } else {
+        current.missingDimensions += 1;
+      }
+
+      map.set(key, current);
+    });
+
+    return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        volumeCbm: roundCbm(row.volumeCbm),
+        avgCbmPerPacket: roundCbm(
+          safeDivide(
+            row.volumeCbm,
+            row.measuredPackets
+          )
+        ),
+        userCount: row.users.size,
+        dimensionCoverage: `${Math.round(
+          safeDivide(
+            row.measuredPackets,
+            row.packets
+          ) * 100
+        )}%`,
+      }))
+      .sort((a, b) =>
+        b.key.localeCompare(a.key)
+      );
+  }, [packingVolumeRows]);
+
+  const volumeUserRows = useMemo(() => {
+    const totalVolume = packingVolumeRows.reduce(
+      (sum, row) =>
+        sum + getVolumeCbm(row),
+      0
+    );
+
+    return groupBy(
+      packingVolumeRows,
+      (row) =>
+        String(
+          rowValue(
+            row,
+            ["packedBy"],
+            "UNKNOWN"
+          )
+        ),
+      (key) => ({
+        key,
+        user: key,
+        packets: 0,
+        measuredPackets: 0,
+        missingDimensions: 0,
+        volumeCbm: 0,
+        clients: new Set(),
+        plants: new Set(),
+      }),
+      (current, row) => {
+        current.packets += 1;
+        current.clients.add(
+          rowValue(row, ["clientName"], "-")
+        );
+        current.plants.add(
+          rowValue(row, ["plantCode"], "-")
+        );
+
+        if (hasMeasuredVolume(row)) {
+          current.measuredPackets += 1;
+          current.volumeCbm += getVolumeCbm(row);
+        } else {
+          current.missingDimensions += 1;
+        }
+      }
+    )
+      .map((row) => ({
+        ...row,
+        volumeCbm: roundCbm(row.volumeCbm),
+        avgCbmPerPacket: roundCbm(
+          safeDivide(
+            row.volumeCbm,
+            row.measuredPackets
+          )
+        ),
+        clientCount: row.clients.size,
+        plantCount: row.plants.size,
+        packetShare: `${Math.round(
+          safeDivide(
+            row.packets,
+            packingVolumeRows.length
+          ) * 100
+        )}%`,
+        volumeShare: `${Math.round(
+          safeDivide(
+            row.volumeCbm,
+            totalVolume
+          ) * 100
+        )}%`,
+        dimensionCoverage: `${Math.round(
+          safeDivide(
+            row.measuredPackets,
+            row.packets
+          ) * 100
+        )}%`,
+      }))
+      .sort((a, b) =>
+        b.volumeCbm - a.volumeCbm
+      );
+  }, [packingVolumeRows]);
+
+  const volumeClientRows = useMemo(() => {
+    return groupBy(
+      packingVolumeRows,
+      (row) =>
+        String(
+          rowValue(
+            row,
+            ["clientName"],
+            "UNKNOWN"
+          )
+        ),
+      (key) => ({
+        key,
+        client: key,
+        packets: 0,
+        measuredPackets: 0,
+        volumeCbm: 0,
+      }),
+      (current, row) => {
+        current.packets += 1;
+        if (hasMeasuredVolume(row)) {
+          current.measuredPackets += 1;
+          current.volumeCbm += getVolumeCbm(row);
+        }
+      }
+    )
+      .map((row) => ({
+        ...row,
+        volumeCbm: roundCbm(row.volumeCbm),
+        avgCbmPerPacket: roundCbm(
+          safeDivide(
+            row.volumeCbm,
+            row.measuredPackets
+          )
+        ),
+        dimensionCoverage: `${Math.round(
+          safeDivide(
+            row.measuredPackets,
+            row.packets
+          ) * 100
+        )}%`,
+      }))
+      .sort((a, b) =>
+        b.volumeCbm - a.volumeCbm
+      );
+  }, [packingVolumeRows]);
+
+  const volumePlantRows = useMemo(() => {
+    return groupBy(
+      packingVolumeRows,
+      (row) =>
+        String(
+          rowValue(
+            row,
+            ["plantCode"],
+            "UNKNOWN"
+          )
+        ),
+      (key) => ({
+        key,
+        plant: key,
+        packets: 0,
+        measuredPackets: 0,
+        volumeCbm: 0,
+        users: new Set(),
+      }),
+      (current, row) => {
+        current.packets += 1;
+        current.users.add(
+          rowValue(row, ["packedBy"], "UNKNOWN")
+        );
+        if (hasMeasuredVolume(row)) {
+          current.measuredPackets += 1;
+          current.volumeCbm += getVolumeCbm(row);
+        }
+      }
+    )
+      .map((row) => ({
+        ...row,
+        volumeCbm: roundCbm(row.volumeCbm),
+        avgCbmPerPacket: roundCbm(
+          safeDivide(
+            row.volumeCbm,
+            row.measuredPackets
+          )
+        ),
+        userCount: row.users.size,
+        dimensionCoverage: `${Math.round(
+          safeDivide(
+            row.measuredPackets,
+            row.packets
+          ) * 100
+        )}%`,
+      }))
+      .sort((a, b) =>
+        b.volumeCbm - a.volumeCbm
+      );
+  }, [packingVolumeRows]);
+
   const agingBucketRows = useMemo(() => {
     return groupBy(
       agingRows,
@@ -1325,6 +1760,47 @@ function InventoryReports() {
 
       packedInRange: packingRows.length,
 
+      packingVolumeRows:
+        packingVolumeRows.length,
+
+      measuredVolumePackets:
+        packingVolumeRows.filter(
+          hasMeasuredVolume
+        ).length,
+
+      missingDimensionPackets:
+        packingVolumeRows.filter(
+          (row) => !hasMeasuredVolume(row)
+        ).length,
+
+      totalPackedVolumeCbm: roundCbm(
+        packingVolumeRows.reduce(
+          (sum, row) =>
+            sum + getVolumeCbm(row),
+          0
+        )
+      ),
+
+      avgPackedVolumeCbm: roundCbm(
+        safeDivide(
+          packingVolumeRows.reduce(
+            (sum, row) =>
+              sum + getVolumeCbm(row),
+            0
+          ),
+          packingVolumeRows.filter(
+            hasMeasuredVolume
+          ).length
+        )
+      ),
+
+      dimensionCoverageRate: safeDivide(
+        packingVolumeRows.filter(
+          hasMeasuredVolume
+        ).length,
+        packingVolumeRows.length
+      ),
+
       dispatchedInRange:
         dispatchRows.length,
 
@@ -1409,6 +1885,7 @@ function InventoryReports() {
   }, [
     stats,
     packingRows,
+    packingVolumeRows,
     dispatchRows,
     combinedRows,
     agingRows,
@@ -1477,6 +1954,71 @@ function InventoryReports() {
         ["clientCount", "Clients"],
       ],
       rows: packingUserRows,
+    },
+
+    VOLUME_USER: {
+      title: "Packing Volume by User",
+      columns: [
+        ["user", "Packed By"],
+        ["packets", "Packets"],
+        ["measuredPackets", "Measured"],
+        ["volumeCbm", "Packed Volume (m³)"],
+        ["avgCbmPerPacket", "Avg m³ / Packet"],
+        ["clientCount", "Clients"],
+        ["plantCount", "Plants"],
+        ["packetShare", "Packet Share"],
+        ["volumeShare", "Volume Share"],
+        ["dimensionCoverage", "Dimension Coverage"],
+      ],
+      rows: volumeUserRows,
+    },
+
+    VOLUME_DATE: {
+      title: "Packing Volume by Date",
+      columns: [
+        ["date", "Date"],
+        ["packets", "Packets Packed"],
+        ["measuredPackets", "Measured"],
+        ["volumeCbm", "Packed Volume (m³)"],
+        ["avgCbmPerPacket", "Avg m³ / Packet"],
+        ["userCount", "Packers"],
+        ["missingDimensions", "Missing Dimensions"],
+        ["dimensionCoverage", "Dimension Coverage"],
+      ],
+      rows: volumeDateRows,
+    },
+
+    VOLUME_CLIENT: {
+      title: "Packing Volume by Client",
+      columns: [
+        ["client", "Client"],
+        ["packets", "Packets"],
+        ["measuredPackets", "Measured"],
+        ["volumeCbm", "Packed Volume (m³)"],
+        ["avgCbmPerPacket", "Avg m³ / Packet"],
+        ["dimensionCoverage", "Dimension Coverage"],
+      ],
+      rows: volumeClientRows,
+    },
+
+    VOLUME_PLANT: {
+      title: "Packing Volume by Plant",
+      columns: [
+        ["plant", "Plant"],
+        ["packets", "Packets"],
+        ["measuredPackets", "Measured"],
+        ["volumeCbm", "Packed Volume (m³)"],
+        ["avgCbmPerPacket", "Avg m³ / Packet"],
+        ["userCount", "Packers"],
+        ["dimensionCoverage", "Dimension Coverage"],
+      ],
+      rows: volumePlantRows,
+    },
+
+    VOLUME_DETAIL: {
+      title: "Packing Volume Packet Register",
+      columns: volumeDetailColumns,
+      rows: volumeDetailRows,
     },
 
     DISPATCH_USER: {
@@ -1555,6 +2097,30 @@ function InventoryReports() {
 
   const topPacker =
     packingUserRows[0];
+
+  const topVolumePacker =
+    volumeUserRows.find(
+      (row) => row.measuredPackets > 0
+    );
+
+  const peakVolumeDate =
+    [...volumeDateRows]
+      .filter(
+        (row) => row.measuredPackets > 0
+      )
+      .sort(
+        (a, b) => b.volumeCbm - a.volumeCbm
+      )[0];
+
+  const topVolumeClient =
+    volumeClientRows.find(
+      (row) => row.measuredPackets > 0
+    );
+
+  const topVolumePlant =
+    volumePlantRows.find(
+      (row) => row.measuredPackets > 0
+    );
 
   const topDispatcher =
     dispatchUserRows[0];
@@ -2075,10 +2641,226 @@ function InventoryReports() {
           );
         }
 
+        safeColumns.forEach(
+          ([key, label], index) => {
+            const normalized =
+              `${key || ""} ${label || ""}`.toLowerCase();
+
+            if (
+              normalized.includes("volumecbm") ||
+              normalized.includes("avgcbm") ||
+              normalized.includes("m³") ||
+              normalized.includes("m3")
+            ) {
+              sheet.getColumn(index + 1).numFmt =
+                "0.000";
+            }
+          }
+        );
+
         finishSheet(sheet);
 
         return sheet;
       };
+
+      /*
+       * =====================================================
+       * PACKING VOLUME EXECUTIVE SUMMARY
+       * =====================================================
+       */
+
+      const volumeExecutive =
+        workbook.addWorksheet(
+          "Volume Executive"
+        );
+
+      volumeExecutive.pageSetup = {
+        paperSize: 8,
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1,
+        margins: {
+          left: 0.25,
+          right: 0.25,
+          top: 0.4,
+          bottom: 0.4,
+          header: 0.2,
+          footer: 0.2,
+        },
+      };
+
+      volumeExecutive.mergeCells("A1:H1");
+      volumeExecutive.getCell("A1").value =
+        "PACKING VOLUME EXECUTIVE SUMMARY";
+      volumeExecutive.getCell("A1").font = {
+        bold: true,
+        size: 20,
+        color: { argb: "FFFFFFFF" },
+      };
+      volumeExecutive.getCell("A1").fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0F172A" },
+      };
+      volumeExecutive.getCell("A1").alignment = {
+        vertical: "middle",
+        horizontal: "left",
+      };
+      volumeExecutive.getRow(1).height = 30;
+
+      volumeExecutive.mergeCells("A2:H2");
+      volumeExecutive.getCell("A2").value =
+        `Reporting Period: ${formatDate(
+          toStartDateTime(fromDate)
+        )} to ${formatDate(
+          toEndDateTime(toDate)
+        )}`;
+      volumeExecutive.getCell("A2").font = {
+        italic: true,
+        color: { argb: "FF475569" },
+      };
+
+      const volumeSummaryRows = [
+        [
+          "Total Packed Volume",
+          kpis.totalPackedVolumeCbm,
+          "m³",
+          "Measured physical cube packed in the selected range",
+        ],
+        [
+          "Measured Packets",
+          kpis.measuredVolumePackets,
+          "packets",
+          "Packets with valid L × B × H dimensions",
+        ],
+        [
+          "Average Packet Cube",
+          kpis.avgPackedVolumeCbm,
+          "m³",
+          "Average physical cube per measured packed packet",
+        ],
+        [
+          "Dimension Coverage",
+          formatPercent(
+            kpis.dimensionCoverageRate
+          ),
+          "coverage",
+          `${kpis.missingDimensionPackets} packed packets need dimension correction`,
+        ],
+        [
+          "Top Packer by Volume",
+          topVolumePacker?.user || "-",
+          topVolumePacker
+            ? `${formatCbm(
+              topVolumePacker.volumeCbm
+            )} m³`
+            : "-",
+          "Use cube handled alongside packet count for productivity review",
+        ],
+        [
+          "Peak Volume Date",
+          peakVolumeDate?.date || "-",
+          peakVolumeDate
+            ? `${formatCbm(
+              peakVolumeDate.volumeCbm
+            )} m³`
+            : "-",
+          "Useful for manpower and floor-capacity planning",
+        ],
+        [
+          "Top Client by Packed Cube",
+          topVolumeClient?.client || "-",
+          topVolumeClient
+            ? `${formatCbm(
+              topVolumeClient.volumeCbm
+            )} m³`
+            : "-",
+          "Highlights client workload by physical packing volume",
+        ],
+        [
+          "Top Plant by Packed Cube",
+          topVolumePlant?.plant || "-",
+          topVolumePlant
+            ? `${formatCbm(
+              topVolumePlant.volumeCbm
+            )} m³`
+            : "-",
+          "Highlights plant contribution to packed volume",
+        ],
+      ];
+
+      const volumeHeader =
+        volumeExecutive.addRow([
+          "KPI",
+          "Value",
+          "Unit / Context",
+          "Management Meaning",
+        ]);
+      volumeHeader.getCell(1).value = "KPI";
+      volumeHeader.getCell(2).value = "Value";
+      volumeHeader.getCell(3).value = "Unit / Context";
+      volumeHeader.getCell(4).value = "Management Meaning";
+      styleHeader(volumeHeader);
+
+      volumeSummaryRows.forEach((values) => {
+        const row = volumeExecutive.addRow(values);
+        row.eachCell((cell) => {
+          cell.alignment = {
+            vertical: "top",
+            wrapText: true,
+          };
+          cell.border = {
+            bottom: {
+              style: "hair",
+              color: { argb: "FFD1D5DB" },
+            },
+          };
+        });
+      });
+
+      volumeExecutive.getColumn(1).width = 28;
+      volumeExecutive.getColumn(2).width = 22;
+      volumeExecutive.getColumn(3).width = 20;
+      volumeExecutive.getColumn(4).width = 58;
+      volumeExecutive.views = [
+        { state: "frozen", ySplit: 3 },
+      ];
+
+      addRowsSheet(
+        "Volume Date Wise",
+        "Packing Volume by Date",
+        tableConfigs.VOLUME_DATE.columns,
+        volumeDateRows
+      );
+
+      addRowsSheet(
+        "Volume User Wise",
+        "Packing Volume by User",
+        tableConfigs.VOLUME_USER.columns,
+        volumeUserRows
+      );
+
+      addRowsSheet(
+        "Volume Client Wise",
+        "Packing Volume by Client",
+        tableConfigs.VOLUME_CLIENT.columns,
+        volumeClientRows
+      );
+
+      addRowsSheet(
+        "Volume Plant Wise",
+        "Packing Volume by Plant",
+        tableConfigs.VOLUME_PLANT.columns,
+        volumePlantRows
+      );
+
+      addRowsSheet(
+        "Packing Volume Detail",
+        "Packing Volume Packet Register",
+        volumeDetailColumns,
+        volumeDetailRows
+      );
 
       /*
       KPI SUMMARY
@@ -2151,6 +2933,28 @@ function InventoryReports() {
           "Packing In Selected Range",
           kpis.packedInRange,
           "Date-filtered packing activity",
+        ],
+        [
+          "Total Packed Volume (m³)",
+          kpis.totalPackedVolumeCbm,
+          "Physical cubic metre volume packed in selected range",
+        ],
+        [
+          "Average Packet Volume (m³)",
+          kpis.avgPackedVolumeCbm,
+          "Average cube across packets with valid dimensions",
+        ],
+        [
+          "Dimension Coverage",
+          formatPercent(
+            kpis.dimensionCoverageRate
+          ),
+          `${kpis.measuredVolumePackets} measured / ${kpis.packingVolumeRows} packed packet rows`,
+        ],
+        [
+          "Missing Packet Dimensions",
+          kpis.missingDimensionPackets,
+          "Packed rows excluded from m³ totals because dimensions are missing or invalid",
         ],
         [
           "Dispatch In Selected Range",
@@ -2543,6 +3347,33 @@ function InventoryReports() {
           "Use this user as benchmark for packing productivity.",
         ],
         [
+          "Top Packer by Volume",
+          topVolumePacker
+            ? `${topVolumePacker.user} - ${formatCbm(
+              topVolumePacker.volumeCbm
+            )} m³ across ${topVolumePacker.packets} packets`
+            : "-",
+          "Compare physical cube handled with packet count before judging productivity.",
+        ],
+        [
+          "Peak Packing Volume Date",
+          peakVolumeDate
+            ? `${peakVolumeDate.date} - ${formatCbm(
+              peakVolumeDate.volumeCbm
+            )} m³`
+            : "-",
+          "Use peak cube days for manpower, floor-space and transport-capacity planning.",
+        ],
+        [
+          "Dimension Coverage",
+          formatPercent(
+            kpis.dimensionCoverageRate
+          ),
+          kpis.missingDimensionPackets > 0
+            ? `${kpis.missingDimensionPackets} packed packets need valid dimensions before volume reporting is complete.`
+            : "All packed packet rows in the selected range have valid dimensions.",
+        ],
+        [
           "Top Dispatch User",
           topDispatcher
             ? `${topDispatcher.user} - ${topDispatcher.count} dispatched`
@@ -2657,7 +3488,7 @@ function InventoryReports() {
           </div>
 
           <div style={subtitle}>
-            KPI, user-wise, date-wise, client-wise and aging reporting
+            KPI, cubic-metre volume, user/date/client/plant productivity and aging reporting
           </div>
         </div>
 
@@ -2740,6 +3571,13 @@ function InventoryReports() {
         </div>
       )}
 
+      {volumeError && (
+        <div style={volumeWarningBox}>
+          <strong>Volume reporting unavailable:</strong>{" "}
+          {volumeError}
+        </div>
+      )}
+
       <div style={summaryGrid}>
         <SummaryCard
           label="Inventory Items"
@@ -2788,6 +3626,33 @@ function InventoryReports() {
         />
 
         <SummaryCard
+          label="Packed Volume"
+          value={`${formatCbm(
+            kpis.totalPackedVolumeCbm
+          )} m³`}
+          accent="#22c55e"
+        />
+
+        <SummaryCard
+          label="Avg Cube / Packet"
+          value={`${formatCbm(
+            kpis.avgPackedVolumeCbm
+          )} m³`}
+          accent="#38bdf8"
+        />
+
+        <SummaryCard
+          label="Dimension Coverage"
+          value={formatPercent(
+            kpis.dimensionCoverageRate
+          )}
+          warning={
+            kpis.dimensionCoverageRate < 1
+          }
+          accent="#a78bfa"
+        />
+
+        <SummaryCard
           label="Dispatch Range"
           value={kpis.dispatchedInRange}
         />
@@ -2804,9 +3669,99 @@ function InventoryReports() {
         />
       </div>
 
+      <div style={volumeInsightPanel}>
+        <div style={volumeInsightHeader}>
+          <div>
+            <div style={volumeInsightEyebrow}>
+              PACKING CUBE INTELLIGENCE
+            </div>
+            <div style={volumeInsightTitle}>
+              Physical packing workload
+            </div>
+            <div style={volumeInsightSubtitle}>
+              Packet count and cubic metres are shown together so large-volume work is not hidden behind simple item counts.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            style={volumeDetailBtn}
+            onClick={() =>
+              setReportMode("VOLUME_DETAIL")
+            }
+          >
+            Open packet register ↗
+          </button>
+        </div>
+
+        <div style={volumeInsightGrid}>
+          <VolumeInsightCard
+            label="Top Packer by m³"
+            value={
+              topVolumePacker?.user || "-"
+            }
+            detail={
+              topVolumePacker
+                ? `${formatCbm(
+                  topVolumePacker.volumeCbm
+                )} m³ • ${topVolumePacker.packets} packets`
+                : "No measured packing volume"
+            }
+          />
+
+          <VolumeInsightCard
+            label="Peak Volume Date"
+            value={
+              peakVolumeDate?.date || "-"
+            }
+            detail={
+              peakVolumeDate
+                ? `${formatCbm(
+                  peakVolumeDate.volumeCbm
+                )} m³ packed`
+                : "No measured packing volume"
+            }
+          />
+
+          <VolumeInsightCard
+            label="Top Client by m³"
+            value={
+              topVolumeClient?.client || "-"
+            }
+            detail={
+              topVolumeClient
+                ? `${formatCbm(
+                  topVolumeClient.volumeCbm
+                )} m³ • ${topVolumeClient.packets} packets`
+                : "No measured packing volume"
+            }
+          />
+
+          <VolumeInsightCard
+            label="Missing Dimensions"
+            value={
+              kpis.missingDimensionPackets
+            }
+            detail={
+              kpis.missingDimensionPackets > 0
+                ? "Excluded from m³ total until dimensions are corrected"
+                : "Volume coverage is complete"
+            }
+            warning={
+              kpis.missingDimensionPackets > 0
+            }
+          />
+        </div>
+      </div>
+
       <div style={modeTabs}>
         {[
           ["DATE", "Date Wise"],
+          ["VOLUME_USER", "Volume by User"],
+          ["VOLUME_DATE", "Volume by Date"],
+          ["VOLUME_CLIENT", "Volume by Client"],
+          ["VOLUME_PLANT", "Volume by Plant"],
+          ["VOLUME_DETAIL", "Volume Packet Register"],
           ["MASTER_ITEMS", "Master Items"],
           ["PACKING_USER", "Packing Users"],
           ["DISPATCH_USER", "Dispatch Users"],
@@ -2906,7 +3861,10 @@ function InventoryReports() {
                         key={key}
                         style={td}
                       >
-                        {row[key] ?? "-"}
+                        {formatReportCell(
+                          key,
+                          row[key]
+                        )}
                       </td>
                     )
                   )}
@@ -2923,9 +3881,11 @@ function SummaryCard({
   label,
   value,
   warning = false,
+  accent = "#60a5fa",
 }) {
   return (
     <div style={summaryCard}>
+      <div style={summaryAccent(accent)} />
       <div style={summaryLabel}>
         {label}
       </div>
@@ -2939,6 +3899,27 @@ function SummaryCard({
         }}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+function VolumeInsightCard({
+  label,
+  value,
+  detail,
+  warning = false,
+}) {
+  return (
+    <div style={volumeInsightCard(warning)}>
+      <div style={volumeInsightCardLabel}>
+        {label}
+      </div>
+      <div style={volumeInsightCardValue}>
+        {value}
+      </div>
+      <div style={volumeInsightCardDetail}>
+        {detail}
       </div>
     </div>
   );
@@ -3057,6 +4038,120 @@ const errorBox = {
   fontWeight: 800,
 };
 
+const volumeInsightPanel = {
+  marginBottom: 16,
+  padding: 16,
+  borderRadius: 20,
+  background:
+    "radial-gradient(circle at 0% 0%, rgba(34,197,94,.12), transparent 34%), linear-gradient(135deg, rgba(15,23,42,.96), rgba(8,15,30,.94))",
+  border:
+    "1px solid rgba(34,197,94,.18)",
+  boxShadow:
+    "0 16px 34px rgba(2,6,23,.24)",
+};
+
+const volumeInsightHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 14,
+  flexWrap: "wrap",
+  marginBottom: 14,
+};
+
+const volumeInsightEyebrow = {
+  color: "#86efac",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".11em",
+};
+
+const volumeInsightTitle = {
+  marginTop: 4,
+  color: "#fff",
+  fontSize: 19,
+  fontWeight: 950,
+};
+
+const volumeInsightSubtitle = {
+  marginTop: 5,
+  maxWidth: 760,
+  color: "rgba(255,255,255,.58)",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const volumeDetailBtn = {
+  height: 36,
+  padding: "0 13px",
+  borderRadius: 12,
+  border:
+    "1px solid rgba(34,197,94,.28)",
+  background:
+    "rgba(34,197,94,.10)",
+  color: "#bbf7d0",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const volumeInsightGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(190px,1fr))",
+  gap: 10,
+};
+
+const volumeInsightCard = (warning) => ({
+  minWidth: 0,
+  padding: 13,
+  borderRadius: 16,
+  background: warning
+    ? "rgba(245,158,11,.08)"
+    : "rgba(255,255,255,.035)",
+  border: warning
+    ? "1px solid rgba(245,158,11,.20)"
+    : "1px solid rgba(255,255,255,.06)",
+});
+
+const volumeInsightCardLabel = {
+  color: "#94a3b8",
+  fontSize: 10,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: ".055em",
+};
+
+const volumeInsightCardValue = {
+  marginTop: 7,
+  color: "#fff",
+  fontSize: 20,
+  fontWeight: 950,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const volumeInsightCardDetail = {
+  marginTop: 5,
+  color: "rgba(255,255,255,.58)",
+  fontSize: 10.5,
+  lineHeight: 1.45,
+};
+
+const volumeWarningBox = {
+  padding: 13,
+  borderRadius: 14,
+  background:
+    "rgba(245,158,11,.09)",
+  color: "#fde68a",
+  border:
+    "1px solid rgba(245,158,11,.20)",
+  marginBottom: 16,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.5,
+};
+
 const summaryGrid = {
   display: "grid",
   gridTemplateColumns:
@@ -3066,6 +4161,8 @@ const summaryGrid = {
 };
 
 const summaryCard = {
+  position: "relative",
+  overflow: "hidden",
   borderRadius: 18,
   padding: 16,
   background:
@@ -3073,6 +4170,17 @@ const summaryCard = {
   border:
     "1px solid rgba(255,255,255,.06)",
 };
+
+const summaryAccent = (accent) => ({
+  position: "absolute",
+  top: 0,
+  left: 14,
+  right: 14,
+  height: 2,
+  borderRadius: "0 0 999px 999px",
+  background:
+    `linear-gradient(90deg,transparent,${accent},transparent)`,
+});
 
 const summaryLabel = {
   color: "#94a3b8",
