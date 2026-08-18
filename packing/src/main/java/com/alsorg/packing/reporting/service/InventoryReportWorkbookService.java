@@ -272,6 +272,42 @@ public class InventoryReportWorkbookService {
                                         warningStyle,
                                         -1);
 
+                        if ("inventory".equals(type)
+                                        || "combined".equals(type)) {
+                                addRowsSheet(
+                                                workbook,
+                                                "Master Items",
+                                                "Master Item Register",
+                                                new String[] {
+                                                                "Master Item",
+                                                                "PD No",
+                                                                "Drawing",
+                                                                "Client",
+                                                                "Plant",
+                                                                "Floor",
+                                                                "Expected Packets",
+                                                                "Actual Packets",
+                                                                "Packet Items",
+                                                                "Packed",
+                                                                "Pending",
+                                                                "Dispatched",
+                                                                "Progress %",
+                                                                "Packing Status",
+                                                                "Latest Status",
+                                                                "Stickers",
+                                                                "Challans",
+                                                                "Last Packed By",
+                                                                "Last Dispatched By",
+                                                                "Exception"
+                                                },
+                                                buildMasterItemRows(directorMasterRows),
+                                                titleStyle,
+                                                headerStyle,
+                                                dataStyle,
+                                                warningStyle,
+                                                -1);
+                        }
+
                         addRowsSheet(
                                         workbook,
                                         "Date Wise",
@@ -568,6 +604,20 @@ public class InventoryReportWorkbookService {
                                         dataStyle,
                                         warningStyle,
                                         -1);
+
+                        /* Keep the dashboard first and its BI source data last,
+                         * matching the structure of the supplied Director workbook. */
+                        if (workbook.getSheet("Director Dashboard") != null) {
+                                workbook.setSheetOrder(
+                                                "Director Dashboard",
+                                                0);
+                        }
+
+                        if (workbook.getSheet("Report Data") != null) {
+                                workbook.setSheetOrder(
+                                                "Report Data",
+                                                workbook.getNumberOfSheets() - 1);
+                        }
 
                         workbook.write(out);
 
@@ -1334,6 +1384,59 @@ public class InventoryReportWorkbookService {
                                         dimensions,
                                         cbm == null ? 0d : cbm,
                                         getAgeDays(value)));
+                }
+
+                return result;
+        }
+
+        private List<List<Object>> buildMasterItemRows(
+                        List<MasterItemReportRow> rows) {
+                List<List<Object>> result =
+                                new ArrayList<>();
+
+                if (rows == null) {
+                        return result;
+                }
+
+                for (MasterItemReportRow source : rows) {
+                        Object progressValue =
+                                        read(source, "packingProgress");
+
+                        String progress = "0%";
+
+                        if (progressValue instanceof Number number) {
+                                progress = Math.round(number.doubleValue()) + "%";
+                        } else if (progressValue != null) {
+                                String raw = String.valueOf(progressValue).trim();
+                                progress = raw.isBlank()
+                                                ? "0%"
+                                                : raw.endsWith("%")
+                                                                ? raw
+                                                                : raw + "%";
+                        }
+
+                        result.add(
+                                        row(
+                                                        text(source, "itemName", "name"),
+                                                        text(source, "pdNo", "pdNumber"),
+                                                        text(source, "drawingName", "drawingNo", "dwgNo"),
+                                                        text(source, "clientName", "client"),
+                                                        text(source, "plantCode", "plant"),
+                                                        text(source, "floor"),
+                                                        number(source, "expectedPackets"),
+                                                        number(source, "actualPackets", "totalPackets"),
+                                                        number(source, "packetItems"),
+                                                        number(source, "packedPacketItems"),
+                                                        number(source, "pendingPacketItems"),
+                                                        number(source, "dispatchedPacketItems"),
+                                                        progress,
+                                                        text(source, "packingStatus"),
+                                                        text(source, "latestStatus", "status"),
+                                                        number(source, "stickerCount"),
+                                                        number(source, "challanCount"),
+                                                        text(source, "lastPackedBy"),
+                                                        text(source, "lastDispatchedBy"),
+                                                        text(source, "exceptionReason")));
                 }
 
                 return result;
@@ -2218,64 +2321,87 @@ public class InventoryReportWorkbookService {
                                         readouts.get(i));
                 }
 
-                writeDirectorChartData(sheet, data);
+                /*
+                 * IMPORTANT:
+                 * Keep BI chart source data on a normal Report Data worksheet,
+                 * just like the reference Director workbook.
+                 *
+                 * The older implementation stored the chart data in hidden
+                 * columns of the Director Dashboard. Excel charts default to
+                 * plotting visible cells only, so hiding those columns could
+                 * leave the workbook with empty/blank charts.
+                 *
+                 * A dedicated visible source sheet guarantees that the four
+                 * native Excel charts always retain their series after export.
+                 */
+                XSSFSheet directorReportData =
+                                getOrCreateDirectorReportDataSheet(workbook);
 
-                XSSFDrawing drawing = sheet.createDrawingPatriarch();
+                writeDirectorChartData(
+                                directorReportData,
+                                data);
+
+                XSSFDrawing drawing =
+                                sheet.createDrawingPatriarch();
 
                 if (!data.dailyRows.isEmpty()) {
                         createDirectorLineChart(
                                         sheet,
+                                        directorReportData,
                                         drawing,
                                         0,
                                         21,
                                         8,
                                         38,
                                         "Daily Packing vs Dispatch Throughput",
-                                        17,
-                                        18,
-                                        19,
+                                        4,
+                                        5,
+                                        6,
                                         1,
                                         data.dailyRows.size());
                 }
 
                 createDirectorBarChart(
                                 sheet,
+                                directorReportData,
                                 drawing,
                                 8,
                                 21,
                                 16,
                                 38,
                                 "Inventory Aging Profile",
-                                21,
-                                22,
+                                10,
+                                11,
                                 1,
                                 data.agingBars.size(),
                                 "Items");
 
                 createDirectorBarChart(
                                 sheet,
+                                directorReportData,
                                 drawing,
                                 0,
                                 39,
                                 8,
                                 56,
                                 "Current Inventory Status Mix",
-                                24,
-                                25,
+                                13,
+                                14,
                                 1,
                                 data.statusBars.size(),
                                 "Items");
 
                 createDirectorBarChart(
                                 sheet,
+                                directorReportData,
                                 drawing,
                                 8,
                                 39,
                                 16,
                                 56,
                                 "Selected-Period Dispatch by Plant",
-                                27,
-                                28,
+                                16,
+                                17,
                                 1,
                                 data.dispatchPlantBars.size(),
                                 "Dispatched");
@@ -2405,9 +2531,6 @@ public class InventoryReportWorkbookService {
                 noteStyle.setWrapText(true);
                 note.setCellStyle(noteStyle);
 
-                for (int hiddenColumn = 17; hiddenColumn <= 28; hiddenColumn++) {
-                        sheet.setColumnHidden(hiddenColumn, true);
-                }
         }
 
         private void writeDirectorKpiCard(
@@ -2589,33 +2712,78 @@ public class InventoryReportWorkbookService {
                 return style;
         }
 
+        private XSSFSheet getOrCreateDirectorReportDataSheet(
+                        Workbook workbook) {
+                Sheet existing = workbook.getSheet("Report Data");
+
+                if (existing instanceof XSSFSheet xssfSheet) {
+                        return xssfSheet;
+                }
+
+                XSSFSheet sheet =
+                                (XSSFSheet) workbook.createSheet("Report Data");
+
+                sheet.setDisplayGridlines(false);
+                sheet.createFreezePane(0, 1);
+
+                return sheet;
+        }
+
         private void writeDirectorChartData(
                         XSSFSheet sheet,
                         DirectorData data) {
-                int dailyHeaderRow = 0;
-                Row dailyHeader = sheet.getRow(dailyHeaderRow);
-                if (dailyHeader == null) {
-                        dailyHeader = sheet.createRow(dailyHeaderRow);
+                /*
+                 * Match the reference workbook's chart-source layout:
+                 *   E:G  = Daily Packing vs Dispatch
+                 *   K:L  = Aging profile
+                 *   N:O  = Current status mix
+                 *   Q:R  = Dispatch by plant
+                 */
+                Row header = sheet.getRow(0);
+                if (header == null) {
+                        header = sheet.createRow(0);
                 }
-                dailyHeader.createCell(17).setCellValue("Date");
-                dailyHeader.createCell(18).setCellValue("Packed");
-                dailyHeader.createCell(19).setCellValue("Dispatched");
 
-                int rowIndex = 1;
+                header.createCell(4).setCellValue("Date");
+                header.createCell(5).setCellValue("Packed");
+                header.createCell(6).setCellValue("Dispatched");
+
+                int dailyRowIndex = 1;
                 for (DirectorDailyPoint point : data.dailyRows) {
-                        Row row = sheet.getRow(rowIndex);
+                        Row row = sheet.getRow(dailyRowIndex);
                         if (row == null) {
-                                row = sheet.createRow(rowIndex);
+                                row = sheet.createRow(dailyRowIndex);
                         }
-                        row.createCell(17).setCellValue(point.date.format(DateTimeFormatter.ofPattern("dd MMM")));
-                        row.createCell(18).setCellValue(point.packed);
-                        row.createCell(19).setCellValue(point.dispatched);
-                        rowIndex++;
+
+                        row.createCell(4).setCellValue(
+                                        point.date.format(
+                                                        DateTimeFormatter.ofPattern("dd MMM")));
+                        row.createCell(5).setCellValue(point.packed);
+                        row.createCell(6).setCellValue(point.dispatched);
+                        dailyRowIndex++;
                 }
 
-                writeDirectorBarData(sheet, 21, 22, data.agingBars);
-                writeDirectorBarData(sheet, 24, 25, data.statusBars);
-                writeDirectorBarData(sheet, 27, 28, data.dispatchPlantBars);
+                writeDirectorBarData(
+                                sheet,
+                                10,
+                                11,
+                                data.agingBars);
+
+                writeDirectorBarData(
+                                sheet,
+                                13,
+                                14,
+                                data.statusBars);
+
+                writeDirectorBarData(
+                                sheet,
+                                16,
+                                17,
+                                data.dispatchPlantBars);
+
+                for (int column = 0; column <= 17; column++) {
+                        sheet.autoSizeColumn(column);
+                }
         }
 
         private void writeDirectorBarData(
@@ -2643,7 +2811,8 @@ public class InventoryReportWorkbookService {
         }
 
         private void createDirectorLineChart(
-                        XSSFSheet sheet,
+                        XSSFSheet chartSheet,
+                        XSSFSheet dataSheet,
                         XSSFDrawing drawing,
                         int col1,
                         int row1,
@@ -2679,7 +2848,7 @@ public class InventoryReportWorkbookService {
                 int lastDataRow = firstDataRow + dataCount - 1;
 
                 XDDFDataSource<String> categories = XDDFDataSourcesFactory.fromStringCellRange(
-                                sheet,
+                                dataSheet,
                                 new CellRangeAddress(
                                                 firstDataRow,
                                                 lastDataRow,
@@ -2687,7 +2856,7 @@ public class InventoryReportWorkbookService {
                                                 categoryColumn));
 
                 XDDFNumericalDataSource<Double> packed = XDDFDataSourcesFactory.fromNumericCellRange(
-                                sheet,
+                                dataSheet,
                                 new CellRangeAddress(
                                                 firstDataRow,
                                                 lastDataRow,
@@ -2695,7 +2864,7 @@ public class InventoryReportWorkbookService {
                                                 packedColumn));
 
                 XDDFNumericalDataSource<Double> dispatched = XDDFDataSourcesFactory.fromNumericCellRange(
-                                sheet,
+                                dataSheet,
                                 new CellRangeAddress(
                                                 firstDataRow,
                                                 lastDataRow,
@@ -2724,7 +2893,8 @@ public class InventoryReportWorkbookService {
         }
 
         private void createDirectorBarChart(
-                        XSSFSheet sheet,
+                        XSSFSheet chartSheet,
+                        XSSFSheet dataSheet,
                         XSSFDrawing drawing,
                         int col1,
                         int row1,
@@ -2760,7 +2930,7 @@ public class InventoryReportWorkbookService {
                 int lastDataRow = firstDataRow + dataCount - 1;
 
                 XDDFDataSource<String> categories = XDDFDataSourcesFactory.fromStringCellRange(
-                                sheet,
+                                dataSheet,
                                 new CellRangeAddress(
                                                 firstDataRow,
                                                 lastDataRow,
@@ -2768,7 +2938,7 @@ public class InventoryReportWorkbookService {
                                                 categoryColumn));
 
                 XDDFNumericalDataSource<Double> values = XDDFDataSourcesFactory.fromNumericCellRange(
-                                sheet,
+                                dataSheet,
                                 new CellRangeAddress(
                                                 firstDataRow,
                                                 lastDataRow,

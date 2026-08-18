@@ -124,7 +124,7 @@ public class ReportExportController {
                 return ResponseEntity.ok()
                                 .header(
                                                 HttpHeaders.CONTENT_DISPOSITION,
-                                                "attachment; filename=inventory-professional-report.xlsx")
+                                                "attachment; filename=\"Inventory Director BI Report.xlsx\"")
                                 .contentType(
                                                 MediaType.parseMediaType(
                                                                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -144,7 +144,7 @@ public class ReportExportController {
                 return ResponseEntity.ok()
                                 .header(
                                                 HttpHeaders.CONTENT_DISPOSITION,
-                                                "attachment; filename=inventory-professional-report.xlsx")
+                                                "attachment; filename=\"Inventory Director BI Report.xlsx\"")
                                 .contentType(
                                                 MediaType.parseMediaType(
                                                                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

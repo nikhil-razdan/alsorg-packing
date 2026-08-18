@@ -17,6 +17,7 @@ import {
 import {
   fetchPackingVolumeReport,
 } from "../../api/packingReportApi";
+import { API_BASE_URL } from "../../../config";
 
 const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
 const reportSnapshotCache = new Map();
@@ -5541,7 +5542,113 @@ function InventoryReports() {
         setExporting(true);
         setError("");
 
-        await buildExcelReport();
+        /*
+         * IMPORTANT:
+         * Use the backend Apache-POI workbook as the single Excel source.
+         * That workbook contains REAL native Excel chart objects for the
+         * Director Dashboard (not screenshots/canvas images).
+         *
+         * Keeping the download on the server also avoids rebuilding a very
+         * large workbook in the browser and guarantees that manual downloads
+         * and scheduled reports have the same Director BI dashboard.
+         */
+        const from =
+          toStartDateTime(fromDate);
+
+        const to =
+          toEndDateTime(toDate);
+
+        const token =
+          window.localStorage.getItem("token");
+
+        const headers = {};
+
+        if (
+          token &&
+          token !== "null" &&
+          token !== "undefined"
+        ) {
+          headers.Authorization =
+            `Bearer ${token}`;
+        }
+
+        const response =
+          await fetch(
+            `${API_BASE_URL}/api/reports/export/inventory/excel?from=${encodeURIComponent(
+              from
+            )}&to=${encodeURIComponent(to)}`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers,
+            }
+          );
+
+        if (!response.ok) {
+          const responseText =
+            await response.text();
+
+          throw new Error(
+            responseText ||
+            `Excel export failed (${response.status})`
+          );
+        }
+
+        const blob =
+          await response.blob();
+
+        const disposition =
+          response.headers.get(
+            "content-disposition"
+          ) || "";
+
+        const utf8Match =
+          disposition.match(
+            /filename\*=UTF-8''([^;]+)/i
+          );
+
+        const normalMatch =
+          disposition.match(
+            /filename=\"?([^\";]+)\"?/i
+          );
+
+        let fileName =
+          `Inventory_Director_BI_Report_${fromDate}_to_${toDate}.xlsx`;
+
+        try {
+          if (utf8Match?.[1]) {
+            fileName = decodeURIComponent(
+              utf8Match[1]
+            );
+          } else if (normalMatch?.[1]) {
+            fileName =
+              normalMatch[1].trim();
+          }
+        } catch {
+          // Keep the safe default file name.
+        }
+
+        const objectUrl =
+          window.URL.createObjectURL(
+            blob
+          );
+
+        const anchor =
+          document.createElement("a");
+
+        anchor.href = objectUrl;
+        anchor.download = fileName;
+        anchor.style.display = "none";
+
+        document.body.appendChild(
+          anchor
+        );
+        anchor.click();
+        anchor.remove();
+
+        window.URL.revokeObjectURL(
+          objectUrl
+        );
       } catch (error) {
         console.error(
           "Inventory Excel export failed:",
