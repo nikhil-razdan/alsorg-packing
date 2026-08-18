@@ -18,7 +18,7 @@ import {
 
 import {
   fetchPackingVolumeReport,
-} from "../../../api/packingReportApi";
+} from "../../api/packingReportApi";
 
 const pad = (value) =>
   String(value).padStart(2, "0");
