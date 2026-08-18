@@ -31,8 +31,10 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowDeleteDialog,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     clean,
@@ -65,6 +67,25 @@ const upperCode = (value) => clean(value).toUpperCase();
 const MAIN_PLANT = "AL-P1";
 const isMainPlant = (value) => upperCode(value) === MAIN_PLANT;
 
+const MR_KANBAN_COLUMNS = [
+    { key: "DRAFT", label: "Draft", subtitle: "Production is preparing the MR" },
+    { key: "STORE", label: "Store", subtitle: "Forwarding / Tally availability / allocation" },
+    { key: "SHORTAGE", label: "Shortage", subtitle: "Linked PI / Purchase dependency" },
+    { key: "HANDOFF", label: "Material Handoff", subtitle: "QC / Processing / Store issue route" },
+    { key: "PRODUCTION", label: "Production", subtitle: "Issued, received or in Production" },
+    { key: "CLOSED", label: "Closed", subtitle: "Production complete or MR cancelled" },
+];
+
+const requisitionKanbanLane = (row) => {
+    const status = normalize(row?.status);
+    if (["CANCELLED", "PRODUCTION_COMPLETED", "COMPLETED"].includes(status)) return "CLOSED";
+    if (["ISSUED_TO_PRODUCTION", "PRODUCTION_STARTED", "PRODUCTION_IN_PROGRESS"].includes(status)) return "PRODUCTION";
+    if (["SHORTAGE_PENDING", "PURCHASE_IN_PROGRESS", "PARTIALLY_RESERVED"].includes(status)) return "SHORTAGE";
+    if (["READY_TO_ISSUE", "PARTIALLY_ISSUED", "QC_PENDING", "PROCESSING", "MATERIAL_IN_TRANSIT", "TRANSFER_IN_PROGRESS"].includes(status)) return "HANDOFF";
+    if (status === "DRAFT") return "DRAFT";
+    return "STORE";
+};
+
 export function MatFlowRequisitionListPage() {
     const navigate = useNavigate();
     const { hasRole, selectedPlantParam } = useMatFlow();
@@ -75,6 +96,7 @@ export function MatFlowRequisitionListPage() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [working, setWorking] = useState(false);
 
@@ -106,7 +128,7 @@ export function MatFlowRequisitionListPage() {
                 row.drawingNo,
                 row.bomNumber,
                 row.requestedBy,
-                row.requestedBy,
+                row.productionPlantCode,
                 row.status,
             ].some((value) => clean(value).toLowerCase().includes(term));
         });
@@ -117,6 +139,13 @@ export function MatFlowRequisitionListPage() {
         ...Array.from(new Set(rows.map((row) => normalize(row.status)).filter(Boolean))).sort(),
     ], [rows]);
 
+    const counts = useMemo(() => ({
+        store: filtered.filter((row) => requisitionKanbanLane(row) === "STORE").length,
+        shortage: filtered.filter((row) => requisitionKanbanLane(row) === "SHORTAGE").length,
+        handoff: filtered.filter((row) => requisitionKanbanLane(row) === "HANDOFF").length,
+        production: filtered.filter((row) => requisitionKanbanLane(row) === "PRODUCTION").length,
+    }), [filtered]);
+
     const pagination = useMatFlowPagination(filtered, 20);
 
     const confirmDelete = async () => {
@@ -126,8 +155,7 @@ export function MatFlowRequisitionListPage() {
         try {
             await matflowApi.deleteDraftRequisition(deleteTarget.id, deleteTarget.rowVersion);
             setDeleteTarget(null);
-            const response = await matflowApi.listRequisitions();
-            setRows(Array.isArray(response?.data) ? response.data : []);
+            await load();
         } catch (requestError) {
             setError(readMatFlowError(requestError, "Unable to delete Draft MR."));
         } finally {
@@ -135,12 +163,16 @@ export function MatFlowRequisitionListPage() {
         }
     };
 
+    const routeText = (row) => isMainPlant(row.productionPlantCode)
+        ? `${row.requestedBy || "Production"} / AL-P1 → AL-P1 Main Store`
+        : `${row.requestedBy || "Production"} / ${row.productionPlantCode || "Plant"} → ${row.productionPlantCode || "Plant"} Store → AL-P1 Main Store`;
+
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="PRODUCTION MATERIAL DEMAND"
+                badge="PRODUCTION MR"
                 title="Material Requisitions"
-                subtitle="Production raises one BOM-backed MR. AL-P1 Production submits directly to AL-P1 Main Store; AL-P2/P3/P4 Production submits to its own Plant Store, which forwards the same MR unchanged to Main Store."
+                subtitle="Create the MR once. MatFlow routes it automatically by plant and keeps the exact Production requester attached to the material."
                 actions={
                     <>
                         <Button
@@ -153,7 +185,7 @@ export function MatFlowRequisitionListPage() {
                             })}
                             sx={secondaryBtnSx}
                         >
-                            Export Excel
+                            Excel
                         </Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                         {canCreate && (
@@ -167,22 +199,63 @@ export function MatFlowRequisitionListPage() {
 
             <ErrorBox>{error}</ErrorBox>
 
-            <Card sx={panelSx}>
-                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 210px", gap: 1 }}>
-                    <TextField label="Search" value={search} onChange={(event) => setSearch(event.target.value)} sx={fieldSx} />
-                    <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={fieldSx}>
-                        {statusOptions.map((value) => (
-                            <MenuItem key={value || "ALL"} value={value}>{value ? readable(value) : "All Statuses"}</MenuItem>
-                        ))}
-                    </TextField>
-                </Box>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
+                <SummaryCard label="At Store" value={counts.store} />
+                <SummaryCard label="Shortage" value={counts.shortage} />
+                <SummaryCard label="In Handoff" value={counts.handoff} />
+                <SummaryCard label="In Production" value={counts.production} />
+            </Box>
+
+            <Card sx={{ ...panelSx, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 200px auto" }, gap: 1, alignItems: "center" }}>
+                <TextField label="Search MR / PD / Drawing / Requester" value={search} onChange={(event) => setSearch(event.target.value)} sx={fieldSx} />
+                <TextField select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} sx={fieldSx}>
+                    {statusOptions.map((value) => (
+                        <MenuItem key={value || "ALL"} value={value}>{value ? readable(value) : "All"}</MenuItem>
+                    ))}
+                </TextField>
+                <MatFlowViewToggle
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]}
+                />
             </Card>
 
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={MR_KANBAN_COLUMNS}
+                        items={filtered}
+                        laneFor={requisitionKanbanLane}
+                        minColumnWidth={255}
+                        boardHeight={{ xs: 560, md: "clamp(480px, calc(100vh - 315px), 690px)" }}
+                        completedLaneKeys={["CLOSED"]}
+                        completedLaneLimit={10}
+                        boardKey={`${status || "ALL"}:${search}:${selectedPlantParam || "ALL"}`}
+                        renderCard={(row) => (
+                            <Card sx={{ ...panelSx, m: 0, p: 1.05, boxShadow: "none" }}>
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                                    <Box sx={{ minWidth: 0 }}>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.requisitionNumber || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.projectCode || "-"} · {row.drawingNo || "-"}</Typography>
+                                    </Box>
+                                    <MatFlowStatusChip status={row.status} />
+                                </Box>
+                                <Typography sx={{ ...mainTextSx, mt: .7 }}>{row.requestedBy || "Production"} · {row.productionPlantCode || "-"}</Typography>
+                                <Typography sx={{ ...subTextSx, whiteSpace: "normal" }}>{routeText(row)}</Typography>
+                                <Typography sx={subTextSx}>{row.bomNumber || "-"} · {formatDate(row.requestedAt)}</Typography>
+                                <Box sx={{ display: "flex", gap: .5, mt: .85, flexWrap: "wrap" }}>
+                                    <Button onClick={() => navigate(`/matflow/requisitions/${row.id}`)} sx={primaryBtnSx}>Open</Button>
+                                    {canCreate && normalize(row.status) === "DRAFT" && row.rowVersion != null && (
+                                        <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} sx={dangerBtnSx}>Delete</Button>
+                                    )}
+                                </Box>
+                            </Card>
+                        )}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 180px 140px minmax(230px,1fr) 165px 140px 150px" }}>
-                            {["MR", "PD No. / Drawing", "BOM", "Plant Routing", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
+                            {["MR", "PD No. / Drawing", "BOM", "Fixed Route", "Status", "Requested", "Action"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
                         </Box>
                         {pagination.pageItems.length === 0 ? <EmptyState /> : pagination.pageItems.map((row) => (
                             <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "170px 180px 140px minmax(230px,1fr) 165px 140px 150px" }}>
@@ -200,12 +273,7 @@ export function MatFlowRequisitionListPage() {
                                 </Box>
                                 <Box sx={{ ...tableCellSx, whiteSpace: "normal" }}>
                                     <Typography sx={mainTextSx}>{row.requestedBy || "-"} · {row.productionPlantCode || "-"}</Typography>
-                                    <Typography sx={subTextSx}>
-                                        {isMainPlant(row.productionPlantCode)
-                                            ? `Direct → AL-P1 Main Store`
-                                            : `${row.productionPlantCode || "Origin"} Store → AL-P1 Main Store`}
-                                    </Typography>
-                                    {row.forwardedToMainStoreAt && <Typography sx={subTextSx}>Forwarded {formatDate(row.forwardedToMainStoreAt)}</Typography>}
+                                    <Typography sx={subTextSx}>{routeText(row)}</Typography>
                                 </Box>
                                 <Box sx={tableCellSx}><MatFlowStatusChip status={row.status} /></Box>
                                 <Box sx={tableCellSx}>{formatDate(row.requestedAt)}</Box>
@@ -219,7 +287,9 @@ export function MatFlowRequisitionListPage() {
                         ))}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Requisitions" />}
+                {!loading && viewMode === "TABLE" && (
+                    <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Material Requisitions" />
+                )}
             </Card>
 
             <MatFlowDeleteDialog

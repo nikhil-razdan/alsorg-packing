@@ -44,9 +44,12 @@ import {
     ErrorBox,
     LoadingBlock,
     MatFlowDeleteDialog,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
+    SummaryCard,
     clean,
     dangerBtnSx,
     dialogActionsSx,
@@ -103,6 +106,23 @@ const bomWorkflow = (bom) => {
     return ["MatFlow", "Review BOM state."];
 };
 
+const BOM_KANBAN_COLUMNS = [
+    { key: "DRAFT", label: "Engineering Draft", subtitle: "BOM is being prepared" },
+    { key: "REVIEW", label: "Production Review", subtitle: "Submitted and waiting for review" },
+    { key: "READY", label: "MR Ready", subtitle: "Reviewed/effective BOM" },
+    { key: "RETURNED", label: "Needs Correction", subtitle: "Returned to Engineering" },
+    { key: "ARCHIVED", label: "Superseded", subtitle: "Older revision retained for trace" },
+];
+
+const bomKanbanLane = (bom) => {
+    const status = normalize(bom?.status);
+    if (status === "SUBMITTED") return "REVIEW";
+    if (status === "APPROVED") return "READY";
+    if (status === "RETURNED") return "RETURNED";
+    if (status === "SUPERSEDED") return "ARCHIVED";
+    return "DRAFT";
+};
+
 export function MatFlowBomListPage() {
     const navigate = useNavigate();
     const { hasRole, selectedPlantParam } = useMatFlow();
@@ -113,6 +133,7 @@ export function MatFlowBomListPage() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleteWorking, setDeleteWorking] = useState(false);
 
@@ -140,6 +161,13 @@ export function MatFlowBomListPage() {
 
     useEffect(() => { load(); }, [load]);
 
+    const counts = useMemo(() => ({
+        draft: rows.filter((row) => normalize(row.status) === "DRAFT").length,
+        review: rows.filter((row) => normalize(row.status) === "SUBMITTED").length,
+        ready: rows.filter((row) => normalize(row.status) === "APPROVED" && row.effective === true).length,
+        correction: rows.filter((row) => normalize(row.status) === "RETURNED").length,
+    }), [rows]);
+
     const pagination = useMatFlowPagination(rows, 20);
 
     const confirmDelete = async () => {
@@ -157,12 +185,42 @@ export function MatFlowBomListPage() {
         }
     };
 
+    const openLabel = (row) =>
+        normalize(row?.status) === "SUBMITTED" && hasRole(REVIEW_ROLES) ? "Review" : "Open";
+
+    const renderCard = (row) => {
+        const workflow = bomWorkflow(row);
+        return (
+            <Card sx={{ ...panelSx, m: 0, p: 1.05, boxShadow: "none" }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7, alignItems: "flex-start" }}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.bomNumber || "-"}</Typography>
+                        <Typography sx={subTextSx}>Rev {row.revisionNo ?? "-"} · {row.projectCode || "-"}</Typography>
+                    </Box>
+                    <MatFlowStatusChip status={row.status} />
+                </Box>
+                <Typography sx={{ ...mainTextSx, mt: .75 }}>{row.productName || "-"}</Typography>
+                <Typography sx={subTextSx}>{row.drawingNo || "-"} · {row.plantCode || "-"}</Typography>
+                <Box sx={{ mt: .8, p: .75, borderRadius: 1.6, background: "var(--mf-surface)", border: "1px solid var(--mf-border)" }}>
+                    <Typography sx={{ ...subTextSx, m: 0 }}>NEXT OWNER</Typography>
+                    <Typography sx={mainTextSx}>{workflow[0]}</Typography>
+                </Box>
+                <Box sx={{ mt: .85, display: "flex", gap: .5, flexWrap: "wrap" }}>
+                    <Button onClick={() => navigate(`/matflow/boms/${row.id}`)} sx={primaryBtnSx}>{openLabel(row)}</Button>
+                    {canCreate && normalize(row.status) === "DRAFT" && row.latestRevision && !row.effective && row.rowVersion != null && (
+                        <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} sx={dangerBtnSx}>Delete</Button>
+                    )}
+                </Box>
+            </Card>
+        );
+    };
+
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="OPERATIONAL BOM"
+                badge="BOM WORKFLOW"
                 title="Product BOMs"
-                subtitle="Engineering creates the Product BOM from Material Inventory. BOM numbers follow BOM/yyyy/MM/dd/PD-NO/DRAWING-NO; Production reviews the submitted BOM here with no separate approval desk."
+                subtitle="Engineering prepares the BOM → Production reviews it → the effective BOM becomes ready for MR."
                 actions={
                     <>
                         <Button
@@ -175,7 +233,7 @@ export function MatFlowBomListPage() {
                             })}
                             sx={secondaryBtnSx}
                         >
-                            Export Excel
+                            Excel
                         </Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                         {canCreate && (
@@ -187,34 +245,56 @@ export function MatFlowBomListPage() {
                 }
             />
 
-            <Card sx={panelSx}>
-                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 1 }}>
-                    <TextField
-                        label="Search"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        sx={fieldSx}
-                    />
-                    <TextField
-                        select
-                        label="Status"
-                        value={status}
-                        onChange={(event) => setStatus(event.target.value)}
-                        sx={fieldSx}
-                    >
-                        {BOM_STATUSES.map((value) => (
-                            <MenuItem key={value || "ALL"} value={value}>
-                                {value ? readable(value) : "All Statuses"}
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                </Box>
-            </Card>
-
             <ErrorBox>{error}</ErrorBox>
 
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
+                <SummaryCard label="Draft" value={counts.draft} />
+                <SummaryCard label="Waiting Review" value={counts.review} />
+                <SummaryCard label="MR Ready" value={counts.ready} />
+                <SummaryCard label="Needs Correction" value={counts.correction} />
+            </Box>
+
+            <Card sx={{ ...panelSx, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 190px auto" }, gap: 1, alignItems: "center" }}>
+                <TextField
+                    label="Search BOM / PD / Product / Drawing"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    sx={fieldSx}
+                />
+                <TextField
+                    select
+                    label="Status"
+                    value={status}
+                    onChange={(event) => setStatus(event.target.value)}
+                    sx={fieldSx}
+                >
+                    {BOM_STATUSES.map((value) => (
+                        <MenuItem key={value || "ALL"} value={value}>
+                            {value ? readable(value) : "All"}
+                        </MenuItem>
+                    ))}
+                </TextField>
+                <MatFlowViewToggle
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "Table" }]}
+                />
+            </Card>
+
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={BOM_KANBAN_COLUMNS}
+                        items={rows}
+                        laneFor={bomKanbanLane}
+                        renderCard={renderCard}
+                        minColumnWidth={255}
+                        boardHeight={{ xs: 560, md: "clamp(480px, calc(100vh - 315px), 690px)" }}
+                        completedLaneKeys={["ARCHIVED"]}
+                        completedLaneLimit={8}
+                        boardKey={`${status || "ALL"}:${search}`}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "165px minmax(230px,1fr) 135px 120px 150px 220px 170px" }}>
                             {["BOM / Revision", "PD No. / Product", "Drawing", "Plant", "Status", "Current Owner / Next", "Action"].map((heading) => (
@@ -242,7 +322,7 @@ export function MatFlowBomListPage() {
                                     </Box>
                                     <Box sx={{ ...tableCellSx, display: "flex", gap: .6, flexWrap: "wrap" }}>
                                         <Button onClick={() => navigate(`/matflow/boms/${row.id}`)} sx={secondaryBtnSx}>
-                                            {normalize(row.status) === "SUBMITTED" && hasRole(REVIEW_ROLES) ? "Review" : "Open"}
+                                            {openLabel(row)}
                                         </Button>
                                         {canCreate && normalize(row.status) === "DRAFT" && row.latestRevision && !row.effective && row.rowVersion != null && (
                                             <Button startIcon={<DeleteOutlineIcon />} onClick={() => setDeleteTarget(row)} sx={dangerBtnSx}>
@@ -255,7 +335,7 @@ export function MatFlowBomListPage() {
                         })}
                     </Box>
                 )}
-                {!loading && (
+                {!loading && viewMode === "TABLE" && (
                     <MatFlowPagination
                         {...pagination}
                         onPageChange={pagination.setPage}
@@ -277,7 +357,6 @@ export function MatFlowBomListPage() {
         </Box>
     );
 }
-
 
 const sectionPalette = {
     METAL: "#60a5fa",
@@ -653,10 +732,17 @@ export function MatFlowBomDetailPage() {
             setRoutes(extractMatFlowPage(routeResponse?.data).rows);
 
             const nextSections = {};
+            const seen = [];
             linesOf(nextBom).forEach((line) => {
-                nextSections[categoryKey(line)] = true;
+                const key = categoryKey(line);
+                if (!seen.includes(key)) seen.push(key);
+                nextSections[key] = false;
             });
-            setOpenSections((current) => ({ ...nextSections, ...current }));
+            // Keep the page readable: open only the first material category.
+            // Users expand the category they need instead of loading every BOM
+            // section into one long wall of rows.
+            if (seen.length) nextSections[seen[0]] = true;
+            setOpenSections(nextSections);
         } catch (requestError) {
             setBom(null);
             setRoutes([]);

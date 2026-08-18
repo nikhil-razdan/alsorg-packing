@@ -519,6 +519,12 @@ export function MatFlowPurchasePage() {
     );
 }
 
+const RECEIVING_KANBAN_COLUMNS = [
+    { key: "AWAITING", label: "Awaiting Receipt", subtitle: "Placed PO waiting at AL-P1 Main Store" },
+    { key: "PARTIAL", label: "Partial Receipt", subtitle: "PO still has outstanding quantity" },
+    { key: "RECEIVED", label: "GRN Posted", subtitle: "Vendor receipt recorded" },
+];
+
 export function MatFlowReceivingPage() {
     const { hasRole, selectedPlantParam } = useMatFlow();
     const centralReceivingUser = hasRole(MATFLOW_ROLES.STORE) && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER);
@@ -530,6 +536,7 @@ export function MatFlowReceivingPage() {
     const [loading, setLoading] = useState(true);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [dialog, setDialog] = useState(false);
     const [form, setForm] = useState({
         purchaseOrderId: "",
@@ -584,6 +591,19 @@ export function MatFlowReceivingPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedOrder?.id]);
 
+    const openReceipt = (order = null) => {
+        setForm({
+            purchaseOrderId: order?.id ? String(order.id) : "",
+            vendorChallanNo: "",
+            vendorInvoiceNo: "",
+            remarks: "",
+            quantities: {},
+            batches: {},
+        });
+        setDialog(true);
+        setError("");
+    };
+
     const createGrn = async () => {
         if (!selectedOrder?.id) {
             setError("Select an open Purchase Order.");
@@ -637,13 +657,25 @@ export function MatFlowReceivingPage() {
     };
 
     const receiptPagination = useMatFlowPagination(receipts, 20);
+    const boardItems = useMemo(() => [
+        ...orders.map((order) => ({
+            ...order,
+            _receivingType: "PO",
+            _lane: normalize(order.status) === "PARTIALLY_RECEIVED" ? "PARTIAL" : "AWAITING",
+        })),
+        ...receipts.map((receipt) => ({
+            ...receipt,
+            _receivingType: "GRN",
+            _lane: "RECEIVED",
+        })),
+    ], [orders, receipts]);
 
     return (
         <Box sx={pageSx}>
             <PageHero
-                badge="STORE RECEIVING"
+                badge="RECEIVING"
                 title="GRN / Goods Receipt"
-                subtitle="GRN/receiving is centralized at AL-P1 Main Store for POs raised from all four plants. MatFlow records the vendor receipt against PI/PO/GRN while Tally remains the physical stock authority; QC is an optional Main Store checklist and Store keeps routing control."
+                subtitle="Open PO → receive at AL-P1 Main Store → return to the linked Store MR for the next availability review."
                 actions={
                     <>
                         <Button
@@ -656,24 +688,70 @@ export function MatFlowReceivingPage() {
                             })}
                             sx={secondaryBtnSx}
                         >
-                            Export Excel
+                            Excel
                         </Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-                        {canReceive && <Button startIcon={<AddIcon />} onClick={() => setDialog(true)} sx={primaryBtnSx}>Create GRN</Button>}
+                        {canReceive && <Button startIcon={<AddIcon />} onClick={() => openReceipt()} sx={primaryBtnSx}>Create GRN</Button>}
                     </>
                 }
             />
 
             <ErrorBox>{error}</ErrorBox>
 
-            <Card sx={panelSx}>
-                <Alert severity="info">
-                    After GRN, return to the Store MR workbench. The newly inwarded quantity becomes Store stock and can then be reserved against the MR shortage.
-                </Alert>
+            <Card sx={{ ...panelSx, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                <Box>
+                    <Typography sx={mainTextSx}>Receiving Workflow</Typography>
+                    <Typography sx={subTextSx}>Tally remains the physical stock authority. MatFlow records PO/GRN lineage and sends the user back to the MR workflow.</Typography>
+                </Box>
+                <MatFlowViewToggle
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[{ value: "KANBAN", label: "Workflow Board" }, { value: "TABLE", label: "GRN Register" }]}
+                />
             </Card>
 
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={RECEIVING_KANBAN_COLUMNS}
+                        items={boardItems}
+                        laneFor={(row) => row._lane}
+                        minColumnWidth={295}
+                        boardHeight={{ xs: 540, md: "clamp(470px, calc(100vh - 280px), 680px)" }}
+                        completedLaneKeys={["RECEIVED"]}
+                        completedLaneLimit={15}
+                        renderCard={(row) => (
+                            <Card sx={{ ...panelSx, m: 0, p: 1.05, boxShadow: "none" }}>
+                                {row._receivingType === "PO" ? (
+                                    <>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6 }}>
+                                            <Box>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.poNumber || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row.indentNumber || "-"} · {row.requisitionNumber || "-"}</Typography>
+                                            </Box>
+                                            <MatFlowStatusChip status={row.status} />
+                                        </Box>
+                                        <Typography sx={{ ...mainTextSx, mt: .7 }}>{row.vendorName || "Vendor"}</Typography>
+                                        <Typography sx={subTextSx}>{row.projectCode || "-"} · {row.productName || row.drawingNo || "-"}</Typography>
+                                        {canReceive && <Button onClick={() => openReceipt(row)} sx={{ ...primaryBtnSx, mt: .85 }}>Receive PO</Button>}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6 }}>
+                                            <Box>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.grnNumber || "-"}</Typography>
+                                                <Typography sx={subTextSx}>{row.poNumber || "-"} · {row.requisitionNumber || "-"}</Typography>
+                                            </Box>
+                                            <MatFlowStatusChip status={row.status || "RECEIVED"} />
+                                        </Box>
+                                        <Typography sx={{ ...mainTextSx, mt: .7 }}>{row.projectCode || "-"} · {row.productName || "-"}</Typography>
+                                        <Typography sx={subTextSx}>Received {formatDate(row.receivedAt)} · AL-P1 Main Store</Typography>
+                                    </>
+                                )}
+                            </Card>
+                        )}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 160px 160px 170px 200px 130px" }}>
                             {["GRN", "PO / PI", "Linked MR", "Store", "PD No. / Product", "Received"].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -690,7 +768,7 @@ export function MatFlowReceivingPage() {
                         ))}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...receiptPagination} onPageChange={receiptPagination.setPage} onPageSizeChange={receiptPagination.setPageSize} label="GRNs" />}
+                {!loading && viewMode === "TABLE" && <MatFlowPagination {...receiptPagination} onPageChange={receiptPagination.setPage} onPageSizeChange={receiptPagination.setPageSize} label="GRNs" />}
             </Card>
 
             <Dialog open={dialog} onClose={() => !working && setDialog(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
@@ -739,3 +817,4 @@ export function MatFlowReceivingPage() {
         </Box>
     );
 }
+

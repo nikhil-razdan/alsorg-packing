@@ -33,8 +33,10 @@ import {
     EmptyState,
     ErrorBox,
     LoadingBlock,
+    MatFlowKanbanBoard,
     MatFlowPagination,
     MatFlowStatusChip,
+    MatFlowViewToggle,
     PageHero,
     SummaryCard,
     clean,
@@ -86,6 +88,18 @@ const STAGES = [
     "RETURN / RECOVERY",
     "OTHER",
 ];
+
+const EXCEPTION_KANBAN_COLUMNS = [
+    { key: "OPEN", label: "Open", subtitle: "Issue recorded and awaiting containment" },
+    { key: "CONTAINED", label: "Contained", subtitle: "Forward workflow is controlled" },
+    { key: "RECOVERY_IN_PROGRESS", label: "Recovery", subtitle: "Corrective recovery is being executed" },
+    { key: "RESOLVED", label: "Resolved", subtitle: "Root cause / CAPA / closure completed" },
+];
+
+const exceptionKanbanLane = (row) => {
+    const state = normalize(row?.status);
+    return ["OPEN", "CONTAINED", "RECOVERY_IN_PROGRESS", "RESOLVED"].includes(state) ? state : "OPEN";
+};
 
 const blankForm = {
     recordType: "MR",
@@ -190,6 +204,7 @@ export function MatFlowExceptionPage() {
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
     const [severity, setSeverity] = useState("");
+    const [viewMode, setViewMode] = useState("KANBAN");
     const [createOpen, setCreateOpen] = useState(false);
     const [detail, setDetail] = useState(null);
     const [actionDialog, setActionDialog] = useState(null);
@@ -491,7 +506,7 @@ export function MatFlowExceptionPage() {
             <PageHero
                 badge="FACTS → CONTAINMENT → RECOVERY → PREVENTION"
                 title="Operational Exception & Recovery Register"
-                subtitle="Record wrong quantity, size, specification, material, route or process data when it becomes known. MatFlow preserves the facts, derives source-record ownership, can stop forward movement, safely unwinds untouched allocations, and keeps the complete recovery/root-cause history without deleting what really happened."
+                subtitle="Record the issue → contain the workflow → recover safely → close with root cause and corrective action."
                 actions={
                     <>
                         <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={working} sx={secondaryBtnSx}>Refresh</Button>
@@ -503,7 +518,7 @@ export function MatFlowExceptionPage() {
             />
 
             <Alert severity="info" sx={{ borderRadius: 2.2 }}>
-                This register is intentionally fact-based. <strong>Detected by</strong> means who reported the problem; <strong>source record owner</strong> is derived from the BOM/MR audit data. Already purchased, issued, processed, consumed or wasted material is never erased to make a person look right or wrong.
+                Keep it factual: the reporter, source-record owner, recovery actions and root cause stay separate. MatFlow never erases completed material history.
             </Alert>
 
             <ErrorBox>{error}</ErrorBox>
@@ -515,22 +530,67 @@ export function MatFlowExceptionPage() {
                 <SummaryCard label="Resolved" value={counts.resolved} tone="success" />
             </Box>
 
-            <Card sx={panelSx}>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 190px 190px" }, gap: 1 }}>
-                    <TextField label="Search exception / MR / BOM / material / person / root cause" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
-                    <TextField select label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
-                        <MenuItem value="">All Statuses</MenuItem>
-                        {["OPEN", "CONTAINED", "RECOVERY_IN_PROGRESS", "RESOLVED"].map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
-                    </TextField>
-                    <TextField select label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value)} sx={fieldSx}>
-                        <MenuItem value="">All Severities</MenuItem>
-                        {SEVERITIES.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
-                    </TextField>
-                </Box>
+            <Card sx={{ ...panelSx, display: "grid", gridTemplateColumns: { xs: "1fr", xl: "1fr 175px 175px auto" }, gap: 1, alignItems: "center" }}>
+                <TextField label="Search exception / MR / BOM / material / owner / root cause" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
+                <TextField select label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
+                    <MenuItem value="">All Statuses</MenuItem>
+                    {["OPEN", "CONTAINED", "RECOVERY_IN_PROGRESS", "RESOLVED"].map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+                </TextField>
+                <TextField select label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value)} sx={fieldSx}>
+                    <MenuItem value="">All Severities</MenuItem>
+                    {SEVERITIES.map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
+                </TextField>
+                <MatFlowViewToggle
+                    value={viewMode}
+                    onChange={setViewMode}
+                    options={[{ value: "KANBAN", label: "Recovery Board" }, { value: "TABLE", label: "Register" }]}
+                />
             </Card>
 
             <Card sx={panelSx}>
-                {loading ? <LoadingBlock /> : (
+                {loading ? <LoadingBlock /> : viewMode === "KANBAN" ? (
+                    <MatFlowKanbanBoard
+                        columns={EXCEPTION_KANBAN_COLUMNS}
+                        items={orderedRows}
+                        laneFor={exceptionKanbanLane}
+                        minColumnWidth={275}
+                        boardHeight={{ xs: 570, md: "clamp(490px, calc(100vh - 335px), 700px)" }}
+                        completedLaneKeys={["RESOLVED"]}
+                        completedLaneLimit={12}
+                        boardKey={`${status || "ALL"}:${severity || "ALL"}:${search}`}
+                        renderCard={(row) => (
+                            <Card sx={{ ...panelSx, m: 0, p: 1.05, boxShadow: "none" }}>
+                                <Box sx={{ display: "flex", justifyContent: "space-between", gap: .6, alignItems: "flex-start" }}>
+                                    <Box sx={{ minWidth: 0 }}>
+                                        <Typography sx={{ ...mainTextSx, fontSize: 12.4 }}>{row.exceptionNumber || "-"}</Typography>
+                                        <Typography sx={subTextSx}>{row.plantCode || "General"} · {readable(row.category || "OTHER")}</Typography>
+                                    </Box>
+                                    <MatFlowStatusChip status={row.severity} />
+                                </Box>
+                                <Typography
+                                    sx={{
+                                        ...mainTextSx,
+                                        mt: .75,
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 3,
+                                        WebkitBoxOrient: "vertical",
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    {row.whatHappened || "-"}
+                                </Typography>
+                                <Typography sx={subTextSx}>{row.requisitionNumber || row.bomNumber || "General record"} · {row.projectCode || "-"}</Typography>
+                                <Typography sx={subTextSx}>
+                                    {row.workflowHold ? "Workflow Hold · " : ""}Owner: {row.assignedTo || row.sourceActor || "Unassigned"}
+                                </Typography>
+                                <Box sx={{ mt: .8, display: "flex", justifyContent: "space-between", gap: .5, alignItems: "center" }}>
+                                    <MatFlowStatusChip status={row.status} />
+                                    <Button onClick={() => openDetail(row)} sx={primaryBtnSx}>Open</Button>
+                                </Box>
+                            </Card>
+                        )}
+                    />
+                ) : (
                     <Box sx={tableShellSx}>
                         <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "170px 120px minmax(250px,1.4fr) minmax(210px,1fr) 150px 150px 110px" }}>
                             {['Exception', 'Severity', 'What happened', 'Linked flow / source', 'Status', 'Updated', 'Action'].map((heading) => <Box key={heading} sx={tableCellSx}>{heading}</Box>)}
@@ -558,7 +618,7 @@ export function MatFlowExceptionPage() {
                         ))}
                     </Box>
                 )}
-                {!loading && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Exceptions" />}
+                {!loading && viewMode === "TABLE" && <MatFlowPagination {...pagination} onPageChange={pagination.setPage} onPageSizeChange={pagination.setPageSize} label="Exceptions" />}
             </Card>
 
             <Dialog open={createOpen} onClose={() => !working && setCreateOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>

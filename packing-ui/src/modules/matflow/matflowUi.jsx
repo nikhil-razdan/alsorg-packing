@@ -547,8 +547,23 @@ export const matFlowRoleLabel = (roleOrRoles) => {
 
 export const defaultMatFlowPathForRole = (roleOrRoles) => {
   const roles = getMatFlowRoles(roleOrRoles);
-  // The four-plant workflow uses one Universal Dashboard as the common MatFlow landing page.
-  return roles.length ? "/matflow/dashboard" : "/modules";
+  if (!roles.length) return "/modules";
+
+  // Managers keep the universal command center. Department users land directly
+  // on the desk where they actually work, while Dashboard stays one click away.
+  if (roles.includes(MATFLOW_ROLES.ADMIN) ||
+    roles.includes(MATFLOW_ROLES.MANAGER) ||
+    roles.includes(MATFLOW_ROLES.DIRECTOR)) {
+    return "/matflow/dashboard";
+  }
+  if (roles.includes(MATFLOW_ROLES.PRODUCTION)) return "/matflow/production";
+  if (roles.includes(MATFLOW_ROLES.ENGINEERING)) return "/matflow/boms";
+  if (roles.includes(MATFLOW_ROLES.STORE)) return "/matflow/store";
+  // Purchase and QC are AL-P1-only desks, so their safe landing stays the
+  // plant-aware Dashboard; the sidebar exposes the desk when AL-P1 is active.
+  if (roles.includes(MATFLOW_ROLES.PURCHASE) || roles.includes(MATFLOW_ROLES.QC)) return "/matflow/dashboard";
+  if (roles.includes(MATFLOW_ROLES.PROCESSING)) return "/matflow/processing";
+  return "/matflow/dashboard";
 };
 
 const MatFlowContext = createContext(null);
@@ -1652,12 +1667,12 @@ export const pageSx = {
   width: "100%",
   display: "flex",
   flexDirection: "column",
-  gap: "14px",
+  gap: "11px",
   color: "var(--mf-text)",
 };
 export const heroSx = {
-  p: { xs: "16px", md: "19px 20px" },
-  borderRadius: "14px",
+  p: { xs: "13px 14px", md: "15px 17px" },
+  borderRadius: "12px",
   background: "var(--mf-hero-bg)",
   border: "1px solid var(--mf-border)",
   boxShadow: "var(--mf-shadow)",
@@ -1673,24 +1688,24 @@ export const heroBadgeSx = {
   letterSpacing: ".08em",
 };
 export const heroTitleSx = {
-  mt: 1.05,
+  mt: .75,
   color: "var(--mf-text)",
-  fontSize: { xs: 23, md: 29 },
+  fontSize: { xs: 21, md: 25 },
   fontWeight: 950,
   lineHeight: 1.08,
   letterSpacing: "-.035em",
 };
 export const heroSubSx = {
-  mt: .65,
+  mt: .45,
   color: "var(--mf-text-secondary)",
-  fontSize: 11.5,
+  fontSize: 10.8,
   fontWeight: 650,
-  lineHeight: 1.55,
-  maxWidth: 920,
+  lineHeight: 1.45,
+  maxWidth: 860,
 };
 export const panelSx = {
-  p: 1.8,
-  borderRadius: "13px",
+  p: 1.4,
+  borderRadius: "11px",
   color: "var(--mf-text)",
   backgroundColor: "var(--mf-card-bg)",
   backgroundImage: "none",

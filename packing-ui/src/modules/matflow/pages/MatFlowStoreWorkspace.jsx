@@ -663,7 +663,7 @@ export function MatFlowStoreDetailPage() {
                 )}
                 {reviewable && (
                     <Alert severity="info" sx={{ mt: 1.5 }}>
-                        For each material, first record the <b>Tally availability decision</b>. For any quantity declared available, Store then makes two independent choices: <b>QC Check Required: Yes/No</b> and <b>Processing Required: Yes/No</b>.
+                        For each material, record the <b>Tally availability decision</b>. For any quantity declared available, Store only decides whether a <b>QC check is required</b>. Processing is automatic from the approved BOM material line.
                     </Alert>
                 )}
             </Card>
@@ -866,7 +866,7 @@ export function MatFlowStoreDetailPage() {
             <Card sx={panelSx}>
                 <Typography sx={{ fontWeight: 950, fontSize: 17 }}>Allocated Material Lots</Typography>
                 <Typography sx={{ ...subTextSx, mb: 1.2 }}>
-                    Store sends each allocated lot using only the MR plant, exact Production requester and any BOM-approved Processing Unit selected during review. A required QC check only gates release; QC never becomes a route point.
+                    Store sends each allocated lot using the MR plant, exact Production requester and the Processing Unit already defined on the approved BOM material line. Store never selects Processing here. A required QC check only gates release; QC never becomes a route point.
                 </Typography>
                 <Box sx={tableShellSx}>
                     <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "160px 135px 150px 130px 150px 100px 145px 145px" }}>
