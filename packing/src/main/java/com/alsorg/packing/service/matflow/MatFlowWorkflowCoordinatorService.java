@@ -14,25 +14,30 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Atomic orchestration for the hidden custody legs in the four-plant MatFlow
  * route. There is still no public Transfers desk.
+ *
+ * Operational Exception holds are respected here as a final safety net. A
+ * processor may still record the factual completion/output of work that already
+ * started, but the completed lot will not be auto-released onward while its MR
+ * is on hold.
  */
 @Service
 public class MatFlowWorkflowCoordinatorService {
     private final MatFlowProductionService productionService;
     private final MatFlowMovementService movementService;
+    private final MatFlowAuditService auditService;
 
     public MatFlowWorkflowCoordinatorService(
             MatFlowProductionService productionService,
-            MatFlowMovementService movementService) {
+            MatFlowMovementService movementService,
+            MatFlowAuditService auditService) {
         this.productionService = productionService;
         this.movementService = movementService;
+        this.auditService = auditService;
     }
 
     /**
      * A Store sends the current complete reservation lot. Processing is never
      * selected here: the route was already fixed on the BOM material line.
-     * A BOM-processed lot goes to that Processing Unit; a non-processed lot
-     * follows the normal Store -> Production route (including the remote Plant
-     * Store hop where applicable).
      */
     @Transactional
     public PlanningResponse issueStoreReservation(
@@ -40,11 +45,6 @@ public class MatFlowWorkflowCoordinatorService {
             StoreIssueRequest request) {
         PlanningResponse response = movementService.advanceStoreReservation(reservationId, request);
 
-        /*
-         * Idempotent: when the BOM-defined Processing destination has physically
-         * received the lot, queue its job automatically. Repeated calls return the
-         * same reservation/route-step job instead of creating duplicates.
-         */
         UUID processingRouteStepId = movementService.processingRouteStepId(reservationId);
         if (processingRouteStepId != null) {
             productionService.createProcessingJobForReservation(
@@ -64,10 +64,9 @@ public class MatFlowWorkflowCoordinatorService {
     }
 
     /**
-     * Processor completion is the only Processing execution decision. After the
-     * job is completed, its output is automatically handed to the exact MR
-     * Production destination; it does not return to Main Store for a second
-     * routing/selection decision.
+     * Processor completion is a factual execution record. If the linked MR is
+     * under an Operational Exception hold, the output remains contained and no
+     * automatic onward hand-off occurs. Otherwise the saved route continues.
      */
     @Transactional
     public ProcessingJobResponse completeProcessing(
@@ -75,6 +74,21 @@ public class MatFlowWorkflowCoordinatorService {
             ProcessingJobCompleteRequest request) {
         ProcessingJobResponse response = productionService.completeProcessingJob(jobId, request);
         if (response != null && response.reservationId() != null) {
+            if (response.requisitionId() != null
+                    && auditService.isRequisitionBlocked(response.requisitionId())) {
+                auditService.record(
+                        "REQUISITION",
+                        response.requisitionId(),
+                        "PROCESSING_OUTPUT_CONTAINED_BY_EXCEPTION",
+                        response.plantCode(),
+                        null,
+                        null,
+                        auditService.details(
+                                "processingJobId", jobId,
+                                "reservationId", response.reservationId(),
+                                "message", "Processing completed factually; onward hand-off was stopped by an active workflow exception."));
+                return response;
+            }
             movementService.advanceReservationAfterProcessing(
                     response.reservationId(),
                     request == null ? null : request.remarks());

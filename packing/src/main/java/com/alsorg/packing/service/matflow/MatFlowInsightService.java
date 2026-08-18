@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -53,6 +54,7 @@ public class MatFlowInsightService {
         private final ReportingModule reporting;
         private final TrackerModule tracker;
         private final IntegrityModule integrity;
+        private final ExceptionModule exceptions;
 
         public MatFlowInsightService(
                         MatFlowProjectDrawingRepository projectRepository,
@@ -73,7 +75,9 @@ public class MatFlowInsightService {
                         MatFlowAuditLogRepository auditRepository,
                         MatFlowReservationRepository reservationRepository,
                         MatFlowAccessService accessService,
-                        MatFlowPlantRoutingService plantRoutingService) {
+                        MatFlowPlantRoutingService plantRoutingService,
+                        MatFlowAuditService auditService,
+                        MatFlowRequisitionService requisitionService) {
 
                 this.reporting = new ReportingModule(
                                 projectRepository,
@@ -113,6 +117,18 @@ public class MatFlowInsightService {
                                 receiptLineRepository,
                                 processingRepository,
                                 reservationRepository,
+                                accessService);
+
+                this.exceptions = new ExceptionModule(
+                                bomRepository,
+                                requisitionRepository,
+                                requisitionLineRepository,
+                                reservationRepository,
+                                indentRepository,
+                                purchaseOrderRepository,
+                                processingRepository,
+                                auditService,
+                                requisitionService,
                                 accessService);
         }
 
@@ -173,6 +189,427 @@ public class MatFlowInsightService {
         @Transactional(readOnly = true)
         public IntegrityReport inspectIntegrity(String plantCode) {
                 return integrity.inspect(plantCode);
+        }
+
+        @Transactional(readOnly = true)
+        public List<Map<String, Object>> workflowExceptions(
+                        String plantCode, String status, String severity, String search) {
+                return exceptions.list(plantCode, status, severity, search);
+        }
+
+        @Transactional(readOnly = true)
+        public Map<String, Object> workflowException(UUID exceptionId) {
+                return exceptions.get(exceptionId);
+        }
+
+        @Transactional
+        public Map<String, Object> openWorkflowException(Map<String, Object> request) {
+                return exceptions.open(request);
+        }
+
+        @Transactional
+        public Map<String, Object> containWorkflowException(UUID exceptionId, Map<String, Object> request) {
+                return exceptions.contain(exceptionId, request);
+        }
+
+        @Transactional
+        public Map<String, Object> startWorkflowExceptionRecovery(UUID exceptionId, Map<String, Object> request) {
+                return exceptions.startRecovery(exceptionId, request);
+        }
+
+        @Transactional
+        public Map<String, Object> addWorkflowExceptionNote(UUID exceptionId, Map<String, Object> request) {
+                return exceptions.note(exceptionId, request);
+        }
+
+        @Transactional
+        public Map<String, Object> resolveWorkflowException(UUID exceptionId, Map<String, Object> request) {
+                return exceptions.resolve(exceptionId, request);
+        }
+
+        @Transactional
+        public Map<String, Object> reopenWorkflowException(UUID exceptionId, Map<String, Object> request) {
+                return exceptions.reopen(exceptionId, request);
+        }
+
+        /**
+         * Exception register adapter. It enriches user observations with source-system
+         * facts before the append-only audit writer persists them. This prevents the
+         * register from becoming a manual "name and blame" list: record ownership,
+         * Project/Product/BOM/MR identity and recovery constraints are derived from
+         * MatFlow wherever a linked record exists.
+         */
+        private static final class ExceptionModule {
+                private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+
+                private final MatFlowBomRepository bomRepository;
+                private final MatFlowMaterialRequisitionRepository requisitionRepository;
+                private final MatFlowRequisitionLineRepository requisitionLineRepository;
+                private final MatFlowReservationRepository reservationRepository;
+                private final MatFlowIndentRepository indentRepository;
+                private final MatFlowPurchaseOrderRepository purchaseOrderRepository;
+                private final MatFlowProcessingJobRepository processingRepository;
+                private final MatFlowAuditService auditService;
+                private final MatFlowRequisitionService requisitionService;
+                private final MatFlowAccessService accessService;
+
+                ExceptionModule(
+                                MatFlowBomRepository bomRepository,
+                                MatFlowMaterialRequisitionRepository requisitionRepository,
+                                MatFlowRequisitionLineRepository requisitionLineRepository,
+                                MatFlowReservationRepository reservationRepository,
+                                MatFlowIndentRepository indentRepository,
+                                MatFlowPurchaseOrderRepository purchaseOrderRepository,
+                                MatFlowProcessingJobRepository processingRepository,
+                                MatFlowAuditService auditService,
+                                MatFlowRequisitionService requisitionService,
+                                MatFlowAccessService accessService) {
+                        this.bomRepository = bomRepository;
+                        this.requisitionRepository = requisitionRepository;
+                        this.requisitionLineRepository = requisitionLineRepository;
+                        this.reservationRepository = reservationRepository;
+                        this.indentRepository = indentRepository;
+                        this.purchaseOrderRepository = purchaseOrderRepository;
+                        this.processingRepository = processingRepository;
+                        this.auditService = auditService;
+                        this.requisitionService = requisitionService;
+                        this.accessService = accessService;
+                }
+
+                List<Map<String, Object>> list(String plantCode, String status, String severity, String search) {
+                        return auditService.listWorkflowExceptions(plantCode, status, severity, search);
+                }
+
+                Map<String, Object> get(UUID id) {
+                        return auditService.getWorkflowException(id);
+                }
+
+                Map<String, Object> open(Map<String, Object> request) {
+                        accessService.requireRead();
+                        Map<String, Object> enriched = request == null
+                                        ? new LinkedHashMap<>()
+                                        : new LinkedHashMap<>(request);
+
+                        UUID requisitionId = uuid(enriched.get("requisitionId"));
+                        UUID bomId = uuid(enriched.get("bomId"));
+                        MatFlowMaterialRequisition requisition = null;
+                        MatFlowBom bom = null;
+
+                        if (requisitionId != null) {
+                                requisition = requisitionRepository.findDetailById(requisitionId)
+                                                .map(value -> (MatFlowMaterialRequisition) Hibernate.unproxy(value))
+                                                .orElseThrow(() -> notFound("Linked Material Requisition not found"));
+                                enrichFromRequisition(enriched, requisition);
+                                bom = requisition.bom == null ? null : (MatFlowBom) Hibernate.unproxy(requisition.bom);
+                                if (bom != null) {
+                                        enriched.put("bomId", bom.getId().toString());
+                                        enriched.put("bomNumber", bom.getBomNumber());
+                                }
+                        } else if (bomId != null) {
+                                bom = bomRepository.findById(bomId)
+                                                .map(value -> (MatFlowBom) Hibernate.unproxy(value))
+                                                .orElseThrow(() -> notFound("Linked BOM not found"));
+                                enrichFromBom(enriched, bom);
+                        }
+
+                        if (bom != null) {
+                                /*
+                                 * `bom` is assigned while resolving either the linked MR or a direct
+                                 * BOM reference, so it is not effectively final. Capture only the
+                                 * immutable identifier before entering the stream lambda.
+                                 */
+                                final UUID affectedBomId = bom.getId();
+                                List<String> affected = requisitionRepository.findAllByOrderByUpdatedAtDesc().stream()
+                                                .filter(row -> row != null && row.bom != null
+                                                                && affectedBomId.equals(row.bom.getId()))
+                                                .filter(row -> !"CANCELLED".equals(enumName(row.status))
+                                                                && !"PRODUCTION_COMPLETED".equals(enumName(row.status)))
+                                                .map(row -> row.getId().toString())
+                                                .distinct()
+                                                .toList();
+                                enriched.put("affectedRequisitionIds", affected);
+                        }
+
+                        deriveSourceOwner(enriched, requisition, bom);
+                        List<UUID> accountabilityIds = new ArrayList<>();
+                        if (bom != null)
+                                accountabilityIds.add(bom.getId());
+                        if (requisition != null)
+                                accountabilityIds.add(requisition.getId());
+                        enriched.put("accountabilityTrailAtDetection",
+                                        auditService.linkedAccountabilityTrail(accountabilityIds));
+                        enriched.put("accountabilityPrinciple",
+                                        "Recorded owner/action history is evidence of process participation, not automatic proof of fault. Root cause is established at closure.");
+
+                        UUID lineId = uuid(enriched.get("requisitionLineId"));
+                        if (requisition != null && lineId != null) {
+                                requisitionLineRepository.findByRequisition_IdOrderByLineNoAsc(requisition.getId())
+                                                .stream()
+                                                .map(value -> (MatFlowRequisitionLine) Hibernate.unproxy(value))
+                                                .filter(line -> lineId.equals(line.getId()))
+                                                .findFirst()
+                                                .ifPresent(line -> {
+                                                        if (line.material != null) {
+                                                                MatFlowMaterial material = (MatFlowMaterial) Hibernate
+                                                                                .unproxy(line.material);
+                                                                enriched.put("materialId", material.getId().toString());
+                                                                enriched.put("materialCode",
+                                                                                material.getMaterialCode());
+                                                                enriched.put("materialName",
+                                                                                material.getMaterialName());
+                                                        }
+                                                        enriched.put("requestedQty", line.requestedQty);
+                                                        enriched.put("issuedQty", line.issuedQty);
+                                                });
+                        }
+
+                        if (requisition != null) {
+                                enriched.putAll(recoveryFacts(requisition));
+                                enriched.put("recoveryPlan", recoveryPlan(requisition));
+                        } else if (bom != null) {
+                                enriched.put("recoveryPlan", List.of(
+                                                "Place a workflow hold before another MR is created from the affected BOM.",
+                                                "Engineering creates a new BOM revision; do not overwrite the historical effective revision.",
+                                                "Review every affected MR listed on this exception and use compensating returns/corrections where execution already started.",
+                                                "Resolve the exception only after Production verifies the corrected revision."));
+                        } else {
+                                enriched.put("workflowHold", false);
+                                enriched.put("recoveryPlan", List.of(
+                                                "Capture the factual record and responsible process, not an assumed person.",
+                                                "Link the exception to a BOM or MR before enabling a workflow hold.",
+                                                "Record root cause, corrective action and prevention before closure."));
+                        }
+
+                        return auditService.openWorkflowException(enriched);
+                }
+
+                Map<String, Object> contain(UUID id, Map<String, Object> request) {
+                        return auditService.containWorkflowException(id, request);
+                }
+
+                Map<String, Object> startRecovery(UUID id, Map<String, Object> request) {
+                        Map<String, Object> current = auditService.getWorkflowException(id);
+                        Map<String, Object> body = request == null
+                                        ? new LinkedHashMap<>()
+                                        : new LinkedHashMap<>(request);
+                        boolean releaseSafe = booleanValue(body.get("releaseSafeReservations"));
+                        if (releaseSafe) {
+                                LinkedHashSet<UUID> requisitions = new LinkedHashSet<>();
+                                UUID direct = uuid(current.get("requisitionId"));
+                                if (direct != null) {
+                                        requisitions.add(direct);
+                                }
+                                Object affected = current.get("affectedRequisitionIds");
+                                if (affected instanceof Iterable<?> iterable) {
+                                        for (Object value : iterable) {
+                                                UUID candidate = uuid(value);
+                                                if (candidate != null) {
+                                                        requisitions.add(candidate);
+                                                }
+                                        }
+                                }
+                                List<Map<String, Object>> results = new ArrayList<>();
+                                String exceptionNumber = text(current.get("exceptionNumber"));
+                                String reason = text(body.get("recoveryAction"));
+                                for (UUID requisitionId : requisitions) {
+                                        results.add(requisitionService.releaseSafelyForException(
+                                                        requisitionId, exceptionNumber, reason));
+                                }
+                                body.put("recoveryResult", Map.of(
+                                                "safeReservationReleaseRequested", true,
+                                                "requisitions", results));
+                        }
+                        return auditService.startWorkflowRecovery(id, body);
+                }
+
+                Map<String, Object> note(UUID id, Map<String, Object> request) {
+                        return auditService.addWorkflowExceptionNote(id, request);
+                }
+
+                Map<String, Object> resolve(UUID id, Map<String, Object> request) {
+                        return auditService.resolveWorkflowException(id, request);
+                }
+
+                Map<String, Object> reopen(UUID id, Map<String, Object> request) {
+                        return auditService.reopenWorkflowException(id, request);
+                }
+
+                private void enrichFromRequisition(Map<String, Object> target, MatFlowMaterialRequisition req) {
+                        if (req.projectDrawing == null) {
+                                throw conflict("Linked MR has no Project/Product context");
+                        }
+                        MatFlowProjectDrawing product = (MatFlowProjectDrawing) Hibernate.unproxy(req.projectDrawing);
+                        accessService.requirePlantAccess(product.getPlantCode());
+                        target.put("requisitionId", req.getId().toString());
+                        target.put("requisitionNumber", req.requisitionNumber);
+                        target.put("plantCode", product.getPlantCode());
+                        target.put("projectCode", product.getProjectCode());
+                        target.put("projectName", product.getProjectName());
+                        target.put("drawingNo", product.getDrawingNo());
+                        target.put("drawingRevision", product.getDrawingRevision());
+                        target.put("productName", product.getProductName());
+                        target.put("mrRequestedBy", req.requestedBy);
+                        target.put("mrStatus", enumName(req.status));
+                }
+
+                private void enrichFromBom(Map<String, Object> target, MatFlowBom bom) {
+                        if (bom.getProjectDrawing() == null) {
+                                throw conflict("Linked BOM has no Project/Product context");
+                        }
+                        MatFlowProjectDrawing product = (MatFlowProjectDrawing) Hibernate
+                                        .unproxy(bom.getProjectDrawing());
+                        accessService.requirePlantAccess(product.getPlantCode());
+                        target.put("bomId", bom.getId().toString());
+                        target.put("bomNumber", bom.getBomNumber());
+                        target.put("bomRevisionNo", bom.getRevisionNo());
+                        target.put("plantCode", product.getPlantCode());
+                        target.put("projectCode", product.getProjectCode());
+                        target.put("projectName", product.getProjectName());
+                        target.put("drawingNo", product.getDrawingNo());
+                        target.put("drawingRevision", product.getDrawingRevision());
+                        target.put("productName", product.getProductName());
+                        target.put("bomCreatedBy", bom.getCreatedBy());
+                        target.put("bomStatus", enumName(bom.getStatus()));
+                }
+
+                private void deriveSourceOwner(
+                                Map<String, Object> target,
+                                MatFlowMaterialRequisition requisition,
+                                MatFlowBom bom) {
+                        String category = enumName(target.get("category"));
+                        Set<String> bomDataCategories = Set.of(
+                                        "WRONG_QUANTITY", "WRONG_SIZE_SPEC", "WRONG_MATERIAL",
+                                        "WRONG_NAME_CODE", "WRONG_DRAWING_BOM", "WRONG_PROCESSING_ROUTE");
+
+                        if (bom != null && bomDataCategories.contains(category)) {
+                                target.put("sourceActor", bom.getCreatedBy());
+                                target.put("sourceOwnerBasis",
+                                                "BOM createdBy — system-derived owner of the source record; this is not a fault verdict");
+                                target.put("sourceRecordType", "BOM");
+                                target.put("sourceRecordStatus", enumName(bom.getStatus()));
+                                return;
+                        }
+                        if (requisition != null && "PRODUCTION_ERROR".equals(category)) {
+                                target.put("sourceActor", requisition.requestedBy);
+                                target.put("sourceOwnerBasis",
+                                                "MR requestedBy — system-derived owner of the Production request; this is not a fault verdict");
+                                target.put("sourceRecordType", "MATERIAL_REQUISITION");
+                                target.put("sourceRecordStatus", enumName(requisition.status));
+                                return;
+                        }
+                        if (requisition != null && Set.of("DATA_ENTRY_ERROR", "OTHER").contains(category)) {
+                                target.put("sourceActor", requisition.requestedBy);
+                                target.put("sourceOwnerBasis",
+                                                "MR requestedBy is shown only as the linked request owner; root cause must be determined from the audit trail");
+                                target.put("sourceRecordType", "MATERIAL_REQUISITION");
+                                target.put("sourceRecordStatus", enumName(requisition.status));
+                                return;
+                        }
+                        target.remove("sourceActor");
+                        target.put("sourceOwnerBasis",
+                                        "No person is auto-attributed for this category. Use the system audit trail and root-cause review to determine responsibility.");
+                        target.put("sourceRecordType", bom != null ? "BOM / DOWNSTREAM PROCESS"
+                                        : requisition != null ? "MATERIAL_REQUISITION / DOWNSTREAM PROCESS"
+                                                        : "GENERAL");
+                        target.put("sourceRecordStatus", bom != null ? enumName(bom.getStatus())
+                                        : requisition != null ? enumName(requisition.status) : null);
+                }
+
+                private Map<String, Object> recoveryFacts(MatFlowMaterialRequisition req) {
+                        List<MatFlowRequisitionLine> lines = requisitionLineRepository
+                                        .findByRequisition_IdOrderByLineNoAsc(req.getId());
+                        boolean materialIssued = lines.stream()
+                                        .anyMatch(line -> scale(line.issuedQty).compareTo(ZERO) > 0);
+                        long activeReservations = reservationRepository
+                                        .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(req.getId())
+                                        .stream()
+                                        .filter(r -> "ACTIVE".equals(enumName(r.status))
+                                                        || "PARTIALLY_ISSUED".equals(enumName(r.status)))
+                                        .count();
+                        List<MatFlowIndent> indents = indentRepository.findByRequisition_Id(req.getId());
+                        boolean committedPurchase = indents.stream()
+                                        .flatMap(indent -> purchaseOrderRepository.findByIndent_Id(indent.getId())
+                                                        .stream())
+                                        .anyMatch(order -> !Set.of("DRAFT", "CANCELLED")
+                                                        .contains(enumName(order.status)));
+                        boolean processingStarted = processingRepository.findAllByOrderByUpdatedAtDesc().stream()
+                                        .filter(job -> job != null && job.requisition != null
+                                                        && req.getId().equals(job.requisition.getId()))
+                                        .anyMatch(job -> !Set.of("PENDING", "CANCELLED")
+                                                        .contains(enumName(job.status)));
+
+                        Map<String, Object> facts = new LinkedHashMap<>();
+                        facts.put("materialAlreadyIssued", materialIssued);
+                        facts.put("activeReservationCount", activeReservations);
+                        facts.put("commercialCommitmentExists", committedPurchase);
+                        facts.put("processingAlreadyStarted", processingStarted);
+                        facts.put("safeReservationRollbackAvailable",
+                                        !materialIssued && !committedPurchase && !processingStarted);
+                        return facts;
+                }
+
+                private List<String> recoveryPlan(MatFlowMaterialRequisition req) {
+                        Map<String, Object> facts = recoveryFacts(req);
+                        List<String> steps = new ArrayList<>();
+                        steps.add("Contain first: the linked MR is blocked from new forward movement while this exception hold is active.");
+                        if (((Number) facts.get("activeReservationCount")).longValue() > 0) {
+                                steps.add("Release only untouched/unissued reservation lots; MatFlow will never release a lot whose physical hand-off already started.");
+                        }
+                        if (Boolean.TRUE.equals(facts.get("materialAlreadyIssued"))) {
+                                steps.add("Already issued material is not erased. Use Material Returns for unused/excess quantity and preserve consumption/waste already recorded.");
+                        }
+                        if (Boolean.TRUE.equals(facts.get("commercialCommitmentExists"))) {
+                                steps.add("A placed PO is a commercial fact and is not deleted. Record vendor/commercial correction and create corrected demand if required.");
+                        }
+                        if (Boolean.TRUE.equals(facts.get("processingAlreadyStarted"))) {
+                                steps.add("Processing already started: record actual output/wastage, hold onward release, then create corrective demand rather than rewriting processing history.");
+                        }
+                        steps.add("Correct the source data through a new BOM revision / corrected MR path, then verify with Production before resolving the exception.");
+                        steps.add("Closure requires root cause, corrective action and resolution. Preventive action remains visible for future reviews.");
+                        return steps;
+                }
+
+                private BigDecimal scale(BigDecimal value) {
+                        return value == null ? ZERO : value.setScale(3, RoundingMode.HALF_UP);
+                }
+
+                private boolean booleanValue(Object value) {
+                        return value instanceof Boolean b ? b
+                                        : value != null && Set.of("TRUE", "YES", "1")
+                                                        .contains(String.valueOf(value).trim()
+                                                                        .toUpperCase(Locale.ROOT));
+                }
+
+                private UUID uuid(Object value) {
+                        if (value == null || String.valueOf(value).trim().isBlank()) {
+                                return null;
+                        }
+                        try {
+                                return UUID.fromString(String.valueOf(value).trim());
+                        } catch (IllegalArgumentException ex) {
+                                throw badRequest("Invalid linked record ID: " + value);
+                        }
+                }
+
+                private String text(Object value) {
+                        return value == null ? null : String.valueOf(value).trim();
+                }
+
+                private String enumName(Object value) {
+                        return value == null ? "" : value.toString().trim().toUpperCase(Locale.ROOT);
+                }
+
+                private ResponseStatusException badRequest(String message) {
+                        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+                }
+
+                private ResponseStatusException notFound(String message) {
+                        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
+                }
+
+                private ResponseStatusException conflict(String message) {
+                        return new ResponseStatusException(HttpStatus.CONFLICT, message);
+                }
         }
 
         private static final class ReportingModule {
@@ -1360,7 +1797,8 @@ public class MatFlowInsightService {
                                          * fields must not take down the entire Production Execution page.
                                          * Strict tracker detail / write endpoints still surface the bad record.
                                          */
-                                        LOG.error("Skipping unreadable MatFlow tracker requisition {} while building list", requisitionId, ex);
+                                        LOG.error("Skipping unreadable MatFlow tracker requisition {} while building list",
+                                                        requisitionId, ex);
                                 }
                         }
 
@@ -2521,7 +2959,8 @@ public class MatFlowInsightService {
                                 case "DRAFT", "PRODUCTION_ISSUE", "PRODUCTION_IN_PROGRESS", "PRODUCTION_COMPLETED" ->
                                         "PRODUCTION";
                                 case "ORIGIN_STORE_FORWARDING" -> "ORIGIN PLANT STORE";
-                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "AL-P1 MAIN STORE";
+                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
+                                        "AL-P1 MAIN STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
                                 case "QC_PENDING" -> "QUALITY CONTROL";
                                 case "PROCESSING" -> "PROCESSING";
@@ -2554,7 +2993,8 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> target("DEMAND");
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" -> target("STORE");
+                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
+                                        target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
                                 case "QC_PENDING" -> target("QC");
                                 case "PROCESSING" -> target("PROCESSING");
@@ -2592,7 +3032,8 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> "DEMAND";
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED" -> "STORE";
+                                                "MATERIAL_RESERVED" ->
+                                        "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
                                 case "QC_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
                                                 "READY_TO_ISSUE" ->
@@ -2806,9 +3247,11 @@ public class MatFlowInsightService {
                         if (indent.requisition != null)
                                 indent.requisition = unwrapRequisition(indent.requisition);
                         if (indent.projectDrawing != null)
-                                indent.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(indent.projectDrawing);
+                                indent.projectDrawing = (MatFlowProjectDrawing) Hibernate
+                                                .unproxy(indent.projectDrawing);
                         if (indent.deliverToLocation != null)
-                                indent.deliverToLocation = (MatFlowLocation) Hibernate.unproxy(indent.deliverToLocation);
+                                indent.deliverToLocation = (MatFlowLocation) Hibernate
+                                                .unproxy(indent.deliverToLocation);
                         return indent;
                 }
 

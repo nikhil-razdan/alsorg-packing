@@ -307,6 +307,24 @@ export const matflowApi = {
 	createConsumption: (body) =>
 		API.post(`${BASE}/production-consumptions`, body),
 
+	/* ================= EXCEPTIONS / RECOVERY ================= */
+	listWorkflowExceptions: (params = {}) =>
+		API.get(`${BASE}/exceptions`, { params: cleanParams(params) }),
+	getWorkflowException: (id) =>
+		API.get(`${BASE}/exceptions/${requiredId(id, "Exception ID")}`),
+	createWorkflowException: (body) =>
+		API.post(`${BASE}/exceptions`, body),
+	containWorkflowException: (id, body = {}) =>
+		API.post(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/contain`, body),
+	startWorkflowExceptionRecovery: (id, body = {}) =>
+		API.post(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/recovery`, body),
+	addWorkflowExceptionNote: (id, body) =>
+		API.post(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/notes`, body),
+	resolveWorkflowException: (id, body) =>
+		API.post(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/resolve`, body),
+	reopenWorkflowException: (id, body) =>
+		API.post(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/reopen`, body),
+
 	/* ========================= READ MODELS ========================= */
 	dashboardReport: (params = {}) =>
 		API.get(`${BASE}/reports/dashboard`, { params: cleanParams(params) }),

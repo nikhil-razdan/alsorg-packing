@@ -345,6 +345,10 @@ public class MatFlowRequisitionService {
                                 .orElseThrow(() -> notFound(
                                                 "Approved operational BOM not found"));
 
+                auditService.assertBomNotBlocked(
+                                bom.getId(),
+                                "create a Material Requisition from this BOM");
+
                 if (bom.getProjectDrawing() == null) {
                         throw conflict(
                                         "Selected operational BOM has no project drawing");
@@ -593,6 +597,9 @@ public class MatFlowRequisitionService {
 
                 MatFlowMaterialRequisition requisition = requireRequisition(id);
                 accessService.requireProductionOwnership(requisition.requestedBy);
+                auditService.assertRequisitionNotBlocked(
+                                requisition.getId(),
+                                "submit this Material Requisition");
 
                 if (requisition.status != RequisitionStatus.DRAFT) {
                         throw conflict("Only a Draft requisition can be submitted");
@@ -686,6 +693,9 @@ public class MatFlowRequisitionService {
                                 .orElseThrow(() -> notFound("Material requisition not found"));
 
                 MatFlowMaterialRequisition requisition = requireRequisitionForRouting(requisitionId);
+                auditService.assertRequisitionNotBlocked(
+                                requisition.getId(),
+                                "forward this Material Requisition to AL-P1 Main Store");
                 String originPlant = plantRoutingService.normalizeFactoryPlant(
                                 requisition.destinationLocation.getPlantCode());
 
@@ -1058,6 +1068,9 @@ public class MatFlowRequisitionService {
                         UUID requisitionId) {
                 plantRoutingService.requireMainStorePlanningActor();
                 MatFlowMaterialRequisition requisition = requireRequisitionForMainStore(requisitionId);
+                auditService.assertRequisitionNotBlocked(
+                                requisition.getId(),
+                                "review or allocate this Material Requisition");
                 requireAtMainStore(requisition);
 
                 MatFlowLocation mainStore = requisition.mainStore == null
@@ -3258,6 +3271,94 @@ public class MatFlowRequisitionService {
                 return response;
         }
 
+        /**
+         * Manager-driven compensating action for an Operational Exception. Only
+         * reservation quantity that has NOT begun physical movement is released.
+         * Issued/in-transit/processing history is never rewritten or deleted.
+         */
+        @Transactional
+        public Map<String, Object> releaseSafelyForException(
+                        UUID requisitionId,
+                        String exceptionNumber,
+                        String reason) {
+                accessService.requireRead();
+                if (requisitionId == null) {
+                        throw badRequest("Requisition ID is required for exception recovery");
+                }
+
+                MatFlowMaterialRequisition requisition = requireRequisition(requisitionId);
+                String plant = requirePlantCode(
+                                requisition.projectDrawing == null
+                                                ? null
+                                                : requisition.projectDrawing.getPlantCode(),
+                                "Exception recovery MR");
+                accessService.requirePlantAccess(plant);
+
+                String actor = accessService.actor();
+                String recoveryReason = "Exception recovery "
+                                + (clean(exceptionNumber) == null ? "" : exceptionNumber)
+                                + ": "
+                                + (clean(reason) == null
+                                                ? "release untouched reservation quantities"
+                                                : clean(reason));
+
+                List<MatFlowReservation> candidates = reservationRepository
+                                .findByRequisitionLine_Requisition_IdOrderByCreatedAtAsc(requisitionId)
+                                .stream()
+                                .filter(reservation -> reservation.status == ReservationStatus.ACTIVE
+                                                || reservation.status == ReservationStatus.PARTIALLY_ISSUED)
+                                .toList();
+
+                List<String> releasedReservationIds = new ArrayList<>();
+                List<Map<String, Object>> skipped = new ArrayList<>();
+                BigDecimal releasedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+
+                for (MatFlowReservation reservation : candidates) {
+                        BigDecimal before = zero(reservation.reservedQty)
+                                        .subtract(zero(reservation.issuedQty))
+                                        .max(BigDecimal.ZERO)
+                                        .setScale(3, RoundingMode.HALF_UP);
+                        if (before.compareTo(BigDecimal.ZERO) <= 0) {
+                                continue;
+                        }
+                        try {
+                                controlModule.releaseForWorkflowException(
+                                                reservation, recoveryReason, actor);
+                                releasedReservationIds.add(reservation.getId().toString());
+                                releasedQty = releasedQty.add(before).setScale(3, RoundingMode.HALF_UP);
+                        } catch (ResponseStatusException ex) {
+                                Map<String, Object> item = new LinkedHashMap<>();
+                                item.put("reservationId", reservation.getId().toString());
+                                item.put("quantity", before);
+                                item.put("reason", ex.getReason());
+                                skipped.add(item);
+                        }
+                }
+
+                refreshState(requisitionId, actor);
+                auditService.record(
+                                "REQUISITION",
+                                requisitionId,
+                                "WORKFLOW_EXCEPTION_SAFE_RELEASE",
+                                plant,
+                                requisition.projectDrawing == null ? null : requisition.projectDrawing.getProjectCode(),
+                                requisition.projectDrawing == null ? null : requisition.projectDrawing.getDrawingNo(),
+                                auditService.details(
+                                                "exceptionNumber", exceptionNumber,
+                                                "releasedReservationIds", releasedReservationIds,
+                                                "releasedQty", releasedQty,
+                                                "skipped", skipped));
+
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("requisitionId", requisitionId.toString());
+                result.put("requisitionNumber", requisition.requisitionNumber);
+                result.put("releasedReservationCount", releasedReservationIds.size());
+                result.put("releasedQty", releasedQty);
+                result.put("releasedReservationIds", releasedReservationIds);
+                result.put("skipped", skipped);
+                return result;
+        }
+
         @Transactional
         public RequisitionResponse cancelRequisition(
                         UUID requisitionId,
@@ -3836,6 +3937,16 @@ public class MatFlowRequisitionService {
 
                         return planningService.getRequisition(
                                         requisition.getId());
+                }
+
+                void releaseForWorkflowException(
+                                MatFlowReservation reservation,
+                                String reason,
+                                String actor) {
+                        if (reservation == null || reservation.getId() == null) {
+                                throw badRequest("Valid reservation is required for exception recovery");
+                        }
+                        releaseReservationInternal(reservation, reason, actor);
                 }
 
                 private void releaseReservationInternal(

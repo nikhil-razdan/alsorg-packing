@@ -1565,6 +1565,7 @@ export function MatFlowDashboardPage() {
     const [tracker, setTracker] = useState(null);
     const [requisitions, setRequisitions] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [workflowExceptions, setWorkflowExceptions] = useState([]);
     const [kanbanSearch, setKanbanSearch] = useState("");
     const [boardFilter, setBoardFilter] = useState("ALL");
     const [boardDensity, setBoardDensity] = useState("COMPACT");
@@ -1580,7 +1581,7 @@ export function MatFlowDashboardPage() {
         setLoading(true);
         setError("");
         try {
-            const [dashboardResponse, trackerResponse, requisitionResponse, projectResponse] = await Promise.all([
+            const [dashboardResponse, trackerResponse, requisitionResponse, projectResponse, exceptionResponse] = await Promise.all([
                 matflowApi.dashboardReport({ plantCode: selectedPlantParam }),
                 matflowApi.getTracker({ plantCode: selectedPlantParam }),
                 view === "operations"
@@ -1590,14 +1591,19 @@ export function MatFlowDashboardPage() {
                     active: true,
                     plantCode: selectedPlantParam || undefined,
                 }),
+                matflowApi.listWorkflowExceptions({
+                    plantCode: selectedPlantParam || undefined,
+                }),
             ]);
             setData(dashboardResponse?.data || null);
             setTracker(trackerResponse?.data || null);
             setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : []);
             setProjects(extractMatFlowPage(projectResponse?.data).rows);
+            setWorkflowExceptions(Array.isArray(exceptionResponse?.data) ? exceptionResponse.data : []);
         } catch (requestError) {
             setRequisitions([]);
             setProjects([]);
+            setWorkflowExceptions([]);
             setError(readMatFlowError(requestError, "Unable to load MatFlow dashboard."));
         } finally {
             setLoading(false);
@@ -2208,6 +2214,9 @@ export function MatFlowDashboardPage() {
     );
     const plantRows = Array.isArray(data?.rows) ? data.rows : [];
     const activeRows = trackerRows.filter((row) => !["CANCELLED", "PRODUCTION_COMPLETED"].includes(normalize(row.currentStage)));
+    const openWorkflowExceptions = workflowExceptions.filter((row) => normalize(row.status) !== "RESOLVED");
+    const heldWorkflowExceptions = openWorkflowExceptions.filter((row) => row.workflowHold === true);
+    const severeWorkflowExceptions = openWorkflowExceptions.filter((row) => ["HIGH", "CRITICAL"].includes(normalize(row.severity)));
 
     const avgMaterialReady = activeRows.length
         ? activeRows.reduce((sum, row) => sum + percent(row.materialReadyPercent), 0) / activeRows.length
@@ -2337,6 +2346,14 @@ export function MatFlowDashboardPage() {
             onClick: () => changeView("operations"),
         },
         {
+            label: "Exceptions & Recovery",
+            value: openWorkflowExceptions.length,
+            subtitle: `${heldWorkflowExceptions.length} workflow hold${heldWorkflowExceptions.length === 1 ? "" : "s"} · ${severeWorkflowExceptions.length} high/critical`,
+            icon: WarningAmberRoundedIcon,
+            tone: severeWorkflowExceptions.length ? "danger" : heldWorkflowExceptions.length ? "warning" : openWorkflowExceptions.length ? "primary" : "success",
+            onClick: () => navigate("/matflow/exceptions"),
+        },
+        {
             label: "Open Material Requests",
             value: kpis.activeRequisitions ?? totals.openRequisitions ?? 0,
             subtitle: `${shortageRows.length} currently carry a shortage`,
@@ -2384,6 +2401,7 @@ export function MatFlowDashboardPage() {
         ["Purchase", "PI → PO → GRN at Main Store", "/matflow/purchase", "purchase", WarningAmberRoundedIcon, "warning"],
         ["QC", "Main Store material checklist", "/matflow/qc", "qc", FactCheckOutlinedIcon, "warning"],
         ["Production", "Receive → account → complete", "/matflow/production-execution", "production-execution", PrecisionManufacturingOutlinedIcon, "purple"],
+        ["Exceptions", "Contain → recover → CAPA", "/matflow/exceptions", "exceptions", WarningAmberRoundedIcon, "danger"],
     ].filter(([, , , screen]) => canAccessMatFlowScreenForContext(screen, roles, contextPlants));
 
     return (
@@ -2433,11 +2451,12 @@ export function MatFlowDashboardPage() {
                                     <Button onClick={() => changeView("materials")} sx={secondaryBtnSx}>Material Tracker</Button>
                                 </Box>
                             </Box>
-                            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: .7 }}>
+                            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: .7 }}>
                                 {[
                                     ["Active MRs", activeRows.length, "primary"],
                                     ["Timing Risk", breachedRows.length + watchRows.length, breachedRows.length ? "danger" : "warning"],
                                     ["Shortage", shortageRows.length, shortageRows.length ? "danger" : "success"],
+                                    ["Exceptions", openWorkflowExceptions.length, severeWorkflowExceptions.length ? "danger" : openWorkflowExceptions.length ? "warning" : "success"],
                                 ].map(([label, value, tone]) => {
                                     const palette = OVERVIEW_TONES[tone];
                                     return (
@@ -3013,6 +3032,7 @@ export function MatFlowMaterialTrackerPage({ embedded = false, materialIdOverrid
 
     const [requisitions, setRequisitions] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [workflowExceptions, setWorkflowExceptions] = useState([]);
     const [selectedId, setSelectedId] = useState(materialId || "");
     const [selectedProjectId, setSelectedProjectId] = useState("");
     const [selectedProductId, setSelectedProductId] = useState("");
