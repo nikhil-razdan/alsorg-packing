@@ -86,6 +86,21 @@ public class DispatchedItemService {
         private final PlantLocationService plantLocationService;
         private final DriverRepository driverRepository;
         private final VehicleRepository vehicleRepository;
+        private final StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService;
+
+        private static final Set<AdminDispatchEditField> STICKER_PDF_CONTENT_FIELDS = Set.of(
+                        AdminDispatchEditField.ITEM_NAME,
+                        AdminDispatchEditField.PACKET_NUMBER,
+                        AdminDispatchEditField.PD_NO,
+                        AdminDispatchEditField.DRAWING_NO,
+                        AdminDispatchEditField.CLIENT_NAME,
+                        AdminDispatchEditField.CLIENT_ADDRESS,
+                        AdminDispatchEditField.FLOOR,
+                        AdminDispatchEditField.DESCRIPTION,
+                        AdminDispatchEditField.WEIGHT,
+                        AdminDispatchEditField.DIMENSIONS,
+                        AdminDispatchEditField.REMARKS,
+                        AdminDispatchEditField.STICKER_LOCATION);
 
         public DispatchedItemService(
                         DispatchedItemRepository dispatchedRepo,
@@ -95,7 +110,8 @@ public class DispatchedItemService {
                         PacketRepository packetRepository,
                         PlantLocationService plantLocationService,
                         DriverRepository driverRepository,
-                        VehicleRepository vehicleRepository) {
+                        VehicleRepository vehicleRepository,
+                        StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService) {
 
                 this.dispatchedRepo = dispatchedRepo;
                 this.auditLogService = auditLogService;
@@ -105,6 +121,7 @@ public class DispatchedItemService {
                 this.plantLocationService = plantLocationService;
                 this.driverRepository = driverRepository;
                 this.vehicleRepository = vehicleRepository;
+                this.stickerHistoryPdfRefreshService = stickerHistoryPdfRefreshService;
         }
 
         /*
@@ -2507,10 +2524,22 @@ public class DispatchedItemService {
                                 request,
                                 fields);
 
-                synchronizeAdminPacketItemFields(
+                List<PacketItem> synchronizedPacketItems = synchronizeAdminPacketItemFields(
                                 selectedItems,
                                 request,
                                 fields);
+
+                /*
+                 * StickerHistory stores the actual PDF bytes that were printed.
+                 * Updating PacketItem alone therefore cannot update historical PDF
+                 * downloads. Rebuild those byte snapshots inside this same Admin edit
+                 * transaction whenever a sticker-facing field changes.
+                 */
+                if (containsStickerPdfContentField(fields)
+                                && !synchronizedPacketItems.isEmpty()) {
+                        stickerHistoryPdfRefreshService.refreshAllForPacketItems(
+                                        synchronizedPacketItems);
+                }
 
                 Driver selectedDriver = resolveAdminDriver(
                                 request,
@@ -2827,7 +2856,7 @@ public class DispatchedItemService {
                 }
         }
 
-        private void synchronizeAdminPacketItemFields(
+        private List<PacketItem> synchronizeAdminPacketItemFields(
                         Collection<DispatchedItem> selectedItems,
                         AdminBulkDispatchEditRequest request,
                         Set<AdminDispatchEditField> fields) {
@@ -2842,7 +2871,7 @@ public class DispatchedItemService {
                                                                 LinkedHashSet::new));
 
                 if (packetItemIds.isEmpty()) {
-                        return;
+                        return List.of();
                 }
 
                 Map<UUID, PacketItem> packetItemMap = new LinkedHashMap<>();
@@ -3005,8 +3034,19 @@ public class DispatchedItemService {
                         }
                 }
 
-                packetItemRepo.saveAll(
+                return packetItemRepo.saveAll(
                                 packetItemMap.values());
+        }
+
+        private boolean containsStickerPdfContentField(
+                        Set<AdminDispatchEditField> fields) {
+
+                if (fields == null || fields.isEmpty()) {
+                        return false;
+                }
+
+                return fields.stream()
+                                .anyMatch(STICKER_PDF_CONTENT_FIELDS::contains);
         }
 
         private Driver resolveAdminDriver(

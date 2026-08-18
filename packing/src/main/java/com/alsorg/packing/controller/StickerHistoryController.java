@@ -27,6 +27,7 @@ import com.alsorg.packing.repository.StickerHistoryRepository;
 
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.PacketService;
+import com.alsorg.packing.service.StickerHistoryPdfRefreshService;
 
 @RestController
 @RequestMapping("/api/stickers")
@@ -35,15 +36,18 @@ public class StickerHistoryController {
     private final StickerHistoryRepository repository;
     private final CurrentUserService currentUserService;
     private final PacketService packetService;
+    private final StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService;
 
     public StickerHistoryController(
             StickerHistoryRepository repository,
             CurrentUserService currentUserService,
-            PacketService packetService
+            PacketService packetService,
+            StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService
     ) {
         this.repository = repository;
         this.currentUserService = currentUserService;
         this.packetService = packetService;
+        this.stickerHistoryPdfRefreshService = stickerHistoryPdfRefreshService;
     }
 
     /*
@@ -184,7 +188,7 @@ public class StickerHistoryController {
      * and Hardware Packing users.
      */
 
-    @Transactional(readOnly = true)
+    @Transactional
     @GetMapping("/history/{historyId}/download-pdf")
     public ResponseEntity<byte[]> download(
             @PathVariable UUID historyId,
@@ -252,8 +256,15 @@ public class StickerHistoryController {
             }
         }
 
-        byte[] pdfData =
-                history.getPdfData();
+        /*
+         * Always rebuild linked history from the current PacketItem before serving
+         * it. This self-heals old stale rows created before Admin Dispatch edits
+         * started refreshing StickerHistory.pdfData. Legacy unlinked rows keep
+         * their original immutable bytes because there is no safe source entity.
+         */
+        byte[] pdfData = packetItem != null
+                ? stickerHistoryPdfRefreshService.refreshHistory(history)
+                : history.getPdfData();
 
         if (
                 pdfData == null ||
@@ -283,6 +294,18 @@ public class StickerHistoryController {
                         "inline; filename=\"" +
                                 safeFileName +
                                 ".pdf\""
+                )
+                .header(
+                        HttpHeaders.CACHE_CONTROL,
+                        "no-store, no-cache, must-revalidate, max-age=0"
+                )
+                .header(
+                        HttpHeaders.PRAGMA,
+                        "no-cache"
+                )
+                .header(
+                        HttpHeaders.EXPIRES,
+                        "0"
                 )
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdfData);

@@ -11882,6 +11882,7 @@ export default function DispatchedItemsPage() {
 					)}/ensure-history`,
 					{
 						method: "POST",
+						cache: "no-store",
 					}
 				);
 
@@ -11973,6 +11974,7 @@ export default function DispatchedItemsPage() {
 					`${API_BASE_URL}${historyPath}`,
 					{
 						method: "GET",
+						cache: "no-store",
 					}
 				);
 
@@ -12075,6 +12077,7 @@ export default function DispatchedItemsPage() {
 					`${API_BASE_URL}${pdfPath}`,
 					{
 						method: "GET",
+						cache: "no-store",
 
 						headers: {
 							Accept:
@@ -21976,6 +21979,7 @@ export default function DispatchedItemsPage() {
 																	`${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 																	{
 																		method: "GET",
+																		cache: "no-store",
 																		headers: getAuthHeaders(),
 																	}
 																);
@@ -22025,6 +22029,7 @@ export default function DispatchedItemsPage() {
 																	`${API_BASE_URL}/api/stickers/history/${h.id}/download-pdf`,
 																	{
 																		method: "GET",
+																		cache: "no-store",
 																		headers: getAuthHeaders(),
 																	}
 																);

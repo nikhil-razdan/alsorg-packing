@@ -142,6 +142,22 @@ public interface StickerHistoryRepository
                         UUID packetItemId);
 
         /*
+         * Batch history fetch used when Admin Dispatch Edit changes sticker-facing
+         * PacketItem fields (packet number, SKU identity, PD/DWG, client, etc.).
+         * Fetching all affected histories in one query avoids one history query per
+         * selected dispatch row.
+         */
+        @Query("""
+                            SELECT h
+                            FROM StickerHistory h
+                            JOIN FETCH h.packetItem p
+                            WHERE p.id IN :packetItemIds
+                            ORDER BY h.generatedAt DESC
+                        """)
+        List<StickerHistory> findAllWithPacketItemsByPacketItemIds(
+                        @Param("packetItemIds") Collection<UUID> packetItemIds);
+
+        /*
          * Required by Admin Center rollback preview.
          */
         long countByPacketItem_Id(

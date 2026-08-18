@@ -63,6 +63,7 @@ public class PacketService {
         private final DispatchedItemRepository dispatchedRepo;
         private final MasterItemRepository masterItemRepository;
         private final StickerHistoryRepository stickerHistoryRepository;
+        private final StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService;
         private final PlantLocationService plantLocationService;
         private final CurrentUserService currentUserService;
         private final ActivityLogService activityLogService;
@@ -87,6 +88,7 @@ public class PacketService {
                         DispatchedItemRepository dispatchedRepo,
                         MasterItemRepository masterItemRepository,
                         StickerHistoryRepository stickerHistoryRepository,
+                        StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService,
                         ActivityLogService activityLogService,
                         PlantLocationService plantLocationService) {
                 this.packetRepository = packetRepository;
@@ -98,6 +100,7 @@ public class PacketService {
                 this.dispatchedRepo = dispatchedRepo;
                 this.masterItemRepository = masterItemRepository;
                 this.stickerHistoryRepository = stickerHistoryRepository;
+                this.stickerHistoryPdfRefreshService = stickerHistoryPdfRefreshService;
                 this.plantLocationService = plantLocationService;
                 this.activityLogService = activityLogService;
                 this.currentUserService = currentUserService;
@@ -1676,6 +1679,16 @@ public class PacketService {
 
                                         dispatchedRepo.save(d);
                                 });
+
+                /*
+                 * StickerHistory stores immutable-at-print-time PDF bytes.
+                 * An Admin correction to current sticker fields must therefore rebuild
+                 * those bytes, otherwise the generated-history row can show current
+                 * metadata while Open PDF still displays the previous values.
+                 * Audit metadata on each StickerHistory row is preserved.
+                 */
+                stickerHistoryPdfRefreshService.refreshAllForPacketItems(
+                                List.of(saved));
 
                 return saved;
         }
@@ -4282,9 +4295,17 @@ public class PacketService {
         private byte[] getStickerHistoryPdfInternal(
                         StickerHistory history,
                         PacketItem item) {
-                if (history.getPdfData() != null
-                                && history.getPdfData().length > 0) {
-                        return history.getPdfData();
+
+                /*
+                 * History PDF bytes are snapshots. Rebuild from the current PacketItem
+                 * before serving so normal and hardware history downloads both reflect
+                 * Admin-corrected packet number / SKU and other sticker-facing fields.
+                 */
+                byte[] refreshedPdf = stickerHistoryPdfRefreshService.refreshHistory(
+                                history);
+
+                if (refreshedPdf != null && refreshedPdf.length > 0) {
+                        return refreshedPdf;
                 }
 
                 String stickerNumber = history.getStickerNumber() != null
