@@ -222,7 +222,14 @@ public class StickerHistoryPdfRefreshService {
          * PdfStickerService uses packetNo for the Packet badge and sku for the
          * CODE / SKU card.
          */
-        pdf.setPacketNo(item.getPacketNumber());
+        /*
+         * The badge must match the current CODE / SKU even for historical
+         * synthetic PacketItems that were once reconstructed as Pkt-1.
+         */
+        pdf.setPacketNo(
+                resolveStickerPacketNumber(
+                        item.getPacketNumber(),
+                        item.getSku()));
         pdf.setSku(item.getSku());
 
         pdf.setDescription(item.getDescription());
@@ -263,6 +270,68 @@ public class StickerHistoryPdfRefreshService {
         }
 
         return pdf;
+    }
+
+    private String resolveStickerPacketNumber(
+            String packetNumber,
+            String sku) {
+
+        String fromSku = packetNumberFromSku(
+                sku);
+
+        if (fromSku != null) {
+            return fromSku;
+        }
+
+        if (packetNumber != null && !packetNumber.trim().isBlank()) {
+            return packetNumber.trim();
+        }
+
+        return packetNumber;
+    }
+
+    private String packetNumberFromSku(
+            String sku) {
+
+        if (sku == null || sku.trim().isBlank()) {
+            return null;
+        }
+
+        String value = sku.trim();
+        String lower = value.toLowerCase(
+                java.util.Locale.ROOT);
+
+        int marker = lower.lastIndexOf(
+                "pkt-");
+
+        if (marker < 0) {
+            return null;
+        }
+
+        String suffix = value.substring(
+                marker + 4);
+
+        String digits = suffix.replaceAll(
+                "[^0-9].*$",
+                "")
+                .replaceAll(
+                        "[^0-9]",
+                        "");
+
+        if (digits.isBlank()) {
+            return null;
+        }
+
+        try {
+            int number = Integer.parseInt(
+                    digits);
+
+            return number > 0
+                    ? "Pkt-" + number
+                    : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private PacketItemType effectiveItemType(

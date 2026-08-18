@@ -72,7 +72,22 @@ public class PdfStickerService {
                 String pdNo = safe(data.getPdNo());
                 String drawingNo = safe(data.getDrawingNo());
 
+                /*
+                 * Packet identity must stay consistent across the complete sticker.
+                 *
+                 * CODE / SKU is the most reliable fallback for legacy/imported rows
+                 * because Dispatch Admin Edit rebuilds the SKU immediately. Older
+                 * reconstructed PacketItems could still contain the old hard-coded
+                 * packetNumber (for example Pkt-1) while SKU already ended in Pkt-2.
+                 *
+                 * Prefer the packet encoded in the current SKU when present, then
+                 * fall back to the explicit packetNo and the existing text fallbacks.
+                 */
+                String skuPacketNo = extractPacketNo(
+                        safe(data.getSku()));
+
                 String packetNo = firstNonBlank(
+                        skuPacketNo,
                         data.getPacketNo(),
                         reflectValue(
                                 data,

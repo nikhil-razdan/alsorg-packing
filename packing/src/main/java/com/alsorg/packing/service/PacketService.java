@@ -151,7 +151,15 @@ public class PacketService {
                                                 + safeForPdf(item.getSku())
                                                 + ")");
 
-                pdf.setPacketNo(item.getPacketNumber());
+                /*
+                 * Keep the PACKET header and CODE / SKU identity synchronized.
+                 * For legacy/import-reconstructed rows the SKU can be newer than an
+                 * old packetNumber value, so prefer the packet encoded in SKU.
+                 */
+                pdf.setPacketNo(
+                                resolveStickerPacketNumber(
+                                                item.getPacketNumber(),
+                                                item.getSku()));
                 pdf.setSku(item.getSku());
 
                 pdf.setDescription(item.getDescription());
@@ -3787,6 +3795,35 @@ public class PacketService {
                                                 packetItem.getSku(),
                                                 dispatchedItem.getSku()));
 
+                /*
+                 * Repair packet identity for synthetic/legacy PacketItems created
+                 * from Dispatch rows. These rows do not have a MasterItem and older
+                 * code created them with packetNumber = Pkt-1 regardless of the SKU.
+                 *
+                 * Do not rewrite normal master-linked PackFlow packets here; their
+                 * packetNumber remains canonical and is updated by the Admin edit
+                 * workflow itself.
+                 */
+                if (packetItem.getMasterItem() == null) {
+                        String currentSku = firstNonBlankValue(
+                                        dispatchedItem.getSku(),
+                                        packetItem.getSku());
+
+                        String packetNumberFromSku = packetNumberFromSku(
+                                        currentSku);
+
+                        if (packetNumberFromSku != null) {
+                                packetItem.setPacketNumber(
+                                                packetNumberFromSku);
+
+                                if (dispatchedItem.getSku() != null
+                                                && !dispatchedItem.getSku().isBlank()) {
+                                        packetItem.setSku(
+                                                        dispatchedItem.getSku().trim());
+                                }
+                        }
+                }
+
                 packetItem.setPdNo(
                                 keepExistingIfBlank(
                                                 packetItem.getPdNo(),
@@ -3958,7 +3995,15 @@ public class PacketService {
                 packetItem.setFgAreaCode(dispatchedItem.getFgAreaCode());
                 packetItem.setFgZoneCode(dispatchedItem.getFgZoneCode());
 
-                packetItem.setPacketNumber("Pkt-1");
+                /*
+                 * Never hard-code Pkt-1 for reconstructed Dispatch rows.
+                 * If Admin Edit already changed the SKU to .../Pkt-N, persist the
+                 * same packet identity so history metadata and the PDF header agree.
+                 */
+                packetItem.setPacketNumber(
+                                firstNonBlankValue(
+                                                packetNumberFromSku(sku),
+                                                "Pkt-1"));
                 packetItem.setQuantity(1);
                 packetItem.setLocation(
                                 firstNonBlankValue(
@@ -3986,6 +4031,81 @@ public class PacketService {
                 dispatchedRepo.save(dispatchedItem);
 
                 return saved;
+        }
+
+        /**
+         * Resolve the packet number shown on a sticker.
+         *
+         * Modern rows keep packetNumber and SKU aligned. For legacy/import rows
+         * edited from Dispatch, SKU is the authoritative fallback because the
+         * Dispatch table has no separate packet-number column.
+         */
+        private String resolveStickerPacketNumber(
+                        String packetNumber,
+                        String sku) {
+
+                String fromSku = packetNumberFromSku(
+                                sku);
+
+                if (fromSku != null) {
+                        return fromSku;
+                }
+
+                if (packetNumber != null
+                                && !packetNumber.trim().isBlank()) {
+                        return packetNumber.trim();
+                }
+
+                return packetNumber;
+        }
+
+        /**
+         * Extract Pkt-N from the current SKU without throwing.
+         */
+        private String packetNumberFromSku(
+                        String sku) {
+
+                if (sku == null || sku.trim().isBlank()) {
+                        return null;
+                }
+
+                String value = sku.trim();
+                String lower = value.toLowerCase(
+                                java.util.Locale.ROOT);
+
+                int marker = lower.lastIndexOf(
+                                "pkt-");
+
+                if (marker < 0) {
+                        return null;
+                }
+
+                String suffix = value.substring(
+                                marker + 4);
+
+                String digits = suffix.replaceAll(
+                                "[^0-9].*$",
+                                "")
+                                .replaceAll(
+                                                "[^0-9]",
+                                                "");
+
+                if (digits.isBlank()) {
+                        return null;
+                }
+
+                try {
+                        int number = Integer.parseInt(
+                                        digits);
+
+                        if (number <= 0) {
+                                return null;
+                        }
+
+                        return "Pkt-" + number;
+                } catch (NumberFormatException ignored) {
+                        return null;
+                }
         }
 
         private String firstNonBlankValue(
