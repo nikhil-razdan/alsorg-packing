@@ -18,7 +18,7 @@ import {
 
 import {
   fetchPackingVolumeReport,
-} from "../../api/packingReportApi";
+} from "../../../api/packingReportApi";
 
 const pad = (value) =>
   String(value).padStart(2, "0");
@@ -230,6 +230,13 @@ const normalizeStats = (data) => {
     packetItemsPendingSticker: numberValue(data?.packetItemsPendingSticker),
     stickerReprints: numberValue(data?.stickerReprints),
 
+    readyToStoreItems: numberValue(data?.readyToStoreItems),
+    warehouseRequestedItems: numberValue(data?.warehouseRequestedItems),
+    returnRequestedItems: numberValue(data?.returnRequestedItems),
+    queuedItems: numberValue(data?.queuedItems),
+    pkdItems: numberValue(data?.pkdItems),
+    fgItems: numberValue(data?.fgItems),
+
     normalDispatchChallans: numberValue(data?.normalDispatchChallans),
     todayDispatchChallans: numberValue(data?.todayDispatchChallans),
     runningTrips: numberValue(data?.runningTrips),
@@ -383,6 +390,450 @@ const getItemStatus = (row, fallback = "-") =>
     ],
     fallback
   );
+
+const isBlankReportValue = (value) => {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return true;
+  }
+
+  const text = String(value).trim();
+
+  return (
+    !text ||
+    text === "-" ||
+    text.toUpperCase() === "NULL" ||
+    text.toUpperCase() === "UNASSIGNED"
+  );
+};
+
+const parseReportDateMs = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? null
+    : date.getTime();
+};
+
+const medianNumber = (values = []) => {
+  const clean = values
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+
+  if (clean.length === 0) return 0;
+
+  const middle = Math.floor(clean.length / 2);
+
+  if (clean.length % 2 === 0) {
+    return (
+      clean[middle - 1] +
+      clean[middle]
+    ) / 2;
+  }
+
+  return clean[middle];
+};
+
+const formatOneDecimal = (value) =>
+  Number(value || 0).toLocaleString(
+    "en-IN",
+    {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }
+  );
+
+const formatSignedPercent = (value) => {
+  const number = Number(value || 0);
+  const prefix = number > 0 ? "+" : "";
+
+  return `${prefix}${(
+    number * 100
+  ).toFixed(1)}%`;
+};
+
+const parseYmdLocal = (value) => {
+  const match = String(value || "").match(
+    /^(\d{4})-(\d{2})-(\d{2})$/
+  );
+
+  if (!match) return null;
+
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    12,
+    0,
+    0,
+    0
+  );
+};
+
+const toYmdLocal = (date) => {
+  if (!(date instanceof Date)) return "";
+
+  return `${date.getFullYear()}-${pad(
+    date.getMonth() + 1
+  )}-${pad(date.getDate())}`;
+};
+
+const addDaysYmd = (value, days) => {
+  const date = parseYmdLocal(value);
+
+  if (!date) return value;
+
+  date.setDate(date.getDate() + days);
+
+  return toYmdLocal(date);
+};
+
+const enumerateDateKeys = (
+  from,
+  to
+) => {
+  const start = parseYmdLocal(from);
+  const end = parseYmdLocal(to);
+
+  if (!start || !end || start > end) {
+    return [];
+  }
+
+  const result = [];
+  const current = new Date(start);
+
+  while (current <= end) {
+    result.push(toYmdLocal(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return result;
+};
+
+const formatShortDateKey = (value) => {
+  const date = parseYmdLocal(value);
+
+  if (!date) return value || "-";
+
+  return date.toLocaleDateString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+    }
+  );
+};
+
+const normalizeClientIdentity = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+const getDirectorStatus = (row) =>
+  String(
+    getItemStatus(row, "UNKNOWN")
+  )
+    .trim()
+    .toUpperCase();
+
+const formatDirectorSnapshot = () =>
+  new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(new Date());
+
+const createDirectorLineChartPng = ({
+  title,
+  rows,
+  width = 960,
+  height = 360,
+}) => {
+  if (
+    typeof document === "undefined" ||
+    !Array.isArray(rows) ||
+    rows.length === 0
+  ) {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  const scale = 2;
+
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "600 20px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(title, width / 2, 26);
+
+  const margin = {
+    left: 54,
+    right: 24,
+    top: 52,
+    bottom: 54,
+  };
+
+  const plotWidth =
+    width - margin.left - margin.right;
+  const plotHeight =
+    height - margin.top - margin.bottom;
+
+  const maximum = Math.max(
+    1,
+    ...rows.flatMap((row) => [
+      Number(row.packed || 0),
+      Number(row.dispatched || 0),
+    ])
+  );
+
+  ctx.strokeStyle = "#d7dee8";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#64748b";
+  ctx.font = "11px Arial";
+  ctx.textAlign = "right";
+
+  for (let i = 0; i <= 4; i += 1) {
+    const value = maximum * (i / 4);
+    const y =
+      margin.top +
+      plotHeight -
+      plotHeight * (i / 4);
+
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(
+      width - margin.right,
+      y
+    );
+    ctx.stroke();
+    ctx.fillText(
+      Math.round(value).toString(),
+      margin.left - 8,
+      y + 4
+    );
+  }
+
+  const getX = (index) => {
+    if (rows.length <= 1) {
+      return margin.left + plotWidth / 2;
+    }
+
+    return (
+      margin.left +
+      (index / (rows.length - 1)) *
+        plotWidth
+    );
+  };
+
+  const getY = (value) =>
+    margin.top +
+    plotHeight -
+    (Number(value || 0) / maximum) *
+      plotHeight;
+
+  const drawSeries = (
+    key,
+    strokeStyle
+  ) => {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+
+    rows.forEach((row, index) => {
+      const x = getX(index);
+      const y = getY(row[key]);
+
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+
+    ctx.stroke();
+  };
+
+  drawSeries("packed", "#136f8a");
+  drawSeries("dispatched", "#f97316");
+
+  const labelStep = Math.max(
+    1,
+    Math.ceil(rows.length / 10)
+  );
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = "10px Arial";
+  ctx.textAlign = "center";
+
+  rows.forEach((row, index) => {
+    if (
+      index % labelStep !== 0 &&
+      index !== rows.length - 1
+    ) {
+      return;
+    }
+
+    ctx.fillText(
+      row.shortLabel || row.label || row.key,
+      getX(index),
+      height - 24
+    );
+  });
+
+  const legendY = height - 7;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#136f8a";
+  ctx.fillRect(width / 2 - 92, legendY - 8, 18, 3);
+  ctx.fillStyle = "#475569";
+  ctx.fillText("Packed", width / 2 - 68, legendY - 4);
+
+  ctx.fillStyle = "#f97316";
+  ctx.fillRect(width / 2 + 12, legendY - 8, 18, 3);
+  ctx.fillStyle = "#475569";
+  ctx.fillText("Dispatched", width / 2 + 36, legendY - 4);
+
+  return canvas.toDataURL("image/png");
+};
+
+const createDirectorBarChartPng = ({
+  title,
+  rows,
+  width = 960,
+  height = 360,
+}) => {
+  if (
+    typeof document === "undefined" ||
+    !Array.isArray(rows) ||
+    rows.length === 0
+  ) {
+    return null;
+  }
+
+  const canvas = document.createElement("canvas");
+  const scale = 2;
+
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.scale(scale, scale);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "600 20px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(title, width / 2, 26);
+
+  const margin = {
+    left: 58,
+    right: 24,
+    top: 52,
+    bottom: 66,
+  };
+
+  const plotWidth =
+    width - margin.left - margin.right;
+  const plotHeight =
+    height - margin.top - margin.bottom;
+
+  const maximum = Math.max(
+    1,
+    ...rows.map((row) =>
+      Number(row.value || 0)
+    )
+  );
+
+  ctx.strokeStyle = "#d7dee8";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#64748b";
+  ctx.font = "11px Arial";
+  ctx.textAlign = "right";
+
+  for (let i = 0; i <= 4; i += 1) {
+    const value = maximum * (i / 4);
+    const y =
+      margin.top +
+      plotHeight -
+      plotHeight * (i / 4);
+
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(
+      width - margin.right,
+      y
+    );
+    ctx.stroke();
+    ctx.fillText(
+      Math.round(value).toString(),
+      margin.left - 8,
+      y + 4
+    );
+  }
+
+  const slotWidth =
+    plotWidth / Math.max(rows.length, 1);
+  const barWidth = Math.min(
+    88,
+    slotWidth * 0.58
+  );
+
+  rows.forEach((row, index) => {
+    const value = Number(row.value || 0);
+    const barHeight =
+      (value / maximum) * plotHeight;
+    const x =
+      margin.left +
+      index * slotWidth +
+      (slotWidth - barWidth) / 2;
+    const y =
+      margin.top +
+      plotHeight -
+      barHeight;
+
+    ctx.fillStyle = "#176b87";
+    ctx.fillRect(
+      x,
+      y,
+      barWidth,
+      barHeight
+    );
+
+    ctx.fillStyle = "#334155";
+    ctx.font = "10px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      String(row.label || "-").slice(0, 18),
+      x + barWidth / 2,
+      height - 34
+    );
+  });
+
+  return canvas.toDataURL("image/png");
+};
 
 const volumeDetailColumns = [
   ["serialNumber", "S.No."],
@@ -915,7 +1366,7 @@ function InventoryReports() {
     useState("");
 
   const [reportMode, setReportMode] =
-    useState("DATE");
+    useState("DIRECTOR_DASHBOARD");
 
   const [stats, setStats] =
     useState({});
@@ -1928,6 +2379,849 @@ function InventoryReports() {
       [masterRows]
     );
 
+  const directorData = useMemo(() => {
+    const selectedDateKeys =
+      enumerateDateKeys(
+        fromDate,
+        toDate
+      );
+
+    const dailyMap = new Map(
+      selectedDateKeys.map((key) => [
+        key,
+        {
+          key,
+          label: formatShortDateKey(key),
+          shortLabel: formatShortDateKey(key),
+          packed: 0,
+          dispatched: 0,
+          total: 0,
+        },
+      ])
+    );
+
+    packingRows.forEach((row) => {
+      const key = getDateKey(
+        rowValue(
+          row,
+          ["packedAt", "date"],
+          null
+        )
+      );
+
+      if (!key || key === "-") return;
+
+      const current =
+        dailyMap.get(key) || {
+          key,
+          label: formatShortDateKey(key),
+          shortLabel: formatShortDateKey(key),
+          packed: 0,
+          dispatched: 0,
+          total: 0,
+        };
+
+      current.packed += 1;
+      current.total += 1;
+      dailyMap.set(key, current);
+    });
+
+    dispatchRows.forEach((row) => {
+      const key = getDateKey(
+        rowValue(
+          row,
+          ["dispatchedAt", "date"],
+          null
+        )
+      );
+
+      if (!key || key === "-") return;
+
+      const current =
+        dailyMap.get(key) || {
+          key,
+          label: formatShortDateKey(key),
+          shortLabel: formatShortDateKey(key),
+          packed: 0,
+          dispatched: 0,
+          total: 0,
+        };
+
+      current.dispatched += 1;
+      current.total += 1;
+      dailyMap.set(key, current);
+    });
+
+    const dailyRows = Array.from(
+      dailyMap.values()
+    ).sort((a, b) =>
+      a.key.localeCompare(b.key)
+    );
+
+    const statusOrder = [
+      "READY",
+      "READY_TO_DISPATCH",
+      "IN_WAREHOUSE",
+      "WAREHOUSE_REQUESTED",
+      "READY_TO_STORE",
+    ];
+
+    const statusMap = new Map(
+      statusOrder.map((status) => [
+        status,
+        0,
+      ])
+    );
+
+    agingRows.forEach((row) => {
+      const status =
+        getDirectorStatus(row);
+
+      statusMap.set(
+        status,
+        (statusMap.get(status) || 0) + 1
+      );
+    });
+
+    const statusBars = statusOrder.map(
+      (status) => ({
+        key: status,
+        label: status.replaceAll("_", " "),
+        value: statusMap.get(status) || 0,
+      })
+    );
+
+    const coreInventory =
+      (statusMap.get("READY") || 0) +
+      (statusMap.get("READY_TO_DISPATCH") || 0) +
+      (statusMap.get("IN_WAREHOUSE") || 0);
+
+    const transitionInventory =
+      (statusMap.get("WAREHOUSE_REQUESTED") || 0) +
+      (statusMap.get("READY_TO_STORE") || 0);
+
+    const currentInventoryPackets =
+      agingRows.length ||
+      inventoryItemPacketRows.length ||
+      coreInventory + transitionInventory ||
+      numberValue(stats.totalItems);
+
+    const agingCounts = {
+      zeroToSeven: 0,
+      eightToThirty: 0,
+      thirtyOneToNinety: 0,
+      ninetyPlus: 0,
+    };
+
+    let ninetyPlusInWarehouse = 0;
+    let agedReadyToDispatch = 0;
+
+    agingRows.forEach((row) => {
+      const days = getAgeDays(row);
+      const status = getDirectorStatus(row);
+
+      if (days <= 7) {
+        agingCounts.zeroToSeven += 1;
+      } else if (days <= 30) {
+        agingCounts.eightToThirty += 1;
+      } else if (days <= 90) {
+        agingCounts.thirtyOneToNinety += 1;
+      } else {
+        agingCounts.ninetyPlus += 1;
+      }
+
+      if (
+        days > 90 &&
+        status === "IN_WAREHOUSE"
+      ) {
+        ninetyPlusInWarehouse += 1;
+      }
+
+      if (
+        days > 30 &&
+        days <= 90 &&
+        status === "READY_TO_DISPATCH"
+      ) {
+        agedReadyToDispatch += 1;
+      }
+    });
+
+    const agingBars = [
+      {
+        label: "0-7 Days",
+        value: agingCounts.zeroToSeven,
+      },
+      {
+        label: "8-30 Days",
+        value: agingCounts.eightToThirty,
+      },
+      {
+        label: "31-90 Days",
+        value: agingCounts.thirtyOneToNinety,
+      },
+      {
+        label: "90+ Days",
+        value: agingCounts.ninetyPlus,
+      },
+    ];
+
+    const agedOver30 =
+      agingCounts.thirtyOneToNinety +
+      agingCounts.ninetyPlus;
+
+    const validPackToDispatchDays = [];
+    let dispatchOverSevenDays = 0;
+    let negativeDispatchTimestamps = 0;
+    let missingPackingDateRows = 0;
+    let missingVehicleRows = 0;
+    let missingDriverRows = 0;
+
+    const challanCounts = new Map();
+    const dispatchPlantMap = new Map();
+
+    dispatchRows.forEach((row) => {
+      const packedValue = rowValue(
+        row,
+        ["packedAt", "packingDate"],
+        null
+      );
+      const dispatchedValue = rowValue(
+        row,
+        ["dispatchedAt", "dispatchDate"],
+        null
+      );
+
+      const packedMs =
+        parseReportDateMs(packedValue);
+      const dispatchedMs =
+        parseReportDateMs(dispatchedValue);
+
+      if (packedMs === null) {
+        missingPackingDateRows += 1;
+      }
+
+      if (
+        packedMs !== null &&
+        dispatchedMs !== null
+      ) {
+        const days =
+          (dispatchedMs - packedMs) /
+          86400000;
+
+        if (days < 0) {
+          negativeDispatchTimestamps += 1;
+        } else {
+          validPackToDispatchDays.push(days);
+
+          if (days > 7) {
+            dispatchOverSevenDays += 1;
+          }
+        }
+      }
+
+      const vehicle = rowValue(
+        row,
+        ["vehicleNumber", "vehicleNo"],
+        null
+      );
+
+      if (isBlankReportValue(vehicle)) {
+        missingVehicleRows += 1;
+      }
+
+      const driver = rowValue(
+        row,
+        ["driverName", "driver"],
+        null
+      );
+
+      if (isBlankReportValue(driver)) {
+        missingDriverRows += 1;
+      }
+
+      const challan = rowValue(
+        row,
+        ["challanNumber", "chalaanNumber"],
+        null
+      );
+
+      if (!isBlankReportValue(challan)) {
+        const key = String(challan).trim();
+        challanCounts.set(
+          key,
+          (challanCounts.get(key) || 0) + 1
+        );
+      }
+
+      const plant = String(
+        rowValue(
+          row,
+          ["plantCode", "plant"],
+          "Unassigned"
+        )
+      ).trim() || "Unassigned";
+
+      dispatchPlantMap.set(
+        plant,
+        (dispatchPlantMap.get(plant) || 0) + 1
+      );
+    });
+
+    const medianPackToDispatchDays =
+      medianNumber(
+        validPackToDispatchDays
+      );
+
+    const averagePackToDispatchDays =
+      safeDivide(
+        validPackToDispatchDays.reduce(
+          (sum, value) => sum + value,
+          0
+        ),
+        validPackToDispatchDays.length
+      );
+
+    const challanPacketCounts =
+      Array.from(challanCounts.values());
+
+    const uniqueChallans =
+      challanCounts.size;
+
+    const averagePacketsPerChallan =
+      safeDivide(
+        challanPacketCounts.reduce(
+          (sum, value) => sum + value,
+          0
+        ),
+        challanPacketCounts.length
+      );
+
+    const medianPacketsPerChallan =
+      medianNumber(
+        challanPacketCounts
+      );
+
+    const dispatchPlantBars =
+      Array.from(
+        dispatchPlantMap.entries()
+      )
+        .map(([label, value]) => ({
+          label,
+          value,
+        }))
+        .sort((a, b) =>
+          b.value - a.value
+        )
+        .slice(0, 8);
+
+    const peakMovement =
+      [...dailyRows]
+        .sort(
+          (a, b) => b.total - a.total
+        )[0] || null;
+
+    const peakPacking =
+      [...dailyRows]
+        .sort(
+          (a, b) => b.packed - a.packed
+        )[0] || null;
+
+    const peakDispatch =
+      [...dailyRows]
+        .sort(
+          (a, b) =>
+            b.dispatched - a.dispatched
+        )[0] || null;
+
+    const comparisonEnd =
+      toDate === todayDate()
+        ? addDaysYmd(toDate, -1)
+        : toDate;
+
+    const latestStart =
+      addDaysYmd(comparisonEnd, -6);
+    const previousEnd =
+      addDaysYmd(latestStart, -1);
+    const previousStart =
+      addDaysYmd(previousEnd, -6);
+
+    const comparisonAvailable =
+      Boolean(
+        previousStart &&
+        fromDate &&
+        previousStart >= fromDate &&
+        comparisonEnd <= toDate
+      );
+
+    const sumBetween = (
+      field,
+      start,
+      end
+    ) =>
+      dailyRows.reduce((sum, row) => {
+        if (
+          row.key >= start &&
+          row.key <= end
+        ) {
+          return sum + Number(row[field] || 0);
+        }
+
+        return sum;
+      }, 0);
+
+    const previousPacked =
+      comparisonAvailable
+        ? sumBetween(
+          "packed",
+          previousStart,
+          previousEnd
+        )
+        : 0;
+
+    const latestPacked =
+      comparisonAvailable
+        ? sumBetween(
+          "packed",
+          latestStart,
+          comparisonEnd
+        )
+        : 0;
+
+    const previousDispatched =
+      comparisonAvailable
+        ? sumBetween(
+          "dispatched",
+          previousStart,
+          previousEnd
+        )
+        : 0;
+
+    const latestDispatched =
+      comparisonAvailable
+        ? sumBetween(
+          "dispatched",
+          latestStart,
+          comparisonEnd
+        )
+        : 0;
+
+    const packingWow =
+      comparisonAvailable &&
+      previousPacked > 0
+        ? (latestPacked - previousPacked) /
+          previousPacked
+        : 0;
+
+    const dispatchWow =
+      comparisonAvailable &&
+      previousDispatched > 0
+        ? (
+          latestDispatched -
+          previousDispatched
+        ) /
+          previousDispatched
+        : 0;
+
+    const previousThroughput =
+      previousPacked + previousDispatched;
+    const latestThroughput =
+      latestPacked + latestDispatched;
+
+    const throughputWow =
+      comparisonAvailable &&
+      previousThroughput > 0
+        ? (
+          latestThroughput -
+          previousThroughput
+        ) /
+          previousThroughput
+        : 0;
+
+    const clientSourceRows = [
+      ...agingRows,
+      ...packingRows,
+      ...dispatchRows,
+    ];
+
+    const rawClientLabels = new Set();
+    const normalizedClientLabels =
+      new Set();
+    let placeholderClientRows = 0;
+
+    clientSourceRows.forEach((row) => {
+      const raw = rowValue(
+        row,
+        ["clientName", "client"],
+        null
+      );
+
+      if (raw === null) return;
+
+      const exact = String(raw);
+      const normalized =
+        normalizeClientIdentity(raw);
+
+      if (exact.trim()) {
+        rawClientLabels.add(exact);
+      }
+
+      if (normalized) {
+        normalizedClientLabels.add(
+          normalized
+        );
+      }
+
+      if (!/[A-Z0-9]/i.test(exact)) {
+        placeholderClientRows += 1;
+      }
+    });
+
+    const masterZeroProgress =
+      formattedMasterRows.filter((row) => {
+        const value = row?.packingProgress;
+
+        if (
+          value === null ||
+          value === undefined ||
+          value === ""
+        ) {
+          return false;
+        }
+
+        return (
+          Number(
+            String(value).replace("%", "")
+          ) === 0
+        );
+      }).length;
+
+    const masterBlankLatestStatus =
+      formattedMasterRows.filter((row) =>
+        isBlankReportValue(
+          row?.latestStatus
+        )
+      ).length;
+
+    const netClearance =
+      dispatchRows.length -
+      packingRows.length;
+
+    const packedPerDay = safeDivide(
+      packingRows.length,
+      Math.max(
+        selectedDateKeys.length,
+        1
+      )
+    );
+
+    const dispatchPackingRatio =
+      safeDivide(
+        dispatchRows.length,
+        packingRows.length
+      );
+
+    const agedOver30Share =
+      safeDivide(
+        agedOver30,
+        currentInventoryPackets
+      );
+
+    const ninetyInWarehouseShare =
+      safeDivide(
+        ninetyPlusInWarehouse,
+        agingCounts.ninetyPlus
+      );
+
+    const delayedDispatchShare =
+      safeDivide(
+        dispatchOverSevenDays,
+        validPackToDispatchDays.length
+      );
+
+    const missingVehicleShare =
+      safeDivide(
+        missingVehicleRows,
+        dispatchRows.length
+      );
+
+    const kpiCards = [
+      {
+        key: "currentInventory",
+        title: "Current Inventory Packets",
+        value: currentInventoryPackets,
+        detail: `${coreInventory.toLocaleString("en-IN")} core states + ${transitionInventory.toLocaleString("en-IN")} transition-state rows`,
+        tone: "blue",
+      },
+      {
+        key: "packed",
+        title: `Packed | ${formatShortDateKey(fromDate)}–${formatShortDateKey(toDate)}`,
+        value: packingRows.length,
+        detail: `${formatOneDecimal(packedPerDay)} packets/day • ${formatCbm(kpis.totalPackedVolumeCbm)} m³ packed`,
+        tone: "green",
+      },
+      {
+        key: "dispatched",
+        title: `Dispatched | ${formatShortDateKey(fromDate)}–${formatShortDateKey(toDate)}`,
+        value: dispatchRows.length,
+        detail: `${formatOneDecimal(dispatchPackingRatio * 100)}% of period packing throughput`,
+        tone: "green",
+      },
+      {
+        key: "agedOver30",
+        title: "Inventory >30 Days",
+        value: agedOver30,
+        detail: `${formatOneDecimal(agedOver30Share * 100)}% of current inventory packet rows`,
+        tone: "red",
+      },
+      {
+        key: "ninetyPlus",
+        title: "Inventory 90+ Days",
+        value: agingCounts.ninetyPlus,
+        detail: `${ninetyPlusInWarehouse.toLocaleString("en-IN")} (${formatOneDecimal(ninetyInWarehouseShare * 100)}%) of 90+ rows are in warehouse`,
+        tone: "red",
+      },
+      {
+        key: "clearance",
+        title: "Net Clearance",
+        value: netClearance,
+        detail:
+          netClearance >= 0
+            ? "More dispatched than packed in the selected period"
+            : "Packing exceeded dispatch in the selected period",
+        tone: "green",
+      },
+      {
+        key: "leadTime",
+        title: "Median Pack → Dispatch",
+        value: `${formatOneDecimal(medianPackToDispatchDays)} d`,
+        detail: `${dispatchOverSevenDays.toLocaleString("en-IN")} valid dispatches (${formatOneDecimal(delayedDispatchShare * 100)}%) took >7 days`,
+        tone: "amber",
+      },
+      {
+        key: "challans",
+        title: "Unique Challans",
+        value: uniqueChallans,
+        detail: `Median ${formatOneDecimal(medianPacketsPerChallan)} packets/challan; average ${formatOneDecimal(averagePacketsPerChallan)}`,
+        tone: "blue",
+      },
+    ];
+
+    const completedPeriodsLabel =
+      comparisonAvailable
+        ? `${formatShortDateKey(previousStart)}–${formatShortDateKey(previousEnd)} vs ${formatShortDateKey(latestStart)}–${formatShortDateKey(comparisonEnd)}`
+        : "Select at least 14 completed days for week-on-week comparison";
+
+    const readouts = [
+      {
+        key: "clearance",
+        title: "Clearance / Throughput",
+        tone: "green",
+        lines: [
+          `${dispatchRows.length.toLocaleString("en-IN")} dispatched vs ${packingRows.length.toLocaleString("en-IN")} packed → net clearance of ${netClearance.toLocaleString("en-IN")}.`,
+          comparisonAvailable
+            ? `Latest completed week: dispatch ${formatSignedPercent(dispatchWow)}; packing ${formatSignedPercent(packingWow)}.`
+            : completedPeriodsLabel,
+          comparisonAvailable
+            ? `Total throughput ${throughputWow >= 0 ? "increased" : "decreased"} ${Math.abs(throughputWow * 100).toFixed(1)}%.`
+            : `Selected period volume: ${formatCbm(kpis.totalPackedVolumeCbm)} m³ with ${formatPercent(kpis.dimensionCoverageRate)} dimension coverage.`,
+        ],
+      },
+      {
+        key: "aging",
+        title: "Aging / Cash & Space Risk",
+        tone: "red",
+        lines: [
+          `${agedOver30.toLocaleString("en-IN")} inventory packet rows are >30 days (${formatOneDecimal(agedOver30Share * 100)}%).`,
+          `${agingCounts.ninetyPlus.toLocaleString("en-IN")} are 90+ days; ${ninetyPlusInWarehouse.toLocaleString("en-IN")} are in warehouse.`,
+          `${agedReadyToDispatch.toLocaleString("en-IN")} dispatch-ready rows are already 31–90 days old.`,
+        ],
+      },
+      {
+        key: "flow",
+        title: "Flow / Capacity Signal",
+        tone: "amber",
+        lines: [
+          peakMovement
+            ? `Peak movement: ${peakMovement.label} with ${peakMovement.total.toLocaleString("en-IN")} movements.`
+            : "No movement data in the selected period.",
+          `Median pack-to-dispatch = ${formatOneDecimal(medianPackToDispatchDays)} days; average = ${formatOneDecimal(averagePackToDispatchDays)} days.`,
+          comparisonAvailable
+            ? `Dispatch ${formatSignedPercent(dispatchWow)} WoW; packing ${formatSignedPercent(packingWow)} WoW.`
+            : `Peak packing ${peakPacking?.packed || 0}; peak dispatch ${peakDispatch?.dispatched || 0}.`,
+        ],
+      },
+      {
+        key: "controls",
+        title: "Data / Control Signal",
+        tone: "blue",
+        lines: [
+          `${negativeDispatchTimestamps.toLocaleString("en-IN")} dispatch rows have dispatch time before packing time.`,
+          `${missingVehicleRows.toLocaleString("en-IN")} dispatch rows (${formatOneDecimal(missingVehicleShare * 100)}%) have no vehicle; ${missingDriverRows.toLocaleString("en-IN")} have no driver.`,
+          `Client labels: ${rawClientLabels.size.toLocaleString("en-IN")} raw → ${normalizedClientLabels.size.toLocaleString("en-IN")} after case/space normalization.`,
+        ],
+      },
+    ];
+
+    const actions = [
+      {
+        priority:
+          agingCounts.ninetyPlus > 0
+            ? "CRITICAL"
+            : "LOW",
+        action:
+          "Reconcile and disposition the 90+ day inventory",
+        why: `${agingCounts.ninetyPlus.toLocaleString("en-IN")} rows are 90+ days; ${ninetyPlusInWarehouse.toLocaleString("en-IN")} are in warehouse`,
+        owner: "Stores + Dispatch",
+        timeframe: "72 hours",
+      },
+      {
+        priority:
+          agedReadyToDispatch > 0
+            ? "HIGH"
+            : "LOW",
+        action:
+          "Create a client-wise dispatch plan for aged READY_TO_DISPATCH",
+        why: `${agedReadyToDispatch.toLocaleString("en-IN")} aged RTD rows are 31–90 days old`,
+        owner: "Dispatch",
+        timeframe: "48 hours",
+      },
+      {
+        priority:
+          agedOver30Share >= 0.25
+            ? "HIGH"
+            : agedOver30 > 0
+              ? "MEDIUM"
+              : "LOW",
+        action:
+          "Run >30-day inventory clean-out by top-risk clients",
+        why: `${formatOneDecimal(agedOver30Share * 100)}% of inventory packet rows are >30 days`,
+        owner: "Ops / Plant Heads",
+        timeframe: "7 days",
+      },
+      {
+        priority:
+          negativeDispatchTimestamps > 0 ||
+          missingVehicleShare >= 0.1
+            ? "HIGH"
+            : missingVehicleRows > 0 ||
+              missingDriverRows > 0
+              ? "MEDIUM"
+              : "LOW",
+        action:
+          "Tighten dispatch data controls",
+        why: `${negativeDispatchTimestamps.toLocaleString("en-IN")} negative timestamps; ${formatOneDecimal(missingVehicleShare * 100)}% vehicle field missing`,
+        owner: "IT + Dispatch",
+        timeframe: "Immediate",
+      },
+      {
+        priority:
+          comparisonAvailable &&
+          packingWow < 0
+            ? "MEDIUM"
+            : "LOW",
+        action:
+          "Protect packing capacity while dispatch catches up",
+        why: comparisonAvailable
+          ? `Dispatch ${formatSignedPercent(dispatchWow)} WoW, packing ${formatSignedPercent(packingWow)}`
+          : `${packingRows.length.toLocaleString("en-IN")} packets / ${formatCbm(kpis.totalPackedVolumeCbm)} m³ packed in selected period`,
+        owner: "Packing",
+        timeframe: "This week",
+      },
+      {
+        priority:
+          masterZeroProgress > 0 ||
+          masterBlankLatestStatus > 0
+            ? "MEDIUM"
+            : "LOW",
+        action:
+          "Repair Master Items progress / latest-status logic",
+        why: `${masterZeroProgress}/${formattedMasterRows.length} rows show 0% progress; latest status blank on ${masterBlankLatestStatus}`,
+        owner: "IT / Product",
+        timeframe: "This sprint",
+      },
+    ];
+
+    return {
+      selectedDateKeys,
+      selectedCalendarDays:
+        selectedDateKeys.length,
+      currentInventoryPackets,
+      totalPackedVolumeCbm:
+        kpis.totalPackedVolumeCbm,
+      dimensionCoverageRate:
+        kpis.dimensionCoverageRate,
+      coreInventory,
+      transitionInventory,
+      agedOver30,
+      agedOver30Share,
+      agingCounts,
+      ninetyPlusInWarehouse,
+      ninetyInWarehouseShare,
+      agedReadyToDispatch,
+      netClearance,
+      packedPerDay,
+      dispatchPackingRatio,
+      medianPackToDispatchDays,
+      averagePackToDispatchDays,
+      validPackToDispatchRows:
+        validPackToDispatchDays.length,
+      dispatchOverSevenDays,
+      delayedDispatchShare,
+      uniqueChallans,
+      averagePacketsPerChallan,
+      medianPacketsPerChallan,
+      missingVehicleRows,
+      missingVehicleShare,
+      missingDriverRows,
+      negativeDispatchTimestamps,
+      missingPackingDateRows,
+      rawClientLabels:
+        rawClientLabels.size,
+      normalizedClientLabels:
+        normalizedClientLabels.size,
+      placeholderClientRows,
+      peakMovement,
+      peakPacking,
+      peakDispatch,
+      comparisonAvailable,
+      comparison: {
+        previousStart,
+        previousEnd,
+        latestStart,
+        latestEnd: comparisonEnd,
+        previousPacked,
+        latestPacked,
+        previousDispatched,
+        latestDispatched,
+        packingWow,
+        dispatchWow,
+        throughputWow,
+        label: completedPeriodsLabel,
+      },
+      masterZeroProgress,
+      masterBlankLatestStatus,
+      dailyRows,
+      agingBars,
+      statusBars,
+      dispatchPlantBars,
+      kpiCards,
+      readouts,
+      actions,
+      snapshotLabel:
+        formatDirectorSnapshot(),
+    };
+  }, [
+    fromDate,
+    toDate,
+    packingRows,
+    dispatchRows,
+    agingRows,
+    inventoryItemPacketRows,
+    stats,
+    formattedMasterRows,
+    kpis,
+  ]);
+
   const tableConfigs = {
     DATE: {
       title: "Date-wise Throughput",
@@ -2076,8 +3370,12 @@ function InventoryReports() {
     },
   };
 
+  const isDirectorDashboard =
+    reportMode === "DIRECTOR_DASHBOARD";
+
   const activeConfig =
-    tableConfigs[reportMode];
+    tableConfigs[reportMode] ||
+    tableConfigs.DATE;
 
   const searchTerm =
     search.trim().toLowerCase();
@@ -2662,6 +3960,620 @@ function InventoryReports() {
 
         return sheet;
       };
+
+      /*
+       * =====================================================
+       * DIRECTOR DASHBOARD
+       * Mirrors the management hierarchy of the reference
+       * Director Dashboard sheet while remaining live for the
+       * currently selected report period.
+       * =====================================================
+       */
+
+      const directorSheet =
+        workbook.addWorksheet(
+          "Director Dashboard"
+        );
+
+      directorSheet.pageSetup = {
+        paperSize: 8,
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1,
+        printArea: "A1:P68",
+        margins: {
+          left: 0.2,
+          right: 0.2,
+          top: 0.25,
+          bottom: 0.25,
+          header: 0.1,
+          footer: 0.1,
+        },
+      };
+
+      for (
+        let column = 1;
+        column <= 16;
+        column += 1
+      ) {
+        directorSheet.getColumn(
+          column
+        ).width = 11.5;
+      }
+
+      const directorColors = {
+        navy: "FF0B2339",
+        blue: "FFE7F1F8",
+        green: "FFE7F5EF",
+        red: "FFFCEAEC",
+        amber: "FFFFF3E3",
+        paleBlue: "FFE9F2F8",
+        headerBlue: "FF1D4F73",
+        text: "FF0F2438",
+        muted: "FF64748B",
+        border: "FFD8E1EA",
+        critical: "FFFDE8E8",
+        high: "FFFFF4E5",
+        medium: "FFEAF3F9",
+        low: "FFECFDF3",
+      };
+
+      directorSheet.mergeCells("A1:P2");
+      const directorTitleCell =
+        directorSheet.getCell("A1");
+      directorTitleCell.value =
+        "DIRECTOR INVENTORY & DISPATCH PERFORMANCE REPORT";
+      directorTitleCell.font = {
+        bold: true,
+        size: 21,
+        color: { argb: "FFFFFFFF" },
+      };
+      directorTitleCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: {
+          argb: directorColors.navy,
+        },
+      };
+      directorTitleCell.alignment = {
+        vertical: "middle",
+        horizontal: "left",
+      };
+      directorSheet.getRow(1).height = 24;
+      directorSheet.getRow(2).height = 12;
+
+      directorSheet.mergeCells("A3:P3");
+      const directorMeta =
+        directorSheet.getCell("A3");
+      directorMeta.value =
+        `Reporting period: ${formatDate(
+          toStartDateTime(fromDate)
+        )} – ${formatDate(
+          toEndDateTime(toDate)
+        )}  |  Snapshot: ${directorData.snapshotLabel}  |  Source: PackFlow Reports`;
+      directorMeta.font = {
+        size: 9,
+        color: { argb: "FFFFFFFF" },
+      };
+      directorMeta.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: {
+          argb: directorColors.navy,
+        },
+      };
+      directorMeta.alignment = {
+        vertical: "middle",
+        horizontal: "left",
+      };
+
+      const directorKpiRanges = [
+        "A5:D8",
+        "E5:H8",
+        "I5:L8",
+        "M5:P8",
+        "A10:D13",
+        "E10:H13",
+        "I10:L13",
+        "M10:P13",
+      ];
+
+      const directorKpiFill = {
+        blue: directorColors.blue,
+        green: directorColors.green,
+        red: directorColors.red,
+        amber: directorColors.amber,
+      };
+
+      directorData.kpiCards.forEach(
+        (card, index) => {
+          const range =
+            directorKpiRanges[index];
+
+          if (!range) return;
+
+          const [start, end] =
+            range.split(":");
+          const startColumn =
+            start.match(/[A-Z]+/)[0];
+          const endColumn =
+            end.match(/[A-Z]+/)[0];
+          const startRow = Number(
+            start.match(/\d+/)[0]
+          );
+          const endRow = Number(
+            end.match(/\d+/)[0]
+          );
+
+          directorSheet.mergeCells(
+            `${startColumn}${startRow}:${endColumn}${startRow}`
+          );
+          directorSheet.mergeCells(
+            `${startColumn}${startRow + 1}:${endColumn}${startRow + 2}`
+          );
+          directorSheet.mergeCells(
+            `${startColumn}${endRow}:${endColumn}${endRow}`
+          );
+
+          const titleCell =
+            directorSheet.getCell(
+              `${startColumn}${startRow}`
+            );
+          const valueCell =
+            directorSheet.getCell(
+              `${startColumn}${startRow + 1}`
+            );
+          const detailCell =
+            directorSheet.getCell(
+              `${startColumn}${endRow}`
+            );
+
+          const fillColor =
+            directorKpiFill[
+              card.tone
+            ] || directorColors.blue;
+
+          for (
+            let row = startRow;
+            row <= endRow;
+            row += 1
+          ) {
+            for (
+              let column =
+                directorSheet.getCell(
+                  `${startColumn}${row}`
+                ).col;
+              column <=
+                directorSheet.getCell(
+                  `${endColumn}${row}`
+                ).col;
+              column += 1
+            ) {
+              const cell =
+                directorSheet.getCell(
+                  row,
+                  column
+                );
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: {
+                  argb: fillColor,
+                },
+              };
+              cell.border = {
+                bottom: {
+                  style: "hair",
+                  color: {
+                    argb:
+                      directorColors.border,
+                  },
+                },
+              };
+            }
+          }
+
+          titleCell.value =
+            card.title.toUpperCase();
+          titleCell.font = {
+            bold: true,
+            size: 9,
+            color: {
+              argb: directorColors.text,
+            },
+          };
+          titleCell.alignment = {
+            vertical: "middle",
+            horizontal: "left",
+          };
+
+          valueCell.value =
+            card.value;
+          valueCell.font = {
+            bold: true,
+            size: 21,
+            color: {
+              argb: directorColors.text,
+            },
+          };
+          valueCell.alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+
+          detailCell.value =
+            card.detail;
+          detailCell.font = {
+            size: 8,
+            color: {
+              argb: directorColors.muted,
+            },
+          };
+          detailCell.alignment = {
+            vertical: "middle",
+            horizontal: "left",
+            wrapText: true,
+          };
+        }
+      );
+
+      directorSheet.mergeCells("A15:P15");
+      const readoutTitle =
+        directorSheet.getCell("A15");
+      readoutTitle.value =
+        "EXECUTIVE READOUT — WHAT THE DIRECTOR NEEDS TO KNOW";
+      readoutTitle.font = {
+        bold: true,
+        size: 10,
+        color: { argb: "FFFFFFFF" },
+      };
+      readoutTitle.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: {
+          argb: directorColors.headerBlue,
+        },
+      };
+
+      const readoutColumns = [
+        ["A", "D"],
+        ["E", "H"],
+        ["I", "L"],
+        ["M", "P"],
+      ];
+
+      directorData.readouts.forEach(
+        (readout, index) => {
+          const [startCol, endCol] =
+            readoutColumns[index];
+          const fillColor =
+            directorKpiFill[
+              readout.tone
+            ] || directorColors.blue;
+
+          directorSheet.mergeCells(
+            `${startCol}16:${endCol}16`
+          );
+          directorSheet.mergeCells(
+            `${startCol}17:${endCol}20`
+          );
+
+          const heading =
+            directorSheet.getCell(
+              `${startCol}16`
+            );
+          const body =
+            directorSheet.getCell(
+              `${startCol}17`
+            );
+
+          heading.value =
+            readout.title.toUpperCase();
+          heading.font = {
+            bold: true,
+            size: 9,
+            color: {
+              argb: directorColors.text,
+            },
+          };
+          heading.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: fillColor,
+            },
+          };
+
+          body.value = readout.lines
+            .map((line) => `• ${line}`)
+            .join("\n");
+          body.font = {
+            size: 8,
+            color: {
+              argb: directorColors.text,
+            },
+          };
+          body.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: fillColor,
+            },
+          };
+          body.alignment = {
+            vertical: "top",
+            horizontal: "left",
+            wrapText: true,
+          };
+        }
+      );
+
+      const directorChartImages = [
+        createDirectorLineChartPng({
+          title:
+            "Daily Packing vs Dispatch Throughput",
+          rows: directorData.dailyRows,
+        }),
+        createDirectorBarChartPng({
+          title: "Inventory Aging Profile",
+          rows: directorData.agingBars,
+        }),
+        createDirectorBarChartPng({
+          title:
+            "Current Inventory Status Mix",
+          rows: directorData.statusBars,
+        }),
+        createDirectorBarChartPng({
+          title:
+            "Selected-Period Dispatch by Plant",
+          rows:
+            directorData.dispatchPlantBars,
+        }),
+      ];
+
+      const directorChartPositions = [
+        {
+          tl: { col: 0, row: 21 },
+          ext: {
+            width: 650,
+            height: 285,
+          },
+        },
+        {
+          tl: { col: 8, row: 21 },
+          ext: {
+            width: 650,
+            height: 285,
+          },
+        },
+        {
+          tl: { col: 0, row: 39 },
+          ext: {
+            width: 650,
+            height: 285,
+          },
+        },
+        {
+          tl: { col: 8, row: 39 },
+          ext: {
+            width: 650,
+            height: 285,
+          },
+        },
+      ];
+
+      directorChartImages.forEach(
+        (base64, index) => {
+          if (!base64) return;
+
+          const imageId =
+            workbook.addImage({
+              base64,
+              extension: "png",
+            });
+
+          directorSheet.addImage(
+            imageId,
+            directorChartPositions[index]
+          );
+        }
+      );
+
+      for (
+        let row = 22;
+        row <= 56;
+        row += 1
+      ) {
+        directorSheet.getRow(row).height =
+          15;
+      }
+
+      directorSheet.mergeCells("A58:P58");
+      const actionTitleCell =
+        directorSheet.getCell("A58");
+      actionTitleCell.value =
+        "DIRECTOR ACTION PRIORITIES";
+      actionTitleCell.font = {
+        bold: true,
+        size: 10,
+        color: { argb: "FFFFFFFF" },
+      };
+      actionTitleCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: {
+          argb: directorColors.headerBlue,
+        },
+      };
+
+      const actionHeaderRanges = [
+        ["A59:B59", "Priority"],
+        ["C59:H59", "Decision / Action"],
+        ["I59:L59", "Why Now"],
+        ["M59:N59", "Owner"],
+        ["O59:P59", "Suggested Timeframe"],
+      ];
+
+      actionHeaderRanges.forEach(
+        ([range, value]) => {
+          directorSheet.mergeCells(range);
+          const cell =
+            directorSheet.getCell(
+              range.split(":")[0]
+            );
+          cell.value = value;
+          cell.font = {
+            bold: true,
+            size: 8,
+            color: {
+              argb: directorColors.text,
+            },
+          };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {
+              argb: "FFD9E6F0",
+            },
+          };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+        }
+      );
+
+      const actionFill = {
+        CRITICAL: directorColors.critical,
+        HIGH: directorColors.high,
+        MEDIUM: directorColors.medium,
+        LOW: directorColors.low,
+      };
+
+      directorData.actions.forEach(
+        (action, index) => {
+          const rowNumber = 60 + index;
+
+          directorSheet.mergeCells(
+            `A${rowNumber}:B${rowNumber}`
+          );
+          directorSheet.mergeCells(
+            `C${rowNumber}:H${rowNumber}`
+          );
+          directorSheet.mergeCells(
+            `I${rowNumber}:L${rowNumber}`
+          );
+          directorSheet.mergeCells(
+            `M${rowNumber}:N${rowNumber}`
+          );
+          directorSheet.mergeCells(
+            `O${rowNumber}:P${rowNumber}`
+          );
+
+          const rowFill =
+            actionFill[
+              action.priority
+            ] || directorColors.medium;
+
+          for (
+            let column = 1;
+            column <= 16;
+            column += 1
+          ) {
+            const cell =
+              directorSheet.getCell(
+                rowNumber,
+                column
+              );
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: {
+                argb: rowFill,
+              },
+            };
+            cell.border = {
+              bottom: {
+                style: "hair",
+                color: {
+                  argb: directorColors.border,
+                },
+              },
+            };
+            cell.alignment = {
+              vertical: "middle",
+              horizontal: "left",
+              wrapText: true,
+            };
+            cell.font = {
+              size: 8,
+              color: {
+                argb: directorColors.text,
+              },
+            };
+          }
+
+          directorSheet.getCell(
+            `A${rowNumber}`
+          ).value = action.priority;
+          directorSheet.getCell(
+            `A${rowNumber}`
+          ).font = {
+            bold: true,
+            size: 8,
+            color: {
+              argb:
+                action.priority ===
+                "CRITICAL"
+                  ? "FFDC2626"
+                  : directorColors.text,
+            },
+          };
+          directorSheet.getCell(
+            `C${rowNumber}`
+          ).value = action.action;
+          directorSheet.getCell(
+            `I${rowNumber}`
+          ).value = action.why;
+          directorSheet.getCell(
+            `M${rowNumber}`
+          ).value = action.owner;
+          directorSheet.getCell(
+            `O${rowNumber}`
+          ).value = action.timeframe;
+          directorSheet.getRow(
+            rowNumber
+          ).height = 24;
+        }
+      );
+
+      directorSheet.mergeCells("A68:P68");
+      const managementNote =
+        directorSheet.getCell("A68");
+      managementNote.value =
+        directorData.comparisonAvailable
+          ? `Management note: week-on-week comparison uses completed periods ${directorData.comparison.label}. If the selected end date is today, today's partial activity is excluded from the comparison.`
+          : "Management note: select at least 14 completed days to enable a full two-week comparison. Current inventory aging remains a live snapshot.";
+      managementNote.font = {
+        italic: true,
+        size: 8,
+        color: {
+          argb: directorColors.muted,
+        },
+      };
+      managementNote.alignment = {
+        vertical: "middle",
+        horizontal: "left",
+        wrapText: true,
+      };
+
+      directorSheet.views = [
+        {
+          state: "frozen",
+          ySplit: 4,
+        },
+      ];
 
       /*
        * =====================================================
@@ -3488,7 +5400,7 @@ function InventoryReports() {
           </div>
 
           <div style={subtitle}>
-            KPI, cubic-metre volume, user/date/client/plant productivity and aging reporting
+            Director decision dashboard, cubic-metre workload, flow performance, aging risk and detailed operational reporting
           </div>
         </div>
 
@@ -3577,6 +5489,49 @@ function InventoryReports() {
           {volumeError}
         </div>
       )}
+
+      <div style={modeTabs}>
+        {[
+          ["DIRECTOR_DASHBOARD", "Director Dashboard"],
+          ["DATE", "Date Wise"],
+          ["VOLUME_USER", "Volume by User"],
+          ["VOLUME_DATE", "Volume by Date"],
+          ["VOLUME_CLIENT", "Volume by Client"],
+          ["VOLUME_PLANT", "Volume by Plant"],
+          ["VOLUME_DETAIL", "Volume Packet Register"],
+          ["MASTER_ITEMS", "Master Items"],
+          ["PACKING_USER", "Packing Users"],
+          ["DISPATCH_USER", "Dispatch Users"],
+          ["CLIENT", "Client Wise"],
+          ["AGING", "Aging"],
+          ["ALL_ITEMS", "All Items / Packets"],
+          ["INVENTORY_ITEMS", "Inventory Items"],
+          ["PACKING_ITEMS", "Packing Items"],
+          ["DISPATCH_ITEMS", "Dispatch Items"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            style={modeTab(
+              reportMode === key
+            )}
+            onClick={() =>
+              setReportMode(key)
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {isDirectorDashboard ? (
+        <DirectorDashboardView
+          data={directorData}
+          loading={loading}
+          volumeError={volumeError}
+          onOpenReport={setReportMode}
+        />
+      ) : (
+        <>
 
       <div style={summaryGrid}>
         <SummaryCard
@@ -3754,38 +5709,6 @@ function InventoryReports() {
         </div>
       </div>
 
-      <div style={modeTabs}>
-        {[
-          ["DATE", "Date Wise"],
-          ["VOLUME_USER", "Volume by User"],
-          ["VOLUME_DATE", "Volume by Date"],
-          ["VOLUME_CLIENT", "Volume by Client"],
-          ["VOLUME_PLANT", "Volume by Plant"],
-          ["VOLUME_DETAIL", "Volume Packet Register"],
-          ["MASTER_ITEMS", "Master Items"],
-          ["PACKING_USER", "Packing Users"],
-          ["DISPATCH_USER", "Dispatch Users"],
-          ["CLIENT", "Client Wise"],
-          ["AGING", "Aging"],
-          ["ALL_ITEMS", "All Items / Packets"],
-          ["INVENTORY_ITEMS", "Inventory Items"],
-          ["PACKING_ITEMS", "Packing Items"],
-          ["DISPATCH_ITEMS", "Dispatch Items"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            style={modeTab(
-              reportMode === key
-            )}
-            onClick={() =>
-              setReportMode(key)
-            }
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div style={tableHeader}>
         <div>
           <div style={tableTitle}>
@@ -3873,6 +5796,8 @@ function InventoryReports() {
           </tbody>
         </table>
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3920,6 +5845,578 @@ function VolumeInsightCard({
       </div>
       <div style={volumeInsightCardDetail}>
         {detail}
+      </div>
+    </div>
+  );
+}
+
+function DirectorKpiCard({
+  title,
+  value,
+  detail,
+  tone = "blue",
+}) {
+  return (
+    <div style={directorKpiCard(tone)}>
+      <div style={directorKpiTitle}>
+        {title}
+      </div>
+
+      <div style={directorKpiValue}>
+        {typeof value === "number"
+          ? value.toLocaleString("en-IN")
+          : value}
+      </div>
+
+      <div style={directorKpiDetail}>
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function DirectorReadoutCard({
+  title,
+  lines = [],
+  tone = "blue",
+}) {
+  return (
+    <div style={directorReadoutCard(tone)}>
+      <div style={directorReadoutTitle}>
+        {title}
+      </div>
+
+      <div style={directorReadoutList}>
+        {lines.map((line, index) => (
+          <div
+            key={`${title}-${index}`}
+            style={directorReadoutLine}
+          >
+            <span style={directorBullet}>•</span>
+            <span>{line}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DirectorLineChart({ rows = [] }) {
+  const width = 900;
+  const height = 300;
+  const padding = {
+    left: 52,
+    right: 18,
+    top: 18,
+    bottom: 52,
+  };
+
+  if (rows.length === 0) {
+    return (
+      <div style={directorChartEmpty}>
+        No throughput data in this period.
+      </div>
+    );
+  }
+
+  const maximum = Math.max(
+    1,
+    ...rows.flatMap((row) => [
+      Number(row.packed || 0),
+      Number(row.dispatched || 0),
+    ])
+  );
+
+  const plotWidth =
+    width - padding.left - padding.right;
+  const plotHeight =
+    height - padding.top - padding.bottom;
+
+  const getX = (index) =>
+    rows.length <= 1
+      ? padding.left + plotWidth / 2
+      : padding.left +
+        (index / (rows.length - 1)) *
+        plotWidth;
+
+  const getY = (value) =>
+    padding.top +
+    plotHeight -
+    (Number(value || 0) / maximum) *
+    plotHeight;
+
+  const packedPoints = rows
+    .map(
+      (row, index) =>
+        `${getX(index)},${getY(row.packed)}`
+    )
+    .join(" ");
+
+  const dispatchedPoints = rows
+    .map(
+      (row, index) =>
+        `${getX(index)},${getY(row.dispatched)}`
+    )
+    .join(" ");
+
+  const labelStep = Math.max(
+    1,
+    Math.ceil(rows.length / 10)
+  );
+
+  return (
+    <div style={directorChartSvgWrap}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Daily packing versus dispatch throughput"
+        style={directorSvg}
+      >
+        {[0, 1, 2, 3, 4].map((step) => {
+          const ratio = step / 4;
+          const y =
+            padding.top +
+            plotHeight -
+            plotHeight * ratio;
+          const value =
+            Math.round(maximum * ratio);
+
+          return (
+            <g key={step}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+                stroke="rgba(148,163,184,.20)"
+                strokeDasharray="5 5"
+              />
+              <text
+                x={padding.left - 10}
+                y={y + 4}
+                textAnchor="end"
+                fill="#94a3b8"
+                fontSize="11"
+              >
+                {value}
+              </text>
+            </g>
+          );
+        })}
+
+        <polyline
+          points={packedPoints}
+          fill="none"
+          stroke="#38bdf8"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        <polyline
+          points={dispatchedPoints}
+          fill="none"
+          stroke="#f97316"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {rows.map((row, index) => {
+          if (
+            index % labelStep !== 0 &&
+            index !== rows.length - 1
+          ) {
+            return null;
+          }
+
+          return (
+            <text
+              key={row.key}
+              x={getX(index)}
+              y={height - 24}
+              textAnchor="middle"
+              fill="#94a3b8"
+              fontSize="10"
+            >
+              {row.shortLabel || row.label}
+            </text>
+          );
+        })}
+      </svg>
+
+      <div style={directorLegend}>
+        <span style={directorLegendItem}>
+          <span style={directorLegendLine("#38bdf8")} />
+          Packed
+        </span>
+        <span style={directorLegendItem}>
+          <span style={directorLegendLine("#f97316")} />
+          Dispatched
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DirectorBarChart({
+  rows = [],
+  maxBars = 8,
+}) {
+  const visibleRows = rows.slice(0, maxBars);
+  const width = 900;
+  const height = 300;
+  const padding = {
+    left: 54,
+    right: 18,
+    top: 18,
+    bottom: 62,
+  };
+
+  if (visibleRows.length === 0) {
+    return (
+      <div style={directorChartEmpty}>
+        No data available.
+      </div>
+    );
+  }
+
+  const maximum = Math.max(
+    1,
+    ...visibleRows.map((row) =>
+      Number(row.value || 0)
+    )
+  );
+
+  const plotWidth =
+    width - padding.left - padding.right;
+  const plotHeight =
+    height - padding.top - padding.bottom;
+  const slotWidth =
+    plotWidth / visibleRows.length;
+  const barWidth = Math.min(
+    90,
+    slotWidth * 0.58
+  );
+
+  return (
+    <div style={directorChartSvgWrap}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        style={directorSvg}
+      >
+        {[0, 1, 2, 3, 4].map((step) => {
+          const ratio = step / 4;
+          const y =
+            padding.top +
+            plotHeight -
+            plotHeight * ratio;
+          const value =
+            Math.round(maximum * ratio);
+
+          return (
+            <g key={step}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+                stroke="rgba(148,163,184,.20)"
+                strokeDasharray="5 5"
+              />
+              <text
+                x={padding.left - 10}
+                y={y + 4}
+                textAnchor="end"
+                fill="#94a3b8"
+                fontSize="11"
+              >
+                {value}
+              </text>
+            </g>
+          );
+        })}
+
+        {visibleRows.map((row, index) => {
+          const value = Number(row.value || 0);
+          const barHeight =
+            (value / maximum) * plotHeight;
+          const x =
+            padding.left +
+            index * slotWidth +
+            (slotWidth - barWidth) / 2;
+          const y =
+            padding.top +
+            plotHeight -
+            barHeight;
+
+          return (
+            <g key={`${row.label}-${index}`}>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barHeight}
+                rx="5"
+                fill="url(#directorBarGradient)"
+              />
+              <text
+                x={x + barWidth / 2}
+                y={Math.max(y - 7, 12)}
+                textAnchor="middle"
+                fill="#cbd5e1"
+                fontSize="10"
+                fontWeight="700"
+              >
+                {value.toLocaleString("en-IN")}
+              </text>
+              <text
+                x={x + barWidth / 2}
+                y={height - 30}
+                textAnchor="middle"
+                fill="#94a3b8"
+                fontSize="9.5"
+              >
+                {String(row.label || "-")
+                  .replaceAll("_", " ")
+                  .slice(0, 18)}
+              </text>
+            </g>
+          );
+        })}
+
+        <defs>
+          <linearGradient
+            id="directorBarGradient"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="100%" stopColor="#0e7490" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+}
+
+function DirectorChartPanel({
+  title,
+  subtitle,
+  children,
+}) {
+  return (
+    <div style={directorChartPanel}>
+      <div style={directorChartPanelHeader}>
+        <div style={directorChartPanelTitle}>
+          {title}
+        </div>
+        {subtitle && (
+          <div style={directorChartPanelSubtitle}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+
+      <div style={directorChartPanelBody}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function DirectorDashboardView({
+  data,
+  loading,
+  volumeError,
+  onOpenReport,
+}) {
+  if (loading) {
+    return (
+      <div style={directorDashboardLoading}>
+        Loading Director Dashboard...
+      </div>
+    );
+  }
+
+  return (
+    <div style={directorDashboardShell}>
+      <div style={directorDashboardHero}>
+        <div>
+          <div style={directorDashboardEyebrow}>
+            EXECUTIVE MANAGEMENT VIEW
+          </div>
+          <div style={directorDashboardTitle}>
+            Director Inventory & Dispatch Performance Report
+          </div>
+          <div style={directorDashboardMeta}>
+            Reporting period: {formatShortDateKey(data.selectedDateKeys?.[0])} – {formatShortDateKey(data.selectedDateKeys?.[data.selectedDateKeys.length - 1])}
+            {" • "}
+            Snapshot: {data.snapshotLabel}
+            {" • "}
+            Live PackFlow source
+          </div>
+        </div>
+
+        <div style={directorHeroActions}>
+          <div style={directorHeroVolume}>
+            <span>Packed physical volume</span>
+            <strong style={directorHeroVolumeValue}>
+              {formatCbm(
+                data.totalPackedVolumeCbm
+              )} m³
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            style={directorHeroButton}
+            onClick={() =>
+              onOpenReport?.("VOLUME_DETAIL")
+            }
+          >
+            Volume register ↗
+          </button>
+        </div>
+      </div>
+
+      {volumeError && (
+        <div style={directorInlineWarning}>
+          Volume context is temporarily unavailable; packet, flow, aging and dispatch intelligence remains active.
+        </div>
+      )}
+
+      <div style={directorKpiGrid}>
+        {data.kpiCards.map((card) => (
+          <DirectorKpiCard
+            key={card.key}
+            {...card}
+          />
+        ))}
+      </div>
+
+      <div style={directorSectionBar}>
+        Executive Readout — What the Director Needs to Know
+      </div>
+
+      <div style={directorReadoutGrid}>
+        {data.readouts.map((readout) => (
+          <DirectorReadoutCard
+            key={readout.key}
+            {...readout}
+          />
+        ))}
+      </div>
+
+      <div style={directorChartsGrid}>
+        <DirectorChartPanel
+          title="Daily Packing vs Dispatch Throughput"
+          subtitle="Daily packet output across the selected reporting period"
+        >
+          <DirectorLineChart
+            rows={data.dailyRows}
+          />
+        </DirectorChartPanel>
+
+        <DirectorChartPanel
+          title="Inventory Aging Profile"
+          subtitle="Current inventory exposure by aging bucket"
+        >
+          <DirectorBarChart
+            rows={data.agingBars}
+            maxBars={4}
+          />
+        </DirectorChartPanel>
+
+        <DirectorChartPanel
+          title="Current Inventory Status Mix"
+          subtitle="Live stock position across operational states"
+        >
+          <DirectorBarChart
+            rows={data.statusBars}
+            maxBars={5}
+          />
+        </DirectorChartPanel>
+
+        <DirectorChartPanel
+          title="Selected-Period Dispatch by Plant"
+          subtitle="Plant contribution to dispatch throughput"
+        >
+          <DirectorBarChart
+            rows={data.dispatchPlantBars}
+            maxBars={8}
+          />
+        </DirectorChartPanel>
+      </div>
+
+      <div style={directorSectionBar}>
+        Director Action Priorities
+      </div>
+
+      <div style={directorActionTableWrap}>
+        <table style={directorActionTable}>
+          <thead>
+            <tr>
+              <th style={directorActionTh}>
+                Priority
+              </th>
+              <th style={directorActionTh}>
+                Decision / Action
+              </th>
+              <th style={directorActionTh}>
+                Why Now
+              </th>
+              <th style={directorActionTh}>
+                Owner
+              </th>
+              <th style={directorActionTh}>
+                Suggested Timeframe
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {data.actions.map((action, index) => (
+              <tr
+                key={`${action.action}-${index}`}
+                style={directorActionRow(
+                  action.priority
+                )}
+              >
+                <td style={directorActionTd}>
+                  <span
+                    style={directorPriorityBadge(
+                      action.priority
+                    )}
+                  >
+                    {action.priority}
+                  </span>
+                </td>
+                <td style={directorActionTdStrong}>
+                  {action.action}
+                </td>
+                <td style={directorActionTd}>
+                  {action.why}
+                </td>
+                <td style={directorActionTd}>
+                  {action.owner}
+                </td>
+                <td style={directorActionTd}>
+                  {action.timeframe}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={directorManagementNote}>
+        {data.comparisonAvailable
+          ? `Management note: week-on-week comparison uses completed periods ${data.comparison.label}. If the selected end date is today, today's partial activity is deliberately excluded from the comparison.`
+          : "Management note: select at least 14 completed days to enable a full two-week comparison. Inventory aging remains a live current-state snapshot."}
       </div>
     </div>
   );
@@ -4279,6 +6776,465 @@ const empty = {
   textAlign: "center",
   color: "#94a3b8",
   fontWeight: 700,
+};
+
+const directorTone = {
+  blue: {
+    background:
+      "linear-gradient(180deg,rgba(30,64,90,.54),rgba(15,23,42,.74))",
+    border: "rgba(56,189,248,.23)",
+    accent: "#38bdf8",
+  },
+  green: {
+    background:
+      "linear-gradient(180deg,rgba(20,83,65,.46),rgba(15,23,42,.74))",
+    border: "rgba(52,211,153,.22)",
+    accent: "#34d399",
+  },
+  red: {
+    background:
+      "linear-gradient(180deg,rgba(92,38,48,.45),rgba(15,23,42,.74))",
+    border: "rgba(248,113,113,.24)",
+    accent: "#fb7185",
+  },
+  amber: {
+    background:
+      "linear-gradient(180deg,rgba(91,64,26,.46),rgba(15,23,42,.74))",
+    border: "rgba(251,191,36,.24)",
+    accent: "#fbbf24",
+  },
+};
+
+const directorDashboardShell = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+  borderRadius: 22,
+  overflow: "hidden",
+};
+
+const directorDashboardLoading = {
+  padding: 34,
+  borderRadius: 20,
+  background:
+    "rgba(255,255,255,.035)",
+  border:
+    "1px solid rgba(255,255,255,.07)",
+  color: "#cbd5e1",
+  textAlign: "center",
+  fontWeight: 800,
+};
+
+const directorDashboardHero = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
+  flexWrap: "wrap",
+  padding: "20px 22px",
+  borderRadius: 20,
+  background:
+    "radial-gradient(circle at 85% 0%,rgba(56,189,248,.16),transparent 35%),linear-gradient(135deg,#081a2b,#0f2940 58%,#10263b)",
+  border:
+    "1px solid rgba(125,211,252,.16)",
+  boxShadow:
+    "0 18px 38px rgba(2,6,23,.30)",
+};
+
+const directorDashboardEyebrow = {
+  color: "#7dd3fc",
+  fontSize: 10,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".13em",
+};
+
+const directorDashboardTitle = {
+  marginTop: 5,
+  color: "#fff",
+  fontSize: 24,
+  lineHeight: 1.15,
+  fontWeight: 950,
+  letterSpacing: "-.02em",
+};
+
+const directorDashboardMeta = {
+  marginTop: 8,
+  color: "#b9c8d8",
+  fontSize: 11.5,
+  lineHeight: 1.5,
+  fontWeight: 650,
+};
+
+const directorHeroActions = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const directorHeroVolume = {
+  minWidth: 170,
+  padding: "10px 13px",
+  borderRadius: 14,
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  background:
+    "rgba(255,255,255,.055)",
+  border:
+    "1px solid rgba(255,255,255,.09)",
+  color: "#b8c8d8",
+  fontSize: 9.5,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+};
+
+const directorHeroVolumeValue = {
+  color: "#fff",
+  fontSize: 18,
+  fontWeight: 950,
+  letterSpacing: "-.02em",
+  textTransform: "none",
+};
+
+const directorHeroButton = {
+  height: 38,
+  padding: "0 14px",
+  border: "none",
+  borderRadius: 12,
+  background:
+    "linear-gradient(135deg,#0284c7,#38bdf8)",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+  boxShadow:
+    "0 10px 22px rgba(14,165,233,.25)",
+};
+
+const directorInlineWarning = {
+  padding: "11px 14px",
+  borderRadius: 14,
+  background:
+    "rgba(245,158,11,.10)",
+  border:
+    "1px solid rgba(245,158,11,.23)",
+  color: "#fcd34d",
+  fontSize: 11.5,
+  fontWeight: 750,
+};
+
+const directorKpiGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(225px,1fr))",
+  gap: 10,
+};
+
+const directorKpiCard = (tone) => {
+  const palette =
+    directorTone[tone] ||
+    directorTone.blue;
+
+  return {
+    position: "relative",
+    minHeight: 126,
+    padding: "14px 15px",
+    borderRadius: 15,
+    overflow: "hidden",
+    background: palette.background,
+    border:
+      `1px solid ${palette.border}`,
+    boxShadow:
+      "inset 0 1px 0 rgba(255,255,255,.025)",
+  };
+};
+
+const directorKpiTitle = {
+  color: "#dbe7f2",
+  fontSize: 9.5,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".07em",
+};
+
+const directorKpiValue = {
+  marginTop: 10,
+  color: "#fff",
+  fontSize: 29,
+  fontWeight: 950,
+  lineHeight: 1,
+  letterSpacing: "-.03em",
+};
+
+const directorKpiDetail = {
+  marginTop: 10,
+  color: "#9fb0c2",
+  fontSize: 10,
+  lineHeight: 1.4,
+  fontWeight: 650,
+};
+
+const directorSectionBar = {
+  padding: "8px 12px",
+  borderRadius: 10,
+  background:
+    "linear-gradient(90deg,#164b70,#1d5e85)",
+  color: "#fff",
+  fontSize: 10.5,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".055em",
+};
+
+const directorReadoutGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(240px,1fr))",
+  gap: 10,
+};
+
+const directorReadoutCard = (tone) => {
+  const palette =
+    directorTone[tone] ||
+    directorTone.blue;
+
+  return {
+    minHeight: 142,
+    padding: 14,
+    borderRadius: 15,
+    background: palette.background,
+    border:
+      `1px solid ${palette.border}`,
+  };
+};
+
+const directorReadoutTitle = {
+  color: "#f1f5f9",
+  fontSize: 10,
+  fontWeight: 950,
+  textTransform: "uppercase",
+  letterSpacing: ".06em",
+};
+
+const directorReadoutList = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 7,
+  marginTop: 10,
+};
+
+const directorReadoutLine = {
+  display: "flex",
+  gap: 7,
+  alignItems: "flex-start",
+  color: "#cad6e2",
+  fontSize: 10.3,
+  fontWeight: 650,
+  lineHeight: 1.45,
+};
+
+const directorBullet = {
+  color: "#7dd3fc",
+  fontWeight: 950,
+};
+
+const directorChartsGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(430px,1fr))",
+  gap: 12,
+};
+
+const directorChartPanel = {
+  minWidth: 0,
+  borderRadius: 17,
+  overflow: "hidden",
+  background:
+    "linear-gradient(180deg,rgba(15,23,42,.86),rgba(7,15,28,.78))",
+  border:
+    "1px solid rgba(148,163,184,.10)",
+  boxShadow:
+    "0 14px 30px rgba(2,6,23,.20)",
+};
+
+const directorChartPanelHeader = {
+  padding: "13px 14px 6px",
+};
+
+const directorChartPanelTitle = {
+  color: "#f8fafc",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const directorChartPanelSubtitle = {
+  marginTop: 4,
+  color: "#7f91a5",
+  fontSize: 9.5,
+  fontWeight: 650,
+};
+
+const directorChartPanelBody = {
+  padding: "0 8px 8px",
+};
+
+const directorChartSvgWrap = {
+  width: "100%",
+  minHeight: 275,
+  overflow: "hidden",
+};
+
+const directorSvg = {
+  width: "100%",
+  height: 285,
+  display: "block",
+};
+
+const directorChartEmpty = {
+  minHeight: 260,
+  display: "grid",
+  placeItems: "center",
+  color: "#64748b",
+  fontSize: 11,
+  fontWeight: 750,
+};
+
+const directorLegend = {
+  display: "flex",
+  justifyContent: "center",
+  gap: 16,
+  marginTop: -14,
+  paddingBottom: 7,
+};
+
+const directorLegendItem = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  color: "#94a3b8",
+  fontSize: 9.5,
+  fontWeight: 750,
+};
+
+const directorLegendLine = (color) => ({
+  width: 18,
+  height: 3,
+  borderRadius: 999,
+  background: color,
+});
+
+const directorActionTableWrap = {
+  overflowX: "auto",
+  borderRadius: 14,
+  border:
+    "1px solid rgba(148,163,184,.10)",
+};
+
+const directorActionTable = {
+  width: "100%",
+  minWidth: 920,
+  borderCollapse: "collapse",
+  fontSize: 10.5,
+};
+
+const directorActionTh = {
+  padding: "10px 12px",
+  textAlign: "left",
+  background: "#18344d",
+  color: "#d8e5f0",
+  fontWeight: 900,
+  borderBottom:
+    "1px solid rgba(148,163,184,.14)",
+};
+
+const directorActionRow = (priority) => {
+  const backgrounds = {
+    CRITICAL: "rgba(127,29,29,.22)",
+    HIGH: "rgba(146,64,14,.18)",
+    MEDIUM: "rgba(30,64,175,.12)",
+    LOW: "rgba(22,101,52,.10)",
+  };
+
+  return {
+    background:
+      backgrounds[priority] ||
+      "rgba(255,255,255,.025)",
+  };
+};
+
+const directorActionTd = {
+  padding: "11px 12px",
+  color: "#bac8d7",
+  verticalAlign: "top",
+  borderBottom:
+    "1px solid rgba(148,163,184,.08)",
+  lineHeight: 1.4,
+};
+
+const directorActionTdStrong = {
+  ...directorActionTd,
+  color: "#f1f5f9",
+  fontWeight: 800,
+};
+
+const directorPriorityBadge = (priority) => {
+  const colors = {
+    CRITICAL: {
+      color: "#fecaca",
+      background: "rgba(239,68,68,.17)",
+      border: "rgba(239,68,68,.27)",
+    },
+    HIGH: {
+      color: "#fed7aa",
+      background: "rgba(249,115,22,.14)",
+      border: "rgba(249,115,22,.24)",
+    },
+    MEDIUM: {
+      color: "#bfdbfe",
+      background: "rgba(59,130,246,.14)",
+      border: "rgba(59,130,246,.24)",
+    },
+    LOW: {
+      color: "#bbf7d0",
+      background: "rgba(34,197,94,.12)",
+      border: "rgba(34,197,94,.22)",
+    },
+  };
+
+  const palette =
+    colors[priority] ||
+    colors.MEDIUM;
+
+  return {
+    display: "inline-flex",
+    minWidth: 72,
+    justifyContent: "center",
+    padding: "4px 8px",
+    borderRadius: 999,
+    color: palette.color,
+    background: palette.background,
+    border:
+      `1px solid ${palette.border}`,
+    fontSize: 8.5,
+    fontWeight: 950,
+    letterSpacing: ".05em",
+  };
+};
+
+const directorManagementNote = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  background:
+    "rgba(255,255,255,.025)",
+  border:
+    "1px solid rgba(148,163,184,.08)",
+  color: "#75879b",
+  fontSize: 9.5,
+  fontStyle: "italic",
+  lineHeight: 1.45,
 };
 
 export default InventoryReports;

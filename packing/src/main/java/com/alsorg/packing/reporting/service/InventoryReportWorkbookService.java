@@ -10,12 +10,18 @@ import java.util.*;
 
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xddf.usermodel.chart.*;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import com.alsorg.packing.reporting.dto.DashboardStatsDTO;
 import com.alsorg.packing.reporting.dto.DispatchReportRow;
 import com.alsorg.packing.reporting.dto.InventoryAgingRow;
+import com.alsorg.packing.reporting.dto.MasterItemReportRow;
 import com.alsorg.packing.reporting.dto.PackingReportRow;
 import com.alsorg.packing.reporting.dto.PackingVolumeRow;
 
@@ -32,6 +38,7 @@ public class InventoryReportWorkbookService {
         private final InventoryAgingReportService agingService;
         private final PackingVolumeReportService packingVolumeService;
         private final DimensionVolumeCalculator volumeCalculator;
+        private final MasterItemReportService masterItemReportService;
 
         public InventoryReportWorkbookService(
                         DashboardReportService dashboardService,
@@ -39,13 +46,15 @@ public class InventoryReportWorkbookService {
                         DispatchReportService dispatchService,
                         InventoryAgingReportService agingService,
                         PackingVolumeReportService packingVolumeService,
-                        DimensionVolumeCalculator volumeCalculator) {
+                        DimensionVolumeCalculator volumeCalculator,
+                        MasterItemReportService masterItemReportService) {
                 this.dashboardService = dashboardService;
                 this.packingService = packingService;
                 this.dispatchService = dispatchService;
                 this.agingService = agingService;
                 this.packingVolumeService = packingVolumeService;
                 this.volumeCalculator = volumeCalculator;
+                this.masterItemReportService = masterItemReportService;
         }
 
         private static final String[] ITEM_PACKET_HEADERS = {
@@ -139,6 +148,19 @@ public class InventoryReportWorkbookService {
                                 ? packingVolumeService.getPackingVolumeReport(from, to)
                                 : List.of();
 
+                List<MasterItemReportRow> directorMasterRows =
+                                includePacking && includeDispatch && includeAging
+                                                ? masterItemReportService.getMasterItems(
+                                                                "ALL",
+                                                                null,
+                                                                null,
+                                                                null,
+                                                                from,
+                                                                to,
+                                                                5000,
+                                                                0)
+                                                : List.of();
+
                 Map<String, PackingVolumeRow> volumeLookup = buildVolumeLookup(
                                 packingVolumeRows);
 
@@ -205,6 +227,24 @@ public class InventoryReportWorkbookService {
 
                         allItemPacketRows.addAll(
                                         dispatchItemPacketRows);
+
+                        if (includePacking && includeDispatch && includeAging) {
+                                DirectorData directorData = buildDirectorData(
+                                                from,
+                                                to,
+                                                packingRows,
+                                                dispatchRows,
+                                                agingRows,
+                                                directorMasterRows,
+                                                kpis);
+
+                                addDirectorDashboardSheet(
+                                                workbook,
+                                                from,
+                                                to,
+                                                directorData,
+                                                kpis);
+                        }
 
                         if (includePacking) {
                                 addPackingVolumeExecutiveSheet(
@@ -1401,6 +1441,1467 @@ public class InventoryReportWorkbookService {
                                                                 : "Completion rate needs improvement."));
         }
 
+        private DirectorData buildDirectorData(
+                        LocalDateTime from,
+                        LocalDateTime to,
+                        List<PackingReportRow> packingRows,
+                        List<DispatchReportRow> dispatchRows,
+                        List<InventoryAgingRow> agingRows,
+                        List<MasterItemReportRow> masterRows,
+                        KpiData kpis) {
+                DirectorData data = new DirectorData();
+
+                LocalDate startDate = from == null
+                                ? LocalDate.now().withDayOfMonth(1)
+                                : from.toLocalDate();
+
+                LocalDate endDate = to == null
+                                ? LocalDate.now()
+                                : to.toLocalDate();
+
+                if (endDate.isBefore(startDate)) {
+                        LocalDate swap = startDate;
+                        startDate = endDate;
+                        endDate = swap;
+                }
+
+                Map<LocalDate, DirectorDailyPoint> dailyMap = new TreeMap<>();
+
+                LocalDate cursor = startDate;
+                while (!cursor.isAfter(endDate)) {
+                        dailyMap.put(
+                                        cursor,
+                                        new DirectorDailyPoint(
+                                                        cursor,
+                                                        0,
+                                                        0));
+                        cursor = cursor.plusDays(1);
+                }
+
+                for (PackingReportRow row : packingRows) {
+                        LocalDateTime packedAt = dateTime(
+                                        row,
+                                        "packedAt",
+                                        "date");
+
+                        if (packedAt == null) {
+                                continue;
+                        }
+
+                        LocalDate date = packedAt.toLocalDate();
+                        DirectorDailyPoint point = dailyMap.computeIfAbsent(
+                                        date,
+                                        key -> new DirectorDailyPoint(
+                                                        key,
+                                                        0,
+                                                        0));
+                        point.packed++;
+                }
+
+                for (DispatchReportRow row : dispatchRows) {
+                        LocalDateTime dispatchedAt = dateTime(
+                                        row,
+                                        "dispatchedAt",
+                                        "date");
+
+                        if (dispatchedAt != null) {
+                                LocalDate date = dispatchedAt.toLocalDate();
+                                DirectorDailyPoint point = dailyMap.computeIfAbsent(
+                                                date,
+                                                key -> new DirectorDailyPoint(
+                                                                key,
+                                                                0,
+                                                                0));
+                                point.dispatched++;
+                        }
+                }
+
+                data.dailyRows.addAll(dailyMap.values());
+
+                Map<String, Long> statusCounts = new LinkedHashMap<>();
+                statusCounts.put("READY", 0L);
+                statusCounts.put("READY_TO_DISPATCH", 0L);
+                statusCounts.put("IN_WAREHOUSE", 0L);
+                statusCounts.put("WAREHOUSE_REQUESTED", 0L);
+                statusCounts.put("READY_TO_STORE", 0L);
+
+                long age0To7 = 0;
+                long age8To30 = 0;
+                long age31To90 = 0;
+                long age90Plus = 0;
+                long ninetyPlusInWarehouse = 0;
+                long agedReadyToDispatch = 0;
+
+                for (InventoryAgingRow row : agingRows) {
+                        String status = directorStatus(row);
+                        statusCounts.put(
+                                        status,
+                                        statusCounts.getOrDefault(status, 0L) + 1);
+
+                        long days = getAgeDays(row);
+
+                        if (days <= 7) {
+                                age0To7++;
+                        } else if (days <= 30) {
+                                age8To30++;
+                        } else if (days <= 90) {
+                                age31To90++;
+                        } else {
+                                age90Plus++;
+                        }
+
+                        if (days > 90 && "IN_WAREHOUSE".equals(status)) {
+                                ninetyPlusInWarehouse++;
+                        }
+
+                        if (days > 30
+                                        && days <= 90
+                                        && "READY_TO_DISPATCH".equals(status)) {
+                                agedReadyToDispatch++;
+                        }
+                }
+
+                data.currentInventoryPackets = agingRows.size();
+                data.coreInventory = statusCounts.getOrDefault("READY", 0L)
+                                + statusCounts.getOrDefault("READY_TO_DISPATCH", 0L)
+                                + statusCounts.getOrDefault("IN_WAREHOUSE", 0L);
+                data.transitionInventory = statusCounts.getOrDefault("WAREHOUSE_REQUESTED", 0L)
+                                + statusCounts.getOrDefault("READY_TO_STORE", 0L);
+
+                if (data.currentInventoryPackets == 0) {
+                        data.currentInventoryPackets = data.coreInventory + data.transitionInventory;
+                }
+
+                data.age0To7 = age0To7;
+                data.age8To30 = age8To30;
+                data.age31To90 = age31To90;
+                data.age90Plus = age90Plus;
+                data.agedOver30 = age31To90 + age90Plus;
+                data.ninetyPlusInWarehouse = ninetyPlusInWarehouse;
+                data.agedReadyToDispatch = agedReadyToDispatch;
+
+                data.agingBars.add(new DirectorBarPoint("0-7 Days", age0To7));
+                data.agingBars.add(new DirectorBarPoint("8-30 Days", age8To30));
+                data.agingBars.add(new DirectorBarPoint("31-90 Days", age31To90));
+                data.agingBars.add(new DirectorBarPoint("90+ Days", age90Plus));
+
+                for (String status : List.of(
+                                "READY",
+                                "READY_TO_DISPATCH",
+                                "IN_WAREHOUSE",
+                                "WAREHOUSE_REQUESTED",
+                                "READY_TO_STORE")) {
+                        data.statusBars.add(
+                                        new DirectorBarPoint(
+                                                        status,
+                                                        statusCounts.getOrDefault(status, 0L)));
+                }
+
+                List<Double> leadTimes = new ArrayList<>();
+                long delayedOver7 = 0;
+                long negativeTimestamps = 0;
+                long missingPackingDate = 0;
+                long missingVehicle = 0;
+                long missingDriver = 0;
+
+                Map<String, Long> challanCounts = new HashMap<>();
+                Map<String, Long> dispatchPlantCounts = new HashMap<>();
+
+                for (DispatchReportRow row : dispatchRows) {
+                        LocalDateTime packedAt = dateTime(
+                                        row,
+                                        "packedAt",
+                                        "packingDate");
+
+                        LocalDateTime dispatchedAt = dateTime(
+                                        row,
+                                        "dispatchedAt",
+                                        "dispatchDate");
+
+                        if (packedAt == null) {
+                                missingPackingDate++;
+                        }
+
+                        if (packedAt != null && dispatchedAt != null) {
+                                double days = java.time.Duration.between(
+                                                packedAt,
+                                                dispatchedAt).toMinutes()
+                                                / 1440.0;
+
+                                if (days < 0) {
+                                        negativeTimestamps++;
+                                } else {
+                                        leadTimes.add(days);
+                                        if (days > 7) {
+                                                delayedOver7++;
+                                        }
+                                }
+                        }
+
+                        String vehicle = text(
+                                        row,
+                                        "vehicleNumber",
+                                        "vehicleNo");
+                        if (isDirectorBlank(vehicle)) {
+                                missingVehicle++;
+                        }
+
+                        String driver = text(
+                                        row,
+                                        "driverName",
+                                        "driver");
+                        if (isDirectorBlank(driver)) {
+                                missingDriver++;
+                        }
+
+                        String challan = text(
+                                        row,
+                                        "challanNumber",
+                                        "chalaanNumber");
+                        if (!isDirectorBlank(challan)) {
+                                challanCounts.put(
+                                                challan,
+                                                challanCounts.getOrDefault(challan, 0L) + 1);
+                        }
+
+                        String plant = text(
+                                        row,
+                                        "plantCode",
+                                        "plant");
+                        if (isDirectorBlank(plant)) {
+                                plant = "Unassigned";
+                        }
+
+                        dispatchPlantCounts.put(
+                                        plant,
+                                        dispatchPlantCounts.getOrDefault(plant, 0L) + 1);
+                }
+
+                data.medianPackToDispatchDays = medianDouble(leadTimes);
+                data.averagePackToDispatchDays = leadTimes.isEmpty()
+                                ? 0
+                                : leadTimes.stream()
+                                                .mapToDouble(Double::doubleValue)
+                                                .average()
+                                                .orElse(0);
+                data.validPackToDispatchRows = leadTimes.size();
+                data.dispatchOverSevenDays = delayedOver7;
+                data.negativeDispatchTimestamps = negativeTimestamps;
+                data.missingPackingDateRows = missingPackingDate;
+                data.missingVehicleRows = missingVehicle;
+                data.missingDriverRows = missingDriver;
+
+                List<Double> packetsPerChallan = challanCounts.values()
+                                .stream()
+                                .map(Long::doubleValue)
+                                .sorted()
+                                .toList();
+
+                data.uniqueChallans = challanCounts.size();
+                data.averagePacketsPerChallan = packetsPerChallan.isEmpty()
+                                ? 0
+                                : packetsPerChallan.stream()
+                                                .mapToDouble(Double::doubleValue)
+                                                .average()
+                                                .orElse(0);
+                data.medianPacketsPerChallan = medianDouble(packetsPerChallan);
+
+                dispatchPlantCounts.entrySet()
+                                .stream()
+                                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                                .limit(8)
+                                .forEach(entry -> data.dispatchPlantBars.add(
+                                                new DirectorBarPoint(
+                                                                entry.getKey(),
+                                                                entry.getValue())));
+
+                DirectorDailyPoint peakMovement = data.dailyRows.stream()
+                                .max(Comparator.comparingLong(DirectorDailyPoint::total))
+                                .orElse(null);
+
+                if (peakMovement != null) {
+                        data.peakMovement = peakMovement.total();
+                        data.peakMovementDate = peakMovement.date;
+                }
+
+                DirectorDailyPoint peakPacking = data.dailyRows.stream()
+                                .max(Comparator.comparingLong(point -> point.packed))
+                                .orElse(null);
+                if (peakPacking != null) {
+                        data.peakPacking = peakPacking.packed;
+                        data.peakPackingDate = peakPacking.date;
+                }
+
+                DirectorDailyPoint peakDispatch = data.dailyRows.stream()
+                                .max(Comparator.comparingLong(point -> point.dispatched))
+                                .orElse(null);
+                if (peakDispatch != null) {
+                        data.peakDispatch = peakDispatch.dispatched;
+                        data.peakDispatchDate = peakDispatch.date;
+                }
+
+                LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                LocalDate comparisonEnd = endDate.equals(today)
+                                ? endDate.minusDays(1)
+                                : endDate;
+                LocalDate latestStart = comparisonEnd.minusDays(6);
+                LocalDate previousEnd = latestStart.minusDays(1);
+                LocalDate previousStart = previousEnd.minusDays(6);
+
+                data.previousStart = previousStart;
+                data.previousEnd = previousEnd;
+                data.latestStart = latestStart;
+                data.latestEnd = comparisonEnd;
+                data.comparisonAvailable = !previousStart.isBefore(startDate);
+
+                if (data.comparisonAvailable) {
+                        data.previousPacked = sumDirectorDaily(
+                                        data.dailyRows,
+                                        previousStart,
+                                        previousEnd,
+                                        true);
+                        data.latestPacked = sumDirectorDaily(
+                                        data.dailyRows,
+                                        latestStart,
+                                        comparisonEnd,
+                                        true);
+                        data.previousDispatched = sumDirectorDaily(
+                                        data.dailyRows,
+                                        previousStart,
+                                        previousEnd,
+                                        false);
+                        data.latestDispatched = sumDirectorDaily(
+                                        data.dailyRows,
+                                        latestStart,
+                                        comparisonEnd,
+                                        false);
+
+                        data.packingWow = directorGrowth(
+                                        data.previousPacked,
+                                        data.latestPacked);
+                        data.dispatchWow = directorGrowth(
+                                        data.previousDispatched,
+                                        data.latestDispatched);
+                        data.throughputWow = directorGrowth(
+                                        data.previousPacked + data.previousDispatched,
+                                        data.latestPacked + data.latestDispatched);
+                }
+
+                Set<String> rawClients = new HashSet<>();
+                Set<String> normalizedClients = new HashSet<>();
+
+                List<Object> clientSources = new ArrayList<>();
+                clientSources.addAll(agingRows);
+                clientSources.addAll(packingRows);
+                clientSources.addAll(dispatchRows);
+
+                for (Object row : clientSources) {
+                        String client = text(
+                                        row,
+                                        "clientName",
+                                        "client");
+
+                        if (isDirectorBlank(client)) {
+                                continue;
+                        }
+
+                        rawClients.add(client);
+                        normalizedClients.add(
+                                        client.trim()
+                                                        .replaceAll("\\s+", " ")
+                                                        .toUpperCase(Locale.ROOT));
+                }
+
+                data.rawClientLabels = rawClients.size();
+                data.normalizedClientLabels = normalizedClients.size();
+
+                for (MasterItemReportRow row : masterRows) {
+                        Object progress = read(
+                                        row,
+                                        "packingProgress");
+
+                        if (progress != null) {
+                                try {
+                                        double value = Double.parseDouble(
+                                                        String.valueOf(progress)
+                                                                        .replace("%", "")
+                                                                        .trim());
+                                        if (Math.abs(value) < 0.000001) {
+                                                data.masterZeroProgress++;
+                                        }
+                                } catch (Exception ignored) {
+                                }
+                        }
+
+                        String latestStatus = text(
+                                        row,
+                                        "latestStatus");
+                        if (isDirectorBlank(latestStatus)) {
+                                data.masterBlankLatestStatus++;
+                        }
+                }
+
+                data.masterRows = masterRows.size();
+                data.packedInRange = packingRows.size();
+                data.dispatchedInRange = dispatchRows.size();
+                data.netClearance = data.dispatchedInRange - data.packedInRange;
+                data.packedPerDay = data.dailyRows.isEmpty()
+                                ? 0
+                                : (double) data.packedInRange / data.dailyRows.size();
+                data.dispatchPackingRatio = data.packedInRange == 0
+                                ? 0
+                                : (double) data.dispatchedInRange / data.packedInRange;
+                data.agedOver30Share = data.currentInventoryPackets == 0
+                                ? 0
+                                : (double) data.agedOver30 / data.currentInventoryPackets;
+                data.ninetyPlusWarehouseShare = data.age90Plus == 0
+                                ? 0
+                                : (double) data.ninetyPlusInWarehouse / data.age90Plus;
+                data.delayedDispatchShare = data.validPackToDispatchRows == 0
+                                ? 0
+                                : (double) data.dispatchOverSevenDays / data.validPackToDispatchRows;
+                data.missingVehicleShare = data.dispatchedInRange == 0
+                                ? 0
+                                : (double) data.missingVehicleRows / data.dispatchedInRange;
+
+                data.actions.add(new DirectorAction(
+                                data.age90Plus > 0 ? "CRITICAL" : "LOW",
+                                "Reconcile and disposition the 90+ day inventory",
+                                data.age90Plus + " rows are 90+ days; "
+                                                + data.ninetyPlusInWarehouse
+                                                + " are in warehouse",
+                                "Stores + Dispatch",
+                                "72 hours"));
+
+                data.actions.add(new DirectorAction(
+                                data.agedReadyToDispatch > 0 ? "HIGH" : "LOW",
+                                "Create a client-wise dispatch plan for aged READY_TO_DISPATCH",
+                                data.agedReadyToDispatch
+                                                + " aged RTD rows are 31-90 days old",
+                                "Dispatch",
+                                "48 hours"));
+
+                data.actions.add(new DirectorAction(
+                                data.agedOver30Share >= 0.25
+                                                ? "HIGH"
+                                                : data.agedOver30 > 0
+                                                                ? "MEDIUM"
+                                                                : "LOW",
+                                "Run >30-day inventory clean-out by top-risk clients",
+                                percent1(data.agedOver30Share)
+                                                + " of inventory packet rows are >30 days",
+                                "Ops / Plant Heads",
+                                "7 days"));
+
+                data.actions.add(new DirectorAction(
+                                data.negativeDispatchTimestamps > 0
+                                                || data.missingVehicleShare >= 0.10
+                                                                ? "HIGH"
+                                                                : data.missingVehicleRows > 0
+                                                                                || data.missingDriverRows > 0
+                                                                                                ? "MEDIUM"
+                                                                                                : "LOW",
+                                "Tighten dispatch data controls",
+                                data.negativeDispatchTimestamps
+                                                + " negative timestamps; "
+                                                + percent1(data.missingVehicleShare)
+                                                + " vehicle field missing",
+                                "IT + Dispatch",
+                                "Immediate"));
+
+                data.actions.add(new DirectorAction(
+                                data.comparisonAvailable && data.packingWow < 0
+                                                ? "MEDIUM"
+                                                : "LOW",
+                                "Protect packing capacity while dispatch catches up",
+                                data.comparisonAvailable
+                                                ? "Dispatch "
+                                                                + signedPercent1(data.dispatchWow)
+                                                                + " WoW, packing "
+                                                                + signedPercent1(data.packingWow)
+                                                : data.packedInRange
+                                                                + " packets / "
+                                                                + round3(kpis.packedVolumeCbm)
+                                                                + " m³ packed in selected period",
+                                "Packing",
+                                "This week"));
+
+                data.actions.add(new DirectorAction(
+                                data.masterZeroProgress > 0
+                                                || data.masterBlankLatestStatus > 0
+                                                                ? "MEDIUM"
+                                                                : "LOW",
+                                "Repair Master Items progress / latest-status logic",
+                                data.masterZeroProgress
+                                                + "/"
+                                                + data.masterRows
+                                                + " rows show 0% progress; latest status blank on "
+                                                + data.masterBlankLatestStatus,
+                                "IT / Product",
+                                "This sprint"));
+
+                return data;
+        }
+
+        private void addDirectorDashboardSheet(
+                        Workbook workbook,
+                        LocalDateTime from,
+                        LocalDateTime to,
+                        DirectorData data,
+                        KpiData kpis) {
+                XSSFSheet sheet = (XSSFSheet) workbook.createSheet("Director Dashboard");
+                sheet.setDisplayGridlines(false);
+                sheet.createFreezePane(0, 4);
+                sheet.setFitToPage(true);
+                sheet.setAutobreaks(true);
+                sheet.setRepeatingRows(CellRangeAddress.valueOf("1:3"));
+                workbook.setPrintArea(
+                                workbook.getSheetIndex(sheet),
+                                0,
+                                15,
+                                0,
+                                67);
+
+                PrintSetup printSetup = sheet.getPrintSetup();
+                printSetup.setLandscape(true);
+                printSetup.setPaperSize(PrintSetup.A3_PAPERSIZE);
+                printSetup.setFitWidth((short) 1);
+                printSetup.setFitHeight((short) 1);
+
+                for (int column = 0; column < 16; column++) {
+                        sheet.setColumnWidth(column, 12 * 256);
+                }
+
+                CellStyle navyTitle = directorStyle(
+                                workbook,
+                                IndexedColors.DARK_BLUE,
+                                IndexedColors.WHITE,
+                                true,
+                                20,
+                                HorizontalAlignment.LEFT);
+
+                CellStyle navySection = directorStyle(
+                                workbook,
+                                IndexedColors.DARK_BLUE,
+                                IndexedColors.WHITE,
+                                true,
+                                10,
+                                HorizontalAlignment.LEFT);
+
+                CellStyle metaStyle = directorStyle(
+                                workbook,
+                                IndexedColors.DARK_BLUE,
+                                IndexedColors.WHITE,
+                                false,
+                                9,
+                                HorizontalAlignment.LEFT);
+
+                sheet.addMergedRegion(new CellRangeAddress(0, 1, 0, 15));
+                Row titleRow = sheet.createRow(0);
+                titleRow.setHeightInPoints(26);
+                Cell title = titleRow.createCell(0);
+                title.setCellValue("DIRECTOR INVENTORY & DISPATCH PERFORMANCE REPORT");
+                title.setCellStyle(navyTitle);
+                Row titleSpacerRow = sheet.createRow(1);
+                titleSpacerRow.setHeightInPoints(10);
+
+                sheet.addMergedRegion(new CellRangeAddress(2, 2, 0, 15));
+                Row metaRow = sheet.createRow(2);
+                Cell meta = metaRow.createCell(0);
+                meta.setCellValue(
+                                "Reporting period: "
+                                                + dateLabel(from)
+                                                + " - "
+                                                + dateLabel(to)
+                                                + "  |  Snapshot: "
+                                                + LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"))
+                                                                .format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm"))
+                                                + " IST  |  Source: PackFlow Reports");
+                meta.setCellStyle(metaStyle);
+
+                List<DirectorKpiCard> cards = List.of(
+                                new DirectorKpiCard(
+                                                "CURRENT INVENTORY PACKETS",
+                                                data.currentInventoryPackets,
+                                                data.coreInventory
+                                                                + " core states + "
+                                                                + data.transitionInventory
+                                                                + " transition-state rows",
+                                                IndexedColors.LIGHT_CORNFLOWER_BLUE),
+                                new DirectorKpiCard(
+                                                "PACKED | "
+                                                                + shortDirectorDate(from)
+                                                                + "-"
+                                                                + shortDirectorDate(to),
+                                                data.packedInRange,
+                                                oneDecimal(data.packedPerDay)
+                                                                + " packets/day | "
+                                                                + round3(kpis.packedVolumeCbm)
+                                                                + " m³ packed",
+                                                IndexedColors.LIGHT_GREEN),
+                                new DirectorKpiCard(
+                                                "DISPATCHED | "
+                                                                + shortDirectorDate(from)
+                                                                + "-"
+                                                                + shortDirectorDate(to),
+                                                data.dispatchedInRange,
+                                                oneDecimal(data.dispatchPackingRatio * 100)
+                                                                + "% of period packing throughput",
+                                                IndexedColors.LIGHT_GREEN),
+                                new DirectorKpiCard(
+                                                "INVENTORY >30 DAYS",
+                                                data.agedOver30,
+                                                oneDecimal(data.agedOver30Share * 100)
+                                                                + "% of current inventory packet rows",
+                                                IndexedColors.ROSE),
+                                new DirectorKpiCard(
+                                                "INVENTORY 90+ DAYS",
+                                                data.age90Plus,
+                                                data.ninetyPlusInWarehouse
+                                                                + " ("
+                                                                + oneDecimal(data.ninetyPlusWarehouseShare * 100)
+                                                                + "%) of 90+ rows are in warehouse",
+                                                IndexedColors.ROSE),
+                                new DirectorKpiCard(
+                                                "NET CLEARANCE",
+                                                data.netClearance,
+                                                data.netClearance >= 0
+                                                                ? "More dispatched than packed in the selected period"
+                                                                : "Packing exceeded dispatch in the selected period",
+                                                IndexedColors.LIGHT_GREEN),
+                                new DirectorKpiCard(
+                                                "MEDIAN PACK -> DISPATCH",
+                                                oneDecimal(data.medianPackToDispatchDays) + " d",
+                                                data.dispatchOverSevenDays
+                                                                + " valid dispatches ("
+                                                                + oneDecimal(data.delayedDispatchShare * 100)
+                                                                + "%) took >7 days",
+                                                IndexedColors.LIGHT_YELLOW),
+                                new DirectorKpiCard(
+                                                "UNIQUE CHALLANS",
+                                                data.uniqueChallans,
+                                                "Median "
+                                                                + oneDecimal(data.medianPacketsPerChallan)
+                                                                + " packets/challan; average "
+                                                                + oneDecimal(data.averagePacketsPerChallan),
+                                                IndexedColors.LIGHT_CORNFLOWER_BLUE));
+
+                int[][] cardRanges = {
+                                { 4, 7, 0, 3 },
+                                { 4, 7, 4, 7 },
+                                { 4, 7, 8, 11 },
+                                { 4, 7, 12, 15 },
+                                { 9, 12, 0, 3 },
+                                { 9, 12, 4, 7 },
+                                { 9, 12, 8, 11 },
+                                { 9, 12, 12, 15 }
+                };
+
+                for (int i = 0; i < cards.size(); i++) {
+                        int[] range = cardRanges[i];
+                        writeDirectorKpiCard(
+                                        workbook,
+                                        sheet,
+                                        range[0],
+                                        range[1],
+                                        range[2],
+                                        range[3],
+                                        cards.get(i));
+                }
+
+                sheet.addMergedRegion(new CellRangeAddress(14, 14, 0, 15));
+                Row executiveTitleRow = sheet.createRow(14);
+                Cell executiveTitle = executiveTitleRow.createCell(0);
+                executiveTitle.setCellValue("EXECUTIVE READOUT - WHAT THE DIRECTOR NEEDS TO KNOW");
+                executiveTitle.setCellStyle(navySection);
+
+                List<DirectorReadout> readouts = List.of(
+                                new DirectorReadout(
+                                                "CLEARANCE / THROUGHPUT",
+                                                List.of(
+                                                                data.dispatchedInRange
+                                                                                + " dispatched vs "
+                                                                                + data.packedInRange
+                                                                                + " packed -> net clearance of "
+                                                                                + data.netClearance
+                                                                                + ".",
+                                                                data.comparisonAvailable
+                                                                                ? "Latest completed week: dispatch "
+                                                                                                + signedPercent1(data.dispatchWow)
+                                                                                                + "; packing "
+                                                                                                + signedPercent1(data.packingWow)
+                                                                                                + "."
+                                                                                : "Select at least 14 completed days for week-on-week comparison.",
+                                                                data.comparisonAvailable
+                                                                                ? "Total throughput "
+                                                                                                + signedPercent1(data.throughputWow)
+                                                                                                + "."
+                                                                                : "Selected-period packed volume: "
+                                                                                                + round3(kpis.packedVolumeCbm)
+                                                                                                + " m³."),
+                                                IndexedColors.LIGHT_GREEN),
+                                new DirectorReadout(
+                                                "AGING / CASH & SPACE RISK",
+                                                List.of(
+                                                                data.agedOver30
+                                                                                + " inventory packet rows are >30 days ("
+                                                                                + oneDecimal(data.agedOver30Share * 100)
+                                                                                + "%).",
+                                                                data.age90Plus
+                                                                                + " are 90+ days; "
+                                                                                + data.ninetyPlusInWarehouse
+                                                                                + " are in warehouse.",
+                                                                data.agedReadyToDispatch
+                                                                                + " dispatch-ready rows are already 31-90 days old."),
+                                                IndexedColors.ROSE),
+                                new DirectorReadout(
+                                                "FLOW / CAPACITY SIGNAL",
+                                                List.of(
+                                                                data.peakMovementDate == null
+                                                                                ? "No movement data in selected period."
+                                                                                : "Peak movement: "
+                                                                                                + data.peakMovementDate.format(DATE_FORMAT)
+                                                                                                + " with "
+                                                                                                + data.peakMovement
+                                                                                                + " movements.",
+                                                                "Median pack-to-dispatch = "
+                                                                                + oneDecimal(data.medianPackToDispatchDays)
+                                                                                + " days; average = "
+                                                                                + oneDecimal(data.averagePackToDispatchDays)
+                                                                                + " days.",
+                                                                data.comparisonAvailable
+                                                                                ? "Dispatch "
+                                                                                                + signedPercent1(data.dispatchWow)
+                                                                                                + " WoW; packing "
+                                                                                                + signedPercent1(data.packingWow)
+                                                                                                + " WoW."
+                                                                                : "Peak packing "
+                                                                                                + data.peakPacking
+                                                                                                + "; peak dispatch "
+                                                                                                + data.peakDispatch
+                                                                                                + "."),
+                                                IndexedColors.LIGHT_YELLOW),
+                                new DirectorReadout(
+                                                "DATA / CONTROL SIGNAL",
+                                                List.of(
+                                                                data.negativeDispatchTimestamps
+                                                                                + " dispatch rows have dispatch time before packing time.",
+                                                                data.missingVehicleRows
+                                                                                + " dispatch rows ("
+                                                                                + oneDecimal(data.missingVehicleShare * 100)
+                                                                                + "%) have no vehicle; "
+                                                                                + data.missingDriverRows
+                                                                                + " have no driver.",
+                                                                "Client labels: "
+                                                                                + data.rawClientLabels
+                                                                                + " raw -> "
+                                                                                + data.normalizedClientLabels
+                                                                                + " after case/space normalization."),
+                                                IndexedColors.LIGHT_CORNFLOWER_BLUE));
+
+                int[][] readoutRanges = {
+                                { 15, 19, 0, 3 },
+                                { 15, 19, 4, 7 },
+                                { 15, 19, 8, 11 },
+                                { 15, 19, 12, 15 }
+                };
+
+                for (int i = 0; i < readouts.size(); i++) {
+                        int[] range = readoutRanges[i];
+                        writeDirectorReadout(
+                                        workbook,
+                                        sheet,
+                                        range[0],
+                                        range[1],
+                                        range[2],
+                                        range[3],
+                                        readouts.get(i));
+                }
+
+                writeDirectorChartData(sheet, data);
+
+                XSSFDrawing drawing = sheet.createDrawingPatriarch();
+
+                if (!data.dailyRows.isEmpty()) {
+                        createDirectorLineChart(
+                                        sheet,
+                                        drawing,
+                                        0,
+                                        21,
+                                        8,
+                                        38,
+                                        "Daily Packing vs Dispatch Throughput",
+                                        17,
+                                        18,
+                                        19,
+                                        1,
+                                        data.dailyRows.size());
+                }
+
+                createDirectorBarChart(
+                                sheet,
+                                drawing,
+                                8,
+                                21,
+                                16,
+                                38,
+                                "Inventory Aging Profile",
+                                21,
+                                22,
+                                1,
+                                data.agingBars.size(),
+                                "Items");
+
+                createDirectorBarChart(
+                                sheet,
+                                drawing,
+                                0,
+                                39,
+                                8,
+                                56,
+                                "Current Inventory Status Mix",
+                                24,
+                                25,
+                                1,
+                                data.statusBars.size(),
+                                "Items");
+
+                createDirectorBarChart(
+                                sheet,
+                                drawing,
+                                8,
+                                39,
+                                16,
+                                56,
+                                "Selected-Period Dispatch by Plant",
+                                27,
+                                28,
+                                1,
+                                data.dispatchPlantBars.size(),
+                                "Dispatched");
+
+                sheet.addMergedRegion(new CellRangeAddress(57, 57, 0, 15));
+                Row actionTitleRow = sheet.createRow(57);
+                Cell actionTitle = actionTitleRow.createCell(0);
+                actionTitle.setCellValue("DIRECTOR ACTION PRIORITIES");
+                actionTitle.setCellStyle(navySection);
+
+                String[] actionHeaders = {
+                                "Priority",
+                                "Decision / Action",
+                                "Why Now",
+                                "Owner",
+                                "Suggested Timeframe"
+                };
+
+                int[][] headerRanges = {
+                                { 0, 1 },
+                                { 2, 7 },
+                                { 8, 11 },
+                                { 12, 13 },
+                                { 14, 15 }
+                };
+
+                CellStyle actionHeaderStyle = directorStyle(
+                                workbook,
+                                IndexedColors.LIGHT_CORNFLOWER_BLUE,
+                                IndexedColors.DARK_BLUE,
+                                true,
+                                9,
+                                HorizontalAlignment.CENTER);
+
+                Row actionHeaderRow = sheet.createRow(58);
+                for (int i = 0; i < actionHeaders.length; i++) {
+                        int startCol = headerRanges[i][0];
+                        int endCol = headerRanges[i][1];
+                        sheet.addMergedRegion(new CellRangeAddress(58, 58, startCol, endCol));
+                        Cell cell = actionHeaderRow.createCell(startCol);
+                        cell.setCellValue(actionHeaders[i]);
+                        cell.setCellStyle(actionHeaderStyle);
+                }
+
+                int actionRowIndex = 59;
+                for (DirectorAction action : data.actions) {
+                        int startRow = actionRowIndex++;
+                        int[][] ranges = {
+                                        { 0, 1 },
+                                        { 2, 7 },
+                                        { 8, 11 },
+                                        { 12, 13 },
+                                        { 14, 15 }
+                        };
+
+                        for (int[] range : ranges) {
+                                sheet.addMergedRegion(new CellRangeAddress(
+                                                startRow,
+                                                startRow,
+                                                range[0],
+                                                range[1]));
+                        }
+
+                        Row row = sheet.createRow(startRow);
+                        row.setHeightInPoints(26);
+
+                        IndexedColors rowColor = switch (action.priority) {
+                                case "CRITICAL" -> IndexedColors.ROSE;
+                                case "HIGH" -> IndexedColors.LIGHT_YELLOW;
+                                case "LOW" -> IndexedColors.LIGHT_GREEN;
+                                default -> IndexedColors.LIGHT_CORNFLOWER_BLUE;
+                        };
+
+                        CellStyle actionStyle = directorStyle(
+                                        workbook,
+                                        rowColor,
+                                        IndexedColors.DARK_BLUE,
+                                        false,
+                                        8,
+                                        HorizontalAlignment.LEFT);
+                        actionStyle.setWrapText(true);
+
+                        Cell priorityCell = row.createCell(0);
+                        priorityCell.setCellValue(action.priority);
+                        priorityCell.setCellStyle(actionStyle);
+
+                        Cell actionCell = row.createCell(2);
+                        actionCell.setCellValue(action.action);
+                        actionCell.setCellStyle(actionStyle);
+
+                        Cell whyCell = row.createCell(8);
+                        whyCell.setCellValue(action.why);
+                        whyCell.setCellStyle(actionStyle);
+
+                        Cell ownerCell = row.createCell(12);
+                        ownerCell.setCellValue(action.owner);
+                        ownerCell.setCellStyle(actionStyle);
+
+                        Cell timeframeCell = row.createCell(14);
+                        timeframeCell.setCellValue(action.timeframe);
+                        timeframeCell.setCellStyle(actionStyle);
+
+                        for (int col = 0; col < 16; col++) {
+                                Cell cell = row.getCell(
+                                                col,
+                                                Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                                cell.setCellStyle(actionStyle);
+                        }
+                }
+
+                sheet.addMergedRegion(new CellRangeAddress(67, 67, 0, 15));
+                Row noteRow = sheet.createRow(67);
+                Cell note = noteRow.createCell(0);
+                note.setCellValue(
+                                data.comparisonAvailable
+                                                ? "Management note: week-on-week comparison uses completed periods "
+                                                                + directorComparisonLabel(data)
+                                                                + ". If the selected end date is today, today's partial activity is excluded."
+                                                : "Management note: select at least 14 completed days to enable a full two-week comparison. Current inventory aging remains a live snapshot.");
+
+                CellStyle noteStyle = workbook.createCellStyle();
+                Font noteFont = workbook.createFont();
+                noteFont.setItalic(true);
+                noteFont.setFontHeightInPoints((short) 8);
+                noteFont.setColor(IndexedColors.GREY_50_PERCENT.getIndex());
+                noteStyle.setFont(noteFont);
+                noteStyle.setWrapText(true);
+                note.setCellStyle(noteStyle);
+
+                for (int hiddenColumn = 17; hiddenColumn <= 28; hiddenColumn++) {
+                        sheet.setColumnHidden(hiddenColumn, true);
+                }
+        }
+
+        private void writeDirectorKpiCard(
+                        Workbook workbook,
+                        Sheet sheet,
+                        int firstRow,
+                        int lastRow,
+                        int firstColumn,
+                        int lastColumn,
+                        DirectorKpiCard card) {
+                sheet.addMergedRegion(new CellRangeAddress(
+                                firstRow,
+                                firstRow,
+                                firstColumn,
+                                lastColumn));
+                sheet.addMergedRegion(new CellRangeAddress(
+                                firstRow + 1,
+                                firstRow + 2,
+                                firstColumn,
+                                lastColumn));
+                sheet.addMergedRegion(new CellRangeAddress(
+                                lastRow,
+                                lastRow,
+                                firstColumn,
+                                lastColumn));
+
+                CellStyle labelStyle = directorStyle(
+                                workbook,
+                                card.fill,
+                                IndexedColors.DARK_BLUE,
+                                true,
+                                9,
+                                HorizontalAlignment.LEFT);
+
+                CellStyle valueStyle = directorStyle(
+                                workbook,
+                                card.fill,
+                                IndexedColors.DARK_BLUE,
+                                true,
+                                20,
+                                HorizontalAlignment.CENTER);
+
+                CellStyle detailStyle = directorStyle(
+                                workbook,
+                                card.fill,
+                                IndexedColors.GREY_50_PERCENT,
+                                false,
+                                8,
+                                HorizontalAlignment.LEFT);
+                detailStyle.setWrapText(true);
+
+                for (int rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null) {
+                                row = sheet.createRow(rowIndex);
+                        }
+
+                        for (int col = firstColumn; col <= lastColumn; col++) {
+                                Cell cell = row.getCell(col, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                                cell.setCellStyle(detailStyle);
+                        }
+                }
+
+                Cell titleCell = sheet.getRow(firstRow).getCell(firstColumn);
+                titleCell.setCellValue(card.title);
+                titleCell.setCellStyle(labelStyle);
+
+                Cell valueCell = sheet.getRow(firstRow + 1).getCell(firstColumn);
+                if (card.value instanceof Number number) {
+                        valueCell.setCellValue(number.doubleValue());
+                } else {
+                        valueCell.setCellValue(String.valueOf(card.value));
+                }
+                valueCell.setCellStyle(valueStyle);
+
+                Cell detailCell = sheet.getRow(lastRow).getCell(firstColumn);
+                detailCell.setCellValue(card.detail);
+                detailCell.setCellStyle(detailStyle);
+        }
+
+        private void writeDirectorReadout(
+                        Workbook workbook,
+                        Sheet sheet,
+                        int firstRow,
+                        int lastRow,
+                        int firstColumn,
+                        int lastColumn,
+                        DirectorReadout readout) {
+                sheet.addMergedRegion(new CellRangeAddress(
+                                firstRow,
+                                firstRow,
+                                firstColumn,
+                                lastColumn));
+                sheet.addMergedRegion(new CellRangeAddress(
+                                firstRow + 1,
+                                lastRow,
+                                firstColumn,
+                                lastColumn));
+
+                CellStyle headingStyle = directorStyle(
+                                workbook,
+                                readout.fill,
+                                IndexedColors.DARK_BLUE,
+                                true,
+                                9,
+                                HorizontalAlignment.LEFT);
+
+                CellStyle bodyStyle = directorStyle(
+                                workbook,
+                                readout.fill,
+                                IndexedColors.DARK_BLUE,
+                                false,
+                                8,
+                                HorizontalAlignment.LEFT);
+                bodyStyle.setWrapText(true);
+                bodyStyle.setVerticalAlignment(VerticalAlignment.TOP);
+
+                Row headingRow = sheet.getRow(firstRow);
+                if (headingRow == null) {
+                        headingRow = sheet.createRow(firstRow);
+                }
+                Cell heading = headingRow.getCell(
+                                firstColumn,
+                                Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                heading.setCellValue(readout.title);
+                heading.setCellStyle(headingStyle);
+
+                Row bodyRow = sheet.getRow(firstRow + 1);
+                if (bodyRow == null) {
+                        bodyRow = sheet.createRow(firstRow + 1);
+                }
+                Cell body = bodyRow.getCell(
+                                firstColumn,
+                                Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                body.setCellValue(
+                                readout.lines.stream()
+                                                .map(line -> "• " + line)
+                                                .reduce((a, b) -> a + "\n" + b)
+                                                .orElse("-"));
+                body.setCellStyle(bodyStyle);
+
+                for (int rowIndex = firstRow; rowIndex <= lastRow; rowIndex++) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null) {
+                                row = sheet.createRow(rowIndex);
+                        }
+                        for (int col = firstColumn; col <= lastColumn; col++) {
+                                Cell cell = row.getCell(col, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                                if (rowIndex == firstRow) {
+                                        cell.setCellStyle(headingStyle);
+                                } else {
+                                        cell.setCellStyle(bodyStyle);
+                                }
+                        }
+                }
+        }
+
+        private CellStyle directorStyle(
+                        Workbook workbook,
+                        IndexedColors fill,
+                        IndexedColors fontColor,
+                        boolean bold,
+                        int fontSize,
+                        HorizontalAlignment alignment) {
+                CellStyle style = workbook.createCellStyle();
+                Font font = workbook.createFont();
+                font.setBold(bold);
+                font.setFontHeightInPoints((short) fontSize);
+                font.setColor(fontColor.getIndex());
+                style.setFont(font);
+                style.setFillForegroundColor(fill.getIndex());
+                style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                style.setAlignment(alignment);
+                style.setVerticalAlignment(VerticalAlignment.CENTER);
+                style.setBorderBottom(BorderStyle.HAIR);
+                style.setBorderTop(BorderStyle.HAIR);
+                style.setBorderLeft(BorderStyle.HAIR);
+                style.setBorderRight(BorderStyle.HAIR);
+                return style;
+        }
+
+        private void writeDirectorChartData(
+                        XSSFSheet sheet,
+                        DirectorData data) {
+                int dailyHeaderRow = 0;
+                Row dailyHeader = sheet.getRow(dailyHeaderRow);
+                if (dailyHeader == null) {
+                        dailyHeader = sheet.createRow(dailyHeaderRow);
+                }
+                dailyHeader.createCell(17).setCellValue("Date");
+                dailyHeader.createCell(18).setCellValue("Packed");
+                dailyHeader.createCell(19).setCellValue("Dispatched");
+
+                int rowIndex = 1;
+                for (DirectorDailyPoint point : data.dailyRows) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null) {
+                                row = sheet.createRow(rowIndex);
+                        }
+                        row.createCell(17).setCellValue(point.date.format(DateTimeFormatter.ofPattern("dd MMM")));
+                        row.createCell(18).setCellValue(point.packed);
+                        row.createCell(19).setCellValue(point.dispatched);
+                        rowIndex++;
+                }
+
+                writeDirectorBarData(sheet, 21, 22, data.agingBars);
+                writeDirectorBarData(sheet, 24, 25, data.statusBars);
+                writeDirectorBarData(sheet, 27, 28, data.dispatchPlantBars);
+        }
+
+        private void writeDirectorBarData(
+                        XSSFSheet sheet,
+                        int categoryColumn,
+                        int valueColumn,
+                        List<DirectorBarPoint> rows) {
+                Row header = sheet.getRow(0);
+                if (header == null) {
+                        header = sheet.createRow(0);
+                }
+                header.createCell(categoryColumn).setCellValue("Category");
+                header.createCell(valueColumn).setCellValue("Value");
+
+                int rowIndex = 1;
+                for (DirectorBarPoint point : rows) {
+                        Row row = sheet.getRow(rowIndex);
+                        if (row == null) {
+                                row = sheet.createRow(rowIndex);
+                        }
+                        row.createCell(categoryColumn).setCellValue(point.label);
+                        row.createCell(valueColumn).setCellValue(point.value);
+                        rowIndex++;
+                }
+        }
+
+        private void createDirectorLineChart(
+                        XSSFSheet sheet,
+                        XSSFDrawing drawing,
+                        int col1,
+                        int row1,
+                        int col2,
+                        int row2,
+                        String title,
+                        int categoryColumn,
+                        int packedColumn,
+                        int dispatchedColumn,
+                        int firstDataRow,
+                        int dataCount) {
+                if (dataCount <= 0) {
+                        return;
+                }
+
+                XSSFClientAnchor anchor = drawing.createAnchor(
+                                0,
+                                0,
+                                0,
+                                0,
+                                col1,
+                                row1,
+                                col2,
+                                row2);
+                XSSFChart chart = drawing.createChart(anchor);
+                chart.setTitleText(title);
+                chart.setTitleOverlay(false);
+
+                XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
+                XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
+                leftAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+
+                int lastDataRow = firstDataRow + dataCount - 1;
+
+                XDDFDataSource<String> categories = XDDFDataSourcesFactory.fromStringCellRange(
+                                sheet,
+                                new CellRangeAddress(
+                                                firstDataRow,
+                                                lastDataRow,
+                                                categoryColumn,
+                                                categoryColumn));
+
+                XDDFNumericalDataSource<Double> packed = XDDFDataSourcesFactory.fromNumericCellRange(
+                                sheet,
+                                new CellRangeAddress(
+                                                firstDataRow,
+                                                lastDataRow,
+                                                packedColumn,
+                                                packedColumn));
+
+                XDDFNumericalDataSource<Double> dispatched = XDDFDataSourcesFactory.fromNumericCellRange(
+                                sheet,
+                                new CellRangeAddress(
+                                                firstDataRow,
+                                                lastDataRow,
+                                                dispatchedColumn,
+                                                dispatchedColumn));
+
+                XDDFLineChartData chartData = (XDDFLineChartData) chart.createData(
+                                ChartTypes.LINE,
+                                bottomAxis,
+                                leftAxis);
+
+                XDDFLineChartData.Series packedSeries = (XDDFLineChartData.Series) chartData.addSeries(
+                                categories,
+                                packed);
+                packedSeries.setTitle("Packed", null);
+                packedSeries.setMarkerStyle(MarkerStyle.NONE);
+
+                XDDFLineChartData.Series dispatchedSeries = (XDDFLineChartData.Series) chartData.addSeries(
+                                categories,
+                                dispatched);
+                dispatchedSeries.setTitle("Dispatched", null);
+                dispatchedSeries.setMarkerStyle(MarkerStyle.NONE);
+
+                chart.plot(chartData);
+                chart.getOrAddLegend().setPosition(LegendPosition.BOTTOM);
+        }
+
+        private void createDirectorBarChart(
+                        XSSFSheet sheet,
+                        XSSFDrawing drawing,
+                        int col1,
+                        int row1,
+                        int col2,
+                        int row2,
+                        String title,
+                        int categoryColumn,
+                        int valueColumn,
+                        int firstDataRow,
+                        int dataCount,
+                        String seriesTitle) {
+                if (dataCount <= 0) {
+                        return;
+                }
+
+                XSSFClientAnchor anchor = drawing.createAnchor(
+                                0,
+                                0,
+                                0,
+                                0,
+                                col1,
+                                row1,
+                                col2,
+                                row2);
+                XSSFChart chart = drawing.createChart(anchor);
+                chart.setTitleText(title);
+                chart.setTitleOverlay(false);
+
+                XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
+                XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
+                leftAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+
+                int lastDataRow = firstDataRow + dataCount - 1;
+
+                XDDFDataSource<String> categories = XDDFDataSourcesFactory.fromStringCellRange(
+                                sheet,
+                                new CellRangeAddress(
+                                                firstDataRow,
+                                                lastDataRow,
+                                                categoryColumn,
+                                                categoryColumn));
+
+                XDDFNumericalDataSource<Double> values = XDDFDataSourcesFactory.fromNumericCellRange(
+                                sheet,
+                                new CellRangeAddress(
+                                                firstDataRow,
+                                                lastDataRow,
+                                                valueColumn,
+                                                valueColumn));
+
+                XDDFBarChartData chartData = (XDDFBarChartData) chart.createData(
+                                ChartTypes.BAR,
+                                bottomAxis,
+                                leftAxis);
+                chartData.setBarDirection(BarDirection.COL);
+                chartData.setBarGrouping(BarGrouping.CLUSTERED);
+                chartData.setVaryColors(false);
+
+                XDDFBarChartData.Series series = (XDDFBarChartData.Series) chartData.addSeries(
+                                categories,
+                                values);
+                series.setTitle(seriesTitle, null);
+
+                chart.plot(chartData);
+        }
+
+        private long sumDirectorDaily(
+                        List<DirectorDailyPoint> rows,
+                        LocalDate from,
+                        LocalDate to,
+                        boolean packed) {
+                return rows.stream()
+                                .filter(row -> !row.date.isBefore(from)
+                                                && !row.date.isAfter(to))
+                                .mapToLong(row -> packed ? row.packed : row.dispatched)
+                                .sum();
+        }
+
+        private double directorGrowth(
+                        long previous,
+                        long current) {
+                if (previous <= 0) {
+                        return 0;
+                }
+
+                return (double) (current - previous) / previous;
+        }
+
+        private double medianDouble(
+                        List<Double> values) {
+                if (values == null || values.isEmpty()) {
+                        return 0;
+                }
+
+                List<Double> sorted = values.stream()
+                                .filter(Objects::nonNull)
+                                .filter(Double::isFinite)
+                                .sorted()
+                                .toList();
+
+                if (sorted.isEmpty()) {
+                        return 0;
+                }
+
+                int middle = sorted.size() / 2;
+                if (sorted.size() % 2 == 0) {
+                        return (sorted.get(middle - 1) + sorted.get(middle)) / 2.0;
+                }
+
+                return sorted.get(middle);
+        }
+
+        private String directorStatus(
+                        Object row) {
+                String value = text(
+                                row,
+                                "status",
+                                "itemStatus",
+                                "currentStatus",
+                                "dispatchStatus");
+
+                return value == null
+                                ? "UNKNOWN"
+                                : value.trim().toUpperCase(Locale.ROOT);
+        }
+
+        private boolean isDirectorBlank(
+                        String value) {
+                if (value == null) {
+                        return true;
+                }
+
+                String clean = value.trim();
+                return clean.isBlank()
+                                || "-".equals(clean)
+                                || "NULL".equalsIgnoreCase(clean)
+                                || "UNASSIGNED".equalsIgnoreCase(clean);
+        }
+
+        private String oneDecimal(
+                        double value) {
+                return String.format(Locale.US, "%.1f", value);
+        }
+
+        private String signedPercent1(
+                        double value) {
+                return String.format(
+                                Locale.US,
+                                "%+.1f%%",
+                                value * 100);
+        }
+
+        private String shortDirectorDate(
+                        LocalDateTime value) {
+                if (value == null) {
+                        return "-";
+                }
+
+                return value.format(DateTimeFormatter.ofPattern("dd MMM"));
+        }
+
+        private String directorComparisonLabel(
+                        DirectorData data) {
+                if (!data.comparisonAvailable) {
+                        return "insufficient completed periods";
+                }
+
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM");
+                return data.previousStart.format(formatter)
+                                + "-"
+                                + data.previousEnd.format(formatter)
+                                + " vs "
+                                + data.latestStart.format(formatter)
+                                + "-"
+                                + data.latestEnd.format(formatter);
+        }
+
         private void addPackingVolumeExecutiveSheet(
                         Workbook workbook,
                         LocalDateTime from,
@@ -2295,6 +3796,152 @@ public class InventoryReportWorkbookService {
                 }
 
                 return "90+ Days";
+        }
+
+        private static class DirectorData {
+                long currentInventoryPackets;
+                long coreInventory;
+                long transitionInventory;
+                long packedInRange;
+                long dispatchedInRange;
+                long agedOver30;
+                long age0To7;
+                long age8To30;
+                long age31To90;
+                long age90Plus;
+                long ninetyPlusInWarehouse;
+                long agedReadyToDispatch;
+                long netClearance;
+                long validPackToDispatchRows;
+                long dispatchOverSevenDays;
+                long uniqueChallans;
+                long missingVehicleRows;
+                long missingDriverRows;
+                long negativeDispatchTimestamps;
+                long missingPackingDateRows;
+                long rawClientLabels;
+                long normalizedClientLabels;
+                long masterRows;
+                long masterZeroProgress;
+                long masterBlankLatestStatus;
+                long peakMovement;
+                long peakPacking;
+                long peakDispatch;
+                long previousPacked;
+                long latestPacked;
+                long previousDispatched;
+                long latestDispatched;
+                double packedPerDay;
+                double dispatchPackingRatio;
+                double agedOver30Share;
+                double ninetyPlusWarehouseShare;
+                double medianPackToDispatchDays;
+                double averagePackToDispatchDays;
+                double delayedDispatchShare;
+                double averagePacketsPerChallan;
+                double medianPacketsPerChallan;
+                double missingVehicleShare;
+                double packingWow;
+                double dispatchWow;
+                double throughputWow;
+                boolean comparisonAvailable;
+                LocalDate peakMovementDate;
+                LocalDate peakPackingDate;
+                LocalDate peakDispatchDate;
+                LocalDate previousStart;
+                LocalDate previousEnd;
+                LocalDate latestStart;
+                LocalDate latestEnd;
+                List<DirectorDailyPoint> dailyRows = new ArrayList<>();
+                List<DirectorBarPoint> agingBars = new ArrayList<>();
+                List<DirectorBarPoint> statusBars = new ArrayList<>();
+                List<DirectorBarPoint> dispatchPlantBars = new ArrayList<>();
+                List<DirectorAction> actions = new ArrayList<>();
+        }
+
+        private static class DirectorDailyPoint {
+                final LocalDate date;
+                long packed;
+                long dispatched;
+
+                DirectorDailyPoint(
+                                LocalDate date,
+                                long packed,
+                                long dispatched) {
+                        this.date = date;
+                        this.packed = packed;
+                        this.dispatched = dispatched;
+                }
+
+                long total() {
+                        return packed + dispatched;
+                }
+        }
+
+        private static class DirectorBarPoint {
+                final String label;
+                final long value;
+
+                DirectorBarPoint(
+                                String label,
+                                long value) {
+                        this.label = label;
+                        this.value = value;
+                }
+        }
+
+        private static class DirectorAction {
+                final String priority;
+                final String action;
+                final String why;
+                final String owner;
+                final String timeframe;
+
+                DirectorAction(
+                                String priority,
+                                String action,
+                                String why,
+                                String owner,
+                                String timeframe) {
+                        this.priority = priority;
+                        this.action = action;
+                        this.why = why;
+                        this.owner = owner;
+                        this.timeframe = timeframe;
+                }
+        }
+
+        private static class DirectorKpiCard {
+                final String title;
+                final Object value;
+                final String detail;
+                final IndexedColors fill;
+
+                DirectorKpiCard(
+                                String title,
+                                Object value,
+                                String detail,
+                                IndexedColors fill) {
+                        this.title = title;
+                        this.value = value;
+                        this.detail = detail;
+                        this.fill = fill;
+                }
+        }
+
+        private static class DirectorReadout {
+                final String title;
+                final List<String> lines;
+                final IndexedColors fill;
+
+                DirectorReadout(
+                                String title,
+                                List<String> lines,
+                                IndexedColors fill) {
+                        this.title = title;
+                        this.lines = lines;
+                        this.fill = fill;
+                }
         }
 
         private static class KpiData {
