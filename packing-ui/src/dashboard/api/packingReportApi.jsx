@@ -1,13 +1,17 @@
-import { API_BASE_URL } from "../../config";
+import { API_BASE_URL } from "../config";
 
 /**
  * Packing Report API
  *
- * Existing packing report contract is preserved.
- * The packet-level volume endpoint is additive and returns the dimensions,
- * calculated cubic metre value, packed user and packed timestamp used by the
- * Inventory Reports workspace.
+ * Existing contracts are preserved. GET report responses use a short-lived
+ * in-memory cache and in-flight de-duplication so reopening Reports or two
+ * components requesting the same range do not download the same large JSON
+ * twice. Explicit Apply Filters can bypass the cache with forceRefresh.
  */
+const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
+const responseCache = new Map();
+const inFlight = new Map();
+
 const authHeaders = () => {
   const token = localStorage.getItem("token");
 
@@ -36,22 +40,75 @@ const readError = async (res, fallback) => {
   }
 };
 
-export async function fetchPackingReport(from, to) {
-  const res = await fetch(
-    `${API_BASE_URL}/api/reports/packing?${buildRangeQuery(from, to)}`,
-    {
-      credentials: "include",
-      headers: authHeaders(),
-    }
-  );
+const readCached = (key) => {
+  const entry = responseCache.get(key);
 
-  if (!res.ok) {
-    throw new Error(
-      await readError(res, "Failed to fetch packing report")
-    );
+  if (!entry) return null;
+
+  if (Date.now() - entry.cachedAt > REPORT_CACHE_TTL_MS) {
+    responseCache.delete(key);
+    return null;
   }
 
-  return res.json();
+  return entry.data;
+};
+
+const fetchJsonReport = async (
+  url,
+  fallbackError,
+  { forceRefresh = false } = {}
+) => {
+  const key = url;
+
+  if (!forceRefresh) {
+    const cached = readCached(key);
+    if (cached !== null) return cached;
+
+    const existing = inFlight.get(key);
+    if (existing) return existing;
+  }
+
+  const request = fetch(url, {
+    credentials: "include",
+    cache: "no-store",
+    headers: authHeaders(),
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(
+          await readError(res, fallbackError)
+        );
+      }
+
+      const data = await res.json();
+
+      responseCache.set(key, {
+        data,
+        cachedAt: Date.now(),
+      });
+
+      return data;
+    })
+    .finally(() => {
+      if (inFlight.get(key) === request) {
+        inFlight.delete(key);
+      }
+    });
+
+  inFlight.set(key, request);
+  return request;
+};
+
+export async function fetchPackingReport(
+  from,
+  to,
+  options = {}
+) {
+  return fetchJsonReport(
+    `${API_BASE_URL}/api/reports/packing?${buildRangeQuery(from, to)}`,
+    "Failed to fetch packing report",
+    options
+  );
 }
 
 /**
@@ -64,32 +121,22 @@ export async function fetchPackingReport(from, to) {
  * packetNumber, quantity, dimensions, volumeCbm, packedAt,
  * packedBy, status and stickerNumber.
  */
-export async function fetchPackingVolumeReport(from, to) {
-  const res = await fetch(
+export async function fetchPackingVolumeReport(
+  from,
+  to,
+  options = {}
+) {
+  const data = await fetchJsonReport(
     `${API_BASE_URL}/api/reports/packing/volume?${buildRangeQuery(from, to)}`,
-    {
-      credentials: "include",
-      headers: authHeaders(),
-    }
+    "Failed to fetch packing volume report",
+    options
   );
-
-  if (!res.ok) {
-    throw new Error(
-      await readError(res, "Failed to fetch packing volume report")
-    );
-  }
-
-  const data = await res.json();
 
   return Array.isArray(data) ? data : [];
 }
 
 /**
  * Existing report export helper retained.
- *
- * We continue opening the existing backend export route so callers that rely
- * on this helper keep the same browser behaviour. The generated Excel now
- * contains the volume-aware backend sheets introduced in the reporting fix.
  */
 export function exportPackingReport(type, from, to) {
   const query = buildRangeQuery(from, to);

@@ -1,11 +1,9 @@
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
   useState,
 } from "react";
-
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
 
 import {
   fetchDashboardStats,
@@ -19,6 +17,56 @@ import {
 import {
   fetchPackingVolumeReport,
 } from "../../api/packingReportApi";
+
+const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
+const reportSnapshotCache = new Map();
+
+const DEFAULT_TABLE_PAGE_SIZE = 50;
+const TABLE_PAGE_SIZE_OPTIONS = [50, 100, 250];
+
+const getReportRangeCacheKey = (from, to) =>
+  `${from || ""}|${to || ""}`;
+
+const readReportSnapshot = (key) => {
+  const entry = reportSnapshotCache.get(key);
+
+  if (!entry) return null;
+
+  if (Date.now() - Number(entry.cachedAt || 0) > REPORT_CACHE_TTL_MS) {
+    reportSnapshotCache.delete(key);
+    return null;
+  }
+
+  return entry;
+};
+
+const writeReportSnapshot = (key, patch) => {
+  const previous = reportSnapshotCache.get(key) || {};
+
+  const next = {
+    ...previous,
+    ...patch,
+    cachedAt: Date.now(),
+  };
+
+  reportSnapshotCache.set(key, next);
+  return next;
+};
+
+const scheduleWhenIdle = (callback) => {
+  if (typeof window === "undefined") {
+    callback();
+    return () => {};
+  }
+
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(callback, { timeout: 700 });
+    return () => window.cancelIdleCallback?.(id);
+  }
+
+  const id = window.setTimeout(callback, 40);
+  return () => window.clearTimeout(id);
+};
 
 const pad = (value) =>
   String(value).padStart(2, "0");
@@ -1389,14 +1437,110 @@ function InventoryReports() {
   const [masterRows, setMasterRows] =
     useState([]);
 
+  const [supplementalLoading, setSupplementalLoading] =
+    useState(false);
+
+  const [tablePage, setTablePage] =
+    useState(0);
+
+  const [tablePageSize, setTablePageSize] =
+    useState(DEFAULT_TABLE_PAGE_SIZE);
+
   useEffect(() => {
     let active = true;
+    let cancelSupplemental = () => {};
 
     const from =
       toStartDateTime(monthStartDate());
 
     const to =
       toEndDateTime(todayDate());
+
+    const cacheKey =
+      getReportRangeCacheKey(from, to);
+
+    const applyCore = (snapshot) => {
+      if (!active || !snapshot) return;
+
+      setStats(normalizeStats(snapshot.statsData || {}));
+      setPackingRows(Array.isArray(snapshot.packingData) ? snapshot.packingData : []);
+      setPackingVolumeRows(Array.isArray(snapshot.packingVolumeData) ? snapshot.packingVolumeData : []);
+      setDispatchRows(Array.isArray(snapshot.dispatchData) ? snapshot.dispatchData : []);
+      setAgingRows(Array.isArray(snapshot.agingData) ? snapshot.agingData : []);
+
+      if (Array.isArray(snapshot.combinedData)) {
+        setCombinedRows(snapshot.combinedData);
+      }
+
+      if (snapshot.masterData !== undefined) {
+        setMasterRows(extractReportRows(snapshot.masterData));
+      }
+    };
+
+    const loadSupplemental = (coreSnapshot) => {
+      cancelSupplemental = scheduleWhenIdle(async () => {
+        if (!active) return;
+
+        try {
+          setSupplementalLoading(true);
+
+          const shouldLoadCombined =
+            !Array.isArray(coreSnapshot?.agingData) ||
+            coreSnapshot.agingData.length === 0;
+
+          const [masterData, combinedData] = await Promise.all([
+            fetchMasterItemReport({
+              from,
+              to,
+              limit: 700,
+            }).catch(() => []),
+            shouldLoadCombined
+              ? fetchCombinedReport(from, to).catch(() => [])
+              : Promise.resolve([]),
+          ]);
+
+          if (!active) return;
+
+          setMasterRows(extractReportRows(masterData));
+
+          if (shouldLoadCombined) {
+            setCombinedRows(Array.isArray(combinedData) ? combinedData : []);
+          }
+
+          writeReportSnapshot(cacheKey, {
+            masterData,
+            ...(shouldLoadCombined ? { combinedData } : {}),
+          });
+        } finally {
+          if (active) {
+            setSupplementalLoading(false);
+          }
+        }
+      });
+    };
+
+    const cached =
+      readReportSnapshot(cacheKey);
+
+    if (cached) {
+      applyCore(cached);
+      setLoading(false);
+
+      const cachedNeedsCombined =
+        (!Array.isArray(cached.agingData) || cached.agingData.length === 0) &&
+        !Array.isArray(cached.combinedData);
+
+      if (cached.masterData === undefined || cachedNeedsCombined) {
+        loadSupplemental(cached);
+      }
+
+      return () => {
+        active = false;
+        cancelSupplemental();
+      };
+    }
+
+    setLoading(true);
 
     Promise.all([
       fetchDashboardStats().catch(() => ({})),
@@ -1416,61 +1560,29 @@ function InventoryReports() {
         return [];
       }),
       fetchDispatchReport(from, to).catch(() => []),
-      fetchCombinedReport(from, to).catch(() => []),
       fetchInventoryAging().catch(() => []),
-      fetchMasterItemReport({
-        from,
-        to,
-        limit: 1000,
-      }).catch(() => []),
     ])
-      .then(
-        ([
+      .then(([
+        statsData,
+        packingData,
+        packingVolumeData,
+        dispatchData,
+        agingData,
+      ]) => {
+        if (!active) return;
+
+        const coreSnapshot = {
           statsData,
           packingData,
           packingVolumeData,
           dispatchData,
-          combinedData,
           agingData,
-          masterData,
-        ]) => {
-          if (!active) return;
+        };
 
-          setStats(
-            normalizeStats(statsData || {})
-          );
-          setPackingRows(
-            Array.isArray(packingData)
-              ? packingData
-              : []
-          );
-          setPackingVolumeRows(
-            Array.isArray(packingVolumeData)
-              ? packingVolumeData
-              : []
-          );
-          setDispatchRows(
-            Array.isArray(dispatchData)
-              ? dispatchData
-              : []
-          );
-          setCombinedRows(
-            Array.isArray(combinedData)
-              ? combinedData
-              : []
-          );
-          setAgingRows(
-            Array.isArray(agingData)
-              ? agingData
-              : []
-          );
-          setMasterRows(
-            extractReportRows(
-              masterData
-            )
-          );
-        }
-      )
+        applyCore(coreSnapshot);
+        writeReportSnapshot(cacheKey, coreSnapshot);
+        loadSupplemental(coreSnapshot);
+      })
       .catch((e) => {
         if (!active) return;
 
@@ -1481,39 +1593,46 @@ function InventoryReports() {
       })
       .finally(() => {
         if (!active) return;
-
         setLoading(false);
       });
 
     return () => {
       active = false;
+      cancelSupplemental();
     };
   }, []);
 
   const loadReports = async () => {
+    const from =
+      toStartDateTime(fromDate);
+
+    const to =
+      toEndDateTime(toDate);
+
+    const cacheKey =
+      getReportRangeCacheKey(from, to);
+
     try {
       setLoading(true);
       setError("");
       setVolumeError("");
+      setTablePage(0);
 
-      const from =
-        toStartDateTime(fromDate);
-
-      const to =
-        toEndDateTime(toDate);
-
+      /*
+       * Fast path: only the datasets required for the visible Director/
+       * throughput/volume experience block the loading state. The large
+       * master/combined registers are deliberately loaded after paint.
+       */
       const [
         statsData,
         packingData,
         packingVolumeData,
         dispatchData,
-        combinedData,
         agingData,
-        masterData,
       ] = await Promise.all([
         fetchDashboardStats().catch(() => ({})),
         fetchPackingReport(from, to).catch(() => []),
-        fetchPackingVolumeReport(from, to).catch((volumeLoadError) => {
+        fetchPackingVolumeReport(from, to, { forceRefresh: true }).catch((volumeLoadError) => {
           console.error(
             "Packing volume report load failed:",
             volumeLoadError
@@ -1524,48 +1643,65 @@ function InventoryReports() {
           return [];
         }),
         fetchDispatchReport(from, to).catch(() => []),
-        fetchCombinedReport(from, to).catch(() => []),
         fetchInventoryAging().catch(() => []),
-        fetchMasterItemReport({
-          from,
-          to,
-          limit: 1000,
-        }).catch(() => []),
       ]);
 
-      setStats(
-        normalizeStats(statsData || {})
-      );
-      setPackingRows(
-        Array.isArray(packingData)
-          ? packingData
-          : []
-      );
-      setPackingVolumeRows(
-        Array.isArray(packingVolumeData)
-          ? packingVolumeData
-          : []
-      );
-      setDispatchRows(
-        Array.isArray(dispatchData)
-          ? dispatchData
-          : []
-      );
-      setCombinedRows(
-        Array.isArray(combinedData)
-          ? combinedData
-          : []
-      );
-      setAgingRows(
-        Array.isArray(agingData)
-          ? agingData
-          : []
-      );
-      setMasterRows(
-        extractReportRows(
-          masterData
-        )
-      );
+      setStats(normalizeStats(statsData || {}));
+      setPackingRows(Array.isArray(packingData) ? packingData : []);
+      setPackingVolumeRows(Array.isArray(packingVolumeData) ? packingVolumeData : []);
+      setDispatchRows(Array.isArray(dispatchData) ? dispatchData : []);
+      setAgingRows(Array.isArray(agingData) ? agingData : []);
+
+      /* Old supplemental rows belong to the previous date range. */
+      setCombinedRows([]);
+      setMasterRows([]);
+
+      const coreSnapshot = {
+        statsData,
+        packingData,
+        packingVolumeData,
+        dispatchData,
+        agingData,
+      };
+
+      writeReportSnapshot(cacheKey, coreSnapshot);
+
+      /*
+       * Do not keep the page spinner alive for large detail registers.
+       * They fill in immediately afterwards and are cached for revisits.
+       */
+      scheduleWhenIdle(async () => {
+        try {
+          setSupplementalLoading(true);
+
+          const shouldLoadCombined =
+            !Array.isArray(agingData) || agingData.length === 0;
+
+          const [masterData, combinedData] = await Promise.all([
+            fetchMasterItemReport({
+              from,
+              to,
+              limit: 700,
+            }).catch(() => []),
+            shouldLoadCombined
+              ? fetchCombinedReport(from, to).catch(() => [])
+              : Promise.resolve([]),
+          ]);
+
+          setMasterRows(extractReportRows(masterData));
+
+          if (shouldLoadCombined) {
+            setCombinedRows(Array.isArray(combinedData) ? combinedData : []);
+          }
+
+          writeReportSnapshot(cacheKey, {
+            masterData,
+            ...(shouldLoadCombined ? { combinedData } : {}),
+          });
+        } finally {
+          setSupplementalLoading(false);
+        }
+      });
     } catch (e) {
       console.error(e);
 
@@ -3380,18 +3516,49 @@ function InventoryReports() {
   const searchTerm =
     search.trim().toLowerCase();
 
+  const deferredSearchTerm =
+    useDeferredValue(searchTerm);
+
+  const activeRows =
+    activeConfig?.rows || [];
+
   const visibleRows = useMemo(() => {
-    const rows =
-      activeConfig?.rows || [];
+    if (!deferredSearchTerm) return activeRows;
 
-    if (!searchTerm) return rows;
-
-    return rows.filter((row) =>
+    return activeRows.filter((row) =>
       makeSearchText(row).includes(
-        searchTerm
+        deferredSearchTerm
       )
     );
-  }, [activeConfig, searchTerm]);
+  }, [activeRows, deferredSearchTerm]);
+
+  useEffect(() => {
+    setTablePage(0);
+  }, [reportMode, deferredSearchTerm, tablePageSize]);
+
+  const tablePageCount =
+    Math.max(
+      1,
+      Math.ceil(
+        visibleRows.length / tablePageSize
+      )
+    );
+
+  const safeTablePage =
+    Math.min(
+      tablePage,
+      tablePageCount - 1
+    );
+
+  const pagedVisibleRows = useMemo(() => {
+    const start =
+      safeTablePage * tablePageSize;
+
+    return visibleRows.slice(
+      start,
+      start + tablePageSize
+    );
+  }, [visibleRows, safeTablePage, tablePageSize]);
 
   const topPacker =
     packingUserRows[0];
@@ -3433,8 +3600,8 @@ function InventoryReports() {
 
   const loadAllMasterItemRows =
     async () => {
-      const pageSize = 100;
-      const maximumPages = 500;
+      const pageSize = 700;
+      const maximumPages = 100;
 
       const collected = [];
 
@@ -3555,6 +3722,24 @@ function InventoryReports() {
   const buildExcelReport =
     async () => {
 
+      /*
+       * ExcelJS is intentionally code-split. It is a large dependency and
+       * should never be parsed just because somebody opened Reports.
+       */
+      const [excelModule, fileSaverModule] =
+        await Promise.all([
+          import("exceljs"),
+          import("file-saver"),
+        ]);
+
+      const ExcelJS =
+        excelModule.default || excelModule;
+
+      const saveAs =
+        fileSaverModule.saveAs ||
+        fileSaverModule.default?.saveAs ||
+        fileSaverModule.default;
+
       const allMasterRows =
         await loadAllMasterItemRows();
 
@@ -3663,60 +3848,46 @@ function InventoryReports() {
           (column, columnIndex) => {
             let maximumLength = 12;
 
-            column.eachCell(
-              {
-                includeEmpty: true,
-              },
-              (cell) => {
-                const rawValue =
-                  cell.value;
+            /*
+             * Scanning every cell in 10k+ row exports blocks the UI for no
+             * visual benefit. Sample the header + first 500 data rows.
+             */
+            const scanLimit =
+              Math.min(sheet.rowCount, 503);
 
-                let text = "";
+            for (let rowIndex = 1; rowIndex <= scanLimit; rowIndex += 1) {
+              const cell =
+                sheet.getCell(rowIndex, columnIndex + 1);
 
-                if (
-                  rawValue === null ||
-                  rawValue === undefined
-                ) {
-                  text = "";
-                } else if (
-                  typeof rawValue ===
-                  "object"
-                ) {
-                  text =
-                    rawValue?.text ||
-                    rawValue?.result ||
-                    String(rawValue);
-                } else {
-                  text =
-                    String(rawValue);
-                }
+              const rawValue = cell.value;
+              let text = "";
 
-                /*
-                 * Use the longest individual line, not the
-                 * complete paragraph length.
-                 */
-                const longestLine =
-                  text
-                    .split(/\r?\n/)
-                    .reduce(
-                      (
-                        longest,
-                        current
-                      ) =>
-                        Math.max(
-                          longest,
-                          current.length
-                        ),
-                      0
-                    );
-
-                maximumLength =
-                  Math.max(
-                    maximumLength,
-                    longestLine + 2
-                  );
+              if (rawValue === null || rawValue === undefined) {
+                text = "";
+              } else if (typeof rawValue === "object") {
+                text =
+                  rawValue?.text ||
+                  rawValue?.result ||
+                  String(rawValue);
+              } else {
+                text = String(rawValue);
               }
-            );
+
+              const longestLine =
+                text
+                  .split(/\r?\n/)
+                  .reduce(
+                    (longest, current) =>
+                      Math.max(longest, current.length),
+                    0
+                  );
+
+              maximumLength =
+                Math.max(
+                  maximumLength,
+                  longestLine + 2
+                );
+            }
 
             /*
              * Wider maximum for descriptive columns.
@@ -5716,7 +5887,13 @@ function InventoryReports() {
           </div>
 
           <div style={tableSubtitle}>
-            Showing {visibleRows.length} rows
+            {visibleRows.length === 0
+              ? "No rows"
+              : `Showing ${safeTablePage * tablePageSize + 1}-${Math.min(
+                (safeTablePage + 1) * tablePageSize,
+                visibleRows.length
+              )} of ${visibleRows.length} rows`}
+            {supplementalLoading ? " • indexing detail data…" : ""}
           </div>
         </div>
       </div>
@@ -5776,7 +5953,7 @@ function InventoryReports() {
               )}
 
             {!loading &&
-              visibleRows.map((row) => (
+              pagedVisibleRows.map((row) => (
                 <tr key={row.key}>
                   {activeConfig.columns.map(
                     ([key]) => (
@@ -5796,6 +5973,66 @@ function InventoryReports() {
           </tbody>
         </table>
       </div>
+
+      {!loading && visibleRows.length > 0 && (
+        <div style={tablePager}>
+          <div style={tablePagerMeta}>
+            Page {safeTablePage + 1} of {tablePageCount}
+          </div>
+
+          <div style={tablePagerActions}>
+            <select
+              value={tablePageSize}
+              onChange={(event) =>
+                setTablePageSize(Number(event.target.value) || DEFAULT_TABLE_PAGE_SIZE)
+              }
+              style={tablePageSizeSelect}
+            >
+              {TABLE_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setTablePage(0)}
+              disabled={safeTablePage === 0}
+              style={tablePageButton(safeTablePage === 0)}
+            >
+              «
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTablePage((page) => Math.max(0, page - 1))}
+              disabled={safeTablePage === 0}
+              style={tablePageButton(safeTablePage === 0)}
+            >
+              ‹
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTablePage((page) => Math.min(tablePageCount - 1, page + 1))}
+              disabled={safeTablePage >= tablePageCount - 1}
+              style={tablePageButton(safeTablePage >= tablePageCount - 1)}
+            >
+              ›
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTablePage(tablePageCount - 1)}
+              disabled={safeTablePage >= tablePageCount - 1}
+              style={tablePageButton(safeTablePage >= tablePageCount - 1)}
+            >
+              »
+            </button>
+          </div>
+        </div>
+      )}
         </>
       )}
     </div>
@@ -5808,8 +6045,20 @@ function SummaryCard({
   warning = false,
   accent = "#60a5fa",
 }) {
+  const valueText =
+    String(value ?? "-");
+
+  const responsiveFontSize =
+    valueText.length > 20
+      ? 15
+      : valueText.length > 15
+        ? 17
+        : valueText.length > 11
+          ? 20
+          : 26;
+
   return (
-    <div style={summaryCard}>
+    <div style={summaryCard} title={valueText}>
       <div style={summaryAccent(accent)} />
       <div style={summaryLabel}>
         {label}
@@ -5818,6 +6067,7 @@ function SummaryCard({
       <div
         style={{
           ...summaryValue,
+          fontSize: responsiveFontSize,
           color: warning
             ? "#fbbf24"
             : "#fff",
@@ -5856,16 +6106,28 @@ function DirectorKpiCard({
   detail,
   tone = "blue",
 }) {
+  const formattedValue =
+    typeof value === "number"
+      ? value.toLocaleString("en-IN")
+      : String(value ?? "-");
+
+  const responsiveFontSize =
+    formattedValue.length > 18
+      ? 16
+      : formattedValue.length > 13
+        ? 20
+        : formattedValue.length > 9
+          ? 24
+          : 29;
+
   return (
-    <div style={directorKpiCard(tone)}>
+    <div style={directorKpiCard(tone)} title={formattedValue}>
       <div style={directorKpiTitle}>
         {title}
       </div>
 
-      <div style={directorKpiValue}>
-        {typeof value === "number"
-          ? value.toLocaleString("en-IN")
-          : value}
+      <div style={{ ...directorKpiValue, fontSize: responsiveFontSize }}>
+        {formattedValue}
       </div>
 
       <div style={directorKpiDetail}>
@@ -6652,14 +6914,20 @@ const volumeWarningBox = {
 const summaryGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(160px,1fr))",
+    "repeat(auto-fit,minmax(185px,1fr))",
   gap: 12,
+  alignItems: "stretch",
   marginBottom: 16,
 };
 
 const summaryCard = {
   position: "relative",
-  overflow: "hidden",
+  minWidth: 0,
+  minHeight: 104,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  overflow: "visible",
   borderRadius: 18,
   padding: 16,
   background:
@@ -6686,10 +6954,21 @@ const summaryLabel = {
 };
 
 const summaryValue = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: 34,
   marginTop: 8,
+  display: "flex",
+  alignItems: "flex-end",
   color: "#fff",
   fontSize: 26,
   fontWeight: 900,
+  lineHeight: 1.08,
+  letterSpacing: "-.02em",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const modeTabs = {
@@ -6777,6 +7056,51 @@ const empty = {
   color: "#94a3b8",
   fontWeight: 700,
 };
+
+const tablePager = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const tablePagerMeta = {
+  color: "#94a3b8",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const tablePagerActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+};
+
+const tablePageSizeSelect = {
+  height: 34,
+  padding: "0 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,.08)",
+  background: "#111827",
+  color: "#e2e8f0",
+  fontWeight: 800,
+  outline: "none",
+};
+
+const tablePageButton = (disabled) => ({
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,.08)",
+  background: disabled
+    ? "rgba(255,255,255,.025)"
+    : "rgba(59,130,246,.13)",
+  color: disabled ? "#475569" : "#bfdbfe",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 950,
+});
 
 const directorTone = {
   blue: {
@@ -6943,7 +7267,7 @@ const directorKpiCard = (tone) => {
     minHeight: 126,
     padding: "14px 15px",
     borderRadius: 15,
-    overflow: "hidden",
+    overflow: "visible",
     background: palette.background,
     border:
       `1px solid ${palette.border}`,
@@ -6961,12 +7285,18 @@ const directorKpiTitle = {
 };
 
 const directorKpiValue = {
+  width: "100%",
+  minWidth: 0,
   marginTop: 10,
   color: "#fff",
   fontSize: 29,
   fontWeight: 950,
-  lineHeight: 1,
+  lineHeight: 1.05,
   letterSpacing: "-.03em",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const directorKpiDetail = {
