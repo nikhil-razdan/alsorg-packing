@@ -16,15 +16,18 @@ import {
 } from "@mui/material";
 import AddAlertOutlinedIcon from "@mui/icons-material/AddAlertOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ReplayOutlinedIcon from "@mui/icons-material/ReplayOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { downloadMatFlowExcel } from "../api/matflowExcel";
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import {
     EmptyState,
@@ -105,6 +108,72 @@ const blankForm = {
 const text = (value) => clean(value) || "-";
 const isOpenStatus = (value) => normalize(value) !== "RESOLVED";
 const severityRank = (value) => ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 }[normalize(value)] || 0);
+
+const REPORT_COLUMNS = [
+    { key: "exceptionNumber", label: "Exception No." },
+    { key: "severity", label: "Severity" },
+    { key: "status", label: "Status" },
+    { key: "workflowHold", label: "Workflow Hold" },
+    { key: "plantCode", label: "Plant" },
+    { key: "projectCode", label: "PD No." },
+    { key: "projectName", label: "Project" },
+    { key: "drawingNo", label: "Drawing No." },
+    { key: "drawingRevision", label: "Drawing Revision" },
+    { key: "productName", label: "Product" },
+    { key: "requisitionNumber", label: "MR No." },
+    { key: "bomNumber", label: "BOM No." },
+    { key: "materialCode", label: "Material Code" },
+    { key: "materialName", label: "Material" },
+    { key: "category", label: "Exception Category" },
+    { key: "detectedStage", label: "Detected Stage" },
+    { key: "detectedBy", label: "Detected By" },
+    { key: "sourceActor", label: "Source Record Owner" },
+    { key: "assignedTo", label: "Assigned Owner / Team" },
+    { key: "whatHappened", label: "What Happened" },
+    { key: "expectedValue", label: "Expected" },
+    { key: "actualValue", label: "Actual / Found" },
+    { key: "impact", label: "Impact" },
+    { key: "delayMinutes", label: "Estimated Delay (Minutes)" },
+    { key: "immediateAction", label: "Immediate / Containment Action" },
+    { key: "recoveryAction", label: "Recovery Action" },
+    { key: "recoveryPlan", label: "Recovery Plan" },
+    { key: "rootCause", label: "Root Cause" },
+    { key: "correctiveAction", label: "Corrective Action" },
+    { key: "preventiveAction", label: "Preventive Action" },
+    { key: "verifiedBy", label: "Verified By" },
+    { key: "verificationReference", label: "Verification Reference" },
+    { key: "resolution", label: "Resolution" },
+    { key: "createdBy", label: "Created By" },
+    { key: "createdAt", label: "Created At" },
+    { key: "updatedBy", label: "Last Updated By" },
+    { key: "updatedAt", label: "Last Updated At" },
+    { key: "resolvedBy", label: "Resolved By" },
+    { key: "resolvedAt", label: "Resolved At" },
+];
+
+const flattenReportRow = (row = {}) => ({
+    ...row,
+    workflowHold: row.workflowHold === true ? "YES" : "NO",
+    recoveryPlan: Array.isArray(row.recoveryPlan) ? row.recoveryPlan.join(" | ") : clean(row.recoveryPlan),
+    recoveryAction: clean(row.recoveryAction),
+    createdAt: row.createdAt || "",
+    updatedAt: row.updatedAt || "",
+    resolvedAt: row.resolvedAt || "",
+});
+
+const saveBlob = (blob, fileName) => {
+    if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("The report is empty.");
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
 
 export function MatFlowExceptionPage() {
     const navigate = useNavigate();
@@ -204,6 +273,76 @@ export function MatFlowExceptionPage() {
         if (severityDelta) return severityDelta;
         return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
     }), [rows]);
+
+    const reportRows = useMemo(() => orderedRows.map(flattenReportRow), [orderedRows]);
+
+    const reportFilterText = useMemo(() => [
+        `Plant: ${selectedPlantParam || "All permitted plants"}`,
+        `Status: ${status ? readable(status) : "All"}`,
+        `Severity: ${severity ? readable(severity) : "All"}`,
+        clean(search) ? `Search: ${clean(search)}` : null,
+        `Open: ${counts.open}`,
+        `Workflow Holds: ${counts.holds}`,
+        `High/Critical: ${counts.severe}`,
+        `Resolved: ${counts.resolved}`,
+    ].filter(Boolean), [selectedPlantParam, status, severity, search, counts]);
+
+    const downloadExcelReport = async () => {
+        setWorking(true);
+        setError("");
+        try {
+            await downloadMatFlowExcel({
+                fileName: `MATFLOW_Operational_Exception_Recovery_Register_${new Date().toISOString().slice(0, 10)}`,
+                sheetName: "Exception Register",
+                title: "ALSORG / MATFLOW — Operational Exception & Recovery Register",
+                subtitle: "Fact-based operational exception, containment, recovery, root-cause and CAPA register. Source record ownership is evidence of process participation, not an automatic fault verdict.",
+                rows: reportRows,
+                columns: REPORT_COLUMNS,
+                metadata: reportFilterText,
+            });
+        } catch (reportError) {
+            setError(readMatFlowError(reportError, reportError?.message || "Unable to export the Exception Register to Excel."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const downloadPdfReport = async () => {
+        setWorking(true);
+        setError("");
+        try {
+            const response = await matflowApi.downloadWorkflowExceptionRegisterPdf({
+                plantCode: selectedPlantParam || undefined,
+                search: clean(search) || undefined,
+                status: status || undefined,
+                severity: severity || undefined,
+            });
+            saveBlob(
+                response?.data,
+                `MATFLOW_Operational_Exception_Recovery_Register_${new Date().toISOString().slice(0, 10)}.pdf`
+            );
+        } catch (reportError) {
+            setError(readMatFlowError(reportError, "Unable to generate the Operational Exception & Recovery PDF report."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const downloadCasePdf = async () => {
+        if (!detail?.id) return;
+        setWorking(true);
+        setError("");
+        try {
+            const response = await matflowApi.downloadWorkflowExceptionCasePdf(detail.id);
+            const number = String(detail.exceptionNumber || detail.id || "Exception")
+                .replace(/[^a-z0-9._-]+/gi, "_");
+            saveBlob(response?.data, `MATFLOW_${number}_Case_File.pdf`);
+        } catch (reportError) {
+            setError(readMatFlowError(reportError, "Unable to generate the exception case PDF."));
+        } finally {
+            setWorking(false);
+        }
+    };
 
     const pagination = useMatFlowPagination(orderedRows, 15);
 
@@ -355,8 +494,10 @@ export function MatFlowExceptionPage() {
                 subtitle="Record wrong quantity, size, specification, material, route or process data when it becomes known. MatFlow preserves the facts, derives source-record ownership, can stop forward movement, safely unwinds untouched allocations, and keeps the complete recovery/root-cause history without deleting what really happened."
                 actions={
                     <>
-                        <Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
-                        <Button startIcon={<AddAlertOutlinedIcon />} onClick={() => openCreate()} sx={primaryBtnSx}>Report Issue</Button>
+                        <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={working} sx={secondaryBtnSx}>Refresh</Button>
+                        <Button startIcon={<FileDownloadOutlinedIcon />} onClick={downloadExcelReport} disabled={working} sx={secondaryBtnSx}>Excel Report</Button>
+                        <Button startIcon={<PictureAsPdfOutlinedIcon />} onClick={downloadPdfReport} disabled={working} sx={secondaryBtnSx}>PDF Report</Button>
+                        <Button startIcon={<AddAlertOutlinedIcon />} onClick={() => openCreate()} disabled={working} sx={primaryBtnSx}>Report Issue</Button>
                     </>
                 }
             />
@@ -590,6 +731,7 @@ export function MatFlowExceptionPage() {
                 </DialogContent>
                 <DialogActions sx={{ ...dialogActionsSx, justifyContent: "space-between", flexWrap: "wrap" }}>
                     <Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+                        {detail && <Button startIcon={<PictureAsPdfOutlinedIcon />} onClick={downloadCasePdf} disabled={working} sx={secondaryBtnSx}>Case PDF</Button>}
                         {detail?.requisitionId && <Button onClick={() => navigate(`/matflow/requisitions/${detail.requisitionId}`)} sx={secondaryBtnSx}>Open MR</Button>}
                         {detail?.bomId && <Button onClick={() => navigate(`/matflow/boms/${detail.bomId}`)} sx={secondaryBtnSx}>Open BOM / Create Revision</Button>}
                         {detail && normalize(detail.status) !== "RESOLVED" && <Button startIcon={<FactCheckOutlinedIcon />} onClick={() => startAction("NOTE")} sx={secondaryBtnSx}>Add Note</Button>}

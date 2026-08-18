@@ -212,6 +212,17 @@ public class MatFlowInsightService {
                 return exceptions.get(exceptionId);
         }
 
+        @Transactional(readOnly = true)
+        public byte[] workflowExceptionsPdf(
+                        String plantCode, String status, String severity, String search) {
+                return exceptions.reportPdf(plantCode, status, severity, search);
+        }
+
+        @Transactional(readOnly = true)
+        public byte[] workflowExceptionPdf(UUID exceptionId) {
+                return exceptions.casePdf(exceptionId);
+        }
+
         @Transactional
         public Map<String, Object> openWorkflowException(Map<String, Object> request) {
                 return exceptions.open(request);
@@ -294,6 +305,14 @@ public class MatFlowInsightService {
                         return auditService.getWorkflowException(id);
                 }
 
+                byte[] reportPdf(String plantCode, String status, String severity, String search) {
+                        return auditService.workflowExceptionRegisterPdf(plantCode, status, severity, search);
+                }
+
+                byte[] casePdf(UUID id) {
+                        return auditService.workflowExceptionCasePdf(id);
+                }
+
                 Map<String, Object> open(Map<String, Object> request) {
                         accessService.requireRead();
                         Map<String, Object> enriched = request == null
@@ -342,10 +361,8 @@ public class MatFlowInsightService {
 
                         deriveSourceOwner(enriched, requisition, bom);
                         List<UUID> accountabilityIds = new ArrayList<>();
-                        if (bom != null)
-                                accountabilityIds.add(bom.getId());
-                        if (requisition != null)
-                                accountabilityIds.add(requisition.getId());
+                        if (bom != null) accountabilityIds.add(bom.getId());
+                        if (requisition != null) accountabilityIds.add(requisition.getId());
                         enriched.put("accountabilityTrailAtDetection",
                                         auditService.linkedAccountabilityTrail(accountabilityIds));
                         enriched.put("accountabilityPrinciple",
@@ -360,13 +377,10 @@ public class MatFlowInsightService {
                                                 .findFirst()
                                                 .ifPresent(line -> {
                                                         if (line.material != null) {
-                                                                MatFlowMaterial material = (MatFlowMaterial) Hibernate
-                                                                                .unproxy(line.material);
+                                                                MatFlowMaterial material = (MatFlowMaterial) Hibernate.unproxy(line.material);
                                                                 enriched.put("materialId", material.getId().toString());
-                                                                enriched.put("materialCode",
-                                                                                material.getMaterialCode());
-                                                                enriched.put("materialName",
-                                                                                material.getMaterialName());
+                                                                enriched.put("materialCode", material.getMaterialCode());
+                                                                enriched.put("materialName", material.getMaterialName());
                                                         }
                                                         enriched.put("requestedQty", line.requestedQty);
                                                         enriched.put("issuedQty", line.issuedQty);
@@ -466,8 +480,7 @@ public class MatFlowInsightService {
                         if (bom.getProjectDrawing() == null) {
                                 throw conflict("Linked BOM has no Project/Product context");
                         }
-                        MatFlowProjectDrawing product = (MatFlowProjectDrawing) Hibernate
-                                        .unproxy(bom.getProjectDrawing());
+                        MatFlowProjectDrawing product = (MatFlowProjectDrawing) Hibernate.unproxy(bom.getProjectDrawing());
                         accessService.requirePlantAccess(product.getPlantCode());
                         target.put("bomId", bom.getId().toString());
                         target.put("bomNumber", bom.getBomNumber());
@@ -519,8 +532,7 @@ public class MatFlowInsightService {
                         target.put("sourceOwnerBasis",
                                         "No person is auto-attributed for this category. Use the system audit trail and root-cause review to determine responsibility.");
                         target.put("sourceRecordType", bom != null ? "BOM / DOWNSTREAM PROCESS"
-                                        : requisition != null ? "MATERIAL_REQUISITION / DOWNSTREAM PROCESS"
-                                                        : "GENERAL");
+                                        : requisition != null ? "MATERIAL_REQUISITION / DOWNSTREAM PROCESS" : "GENERAL");
                         target.put("sourceRecordStatus", bom != null ? enumName(bom.getStatus())
                                         : requisition != null ? enumName(requisition.status) : null);
                 }
@@ -538,23 +550,19 @@ public class MatFlowInsightService {
                                         .count();
                         List<MatFlowIndent> indents = indentRepository.findByRequisition_Id(req.getId());
                         boolean committedPurchase = indents.stream()
-                                        .flatMap(indent -> purchaseOrderRepository.findByIndent_Id(indent.getId())
-                                                        .stream())
-                                        .anyMatch(order -> !Set.of("DRAFT", "CANCELLED")
-                                                        .contains(enumName(order.status)));
+                                        .flatMap(indent -> purchaseOrderRepository.findByIndent_Id(indent.getId()).stream())
+                                        .anyMatch(order -> !Set.of("DRAFT", "CANCELLED").contains(enumName(order.status)));
                         boolean processingStarted = processingRepository.findAllByOrderByUpdatedAtDesc().stream()
                                         .filter(job -> job != null && job.requisition != null
                                                         && req.getId().equals(job.requisition.getId()))
-                                        .anyMatch(job -> !Set.of("PENDING", "CANCELLED")
-                                                        .contains(enumName(job.status)));
+                                        .anyMatch(job -> !Set.of("PENDING", "CANCELLED").contains(enumName(job.status)));
 
                         Map<String, Object> facts = new LinkedHashMap<>();
                         facts.put("materialAlreadyIssued", materialIssued);
                         facts.put("activeReservationCount", activeReservations);
                         facts.put("commercialCommitmentExists", committedPurchase);
                         facts.put("processingAlreadyStarted", processingStarted);
-                        facts.put("safeReservationRollbackAvailable",
-                                        !materialIssued && !committedPurchase && !processingStarted);
+                        facts.put("safeReservationRollbackAvailable", !materialIssued && !committedPurchase && !processingStarted);
                         return facts;
                 }
 
@@ -586,8 +594,7 @@ public class MatFlowInsightService {
                 private boolean booleanValue(Object value) {
                         return value instanceof Boolean b ? b
                                         : value != null && Set.of("TRUE", "YES", "1")
-                                                        .contains(String.valueOf(value).trim()
-                                                                        .toUpperCase(Locale.ROOT));
+                                                        .contains(String.valueOf(value).trim().toUpperCase(Locale.ROOT));
                 }
 
                 private UUID uuid(Object value) {
@@ -1807,8 +1814,7 @@ public class MatFlowInsightService {
                                          * fields must not take down the entire Production Execution page.
                                          * Strict tracker detail / write endpoints still surface the bad record.
                                          */
-                                        LOG.error("Skipping unreadable MatFlow tracker requisition {} while building list",
-                                                        requisitionId, ex);
+                                        LOG.error("Skipping unreadable MatFlow tracker requisition {} while building list", requisitionId, ex);
                                 }
                         }
 
@@ -2969,8 +2975,7 @@ public class MatFlowInsightService {
                                 case "DRAFT", "PRODUCTION_ISSUE", "PRODUCTION_IN_PROGRESS", "PRODUCTION_COMPLETED" ->
                                         "PRODUCTION";
                                 case "ORIGIN_STORE_FORWARDING" -> "ORIGIN PLANT STORE";
-                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
-                                        "AL-P1 MAIN STORE";
+                                case "AWAITING_MAIN_STORE_PLANNING", "MATERIAL_RESERVED", "READY_TO_ISSUE" -> "AL-P1 MAIN STORE";
                                 case "SHORTAGE_PENDING" -> "STORE / PURCHASE";
                                 case "QC_PENDING" -> "QUALITY CONTROL";
                                 case "PROCESSING" -> "PROCESSING";
@@ -3003,8 +3008,7 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> target("DEMAND");
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" ->
-                                        target("STORE");
+                                                "MATERIAL_RESERVED", "READY_TO_ISSUE" -> target("STORE");
                                 case "SHORTAGE_PENDING" -> target("PURCHASE");
                                 case "QC_PENDING" -> target("QC");
                                 case "PROCESSING" -> target("PROCESSING");
@@ -3042,8 +3046,7 @@ public class MatFlowInsightService {
                         return switch (stage) {
                                 case "DRAFT" -> "DEMAND";
                                 case "ORIGIN_STORE_FORWARDING", "AWAITING_MAIN_STORE_PLANNING",
-                                                "MATERIAL_RESERVED" ->
-                                        "STORE";
+                                                "MATERIAL_RESERVED" -> "STORE";
                                 case "SHORTAGE_PENDING" -> "PURCHASE";
                                 case "QC_PENDING", "PROCESSING", "TRANSFER_IN_PROGRESS",
                                                 "READY_TO_ISSUE" ->
@@ -3257,11 +3260,9 @@ public class MatFlowInsightService {
                         if (indent.requisition != null)
                                 indent.requisition = unwrapRequisition(indent.requisition);
                         if (indent.projectDrawing != null)
-                                indent.projectDrawing = (MatFlowProjectDrawing) Hibernate
-                                                .unproxy(indent.projectDrawing);
+                                indent.projectDrawing = (MatFlowProjectDrawing) Hibernate.unproxy(indent.projectDrawing);
                         if (indent.deliverToLocation != null)
-                                indent.deliverToLocation = (MatFlowLocation) Hibernate
-                                                .unproxy(indent.deliverToLocation);
+                                indent.deliverToLocation = (MatFlowLocation) Hibernate.unproxy(indent.deliverToLocation);
                         return indent;
                 }
 

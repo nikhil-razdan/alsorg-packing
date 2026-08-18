@@ -312,6 +312,15 @@ export const matflowApi = {
 		API.get(`${BASE}/exceptions`, { params: cleanParams(params) }),
 	getWorkflowException: (id) =>
 		API.get(`${BASE}/exceptions/${requiredId(id, "Exception ID")}`),
+	downloadWorkflowExceptionRegisterPdf: (params = {}) =>
+		API.get(`${BASE}/exceptions/report.pdf`, {
+			params: cleanParams(params),
+			responseType: "blob",
+		}),
+	downloadWorkflowExceptionCasePdf: (id) =>
+		API.get(`${BASE}/exceptions/${requiredId(id, "Exception ID")}/report.pdf`, {
+			responseType: "blob",
+		}),
 	createWorkflowException: (body) =>
 		API.post(`${BASE}/exceptions`, body),
 	containWorkflowException: (id, body = {}) =>

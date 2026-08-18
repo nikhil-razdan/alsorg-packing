@@ -16,6 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -123,6 +127,22 @@ public class MatFlowInsightController {
         return service.workflowExceptions(plantCode, status, severity, search);
     }
 
+    @GetMapping(value = "/exceptions/report.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> exceptionRegisterPdf(
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String search) {
+        byte[] pdf = service.workflowExceptionsPdf(plantCode, status, severity, search);
+        return pdfResponse(pdf, "MATFLOW_Operational_Exception_Recovery_Register.pdf");
+    }
+
+    @GetMapping(value = "/exceptions/{id}/report.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> exceptionCasePdf(@PathVariable UUID id) {
+        byte[] pdf = service.workflowExceptionPdf(id);
+        return pdfResponse(pdf, "MATFLOW_Exception_" + id + ".pdf");
+    }
+
     @GetMapping("/exceptions/{id}")
     public Map<String, Object> exception(@PathVariable UUID id) {
         return service.workflowException(id);
@@ -170,5 +190,16 @@ public class MatFlowInsightController {
             @RequestBody Map<String, Object> request) {
         return service.reopenWorkflowException(id, request);
     }
+    private ResponseEntity<byte[]> pdfResponse(byte[] pdf, String fileName) {
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(fileName)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .body(pdf);
+    }
+
 }
 

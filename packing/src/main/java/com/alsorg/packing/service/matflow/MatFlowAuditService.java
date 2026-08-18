@@ -6,8 +6,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.awt.Color;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -17,6 +21,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -442,6 +453,516 @@ public class MatFlowAuditService {
                                                                 + ". Correct/revise the BOM and resolve the exception before attempting to "
                                                                 + (clean(action) == null ? "continue" : action)
                                                                 + ". Reason: " + asString(snapshot.get("whatHappened")));
+                        }
+                }
+        }
+
+        /**
+         * Generates a management-ready PDF for the currently filtered Operational
+         * Exception & Recovery Register. The report is produced from the same
+         * append-only audit snapshots used by the UI, so Excel/PDF and screen data
+         * cannot drift into separate sources of truth.
+         */
+        @Transactional(readOnly = true)
+        public byte[] workflowExceptionRegisterPdf(
+                        String plantCode,
+                        String status,
+                        String severity,
+                        String search) {
+                List<Map<String, Object>> rows = listWorkflowExceptions(
+                                plantCode,
+                                status,
+                                severity,
+                                search);
+                return buildExceptionRegisterPdf(rows, plantCode, status, severity, search);
+        }
+
+        /** Generates the full case-file PDF, including CAPA and immutable timeline. */
+        @Transactional(readOnly = true)
+        public byte[] workflowExceptionCasePdf(UUID exceptionId) {
+                Map<String, Object> row = getWorkflowException(exceptionId);
+                return buildExceptionCasePdf(row);
+        }
+
+        private byte[] buildExceptionRegisterPdf(
+                        List<Map<String, Object>> rows,
+                        String plantCode,
+                        String status,
+                        String severity,
+                        String search) {
+                List<Map<String, Object>> safeRows = rows == null ? List.of() : rows;
+                long open = safeRows.stream()
+                                .filter(row -> !"RESOLVED".equals(cleanUpper(asString(row.get("status")))))
+                                .count();
+                long holds = safeRows.stream()
+                                .filter(row -> !"RESOLVED".equals(cleanUpper(asString(row.get("status")))))
+                                .filter(row -> asBoolean(row.get("workflowHold"), false))
+                                .count();
+                long severe = safeRows.stream()
+                                .filter(row -> !"RESOLVED".equals(cleanUpper(asString(row.get("status")))))
+                                .filter(row -> {
+                                        String value = cleanUpper(asString(row.get("severity")));
+                                        return "HIGH".equals(value) || "CRITICAL".equals(value);
+                                })
+                                .count();
+                long resolved = safeRows.stream()
+                                .filter(row -> "RESOLVED".equals(cleanUpper(asString(row.get("status")))))
+                                .count();
+
+                try (PDDocument document = new PDDocument()) {
+                        PdfCursor cursor = new PdfCursor(document, new PDRectangle(PDRectangle.A4.getHeight(), PDRectangle.A4.getWidth()));
+                        cursor.newPage();
+                        drawRegisterHeader(
+                                        cursor,
+                                        plantCode,
+                                        status,
+                                        severity,
+                                        search,
+                                        safeRows.size(),
+                                        open,
+                                        holds,
+                                        severe,
+                                        resolved);
+
+                        if (safeRows.isEmpty()) {
+                                cursor.ensure(45f);
+                                cursor.text("No exception records match the selected filters.", 10f, false, 40f);
+                        } else {
+                                int index = 1;
+                                for (Map<String, Object> row : safeRows) {
+                                        float required = estimateRegisterCaseHeight(row);
+                                        if (!cursor.hasSpace(required)) {
+                                                cursor.newPage();
+                                                drawRegisterContinuationHeader(cursor);
+                                        }
+                                        drawRegisterCase(cursor, row, index++);
+                                }
+                        }
+
+                        cursor.close();
+                        addPdfFooters(document, "Operational Exception & Recovery Register");
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        document.save(out);
+                        return out.toByteArray();
+                } catch (IOException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Unable to generate Operational Exception & Recovery PDF report",
+                                        exception);
+                }
+        }
+
+        private byte[] buildExceptionCasePdf(Map<String, Object> row) {
+                if (row == null || row.isEmpty()) {
+                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "MatFlow workflow exception not found");
+                }
+
+                try (PDDocument document = new PDDocument()) {
+                        PdfCursor cursor = new PdfCursor(document, PDRectangle.A4);
+                        cursor.newPage();
+
+                        String exceptionNumber = pdfValue(row.get("exceptionNumber"));
+                        cursor.fillBar(new Color(15, 23, 42), 58f);
+                        cursor.textAt("ALSORG / MATFLOW", 32f, cursor.pageTop() - 23f, 16f, true, Color.WHITE);
+                        cursor.textAt("Operational Exception & Recovery Case File", 32f, cursor.pageTop() - 43f, 11f, false, Color.WHITE);
+                        cursor.y = cursor.pageTop() - 76f;
+
+                        cursor.section("CASE CONTROL");
+                        cursor.kv("Exception", exceptionNumber);
+                        cursor.kv("Status / Severity", pdfValue(row.get("status")) + " / " + pdfValue(row.get("severity")));
+                        cursor.kv("Workflow Hold", asBoolean(row.get("workflowHold"), false) ? "YES" : "NO");
+                        cursor.kv("Plant / PD No. / Drawing",
+                                        joinPdf(" · ", row.get("plantCode"), row.get("projectCode"), row.get("drawingNo")));
+                        cursor.kv("Product / Material",
+                                        joinPdf(" · ", row.get("productName"), row.get("materialCode"), row.get("materialName")));
+                        cursor.kv("Linked MR / BOM",
+                                        joinPdf(" · ", row.get("requisitionNumber"), row.get("bomNumber")));
+                        cursor.kv("Category / Detected Stage",
+                                        joinPdf(" · ", row.get("category"), row.get("detectedStage")));
+                        cursor.kv("Detected By / Source Record Owner",
+                                        joinPdf(" · ", row.get("detectedBy"), row.get("sourceActor")));
+                        cursor.kv("Created / Last Updated",
+                                        joinPdf(" · ", row.get("createdAt"), row.get("updatedAt")));
+
+                        cursor.section("WHAT HAPPENED");
+                        cursor.paragraph(pdfValue(row.get("whatHappened")));
+                        cursor.kv("Expected", pdfValue(row.get("expectedValue")));
+                        cursor.kv("Actual / Found", pdfValue(row.get("actualValue")));
+                        cursor.kv("Impact", pdfValue(row.get("impact")));
+                        cursor.kv("Estimated Delay (minutes)", pdfValue(row.get("delayMinutes")));
+                        cursor.kv("Immediate Containment", pdfValue(row.get("immediateAction")));
+                        cursor.kv("Assigned Owner / Team", pdfValue(row.get("assignedTo")));
+
+                        Object recoveryPlan = row.get("recoveryPlan");
+                        if (recoveryPlan instanceof Collection<?> collection && !collection.isEmpty()) {
+                                cursor.section("RECOVERY PLAN");
+                                int step = 1;
+                                for (Object item : collection) {
+                                        cursor.bullet(step++ + ". " + pdfValue(item));
+                                }
+                        }
+                        if (clean(asString(row.get("recoveryAction"))) != null
+                                        || row.get("recoveryResult") != null) {
+                                cursor.section("RECOVERY EXECUTION");
+                                cursor.kv("Recovery Action", pdfValue(row.get("recoveryAction")));
+                                cursor.kv("Recovery Result", pdfValue(row.get("recoveryResult")));
+                        }
+
+                        boolean hasClosure = "RESOLVED".equals(cleanUpper(asString(row.get("status"))))
+                                        || clean(asString(row.get("rootCause"))) != null
+                                        || clean(asString(row.get("correctiveAction"))) != null;
+                        if (hasClosure) {
+                                cursor.section("ROOT CAUSE / CAPA / CLOSURE");
+                                cursor.kv("Root Cause", pdfValue(row.get("rootCause")));
+                                cursor.kv("Corrective Action", pdfValue(row.get("correctiveAction")));
+                                cursor.kv("Preventive Action", pdfValue(row.get("preventiveAction")));
+                                cursor.kv("Verified By", joinPdf(" · ", row.get("verifiedBy"), row.get("resolvedBy")));
+                                cursor.kv("Verification Reference", pdfValue(row.get("verificationReference")));
+                                cursor.kv("Resolution", pdfValue(row.get("resolution")));
+                                cursor.kv("Resolved At", pdfValue(row.get("resolvedAt")));
+                        }
+
+                        Object accountability = row.get("accountabilityTrailAtDetection");
+                        if (accountability instanceof Collection<?> collection && !collection.isEmpty()) {
+                                cursor.section("SYSTEM ACCOUNTABILITY TRAIL AT DETECTION");
+                                cursor.paragraph("Recorded participation is evidence of who performed which system action; it is not an automatic fault verdict.");
+                                int count = 0;
+                                for (Object item : collection) {
+                                        if (!(item instanceof Map<?, ?> event)) {
+                                                continue;
+                                        }
+                                        if (count++ >= 100) {
+                                                cursor.bullet("Additional accountability events omitted after 100 rows.");
+                                                break;
+                                        }
+                                        cursor.bullet(joinPdf(" | ",
+                                                        event.get("actionAt"),
+                                                        event.get("entityType"),
+                                                        event.get("action"),
+                                                        event.get("actor"),
+                                                        event.get("projectCode"),
+                                                        event.get("drawingNo")));
+                                }
+                        }
+
+                        Object history = row.get("history");
+                        if (history instanceof Collection<?> collection && !collection.isEmpty()) {
+                                cursor.section("IMMUTABLE EXCEPTION EVENT TIMELINE");
+                                for (Object item : collection) {
+                                        if (!(item instanceof Map<?, ?> event)) {
+                                                continue;
+                                        }
+                                        cursor.bullet(joinPdf(" | ",
+                                                        event.get("actionAt"),
+                                                        event.get("action"),
+                                                        event.get("actor"),
+                                                        event.get("status"),
+                                                        event.get("note")));
+                                }
+                        }
+
+                        cursor.close();
+                        addPdfFooters(document, exceptionNumber);
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        document.save(out);
+                        return out.toByteArray();
+                } catch (IOException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        "Unable to generate Operational Exception case PDF",
+                                        exception);
+                }
+        }
+
+        private void drawRegisterHeader(
+                        PdfCursor cursor,
+                        String plantCode,
+                        String status,
+                        String severity,
+                        String search,
+                        int total,
+                        long open,
+                        long holds,
+                        long severe,
+                        long resolved) throws IOException {
+                cursor.fillBar(new Color(15, 23, 42), 52f);
+                cursor.textAt("ALSORG / MATFLOW", 26f, cursor.pageTop() - 20f, 15f, true, Color.WHITE);
+                cursor.textAt("Operational Exception & Recovery Register", 26f, cursor.pageTop() - 39f, 11f, false, Color.WHITE);
+                cursor.y = cursor.pageTop() - 66f;
+                cursor.text("Generated: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MMM-yyyy HH:mm")), 8f, false, 11f);
+                cursor.text("Filters: Plant=" + printableFilter(plantCode)
+                                + "  |  Status=" + printableFilter(status)
+                                + "  |  Severity=" + printableFilter(severity)
+                                + "  |  Search=" + printableFilter(search), 8f, false, 12f);
+                cursor.text("Total " + total + "   |   Open " + open + "   |   Holds " + holds
+                                + "   |   High/Critical " + severe + "   |   Resolved " + resolved,
+                                9f, true, 17f);
+                cursor.line();
+        }
+
+        private void drawRegisterContinuationHeader(PdfCursor cursor) throws IOException {
+                cursor.text("Operational Exception & Recovery Register — Continued", 11f, true, 17f);
+                cursor.line();
+        }
+
+        private float estimateRegisterCaseHeight(Map<String, Object> row) {
+                int narrative = Math.max(1, wrapPdf(pdfValue(row.get("whatHappened")), 58).size());
+                int closure = Math.max(1, wrapPdf(joinPdf(" / ", row.get("rootCause"), row.get("correctiveAction")), 52).size());
+                return 58f + (narrative * 8f) + Math.min(closure, 3) * 8f;
+        }
+
+        private void drawRegisterCase(PdfCursor cursor, Map<String, Object> row, int index) throws IOException {
+                float startY = cursor.y;
+                cursor.text(index + ".  " + pdfValue(row.get("exceptionNumber"))
+                                + "    " + pdfValue(row.get("severity"))
+                                + " / " + pdfValue(row.get("status"))
+                                + (asBoolean(row.get("workflowHold"), false) ? "    [WORKFLOW HOLD]" : ""),
+                                9.5f, true, 13f);
+                cursor.text("Plant/PD/Drawing: " + joinPdf(" · ", row.get("plantCode"), row.get("projectCode"), row.get("drawingNo"))
+                                + "    |    Linked: " + joinPdf(" · ", row.get("requisitionNumber"), row.get("bomNumber")),
+                                7.5f, false, 10f);
+                cursor.text("Category/Stage: " + joinPdf(" · ", row.get("category"), row.get("detectedStage"))
+                                + "    |    Detected: " + pdfValue(row.get("detectedBy"))
+                                + "    |    Source owner: " + pdfValue(row.get("sourceActor")),
+                                7.5f, false, 10f);
+                cursor.wrapped("What happened: " + pdfValue(row.get("whatHappened")), 7.5f, false, 115, 8.5f);
+                String compare = joinPdf(" | ",
+                                clean(asString(row.get("expectedValue"))) == null ? null : "Expected: " + asString(row.get("expectedValue")),
+                                clean(asString(row.get("actualValue"))) == null ? null : "Actual: " + asString(row.get("actualValue")),
+                                clean(asString(row.get("impact"))) == null ? null : "Impact: " + asString(row.get("impact")));
+                if (!"-".equals(compare)) {
+                        cursor.wrapped(compare, 7f, false, 118, 8f);
+                }
+                String closure = joinPdf(" | ",
+                                clean(asString(row.get("rootCause"))) == null ? null : "Root cause: " + asString(row.get("rootCause")),
+                                clean(asString(row.get("correctiveAction"))) == null ? null : "Corrective: " + asString(row.get("correctiveAction")),
+                                clean(asString(row.get("resolution"))) == null ? null : "Resolution: " + asString(row.get("resolution")));
+                if (!"-".equals(closure)) {
+                        cursor.wrapped(closure, 7f, false, 118, 8f);
+                }
+                cursor.text("Updated: " + pdfValue(firstNonBlank(row.get("updatedAt"), row.get("createdAt")))
+                                + "    |    Assigned: " + pdfValue(row.get("assignedTo")),
+                                7f, false, 9f);
+                cursor.strokeBox(cursor.margin, cursor.y - 2f, cursor.contentWidth(), startY - cursor.y + 4f, new Color(203, 213, 225));
+                cursor.y -= 8f;
+        }
+
+        private void addPdfFooters(PDDocument document, String label) throws IOException {
+                int totalPages = document.getNumberOfPages();
+                for (int index = 0; index < totalPages; index++) {
+                        PDPage page = document.getPage(index);
+                        try (PDPageContentStream stream = new PDPageContentStream(
+                                        document, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
+                                stream.setNonStrokingColor(new Color(100, 116, 139));
+                                stream.setFont(PDType1Font.HELVETICA, 7f);
+                                stream.beginText();
+                                stream.newLineAtOffset(24f, 14f);
+                                stream.showText(pdfSafe(label) + "  |  Page " + (index + 1) + " of " + totalPages);
+                                stream.endText();
+                        }
+                }
+        }
+
+        private String printableFilter(String value) {
+                String clean = clean(value);
+                return clean == null ? "ALL" : clean;
+        }
+
+        private String pdfValue(Object value) {
+                if (value == null) {
+                        return "-";
+                }
+                if (value instanceof Collection<?> collection) {
+                        if (collection.isEmpty()) {
+                                return "-";
+                        }
+                        return collection.stream().map(this::pdfValue).filter(item -> !"-".equals(item))
+                                        .reduce((left, right) -> left + ", " + right).orElse("-");
+                }
+                if (value instanceof Map<?, ?> map) {
+                        try {
+                                return objectMapper.writeValueAsString(map);
+                        } catch (Exception ignored) {
+                                return String.valueOf(value);
+                        }
+                }
+                String text = clean(String.valueOf(value));
+                return text == null ? "-" : text;
+        }
+
+        private String joinPdf(String delimiter, Object... values) {
+                List<String> parts = new ArrayList<>();
+                if (values != null) {
+                        for (Object value : values) {
+                                String text = pdfValue(value);
+                                if (!"-".equals(text)) {
+                                        parts.add(text);
+                                }
+                        }
+                }
+                return parts.isEmpty() ? "-" : String.join(delimiter, parts);
+        }
+
+        private static String pdfSafe(String value) {
+                if (value == null) {
+                        return "";
+                }
+                return value
+                                .replace('\u2013', '-')
+                                .replace('\u2014', '-')
+                                .replace('\u2018', '\'')
+                                .replace('\u2019', '\'')
+                                .replace('\u201c', '"')
+                                .replace('\u201d', '"')
+                                .replace('\u2022', '-')
+                                .replace('\u2192', '>')
+                                .replaceAll("[^\\x20-\\x7E]", "?");
+        }
+
+        private static List<String> wrapPdf(String value, int maxChars) {
+                String text = pdfSafe(value == null ? "" : value).trim();
+                if (text.isEmpty()) {
+                        return List.of("-");
+                }
+                List<String> lines = new ArrayList<>();
+                for (String paragraph : text.split("\\R", -1)) {
+                        String working = paragraph.trim();
+                        if (working.isEmpty()) {
+                                lines.add("");
+                                continue;
+                        }
+                        while (working.length() > maxChars) {
+                                int cut = working.lastIndexOf(' ', maxChars);
+                                if (cut < Math.max(8, maxChars / 2)) {
+                                        cut = maxChars;
+                                }
+                                lines.add(working.substring(0, cut).trim());
+                                working = working.substring(cut).trim();
+                        }
+                        lines.add(working);
+                }
+                return lines;
+        }
+
+        /** Minimal PDFBox writer kept inside this existing service to avoid new files. */
+        private static final class PdfCursor {
+                private final PDDocument document;
+                private final PDRectangle size;
+                private final PDFont regular = PDType1Font.HELVETICA;
+                private final PDFont bold = PDType1Font.HELVETICA_BOLD;
+                private final float margin = 26f;
+                private PDPage page;
+                private PDPageContentStream stream;
+                private float y;
+
+                PdfCursor(PDDocument document, PDRectangle size) {
+                        this.document = document;
+                        this.size = size;
+                }
+
+                float pageTop() {
+                        return size.getHeight();
+                }
+
+                float contentWidth() {
+                        return size.getWidth() - (margin * 2f);
+                }
+
+                boolean hasSpace(float height) {
+                        return y - height > 30f;
+                }
+
+                void ensure(float height) throws IOException {
+                        if (!hasSpace(height)) {
+                                newPage();
+                        }
+                }
+
+                void newPage() throws IOException {
+                        closeStream();
+                        page = new PDPage(size);
+                        document.addPage(page);
+                        stream = new PDPageContentStream(document, page);
+                        y = size.getHeight() - margin;
+                }
+
+                void fillBar(Color color, float height) throws IOException {
+                        stream.setNonStrokingColor(color);
+                        stream.addRect(0f, size.getHeight() - height, size.getWidth(), height);
+                        stream.fill();
+                }
+
+                void text(String value, float fontSize, boolean strong, float leading) throws IOException {
+                        ensure(leading + 3f);
+                        textAt(value, margin, y, fontSize, strong, Color.BLACK);
+                        y -= leading;
+                }
+
+                void wrapped(String value, float fontSize, boolean strong, int maxChars, float leading) throws IOException {
+                        for (String line : wrapPdf(value, maxChars)) {
+                                text(line, fontSize, strong, leading);
+                        }
+                }
+
+                void paragraph(String value) throws IOException {
+                        wrapped(value, 9f, false, 92, 11f);
+                        y -= 3f;
+                }
+
+                void bullet(String value) throws IOException {
+                        wrapped("- " + value, 8f, false, 90, 10f);
+                }
+
+                void section(String label) throws IOException {
+                        ensure(28f);
+                        y -= 5f;
+                        text(label, 10f, true, 15f);
+                        line();
+                }
+
+                void kv(String key, String value) throws IOException {
+                        ensure(18f);
+                        List<String> lines = wrapPdf(value, 72);
+                        text(key + ": " + (lines.isEmpty() ? "-" : lines.get(0)), 8.5f, false, 10f);
+                        for (int index = 1; index < lines.size(); index++) {
+                                text("    " + lines.get(index), 8.5f, false, 10f);
+                        }
+                }
+
+                void line() throws IOException {
+                        ensure(5f);
+                        stream.setStrokingColor(new Color(203, 213, 225));
+                        stream.setLineWidth(.7f);
+                        stream.moveTo(margin, y);
+                        stream.lineTo(size.getWidth() - margin, y);
+                        stream.stroke();
+                        y -= 7f;
+                }
+
+                void strokeBox(float x, float bottom, float width, float height, Color color) throws IOException {
+                        stream.setStrokingColor(color);
+                        stream.setLineWidth(.6f);
+                        stream.addRect(x, bottom, width, Math.max(8f, height));
+                        stream.stroke();
+                }
+
+                void textAt(String value, float x, float baseline, float fontSize, boolean strong, Color color) throws IOException {
+                        stream.setNonStrokingColor(color);
+                        stream.setFont(strong ? bold : regular, fontSize);
+                        stream.beginText();
+                        stream.newLineAtOffset(x, baseline);
+                        stream.showText(pdfSafe(value));
+                        stream.endText();
+                }
+
+                void close() throws IOException {
+                        closeStream();
+                }
+
+                private void closeStream() throws IOException {
+                        if (stream != null) {
+                                stream.close();
+                                stream = null;
                         }
                 }
         }
