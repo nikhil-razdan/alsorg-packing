@@ -1,6 +1,14 @@
+/*
+ * VERIFIED BASE: ClientMasterPage(7).jsx
+ * INSIGHT REFERENCE: UsersPage(5).jsx
+ * BUILD: 2026-08-19 16:33 IST
+ * CHANGE: Client insights added; Source table column removed.
+ */
+
 import {
 	useCallback,
 	useEffect,
+	useMemo,
 	useState,
 } from "react";
 
@@ -44,10 +52,14 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
-import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import HomeWorkOutlinedIcon from "@mui/icons-material/HomeWorkOutlined";
-import SourceOutlinedIcon from "@mui/icons-material/SourceOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
+import DateRangeOutlinedIcon from "@mui/icons-material/DateRangeOutlined";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
@@ -67,6 +79,13 @@ const PAGE_SIZE_OPTIONS = [
 	25,
 	50,
 	100,
+];
+
+const INSIGHT_PERIOD_OPTIONS = [
+	{ value: "TODAY", label: "Today" },
+	{ value: "7D", label: "Last 7 Days" },
+	{ value: "30D", label: "Last 30 Days" },
+	{ value: "ALL", label: "All Available" },
 ];
 
 const EMPTY_FORM = {
@@ -173,26 +192,239 @@ const shortId = (value) => {
 		: text;
 };
 
-const sourceLabel = (source) => {
-	const clean =
-		String(source || "")
-			.trim();
-
-	if (!clean) {
-		return "MANUAL";
-	}
-
-	if (
-		clean
-			.toUpperCase()
-			.startsWith("XLSX_SEED")
-	) {
-		return "XLSX Seed";
-	}
-
-	return clean
-		.replaceAll("_", " ");
+const normalizeClientKey = (value) => {
+	return String(value || "")
+		.normalize("NFKD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim()
+		.replace(/\s+/g, " ");
 };
+
+const parseSmartDate = (value) => {
+	if (!value) {
+		return null;
+	}
+
+	const date =
+		value instanceof Date
+			? value
+			: new Date(value);
+
+	return Number.isNaN(date.getTime())
+		? null
+		: date;
+};
+
+const toLocalDateTimeParam = (date) => {
+	if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+		return "";
+	}
+
+	const pad = (value) => String(value).padStart(2, "0");
+
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+		date.getDate()
+	)}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+		date.getSeconds()
+	)}`;
+};
+
+const getInsightPeriodWindow = (period) => {
+	const now = new Date();
+	const end = new Date(now);
+	end.setHours(23, 59, 59, 999);
+
+	if (period === "ALL") {
+		return {
+			key: "ALL",
+			label: "All Available",
+			start: null,
+			end: null,
+			fromParam: "",
+			toParam: "",
+		};
+	}
+
+	const start = new Date(now);
+	start.setHours(0, 0, 0, 0);
+
+	if (period === "7D") {
+		start.setDate(start.getDate() - 6);
+	} else if (period === "30D") {
+		start.setDate(start.getDate() - 29);
+	}
+
+	return {
+		key: period,
+		label:
+			INSIGHT_PERIOD_OPTIONS.find((option) => option.value === period)
+				?.label || "Today",
+		start,
+		end,
+		fromParam: toLocalDateTimeParam(start),
+		toParam: toLocalDateTimeParam(end),
+	};
+};
+
+const isWithinInsightWindow = (value, window) => {
+	if (!window || window.key === "ALL") {
+		return true;
+	}
+
+	const date = parseSmartDate(value);
+
+	if (!date) {
+		return false;
+	}
+
+	return (
+		(!window.start || date.getTime() >= window.start.getTime()) &&
+		(!window.end || date.getTime() <= window.end.getTime())
+	);
+};
+
+const localDateKey = (value) => {
+	const date = parseSmartDate(value);
+
+	if (!date) {
+		return "";
+	}
+
+	const pad = (part) => String(part).padStart(2, "0");
+
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+		date.getDate()
+	)}`;
+};
+
+const extractApiRows = (payload) => {
+	if (Array.isArray(payload)) {
+		return payload;
+	}
+
+	const candidates = [
+		payload?.rows,
+		payload?.content,
+		payload?.items,
+		payload?.results,
+		payload?.data,
+	];
+
+	return candidates.find(Array.isArray) || [];
+};
+
+const reportClientName = (row) => {
+	return String(
+		row?.clientName ||
+		row?.client ||
+		row?.siteName ||
+		row?.customerName ||
+		""
+	).trim();
+};
+
+const packingTimestamp = (row) =>
+	row?.packedAt ||
+	row?.packingDate ||
+	row?.generatedAt ||
+	row?.createdAt ||
+	row?.updatedAt ||
+	null;
+
+const dispatchReportTimestamp = (row) =>
+	row?.dispatchedAt ||
+	row?.dispatchTime ||
+	row?.generatedAt ||
+	row?.createdAt ||
+	row?.updatedAt ||
+	null;
+
+const stickerTimestamp = (row) =>
+	row?.generatedAt ||
+	row?.createdAt ||
+	row?.updatedAt ||
+	null;
+
+const standardChallanTimestamp = (row) =>
+	row?.dispatchedAt ||
+	row?.tripStartedAt ||
+	row?.generatedAt ||
+	row?.createdAt ||
+	null;
+
+const customChallanTimestamp = (row) =>
+	row?.generatedAt ||
+	row?.dispatchTime ||
+	row?.createdAt ||
+	null;
+
+const packingActor = (row) =>
+	String(
+		row?.packedBy ||
+		row?.generatedBy ||
+		row?.createdBy ||
+		row?.performedBy ||
+		""
+	).trim();
+
+const dispatchActor = (row) =>
+	String(
+		row?.dispatchedBy ||
+		row?.generatedBy ||
+		row?.createdBy ||
+		row?.performedBy ||
+		""
+	).trim();
+
+const standardChallanNumber = (row, index = 0) =>
+	String(
+		row?.challanNumber ||
+		row?.challanNo ||
+		row?.number ||
+		row?.id ||
+		`STANDARD-${index}`
+	).trim();
+
+const customChallanNumber = (row, index = 0) =>
+	String(
+		row?.challanNumber ||
+		row?.challanNo ||
+		row?.number ||
+		row?.id ||
+		`CUSTOM-${index}`
+	).trim();
+
+const safeSetValues = (setValue) =>
+	Array.from(setValue || []).filter(Boolean);
+
+const buildEmptyClientInsight = (name = "") => ({
+	clientName: name,
+	packingPeriod: 0,
+	dispatchPeriod: 0,
+	periodOutput: 0,
+	stickersGenerated: 0,
+	initialStickers: 0,
+	reprints: 0,
+	standardChallans: 0,
+	customChallans: 0,
+	challanItems: 0,
+	activeDays: 0,
+	uniqueItems: 0,
+	uniquePdNos: 0,
+	uniqueDrawingNos: 0,
+	uniqueSkus: 0,
+	plants: [],
+	packingUsers: [],
+	dispatchUsers: [],
+	activityScore: 0,
+	activityBand: "No recorded work",
+	firstActivityAt: null,
+	lastActivityAt: null,
+	recentRows: [],
+});
+
 
 /* =========================================================
  * PAGE
@@ -242,6 +474,30 @@ export default function ClientMasterPage() {
 			active: 0,
 			inactive: 0,
 		});
+
+	const [insightPeriod, setInsightPeriod] =
+		useState("7D");
+
+	const [intelligenceLoading, setIntelligenceLoading] =
+		useState(false);
+
+	const [intelligenceData, setIntelligenceData] =
+		useState({
+			packingRows: [],
+			dispatchRows: [],
+			stickerRows: [],
+			standardChallans: [],
+			customChallans: [],
+			loadedAt: null,
+			errors: [],
+			sources: {},
+		});
+
+	const [insightOpen, setInsightOpen] =
+		useState(false);
+
+	const [insightClient, setInsightClient] =
+		useState(null);
 
 	const [loading, setLoading] =
 		useState(true);
@@ -353,6 +609,116 @@ export default function ClientMasterPage() {
 			});
 		},
 		[]
+	);
+
+
+	const insightWindow = useMemo(
+		() => getInsightPeriodWindow(insightPeriod),
+		[insightPeriod]
+	);
+
+	const loadIntelligence = useCallback(
+		async () => {
+			setIntelligenceLoading(true);
+
+			const reportFrom =
+				insightWindow.fromParam ||
+				"2000-01-01T00:00:00";
+
+			const reportTo =
+				insightWindow.toParam ||
+				toLocalDateTimeParam(new Date());
+
+			const [
+				packingResult,
+				dispatchResult,
+				stickerResult,
+				standardChallanResult,
+				customChallanResult,
+			] = await Promise.allSettled([
+				API.get("/reports/packing", {
+					params: {
+						from: reportFrom,
+						to: reportTo,
+					},
+				}),
+				API.get("/reports/dispatch", {
+					params: {
+						from: reportFrom,
+						to: reportTo,
+					},
+				}),
+				API.get("/stickers/generated-history"),
+				API.get("/dispatched/challans"),
+				API.get("/chalaan/custom"),
+			]);
+
+			const errors = [];
+			const sources = {};
+
+			const unpack = (result, label, key) => {
+				if (result.status === "fulfilled") {
+					const loadedRows = extractApiRows(
+						result.value?.data
+					);
+
+					sources[key] = {
+						ok: true,
+						count: loadedRows.length,
+					};
+
+					return loadedRows;
+				}
+
+				const message = getApiMessage(
+					result.reason,
+					"Unavailable"
+				);
+
+				errors.push(`${label}: ${message}`);
+				sources[key] = {
+					ok: false,
+					count: 0,
+					message,
+				};
+
+				return [];
+			};
+
+			setIntelligenceData({
+				packingRows: unpack(
+					packingResult,
+					"Packing report",
+					"packing"
+				),
+				dispatchRows: unpack(
+					dispatchResult,
+					"Dispatch report",
+					"dispatch"
+				),
+				stickerRows: unpack(
+					stickerResult,
+					"Sticker history",
+					"stickers"
+				),
+				standardChallans: unpack(
+					standardChallanResult,
+					"Standard challans",
+					"challans"
+				),
+				customChallans: unpack(
+					customChallanResult,
+					"Custom challans",
+					"customChallans"
+				),
+				loadedAt: new Date(),
+				errors,
+				sources,
+			});
+
+			setIntelligenceLoading(false);
+		},
+		[insightWindow]
 	);
 
 	const loadStats = useCallback(
@@ -498,6 +864,360 @@ export default function ClientMasterPage() {
 	useEffect(() => {
 		refreshAll();
 	}, [refreshAll]);
+
+	useEffect(() => {
+		loadIntelligence();
+	}, [loadIntelligence]);
+
+	const clientInsightsByKey = useMemo(() => {
+		const map = new Map();
+
+		const getTarget = (clientName) => {
+			const cleanName = String(clientName || "").trim();
+			const key = normalizeClientKey(cleanName);
+
+			if (!key) {
+				return null;
+			}
+
+			if (!map.has(key)) {
+				map.set(key, {
+					clientName: cleanName,
+					packingPeriod: 0,
+					dispatchPeriod: 0,
+					stickersGenerated: 0,
+					initialStickers: 0,
+					reprints: 0,
+					challanItems: 0,
+					_standardChallanKeys: new Set(),
+					_customChallanKeys: new Set(),
+					_activeDayKeys: new Set(),
+					_itemKeys: new Set(),
+					_pdKeys: new Set(),
+					_drawingKeys: new Set(),
+					_skuKeys: new Set(),
+					_plantKeys: new Set(),
+					_packingUsers: new Set(),
+					_dispatchUsers: new Set(),
+					firstActivityAt: null,
+					lastActivityAt: null,
+					recentRows: [],
+				});
+			}
+
+			return map.get(key);
+		};
+
+		const addDistinct = (setValue, value) => {
+			const clean = String(value || "").trim();
+			if (clean) {
+				setValue.add(clean);
+			}
+		};
+
+		const touch = (target, timestamp) => {
+			if (!target || !timestamp) {
+				return;
+			}
+
+			const parsed = parseSmartDate(timestamp);
+			if (!parsed) {
+				return;
+			}
+
+			const first = parseSmartDate(target.firstActivityAt);
+			const last = parseSmartDate(target.lastActivityAt);
+
+			if (!first || parsed.getTime() < first.getTime()) {
+				target.firstActivityAt = timestamp;
+			}
+
+			if (!last || parsed.getTime() > last.getTime()) {
+				target.lastActivityAt = timestamp;
+			}
+
+			const dayKey = localDateKey(timestamp);
+			if (dayKey) {
+				target._activeDayKeys.add(dayKey);
+			}
+		};
+
+		const captureRowDimensions = (target, row) => {
+			if (!target || !row) return;
+
+			addDistinct(target._itemKeys, row?.itemName || row?.name || row?.description);
+			addDistinct(target._pdKeys, row?.pdNo);
+			addDistinct(target._drawingKeys, row?.drawingNo);
+			addDistinct(target._skuKeys, row?.sku || row?.codeSku);
+			addDistinct(target._plantKeys, row?.plantCode);
+		};
+
+		const addRecent = (target, category, action, timestamp, detail = "") => {
+			if (!target || !timestamp || !isWithinInsightWindow(timestamp, insightWindow)) {
+				return;
+			}
+
+			target.recentRows.push({
+				category,
+				action,
+				timestamp,
+				detail,
+			});
+		};
+
+		(intelligenceData.packingRows || []).forEach((row) => {
+			const timestamp = packingTimestamp(row);
+			if (!isWithinInsightWindow(timestamp, insightWindow)) return;
+
+			const target = getTarget(reportClientName(row));
+			if (!target) return;
+
+			target.packingPeriod += 1;
+			touch(target, timestamp);
+			captureRowDimensions(target, row);
+			addDistinct(target._packingUsers, packingActor(row));
+			addRecent(
+				target,
+				"PACKING",
+				"Packed item",
+				timestamp,
+				[row?.itemName || row?.name, row?.pdNo, row?.sku]
+					.filter(Boolean)
+					.join(" • ")
+			);
+		});
+
+		(intelligenceData.dispatchRows || []).forEach((row) => {
+			const timestamp = dispatchReportTimestamp(row);
+			if (!isWithinInsightWindow(timestamp, insightWindow)) return;
+
+			const target = getTarget(reportClientName(row));
+			if (!target) return;
+
+			target.dispatchPeriod += 1;
+			touch(target, timestamp);
+			captureRowDimensions(target, row);
+			addDistinct(target._dispatchUsers, dispatchActor(row));
+			addRecent(
+				target,
+				"DISPATCH",
+				"Dispatched item",
+				timestamp,
+				[row?.itemName || row?.name, row?.pdNo, row?.sku]
+					.filter(Boolean)
+					.join(" • ")
+			);
+		});
+
+		(intelligenceData.stickerRows || []).forEach((row) => {
+			const timestamp = stickerTimestamp(row);
+			if (!isWithinInsightWindow(timestamp, insightWindow)) return;
+
+			const target = getTarget(reportClientName(row));
+			if (!target) return;
+
+			target.stickersGenerated += 1;
+
+			const isReprint =
+				String(row?.reason || "").trim().toUpperCase() === "REPRINT" ||
+				Number(row?.printIteration || 1) > 1;
+
+			if (isReprint) {
+				target.reprints += 1;
+			} else {
+				target.initialStickers += 1;
+			}
+
+			touch(target, timestamp);
+			captureRowDimensions(target, row);
+			addDistinct(target._packingUsers, row?.generatedBy);
+			addRecent(
+				target,
+				"STICKER",
+				isReprint ? "Sticker reprint" : "Sticker generated",
+				timestamp,
+				[row?.stickerNumber, row?.itemName, row?.pdNo]
+					.filter(Boolean)
+					.join(" • ")
+			);
+		});
+
+		(intelligenceData.standardChallans || []).forEach((challan, challanIndex) => {
+			const timestamp = standardChallanTimestamp(challan);
+			if (!isWithinInsightWindow(timestamp, insightWindow)) return;
+
+			const items = Array.isArray(challan?.items) ? challan.items : [];
+			const byClient = new Map();
+
+			items.forEach((item) => {
+				const clientName = reportClientName(item);
+				const clientKey = normalizeClientKey(clientName);
+				if (!clientKey) return;
+
+				if (!byClient.has(clientKey)) {
+					byClient.set(clientKey, {
+						clientName,
+						items: [],
+					});
+				}
+
+				byClient.get(clientKey).items.push(item);
+			});
+
+			byClient.forEach((entry) => {
+				const target = getTarget(entry.clientName);
+				if (!target) return;
+
+				const challanKey = standardChallanNumber(challan, challanIndex);
+				target._standardChallanKeys.add(challanKey);
+				target.challanItems += entry.items.length;
+				touch(target, timestamp);
+				addDistinct(target._dispatchUsers, dispatchActor(challan));
+
+				entry.items.forEach((item) => captureRowDimensions(target, item));
+
+				addRecent(
+					target,
+					"CHALLAN",
+					`Standard challan ${challanKey}`,
+					timestamp,
+					`${entry.items.length} client item${entry.items.length === 1 ? "" : "s"}`
+				);
+			});
+		});
+
+		(intelligenceData.customChallans || []).forEach((challan, challanIndex) => {
+			const timestamp = customChallanTimestamp(challan);
+			if (!isWithinInsightWindow(timestamp, insightWindow)) return;
+
+			const target = getTarget(reportClientName(challan));
+			if (!target) return;
+
+			const challanKey = customChallanNumber(challan, challanIndex);
+			target._customChallanKeys.add(challanKey);
+			const items = Array.isArray(challan?.items) ? challan.items : [];
+			target.challanItems += items.length;
+			touch(target, timestamp);
+			addDistinct(target._dispatchUsers, dispatchActor(challan));
+			items.forEach((item) => captureRowDimensions(target, item));
+			addRecent(
+				target,
+				"CHALLAN",
+				`Custom challan ${challanKey}`,
+				timestamp,
+				`${items.length} item${items.length === 1 ? "" : "s"}`
+			);
+		});
+
+		let maxOutput = 0;
+		let maxTracked = 0;
+		let maxDays = 0;
+
+		map.forEach((value) => {
+			value.periodOutput =
+				value.packingPeriod + value.dispatchPeriod;
+			value.standardChallans = value._standardChallanKeys.size;
+			value.customChallans = value._customChallanKeys.size;
+			value.activeDays = value._activeDayKeys.size;
+			value.uniqueItems = value._itemKeys.size;
+			value.uniquePdNos = value._pdKeys.size;
+			value.uniqueDrawingNos = value._drawingKeys.size;
+			value.uniqueSkus = value._skuKeys.size;
+			value.plants = safeSetValues(value._plantKeys).sort();
+			value.packingUsers = safeSetValues(value._packingUsers).sort();
+			value.dispatchUsers = safeSetValues(value._dispatchUsers).sort();
+			value.trackedRecords =
+				value.stickersGenerated +
+				value.standardChallans +
+				value.customChallans;
+
+			value.recentRows = [...value.recentRows]
+				.sort(
+					(a, b) =>
+						(parseSmartDate(b.timestamp)?.getTime() || 0) -
+						(parseSmartDate(a.timestamp)?.getTime() || 0)
+				)
+				.slice(0, 14);
+
+			maxOutput = Math.max(maxOutput, value.periodOutput);
+			maxTracked = Math.max(maxTracked, value.trackedRecords);
+			maxDays = Math.max(maxDays, value.activeDays);
+		});
+
+		map.forEach((value) => {
+			const outputIndex = maxOutput ? value.periodOutput / maxOutput : 0;
+			const recordIndex = maxTracked ? value.trackedRecords / maxTracked : 0;
+			const dayIndex = maxDays ? value.activeDays / maxDays : 0;
+
+			value.activityScore = Math.round(
+				Math.min(
+					100,
+					outputIndex * 60 +
+						recordIndex * 25 +
+						dayIndex * 15
+				)
+			);
+
+			value.activityBand =
+				value.activityScore >= 80
+					? "High recorded activity"
+					: value.activityScore >= 50
+						? "Strong recorded activity"
+						: value.activityScore > 0
+							? "Recorded activity"
+							: "No recorded work";
+
+			delete value._standardChallanKeys;
+			delete value._customChallanKeys;
+			delete value._activeDayKeys;
+			delete value._itemKeys;
+			delete value._pdKeys;
+			delete value._drawingKeys;
+			delete value._skuKeys;
+			delete value._plantKeys;
+			delete value._packingUsers;
+			delete value._dispatchUsers;
+		});
+
+		return map;
+	}, [intelligenceData, insightWindow]);
+
+	const intelligenceSummary = useMemo(() => {
+		const values = Array.from(clientInsightsByKey.values());
+
+		return values.reduce(
+			(result, item) => {
+				result.operationalClients += item.periodOutput > 0 || item.trackedRecords > 0 ? 1 : 0;
+				result.packed += item.packingPeriod;
+				result.dispatched += item.dispatchPeriod;
+				result.stickers += item.stickersGenerated;
+				result.challans += item.standardChallans + item.customChallans;
+				return result;
+			},
+			{
+				operationalClients: 0,
+				packed: 0,
+				dispatched: 0,
+				stickers: 0,
+				challans: 0,
+			}
+		);
+	}, [clientInsightsByKey]);
+
+	const insightForClient = useCallback(
+		(client) => {
+			if (!client) {
+				return buildEmptyClientInsight();
+			}
+
+			return (
+				clientInsightsByKey.get(
+					normalizeClientKey(client.name)
+				) || buildEmptyClientInsight(client.name)
+			);
+		},
+		[clientInsightsByKey]
+	);
 
 	const currentPage =
 		Math.min(
@@ -867,41 +1587,14 @@ export default function ClientMasterPage() {
 				</Box>
 
 				<Box sx={statsGridSx}>
-					<StatCard
-						label="Total Clients"
-						value={stats.total}
-						accent="#3b82f6"
-						icon={
-							<PeopleAltOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Active Clients"
-						value={stats.active}
-						accent="#22c55e"
-						icon={
-							<CheckCircleOutlineOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Archived Clients"
-						value={stats.inactive}
-						accent="#64748b"
-						icon={
-							<BlockOutlinedIcon />
-						}
-					/>
-
-					<StatCard
-						label="Current Result"
-						value={totalElements}
-						accent="#a78bfa"
-						icon={
-							<VisibilityOutlinedIcon />
-						}
-					/>
+					<StatCard label="Total Clients" value={stats.total} accent="#3b82f6" icon={<PeopleAltOutlinedIcon />} />
+					<StatCard label="Active Clients" value={stats.active} accent="#22c55e" icon={<CheckCircleOutlineOutlinedIcon />} />
+					<StatCard label="Archived Clients" value={stats.inactive} accent="#64748b" icon={<BlockOutlinedIcon />} />
+					<StatCard label="Current Result" value={totalElements} accent="#a78bfa" icon={<VisibilityOutlinedIcon />} />
+					<StatCard label={`Active • ${insightWindow.label}`} value={intelligenceSummary.operationalClients} accent="#14b8a6" icon={<TimelineOutlinedIcon />} />
+					<StatCard label={`Packed • ${insightWindow.label}`} value={intelligenceSummary.packed} accent="#22c55e" icon={<FactCheckOutlinedIcon />} />
+					<StatCard label={`Dispatched • ${insightWindow.label}`} value={intelligenceSummary.dispatched} accent="#f97316" icon={<LocalShippingOutlinedIcon />} />
+					<StatCard label={`Sticker Events • ${insightWindow.label}`} value={intelligenceSummary.stickers} accent="#06b6d4" icon={<AssessmentOutlinedIcon />} />
 				</Box>
 
 				<Box
@@ -928,7 +1621,7 @@ export default function ClientMasterPage() {
 									smartControlTitleSx
 								}
 							>
-								Client Directory & Shared Master Control
+								Client Directory & Operational Intelligence
 							</Typography>
 
 							<Typography
@@ -936,11 +1629,7 @@ export default function ClientMasterPage() {
 									smartControlSubSx
 								}
 							>
-								Maintain one reusable client directory for PackFlow
-								search today and future FlowSuite module integrations.
-								Client creation in PackFlow remains free-text; this master
-								adds controlled reusable suggestions without changing the
-								existing packet workflow.
+								Maintain reusable client master data while reviewing PackFlow packing, dispatch, sticker and challan activity for each client across a selected period. Existing packet creation and free-text client entry remain unchanged.
 							</Typography>
 						</Box>
 
@@ -949,6 +1638,15 @@ export default function ClientMasterPage() {
 								smartControlActionsSx
 							}
 						>
+							<Button
+								startIcon={<InsightsOutlinedIcon />}
+								onClick={loadIntelligence}
+								disabled={intelligenceLoading}
+								sx={insightsButtonSx}
+							>
+								{intelligenceLoading ? "Refreshing..." : "Refresh Intelligence"}
+							</Button>
+
 							<Button
 								startIcon={
 									<RefreshOutlinedIcon />
@@ -981,6 +1679,40 @@ export default function ClientMasterPage() {
 							>
 								Add Client
 							</Button>
+						</Box>
+					</Box>
+
+					<Box sx={intelligenceToolbarSx}>
+						<Box sx={intelligenceToolbarGroupSx}>
+							<DateRangeOutlinedIcon sx={{ color: "#60a5fa", fontSize: 18 }} />
+							<Typography sx={intelligenceToolbarLabelSx}>Insight Period</Typography>
+							<TextField
+								select
+								size="small"
+								value={insightPeriod}
+								onChange={(event) => {
+									setInsightPeriod(event.target.value);
+									setPageNo(1);
+								}}
+								sx={{ ...fieldSx, minWidth: 165 }}
+							>
+								{INSIGHT_PERIOD_OPTIONS.map((option) => (
+									<MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+								))}
+							</TextField>
+						</Box>
+
+						<Box sx={dataSourceHealthSx}>
+							<Typography sx={intelligenceToolbarLabelSx}>Data Sources</Typography>
+							{Object.entries(intelligenceData.sources || {}).map(([key, source]) => (
+								<Tooltip key={key} title={source.ok ? `${source.count} records loaded` : source.message || "Unavailable"}>
+									<Chip
+										label={key.replace(/([A-Z])/g, " $1")}
+										size="small"
+										sx={sourceHealthChipSx(source.ok)}
+									/>
+								</Tooltip>
+							))}
 						</Box>
 					</Box>
 
@@ -1147,6 +1879,10 @@ export default function ClientMasterPage() {
 									}
 								/>
 							)}
+
+							<Typography sx={smartLoadedAtSx}>
+								Insight snapshot: {intelligenceData.loadedAt ? formatDateTime(intelligenceData.loadedAt) : "Loading..."}
+							</Typography>
 						</Box>
 
 						<Button
@@ -1166,11 +1902,17 @@ export default function ClientMasterPage() {
 					</Box>
 				</Box>
 
+				{intelligenceData.errors.length > 0 && (
+					<Alert severity="warning" sx={performanceWarningSx}>
+						Client Master remains available, but part of the insight snapshot could not be loaded. {intelligenceData.errors.join(" • ")}
+					</Alert>
+				)}
+
 				<Box sx={tablePanelSx}>
 					<Box sx={tableHeaderSx}>
 						<Box>Client</Box>
 						<Box>Address</Box>
-						<Box>Source</Box>
+						<Box>{insightWindow.label} Tracker</Box>
 						<Box>Created By</Box>
 						<Box>Updated By / Time</Box>
 						<Box>Status</Box>
@@ -1201,6 +1943,12 @@ export default function ClientMasterPage() {
 										row={
 											row
 										}
+										insight={insightForClient(row)}
+										periodLabel={insightWindow.label}
+										onInsights={() => {
+											setInsightClient(row);
+											setInsightOpen(true);
+										}}
 										onEdit={() =>
 											openEditDrawer(
 												row
@@ -1414,6 +2162,18 @@ export default function ClientMasterPage() {
 				}
 			/>
 
+			<ClientInsightsDialog
+				open={insightOpen}
+				client={insightClient}
+				insight={insightClient ? insightForClient(insightClient) : null}
+				periodLabel={insightWindow.label}
+				sources={intelligenceData.sources}
+				onClose={() => {
+					setInsightOpen(false);
+					setInsightClient(null);
+				}}
+			/>
+
 			<Snackbar
 				open={snackbar.open}
 				autoHideDuration={3500}
@@ -1593,6 +2353,9 @@ function PageHeader({
 
 function ClientRow({
 	row,
+	insight,
+	periodLabel,
+	onInsights,
 	onEdit,
 	onToggle,
 }) {
@@ -1608,14 +2371,11 @@ function ClientRow({
 			.toUpperCase() ||
 		"C";
 
-	const xlsxSeeded =
-		String(
-			row?.source || ""
-		)
-			.toUpperCase()
-			.startsWith(
-				"XLSX_SEED"
-			);
+	const smartInsight =
+		insight ||
+		buildEmptyClientInsight(
+			row?.name
+		);
 
 	return (
 		<Box
@@ -1677,32 +2437,43 @@ function ClientRow({
 				</Typography>
 			</Box>
 
-			<Box>
-				<Tooltip
-					title={
-						row?.source ||
-						"MANUAL"
-					}
-				>
+			<Box sx={clientInsightCellSx}>
+				<Box sx={performanceTopSx}>
+					<Box>
+						<Typography sx={performanceTotalSx}>
+							{smartInsight.periodOutput}
+						</Typography>
+						<Typography sx={performancePeriodCaptionSx}>
+							{periodLabel || "Period"} output
+						</Typography>
+					</Box>
+
 					<Chip
-						icon={
-							xlsxSeeded
-								? <SourceOutlinedIcon />
-								: <BusinessOutlinedIcon />
-						}
-						label={
-							sourceLabel(
-								row?.source
-							)
-						}
+						label={`${smartInsight.activityScore}%`}
 						size="small"
-						sx={
-							xlsxSeeded
-								? sourceSeedChipSx
-								: sourceManualChipSx
-						}
+						sx={performanceScoreChipSx(
+							smartInsight.activityScore
+						)}
 					/>
-				</Tooltip>
+				</Box>
+
+				<Box sx={performanceSplitSx}>
+					<span>Pack <strong>{smartInsight.packingPeriod}</strong></span>
+					<span>Dispatch <strong>{smartInsight.dispatchPeriod}</strong></span>
+					<span>Sticker <strong>{smartInsight.stickersGenerated}</strong></span>
+					<span>Challan <strong>{smartInsight.standardChallans + smartInsight.customChallans}</strong></span>
+					<span>Days <strong>{smartInsight.activeDays}</strong></span>
+				</Box>
+
+				<Typography sx={performanceBandSx}>
+					{smartInsight.activityBand}
+				</Typography>
+
+				<Typography sx={performanceLastSx}>
+					{smartInsight.lastActivityAt
+						? formatDateTime(smartInsight.lastActivityAt)
+						: "No recorded activity"}
+				</Typography>
 			</Box>
 
 			<Box sx={auditCellSx}>
@@ -1766,6 +2537,14 @@ function ClientRow({
 
 			<Box sx={actionsSx}>
 				<Button
+					startIcon={<InsightsOutlinedIcon />}
+					onClick={onInsights}
+					sx={insightsButtonSx}
+				>
+					Insights
+				</Button>
+
+				<Button
 					startIcon={
 						<EditOutlinedIcon />
 					}
@@ -1798,6 +2577,7 @@ function ClientRow({
 		</Box>
 	);
 }
+
 
 /* =========================================================
  * CLIENT EDITOR DRAWER
@@ -2003,6 +2783,284 @@ function ClientEditorDrawer({
 				</Button>
 			</Box>
 		</Drawer>
+	);
+}
+
+
+/* =========================================================
+ * CLIENT INSIGHTS DIALOG
+ * ========================================================= */
+
+function ClientInsightsDialog({
+	open,
+	client,
+	insight,
+	periodLabel,
+	sources,
+	onClose,
+}) {
+	if (!client) {
+		return null;
+	}
+
+	const data =
+		insight ||
+		buildEmptyClientInsight(client.name);
+
+	const sourceEntries =
+		Object.entries(sources || {});
+
+	return (
+		<Dialog
+			open={open}
+			onClose={onClose}
+			fullWidth
+			maxWidth="lg"
+			PaperProps={{
+				sx: performanceDialogPaperSx,
+			}}
+		>
+			<DialogTitle sx={performanceDialogTitleSx}>
+				<Box sx={performanceDialogTitleRowSx}>
+					<Box sx={performanceDialogIdentitySx}>
+						<Box sx={performanceAvatarSx}>
+							{String(client.name || "C")
+								.charAt(0)
+								.toUpperCase()}
+						</Box>
+
+						<Box>
+							<Typography sx={performanceDialogNameSx}>
+								{client.name}
+							</Typography>
+
+							<Typography sx={performanceDialogSubSx}>
+								PackFlow packing, dispatch, sticker and challan intelligence
+							</Typography>
+						</Box>
+					</Box>
+
+					<Button onClick={onClose} sx={closeButtonSx}>
+						<CloseOutlinedIcon />
+					</Button>
+				</Box>
+			</DialogTitle>
+
+			<DialogContent sx={performanceDialogContentSx}>
+				<Box sx={performanceHeroGridSx}>
+					<PerformanceMetricCard
+						label={`${periodLabel || "Period"} Output`}
+						value={data.periodOutput}
+						detail={`${data.packingPeriod} packed • ${data.dispatchPeriod} dispatched`}
+						accent="#3b82f6"
+					/>
+
+					<PerformanceMetricCard
+						label="Client Activity Index"
+						value={`${data.activityScore}%`}
+						detail={data.activityBand}
+						accent="#22c55e"
+					/>
+
+					<PerformanceMetricCard
+						label="Active Days"
+						value={data.activeDays}
+						detail={data.lastActivityAt ? `Last: ${formatDateTime(data.lastActivityAt)}` : "No recorded activity"}
+						accent="#a78bfa"
+					/>
+
+					<PerformanceMetricCard
+						label="Tracked Documents"
+						value={data.stickersGenerated + data.standardChallans + data.customChallans}
+						detail={`${data.stickersGenerated} sticker events • ${data.standardChallans + data.customChallans} challans`}
+						accent="#14b8a6"
+					/>
+				</Box>
+
+				<Box sx={performanceSectionGridSx}>
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Client Master Profile
+						</Typography>
+
+						<Box sx={performanceAccessListSx}>
+							<div>
+								<span>Status</span>
+								<strong>{client.active === false ? "Archived" : "Active"}</strong>
+							</div>
+							<div>
+								<span>Address</span>
+								<strong>{client.address || "No address recorded"}</strong>
+							</div>
+							<div>
+								<span>Created By</span>
+								<strong>{client.createdBy || "SYSTEM"}</strong>
+							</div>
+							<div>
+								<span>Created</span>
+								<strong>{formatDateTime(client.createdAt)}</strong>
+							</div>
+							<div>
+								<span>First Operational Activity</span>
+								<strong>{data.firstActivityAt ? formatDateTime(data.firstActivityAt) : "No recorded activity"}</strong>
+							</div>
+							<div>
+								<span>Last Operational Activity</span>
+								<strong>{data.lastActivityAt ? formatDateTime(data.lastActivityAt) : "No recorded activity"}</strong>
+							</div>
+						</Box>
+
+						<Typography sx={{ ...performanceSectionTitleSx, mt: 1.4 }}>
+							Operational Footprint
+						</Typography>
+
+						<Box sx={insightTagWrapSx}>
+							{data.plants.length > 0 ? data.plants.map((plant) => (
+								<Chip key={plant} label={plant} size="small" sx={insightTagSx("#38bdf8")} />
+							)) : <Chip label="No plant data" size="small" sx={neutralInsightChipSx} />}
+						</Box>
+					</Box>
+
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							PackFlow Operational Record
+						</Typography>
+
+						<Box sx={performanceMixGridSx}>
+							<PerformanceMixItem label="Packed" value={data.packingPeriod} accent="#22c55e" />
+							<PerformanceMixItem label="Dispatched" value={data.dispatchPeriod} accent="#f97316" />
+							<PerformanceMixItem label="Stickers" value={data.stickersGenerated} accent="#06b6d4" />
+							<PerformanceMixItem label="Initial Stickers" value={data.initialStickers} accent="#38bdf8" />
+							<PerformanceMixItem label="Reprints" value={data.reprints} accent="#f59e0b" />
+							<PerformanceMixItem label="Std. Challans" value={data.standardChallans} accent="#a78bfa" />
+							<PerformanceMixItem label="Custom Challans" value={data.customChallans} accent="#ec4899" />
+							<PerformanceMixItem label="Challan Items" value={data.challanItems} accent="#f97316" />
+							<PerformanceMixItem label="Unique Items" value={data.uniqueItems} accent="#14b8a6" />
+							<PerformanceMixItem label="Unique PD Nos" value={data.uniquePdNos} accent="#60a5fa" />
+							<PerformanceMixItem label="Unique DWG Nos" value={data.uniqueDrawingNos} accent="#8b5cf6" />
+							<PerformanceMixItem label="Unique SKUs" value={data.uniqueSkus} accent="#22c55e" />
+						</Box>
+
+						<Typography sx={performanceNoteSx}>
+							Client Activity Index is a relative operational index built from recorded packing, dispatch, sticker/challan events and active days for the selected period. It is not a commercial value, client-quality rating or business priority score.
+						</Typography>
+					</Box>
+				</Box>
+
+				<Box sx={performanceSectionGridSx}>
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Recorded Operators
+						</Typography>
+
+						<Typography sx={insightMiniHeadingSx}>Packing / Sticker Users</Typography>
+						<Box sx={insightTagWrapSx}>
+							{data.packingUsers.length > 0 ? data.packingUsers.map((user) => (
+								<Chip key={user} label={user} size="small" sx={insightTagSx("#22c55e")} />
+							)) : <Chip label="No recorded user" size="small" sx={neutralInsightChipSx} />}
+						</Box>
+
+						<Typography sx={{ ...insightMiniHeadingSx, mt: 1.2 }}>Dispatch / Challan Users</Typography>
+						<Box sx={insightTagWrapSx}>
+							{data.dispatchUsers.length > 0 ? data.dispatchUsers.map((user) => (
+								<Chip key={user} label={user} size="small" sx={insightTagSx("#f97316")} />
+							)) : <Chip label="No recorded user" size="small" sx={neutralInsightChipSx} />}
+						</Box>
+					</Box>
+
+					<Box sx={performanceSectionCardSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Data Source Health
+						</Typography>
+
+						<Box sx={insightSourceGridSx}>
+							{sourceEntries.length === 0 ? (
+								<Box sx={performanceEmptySx}>Insight sources are still loading.</Box>
+							) : sourceEntries.map(([key, source]) => (
+								<Box key={key} sx={insightSourceRowSx(source.ok)}>
+									<span>{key.replace(/([A-Z])/g, " $1")}</span>
+									<strong>{source.ok ? `${source.count} loaded` : "Unavailable"}</strong>
+								</Box>
+							))}
+						</Box>
+					</Box>
+				</Box>
+
+				<Box sx={performanceRecentCardSx}>
+					<Box sx={performanceRecentHeaderSx}>
+						<Typography sx={performanceSectionTitleSx}>
+							Recent Client Activity
+						</Typography>
+
+						<Chip
+							label={`${data.recentRows?.length || 0} shown`}
+							size="small"
+							sx={clientInsightCountChipSx}
+						/>
+					</Box>
+
+					{(!data.recentRows || data.recentRows.length === 0) ? (
+						<Box sx={performanceEmptySx}>
+							No client activity was found in the loaded snapshot for this period.
+						</Box>
+					) : (
+						<Box sx={performanceRecentListSx}>
+							{data.recentRows.map((activity, index) => (
+								<Box
+									key={`${activity.action}-${activity.timestamp}-${index}`}
+									sx={performanceRecentRowSx}
+								>
+									<Box sx={performanceRecentDotSx(activity.category)} />
+
+									<Box sx={{ minWidth: 0 }}>
+										<Typography sx={performanceRecentActionSx}>
+											{activity.action}
+										</Typography>
+										<Typography sx={performanceRecentMetaSx}>
+											{formatDateTime(activity.timestamp)}{activity.detail ? ` • ${activity.detail}` : ""}
+										</Typography>
+									</Box>
+								</Box>
+							))}
+						</Box>
+					)}
+				</Box>
+			</DialogContent>
+
+			<DialogActions sx={dialogActionsSx}>
+				<Button onClick={onClose} sx={primaryButtonSx}>
+					Close Insights
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+}
+
+function PerformanceMetricCard({
+	label,
+	value,
+	detail,
+	accent,
+}) {
+	return (
+		<Box sx={performanceMetricCardSx(accent)}>
+			<Typography sx={performanceMetricLabelSx}>{label}</Typography>
+			<Typography sx={performanceMetricValueSx}>{value}</Typography>
+			<Typography sx={performanceMetricDetailSx}>{detail}</Typography>
+		</Box>
+	);
+}
+
+function PerformanceMixItem({
+	label,
+	value,
+	accent,
+}) {
+	return (
+		<Box sx={performanceMixItemSx(accent)}>
+			<span>{label}</span>
+			<strong>{value}</strong>
+		</Box>
 	);
 }
 
@@ -2467,6 +3525,157 @@ const smartFilterChipSx = {
 	fontSize: 9.5,
 };
 
+const intelligenceToolbarSx = {
+	mt: 1.3,
+	p: 1,
+	borderRadius: "14px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	gap: 1,
+	flexWrap: "wrap",
+	background: "rgba(2,6,23,.34)",
+	border: "1px solid rgba(148,163,184,.08)",
+};
+
+const intelligenceToolbarGroupSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.8,
+	flexWrap: "wrap",
+};
+
+const intelligenceToolbarLabelSx = {
+	color: "#94a3b8",
+	fontSize: 10.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".05em",
+};
+
+const dataSourceHealthSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 0.55,
+	flexWrap: "wrap",
+	maxWidth: 650,
+};
+
+const sourceHealthChipSx = (ok) => ({
+	height: 22,
+	fontSize: 9,
+	fontWeight: 900,
+	textTransform: "capitalize",
+	color: ok ? "#86efac" : "#fca5a5",
+	background: ok ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)",
+	border: `1px solid ${ok ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)"}`,
+});
+
+const smartLoadedAtSx = {
+	color: "#64748b",
+	fontSize: 9.8,
+	fontWeight: 700,
+};
+
+const performanceWarningSx = {
+	borderRadius: "14px",
+	background: "rgba(245,158,11,.07)",
+	border: "1px solid rgba(245,158,11,.16)",
+	color: "#fde68a",
+	"& .MuiAlert-icon": {
+		color: "#f59e0b",
+	},
+};
+
+const insightsButtonSx = {
+	minHeight: 36,
+	borderRadius: "11px",
+	px: 1.45,
+	textTransform: "none",
+	fontWeight: 900,
+	color: "#c4b5fd",
+	background: "rgba(139,92,246,.09)",
+	border: "1px solid rgba(167,139,250,.20)",
+	"&:hover": {
+		color: "#fff",
+		background: "rgba(139,92,246,.16)",
+		borderColor: "rgba(167,139,250,.34)",
+	},
+};
+
+const clientInsightCellSx = {
+	minWidth: 0,
+	p: 1,
+	borderRadius: "12px",
+	background: "rgba(2,6,23,.22)",
+	border: "1px solid rgba(96,165,250,.08)",
+};
+
+const performanceTopSx = {
+	display: "flex",
+	alignItems: "flex-start",
+	justifyContent: "space-between",
+	gap: 0.8,
+};
+
+const performanceTotalSx = {
+	color: "#fff",
+	fontSize: 21,
+	fontWeight: 950,
+	lineHeight: 1,
+};
+
+const performancePeriodCaptionSx = {
+	mt: 0.25,
+	color: "#64748b",
+	fontSize: 8.5,
+	fontWeight: 800,
+	textTransform: "uppercase",
+	letterSpacing: ".05em",
+};
+
+const performanceScoreChipSx = (score) => {
+	const numeric = Number(score || 0);
+	const accent = numeric >= 80 ? "#22c55e" : numeric >= 50 ? "#60a5fa" : numeric > 0 ? "#f59e0b" : "#64748b";
+
+	return {
+		height: 23,
+		color: accent,
+		background: `${accent}12`,
+		border: `1px solid ${accent}28`,
+		fontWeight: 950,
+		fontSize: 9.5,
+	};
+};
+
+const performanceSplitSx = {
+	mt: 0.8,
+	display: "flex",
+	gap: 0.7,
+	flexWrap: "wrap",
+	color: "#64748b",
+	fontSize: 8.8,
+	fontWeight: 800,
+	"& strong": {
+		color: "#cbd5e1",
+		fontWeight: 950,
+	},
+};
+
+const performanceBandSx = {
+	mt: 0.65,
+	color: "#94a3b8",
+	fontSize: 9.4,
+	fontWeight: 850,
+};
+
+const performanceLastSx = {
+	mt: 0.25,
+	color: "#475569",
+	fontSize: 8.9,
+	fontWeight: 700,
+};
+
 const tablePanelSx = {
 	borderRadius: "22px",
 	background:
@@ -2500,10 +3709,10 @@ const tablePanelSx = {
 };
 
 const tableHeaderSx = {
-	minWidth: 1490,
+	minWidth: 1660,
 	display: "grid",
 	gridTemplateColumns:
-		"1.15fr 1.55fr .82fr .82fr 1.08fr .66fr 260px",
+		"1.05fr 1.30fr 1.45fr .72fr .92fr .58fr 330px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
@@ -2519,10 +3728,10 @@ const tableHeaderSx = {
 };
 
 const tableRowSx = {
-	minWidth: 1490,
+	minWidth: 1660,
 	display: "grid",
 	gridTemplateColumns:
-		"1.15fr 1.55fr .82fr .82fr 1.08fr .66fr 260px",
+		"1.05fr 1.30fr 1.45fr .72fr .92fr .58fr 330px",
 	gap: 2,
 	alignItems: "center",
 	p: "15px 20px",
@@ -2612,35 +3821,9 @@ const auditPrimarySx = {
 	textOverflow: "ellipsis",
 };
 
-const sourceSeedChipSx = {
-	height: 25,
-	color: "#7dd3fc",
-	background:
-		"rgba(14,165,233,.12)",
-	border:
-		"1px solid rgba(14,165,233,.24)",
-	fontWeight: 900,
-	fontSize: 9.5,
 
-	"& .MuiChip-icon": {
-		color: "#38bdf8",
-	},
-};
 
-const sourceManualChipSx = {
-	height: 25,
-	color: "#c4b5fd",
-	background:
-		"rgba(139,92,246,.12)",
-	border:
-		"1px solid rgba(139,92,246,.24)",
-	fontWeight: 900,
-	fontSize: 9.5,
 
-	"& .MuiChip-icon": {
-		color: "#a78bfa",
-	},
-};
 
 const enabledChipSx = {
 	height: 24,
@@ -2686,7 +3869,7 @@ const actionsSx = {
 };
 
 const loadingSx = {
-	minWidth: 1490,
+	minWidth: 1660,
 	minHeight: 320,
 	display: "grid",
 	placeItems: "center",
@@ -2697,7 +3880,7 @@ const loadingSx = {
 };
 
 const emptyStateSx = {
-	minWidth: 1490,
+	minWidth: 1660,
 	p: 5,
 	textAlign: "center",
 	color: "#94a3b8",
@@ -3056,6 +4239,328 @@ const errorAlertSx = {
 	border:
 		"1px solid rgba(239,68,68,.18)",
 	color: "#fecaca",
+};
+
+const performanceDialogPaperSx = {
+	background: "linear-gradient(180deg,#071120,#0f172a)",
+	color: "#fff",
+	borderRadius: "22px",
+	border: "1px solid rgba(96,165,250,.12)",
+	boxShadow: "0 30px 80px rgba(2,6,23,.58)",
+	maxHeight: "90vh",
+};
+
+const performanceDialogTitleSx = {
+	p: 2.2,
+	borderBottom: "1px solid rgba(148,163,184,.08)",
+};
+
+const performanceDialogTitleRowSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 2,
+};
+
+const performanceDialogIdentitySx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1.2,
+};
+
+const performanceAvatarSx = {
+	width: 44,
+	height: 44,
+	borderRadius: "13px",
+	display: "grid",
+	placeItems: "center",
+	color: "#bfdbfe",
+	background: "linear-gradient(135deg,rgba(37,99,235,.24),rgba(59,130,246,.10))",
+	border: "1px solid rgba(96,165,250,.22)",
+	fontWeight: 950,
+};
+
+const performanceDialogNameSx = {
+	fontSize: 20,
+	fontWeight: 950,
+};
+
+const performanceDialogSubSx = {
+	mt: 0.25,
+	color: "#94a3b8",
+	fontSize: 11.5,
+	fontWeight: 650,
+};
+
+const performanceDialogContentSx = {
+	p: 2.2,
+	"&::-webkit-scrollbar": {
+		width: 8,
+	},
+	"&::-webkit-scrollbar-thumb": {
+		background: "#334155",
+		borderRadius: 999,
+	},
+};
+
+const performanceHeroGridSx = {
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "repeat(2,minmax(0,1fr))",
+		md: "repeat(4,minmax(0,1fr))",
+	},
+	gap: 1,
+};
+
+const performanceMetricCardSx = (accent) => ({
+	p: 1.4,
+	borderRadius: "14px",
+	background: `radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(2,6,23,.28)`,
+	border: `1px solid ${accent}26`,
+});
+
+const performanceMetricLabelSx = {
+	color: "#94a3b8",
+	fontSize: 9.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".06em",
+};
+
+const performanceMetricValueSx = {
+	mt: 0.6,
+	fontSize: 24,
+	fontWeight: 950,
+	color: "#fff",
+};
+
+const performanceMetricDetailSx = {
+	mt: 0.4,
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 700,
+	lineHeight: 1.4,
+};
+
+const performanceSectionGridSx = {
+	mt: 1.5,
+	display: "grid",
+	gridTemplateColumns: {
+		xs: "1fr",
+		md: "repeat(2,minmax(0,1fr))",
+	},
+	gap: 1.2,
+};
+
+const performanceSectionCardSx = {
+	p: 1.5,
+	borderRadius: "15px",
+	background: "rgba(2,6,23,.25)",
+	border: "1px solid rgba(148,163,184,.07)",
+};
+
+const performanceSectionTitleSx = {
+	color: "#f1f5f9",
+	fontSize: 12.5,
+	fontWeight: 950,
+	mb: 1,
+};
+
+const performanceAccessListSx = {
+	mt: 1.2,
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.7,
+	"& > div": {
+		display: "flex",
+		justifyContent: "space-between",
+		gap: 1,
+		color: "#64748b",
+		fontSize: 10.5,
+	},
+	"& strong": {
+		color: "#cbd5e1",
+		fontWeight: 850,
+		textAlign: "right",
+		maxWidth: "65%",
+		overflowWrap: "anywhere",
+	},
+};
+
+const performanceMixGridSx = {
+	display: "grid",
+	gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+	gap: 0.8,
+};
+
+const performanceMixItemSx = (accent) => ({
+	p: 1,
+	borderRadius: "10px",
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	color: "#94a3b8",
+	background: `${accent}0d`,
+	border: `1px solid ${accent}1f`,
+	fontSize: 10,
+	fontWeight: 800,
+	"& strong": {
+		color: accent,
+		fontSize: 15,
+	},
+});
+
+const performanceNoteSx = {
+	mt: 1.1,
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 650,
+	lineHeight: 1.45,
+};
+
+const performanceRecentCardSx = {
+	mt: 1.3,
+	p: 1.5,
+	borderRadius: "15px",
+	background: "rgba(2,6,23,.25)",
+	border: "1px solid rgba(148,163,184,.07)",
+};
+
+const performanceRecentHeaderSx = {
+	display: "flex",
+	justifyContent: "space-between",
+	alignItems: "center",
+	gap: 1,
+};
+
+const performanceRecentListSx = {
+	maxHeight: 280,
+	overflowY: "auto",
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.6,
+	pr: 0.5,
+	scrollbarWidth: "thin",
+	scrollbarColor: "#334155 transparent",
+};
+
+const performanceRecentRowSx = {
+	display: "grid",
+	gridTemplateColumns: "9px minmax(0,1fr)",
+	gap: 1,
+	alignItems: "center",
+	p: 0.9,
+	borderRadius: "10px",
+	background: "rgba(255,255,255,.025)",
+	border: "1px solid rgba(255,255,255,.045)",
+};
+
+const performanceRecentDotSx = (category) => {
+	const colors = {
+		PACKING: "#22c55e",
+		DISPATCH: "#f97316",
+		STICKER: "#06b6d4",
+		CHALLAN: "#a78bfa",
+		OTHER: "#64748b",
+	};
+
+	const color = colors[category] || colors.OTHER;
+
+	return {
+		width: 7,
+		height: 7,
+		borderRadius: "50%",
+		background: color,
+		boxShadow: `0 0 8px ${color}66`,
+	};
+};
+
+const performanceRecentActionSx = {
+	color: "#e2e8f0",
+	fontSize: 10.5,
+	fontWeight: 850,
+};
+
+const performanceRecentMetaSx = {
+	mt: 0.2,
+	color: "#64748b",
+	fontSize: 9,
+	fontWeight: 650,
+};
+
+const performanceEmptySx = {
+	p: 2,
+	borderRadius: "12px",
+	textAlign: "center",
+	color: "#64748b",
+	background: "rgba(255,255,255,.02)",
+	fontSize: 10.5,
+};
+
+const insightTagWrapSx = {
+	display: "flex",
+	gap: 0.6,
+	flexWrap: "wrap",
+};
+
+const insightTagSx = (accent) => ({
+	height: 24,
+	color: accent,
+	background: `${accent}10`,
+	border: `1px solid ${accent}24`,
+	fontWeight: 850,
+	fontSize: 9.5,
+});
+
+const neutralInsightChipSx = {
+	height: 24,
+	color: "#94a3b8",
+	background: "rgba(100,116,139,.08)",
+	border: "1px solid rgba(100,116,139,.16)",
+	fontWeight: 800,
+	fontSize: 9.5,
+};
+
+const insightMiniHeadingSx = {
+	color: "#64748b",
+	fontSize: 9.5,
+	fontWeight: 900,
+	textTransform: "uppercase",
+	letterSpacing: ".05em",
+	mb: 0.7,
+};
+
+const insightSourceGridSx = {
+	display: "flex",
+	flexDirection: "column",
+	gap: 0.65,
+};
+
+const insightSourceRowSx = (ok) => ({
+	display: "flex",
+	justifyContent: "space-between",
+	gap: 1,
+	p: 0.8,
+	borderRadius: "9px",
+	color: "#94a3b8",
+	background: ok ? "rgba(34,197,94,.04)" : "rgba(239,68,68,.04)",
+	border: `1px solid ${ok ? "rgba(34,197,94,.12)" : "rgba(239,68,68,.12)"}`,
+	fontSize: 9.8,
+	fontWeight: 800,
+	textTransform: "capitalize",
+	"& strong": {
+		color: ok ? "#86efac" : "#fca5a5",
+		fontWeight: 900,
+	},
+});
+
+const clientInsightCountChipSx = {
+	height: 22,
+	color: "#c4b5fd",
+	background: "rgba(139,92,246,.09)",
+	border: "1px solid rgba(167,139,250,.18)",
+	fontWeight: 900,
+	fontSize: 9,
 };
 
 const dialogPaperSx = {
