@@ -16,6 +16,7 @@ import {
   Collapse,
   LinearProgress,
   CircularProgress,
+  Autocomplete,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { API_BASE_URL } from "../config";
@@ -1192,6 +1193,289 @@ function HardwareUomSelect({
         )
       )}
     </TextField>
+  );
+}
+
+function ClientNameAutocomplete({
+  value = "",
+  onValueChange,
+  onClientSelected,
+  disabled = false,
+  error = false,
+  helperText = "",
+  darkMode = true,
+  label = "Client Name",
+}) {
+  const [inputValue, setInputValue] =
+    useState(value || "");
+
+  const [options, setOptions] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  useEffect(() => {
+    const externalValue =
+      String(value || "");
+
+    setInputValue((current) =>
+      current === externalValue
+        ? current
+        : externalValue
+    );
+  }, [value]);
+
+  useEffect(() => {
+    const query =
+      String(inputValue || "")
+        .trim();
+
+    if (query.length < 2 || disabled) {
+      setOptions([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    // Do not leave suggestions from the previous query visible while
+    // the next server-side match is being resolved.
+    setOptions([]);
+
+    const controller =
+      new AbortController();
+
+    const timer = window.setTimeout(
+      async () => {
+        try {
+          setLoading(true);
+
+          const response =
+            await API.get(
+              "/client-master/search",
+              {
+                params: {
+                  q: query,
+                  limit: 12,
+                },
+                signal: controller.signal,
+              }
+            );
+
+          const rows =
+            Array.isArray(response.data)
+              ? response.data
+              : [];
+
+          setOptions(rows);
+        } catch (errorValue) {
+          if (
+            errorValue?.code !==
+            "ERR_CANCELED"
+          ) {
+            console.error(
+              "Client master search failed:",
+              errorValue
+            );
+          }
+
+          setOptions([]);
+        } finally {
+          if (!controller.signal.aborted) {
+            setLoading(false);
+          }
+        }
+      },
+      220
+    );
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    inputValue,
+    disabled,
+  ]);
+
+  const selectedLabel = (option) => {
+    if (typeof option === "string") {
+      return option;
+    }
+
+    return String(
+      option?.name ||
+      option?.clientName ||
+      ""
+    );
+  };
+
+  const applyText = (nextValue) => {
+    const text =
+      String(nextValue || "");
+
+    setInputValue(text);
+
+    if (
+      typeof onValueChange ===
+      "function"
+    ) {
+      onValueChange(text);
+    }
+  };
+
+  return (
+    <Autocomplete
+      freeSolo
+      fullWidth
+      disabled={disabled}
+      value={null}
+      inputValue={inputValue}
+      options={options}
+      loading={loading}
+      open={
+        !disabled &&
+        inputValue.trim().length >= 2 &&
+        (loading || options.length > 0)
+      }
+      openOnFocus={false}
+      clearOnBlur={false}
+      handleHomeEndKeys={false}
+      filterOptions={(serverOptions) =>
+        serverOptions
+      }
+      getOptionLabel={selectedLabel}
+      isOptionEqualToValue={(option, candidate) =>
+        Boolean(
+          option?.id &&
+          candidate?.id &&
+          option.id === candidate.id
+        )
+      }
+      onInputChange={(
+        _event,
+        nextInput,
+        reason
+      ) => {
+        if (
+          reason === "input" ||
+          reason === "clear"
+        ) {
+          applyText(nextInput);
+        }
+      }}
+      onChange={(
+        _event,
+        selected
+      ) => {
+        if (!selected) {
+          return;
+        }
+
+        if (
+          typeof selected ===
+          "string"
+        ) {
+          applyText(selected);
+          return;
+        }
+
+        const name =
+          selectedLabel(selected);
+
+        applyText(name);
+
+        if (
+          typeof onClientSelected ===
+          "function"
+        ) {
+          onClientSelected(selected);
+        }
+      }}
+      noOptionsText="No matching client in Client Master"
+      loadingText="Searching Client Master..."
+      slotProps={{
+        paper: {
+          sx: {
+            mt: 0.6,
+            color: "#e2e8f0",
+            background:
+              "linear-gradient(180deg,#172033 0%,#0f172a 100%)",
+            border:
+              "1px solid rgba(148,163,184,.20)",
+            borderRadius: "12px",
+            boxShadow:
+              "0 22px 60px rgba(2,6,23,.82)",
+          },
+        },
+        popper: {
+          sx: {
+            zIndex: 10050,
+          },
+        },
+      }}
+      renderOption={(props, option) => (
+        <li
+          {...props}
+          key={option.id || option.name}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Box
+              sx={{
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 850,
+              }}
+            >
+              {option.name}
+            </Box>
+
+            {option.address && (
+              <Box
+                sx={{
+                  mt: 0.25,
+                  color: "#94a3b8",
+                  fontSize: 11,
+                  whiteSpace: "normal",
+                }}
+              >
+                {option.address}
+              </Box>
+            )}
+          </Box>
+        </li>
+      )}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          placeholder="Type at least 2 characters to search, or enter a new client"
+          error={error}
+          helperText={
+            error
+              ? helperText
+              : helperText ||
+                "Search Client Master as you type. Free-text client names are still allowed."
+          }
+          sx={formFieldSx(darkMode)}
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {loading ? (
+                  <CircularProgress
+                    size={16}
+                    sx={{
+                      color: "#60a5fa",
+                    }}
+                  />
+                ) : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+    />
   );
 }
 
@@ -2631,6 +2915,44 @@ function ZohoItemsPage() {
     placeholder,
     type = "text",
   }) => {
+    if (key === "clientName") {
+      return (
+        <ClientNameAutocomplete
+          key={key}
+          value={form.clientName || ""}
+          onValueChange={(nextValue) => {
+            setForm((previous) => ({
+              ...previous,
+              clientName: nextValue,
+            }));
+
+            setErrors((previous) => ({
+              ...previous,
+              clientName: "",
+            }));
+          }}
+          onClientSelected={(client) => {
+            setForm((previous) => ({
+              ...previous,
+              clientName:
+                client?.name ||
+                previous.clientName,
+              clientAddress:
+                String(
+                  client?.address || ""
+                ).trim()
+                  ? client.address
+                  : previous.clientAddress,
+            }));
+          }}
+          error={!!errors.clientName}
+          helperText={errors.clientName}
+          darkMode={darkMode}
+          label={label}
+        />
+      );
+    }
+
     return (
       <TextField
         key={key}
@@ -11886,22 +12208,38 @@ function ZohoItemsPage() {
                   sx={formFieldSx(darkMode)}
                 />
 
-                <TextField
+                <ClientNameAutocomplete
                   label="Client Name"
                   disabled={
                     Boolean(
                       hardwareAddMaster
                     )
                   }
-                  fullWidth
-                  value={hardwareForm.clientName}
-                  onChange={(e) =>
+                  value={
+                    hardwareForm.clientName ||
+                    ""
+                  }
+                  onValueChange={(nextValue) =>
                     setHardwareForm((previous) => ({
                       ...previous,
-                      clientName: e.target.value,
+                      clientName: nextValue,
                     }))
                   }
-                  sx={formFieldSx(darkMode)}
+                  onClientSelected={(client) =>
+                    setHardwareForm((previous) => ({
+                      ...previous,
+                      clientName:
+                        client?.name ||
+                        previous.clientName,
+                      clientAddress:
+                        String(
+                          client?.address || ""
+                        ).trim()
+                          ? client.address
+                          : previous.clientAddress,
+                    }))
+                  }
+                  darkMode={darkMode}
                 />
 
                 <TextField

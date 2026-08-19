@@ -11,6 +11,7 @@ import DispatchedItemsPage from "../../pages/DispatchedItemsPage";
 import LogisticsPortalPage from "../../pages/LogisticsPortalPage";
 import UsersPage from "../../pages/UsersPage";
 import ZohoItemsPage from "../../pages/ZohoItemsPage";
+import ClientMasterPage from "../../pages/ClientMasterPage";
 
 import RequireRole from "../../auth/RequireRole";
 import RequireWarehouseAccess from "../../auth/RequireWarehouseAccess";
@@ -83,6 +84,15 @@ export default function PackFlowRoutes() {
         element={
           <RequireRole allowed={["ADMIN"]}>
             <UsersPage />
+          </RequireRole>
+        }
+      />
+
+      <Route
+        path="client-master"
+        element={
+          <RequireRole allowed={["ADMIN"]}>
+            <ClientMasterPage />
           </RequireRole>
         }
       />

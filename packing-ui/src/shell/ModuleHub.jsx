@@ -25,6 +25,9 @@ import LayersOutlinedIcon
 import AdminPanelSettingsOutlinedIcon
 	from "@mui/icons-material/AdminPanelSettingsOutlined";
 
+import PeopleAltOutlinedIcon
+	from "@mui/icons-material/PeopleAltOutlined";
+
 import ArrowForwardIcon
 	from "@mui/icons-material/ArrowForward";
 
@@ -192,6 +195,27 @@ export default function ModuleHub() {
 				canAccess(MODULE_KEYS.MATERIALS) ||
 				canAccess(MODULE_KEYS.MATFLOW),
 			accent: "Global Material Control",
+		},
+		{
+			key: MODULE_KEYS.CLIENTS,
+			title: "Client Master",
+			subtitle:
+				"Shared FlowSuite client directory for searchable PackFlow selection today and cross-module client integration later.",
+			icon: (
+				<PeopleAltOutlinedIcon
+					fontSize="large"
+				/>
+			),
+			path: "/packflow/client-master",
+			tags: [
+				"Client Directory",
+				"Search",
+				"Shared Master",
+				"Future Integrations",
+			],
+			visible:
+				hasRole("ADMIN"),
+			accent: "Shared Master Data",
 		},
 		{
 			key: "USERS",
