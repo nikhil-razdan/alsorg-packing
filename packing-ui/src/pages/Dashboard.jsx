@@ -3928,15 +3928,8 @@ const page = {
   position: "relative",
   overflowX: "hidden",
   overflowY: "auto",
-
-  background: `
-    radial-gradient(circle at 10% 6%, rgba(59,130,246,.22), transparent 30%),
-    radial-gradient(circle at 86% 12%, rgba(14,165,233,.14), transparent 24%),
-    radial-gradient(circle at 72% 90%, rgba(168,85,247,.11), transparent 28%),
-    linear-gradient(135deg,var(--pf-surface-deep) 0%,#07111f 44%,var(--pf-surface) 100%)
-  `,
-
-  backgroundAttachment: "fixed",
+  background:
+    "linear-gradient(135deg,var(--pf-bg),var(--pf-surface))",
 };
 
 const backgroundText = {
@@ -3987,8 +3980,9 @@ const heroTitle = {
 
 const heroSubtitle = {
   marginTop: 6,
-  fontSize: 15,
-  color: "#d6e0ee",
+  fontSize: 14,
+  color: "var(--pf-text-muted)",
+  fontWeight: 650,
 };
 
 const heroActions = {
@@ -3999,29 +3993,23 @@ const heroActions = {
 };
 
 const modeBtn = (active) => ({
-  height: 44,
-  padding: "0 18px",
-  borderRadius: 999,
-
+  height: 40,
+  padding: "0 16px",
+  borderRadius: 11,
   border: active
-    ? "1px solid rgba(96,165,250,.48)"
+    ? "1px solid rgba(59,130,246,.34)"
     : "1px solid rgba(var(--pf-fg-rgb),.08)",
-
   cursor: "pointer",
-
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-    : "rgba(var(--pf-surface-rgb),.70)",
-
-  color: "var(--pf-text-strong)",
+    : "var(--pf-surface)",
+  color: active ? "#fff" : "var(--pf-text-strong)",
   fontWeight: 900,
-
   boxShadow: active
-    ? "0 14px 30px rgba(37,99,235,.32)"
-    : "0 12px 24px rgba(var(--pf-surface-deep-rgb),.18)",
-
-  backdropFilter: "blur(16px)",
-  transition: "all .25s ease",
+    ? "0 8px 20px rgba(37,99,235,.22)"
+    : "0 5px 14px rgba(var(--pf-surface-deep-rgb),.08)",
+  transition:
+    "background .18s ease,border-color .18s ease,box-shadow .18s ease,transform .18s ease",
 });
 
 const kpiGrid = {
@@ -4034,14 +4022,14 @@ const kpiGrid = {
 const inventoryPulsePanel = {
   position: "relative",
   overflow: "hidden",
-  padding: 18,
-  borderRadius: 24,
+  padding: 17,
+  borderRadius: 18,
   background:
-    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.16),transparent 30%), radial-gradient(circle at 100% 100%,rgba(14,165,233,.09),transparent 28%), linear-gradient(135deg,rgba(var(--pf-surface-rgb),.96),rgba(8,15,30,.92))",
+    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.08),transparent 30%), var(--pf-surface)",
   border:
-    "1px solid rgba(148,163,184,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow:
-    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
+    "0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
 };
 
 const inventoryPulseHeader = {
@@ -4054,7 +4042,7 @@ const inventoryPulseHeader = {
 };
 
 const inventorySectionEyebrow = {
-  color: "#93c5fd",
+  color: "#3b82f6",
   fontSize: 10.5,
   fontWeight: 950,
   letterSpacing: ".13em",
@@ -4122,12 +4110,12 @@ const inventoryPulseGrid = {
 
 const inventoryPulseMetric = (accent) => ({
   minWidth: 0,
-  minHeight: 105,
+  minHeight: 101,
   padding: 12,
-  borderRadius: 15,
+  borderRadius: 12,
   background:
-    `radial-gradient(circle at 100% 0%,${accent}16,transparent 42%), rgba(var(--pf-surface-deep-rgb),.34)`,
-  border: `1px solid ${accent}20`,
+    `radial-gradient(circle at 100% 0%,${accent}12,transparent 44%), var(--pf-surface-alt)`,
+  border: `1px solid ${accent}24`,
 });
 
 const inventoryPulseMetricTop = {
@@ -4218,13 +4206,12 @@ const inventorySectionTitle = {
 };
 
 const inventorySectionCount = {
-  padding: "6px 9px",
+  padding: "5px 9px",
   borderRadius: 999,
-  color: "#dbeafe",
-  background:
-    "rgba(148,163,184,.06)",
+  color: "var(--pf-text-muted)",
+  background: "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(148,163,184,.09)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   fontSize: 9,
   fontWeight: 850,
 };
@@ -4236,34 +4223,33 @@ const inventoryStatCard = (
 ) => ({
   position: "relative",
   minWidth: 0,
-  minHeight: 172,
+  minHeight: 166,
   overflow: "hidden",
   padding: 14,
-  borderRadius: 18,
+  borderRadius: 16,
   textAlign: "left",
   width: "100%",
   color: "var(--pf-text-strong)",
   fontFamily: "inherit",
-  cursor: clickable
-    ? "pointer"
-    : "default",
-
+  cursor: clickable ? "pointer" : "default",
   background: active
-    ? `linear-gradient(160deg,${accent}16,rgba(var(--pf-surface-rgb),.96) 44%,rgba(8,15,30,.94))`
-    : "linear-gradient(160deg,rgba(var(--pf-surface-raised-rgb),.72),rgba(var(--pf-surface-rgb),.90) 48%,rgba(8,15,30,.90))",
-
+    ? `linear-gradient(155deg,${accent}12,var(--pf-surface) 48%,var(--pf-surface-alt))`
+    : "linear-gradient(155deg,var(--pf-surface),var(--pf-surface-alt))",
   border: active
-    ? `1px solid ${accent}55`
-    : "1px solid rgba(148,163,184,.09)",
-
+    ? `1px solid ${accent}4D`
+    : "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow: active
-    ? `0 18px 38px ${accent}1D, inset 0 1px 0 rgba(var(--pf-fg-rgb),.035)`
-    : "0 12px 28px rgba(var(--pf-surface-deep-rgb),.22), inset 0 1px 0 rgba(var(--pf-fg-rgb),.018)",
-
-  backdropFilter: "blur(18px)",
-
+    ? `0 12px 26px ${accent}18`
+    : "0 9px 22px rgba(var(--pf-surface-deep-rgb),.10)",
   transition:
     "transform .18s ease,border-color .18s ease,box-shadow .18s ease",
+  ...(clickable
+    ? {
+        "&:hover": {
+          transform: "translateY(-2px)",
+        },
+      }
+    : {}),
 });
 
 const inventoryCardAmbient = (accent) => ({
@@ -4378,7 +4364,7 @@ const inventoryOpenIndicator = (active) => ({
   display: "grid",
   placeItems: "center",
   color: active
-    ? "#bfdbfe"
+    ? "#2563eb"
     : "var(--pf-text-dim)",
   background: active
     ? "rgba(59,130,246,.14)"
@@ -4394,7 +4380,7 @@ const inventoryStatSubtle = {
   zIndex: 1,
   minHeight: 29,
   marginTop: 6,
-  color: "#bcc8d8",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   fontWeight: 700,
   lineHeight: 1.42,
@@ -4453,7 +4439,7 @@ const inventoryStatFooter = {
 
 const inventoryTrendLabel = {
   minWidth: 0,
-  color: "#9fb0c6",
+  color: "var(--pf-text-dim)",
   fontSize: 9.3,
   fontWeight: 750,
   overflow: "hidden",
@@ -4482,7 +4468,7 @@ const inventoryLiveDotWrap = {
   display: "inline-flex",
   alignItems: "center",
   gap: 4,
-  color: "#9fb0c6",
+  color: "var(--pf-text-dim)",
   fontSize: 8.5,
   fontWeight: 950,
   letterSpacing: ".055em",
@@ -4858,20 +4844,13 @@ const modalOverlay = {
 
 const modalCard = {
   width: "min(560px, 100%)",
-
-  borderRadius: 26,
-
+  borderRadius: 16,
   padding: 22,
-
-  background:
-    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.96), rgba(var(--pf-surface-rgb),.88))",
-
+  background: "var(--pf-surface)",
   border:
     "1px solid rgba(var(--pf-fg-rgb),.08)",
-
   boxShadow:
-    "0 28px 70px rgba(var(--pf-surface-deep-rgb),.55)",
-
+    "0 24px 64px rgba(var(--pf-surface-deep-rgb),.28)",
   color: "var(--pf-text-strong)",
 };
 
@@ -4898,19 +4877,13 @@ const modalSubtitle = {
 const modalCloseBtn = {
   width: 34,
   height: 34,
-
-  borderRadius: "50%",
-
+  borderRadius: 9,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.10)",
-
-  background: "rgba(var(--pf-fg-rgb),.06)",
-
+    "1px solid rgba(var(--pf-fg-rgb),.09)",
+  background: "var(--pf-surface-alt)",
   color: "var(--pf-text-strong)",
-
   cursor: "pointer",
-
-  fontSize: 22,
+  fontSize: 20,
   lineHeight: 1,
 };
 
@@ -5041,21 +5014,13 @@ const detailItemSubtle = {
 
 const adminPanel = {
   marginTop: 2,
-
-  borderRadius: 24,
-
+  borderRadius: 18,
   padding: 18,
-
-  background:
-    "rgba(var(--pf-surface-rgb),.78)",
-
+  background: "var(--pf-surface)",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
-
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow:
-    "0 18px 35px rgba(var(--pf-surface-deep-rgb),.32)",
-
-  backdropFilter: "blur(18px)",
+    "0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
 };
 
 const analyticsCardTitle = {
@@ -5136,20 +5101,13 @@ const insightItem = {
 };
 
 const analyticsCard = {
-  padding: 22,
-
-  borderRadius: 24,
-
-  background:
-    "rgba(var(--pf-surface-rgb),.78)",
-
+  padding: 20,
+  borderRadius: 18,
+  background: "var(--pf-surface)",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
-
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow:
-    "0 18px 40px rgba(var(--pf-surface-deep-rgb),.34)",
-
-  backdropFilter: "blur(18px)",
+    "0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
 };
 
 const analyticsCardLarge = {
@@ -5278,14 +5236,13 @@ const chartPanelSurface = {
   height: 555,
   minHeight: 555,
   padding: 17,
-  borderRadius: 24,
+  borderRadius: 18,
   background:
-    "radial-gradient(circle at 0% 0%,rgba(37,99,235,.14),transparent 31%), radial-gradient(circle at 100% 100%,rgba(34,197,94,.05),transparent 28%), linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(8,15,30,.93))",
+    "radial-gradient(circle at 0% 0%,rgba(37,99,235,.07),transparent 31%), var(--pf-surface)",
   border:
-    "1px solid rgba(148,163,184,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow:
-    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
-  backdropFilter: "blur(18px)",
+    "0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
   overflow: "hidden",
   display: "flex",
   flexDirection: "column",
@@ -5312,7 +5269,7 @@ const chartPanelSubtitle = {
   maxWidth: 560,
   marginTop: 4,
   fontSize: 11.5,
-  color: "#c0cad8",
+  color: "var(--pf-text-muted)",
   fontWeight: 650,
   lineHeight: 1.5,
 };
@@ -5321,28 +5278,25 @@ const chartToggleWrap = {
   display: "inline-flex",
   gap: 4,
   padding: 4,
-  borderRadius: 12,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.52)",
+  borderRadius: 10,
+  background: "var(--pf-surface-alt)",
   border:
-    "1px solid rgba(148,163,184,.09)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const chartModeBtn = (active) => ({
   height: 31,
   padding: "0 9px",
-  borderRadius: 8,
+  borderRadius: 7,
   border: active
-    ? "1px solid rgba(96,165,250,.26)"
+    ? "1px solid rgba(59,130,246,.24)"
     : "1px solid transparent",
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  color: active
-    ? "var(--pf-text-strong)"
-    : "#b1bfd0",
+  color: active ? "#1d4ed8" : "var(--pf-text-muted)",
   background: active
-    ? "linear-gradient(135deg,rgba(37,99,235,.28),rgba(59,130,246,.13))"
+    ? "rgba(59,130,246,.12)"
     : "transparent",
   cursor: "pointer",
   fontFamily: "inherit",
@@ -5365,15 +5319,14 @@ const chartStatusMetric = (accent) => ({
   position: "relative",
   overflow: "hidden",
   display: "grid",
-  gridTemplateColumns:
-    "31px minmax(0,1fr)",
+  gridTemplateColumns: "31px minmax(0,1fr)",
   gap: 8,
   alignItems: "center",
   padding: "9px 10px 11px",
-  borderRadius: 13,
+  borderRadius: 11,
   background:
-    `linear-gradient(135deg,${accent}0D,rgba(var(--pf-surface-deep-rgb),.34))`,
-  border: `1px solid ${accent}1C`,
+    `linear-gradient(135deg,${accent}0D,var(--pf-surface-alt))`,
+  border: `1px solid ${accent}20`,
 });
 
 const chartStatusIcon = (accent) => ({
@@ -5394,7 +5347,7 @@ const chartStatusCopy = {
 };
 
 const chartStatusLabel = {
-  color: "#d4deea",
+  color: "var(--pf-text-muted)",
   fontSize: 9.4,
   fontWeight: 850,
   textTransform: "uppercase",
@@ -5450,11 +5403,11 @@ const chartPanelBody = {
   minHeight: 330,
   overflow: "hidden",
   padding: 9,
-  borderRadius: 17,
+  borderRadius: 14,
   background:
-    "radial-gradient(circle at 50% 45%,rgba(59,130,246,.055),transparent 48%), linear-gradient(180deg,rgba(var(--pf-surface-deep-rgb),.34),rgba(var(--pf-surface-deep-rgb),.18))",
+    "radial-gradient(circle at 50% 45%,rgba(59,130,246,.04),transparent 48%), var(--pf-surface-alt)",
   border:
-    "1px solid rgba(148,163,184,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -5468,18 +5421,17 @@ const chartInsightFooter = {
   gap: 12,
   flexWrap: "wrap",
   padding: "8px 10px",
-  borderRadius: 12,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.28)",
+  borderRadius: 10,
+  background: "var(--pf-surface-alt)",
   border:
-    "1px solid rgba(148,163,184,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const chartInsightItem = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  color: "#b5c1d1",
+  color: "var(--pf-text-muted)",
   fontSize: 9.6,
   fontWeight: 700,
 };
@@ -5499,14 +5451,13 @@ const activityPanelSurface = {
   height: 555,
   minHeight: 555,
   padding: 17,
-  borderRadius: 24,
+  borderRadius: 18,
   background:
-    "radial-gradient(circle at 100% 0%,rgba(34,211,238,.08),transparent 31%), linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(8,15,30,.93))",
+    "radial-gradient(circle at 100% 0%,rgba(34,211,238,.06),transparent 31%), var(--pf-surface)",
   border:
-    "1px solid rgba(148,163,184,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
   boxShadow:
-    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
-  backdropFilter: "blur(18px)",
+    "0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
   overflow: "hidden",
   display: "flex",
   flexDirection: "column",
@@ -5531,7 +5482,7 @@ const activityPanelTitle = {
 const activityPanelSubtitle = {
   maxWidth: 360,
   marginTop: 4,
-  color: "#c0cad8",
+  color: "var(--pf-text-muted)",
   fontSize: 11.5,
   fontWeight: 650,
   lineHeight: 1.45,
@@ -5577,7 +5528,7 @@ const activityRefreshBtn = {
     "1px solid rgba(96,165,250,.12)",
   background:
     "rgba(59,130,246,.06)",
-  color: "#93c5fd",
+  color: "#2563eb",
   cursor: "pointer",
   fontFamily: "inherit",
   fontSize: 8.5,
@@ -5595,14 +5546,13 @@ const activitySignalsRow = {
 const activitySignal = {
   minWidth: 0,
   padding: "8px 9px",
-  borderRadius: 11,
+  borderRadius: 10,
   display: "flex",
   alignItems: "center",
   gap: 7,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.31)",
+  background: "var(--pf-surface-alt)",
   border:
-    "1px solid rgba(148,163,184,.065)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const activitySignalDot = (accent) => ({
@@ -5657,15 +5607,12 @@ const activityFeedShell = {
   overflowX: "hidden",
   overscrollBehavior: "contain",
   scrollbarWidth: "thin",
-  scrollbarColor:
-    "#334155 transparent",
-  borderRadius: 14,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.20)",
+  scrollbarColor: "#94a3b8 transparent",
+  borderRadius: 12,
+  background: "var(--pf-surface-alt)",
   border:
-    "1px solid rgba(148,163,184,.055)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
-
 
 const dashboardDrillOverlay = {
   position: "fixed",
@@ -5687,7 +5634,7 @@ const dashboardDrillModal = {
   overflow: "hidden",
   borderRadius: 28,
   background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,var(--pf-surface),#07101d)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border: "1px solid rgba(96,165,250,.18)",
   boxShadow: "0 42px 120px rgba(0,0,0,.70)",
   color: "var(--pf-text-strong)",
@@ -5927,7 +5874,7 @@ const dashboardDrillPageSize = {
   borderRadius: 10,
   border: "1px solid rgba(96,165,250,.14)",
   background: "var(--pf-surface)",
-  color: "#bfdbfe",
+  color: "var(--pf-text-strong)",
   colorScheme: "var(--pf-color-scheme)",
   fontFamily: "inherit",
   fontSize: 9,
@@ -5942,7 +5889,7 @@ const dashboardDrillPageButton = (disabled) => ({
   borderRadius: 10,
   border: "1px solid rgba(96,165,250,.14)",
   background: "rgba(59,130,246,.06)",
-  color: "#bfdbfe",
+  color: "#2563eb",
   opacity: disabled ? 0.35 : 1,
   cursor: disabled ? "not-allowed" : "pointer",
   fontFamily: "inherit",
@@ -5981,7 +5928,7 @@ const dashboardRecordModal = {
   overflow: "hidden",
   borderRadius: 26,
   background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,var(--pf-surface),#08101d)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border: "1px solid rgba(96,165,250,.18)",
   boxShadow: "0 40px 110px rgba(0,0,0,.70)",
   color: "var(--pf-text-strong)",

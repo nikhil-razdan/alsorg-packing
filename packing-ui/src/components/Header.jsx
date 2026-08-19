@@ -790,17 +790,17 @@ function Header() {
 /* ===================== STYLES ===================== */
 
 const header = {
-	height: 76,
-	padding: "0 28px",
+	height: 66,
+	padding: "0 22px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
 	background:
 		"linear-gradient(180deg,var(--pf-header-start) 0%,var(--pf-header-end) 100%)",
 	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 	boxShadow:
-		"0 10px 30px rgba(var(--pf-surface-deep-rgb),.35)",
+		"0 6px 18px rgba(var(--pf-surface-deep-rgb),.08)",
 	position: "sticky",
 	top: 0,
 	zIndex: 50,
@@ -814,106 +814,106 @@ const left = {
 const brandWrap = {
 	display: "flex",
 	alignItems: "center",
-	gap: 16,
+	gap: 12,
 };
 
 const brandMark = {
-	width: 48,
-	height: 48,
-	borderRadius: 16,
+	width: 42,
+	height: 42,
+	borderRadius: 12,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	fontWeight: 900,
-	fontSize: 20,
-	color: "var(--pf-text-strong)",
+	fontWeight: 950,
+	fontSize: 18,
+	color: "#fff",
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
 	boxShadow:
-		"0 10px 25px rgba(37,99,235,.35)",
+		"0 7px 18px rgba(37,99,235,.24)",
 };
 
 const title = {
-	fontSize: 18,
-	fontWeight: 900,
-	letterSpacing: 1,
+	fontSize: 17,
+	fontWeight: 950,
+	letterSpacing: .5,
 	color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
-	fontSize: 12,
-	marginTop: 4,
-	color: "rgba(var(--pf-fg-rgb),.55)",
-	letterSpacing: 0.4,
+	fontSize: 10.5,
+	marginTop: 2,
+	color: "var(--pf-text-muted)",
+	letterSpacing: 0.25,
+	fontWeight: 650,
 };
 
 const right = {
 	display: "flex",
 	alignItems: "center",
-	gap: 12,
+	gap: 8,
 };
 
 const statusBadge = (severity) => ({
-	height: 38,
-	padding: "0 16px",
+	height: 34,
+	padding: "0 13px",
 	borderRadius: 999,
 	display: "flex",
 	alignItems: "center",
 	background:
 		severity === "error"
-			? "rgba(239,68,68,.13)"
+			? "rgba(239,68,68,.09)"
 			: severity === "warning"
-				? "rgba(245,158,11,.13)"
-				: "rgba(34,197,94,.12)",
+				? "rgba(245,158,11,.10)"
+				: "rgba(34,197,94,.09)",
 	color:
 		severity === "error"
-			? "#f87171"
+			? "#dc2626"
 			: severity === "warning"
-				? "#fbbf24"
-				: "#4ade80",
+				? "#b45309"
+				: "#15803d",
 	border:
 		severity === "error"
-			? "1px solid rgba(239,68,68,.26)"
+			? "1px solid rgba(239,68,68,.22)"
 			: severity === "warning"
-				? "1px solid rgba(245,158,11,.25)"
-				: "1px solid rgba(34,197,94,.22)",
-	fontWeight: 800,
-	fontSize: 12,
-	letterSpacing: 1,
+				? "1px solid rgba(245,158,11,.22)"
+				: "1px solid rgba(34,197,94,.20)",
+	fontWeight: 900,
+	fontSize: 10.5,
+	letterSpacing: .7,
 	cursor: "pointer",
 });
 
 const iconBtnSx = {
-	width: 42,
-	height: 42,
-	borderRadius: "14px",
-	color: "rgba(var(--pf-fg-rgb),.82)",
-	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+	width: 38,
+	height: 38,
+	borderRadius: "10px",
+	color: "var(--pf-text)",
+	background: "var(--pf-surface-alt)",
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
-
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
+	transition:
+		"background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease",
 	"&:hover": {
-		background:
-			"rgba(59,130,246,.16)",
-		borderColor:
-			"rgba(59,130,246,.35)",
+		color: "#2563eb",
+		background: "rgba(59,130,246,.08)",
+		borderColor: "rgba(59,130,246,.24)",
 		transform: "translateY(-1px)",
 	},
 };
 
 const logoutButton = {
-	px: 2.2,
-	py: 1,
-	borderRadius: "14px",
+	height: 38,
+	px: 1.8,
+	borderRadius: "10px",
 	textTransform: "none",
-	fontWeight: 700,
+	fontWeight: 850,
+	fontSize: 12,
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	boxShadow:
-		"0 10px 25px rgba(37,99,235,.35)",
-
+		"0 7px 18px rgba(37,99,235,.22)",
 	"&:hover": {
 		background:
 			"linear-gradient(135deg,#1d4ed8,#2563eb)",
@@ -921,16 +921,15 @@ const logoutButton = {
 };
 
 const popoverPaper = {
-	mt: 1.5,
-	borderRadius: "22px",
-	background:
-		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+	mt: 1,
+	borderRadius: "14px",
+	background: "var(--pf-surface)",
 	color: "var(--pf-text-strong)",
 	border:
 		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	boxShadow:
-		"0 24px 70px rgba(0,0,0,.45)",
-	p: 2,
+		"0 20px 54px rgba(var(--pf-surface-deep-rgb),.24)",
+	p: 1.5,
 };
 
 const popoverTitle = {
@@ -961,20 +960,19 @@ const moduleGrid = {
 };
 
 const moduleCard = {
-	minHeight: 74,
-	borderRadius: 16,
+	minHeight: 68,
+	borderRadius: 11,
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
-	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "var(--pf-surface-alt)",
 	color: "var(--pf-text-strong)",
 	cursor: "pointer",
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "flex-start",
 	justifyContent: "center",
-	gap: 8,
-	padding: "12px 14px",
+	gap: 7,
+	padding: "10px 12px",
 	fontWeight: 800,
 };
 
@@ -993,12 +991,11 @@ const notificationItem = {
 	display: "grid",
 	gridTemplateColumns: "18px 1fr",
 	gap: 1,
-	p: 1.4,
-	borderRadius: "16px",
+	p: 1.25,
+	borderRadius: "11px",
 	border:
 		"1px solid rgba(var(--pf-fg-rgb),.06)",
-	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+	background: "var(--pf-surface-alt)",
 	mb: 1,
 };
 
@@ -1077,15 +1074,15 @@ const healthRow = {
 };
 
 const healthyNotificationState = {
-	color: "#4ade80",
+	color: "#15803d",
 	fontSize: 12,
-	py: 3,
+	py: 2.5,
 	px: 2,
 	textAlign: "center",
 	fontWeight: 800,
 	background: "rgba(34,197,94,.06)",
-	borderRadius: "14px",
-	border: "1px solid rgba(34,197,94,.12)",
+	borderRadius: "11px",
+	border: "1px solid rgba(34,197,94,.14)",
 };
 
 const healthDivider = {
@@ -1108,11 +1105,10 @@ const fleetHealthRow = (severity) => ({
 });
 
 const settingsDrawer = {
-	width: 390,
-	background:
-		"linear-gradient(180deg,var(--pf-surface-deep),var(--pf-surface))",
+	width: 370,
+	background: "var(--pf-surface)",
 	color: "var(--pf-text-strong)",
-	p: 3,
+	p: 2.5,
 	borderLeft:
 		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
@@ -1146,23 +1142,23 @@ const profileCard = {
 	display: "flex",
 	alignItems: "center",
 	gap: 2,
-	p: 2,
-	borderRadius: "18px",
-	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+	p: 1.6,
+	borderRadius: "12px",
+	background: "var(--pf-surface-alt)",
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const profileAvatar = {
-	width: 44,
-	height: 44,
-	borderRadius: "16px",
+	width: 42,
+	height: 42,
+	borderRadius: "12px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
+	color: "#fff",
 	fontWeight: 900,
 };
 
@@ -1192,18 +1188,17 @@ const sectionLabel = {
 
 const settingsAction = {
 	width: "100%",
-	height: 44,
-	borderRadius: 14,
+	height: 42,
+	borderRadius: 10,
 	border:
 		"1px solid rgba(var(--pf-fg-rgb),.08)",
-	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+	background: "var(--pf-surface-alt)",
 	color: "var(--pf-text-strong)",
 	cursor: "pointer",
 	fontWeight: 800,
 	textAlign: "left",
-	padding: "0 14px",
-	marginBottom: 10,
+	padding: "0 13px",
+	marginBottom: 9,
 };
 
 const settingsActionDanger = {
@@ -1225,15 +1220,15 @@ const themeChoiceRow = {
 };
 
 const themeChoiceButton = (active) => ({
-	height: 44,
-	borderRadius: 12,
+	height: 42,
+	borderRadius: 10,
 	border: active
-		? "1px solid rgba(59,130,246,.42)"
+		? "1px solid rgba(59,130,246,.34)"
 		: "1px solid rgba(var(--pf-fg-rgb),.08)",
 	background: active
-		? "linear-gradient(135deg,#2563eb,#3b82f6)"
-		: "rgba(var(--pf-fg-rgb),.035)",
-	color: active ? "#fff" : "var(--pf-text)",
+		? "rgba(59,130,246,.12)"
+		: "var(--pf-surface-alt)",
+	color: active ? "#1d4ed8" : "var(--pf-text)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",

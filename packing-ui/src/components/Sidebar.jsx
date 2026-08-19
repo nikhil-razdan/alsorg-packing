@@ -11,9 +11,11 @@ import AltRouteOutlinedIcon from "@mui/icons-material/AltRouteOutlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 
 import { useAuth } from "../auth/AuthContext";
+import { usePackFlowTheme } from "../theme/PackFlowThemeContext";
 
 function Sidebar() {
   const location = useLocation();
+  const { isDark } = usePackFlowTheme();
   const [collapsed, setCollapsed] = useState(false);
 
   const {
@@ -108,24 +110,36 @@ function Sidebar() {
   const linkStyle = (active) => ({
     display: "flex",
     alignItems: "center",
-    gap: collapsed ? 0 : 13,
-    padding: "10px 12px",
-    marginBottom: 5,
-    borderRadius: 10,
+    gap: collapsed ? 0 : 12,
+    minHeight: 42,
+    padding: collapsed ? "9px 8px" : "9px 11px",
+    marginBottom: 4,
+    borderRadius: 9,
     textDecoration: "none",
-    fontWeight: 800,
-    fontSize: 13,
-    color: active ? "#ffffff" : "var(--pf-sidebar-text)",
+    fontWeight: active ? 900 : 780,
+    fontSize: 12.5,
+    color: active
+      ? (isDark ? "#dbeafe" : "#1d4ed8")
+      : "var(--pf-sidebar-text)",
     background: active
-      ? "linear-gradient(135deg,#2563eb,#3b82f6)"
+      ? (
+        isDark
+          ? "rgba(59,130,246,.17)"
+          : "rgba(59,130,246,.085)"
+      )
       : "transparent",
     border: active
-      ? "1px solid rgba(59,130,246,.34)"
+      ? "1px solid rgba(59,130,246,.20)"
       : "1px solid transparent",
     boxShadow: active
-      ? "0 7px 18px rgba(37,99,235,.20)"
+      ? (
+        isDark
+          ? "inset 3px 0 0 #60a5fa"
+          : "inset 3px 0 0 #2563eb"
+      )
       : "none",
-    transition: "background .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease",
+    transition:
+      "background .16s ease,border-color .16s ease,color .16s ease",
     justifyContent: collapsed ? "center" : "flex-start",
   });
 
@@ -213,7 +227,7 @@ function Sidebar() {
 const sidebar = {
   height: "100vh",
   flexShrink: 0,
-  padding: "18px 11px",
+  padding: "16px 10px",
   boxSizing: "border-box",
   display: "flex",
   flexDirection: "column",
@@ -221,9 +235,10 @@ const sidebar = {
   background: "var(--pf-sidebar-bg)",
   color: "var(--pf-sidebar-text)",
   borderRight: "1px solid var(--pf-sidebar-border)",
-  boxShadow: "var(--pf-sidebar-shadow)",
+  boxShadow: "none",
   overflow: "hidden",
-  transition: "width .22s ease,background-color .18s ease,border-color .18s ease",
+  transition:
+    "width .22s ease,background-color .18s ease,border-color .18s ease",
   zIndex: 40,
 };
 
@@ -232,21 +247,22 @@ const topHighlight = {
   top: 0,
   left: 0,
   right: 0,
-  height: 86,
-  background: "var(--pf-sidebar-highlight)",
+  height: 74,
+  background:
+    "linear-gradient(180deg,rgba(59,130,246,.045),transparent)",
   pointerEvents: "none",
 };
 
 const toggleButton = {
-  width: 28,
-  height: 28,
+  width: 26,
+  height: 26,
   borderRadius: 8,
   border: "1px solid var(--pf-sidebar-border)",
   background: "var(--pf-sidebar-control)",
   color: "var(--pf-text-muted)",
   cursor: "pointer",
   fontWeight: 900,
-  fontSize: 18,
+  fontSize: 17,
   lineHeight: 1,
   display: "flex",
   alignItems: "center",
@@ -255,19 +271,19 @@ const toggleButton = {
 
 const menuTitle = {
   margin: 0,
-  paddingLeft: 5,
-  fontWeight: 850,
-  fontSize: 10,
+  paddingLeft: 4,
+  fontWeight: 900,
+  fontSize: 9,
   color: "var(--pf-sidebar-muted)",
-  letterSpacing: ".12em",
+  letterSpacing: ".14em",
   textTransform: "uppercase",
 };
 
 const toggleRow = {
   display: "flex",
   alignItems: "center",
-  marginBottom: 15,
-  minHeight: 28,
+  marginBottom: 12,
+  minHeight: 26,
 };
 
 const icon = {
@@ -289,45 +305,45 @@ const divider = {
 const smallDivider = {
   height: 1,
   background: "var(--pf-sidebar-divider)",
-  margin: "9px 0 11px",
+  margin: "7px 0 9px",
 };
 
 const logoSection = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  marginBottom: 16,
-  paddingLeft: 3,
+  gap: 10,
+  marginBottom: 14,
+  paddingLeft: 2,
   position: "relative",
   zIndex: 1,
 };
 
 const logoIcon = {
-  width: 36,
-  height: 36,
-  borderRadius: 11,
+  width: 34,
+  height: 34,
+  borderRadius: 10,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   fontWeight: 950,
-  fontSize: 16,
-  boxShadow: "0 8px 18px rgba(37,99,235,.24)",
+  fontSize: 15,
+  boxShadow: "0 6px 14px rgba(37,99,235,.18)",
 };
 
 const logoTitle = {
   color: "var(--pf-text-strong)",
   fontWeight: 950,
-  fontSize: 14,
-  letterSpacing: .9,
+  fontSize: 13.5,
+  letterSpacing: .65,
 };
 
 const logoSub = {
   color: "var(--pf-sidebar-muted)",
-  fontSize: 10.5,
-  fontWeight: 650,
-  marginTop: 2,
+  fontSize: 9.5,
+  fontWeight: 700,
+  marginTop: 1,
 };
 
 export default Sidebar;

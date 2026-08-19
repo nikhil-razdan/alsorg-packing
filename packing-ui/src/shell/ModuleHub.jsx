@@ -352,7 +352,7 @@ export default function ModuleHub() {
 							variant="h6"
 							sx={{
 								fontWeight: 900,
-								color: "#fff",
+								color: "#0f172a",
 							}}
 						>
 							No module access assigned
@@ -362,7 +362,7 @@ export default function ModuleHub() {
 							sx={{
 								mt: 1,
 								color:
-									"rgba(255,255,255,.58)",
+									"#64748b",
 							}}
 						>
 							Please contact Admin to assign PackFlow, BOMFlow or
@@ -449,49 +449,50 @@ const pageSx = {
 	overflowY: "auto",
 	fontFamily: "Inter, system-ui, sans-serif",
 	background: `
-		radial-gradient(circle at top left, rgba(59,130,246,0.14), transparent 22%),
-		radial-gradient(circle at bottom right, rgba(14,165,233,0.10), transparent 24%),
-		linear-gradient(135deg, #020617 0%, #0f172a 45%, #111827 100%)
+		radial-gradient(circle at 7% 0%, rgba(59,130,246,.10), transparent 25%),
+		radial-gradient(circle at 94% 100%, rgba(14,165,233,.07), transparent 28%),
+		linear-gradient(180deg,#f8fbff 0%,#f3f7fc 48%,#eef4fa 100%)
 	`,
-	p: { xs: 2, md: 4 },
+	color: "#0f172a",
+	p: { xs: 1.5, sm: 2, md: 3 },
 };
 
 const ambientGlowOne = {
 	position: "absolute",
-	top: -120,
-	left: -120,
-	width: 420,
-	height: 420,
+	top: -150,
+	left: -130,
+	width: 380,
+	height: 380,
 	borderRadius: "50%",
-	background: "rgba(37,99,235,.18)",
-	filter: "blur(100px)",
+	background: "rgba(37,99,235,.10)",
+	filter: "blur(110px)",
 	pointerEvents: "none",
 };
 
 const ambientGlowTwo = {
 	position: "absolute",
-	right: -120,
-	bottom: -120,
-	width: 460,
-	height: 460,
+	right: -130,
+	bottom: -150,
+	width: 420,
+	height: 420,
 	borderRadius: "50%",
-	background: "rgba(14,165,233,.14)",
-	filter: "blur(110px)",
+	background: "rgba(14,165,233,.08)",
+	filter: "blur(120px)",
 	pointerEvents: "none",
 };
 
 const backgroundText = {
 	position: "fixed",
-	fontSize: { xs: 88, md: 190 },
+	fontSize: { xs: 82, md: 168 },
 	fontWeight: 950,
 	background:
-		"linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.012))",
+		"linear-gradient(180deg, rgba(37,99,235,.035), rgba(37,99,235,.008))",
 	WebkitBackgroundClip: "text",
 	WebkitTextFillColor: "transparent",
-	top: "50%",
+	top: "53%",
 	left: "50%",
 	transform: "translate(-50%, -50%)",
-	letterSpacing: 6,
+	letterSpacing: 5,
 	pointerEvents: "none",
 	userSelect: "none",
 	whiteSpace: "nowrap",
@@ -503,95 +504,112 @@ const topBarSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	maxWidth: 1120,
+	maxWidth: 1240,
 	mx: "auto",
-	mb: 5,
+	mb: { xs: 3, md: 4 },
+	minHeight: 66,
+	px: { xs: 1.5, md: 2 },
+	py: 1,
+	borderRadius: "14px",
+	background: "rgba(255,255,255,.88)",
+	border: "1px solid rgba(148,163,184,.18)",
+	boxShadow: "0 10px 28px rgba(15,23,42,.07)",
+	backdropFilter: "blur(16px)",
 };
 
 const brandWrapSx = {
 	display: "flex",
 	alignItems: "center",
-	gap: 1.8,
+	gap: 1.4,
 };
 
 const brandMarkSx = {
-	width: 52,
-	height: 52,
-	borderRadius: "18px",
+	width: 42,
+	height: 42,
+	borderRadius: "11px",
 	display: "grid",
 	placeItems: "center",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
 	fontWeight: 950,
-	fontSize: 20,
-	boxShadow: "0 14px 30px rgba(37,99,235,.35)",
+	fontSize: 17,
+	boxShadow: "0 8px 20px rgba(37,99,235,.22)",
 };
 
 const brandTitleSx = {
-	color: "#fff",
+	color: "#0f172a",
 	fontWeight: 950,
-	fontSize: 20,
-	letterSpacing: 0.5,
+	fontSize: 18,
+	letterSpacing: 0.25,
 };
 
 const brandSubSx = {
-	color: "rgba(255,255,255,.52)",
-	fontSize: 12,
-	mt: 0.4,
+	color: "#64748b",
+	fontSize: 10.5,
+	fontWeight: 650,
+	mt: 0.2,
 };
 
 const logoutBtnSx = {
-	borderRadius: "14px",
-	px: 2.4,
-	py: 1.1,
+	minHeight: 38,
+	borderRadius: "9px",
+	px: 2,
+	py: 0.8,
 	textTransform: "none",
-	fontWeight: 800,
-	color: "#fff",
-	background: "rgba(255,255,255,.05)",
-	border: "1px solid rgba(255,255,255,.10)",
+	fontWeight: 850,
+	fontSize: 12,
+	color: "#1d4ed8",
+	background: "#eff6ff",
+	border: "1px solid #bfdbfe",
+	boxShadow: "none",
 	"&:hover": {
-		background: "rgba(59,130,246,.18)",
-		borderColor: "rgba(59,130,246,.35)",
+		background: "#dbeafe",
+		borderColor: "#93c5fd",
 	},
 };
 
 const containerSx = {
 	position: "relative",
 	zIndex: 1,
-	maxWidth: 1120,
+	maxWidth: 1240,
 	mx: "auto",
 };
 
 const heroSx = {
-	mb: 4,
-	maxWidth: 780,
+	mb: { xs: 3, md: 3.5 },
+	maxWidth: 820,
+	px: { xs: 0.5, md: 1 },
 };
 
 const badgeSx = {
-	mb: 2,
-	height: 38,
-	borderRadius: 999,
-	background: "rgba(37,99,235,.14)",
-	border: "1px solid rgba(59,130,246,.22)",
-	color: "#60a5fa",
-	fontSize: 12,
-	fontWeight: 850,
-	letterSpacing: 1.2,
+	mb: 1.5,
+	height: 29,
+	borderRadius: "8px",
+	background: "#eff6ff",
+	border: "1px solid #bfdbfe",
+	color: "#2563eb",
+	fontSize: 10.5,
+	fontWeight: 900,
+	letterSpacing: 1,
+	"& .MuiChip-label": {
+		px: 1.2,
+	},
 };
 
 const titleSx = {
-	color: "#fff",
+	color: "#0f172a",
 	fontWeight: 950,
-	letterSpacing: "-0.055em",
-	lineHeight: 1,
-	mb: 2,
-	fontSize: { xs: 40, md: 58 },
+	letterSpacing: "-0.045em",
+	lineHeight: 1.05,
+	mb: 1.2,
+	fontSize: { xs: 34, sm: 40, md: 48 },
 };
 
 const subtitleSx = {
-	color: "rgba(255,255,255,.66)",
-	fontSize: { xs: 15, md: 17 },
-	lineHeight: 1.8,
+	color: "#64748b",
+	fontSize: { xs: 13.5, md: 15 },
+	fontWeight: 600,
+	lineHeight: 1.65,
 	maxWidth: 760,
 };
 
@@ -600,120 +618,146 @@ const moduleGridSx = {
 	gridTemplateColumns: {
 		xs: "1fr",
 		md: "repeat(2, minmax(0, 1fr))",
+		xl: "repeat(3, minmax(0, 1fr))",
 	},
-	gap: 3,
+	gap: { xs: 1.5, md: 2 },
 	alignItems: "stretch",
 };
 
 const emptyCardSx = {
-	borderRadius: 5,
-	p: 4,
-	background: "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	boxShadow: "0 30px 80px rgba(2,6,23,.45)",
+	borderRadius: "14px",
+	p: 3.5,
+	background: "rgba(255,255,255,.92)",
+	border: "1px solid rgba(148,163,184,.22)",
+	boxShadow: "0 12px 32px rgba(15,23,42,.07)",
 };
 
 const moduleCardSx = {
 	height: "100%",
-	minHeight: 286,
+	minHeight: 274,
 	position: "relative",
 	overflow: "hidden",
-	borderRadius: 5,
-	background: "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.84))",
-	border: "1px solid rgba(255,255,255,.08)",
-	boxShadow: "0 30px 80px rgba(2,6,23,.45)",
-	backdropFilter: "blur(18px)",
-	transition: "all .25s ease",
+	borderRadius: "14px",
+	background: "rgba(255,255,255,.94)",
+	border: "1px solid rgba(148,163,184,.20)",
+	boxShadow: "0 10px 28px rgba(15,23,42,.065)",
+	backdropFilter: "blur(12px)",
+	transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
 	"&:before": {
-		content: '""',
+		content: '\"\"',
 		position: "absolute",
 		top: 0,
 		left: 0,
-		right: 0,
-		height: 120,
-		background: "linear-gradient(180deg, rgba(59,130,246,.18), transparent)",
+		bottom: 0,
+		width: 4,
+		background: "linear-gradient(180deg,#2563eb,#60a5fa)",
 		pointerEvents: "none",
 	},
 	"&:hover": {
-		transform: "translateY(-6px)",
-		boxShadow: "0 34px 90px rgba(2,6,23,.62)",
-		borderColor: "rgba(59,130,246,.28)",
+		transform: "translateY(-2px)",
+		boxShadow: "0 16px 36px rgba(15,23,42,.10)",
+		borderColor: "rgba(59,130,246,.30)",
 	},
 };
 
 const cardContentSx = {
-	p: 3.5,
+	p: { xs: 2.25, md: 2.6 },
+	pl: { xs: 2.5, md: 2.85 },
 	position: "relative",
 	zIndex: 1,
 	height: "100%",
 	display: "flex",
 	flexDirection: "column",
+	"&:last-child": {
+		pb: { xs: 2.25, md: 2.6 },
+	},
 };
 
 const cardTopSx = {
 	display: "flex",
-	alignItems: "flex-start",
+	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 2,
-	mb: 2.5,
+	gap: 1.5,
+	mb: 1.8,
 };
 
 const iconBoxSx = {
-	width: 64,
-	height: 64,
-	borderRadius: "22px",
+	width: 48,
+	height: 48,
+	borderRadius: "12px",
 	display: "grid",
 	placeItems: "center",
-	color: "#93c5fd",
-	background: "rgba(59,130,246,.13)",
-	border: "1px solid rgba(59,130,246,.20)",
-	boxShadow: "0 12px 30px rgba(37,99,235,.18)",
+	color: "#2563eb",
+	background: "#eff6ff",
+	border: "1px solid #dbeafe",
+	boxShadow: "none",
+	"& svg": {
+		fontSize: 27,
+	},
 };
 
 const cardChipSx = {
-	color: "#60a5fa",
-	background: "rgba(37,99,235,.13)",
-	border: "1px solid rgba(59,130,246,.20)",
-	fontWeight: 800,
+	height: 25,
+	borderRadius: "7px",
+	color: "#1d4ed8",
+	background: "#f5f9ff",
+	border: "1px solid #dbeafe",
+	fontWeight: 850,
+	fontSize: 9.5,
+	"& .MuiChip-label": {
+		px: 1,
+	},
 };
 
 const cardTitleSx = {
-	color: "#fff",
+	color: "#0f172a",
 	fontWeight: 950,
-	mb: 1.2,
+	fontSize: { xs: 22, md: 24 },
+	mb: 0.7,
 	letterSpacing: "-0.035em",
 };
 
 const cardSubtitleSx = {
-	color: "rgba(255,255,255,.58)",
-	lineHeight: 1.75,
-	minHeight: 72,
-	mb: 2.2,
+	color: "#64748b",
+	fontSize: 12.5,
+	fontWeight: 600,
+	lineHeight: 1.6,
+	minHeight: 62,
+	mb: 1.8,
 };
 
 const tagWrapSx = {
 	display: "flex",
 	flexWrap: "wrap",
-	gap: 1,
-	mb: 3,
+	gap: 0.7,
+	mb: 2,
 	mt: "auto",
 };
 
 const tagSx = {
-	color: "rgba(255,255,255,.78)",
-	background: "rgba(255,255,255,.055)",
-	border: "1px solid rgba(255,255,255,.08)",
-	fontWeight: 700,
+	height: 24,
+	borderRadius: "7px",
+	color: "#475569",
+	background: "#f8fafc",
+	border: "1px solid #e2e8f0",
+	fontWeight: 750,
+	fontSize: 9.5,
+	"& .MuiChip-label": {
+		px: 0.95,
+	},
 };
 
 const openBtnSx = {
-	borderRadius: "16px",
-	py: 1.35,
+	minHeight: 40,
+	borderRadius: "9px",
+	py: 0.9,
 	textTransform: "none",
 	fontWeight: 900,
+	fontSize: 12.5,
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 18px 40px rgba(37,99,235,.35)",
+	boxShadow: "0 8px 20px rgba(37,99,235,.20)",
 	"&:hover": {
 		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+		boxShadow: "0 10px 24px rgba(37,99,235,.24)",
 	},
 };
