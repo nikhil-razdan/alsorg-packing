@@ -39,7 +39,7 @@ import { useAuth }
 	from "../auth/AuthContext";
 
 import ClientMasterPage
-	from "./ClientMasterPage";
+	from "../pages/ClientMasterPage";
 
 import RequireRole
 	from "../auth/RequireRole";
