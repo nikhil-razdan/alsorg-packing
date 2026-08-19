@@ -20,13 +20,16 @@ import AddIcon from "@mui/icons-material/Add";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
@@ -415,15 +418,524 @@ function BuilderMiniStat({ icon, title, value, subtitle, accent = "#60a5fa" }) {
     );
 }
 
-function BuilderAssistantItem({ done, label, subtitle }) {
+const emptyProductAttachmentState = {
+    productImageAvailable: false,
+    drawingAvailable: false,
+    productImageFileName: "",
+    drawingFileName: "",
+};
+
+const revokeObjectUrl = (url) => {
+    if (!url) return;
+    try {
+        URL.revokeObjectURL(url);
+    } catch {
+        // Best-effort browser cleanup.
+    }
+};
+
+const fileExtension = (name) => {
+    const value = clean(name).toLowerCase();
+    const dot = value.lastIndexOf(".");
+    return dot >= 0 ? value.slice(dot + 1) : "";
+};
+
+const openProductFileBlob = (blob, fileName = "MatFlow_Product_Attachment") => {
+    if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("The Product attachment is empty.");
+    }
+
+    const url = URL.createObjectURL(blob);
+    const type = clean(blob.type).toLowerCase();
+    const previewable = type.startsWith("image/") || type === "application/pdf";
+
+    if (previewable) {
+        const opened = window.open(url, "_blank", "noopener,noreferrer");
+        if (!opened) {
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.target = "_blank";
+            anchor.rel = "noopener noreferrer";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+        }
+    } else {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = clean(fileName) || "MatFlow_Product_Attachment";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    }
+
+    window.setTimeout(() => revokeObjectUrl(url), 60_000);
+};
+
+function useProductReferenceFiles({ projectId, productId, enabled = true, canManage = false, setError }) {
+    const [attachments, setAttachments] = useState(emptyProductAttachmentState);
+    const [imageUrl, setImageUrl] = useState("");
+    const [drawingPreviewUrl, setDrawingPreviewUrl] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [working, setWorking] = useState(false);
+
+    const replaceImageUrl = useCallback((nextUrl = "") => {
+        setImageUrl((current) => {
+            if (current && current !== nextUrl) revokeObjectUrl(current);
+            return nextUrl || "";
+        });
+    }, []);
+
+    const replaceDrawingPreviewUrl = useCallback((nextUrl = "") => {
+        setDrawingPreviewUrl((current) => {
+            if (current && current !== nextUrl) revokeObjectUrl(current);
+            return nextUrl || "";
+        });
+    }, []);
+
+    const reset = useCallback(() => {
+        setAttachments(emptyProductAttachmentState);
+        replaceImageUrl("");
+        replaceDrawingPreviewUrl("");
+    }, [replaceImageUrl, replaceDrawingPreviewUrl]);
+
+    const load = useCallback(async () => {
+        if (!enabled || !projectId || !productId) {
+            reset();
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const statusResponse = await matflowApi.getProjectProductAttachmentStatus(projectId, productId);
+            const next = {
+                ...emptyProductAttachmentState,
+                ...(statusResponse?.data || {}),
+            };
+            setAttachments(next);
+
+            if (next.productImageAvailable) {
+                try {
+                    const imageResponse = await matflowApi.getProjectProductImage(projectId, productId);
+                    const blob = imageResponse?.data;
+                    if (
+                        blob instanceof Blob &&
+                        blob.size > 0 &&
+                        clean(blob.type).toLowerCase().startsWith("image/")
+                    ) {
+                        replaceImageUrl(URL.createObjectURL(blob));
+                    } else {
+                        replaceImageUrl("");
+                    }
+                } catch {
+                    // Status remains useful even if the inline preview cannot be loaded.
+                    replaceImageUrl("");
+                }
+            } else {
+                replaceImageUrl("");
+            }
+
+            if (
+                next.drawingAvailable &&
+                ["png", "jpg", "jpeg", "webp"].includes(fileExtension(next.drawingFileName))
+            ) {
+                try {
+                    const drawingResponse = await matflowApi.getProjectProductDrawing(projectId, productId);
+                    const drawingBlob = drawingResponse?.data;
+                    if (
+                        drawingBlob instanceof Blob &&
+                        drawingBlob.size > 0 &&
+                        clean(drawingBlob.type).toLowerCase().startsWith("image/")
+                    ) {
+                        replaceDrawingPreviewUrl(URL.createObjectURL(drawingBlob));
+                    } else {
+                        replaceDrawingPreviewUrl("");
+                    }
+                } catch {
+                    replaceDrawingPreviewUrl("");
+                }
+            } else {
+                replaceDrawingPreviewUrl("");
+            }
+        } catch (requestError) {
+            reset();
+            if (typeof setError === "function") {
+                setError(readMatFlowError(
+                    requestError,
+                    "Unable to load Product image / drawing attachments."
+                ));
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [
+        enabled,
+        projectId,
+        productId,
+        replaceImageUrl,
+        replaceDrawingPreviewUrl,
+        reset,
+        setError,
+    ]);
+
+    useEffect(() => {
+        load();
+        return () => {
+            replaceImageUrl("");
+            replaceDrawingPreviewUrl("");
+        };
+    }, [load, replaceImageUrl, replaceDrawingPreviewUrl]);
+
+    const upload = useCallback(async (kind, file) => {
+        if (!canManage || !projectId || !productId || !file) return;
+
+        if (kind === "IMAGE") {
+            if (file.size > 8 * 1024 * 1024) {
+                setError?.("Product image cannot exceed 8 MB.");
+                return;
+            }
+            const ext = fileExtension(file.name);
+            if (!["png", "jpg", "jpeg", "webp"].includes(ext)) {
+                setError?.("Product image must be PNG, JPG/JPEG or WEBP.");
+                return;
+            }
+        } else {
+            if (file.size > 20 * 1024 * 1024) {
+                setError?.("Product drawing cannot exceed 20 MB.");
+                return;
+            }
+            const ext = fileExtension(file.name);
+            if (!["pdf", "png", "jpg", "jpeg", "webp", "dwg", "dxf"].includes(ext)) {
+                setError?.("Product drawing must be PDF, image, DWG or DXF.");
+                return;
+            }
+        }
+
+        setWorking(true);
+        setError?.("");
+        try {
+            if (kind === "IMAGE") {
+                await matflowApi.uploadProjectProductImage(projectId, productId, file);
+            } else {
+                await matflowApi.uploadProjectProductDrawing(projectId, productId, file);
+            }
+            await load();
+        } catch (requestError) {
+            setError?.(readMatFlowError(
+                requestError,
+                kind === "IMAGE"
+                    ? "Unable to attach the Product image."
+                    : "Unable to attach the Product drawing."
+            ));
+        } finally {
+            setWorking(false);
+        }
+    }, [canManage, projectId, productId, load, setError]);
+
+    const open = useCallback(async (kind) => {
+        if (!projectId || !productId) return;
+
+        setWorking(true);
+        setError?.("");
+        try {
+            const response = kind === "IMAGE"
+                ? await matflowApi.getProjectProductImage(projectId, productId)
+                : await matflowApi.getProjectProductDrawing(projectId, productId);
+
+            openProductFileBlob(
+                response?.data,
+                kind === "IMAGE"
+                    ? attachments.productImageFileName || "MatFlow_Product_Image"
+                    : attachments.drawingFileName || "MatFlow_Product_Drawing"
+            );
+        } catch (requestError) {
+            setError?.(readMatFlowError(
+                requestError,
+                kind === "IMAGE"
+                    ? "Unable to open the Product image."
+                    : "Unable to open the Product drawing."
+            ));
+        } finally {
+            setWorking(false);
+        }
+    }, [
+        projectId,
+        productId,
+        attachments.productImageFileName,
+        attachments.drawingFileName,
+        setError,
+    ]);
+
+    const remove = useCallback(async (kind) => {
+        if (!canManage || !projectId || !productId) return;
+
+        setWorking(true);
+        setError?.("");
+        try {
+            if (kind === "IMAGE") {
+                await matflowApi.deleteProjectProductImage(projectId, productId);
+            } else {
+                await matflowApi.deleteProjectProductDrawing(projectId, productId);
+            }
+            await load();
+        } catch (requestError) {
+            setError?.(readMatFlowError(
+                requestError,
+                kind === "IMAGE"
+                    ? "Unable to remove the Product image."
+                    : "Unable to remove the Product drawing."
+            ));
+        } finally {
+            setWorking(false);
+        }
+    }, [canManage, projectId, productId, load, setError]);
+
+    return {
+        attachments,
+        imageUrl,
+        drawingPreviewUrl,
+        loading,
+        working,
+        load,
+        upload,
+        open,
+        remove,
+    };
+}
+
+function ProductReferencePanel({
+    project,
+    product,
+    files,
+    canManage = false,
+    contextUnavailable = false,
+}) {
+    const ready = Boolean(project?.id && product?.id);
+    const attachments = files?.attachments || emptyProductAttachmentState;
+    const busy = files?.loading || files?.working;
+
     return (
-        <Box sx={builderAssistantItemSx}>
-            <Box sx={builderAssistantDotSx(done)}>{done ? "✓" : "!"}</Box>
-            <Box sx={{ minWidth: 0 }}>
-                <Typography sx={builderAssistantLabelSx(done)}>{label}</Typography>
-                <Typography sx={builderAssistantSubSx}>{subtitle}</Typography>
+        <Card sx={builderSidePanelSx}>
+            <Box sx={builderSideTitleRowSx}>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={builderSideTitleSx}>Product References</Typography>
+                    <Typography sx={builderAssistantSubSx}>
+                        Product image and drawing stay linked to the Product across BOM revisions.
+                    </Typography>
+                </Box>
+                <ImageOutlinedIcon sx={{ color: "#93c5fd" }} />
             </Box>
-        </Box>
+
+            {!ready ? (
+                <Box sx={builderAttachmentEmptySx}>
+                    <ImageOutlinedIcon sx={{ fontSize: 28, opacity: .55 }} />
+                    <Typography sx={{ ...builderAssistantSubSx, mt: .55, textAlign: "center" }}>
+                        {contextUnavailable
+                            ? "Product attachment context could not be resolved from the Project portfolio."
+                            : "Select the Product / Drawing to show or attach its reference files."}
+                    </Typography>
+                </Box>
+            ) : (
+                <Box sx={{ mt: 1.05, display: "grid", gap: 1 }}>
+                    <Box sx={builderAttachmentIdentitySx}>
+                        <Typography noWrap sx={builderQuickTitleSx}>
+                            {product.productName || "Product / Item"}
+                        </Typography>
+                        <Typography sx={builderAssistantSubSx}>
+                            {project.projectCode || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision || "0"}
+                        </Typography>
+                    </Box>
+
+                    <Box>
+                        <Box sx={builderAttachmentLabelRowSx}>
+                            <Typography sx={builderAttachmentLabelSx}>PRODUCT IMAGE</Typography>
+                            <Chip
+                                size="small"
+                                label={attachments.productImageAvailable ? "ATTACHED" : "OPTIONAL"}
+                                sx={attachments.productImageAvailable
+                                    ? builderAttachmentAttachedChipSx
+                                    : builderAttachmentOptionalChipSx}
+                            />
+                        </Box>
+
+                        {attachments.productImageAvailable && files?.imageUrl ? (
+                            <Box
+                                component="button"
+                                type="button"
+                                onClick={() => files.open("IMAGE")}
+                                disabled={busy}
+                                sx={builderProductImageButtonSx}
+                                title="Open Product image"
+                            >
+                                <Box
+                                    component="img"
+                                    src={files.imageUrl}
+                                    alt={`${product.productName || "Product"} reference`}
+                                    sx={builderProductImageSx}
+                                />
+                            </Box>
+                        ) : (
+                            <Box sx={builderAttachmentEmptySx}>
+                                <ImageOutlinedIcon sx={{ fontSize: 28, opacity: .55 }} />
+                                <Typography sx={{ ...builderAssistantSubSx, mt: .45 }}>
+                                    {files?.loading
+                                        ? "Loading image..."
+                                        : "No Product image attached."}
+                                </Typography>
+                            </Box>
+                        )}
+
+                        <Box sx={builderAttachmentActionRowSx}>
+                            {attachments.productImageAvailable && (
+                                <Button
+                                    size="small"
+                                    startIcon={<OpenInNewOutlinedIcon />}
+                                    onClick={() => files.open("IMAGE")}
+                                    disabled={busy}
+                                    sx={secondaryBtnSx}
+                                >
+                                    View
+                                </Button>
+                            )}
+
+                            {canManage && (
+                                <Button
+                                    component="label"
+                                    size="small"
+                                    startIcon={<FileUploadOutlinedIcon />}
+                                    disabled={busy}
+                                    sx={attachments.productImageAvailable ? secondaryBtnSx : primaryBtnSx}
+                                >
+                                    {attachments.productImageAvailable ? "Replace" : "Attach Image"}
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={(event) => {
+                                            const selected = event.target.files?.[0] || null;
+                                            event.target.value = "";
+                                            if (selected) files.upload("IMAGE", selected);
+                                        }}
+                                    />
+                                </Button>
+                            )}
+
+                            {canManage && attachments.productImageAvailable && (
+                                <IconButton
+                                    size="small"
+                                    title="Remove Product image"
+                                    onClick={() => files.remove("IMAGE")}
+                                    disabled={busy}
+                                    sx={builderAttachmentDeleteSx}
+                                >
+                                    <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                            )}
+                        </Box>
+                    </Box>
+
+                    <Box sx={builderDrawingTileSx}>
+                        <Box sx={builderAttachmentLabelRowSx}>
+                            <Typography sx={builderAttachmentLabelSx}>PRODUCT DRAWING</Typography>
+                            <Chip
+                                size="small"
+                                label={attachments.drawingAvailable ? "ATTACHED" : "OPTIONAL"}
+                                sx={attachments.drawingAvailable
+                                    ? builderAttachmentAttachedChipSx
+                                    : builderAttachmentOptionalChipSx}
+                            />
+                        </Box>
+
+                        {attachments.drawingAvailable && files?.drawingPreviewUrl ? (
+                            <Box
+                                component="button"
+                                type="button"
+                                onClick={() => files.open("DRAWING")}
+                                disabled={busy}
+                                sx={builderDrawingPreviewButtonSx}
+                                title="Open Product drawing"
+                            >
+                                <Box
+                                    component="img"
+                                    src={files.drawingPreviewUrl}
+                                    alt={`${product.drawingNo || "Product"} drawing`}
+                                    sx={builderDrawingPreviewSx}
+                                />
+                            </Box>
+                        ) : (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: .8, mt: .75 }}>
+                                <Box sx={builderDrawingIconSx}><DescriptionOutlinedIcon /></Box>
+                                <Box sx={{ minWidth: 0, flex: 1 }}>
+                                    <Typography noWrap sx={builderQuickTitleSx}>
+                                        {attachments.drawingAvailable
+                                            ? attachments.drawingFileName || product.drawingNo || "Product Drawing"
+                                            : "No drawing attachment"}
+                                    </Typography>
+                                    <Typography sx={builderAssistantSubSx}>
+                                        PDF / image / DWG / DXF · up to 20 MB
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        )}
+
+                        <Box sx={builderAttachmentActionRowSx}>
+                            {attachments.drawingAvailable && (
+                                <Button
+                                    size="small"
+                                    startIcon={<OpenInNewOutlinedIcon />}
+                                    onClick={() => files.open("DRAWING")}
+                                    disabled={busy}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Open / Download
+                                </Button>
+                            )}
+
+                            {canManage && (
+                                <Button
+                                    component="label"
+                                    size="small"
+                                    startIcon={<FileUploadOutlinedIcon />}
+                                    disabled={busy}
+                                    sx={attachments.drawingAvailable ? secondaryBtnSx : primaryBtnSx}
+                                >
+                                    {attachments.drawingAvailable ? "Replace" : "Attach Drawing"}
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,application/pdf,image/png,image/jpeg,image/webp"
+                                        onChange={(event) => {
+                                            const selected = event.target.files?.[0] || null;
+                                            event.target.value = "";
+                                            if (selected) files.upload("DRAWING", selected);
+                                        }}
+                                    />
+                                </Button>
+                            )}
+
+                            {canManage && attachments.drawingAvailable && (
+                                <IconButton
+                                    size="small"
+                                    title="Remove Product drawing"
+                                    onClick={() => files.remove("DRAWING")}
+                                    disabled={busy}
+                                    sx={builderAttachmentDeleteSx}
+                                >
+                                    <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                            )}
+                        </Box>
+                    </Box>
+
+                    {!canManage && (
+                        <Typography sx={{ ...builderAssistantSubSx, mt: -.1 }}>
+                            View-only here. Engineering manages Product reference files.
+                        </Typography>
+                    )}
+                </Box>
+            )}
+        </Card>
     );
 }
 
@@ -455,7 +967,7 @@ function BuilderQuickAction({ icon, title, subtitle, onClick }) {
 export function MatFlowBomCreatePage() {
     const navigate = useNavigate();
     const [params] = useSearchParams();
-    const { selectedPlantParam } = useMatFlow();
+    const { selectedPlantParam, hasRole } = useMatFlow();
 
     const requestedProductId = params.get("productId") || "";
     const [projects, setProjects] = useState([]);
@@ -519,6 +1031,15 @@ export function MatFlowBomCreatePage() {
     const selectedProject = projects.find((project) => String(project.id) === String(form.projectId)) || null;
     const products = Array.isArray(selectedProject?.products) ? selectedProject.products : [];
     const selectedProduct = products.find((product) => String(product.id) === String(form.projectDrawingId)) || null;
+
+    const canManageProductFiles = hasRole(EDIT_ROLES);
+    const productFiles = useProductReferenceFiles({
+        projectId: selectedProject?.id || "",
+        productId: selectedProduct?.id || "",
+        enabled: Boolean(selectedProject?.id && selectedProduct?.id),
+        canManage: canManageProductFiles,
+        setError,
+    });
 
     const save = async () => {
         if (!selectedProject?.id) {
@@ -664,18 +1185,12 @@ export function MatFlowBomCreatePage() {
                 </Box>
 
                 <Box sx={builderRightColumnSx}>
-                    <Card sx={builderSidePanelSx}>
-                        <Box sx={builderSideTitleRowSx}>
-                            <Box>
-                                <Typography sx={builderSideTitleSx}>BOM Assistant</Typography>
-                                <Typography sx={builderAssistantSubSx}>Pre-builder checks.</Typography>
-                            </Box>
-                            <AutoAwesomeOutlinedIcon sx={{ color: "#93c5fd" }} />
-                        </Box>
-                        <BuilderAssistantItem done={Boolean(selectedProject)} label="PD No. selected" subtitle={selectedProject ? `${selectedProject.projectCode} · ${selectedProject.clientName}` : "Choose the manufacturing Project / PD."} />
-                        <BuilderAssistantItem done={Boolean(selectedProduct)} label="Product / Drawing selected" subtitle={selectedProduct ? `${selectedProduct.productName} · ${selectedProduct.drawingNo}` : "Choose the Product that owns this BOM."} />
-                        <BuilderAssistantItem done={ready} label="Ready to create" subtitle="The backend will generate BOM/yyyy/MM/dd/PD-NO/DRAWING-NO." />
-                    </Card>
+                    <ProductReferencePanel
+                        project={selectedProject}
+                        product={selectedProduct}
+                        files={productFiles}
+                        canManage={canManageProductFiles}
+                    />
 
                     <Card sx={builderSidePanelSx}>
                         <Typography sx={builderSideTitleSx}>After Draft Creation</Typography>
@@ -717,6 +1232,8 @@ export function MatFlowBomDetailPage() {
     const [action, setAction] = useState(null);
     const [actionRemarks, setActionRemarks] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [productOwnerProjectId, setProductOwnerProjectId] = useState("");
+    const [productOwnerLookupDone, setProductOwnerLookupDone] = useState(false);
 
     const load = useCallback(async () => {
         if (!bomId) return;
@@ -757,6 +1274,70 @@ export function MatFlowBomDetailPage() {
     const status = normalize(bom?.status);
     const project = projectOf(bom);
     const lines = linesOf(bom);
+
+    useEffect(() => {
+        let active = true;
+
+        const productId = project?.id || bom?.projectDrawingId || "";
+        const directProjectId = project?.parentProjectId || project?.projectId || "";
+
+        setProductOwnerLookupDone(false);
+
+        if (!productId) {
+            setProductOwnerProjectId("");
+            setProductOwnerLookupDone(true);
+            return () => { active = false; };
+        }
+
+        if (directProjectId) {
+            setProductOwnerProjectId(String(directProjectId));
+            setProductOwnerLookupDone(true);
+            return () => { active = false; };
+        }
+
+        (async () => {
+            try {
+                const response = await matflowApi.listProjects({
+                    search: clean(project?.projectCode) || undefined,
+                    plantCode: clean(project?.plantCode) || undefined,
+                });
+
+                if (!active) return;
+
+                const portfolios = Array.isArray(response?.data) ? response.data : [];
+                const owner = portfolios.find((portfolio) =>
+                    (Array.isArray(portfolio?.products) ? portfolio.products : [])
+                        .some((productRow) => String(productRow?.id) === String(productId))
+                );
+
+                setProductOwnerProjectId(owner?.id ? String(owner.id) : "");
+            } catch {
+                if (active) setProductOwnerProjectId("");
+            } finally {
+                if (active) setProductOwnerLookupDone(true);
+            }
+        })();
+
+        return () => { active = false; };
+    }, [
+        bom?.projectDrawingId,
+        project?.id,
+        project?.parentProjectId,
+        project?.projectId,
+        project?.projectCode,
+        project?.plantCode,
+    ]);
+
+    const canManageProductFiles = hasRole(EDIT_ROLES);
+    const resolvedProductId = project?.id || bom?.projectDrawingId || "";
+    const productFiles = useProductReferenceFiles({
+        projectId: productOwnerProjectId,
+        productId: resolvedProductId,
+        enabled: Boolean(productOwnerProjectId && resolvedProductId),
+        canManage: canManageProductFiles,
+        setError,
+    });
+
     const canEdit = hasRole(EDIT_ROLES) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
     const canReview = hasRole(REVIEW_ROLES) && status === "SUBMITTED" && bom?.rowVersion != null;
     const canRevision = hasRole(EDIT_ROLES) && status === "APPROVED" && bom?.effective && bom?.latestRevision;
@@ -1245,19 +1826,24 @@ export function MatFlowBomDetailPage() {
                 </Box>
 
                 <Box sx={builderRightColumnSx}>
-                    <Card sx={builderSidePanelSx}>
-                        <Box sx={builderSideTitleRowSx}>
-                            <Box>
-                                <Typography sx={builderSideTitleSx}>BOM Assistant</Typography>
-                                <Typography sx={builderAssistantSubSx}>Operational checks before Production review.</Typography>
-                            </Box>
-                            <AutoAwesomeOutlinedIcon sx={{ color: "#93c5fd" }} />
-                        </Box>
-                        <BuilderAssistantItem done={lines.length > 0} label="Material structure" subtitle={lines.length ? `${lines.length} material line(s) added.` : "At least one material is required."} />
-                        <BuilderAssistantItem done={lines.length > 0 && validQtyCount === lines.length} label="Quantity validation" subtitle={lines.length > 0 && validQtyCount === lines.length ? "All required/net quantities are positive." : "Correct zero or invalid quantities before submission."} />
-                        <BuilderAssistantItem done={lines.length > 0 && categorizedCount === lines.length} label="Category snapshots" subtitle="Material categories organize the builder and remain traceable." />
-                        <BuilderAssistantItem done={status === "APPROVED" && bom?.effective === true} label="Production review" subtitle={status === "APPROVED" && bom?.effective ? "Reviewed and effective for MR creation." : `Current owner: ${workflow[0]}.`} />
-                    </Card>
+                    <ProductReferencePanel
+                        project={productOwnerProjectId ? {
+                            id: productOwnerProjectId,
+                            projectCode: project?.projectCode,
+                            projectName: project?.projectName,
+                            clientName: project?.clientName,
+                            plantCode: project?.plantCode,
+                        } : null}
+                        product={{
+                            id: resolvedProductId,
+                            productName: project?.productName,
+                            drawingNo: project?.drawingNo,
+                            drawingRevision: project?.drawingRevision,
+                        }}
+                        files={productFiles}
+                        canManage={canManageProductFiles}
+                        contextUnavailable={productOwnerLookupDone && !productOwnerProjectId}
+                    />
 
                     <Card sx={builderSidePanelSx}>
                         <Box sx={builderSideTitleRowSx}>
@@ -1485,11 +2071,22 @@ const builderSectionCellSx = { p: .8, minWidth: 0, fontSize: 11, color: "var(--m
 const builderProcessingChipSx = { height: 22, fontSize: 9.4, fontWeight: 800, color: "var(--mf-purple-text)", background: "var(--mf-purple-soft)", border: "1px solid var(--mf-purple-border)", cursor: "pointer" };
 const builderDeleteIconSx = { width: 30, height: 30, color: "var(--mf-danger-text)", border: "1px solid var(--mf-danger-border)", borderRadius: 1.5 };
 const builderSidePanelSx = { ...panelSx, m: 0, p: 1.3, boxShadow: "none" };
+const builderAttachmentIdentitySx = { p: .85, borderRadius: 1.7, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" };
+const builderAttachmentLabelRowSx = { display: "flex", justifyContent: "space-between", gap: .6, alignItems: "center" };
+const builderAttachmentLabelSx = { color: "var(--mf-text-muted)", fontSize: 9.4, fontWeight: 900, letterSpacing: .55 };
+const builderAttachmentAttachedChipSx = { height: 19, fontSize: 8.8, fontWeight: 900, color: "var(--mf-success-text)", background: "var(--mf-success-soft)", border: "1px solid var(--mf-success-border)" };
+const builderAttachmentOptionalChipSx = { height: 19, fontSize: 8.8, fontWeight: 900, color: "var(--mf-text-muted)", background: "var(--mf-surface-strong)", border: "1px solid var(--mf-border)" };
+const builderAttachmentEmptySx = { minHeight: 105, mt: .7, borderRadius: 1.8, border: "1px dashed var(--mf-border)", background: "var(--mf-surface)", display: "grid", placeItems: "center", alignContent: "center", p: 1.15, color: "var(--mf-text-muted)" };
+const builderProductImageButtonSx = { width: "100%", p: 0, mt: .7, display: "block", overflow: "hidden", borderRadius: 1.8, border: "1px solid var(--mf-border)", background: "var(--mf-surface)", cursor: "pointer", "&:disabled": { cursor: "default", opacity: .75 } };
+const builderProductImageSx = { width: "100%", height: 150, display: "block", objectFit: "contain", background: "var(--mf-surface)" };
+const builderAttachmentActionRowSx = { display: "flex", gap: .55, alignItems: "center", flexWrap: "wrap", mt: .75 };
+const builderAttachmentDeleteSx = { width: 32, height: 32, color: "var(--mf-danger-text)", border: "1px solid var(--mf-danger-border)", borderRadius: 1.5 };
+const builderDrawingTileSx = { p: .9, borderRadius: 1.8, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" };
+const builderDrawingPreviewButtonSx = { width: "100%", p: 0, mt: .75, display: "block", overflow: "hidden", borderRadius: 1.6, border: "1px solid var(--mf-border)", background: "var(--mf-card-bg)", cursor: "pointer", "&:disabled": { cursor: "default", opacity: .75 } };
+const builderDrawingPreviewSx = { width: "100%", height: 122, display: "block", objectFit: "contain", background: "var(--mf-surface)" };
+const builderDrawingIconSx = { flex: "0 0 auto", width: 34, height: 34, borderRadius: 1.7, display: "grid", placeItems: "center", color: "var(--mf-purple-text)", background: "var(--mf-purple-soft)", "& svg": { fontSize: 19 } };
 const builderSideTitleRowSx = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1 };
 const builderSideTitleSx = { color: "var(--mf-text)", fontSize: 14.2, fontWeight: 950 };
-const builderAssistantItemSx = { display: "flex", gap: .75, py: .85, borderBottom: "1px solid var(--mf-border)", "&:last-of-type": { borderBottom: 0 } };
-const builderAssistantDotSx = (done) => ({ flex: "0 0 auto", width: 22, height: 22, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 10.5, fontWeight: 950, color: done ? "var(--mf-success-text)" : "var(--mf-warning-text)", background: done ? "var(--mf-success-soft)" : "var(--mf-warning-soft)", border: `1px solid ${done ? "var(--mf-success-border)" : "var(--mf-warning-border)"}` });
-const builderAssistantLabelSx = (done) => ({ color: done ? "var(--mf-text)" : "var(--mf-warning-text)", fontSize: 11.3, fontWeight: 900, lineHeight: 1.3 });
 const builderAssistantSubSx = { color: "var(--mf-text-muted)", fontSize: 9.9, lineHeight: 1.45, mt: .15 };
 const builderWorkflowItemSx = (active, done) => ({ display: "flex", gap: .75, p: .8, borderRadius: 1.6, border: `1px solid ${active ? "var(--mf-primary-border)" : "var(--mf-border)"}`, background: active ? "var(--mf-primary-soft)" : done ? "var(--mf-success-soft)" : "var(--mf-surface)", mb: .65 });
 const builderWorkflowNumberSx = (active, done) => ({ flex: "0 0 auto", width: 24, height: 24, display: "grid", placeItems: "center", borderRadius: "50%", fontSize: 10.5, fontWeight: 950, color: done ? "var(--mf-success-text)" : active ? "var(--mf-primary-text)" : "var(--mf-text-muted)", background: done ? "var(--mf-success-soft)" : active ? "var(--mf-primary-soft)" : "var(--mf-surface-strong)", border: `1px solid ${done ? "var(--mf-success-border)" : active ? "var(--mf-primary-border)" : "var(--mf-border)"}` });
