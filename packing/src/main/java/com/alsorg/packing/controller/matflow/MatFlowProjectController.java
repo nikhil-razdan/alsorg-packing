@@ -1,5 +1,6 @@
 package com.alsorg.packing.controller.matflow;
 
+import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductBulkCreateRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductRequest;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
 import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectRequest;
@@ -74,6 +75,13 @@ public class MatFlowProjectController {
             @PathVariable UUID projectId,
             @Valid @RequestBody ProductRequest request) {
         return service.addProduct(projectId, request);
+    }
+
+    @PostMapping("/{projectId}/products/bulk")
+    public ProjectPortfolioResponse addProducts(
+            @PathVariable UUID projectId,
+            @Valid @RequestBody ProductBulkCreateRequest request) {
+        return service.addProducts(projectId, request.products());
     }
 
     @PutMapping("/{projectId}/products/{productId}")

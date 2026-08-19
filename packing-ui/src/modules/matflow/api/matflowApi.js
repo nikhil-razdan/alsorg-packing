@@ -116,6 +116,11 @@ export const matflowApi = {
 			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products`,
 			body
 		),
+	addProjectProducts: (projectId, products) =>
+		API.post(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/bulk`,
+			{ products }
+		),
 	updateProjectProduct: (projectId, productId, body) =>
 		API.put(
 			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}`,

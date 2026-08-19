@@ -440,6 +440,13 @@ const fileExtension = (name) => {
     return dot >= 0 ? value.slice(dot + 1) : "";
 };
 
+const productDimensionsText = (product) => {
+    if (clean(product?.dimensions)) return clean(product.dimensions);
+    const values = [product?.dimensionLength, product?.dimensionBreadth, product?.dimensionHeight];
+    if (values.some((value) => value === null || value === undefined || value === "")) return "Not specified";
+    return `${values.map((value) => Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })).join(" × ")} ${clean(product?.dimensionUom) || "MM"}`;
+};
+
 const openProductFileBlob = (blob, fileName = "MatFlow_Product_Attachment") => {
     if (!(blob instanceof Blob) || blob.size === 0) {
         throw new Error("The Product attachment is empty.");
@@ -744,6 +751,9 @@ function ProductReferencePanel({
                         </Typography>
                         <Typography sx={builderAssistantSubSx}>
                             {project.projectCode || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision || "0"}
+                        </Typography>
+                        <Typography sx={{ ...builderAssistantSubSx, mt: .25, fontWeight: 850 }}>
+                            Size: {productDimensionsText(product)} · L × B × H
                         </Typography>
                     </Box>
 

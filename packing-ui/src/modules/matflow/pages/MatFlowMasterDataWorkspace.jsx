@@ -127,10 +127,61 @@ const emptyProduct = {
     productName: "",
     drawingNo: "",
     drawingRevision: "0",
+    dimensionLength: "",
+    dimensionBreadth: "",
+    dimensionHeight: "",
     requiredDate: "",
     remarks: "",
     active: true,
 };
+
+const newProductBatchRow = () => ({
+    ...emptyProduct,
+    _key: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+    imageFile: null,
+    drawingFile: null,
+});
+
+const optionalPositiveNumber = (value) => {
+    const text = clean(value);
+    if (!text) return null;
+    const number = Number(text);
+    return Number.isFinite(number) ? number : null;
+};
+
+const productDimensionsText = (product) => {
+    if (clean(product?.dimensions)) return clean(product.dimensions);
+    const values = [product?.dimensionLength, product?.dimensionBreadth, product?.dimensionHeight];
+    if (values.some((value) => value === null || value === undefined || value === "")) return "-";
+    return `${values.map((value) => Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })).join(" × ")} ${clean(product?.dimensionUom) || "MM"}`;
+};
+
+const validateProductDimensions = (form) => {
+    const raw = [form?.dimensionLength, form?.dimensionBreadth, form?.dimensionHeight].map((value) => clean(value));
+    const any = raw.some(Boolean);
+    if (!any) return "";
+    if (raw.some((value) => !value)) {
+        return "Enter complete Product dimensions as L × B × H, or leave all three blank.";
+    }
+    const values = raw.map(Number);
+    if (values.some((value) => !Number.isFinite(value) || value <= 0)) {
+        return "Product dimensions L × B × H must all be greater than zero.";
+    }
+    return "";
+};
+
+const productRequestBody = (form, rowVersion = null) => ({
+    productName: clean(form?.productName),
+    drawingNo: upperCode(form?.drawingNo),
+    drawingRevision: upperCode(form?.drawingRevision) || "0",
+    dimensionLength: optionalPositiveNumber(form?.dimensionLength),
+    dimensionBreadth: optionalPositiveNumber(form?.dimensionBreadth),
+    dimensionHeight: optionalPositiveNumber(form?.dimensionHeight),
+    requiredDate: clean(form?.requiredDate) || null,
+    remarks: clean(form?.remarks) || null,
+    active: form?.active === true,
+    rowVersion,
+});
 
 export function MatFlowProjectsPage() {
     const navigate = useNavigate();
@@ -149,6 +200,7 @@ export function MatFlowProjectsPage() {
     const [deleteDialog, setDeleteDialog] = useState(null);
     const [projectForm, setProjectForm] = useState(emptyProject);
     const [productForm, setProductForm] = useState(emptyProduct);
+    const [productBatchRows, setProductBatchRows] = useState([newProductBatchRow()]);
     const [productImageFile, setProductImageFile] = useState(null);
     const [productDrawingFile, setProductDrawingFile] = useState(null);
     const [productAttachmentMap, setProductAttachmentMap] = useState({});
@@ -268,13 +320,30 @@ export function MatFlowProjectsPage() {
             productName: product?.productName || "",
             drawingNo: product?.drawingNo || "",
             drawingRevision: product?.drawingRevision || "0",
+            dimensionLength: product?.dimensionLength ?? "",
+            dimensionBreadth: product?.dimensionBreadth ?? "",
+            dimensionHeight: product?.dimensionHeight ?? "",
             requiredDate: product?.requiredDate || "",
             remarks: product?.remarks || "",
             active: product?.active !== false,
         });
+        setProductBatchRows(product ? [] : [newProductBatchRow()]);
         setProductImageFile(null);
         setProductDrawingFile(null);
         setError("");
+    };
+
+    const updateProductBatchRow = (key, patch) => {
+        setProductBatchRows((current) => current.map((row) =>
+            row._key === key ? { ...row, ...patch } : row
+        ));
+    };
+
+    const removeProductBatchRow = (key) => {
+        setProductBatchRows((current) => {
+            const next = current.filter((row) => row._key !== key);
+            return next.length ? next : [newProductBatchRow()];
+        });
     };
 
     const findSavedProduct = (portfolio, body, fallback = null) => {
@@ -349,11 +418,119 @@ export function MatFlowProjectsPage() {
         }
     };
 
+    const saveProductBatch = async () => {
+        const project = productDialog?.project;
+        if (!project?.id) return;
+
+        const rowsToSave = productBatchRows.filter((row) =>
+            clean(row.productName)
+            || clean(row.drawingNo)
+            || clean(row.dimensionLength)
+            || clean(row.dimensionBreadth)
+            || clean(row.dimensionHeight)
+            || row.imageFile
+            || row.drawingFile
+        );
+
+        if (!rowsToSave.length) {
+            setError("Add at least one Product.");
+            return;
+        }
+
+        const seen = new Set();
+        for (let index = 0; index < rowsToSave.length; index += 1) {
+            const row = rowsToSave[index];
+            const rowNo = index + 1;
+            if (!clean(row.productName) || !clean(row.drawingNo)) {
+                setError(`Product ${rowNo}: Product name and Drawing number are required.`);
+                return;
+            }
+            const dimensionError = validateProductDimensions(row);
+            if (dimensionError) {
+                setError(`Product ${rowNo}: ${dimensionError}`);
+                return;
+            }
+            if (row.imageFile && row.imageFile.size > 8 * 1024 * 1024) {
+                setError(`Product ${rowNo}: Product image cannot exceed 8 MB.`);
+                return;
+            }
+            if (row.drawingFile && row.drawingFile.size > 20 * 1024 * 1024) {
+                setError(`Product ${rowNo}: Product drawing cannot exceed 20 MB.`);
+                return;
+            }
+
+            const duplicateKey = `${upperCode(row.drawingNo)}|${upperCode(row.drawingRevision) || "0"}`;
+            if (seen.has(duplicateKey)) {
+                setError(`Product ${rowNo}: Drawing / Revision is repeated in this batch.`);
+                return;
+            }
+            seen.add(duplicateKey);
+        }
+
+        const bodies = rowsToSave.map((row) => productRequestBody(row));
+
+        setWorking(true);
+        setError("");
+        try {
+            const response = await matflowApi.addProjectProducts(project.id, bodies);
+            let portfolio = response?.data || null;
+            if (!portfolio?.products) {
+                portfolio = (await matflowApi.getProject(project.id))?.data || portfolio;
+            }
+
+            const attachmentFailures = [];
+            for (let index = 0; index < rowsToSave.length; index += 1) {
+                const row = rowsToSave[index];
+                const body = bodies[index];
+                const savedProduct = findSavedProduct(portfolio, body);
+                if (!savedProduct?.id) {
+                    if (row.imageFile || row.drawingFile) {
+                        attachmentFailures.push(`${row.productName}: saved, but attachment target could not be resolved`);
+                    }
+                    continue;
+                }
+
+                try {
+                    if (row.imageFile) {
+                        await matflowApi.uploadProjectProductImage(project.id, savedProduct.id, row.imageFile);
+                    }
+                    if (row.drawingFile) {
+                        await matflowApi.uploadProjectProductDrawing(project.id, savedProduct.id, row.drawingFile);
+                    }
+                } catch (attachmentError) {
+                    attachmentFailures.push(`${row.productName}: optional attachment upload failed`);
+                }
+            }
+
+            setProductDialog(null);
+            setProductBatchRows([newProductBatchRow()]);
+            setExpandedProjects((current) => ({ ...current, [String(project.id)]: true }));
+            await load();
+
+            if (attachmentFailures.length) {
+                setError(`Products were created successfully. ${attachmentFailures.join(" | ")}. Edit the affected Product to retry its optional files.`);
+            }
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to add Products."));
+        } finally {
+            setWorking(false);
+        }
+    };
+
     const saveProduct = async () => {
         const project = productDialog?.project;
         if (!project?.id) return;
+        if (!productDialog?.product?.id) {
+            await saveProductBatch();
+            return;
+        }
         if (!clean(productForm.productName) || !clean(productForm.drawingNo)) {
             setError("Product name and Drawing number are required.");
+            return;
+        }
+        const dimensionError = validateProductDimensions(productForm);
+        if (dimensionError) {
+            setError(dimensionError);
             return;
         }
 
@@ -366,15 +543,10 @@ export function MatFlowProjectsPage() {
             return;
         }
 
-        const body = {
-            productName: clean(productForm.productName),
-            drawingNo: upperCode(productForm.drawingNo),
-            drawingRevision: upperCode(productForm.drawingRevision) || "0",
-            requiredDate: clean(productForm.requiredDate) || null,
-            remarks: clean(productForm.remarks) || null,
-            active: productForm.active === true,
-            rowVersion: productDialog?.product?.rowVersion ?? null,
-        };
+        const body = productRequestBody(
+            productForm,
+            productDialog?.product?.rowVersion ?? null
+        );
 
         setWorking(true);
         setError("");
@@ -383,9 +555,7 @@ export function MatFlowProjectsPage() {
         let savedProduct = productDialog?.product || null;
 
         try {
-            const response = productDialog?.product?.id
-                ? await matflowApi.updateProjectProduct(project.id, productDialog.product.id, body)
-                : await matflowApi.addProjectProduct(project.id, body);
+            const response = await matflowApi.updateProjectProduct(project.id, productDialog.product.id, body);
 
             portfolio = response?.data || null;
             savedProduct = findSavedProduct(portfolio, body, savedProduct);
@@ -424,11 +594,6 @@ export function MatFlowProjectsPage() {
                 );
             }
         } catch (requestError) {
-            /*
-             * The Product itself is already valid at this point. Keep the dialog in
-             * edit mode so Engineering can retry only the optional file upload
-             * without accidentally creating a duplicate Product/Drawing.
-             */
             setProductDialog({
                 project: portfolio || project,
                 product: savedProduct,
@@ -501,6 +666,11 @@ export function MatFlowProjectsPage() {
                                             productName: product.productName,
                                             drawingNo: product.drawingNo,
                                             drawingRevision: product.drawingRevision,
+                                            dimensions: productDimensionsText(product),
+                                            dimensionLength: product.dimensionLength,
+                                            dimensionBreadth: product.dimensionBreadth,
+                                            dimensionHeight: product.dimensionHeight,
+                                            dimensionUom: product.dimensionUom || "MM",
                                             latestBomNumber: product.latestBomNumber,
                                             latestBomStatus: product.latestBomStatus,
                                             bomEffective: product.bomEffective,
@@ -542,7 +712,7 @@ export function MatFlowProjectsPage() {
             <Card sx={panelSx}>
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 180px", gap: 1 }}>
                     <TextField
-                        label="Search PD No. / Project / Client / Product / Drawing"
+                        label="Search PD No. / Project / Client / Product / Drawing / Size"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         sx={fieldSx}
@@ -614,7 +784,7 @@ export function MatFlowProjectsPage() {
                                                     onClick={(event) => { event.stopPropagation(); openProduct(project); setExpandedProjects((current) => ({ ...current, [String(project.id)]: true })); }}
                                                     sx={primaryBtnSx}
                                                 >
-                                                    Add Product
+                                                    Add Products
                                                 </Button>
                                                 {project.rowVersion != null && (
                                                     <Tooltip title="Delete setup-only Project">
@@ -657,15 +827,15 @@ export function MatFlowProjectsPage() {
                                         </Box>
 
                                         <Box sx={tableShellSx}>
-                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 330px" }}>
-                                                {["Product / Item", "Drawing", "Required", "Latest BOM", "Current", "Action"].map((heading) => (
+                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "minmax(200px,1fr) 155px 180px 120px 160px 155px 315px" }}>
+                                                {["Product / Item", "Drawing", "Dimensions (L × B × H)", "Required", "Latest BOM", "Current", "Action"].map((heading) => (
                                                     <Box key={heading} sx={tableCellSx}>{heading}</Box>
                                                 ))}
                                             </Box>
                                             {products.length === 0 ? <EmptyState>No Products added yet.</EmptyState> : products.map((product) => {
                                                 const attachments = productAttachmentMap[String(product.id)] || {};
                                                 return (
-                                                <Box key={product.id} sx={{ ...tableRowSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 330px" }}>
+                                                <Box key={product.id} sx={{ ...tableRowSx, gridTemplateColumns: "minmax(200px,1fr) 155px 180px 120px 160px 155px 315px" }}>
                                                     <Box sx={tableCellSx}>
                                                         <Typography sx={mainTextSx}>{product.productName || "-"}</Typography>
                                                         <Typography sx={subTextSx}>{product.active === false ? "Inactive" : "Active"}</Typography>
@@ -673,6 +843,10 @@ export function MatFlowProjectsPage() {
                                                     <Box sx={tableCellSx}>
                                                         <Typography sx={mainTextSx}>{product.drawingNo || "-"}</Typography>
                                                         <Typography sx={subTextSx}>Rev {product.drawingRevision || "0"}</Typography>
+                                                    </Box>
+                                                    <Box sx={tableCellSx}>
+                                                        <Typography sx={mainTextSx}>{productDimensionsText(product)}</Typography>
+                                                        <Typography sx={subTextSx}>L × B × H</Typography>
                                                     </Box>
                                                     <Box sx={tableCellSx}>{product.requiredDate || project.requiredDate || "-"}</Box>
                                                     <Box sx={tableCellSx}>
@@ -757,116 +931,170 @@ export function MatFlowProjectsPage() {
                 </DialogActions>
             </Dialog>
 
-            <Dialog open={Boolean(productDialog)} onClose={() => !working && setProductDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-                <DialogTitle sx={dialogTitleSx}>{productDialog?.product ? "Edit Product / Drawing" : "Add Product / Drawing"}</DialogTitle>
+            <Dialog
+                open={Boolean(productDialog)}
+                onClose={() => !working && setProductDialog(null)}
+                fullWidth
+                maxWidth={productDialog?.product ? "sm" : "lg"}
+                PaperProps={{ sx: dialogPaperSx }}
+            >
+                <DialogTitle sx={dialogTitleSx}>
+                    {productDialog?.product ? "Edit Product / Drawing" : "Add Products / Drawings"}
+                </DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    <Alert severity="info" sx={{ mb: 1.5 }}>
-                        Product creation is immediate. Engineering may optionally attach one Product image and one Product drawing. Uploading another file later replaces the previous file.
-                    </Alert>
-                    <Box sx={{ display: "grid", gap: 1.5 }}>
-                        <TextField label="Product / Item *" value={productForm.productName} onChange={(e) => setProductForm((c) => ({ ...c, productName: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(e) => setProductForm((c) => ({ ...c, drawingNo: e.target.value }))} sx={fieldSx} />
-                        <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(e) => setProductForm((c) => ({ ...c, drawingRevision: e.target.value }))} sx={fieldSx} />
-                        <TextField type="date" label="Required Date" InputLabelProps={{ shrink: true }} value={productForm.requiredDate} onChange={(e) => setProductForm((c) => ({ ...c, requiredDate: e.target.value }))} sx={fieldSx} />
+                    {productDialog?.product ? (
+                        <>
+                            <Alert severity="info" sx={{ mb: 1.5 }}>
+                                Edit this Product record. Size is stored as L × B × H in MM. Product identity, drawing and dimensions cannot be changed after a BOM exists.
+                            </Alert>
+                            <Box sx={{ display: "grid", gap: 1.5 }}>
+                                <TextField label="Product / Item *" value={productForm.productName} onChange={(e) => setProductForm((c) => ({ ...c, productName: e.target.value }))} sx={fieldSx} />
+                                <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(e) => setProductForm((c) => ({ ...c, drawingNo: e.target.value }))} sx={fieldSx} />
+                                <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(e) => setProductForm((c) => ({ ...c, drawingRevision: e.target.value }))} sx={fieldSx} />
+                                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(3,1fr)" }, gap: 1 }}>
+                                    <TextField type="number" label="Length (L) mm" value={productForm.dimensionLength} onChange={(e) => setProductForm((c) => ({ ...c, dimensionLength: e.target.value }))} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                    <TextField type="number" label="Breadth (B) mm" value={productForm.dimensionBreadth} onChange={(e) => setProductForm((c) => ({ ...c, dimensionBreadth: e.target.value }))} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                    <TextField type="number" label="Height (H) mm" value={productForm.dimensionHeight} onChange={(e) => setProductForm((c) => ({ ...c, dimensionHeight: e.target.value }))} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                </Box>
+                                <TextField type="date" label="Required Date" InputLabelProps={{ shrink: true }} value={productForm.requiredDate} onChange={(e) => setProductForm((c) => ({ ...c, requiredDate: e.target.value }))} sx={fieldSx} />
 
-                        <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
-                            <Typography sx={mainTextSx}>Optional Product Files</Typography>
-                            <Typography sx={{ ...subTextSx, mt: .25, mb: 1 }}>
-                                Product image: PNG/JPG/WEBP up to 8 MB. Drawing: PDF/image/DWG/DXF up to 20 MB.
-                            </Typography>
+                                <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                    <Typography sx={mainTextSx}>Optional Product Files</Typography>
+                                    <Typography sx={{ ...subTextSx, mt: .25, mb: 1 }}>
+                                        Product image: PNG/JPG/WEBP up to 8 MB. Drawing: PDF/image/DWG/DXF up to 20 MB.
+                                    </Typography>
 
-                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: .8 }}>
-                                <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
-                                    {productImageFile ? productImageFile.name : "Product Image (Optional)"}
-                                    <input
-                                        hidden
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp"
-                                        onChange={(event) => {
-                                            const selected = event.target.files?.[0] || null;
-                                            if (selected && selected.size > 8 * 1024 * 1024) {
-                                                setProductImageFile(null);
-                                                setError("Product image cannot exceed 8 MB.");
-                                                event.target.value = "";
-                                                return;
-                                            }
-                                            setProductImageFile(selected);
-                                        }}
-                                    />
-                                </Button>
+                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: .8 }}>
+                                        <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
+                                            {productImageFile ? productImageFile.name : "Product Image (Optional)"}
+                                            <input hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => {
+                                                const selected = event.target.files?.[0] || null;
+                                                if (selected && selected.size > 8 * 1024 * 1024) {
+                                                    setProductImageFile(null);
+                                                    setError("Product image cannot exceed 8 MB.");
+                                                    event.target.value = "";
+                                                    return;
+                                                }
+                                                setProductImageFile(selected);
+                                            }} />
+                                        </Button>
 
-                                <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
-                                    {productDrawingFile ? productDrawingFile.name : "Drawing File (Optional)"}
-                                    <input
-                                        hidden
-                                        type="file"
-                                        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,application/pdf,image/png,image/jpeg,image/webp"
-                                        onChange={(event) => {
-                                            const selected = event.target.files?.[0] || null;
-                                            if (selected && selected.size > 20 * 1024 * 1024) {
-                                                setProductDrawingFile(null);
-                                                setError("Product drawing cannot exceed 20 MB.");
-                                                event.target.value = "";
-                                                return;
-                                            }
-                                            setProductDrawingFile(selected);
-                                        }}
-                                    />
+                                        <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
+                                            {productDrawingFile ? productDrawingFile.name : "Drawing File (Optional)"}
+                                            <input hidden type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,application/pdf,image/png,image/jpeg,image/webp" onChange={(event) => {
+                                                const selected = event.target.files?.[0] || null;
+                                                if (selected && selected.size > 20 * 1024 * 1024) {
+                                                    setProductDrawingFile(null);
+                                                    setError("Product drawing cannot exceed 20 MB.");
+                                                    event.target.value = "";
+                                                    return;
+                                                }
+                                                setProductDrawingFile(selected);
+                                            }} />
+                                        </Button>
+                                    </Box>
+
+                                    {(() => {
+                                        const currentAttachments = productAttachmentMap[String(productDialog.product.id)] || {};
+                                        return (
+                                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: .6, mt: 1 }}>
+                                                {currentAttachments.productImageAvailable && <>
+                                                    <Button onClick={() => openProductAttachment(productDialog.project, productDialog.product, "IMAGE")} disabled={working} sx={secondaryBtnSx}>View Current Image</Button>
+                                                    <Button onClick={() => removeProductAttachment("IMAGE")} disabled={working} sx={secondaryBtnSx}>Remove Image</Button>
+                                                </>}
+                                                {currentAttachments.drawingAvailable && <>
+                                                    <Button onClick={() => openProductAttachment(productDialog.project, productDialog.product, "DRAWING")} disabled={working} sx={secondaryBtnSx}>View Current Drawing</Button>
+                                                    <Button onClick={() => removeProductAttachment("DRAWING")} disabled={working} sx={secondaryBtnSx}>Remove Drawing</Button>
+                                                </>}
+                                            </Box>
+                                        );
+                                    })()}
+                                </Card>
+
+                                <TextField multiline minRows={2} label="Remarks" value={productForm.remarks} onChange={(e) => setProductForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
+                                <FormControlLabel control={<Switch checked={productForm.active === true} onChange={(e) => setProductForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
+                            </Box>
+                        </>
+                    ) : (
+                        <>
+                            <Alert severity="info" sx={{ mb: 1.2 }}>
+                                Add several Products to this Project in one save. Each Product has its own Drawing, optional L × B × H size in MM, required date, image and drawing attachment.
+                            </Alert>
+
+                            <Box sx={{ display: "grid", gap: 1 }}>
+                                {productBatchRows.map((row, index) => (
+                                    <Card key={row._key} sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mb: 1 }}>
+                                            <Box>
+                                                <Typography sx={{ ...mainTextSx, fontSize: 13 }}>Product {index + 1}</Typography>
+                                                <Typography sx={subTextSx}>Create under {productDialog?.project?.projectCode || "selected Project"}</Typography>
+                                            </Box>
+                                            {productBatchRows.length > 1 && (
+                                                <IconButton size="small" onClick={() => removeProductBatchRow(row._key)} disabled={working}>
+                                                    <DeleteOutlineIcon fontSize="small" />
+                                                </IconButton>
+                                            )}
+                                        </Box>
+
+                                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(190px,1.4fr) 150px 95px repeat(3,120px) 150px auto auto" }, gap: .8, alignItems: "center" }}>
+                                            <TextField label="Product / Item *" value={row.productName} onChange={(e) => updateProductBatchRow(row._key, { productName: e.target.value })} sx={fieldSx} />
+                                            <TextField label="Drawing No. *" value={row.drawingNo} onChange={(e) => updateProductBatchRow(row._key, { drawingNo: e.target.value })} sx={fieldSx} />
+                                            <TextField label="Rev" value={row.drawingRevision} onChange={(e) => updateProductBatchRow(row._key, { drawingRevision: e.target.value })} sx={fieldSx} />
+                                            <TextField type="number" label="L (mm)" value={row.dimensionLength} onChange={(e) => updateProductBatchRow(row._key, { dimensionLength: e.target.value })} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                            <TextField type="number" label="B (mm)" value={row.dimensionBreadth} onChange={(e) => updateProductBatchRow(row._key, { dimensionBreadth: e.target.value })} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                            <TextField type="number" label="H (mm)" value={row.dimensionHeight} onChange={(e) => updateProductBatchRow(row._key, { dimensionHeight: e.target.value })} sx={fieldSx} inputProps={{ min: 0, step: "0.001" }} />
+                                            <TextField type="date" label="Required" InputLabelProps={{ shrink: true }} value={row.requiredDate} onChange={(e) => updateProductBatchRow(row._key, { requiredDate: e.target.value })} sx={fieldSx} />
+                                            <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx} disabled={working}>
+                                                {row.imageFile ? row.imageFile.name : "Image"}
+                                                <input hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => {
+                                                    const file = event.target.files?.[0] || null;
+                                                    event.target.value = "";
+                                                    if (file && file.size > 8 * 1024 * 1024) {
+                                                        setError(`Product ${index + 1}: Product image cannot exceed 8 MB.`);
+                                                        return;
+                                                    }
+                                                    updateProductBatchRow(row._key, { imageFile: file });
+                                                }} />
+                                            </Button>
+                                            <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx} disabled={working}>
+                                                {row.drawingFile ? row.drawingFile.name : "Drawing"}
+                                                <input hidden type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,application/pdf,image/png,image/jpeg,image/webp" onChange={(event) => {
+                                                    const file = event.target.files?.[0] || null;
+                                                    event.target.value = "";
+                                                    if (file && file.size > 20 * 1024 * 1024) {
+                                                        setError(`Product ${index + 1}: Product drawing cannot exceed 20 MB.`);
+                                                        return;
+                                                    }
+                                                    updateProductBatchRow(row._key, { drawingFile: file });
+                                                }} />
+                                            </Button>
+                                        </Box>
+
+                                        <TextField multiline minRows={1} label="Remarks (Optional)" value={row.remarks} onChange={(e) => updateProductBatchRow(row._key, { remarks: e.target.value })} sx={{ ...fieldSx, mt: .8 }} />
+                                    </Card>
+                                ))}
+
+                                <Button
+                                    startIcon={<AddIcon />}
+                                    onClick={() => setProductBatchRows((current) => [...current, newProductBatchRow()])}
+                                    disabled={working || productBatchRows.length >= 100}
+                                    sx={secondaryBtnSx}
+                                >
+                                    Add Another Product
                                 </Button>
                             </Box>
-
-                            {productDialog?.product?.id && (() => {
-                                const currentAttachments = productAttachmentMap[String(productDialog.product.id)] || {};
-                                return (
-                                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: .6, mt: 1 }}>
-                                        {currentAttachments.productImageAvailable && (
-                                            <>
-                                                <Button
-                                                    onClick={() => openProductAttachment(productDialog.project, productDialog.product, "IMAGE")}
-                                                    disabled={working}
-                                                    sx={secondaryBtnSx}
-                                                >
-                                                    View Current Image
-                                                </Button>
-                                                <Button
-                                                    onClick={() => removeProductAttachment("IMAGE")}
-                                                    disabled={working}
-                                                    sx={secondaryBtnSx}
-                                                >
-                                                    Remove Image
-                                                </Button>
-                                            </>
-                                        )}
-                                        {currentAttachments.drawingAvailable && (
-                                            <>
-                                                <Button
-                                                    onClick={() => openProductAttachment(productDialog.project, productDialog.product, "DRAWING")}
-                                                    disabled={working}
-                                                    sx={secondaryBtnSx}
-                                                >
-                                                    View Current Drawing
-                                                </Button>
-                                                <Button
-                                                    onClick={() => removeProductAttachment("DRAWING")}
-                                                    disabled={working}
-                                                    sx={secondaryBtnSx}
-                                                >
-                                                    Remove Drawing
-                                                </Button>
-                                            </>
-                                        )}
-                                    </Box>
-                                );
-                            })()}
-                        </Card>
-
-                        <TextField multiline minRows={2} label="Remarks" value={productForm.remarks} onChange={(e) => setProductForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
-                        <FormControlLabel control={<Switch checked={productForm.active === true} onChange={(e) => setProductForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
-                    </Box>
+                        </>
+                    )}
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
                     <Button onClick={() => setProductDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={saveProduct} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Save Product"}</Button>
+                    <Button onClick={saveProduct} disabled={working} sx={primaryBtnSx}>
+                        {working
+                            ? "Saving..."
+                            : productDialog?.product
+                                ? "Save Product"
+                                : `Add ${Math.max(1, productBatchRows.filter((row) => clean(row.productName) || clean(row.drawingNo)).length)} Product${productBatchRows.filter((row) => clean(row.productName) || clean(row.drawingNo)).length === 1 ? "" : "s"}`}
+                    </Button>
                 </DialogActions>
             </Dialog>
 

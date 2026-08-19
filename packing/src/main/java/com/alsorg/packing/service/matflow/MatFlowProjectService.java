@@ -16,9 +16,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -111,7 +114,8 @@ public class MatFlowProjectService {
                         || contains(project.getProjectName(), query)
                         || contains(project.getClientName(), query)
                         || productsOf(project).stream().anyMatch(product -> contains(product.getProductName(), query)
-                                || contains(product.getDrawingNo(), query)))
+                                || contains(product.getDrawingNo(), query)
+                                || contains(formatDimensions(product), query)))
                 .map(this::toPortfolio)
                 .toList();
     }
@@ -360,48 +364,102 @@ public class MatFlowProjectService {
 
     @Transactional
     public ProjectPortfolioResponse addProduct(UUID projectId, ProductRequest request) {
+        if (request == null) {
+            throw badRequest("Product request is required");
+        }
+        return addProducts(projectId, List.of(request));
+    }
+
+    /**
+     * Adds multiple Products to one Project in a single database transaction.
+     * All rows are validated, including duplicate drawing/revision keys, before
+     * the first Product is inserted. A validation failure therefore leaves the
+     * Project unchanged rather than partially creating a batch. Optional Product
+     * image/drawing files continue to use their existing per-Product endpoints.
+     */
+    @Transactional
+    public ProjectPortfolioResponse addProducts(UUID projectId, List<ProductRequest> requests) {
         accessService.requireProjectWrite();
-        validateProductRequest(request, false);
+
+        if (requests == null || requests.isEmpty()) {
+            throw badRequest("At least one Product is required");
+        }
+        if (requests.size() > 100) {
+            throw badRequest("A maximum of 100 Products can be added in one batch");
+        }
 
         MatFlowProject project = requireProject(projectId);
-        if (!project.isActive())
-            throw conflict("Cannot add a product to an inactive Project");
+        if (!project.isActive()) {
+            throw conflict("Cannot add Products to an inactive Project");
+        }
 
-        String drawingNo = requiredUpper(request.drawingNo(), "Drawing number");
-        String drawingRevision = defaultRevision(request.drawingRevision());
+        List<MatFlowProjectDrawing> existingProducts = productsOf(project);
+        Set<String> existingKeys = new LinkedHashSet<>();
+        for (MatFlowProjectDrawing existing : existingProducts) {
+            existingKeys.add(productKey(existing.getDrawingNo(), existing.getDrawingRevision()));
+        }
 
-        boolean duplicate = productsOf(project).stream().anyMatch(product -> same(product.getDrawingNo(), drawingNo)
-                && same(product.getDrawingRevision(), drawingRevision));
-        if (duplicate) {
-            throw conflict("Drawing/revision already exists in this Project: " + drawingNo + " Rev " + drawingRevision);
+        Set<String> batchKeys = new LinkedHashSet<>();
+        for (int index = 0; index < requests.size(); index++) {
+            ProductRequest request = requests.get(index);
+            validateProductRequest(request, false);
+
+            String drawingNo = requiredUpper(request.drawingNo(), "Drawing number");
+            String drawingRevision = defaultRevision(request.drawingRevision());
+            String key = productKey(drawingNo, drawingRevision);
+
+            if (existingKeys.contains(key)) {
+                throw conflict("Drawing/revision already exists in this Project: "
+                        + drawingNo + " Rev " + drawingRevision);
+            }
+            if (!batchKeys.add(key)) {
+                throw conflict("Drawing/revision is repeated in this Product batch: "
+                        + drawingNo + " Rev " + drawingRevision);
+            }
         }
 
         String actor = accessService.actor();
-        MatFlowProjectDrawing product = new MatFlowProjectDrawing();
-        product.setProject(project);
-        applyProduct(product, request);
-        product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
-        product.setProductApprovedBy(actor);
-        product.setProductApprovedAt(LocalDateTime.now());
-        product.setProductReturnedBy(null);
-        product.setProductReturnedAt(null);
-        product.setProductApprovalRemarks(null);
-        product.setCreatedBy(actor);
-        product.setUpdatedBy(actor);
-        product = productRepository.save(product);
+        LocalDateTime now = LocalDateTime.now();
 
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PROJECT_PRODUCT_CREATED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details(
-                        "projectId", project.getId(),
-                        "productName", product.getProductName(),
-                        "drawingRevision", product.getDrawingRevision(),
-                        "executionEligible", true));
+        try {
+            for (ProductRequest request : requests) {
+                MatFlowProjectDrawing product = new MatFlowProjectDrawing();
+                product.setProject(project);
+                applyProduct(product, request);
+                product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
+                product.setProductApprovedBy(actor);
+                product.setProductApprovedAt(now);
+                product.setProductReturnedBy(null);
+                product.setProductReturnedAt(null);
+                product.setProductApprovalRemarks(null);
+                product.setCreatedBy(actor);
+                product.setUpdatedBy(actor);
+                product = productRepository.save(product);
+
+                auditService.record(
+                        "PROJECT_PRODUCT",
+                        product.getId(),
+                        "PROJECT_PRODUCT_CREATED",
+                        project.getPlantCode(),
+                        project.getProjectCode(),
+                        product.getDrawingNo(),
+                        auditService.details(
+                                "projectId", project.getId(),
+                                "productName", product.getProductName(),
+                                "drawingRevision", product.getDrawingRevision(),
+                                "dimensions", formatDimensions(product),
+                                "batchCreate", requests.size() > 1,
+                                "executionEligible", true));
+            }
+
+            // Force unique/DB validation inside this service boundary so a
+            // concurrent duplicate becomes a controlled 409 and the whole batch rolls back.
+            productRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw conflict(
+                    "One or more Products conflict with an existing Drawing / Revision. "
+                            + "Refresh the Project and retry the batch.");
+        }
 
         return toPortfolio(project);
     }
@@ -421,7 +479,10 @@ public class MatFlowProjectService {
 
         boolean identityChanged = !same(product.getProductName(), nextName)
                 || !same(product.getDrawingNo(), nextDrawing)
-                || !same(product.getDrawingRevision(), nextRevision);
+                || !same(product.getDrawingRevision(), nextRevision)
+                || !sameDimension(product.getDimensionLength(), request.dimensionLength())
+                || !sameDimension(product.getDimensionBreadth(), request.dimensionBreadth())
+                || !sameDimension(product.getDimensionHeight(), request.dimensionHeight());
 
         boolean hasBom = !bomRepository
                 .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
@@ -429,7 +490,7 @@ public class MatFlowProjectService {
 
         if (hasBom && identityChanged) {
             throw conflict(
-                    "Product identity/drawing cannot be changed after a BOM exists. Create a new Product/Drawing revision instead.");
+                    "Product identity, drawing or dimensions cannot be changed after a BOM exists. Create a new Product/Drawing revision instead.");
         }
 
         boolean duplicate = productsOf(project).stream()
@@ -464,6 +525,7 @@ public class MatFlowProjectService {
                 product.getDrawingNo(),
                 auditService.details(
                         "productName", product.getProductName(),
+                        "dimensions", formatDimensions(product),
                         "executionEligible", true,
                         "identityChanged", identityChanged));
 
@@ -1043,6 +1105,11 @@ public class MatFlowProjectService {
                 product.getProductName(),
                 product.getDrawingNo(),
                 product.getDrawingRevision(),
+                product.getDimensionLength(),
+                product.getDimensionBreadth(),
+                product.getDimensionHeight(),
+                product.getDimensionUom(),
+                formatDimensions(product),
                 product.getRequiredDate(),
                 product.isActive(),
                 latestBom == null ? null : latestBom.getId(),
@@ -1147,6 +1214,10 @@ public class MatFlowProjectService {
         product.setProductName(required(request.productName(), "Product name"));
         product.setDrawingNo(requiredUpper(request.drawingNo(), "Drawing number"));
         product.setDrawingRevision(defaultRevision(request.drawingRevision()));
+        product.setDimensionLength(normalizeDimension(request.dimensionLength()));
+        product.setDimensionBreadth(normalizeDimension(request.dimensionBreadth()));
+        product.setDimensionHeight(normalizeDimension(request.dimensionHeight()));
+        product.setDimensionUom("MM");
         product.setRequiredDate(request.requiredDate());
         product.setRemarks(request.remarks());
         product.setActive(request.active() == null || request.active());
@@ -1168,8 +1239,64 @@ public class MatFlowProjectService {
             throw badRequest("Product request is required");
         required(request.productName(), "Product name");
         required(request.drawingNo(), "Drawing number");
+        validateDimensions(request.dimensionLength(), request.dimensionBreadth(), request.dimensionHeight());
         if (update && request.rowVersion() == null)
             throw badRequest("Project Product rowVersion is required");
+    }
+
+    private void validateDimensions(BigDecimal length, BigDecimal breadth, BigDecimal height) {
+        boolean any = length != null || breadth != null || height != null;
+        if (!any) {
+            return;
+        }
+        if (length == null || breadth == null || height == null) {
+            throw badRequest("Enter complete Product dimensions as L x B x H, or leave all three blank");
+        }
+        if (length.compareTo(BigDecimal.ZERO) <= 0
+                || breadth.compareTo(BigDecimal.ZERO) <= 0
+                || height.compareTo(BigDecimal.ZERO) <= 0) {
+            throw badRequest("Product dimensions L x B x H must all be greater than zero");
+        }
+    }
+
+    private BigDecimal normalizeDimension(BigDecimal value) {
+        return value == null ? null : value.setScale(3, RoundingMode.HALF_UP);
+    }
+
+    private boolean sameDimension(BigDecimal left, BigDecimal right) {
+        BigDecimal a = normalizeDimension(left);
+        BigDecimal b = normalizeDimension(right);
+        if (a == null || b == null) {
+            return a == null && b == null;
+        }
+        return a.compareTo(b) == 0;
+    }
+
+    private String productKey(String drawingNo, String drawingRevision) {
+        return requiredUpper(drawingNo, "Drawing number") + "|" + defaultRevision(drawingRevision);
+    }
+
+    private String formatDimensions(MatFlowProjectDrawing product) {
+        if (product == null
+                || product.getDimensionLength() == null
+                || product.getDimensionBreadth() == null
+                || product.getDimensionHeight() == null) {
+            return null;
+        }
+        return dimensionText(product.getDimensionLength())
+                + " x " + dimensionText(product.getDimensionBreadth())
+                + " x " + dimensionText(product.getDimensionHeight())
+                + " " + (cleanUpper(product.getDimensionUom()) == null ? "MM" : cleanUpper(product.getDimensionUom()));
+    }
+
+    private String dimensionText(BigDecimal value) {
+        if (value == null) {
+            return "";
+        }
+        BigDecimal normalized = value.stripTrailingZeros();
+        return normalized.scale() < 0
+                ? normalized.setScale(0).toPlainString()
+                : normalized.toPlainString();
     }
 
     private void assertVersion(Long requested, Long current, String entity) {
