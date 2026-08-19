@@ -112,7 +112,15 @@ public class MatFlowQcService {
 
         @Transactional
         public QcInspectionResponse decide(UUID inspectionId, QcDecisionRequest request) {
-                return qc.decide(inspectionId, request);
+                return qc.decide(inspectionId, request, null);
+        }
+
+        @Transactional
+        public QcInspectionResponse decide(
+                        UUID inspectionId,
+                        QcDecisionRequest request,
+                        Boolean qcDone) {
+                return qc.decide(inspectionId, request, qcDone);
         }
 
         @Transactional(readOnly = true)
@@ -260,7 +268,8 @@ public class MatFlowQcService {
                 @Transactional
                 public QcInspectionResponse decide(
                                 UUID id,
-                                QcDecisionRequest request) {
+                                QcDecisionRequest request,
+                                Boolean qcDone) {
                         accessService.requireQcWrite();
 
                         if (request == null) {
@@ -280,13 +289,14 @@ public class MatFlowQcService {
                                         inspection.getRowVersion());
 
                         /*
-                         * Current workflow: a Store-created reservation QC row is only a
-                         * check/tick. It does not move stock, create a QC location or select
-                         * a route. Completing the check simply unlocks the route Store
-                         * already selected during MR allocation.
+                         * Current workflow: a Store-created reservation QC row is a simple
+                         * pass / not-done gate. QC still does not move stock, create a QC
+                         * Location or choose a route. A successful check unlocks the route
+                         * Store already selected during MR allocation; a not-done result
+                         * keeps the same QC row pending for correction/recheck.
                          */
                         if (isSimpleReservationCheck(inspection)) {
-                                return completeReservationQcCheck(inspection, request);
+                                return completeReservationQcCheck(inspection, request, qcDone);
                         }
 
                         /*
@@ -436,7 +446,8 @@ public class MatFlowQcService {
 
                 private QcInspectionResponse completeReservationQcCheck(
                                 MatFlowQcInspection inspection,
-                                QcDecisionRequest request) {
+                                QcDecisionRequest request,
+                                Boolean requestedQcDone) {
                         MatFlowReservation reservation = reservationRepository
                                         .findById(inspection.routingReservationId)
                                         .map(value -> (MatFlowReservation) Hibernate.unproxy(value))
@@ -463,29 +474,61 @@ public class MatFlowQcService {
                         plantRoutingService.assertMainStoreLocation(inspection.location, "MatFlow QC");
                         accessService.requirePlantAccess(MatFlowPlantRoutingService.MAIN_STORE_PLANT);
 
+                        BigDecimal inspectionQty = scale(inspection.inspectionQty);
+
+                        /*
+                         * Outcome is explicit in the endpoint query parameter so this
+                         * workflow remains compatible with both historical
+                         * QcDecisionRequest shapes (with accepted/rejected quantities)
+                         * and the newer simplified rowVersion/remarks request.
+                         * A missing outcome keeps legacy clients working as "Done".
+                         */
+                        boolean qcDone = requestedQcDone == null || requestedQcDone;
+                        BigDecimal accepted = qcDone
+                                        ? inspectionQty
+                                        : BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+                        /*
+                         * "QC Not Done" is a recheck/hold outcome, not a physical
+                         * rejected-stock disposition. Keep rejectedQty at zero so
+                         * legacy rejection/return reporting is not polluted by a
+                         * simple checklist failure.
+                         */
+                        BigDecimal rejected = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
+
                         String actor = accessService.actor();
-                        inspection.acceptedQty = scale(inspection.inspectionQty);
-                        inspection.rejectedQty = BigDecimal.ZERO.setScale(3, RoundingMode.HALF_UP);
-                        inspection.status = QcInspectionStatus.COMPLETED;
+                        inspection.acceptedQty = accepted;
+                        inspection.rejectedQty = rejected;
+                        /*
+                         * A failed/not-done check is intentionally NOT closed. The same
+                         * immutable QC identity stays pending, keeping Store routing locked
+                         * until QC later confirms the corrected material as Done.
+                         */
+                        inspection.status = qcDone
+                                        ? QcInspectionStatus.COMPLETED
+                                        : QcInspectionStatus.PENDING;
                         inspection.inspectedBy = actor;
                         inspection.inspectedAt = LocalDateTime.now();
                         inspection.remarks = clean(request.remarks());
                         inspection.setUpdatedBy(actor);
                         inspection = qcRepository.save(inspection);
 
-                        /* Unlock only the first Store-origin hand-off. */
-                        transferRepository
-                                        .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(reservation.getId())
-                                        .stream()
-                                        .filter(transfer -> transfer != null && transfer.predecessorTransferId == null)
-                                        .findFirst()
-                                        .ifPresent(first -> {
-                                                if (first.status == TransferStatus.PLANNED) {
-                                                        first.status = TransferStatus.READY;
-                                                        first.setUpdatedBy(actor);
-                                                        transferRepository.save(first);
-                                                }
-                                        });
+                        if (qcDone) {
+                                /* Unlock only the first Store-origin hand-off. */
+                                transferRepository
+                                                .findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+                                                                reservation.getId())
+                                                .stream()
+                                                .filter(transfer -> transfer != null
+                                                                && transfer.predecessorTransferId == null)
+                                                .findFirst()
+                                                .ifPresent(first -> {
+                                                        if (first.status == TransferStatus.PLANNED) {
+                                                                first.status = TransferStatus.READY;
+                                                                first.setUpdatedBy(actor);
+                                                                transferRepository.save(first);
+                                                        }
+                                                });
+                        }
 
                         QcBusinessContext context = resolveBusinessContext(inspection);
                         MatFlowProjectDrawing product = requisition.projectDrawing == null
@@ -495,7 +538,7 @@ public class MatFlowQcService {
                         auditService.record(
                                         "QC_CHECK",
                                         inspection.getId(),
-                                        "QC_CHECK_COMPLETED",
+                                        qcDone ? "QC_CHECK_COMPLETED" : "QC_CHECK_NOT_DONE",
                                         inspection.location == null ? null : inspection.location.getPlantCode(),
                                         product == null ? null : product.getProjectCode(),
                                         product == null ? null : product.getDrawingNo(),
@@ -508,8 +551,13 @@ public class MatFlowQcService {
                                                                         ? null
                                                                         : inspection.material.getMaterialCode(),
                                                         "quantity", inspection.inspectionQty,
+                                                        "acceptedQty", accepted,
+                                                        "rejectedQty", rejected,
+                                                        "qcDone", qcDone,
                                                         "photoAvailable", evidenceService.exists(inspection.getId()),
-                                                        "nextRouteOwnedBy", "STORE"));
+                                                        "remarks", inspection.remarks,
+                                                        "workflowReleased", qcDone,
+                                                        "nextRouteOwnedBy", qcDone ? "STORE" : "QC"));
 
                         requisitionService.refreshState(requisition.getId(), actor);
                         return toResponse(inspection);

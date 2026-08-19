@@ -127,6 +127,49 @@ export const matflowApi = {
 			{ params: cleanParams({ rowVersion }) }
 		),
 
+	getProjectProductAttachments: (projectId) =>
+		API.get(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/product-attachments`
+		),
+	getProjectProductAttachmentStatus: (projectId, productId) =>
+		API.get(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/attachments`
+		),
+	uploadProjectProductImage: (projectId, productId, file) => {
+		const formData = new FormData();
+		formData.append("file", file);
+		return API.post(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/image`,
+			formData
+		);
+	},
+	getProjectProductImage: (projectId, productId) =>
+		API.get(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/image`,
+			{ responseType: "blob" }
+		),
+	deleteProjectProductImage: (projectId, productId) =>
+		API.delete(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/image`
+		),
+	uploadProjectProductDrawing: (projectId, productId, file) => {
+		const formData = new FormData();
+		formData.append("file", file);
+		return API.post(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/drawing`,
+			formData
+		);
+	},
+	getProjectProductDrawing: (projectId, productId) =>
+		API.get(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/drawing`,
+			{ responseType: "blob" }
+		),
+	deleteProjectProductDrawing: (projectId, productId) =>
+		API.delete(
+			`${BASE}/projects/${requiredId(projectId, "Project ID")}/products/${requiredId(productId, "Product ID")}/drawing`
+		),
+
 	listProcessingUnits: (params = {}) =>
 		API.get(`${BASE}/processing-units`, { params: cleanParams(params) }),
 	createProcessingUnit: (body) =>
@@ -257,8 +300,12 @@ export const matflowApi = {
 	/* =============================== QC ================================ */
 	listQcInspections: (params = {}) =>
 		API.get(`${BASE}/qc`, { params: cleanParams(params) }),
-	decideQc: (id, body) =>
-		API.post(`${BASE}/qc/${requiredId(id, "QC record ID")}/decision`, body),
+	decideQc: (id, body, qcDone = undefined) =>
+		API.post(
+			`${BASE}/qc/${requiredId(id, "QC record ID")}/decision`,
+			body,
+			{ params: cleanParams({ qcDone }) }
+		),
 	uploadQcPhoto: (id, file) => {
 		const formData = new FormData();
 		formData.append("file", file);

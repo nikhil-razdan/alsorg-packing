@@ -54,8 +54,9 @@ public class MatFlowQcController {
     @PostMapping("/qc/{id}/decision")
     public QcInspectionResponse decide(
             @PathVariable UUID id,
+            @RequestParam(required = false) Boolean qcDone,
             @Valid @RequestBody QcDecisionRequest request) {
-        return service.decide(id, request);
+        return service.decide(id, request, qcDone);
     }
 
     @PostMapping(value = "/qc/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

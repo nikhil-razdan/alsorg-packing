@@ -149,6 +149,9 @@ export function MatFlowProjectsPage() {
     const [deleteDialog, setDeleteDialog] = useState(null);
     const [projectForm, setProjectForm] = useState(emptyProject);
     const [productForm, setProductForm] = useState(emptyProduct);
+    const [productImageFile, setProductImageFile] = useState(null);
+    const [productDrawingFile, setProductDrawingFile] = useState(null);
+    const [productAttachmentMap, setProductAttachmentMap] = useState({});
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -159,9 +162,38 @@ export function MatFlowProjectsPage() {
                 active: activeFilter === "ALL" ? undefined : activeFilter === "ACTIVE",
                 plantCode: selectedPlantParam || undefined,
             });
-            setRows(Array.isArray(response?.data) ? response.data : []);
+
+            const projectRows = Array.isArray(response?.data) ? response.data : [];
+            setRows(projectRows);
+
+            /*
+             * Attachment metadata is filesystem-backed and deliberately separate
+             * from the Project/Product business tables. One lightweight request per
+             * visible Project keeps the Product list informative without adding a
+             * new attachment entity/table to MatFlow.
+             */
+            const attachmentResults = await Promise.allSettled(
+                projectRows
+                    .filter((project) => project?.id)
+                    .map(async (project) => {
+                        const attachmentResponse = await matflowApi.getProjectProductAttachments(project.id);
+                        return Array.isArray(attachmentResponse?.data) ? attachmentResponse.data : [];
+                    })
+            );
+
+            const nextAttachmentMap = {};
+            attachmentResults.forEach((result) => {
+                if (result.status !== "fulfilled") return;
+                result.value.forEach((item) => {
+                    if (item?.productId) {
+                        nextAttachmentMap[String(item.productId)] = item;
+                    }
+                });
+            });
+            setProductAttachmentMap(nextAttachmentMap);
         } catch (requestError) {
             setRows([]);
+            setProductAttachmentMap({});
             setError(readMatFlowError(requestError, "Unable to load Projects & Products."));
         } finally {
             setLoading(false);
@@ -240,7 +272,81 @@ export function MatFlowProjectsPage() {
             remarks: product?.remarks || "",
             active: product?.active !== false,
         });
+        setProductImageFile(null);
+        setProductDrawingFile(null);
         setError("");
+    };
+
+    const findSavedProduct = (portfolio, body, fallback = null) => {
+        if (fallback?.id) return fallback;
+        const products = Array.isArray(portfolio?.products) ? portfolio.products : [];
+        return products.find((product) =>
+            upperCode(product?.drawingNo) === upperCode(body?.drawingNo) &&
+            upperCode(product?.drawingRevision || "0") === upperCode(body?.drawingRevision || "0")
+        ) || null;
+    };
+
+    const openProductAttachment = async (project, product, kind) => {
+        if (!project?.id || !product?.id) return;
+        setWorking(true);
+        setError("");
+        try {
+            const response = kind === "IMAGE"
+                ? await matflowApi.getProjectProductImage(project.id, product.id)
+                : await matflowApi.getProjectProductDrawing(project.id, product.id);
+
+            const blob = response?.data;
+            if (!(blob instanceof Blob) || blob.size === 0) {
+                throw new Error(kind === "IMAGE"
+                    ? "Product image could not be loaded."
+                    : "Product drawing could not be loaded.");
+            }
+
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.target = "_blank";
+            anchor.rel = "noopener noreferrer";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } catch (requestError) {
+            setError(readMatFlowError(
+                requestError,
+                kind === "IMAGE"
+                    ? "Unable to open the Product image."
+                    : "Unable to open the Product drawing."
+            ));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const removeProductAttachment = async (kind) => {
+        const project = productDialog?.project;
+        const product = productDialog?.product;
+        if (!project?.id || !product?.id) return;
+
+        setWorking(true);
+        setError("");
+        try {
+            if (kind === "IMAGE") {
+                await matflowApi.deleteProjectProductImage(project.id, product.id);
+            } else {
+                await matflowApi.deleteProjectProductDrawing(project.id, product.id);
+            }
+            await load();
+        } catch (requestError) {
+            setError(readMatFlowError(
+                requestError,
+                kind === "IMAGE"
+                    ? "Unable to remove the Product image."
+                    : "Unable to remove the Product drawing."
+            ));
+        } finally {
+            setWorking(false);
+        }
     };
 
     const saveProduct = async () => {
@@ -251,31 +357,97 @@ export function MatFlowProjectsPage() {
             return;
         }
 
+        if (productImageFile && productImageFile.size > 8 * 1024 * 1024) {
+            setError("Product image cannot exceed 8 MB.");
+            return;
+        }
+        if (productDrawingFile && productDrawingFile.size > 20 * 1024 * 1024) {
+            setError("Product drawing cannot exceed 20 MB.");
+            return;
+        }
+
+        const body = {
+            productName: clean(productForm.productName),
+            drawingNo: upperCode(productForm.drawingNo),
+            drawingRevision: upperCode(productForm.drawingRevision) || "0",
+            requiredDate: clean(productForm.requiredDate) || null,
+            remarks: clean(productForm.remarks) || null,
+            active: productForm.active === true,
+            rowVersion: productDialog?.product?.rowVersion ?? null,
+        };
+
         setWorking(true);
         setError("");
+
+        let portfolio = null;
+        let savedProduct = productDialog?.product || null;
+
         try {
-            const body = {
-                productName: clean(productForm.productName),
-                drawingNo: upperCode(productForm.drawingNo),
-                drawingRevision: upperCode(productForm.drawingRevision) || "0",
-                requiredDate: clean(productForm.requiredDate) || null,
-                remarks: clean(productForm.remarks) || null,
-                active: productForm.active === true,
-                rowVersion: productDialog?.product?.rowVersion ?? null,
-            };
-            if (productDialog?.product?.id) {
-                await matflowApi.updateProjectProduct(project.id, productDialog.product.id, body);
-            } else {
-                await matflowApi.addProjectProduct(project.id, body);
+            const response = productDialog?.product?.id
+                ? await matflowApi.updateProjectProduct(project.id, productDialog.product.id, body)
+                : await matflowApi.addProjectProduct(project.id, body);
+
+            portfolio = response?.data || null;
+            savedProduct = findSavedProduct(portfolio, body, savedProduct);
+
+            if (!savedProduct?.id) {
+                const refreshed = await matflowApi.getProject(project.id);
+                portfolio = refreshed?.data || portfolio;
+                savedProduct = findSavedProduct(portfolio, body, savedProduct);
             }
-            setProductDialog(null);
-            setExpandedProjects((current) => ({ ...current, [String(project.id)]: true }));
-            await load();
+
+            if (!savedProduct?.id) {
+                throw new Error(
+                    "Product was saved but MatFlow could not resolve its Product ID for the optional attachments. Refresh and edit the Product to attach files."
+                );
+            }
         } catch (requestError) {
             setError(readMatFlowError(requestError, "Unable to save Product / Drawing."));
-        } finally {
             setWorking(false);
+            return;
         }
+
+        try {
+            if (productImageFile) {
+                await matflowApi.uploadProjectProductImage(
+                    project.id,
+                    savedProduct.id,
+                    productImageFile
+                );
+            }
+
+            if (productDrawingFile) {
+                await matflowApi.uploadProjectProductDrawing(
+                    project.id,
+                    savedProduct.id,
+                    productDrawingFile
+                );
+            }
+        } catch (requestError) {
+            /*
+             * The Product itself is already valid at this point. Keep the dialog in
+             * edit mode so Engineering can retry only the optional file upload
+             * without accidentally creating a duplicate Product/Drawing.
+             */
+            setProductDialog({
+                project: portfolio || project,
+                product: savedProduct,
+            });
+            setError(readMatFlowError(
+                requestError,
+                "Product was saved, but one of the optional Product attachments could not be uploaded. Retry the attachment from this Edit dialog."
+            ));
+            await load();
+            setWorking(false);
+            return;
+        }
+
+        setProductDialog(null);
+        setProductImageFile(null);
+        setProductDrawingFile(null);
+        setExpandedProjects((current) => ({ ...current, [String(project.id)]: true }));
+        await load();
+        setWorking(false);
     };
 
     const confirmDelete = async () => {
@@ -310,7 +482,7 @@ export function MatFlowProjectsPage() {
             <PageHero
                 badge="PD / PROJECT → PRODUCT"
                 title="Projects & Products"
-                subtitle="Use PD No. / Project No. as the Project identifier, then add one or many Products / Drawings. No Project or Product approval is required."
+                subtitle="Use PD No. / Project No. as the Project identifier, then add one or many Products / Drawings. Engineering can optionally attach a Product image and Product drawing; no Project or Product approval is required."
                 actions={
                     <>
                         <Button
@@ -333,6 +505,8 @@ export function MatFlowProjectsPage() {
                                             latestBomStatus: product.latestBomStatus,
                                             bomEffective: product.bomEffective,
                                             currentDepartment: product.currentDepartment,
+                                            productImageAttached: productAttachmentMap[String(product.id)]?.productImageAvailable === true ? "YES" : "NO",
+                                            drawingAttached: productAttachmentMap[String(product.id)]?.drawingAvailable === true ? "YES" : "NO",
                                         }))
                                         : [{
                                             pdNo: project.projectCode,
@@ -483,13 +657,15 @@ export function MatFlowProjectsPage() {
                                         </Box>
 
                                         <Box sx={tableShellSx}>
-                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 210px" }}>
+                                            <Box sx={{ ...tableHeaderSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 330px" }}>
                                                 {["Product / Item", "Drawing", "Required", "Latest BOM", "Current", "Action"].map((heading) => (
                                                     <Box key={heading} sx={tableCellSx}>{heading}</Box>
                                                 ))}
                                             </Box>
-                                            {products.length === 0 ? <EmptyState>No Products added yet.</EmptyState> : products.map((product) => (
-                                                <Box key={product.id} sx={{ ...tableRowSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 210px" }}>
+                                            {products.length === 0 ? <EmptyState>No Products added yet.</EmptyState> : products.map((product) => {
+                                                const attachments = productAttachmentMap[String(product.id)] || {};
+                                                return (
+                                                <Box key={product.id} sx={{ ...tableRowSx, gridTemplateColumns: "minmax(210px,1fr) 170px 130px 170px 170px 330px" }}>
                                                     <Box sx={tableCellSx}>
                                                         <Typography sx={mainTextSx}>{product.productName || "-"}</Typography>
                                                         <Typography sx={subTextSx}>{product.active === false ? "Inactive" : "Active"}</Typography>
@@ -516,6 +692,24 @@ export function MatFlowProjectsPage() {
                                                         ) : canManage ? (
                                                             <Button onClick={() => navigate(`/matflow/boms/new?productId=${encodeURIComponent(product.id)}`)} sx={primaryBtnSx}>Create BOM</Button>
                                                         ) : null}
+                                                        {attachments.productImageAvailable && (
+                                                            <Button
+                                                                onClick={() => openProductAttachment(project, product, "IMAGE")}
+                                                                disabled={working}
+                                                                sx={secondaryBtnSx}
+                                                            >
+                                                                Product Image
+                                                            </Button>
+                                                        )}
+                                                        {attachments.drawingAvailable && (
+                                                            <Button
+                                                                onClick={() => openProductAttachment(project, product, "DRAWING")}
+                                                                disabled={working}
+                                                                sx={secondaryBtnSx}
+                                                            >
+                                                                Drawing
+                                                            </Button>
+                                                        )}
                                                         {canManage && <Button onClick={() => openProduct(project, product)} sx={secondaryBtnSx}>Edit</Button>}
                                                         {canManage && product.rowVersion != null && (
                                                             <IconButton
@@ -527,7 +721,8 @@ export function MatFlowProjectsPage() {
                                                         )}
                                                     </Box>
                                                 </Box>
-                                            ))}
+                                                );
+                                            })}
                                         </Box>
                                     </Box>
                                 )}
@@ -565,12 +760,106 @@ export function MatFlowProjectsPage() {
             <Dialog open={Boolean(productDialog)} onClose={() => !working && setProductDialog(null)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
                 <DialogTitle sx={dialogTitleSx}>{productDialog?.product ? "Edit Product / Drawing" : "Add Product / Drawing"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
-                    <Alert severity="info" sx={{ mb: 1.5 }}>Product creation is immediate. There is no approval step.</Alert>
+                    <Alert severity="info" sx={{ mb: 1.5 }}>
+                        Product creation is immediate. Engineering may optionally attach one Product image and one Product drawing. Uploading another file later replaces the previous file.
+                    </Alert>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <TextField label="Product / Item *" value={productForm.productName} onChange={(e) => setProductForm((c) => ({ ...c, productName: e.target.value }))} sx={fieldSx} />
                         <TextField label="Drawing No. *" value={productForm.drawingNo} onChange={(e) => setProductForm((c) => ({ ...c, drawingNo: e.target.value }))} sx={fieldSx} />
                         <TextField label="Drawing Revision" value={productForm.drawingRevision} onChange={(e) => setProductForm((c) => ({ ...c, drawingRevision: e.target.value }))} sx={fieldSx} />
                         <TextField type="date" label="Required Date" InputLabelProps={{ shrink: true }} value={productForm.requiredDate} onChange={(e) => setProductForm((c) => ({ ...c, requiredDate: e.target.value }))} sx={fieldSx} />
+
+                        <Card sx={{ ...panelSx, m: 0, p: 1.1, boxShadow: "none" }}>
+                            <Typography sx={mainTextSx}>Optional Product Files</Typography>
+                            <Typography sx={{ ...subTextSx, mt: .25, mb: 1 }}>
+                                Product image: PNG/JPG/WEBP up to 8 MB. Drawing: PDF/image/DWG/DXF up to 20 MB.
+                            </Typography>
+
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: .8 }}>
+                                <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
+                                    {productImageFile ? productImageFile.name : "Product Image (Optional)"}
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        onChange={(event) => {
+                                            const selected = event.target.files?.[0] || null;
+                                            if (selected && selected.size > 8 * 1024 * 1024) {
+                                                setProductImageFile(null);
+                                                setError("Product image cannot exceed 8 MB.");
+                                                event.target.value = "";
+                                                return;
+                                            }
+                                            setProductImageFile(selected);
+                                        }}
+                                    />
+                                </Button>
+
+                                <Button component="label" startIcon={<FileUploadOutlinedIcon />} sx={secondaryBtnSx}>
+                                    {productDrawingFile ? productDrawingFile.name : "Drawing File (Optional)"}
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,application/pdf,image/png,image/jpeg,image/webp"
+                                        onChange={(event) => {
+                                            const selected = event.target.files?.[0] || null;
+                                            if (selected && selected.size > 20 * 1024 * 1024) {
+                                                setProductDrawingFile(null);
+                                                setError("Product drawing cannot exceed 20 MB.");
+                                                event.target.value = "";
+                                                return;
+                                            }
+                                            setProductDrawingFile(selected);
+                                        }}
+                                    />
+                                </Button>
+                            </Box>
+
+                            {productDialog?.product?.id && (() => {
+                                const currentAttachments = productAttachmentMap[String(productDialog.product.id)] || {};
+                                return (
+                                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: .6, mt: 1 }}>
+                                        {currentAttachments.productImageAvailable && (
+                                            <>
+                                                <Button
+                                                    onClick={() => openProductAttachment(productDialog.project, productDialog.product, "IMAGE")}
+                                                    disabled={working}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    View Current Image
+                                                </Button>
+                                                <Button
+                                                    onClick={() => removeProductAttachment("IMAGE")}
+                                                    disabled={working}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    Remove Image
+                                                </Button>
+                                            </>
+                                        )}
+                                        {currentAttachments.drawingAvailable && (
+                                            <>
+                                                <Button
+                                                    onClick={() => openProductAttachment(productDialog.project, productDialog.product, "DRAWING")}
+                                                    disabled={working}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    View Current Drawing
+                                                </Button>
+                                                <Button
+                                                    onClick={() => removeProductAttachment("DRAWING")}
+                                                    disabled={working}
+                                                    sx={secondaryBtnSx}
+                                                >
+                                                    Remove Drawing
+                                                </Button>
+                                            </>
+                                        )}
+                                    </Box>
+                                );
+                            })()}
+                        </Card>
+
                         <TextField multiline minRows={2} label="Remarks" value={productForm.remarks} onChange={(e) => setProductForm((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} />
                         <FormControlLabel control={<Switch checked={productForm.active === true} onChange={(e) => setProductForm((c) => ({ ...c, active: e.target.checked }))} />} label="Active" />
                     </Box>

@@ -12,21 +12,35 @@ import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
  * First-class Project aggregate boundary.
  *
- * Project/Product creation is immediate and approval-free. The legacy field/property name projectCode is retained for compatibility, but its business meaning is PD No. / Project No. Existing material execution foreign keys
+ * Project/Product creation is immediate and approval-free. The legacy
+ * field/property name projectCode is retained for compatibility, but its
+ * business meaning is PD No. / Project No. Existing material execution foreign
+ * keys
  * attached to MatFlowProjectDrawing (the Product/Item child). The parent
  * Project
  * is a portfolio/ownership aggregate, while every BOM/requisition/stock
@@ -36,12 +50,23 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MatFlowProjectService {
 
+    private static final long PRODUCT_IMAGE_MAX_BYTES = 8L * 1024L * 1024L;
+    private static final long DRAWING_MAX_BYTES = 20L * 1024L * 1024L;
+
+    private static final List<String> PRODUCT_IMAGE_EXTENSIONS = List.of("jpg", "jpeg", "png", "webp");
+    private static final List<String> PRODUCT_DRAWING_EXTENSIONS = List.of("pdf", "jpg", "jpeg", "png", "webp", "dwg",
+            "dxf");
+
+    private static final Set<String> PRODUCT_IMAGE_EXTENSION_SET = Set.copyOf(PRODUCT_IMAGE_EXTENSIONS);
+    private static final Set<String> PRODUCT_DRAWING_EXTENSION_SET = Set.copyOf(PRODUCT_DRAWING_EXTENSIONS);
+
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowBomRepository bomRepository;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
+    private final Path attachmentRoot;
 
     public MatFlowProjectService(
             MatFlowProjectRepository projectRepository,
@@ -49,13 +74,23 @@ public class MatFlowProjectService {
             MatFlowBomRepository bomRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
             MatFlowAccessService accessService,
-            MatFlowAuditService auditService) {
+            MatFlowAuditService auditService,
+            @Value("${matflow.product-attachment-dir:}") String configuredAttachmentDirectory) {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
         this.bomRepository = bomRepository;
         this.requisitionRepository = requisitionRepository;
         this.accessService = accessService;
         this.auditService = auditService;
+        this.attachmentRoot = resolveAttachmentRoot(configuredAttachmentDirectory);
+
+        try {
+            Files.createDirectories(this.attachmentRoot);
+        } catch (IOException ex) {
+            throw new IllegalStateException(
+                    "Unable to initialize MatFlow Product attachment directory: " + this.attachmentRoot,
+                    ex);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -85,6 +120,156 @@ public class MatFlowProjectService {
     public ProjectPortfolioResponse get(UUID id) {
         accessService.requireRead();
         return toPortfolio(requireProject(id));
+    }
+
+    /**
+     * Returns optional Engineering attachments for every Product in one Project.
+     * Files are stored outside the transactional business tables; the Product
+     * remains the durable business record and no new attachment table is needed.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> productAttachments(UUID projectId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        return productsOf(project).stream()
+                .map(product -> productAttachmentStatus(project, product))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> productAttachmentStatus(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        return productAttachmentStatus(project, product);
+    }
+
+    @Transactional
+    public Map<String, Object> saveProductImage(
+            UUID projectId,
+            UUID productId,
+            MultipartFile file) {
+
+        accessService.requireProjectWrite();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        saveAttachment(product, ProductAttachmentKind.PRODUCT_IMAGE, file);
+
+        auditService.record(
+                "PROJECT_PRODUCT",
+                product.getId(),
+                "PRODUCT_IMAGE_UPLOADED",
+                project.getPlantCode(),
+                project.getProjectCode(),
+                product.getDrawingNo(),
+                auditService.details(
+                        "productName", product.getProductName(),
+                        "drawingRevision", product.getDrawingRevision(),
+                        "fileName", clean(file == null ? null : file.getOriginalFilename()),
+                        "sizeBytes", file == null ? null : file.getSize()));
+
+        return productAttachmentStatus(project, product);
+    }
+
+    @Transactional
+    public Map<String, Object> saveProductDrawing(
+            UUID projectId,
+            UUID productId,
+            MultipartFile file) {
+
+        accessService.requireProjectWrite();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        saveAttachment(product, ProductAttachmentKind.DRAWING, file);
+
+        auditService.record(
+                "PROJECT_PRODUCT",
+                product.getId(),
+                "PRODUCT_DRAWING_UPLOADED",
+                project.getPlantCode(),
+                project.getProjectCode(),
+                product.getDrawingNo(),
+                auditService.details(
+                        "productName", product.getProductName(),
+                        "drawingRevision", product.getDrawingRevision(),
+                        "fileName", clean(file == null ? null : file.getOriginalFilename()),
+                        "sizeBytes", file == null ? null : file.getSize()));
+
+        return productAttachmentStatus(project, product);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource loadProductImage(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        Path path = requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE);
+        return new FileSystemResource(path);
+    }
+
+    @Transactional(readOnly = true)
+    public Resource loadProductDrawing(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        Path path = requireAttachmentPath(product, ProductAttachmentKind.DRAWING);
+        return new FileSystemResource(path);
+    }
+
+    @Transactional(readOnly = true)
+    public String productImageContentType(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        return attachmentContentType(
+                requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE));
+    }
+
+    @Transactional(readOnly = true)
+    public String productDrawingContentType(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        return attachmentContentType(
+                requireAttachmentPath(product, ProductAttachmentKind.DRAWING));
+    }
+
+    @Transactional(readOnly = true)
+    public String productImageFileName(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        Path path = requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE);
+        return downloadFileName(product, ProductAttachmentKind.PRODUCT_IMAGE, path);
+    }
+
+    @Transactional(readOnly = true)
+    public String productDrawingFileName(UUID projectId, UUID productId) {
+        accessService.requireRead();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        Path path = requireAttachmentPath(product, ProductAttachmentKind.DRAWING);
+        return downloadFileName(product, ProductAttachmentKind.DRAWING, path);
+    }
+
+    @Transactional
+    public Map<String, Object> deleteProductImage(UUID projectId, UUID productId) {
+        return deleteProductAttachment(projectId, productId, ProductAttachmentKind.PRODUCT_IMAGE);
+    }
+
+    @Transactional
+    public Map<String, Object> deleteProductDrawing(UUID projectId, UUID productId) {
+        return deleteProductAttachment(projectId, productId, ProductAttachmentKind.DRAWING);
     }
 
     @Transactional
@@ -347,6 +532,10 @@ public class MatFlowProjectService {
 
             projectRepository.delete(project);
             projectRepository.flush();
+
+            for (MatFlowProjectDrawing product : products) {
+                deleteProductAttachmentDirectoryQuietly(product.getId());
+            }
         } catch (DataIntegrityViolationException ex) {
             throw conflict(
                     "Cannot delete Project '" + project.getProjectCode()
@@ -392,6 +581,7 @@ public class MatFlowProjectService {
             productRepository.delete(product);
             /* See deleteProject(): force the physical constraint check here. */
             productRepository.flush();
+            deleteProductAttachmentDirectoryQuietly(product.getId());
         } catch (DataIntegrityViolationException ex) {
             throw conflict(
                     "Cannot delete Product '" + product.getProductName()
@@ -400,6 +590,378 @@ public class MatFlowProjectService {
         }
 
         return toPortfolio(project);
+    }
+
+    private Map<String, Object> deleteProductAttachment(
+            UUID projectId,
+            UUID productId,
+            ProductAttachmentKind kind) {
+
+        accessService.requireProjectWrite();
+
+        MatFlowProject project = requireProject(projectId);
+        MatFlowProjectDrawing product = requireProduct(project, productId);
+        Path path = findAttachmentPath(product.getId(), kind);
+
+        if (path != null) {
+            try {
+                Files.deleteIfExists(path);
+                deleteDirectoryIfEmpty(path.getParent());
+            } catch (IOException ex) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Unable to remove " + kind.label,
+                        ex);
+            }
+
+            auditService.record(
+                    "PROJECT_PRODUCT",
+                    product.getId(),
+                    kind == ProductAttachmentKind.PRODUCT_IMAGE
+                            ? "PRODUCT_IMAGE_REMOVED"
+                            : "PRODUCT_DRAWING_REMOVED",
+                    project.getPlantCode(),
+                    project.getProjectCode(),
+                    product.getDrawingNo(),
+                    auditService.details(
+                            "productName", product.getProductName(),
+                            "drawingRevision", product.getDrawingRevision()));
+        }
+
+        return productAttachmentStatus(project, product);
+    }
+
+    private Map<String, Object> productAttachmentStatus(
+            MatFlowProject project,
+            MatFlowProjectDrawing product) {
+
+        Path image = findAttachmentPath(product == null ? null : product.getId(),
+                ProductAttachmentKind.PRODUCT_IMAGE);
+        Path drawing = findAttachmentPath(product == null ? null : product.getId(),
+                ProductAttachmentKind.DRAWING);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("projectId", project == null ? null : project.getId());
+        response.put("productId", product == null ? null : product.getId());
+        response.put("productImageAvailable", image != null);
+        response.put("drawingAvailable", drawing != null);
+        response.put("productImageFileName",
+                image == null || product == null
+                        ? null
+                        : downloadFileName(product, ProductAttachmentKind.PRODUCT_IMAGE, image));
+        response.put("drawingFileName",
+                drawing == null || product == null
+                        ? null
+                        : downloadFileName(product, ProductAttachmentKind.DRAWING, drawing));
+        return response;
+    }
+
+    private void saveAttachment(
+            MatFlowProjectDrawing product,
+            ProductAttachmentKind kind,
+            MultipartFile file) {
+
+        validateAttachment(kind, file);
+
+        UUID productId = product == null ? null : product.getId();
+        if (productId == null) {
+            throw badRequest("Product ID is required before an attachment can be saved");
+        }
+
+        String ext = extension(file.getOriginalFilename());
+        Path directory = productAttachmentDirectory(productId);
+        Path target = directory.resolve(kind.baseName + "." + ext).normalize();
+
+        if (!target.getParent().equals(directory)) {
+            throw badRequest("Invalid Product attachment path");
+        }
+
+        Path temporary = null;
+        try {
+            Files.createDirectories(directory);
+            temporary = directory.resolve(
+                    kind.baseName + ".upload-" + UUID.randomUUID() + ".tmp");
+
+            Files.copy(
+                    file.getInputStream(),
+                    temporary,
+                    StandardCopyOption.REPLACE_EXISTING);
+
+            try {
+                Files.move(
+                        temporary,
+                        target,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                Files.move(
+                        temporary,
+                        target,
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            for (String otherExtension : kind.extensions) {
+                Path old = directory.resolve(kind.baseName + "." + otherExtension);
+                if (!old.equals(target)) {
+                    Files.deleteIfExists(old);
+                }
+            }
+        } catch (IOException ex) {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ignored) {
+                    // best-effort cleanup
+                }
+            }
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Unable to store " + kind.label,
+                    ex);
+        }
+    }
+
+    private void validateAttachment(
+            ProductAttachmentKind kind,
+            MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            throw badRequest("Select a " + kind.label + " to upload");
+        }
+
+        if (file.getSize() > kind.maxBytes) {
+            throw badRequest(
+                    kind.label + " cannot exceed " + (kind.maxBytes / (1024L * 1024L)) + " MB");
+        }
+
+        String ext = extension(file.getOriginalFilename());
+        if (!kind.extensionSet.contains(ext)) {
+            throw badRequest(
+                    kind.label + " must be one of: " + String.join(", ", kind.extensions));
+        }
+
+        String contentType = clean(file.getContentType());
+        if (kind == ProductAttachmentKind.PRODUCT_IMAGE
+                && contentType != null
+                && !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            throw badRequest("Product image must be an image file");
+        }
+    }
+
+    private Path requireAttachmentPath(
+            MatFlowProjectDrawing product,
+            ProductAttachmentKind kind) {
+
+        Path path = findAttachmentPath(product == null ? null : product.getId(), kind);
+        if (path == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    kind.label + " not found");
+        }
+        return path;
+    }
+
+    private Path findAttachmentPath(
+            UUID productId,
+            ProductAttachmentKind kind) {
+
+        if (productId == null) {
+            return null;
+        }
+
+        Path directory = productAttachmentDirectory(productId);
+        for (String ext : kind.extensions) {
+            Path candidate = directory.resolve(kind.baseName + "." + ext);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private Path productAttachmentDirectory(UUID productId) {
+        if (productId == null) {
+            throw badRequest("Product ID is required");
+        }
+        Path directory = attachmentRoot.resolve(productId.toString()).normalize();
+        if (!directory.getParent().equals(attachmentRoot)) {
+            throw badRequest("Invalid Product attachment directory");
+        }
+        return directory;
+    }
+
+    private String attachmentContentType(Path path) {
+        if (path == null) {
+            return "application/octet-stream";
+        }
+
+        try {
+            String detected = Files.probeContentType(path);
+            if (detected != null && !detected.isBlank()) {
+                return detected;
+            }
+        } catch (IOException ignored) {
+            // fallback below
+        }
+
+        return mediaTypeForExtension(extension(path.getFileName().toString()));
+    }
+
+    private String downloadFileName(
+            MatFlowProjectDrawing product,
+            ProductAttachmentKind kind,
+            Path path) {
+
+        String ext = extension(path == null ? null : path.getFileName().toString());
+        String stem;
+
+        if (kind == ProductAttachmentKind.PRODUCT_IMAGE) {
+            stem = safeFileStem(
+                    (product == null ? "product" : product.getProductName()) + "-image");
+        } else {
+            stem = safeFileStem(
+                    (product == null ? "drawing" : product.getDrawingNo())
+                            + "-Rev-"
+                            + (product == null ? "0" : defaultRevision(product.getDrawingRevision())));
+        }
+
+        return stem + (ext.isBlank() ? "" : "." + ext);
+    }
+
+    private String safeFileStem(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null) {
+            return "matflow-file";
+        }
+
+        String safe = cleaned
+                .replaceAll("[^A-Za-z0-9._-]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^[_\\.]+|[_\\.]+$", "");
+
+        return safe.isBlank() ? "matflow-file" : safe;
+    }
+
+    private String extension(String fileName) {
+        String name = clean(fileName);
+        if (name == null) {
+            return "";
+        }
+
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return "";
+        }
+
+        return name.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private String mediaTypeForExtension(String ext) {
+        return switch (ext) {
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "webp" -> "image/webp";
+            case "pdf" -> "application/pdf";
+            case "dwg" -> "image/vnd.dwg";
+            case "dxf" -> "image/vnd.dxf";
+            default -> "application/octet-stream";
+        };
+    }
+
+    private Path resolveAttachmentRoot(String configured) {
+        String directory = clean(configured);
+        if (directory != null) {
+            return Path.of(directory).toAbsolutePath().normalize();
+        }
+
+        return Path.of(
+                System.getProperty("user.home"),
+                ".flowsuite",
+                "matflow",
+                "product-attachments")
+                .toAbsolutePath()
+                .normalize();
+    }
+
+    private void deleteProductAttachmentDirectoryQuietly(UUID productId) {
+        if (productId == null) {
+            return;
+        }
+
+        Path directory;
+        try {
+            directory = productAttachmentDirectory(productId);
+        } catch (RuntimeException ignored) {
+            return;
+        }
+
+        try {
+            if (!Files.isDirectory(directory)) {
+                return;
+            }
+
+            try (var paths = Files.list(directory)) {
+                paths.forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                        // setup-record deletion must not fail because evidence cleanup failed
+                    }
+                });
+            }
+            Files.deleteIfExists(directory);
+        } catch (IOException ignored) {
+            // best-effort orphan cleanup
+        }
+    }
+
+    private void deleteDirectoryIfEmpty(Path directory) throws IOException {
+        if (directory == null || !Files.isDirectory(directory)) {
+            return;
+        }
+
+        boolean empty;
+        try (var paths = Files.list(directory)) {
+            empty = paths.findAny().isEmpty();
+        }
+
+        if (empty) {
+            Files.deleteIfExists(directory);
+        }
+    }
+
+    private enum ProductAttachmentKind {
+        PRODUCT_IMAGE(
+                "Product image",
+                "product-image",
+                PRODUCT_IMAGE_MAX_BYTES,
+                PRODUCT_IMAGE_EXTENSIONS,
+                PRODUCT_IMAGE_EXTENSION_SET),
+        DRAWING(
+                "Product drawing",
+                "drawing",
+                DRAWING_MAX_BYTES,
+                PRODUCT_DRAWING_EXTENSIONS,
+                PRODUCT_DRAWING_EXTENSION_SET);
+
+        private final String label;
+        private final String baseName;
+        private final long maxBytes;
+        private final List<String> extensions;
+        private final Set<String> extensionSet;
+
+        ProductAttachmentKind(
+                String label,
+                String baseName,
+                long maxBytes,
+                List<String> extensions,
+                Set<String> extensionSet) {
+            this.label = label;
+            this.baseName = baseName;
+            this.maxBytes = maxBytes;
+            this.extensions = extensions;
+            this.extensionSet = extensionSet;
+        }
     }
 
     private void assertProductCanBeDeleted(MatFlowProjectDrawing product) {

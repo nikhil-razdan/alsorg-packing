@@ -34,6 +34,7 @@ import {
     PageHero,
     SummaryCard,
     clean,
+    dangerBtnSx,
     dialogActionsSx,
     dialogContentSx,
     dialogPaperSx,
@@ -58,8 +59,8 @@ import {
 } from "../matflowUi";
 
 const QC_KANBAN_COLUMNS = [
-    { key: "PENDING", label: "Pending Check", subtitle: "Material lot waiting for QC tick" },
-    { key: "COMPLETED", label: "Checked", subtitle: "QC confirmation completed" },
+    { key: "PENDING", label: "Pending / Recheck", subtitle: "New QC check or a lot marked Not Done and waiting for recheck" },
+    { key: "COMPLETED", label: "QC Done", subtitle: "QC confirmed and Store route unlocked" },
 ];
 
 export function MatFlowQcPage() {
@@ -93,7 +94,12 @@ export function MatFlowQcPage() {
     useEffect(() => { load(); }, [load]);
 
     const counts = useMemo(() => ({
-        pending: rows.filter((row) => normalize(row.status) === "PENDING").length,
+        pending: rows.filter((row) =>
+            normalize(row.status) === "PENDING" && !row.inspectedAt
+        ).length,
+        recheck: rows.filter((row) =>
+            normalize(row.status) === "PENDING" && Boolean(row.inspectedAt)
+        ).length,
         checked: rows.filter((row) => normalize(row.status) === "COMPLETED").length,
         evidence: rows.filter((row) => row.photoAvailable === true).length,
     }), [rows]);
@@ -105,24 +111,61 @@ export function MatFlowQcPage() {
         setError("");
     };
 
-    const completeCheck = async () => {
+    const completeCheck = async (qcDone) => {
         const row = dialog;
         if (!row?.id || row.rowVersion == null) return;
+
+        if (photo && photo.size > 8 * 1024 * 1024) {
+            setError("QC picture cannot exceed 8 MB.");
+            return;
+        }
+
+        const inspectionQty = Number(row.inspectionQty || 0);
+        if (!Number.isFinite(inspectionQty) || inspectionQty <= 0) {
+            setError("QC quantity is invalid. Refresh this QC record and retry.");
+            return;
+        }
+
         setWorking(true);
         setError("");
         try {
+            /*
+             * Save optional evidence first so the decision audit can truthfully
+             * record photoAvailable=true. If the decision later fails, the same
+             * pending QC row keeps the picture for the retry instead of losing
+             * the evidence.
+             */
             if (photo) {
                 await matflowApi.uploadQcPhoto(row.id, photo);
             }
-            await matflowApi.decideQc(row.id, {
-                rowVersion: row.rowVersion,
-                remarks: clean(remarks) || null,
-            });
+
+            await matflowApi.decideQc(
+                row.id,
+                {
+                    /*
+                     * Keep these quantity fields for compatibility with older
+                     * QcDecisionRequest DTOs; newer simplified DTOs safely ignore
+                     * them while the explicit qcDone query parameter drives the
+                     * current workflow.
+                     */
+                    rowVersion: row.rowVersion,
+                    acceptedQty: qcDone ? inspectionQty : 0,
+                    rejectedQty: qcDone ? 0 : inspectionQty,
+                    remarks: clean(remarks) || null,
+                },
+                qcDone
+            );
+
             setDialog(null);
             setPhoto(null);
             await load();
         } catch (requestError) {
-            setError(readMatFlowError(requestError, requestError?.message || "Unable to complete the QC check."));
+            setError(readMatFlowError(
+                requestError,
+                requestError?.message || (qcDone
+                    ? "Unable to mark QC Done."
+                    : "Unable to mark QC Not Done.")
+            ));
         } finally {
             setWorking(false);
         }
@@ -153,7 +196,7 @@ export function MatFlowQcPage() {
             <PageHero
                 badge="QC"
                 title="Material QC Checklist"
-                subtitle="Check the MR-linked material lot. QC only confirms the check; it does not select or change the material route."
+                subtitle="Check the MR-linked material lot, optionally attach a picture, then mark QC Done or QC Not Done. QC does not select or change the material route."
                 actions={
                     <>
                         <Button
@@ -175,9 +218,10 @@ export function MatFlowQcPage() {
 
             <ErrorBox>{error}</ErrorBox>
 
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 1 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2,minmax(0,1fr))", md: "repeat(4,minmax(0,1fr))" }, gap: 1 }}>
                 <SummaryCard label="Pending" value={counts.pending} />
-                <SummaryCard label="Checked" value={counts.checked} />
+                <SummaryCard label="Recheck Required" value={counts.recheck} />
+                <SummaryCard label="QC Done" value={counts.checked} />
                 <SummaryCard label="With Picture" value={counts.evidence} />
             </Box>
 
@@ -191,7 +235,7 @@ export function MatFlowQcPage() {
                 >
                     <MenuItem value="">All</MenuItem>
                     <MenuItem value="PENDING">Pending</MenuItem>
-                    <MenuItem value="COMPLETED">Checked</MenuItem>
+                    <MenuItem value="COMPLETED">QC Done</MenuItem>
                 </TextField>
                 <MatFlowViewToggle
                     value={viewMode}
@@ -213,6 +257,7 @@ export function MatFlowQcPage() {
                         boardKey={status || "ALL"}
                         renderCard={(row) => {
                             const pending = normalize(row.status) === "PENDING";
+                            const recheck = pending && Boolean(row.inspectedAt);
                             const procurement = [
                                 ...(Array.isArray(row.indentNumbers) ? row.indentNumbers : []),
                                 ...(Array.isArray(row.purchaseOrderNumbers) ? row.purchaseOrderNumbers : []),
@@ -225,13 +270,22 @@ export function MatFlowQcPage() {
                                             <Typography sx={{ ...mainTextSx, fontSize: 12.5 }}>{row.requisitionNumber || "-"}</Typography>
                                             <Typography sx={subTextSx}>{row.pdNo || "-"} · {row.drawingNo || "-"}</Typography>
                                         </Box>
-                                        <MatFlowStatusChip status={pending ? "PENDING" : "COMPLETED"} />
+                                        <MatFlowStatusChip status={recheck ? "PENDING_RECHECK" : (pending ? "PENDING" : "COMPLETED")} />
                                     </Box>
                                     <Typography sx={{ ...mainTextSx, mt: .7 }}>{row.materialName || row.materialCode || "-"}</Typography>
                                     <Typography sx={subTextSx}>{row.materialCode || "-"} · Qty {formatQty(row.inspectionQty)}</Typography>
                                     <Typography sx={subTextSx}>{procurement.length ? procurement.join(" · ") : "MR available lot"}</Typography>
+                                    {recheck && (
+                                        <Typography sx={{ ...subTextSx, mt: .35, color: "var(--mf-warning-text)", whiteSpace: "normal" }}>
+                                            Last QC attempt was Not Done{row.remarks ? ` · ${row.remarks}` : ""}.
+                                        </Typography>
+                                    )}
                                     <Box sx={{ display: "flex", gap: .5, mt: .85, flexWrap: "wrap" }}>
-                                        {canAct && pending && <Button onClick={() => openCheck(row)} disabled={working} sx={primaryBtnSx}>Check</Button>}
+                                        {canAct && pending && (
+                                            <Button onClick={() => openCheck(row)} disabled={working} sx={primaryBtnSx}>
+                                                {recheck ? "Recheck" : "Check"}
+                                            </Button>
+                                        )}
                                         {row.photoAvailable && <Button onClick={() => viewPhoto(row)} disabled={working} sx={secondaryBtnSx}>Picture</Button>}
                                     </Box>
                                 </Card>
@@ -255,6 +309,7 @@ export function MatFlowQcPage() {
                                 ...(Array.isArray(row.grnNumbers) ? row.grnNumbers : []),
                             ];
                             const pending = normalize(row.status) === "PENDING";
+                            const recheck = pending && Boolean(row.inspectedAt);
                             return (
                                 <Box key={row.id} sx={{ ...tableRowSx, gridTemplateColumns: "190px 190px minmax(210px,1fr) 90px 130px 135px 165px 150px" }}>
                                     <Box sx={tableCellSx}>
@@ -270,7 +325,7 @@ export function MatFlowQcPage() {
                                         <Typography sx={subTextSx}>{row.materialCode || "-"}</Typography>
                                     </Box>
                                     <Box sx={tableCellSx}>{formatQty(row.inspectionQty)}</Box>
-                                    <Box sx={tableCellSx}><MatFlowStatusChip status={pending ? "PENDING" : "COMPLETED"} /></Box>
+                                    <Box sx={tableCellSx}><MatFlowStatusChip status={recheck ? "PENDING_RECHECK" : (pending ? "PENDING" : "COMPLETED")} /></Box>
                                     <Box sx={tableCellSx}>
                                         {row.photoAvailable ? (
                                             <Button onClick={() => viewPhoto(row)} disabled={working} sx={secondaryBtnSx}>View</Button>
@@ -282,8 +337,10 @@ export function MatFlowQcPage() {
                                     </Box>
                                     <Box sx={tableCellSx}>
                                         {canAct && pending ? (
-                                            <Button onClick={() => openCheck(row)} disabled={working} sx={primaryBtnSx}>Check</Button>
-                                        ) : <Typography sx={subTextSx}>{row.remarks || "Checked"}</Typography>}
+                                            <Button onClick={() => openCheck(row)} disabled={working} sx={primaryBtnSx}>
+                                                {recheck ? "Recheck" : "Check"}
+                                            </Button>
+                                        ) : <Typography sx={subTextSx}>{row.remarks || "QC Done"}</Typography>}
                                     </Box>
                                 </Box>
                             );
@@ -308,17 +365,17 @@ export function MatFlowQcPage() {
                 maxWidth="sm"
                 PaperProps={{ sx: dialogPaperSx }}
             >
-                <DialogTitle sx={dialogTitleSx}>Complete QC Check</DialogTitle>
+                <DialogTitle sx={dialogTitleSx}>{dialog?.inspectedAt ? "Recheck Material QC" : "Material QC Decision"}</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gap: 1.5 }}>
                         <Alert severity="info">
-                            Confirm this material lot against {dialog?.requisitionNumber || "the MR"}. The BOM/Store route is already fixed.
+                            Confirm this material lot against {dialog?.requisitionNumber || "the MR"}. Attach a picture if useful. <b>QC Done</b> unlocks the Store-owned route; <b>QC Not Done</b> keeps this same lot pending for correction/recheck.
                         </Alert>
                         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
                             <Detail label="MR" value={dialog?.requisitionNumber || "-"} />
                             <Detail label="Material" value={dialog?.materialName || dialog?.materialCode || "-"} />
                             <Detail label="Quantity" value={formatQty(dialog?.inspectionQty)} />
-                            <Detail label="QC Role" value="Check only" />
+                            <Detail label="QC Result" value="Done / Not Done" />
                         </Box>
                         <Button component="label" sx={secondaryBtnSx}>
                             {photo ? `Picture: ${photo.name}` : "Attach Picture (Optional)"}
@@ -326,24 +383,36 @@ export function MatFlowQcPage() {
                                 hidden
                                 type="file"
                                 accept="image/png,image/jpeg,image/webp"
-                                onChange={(event) => setPhoto(event.target.files?.[0] || null)}
+                                onChange={(event) => {
+                                    const selected = event.target.files?.[0] || null;
+                                    if (selected && selected.size > 8 * 1024 * 1024) {
+                                        setPhoto(null);
+                                        setError("QC picture cannot exceed 8 MB.");
+                                        event.target.value = "";
+                                        return;
+                                    }
+                                    setPhoto(selected);
+                                }}
                             />
                         </Button>
                         <Typography sx={subTextSx}>PNG, JPG/JPEG or WEBP. Maximum 8 MB.</Typography>
                         <TextField
                             multiline
                             minRows={3}
-                            label="Remarks (Optional)"
+                            label="QC Remarks / Reason (Optional)"
                             value={remarks}
                             onChange={(event) => setRemarks(event.target.value)}
                             sx={fieldSx}
                         />
                     </Box>
                 </DialogContent>
-                <DialogActions sx={dialogActionsSx}>
+                <DialogActions sx={{ ...dialogActionsSx, gap: .75, flexWrap: "wrap" }}>
                     <Button onClick={() => setDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={completeCheck} disabled={working} sx={primaryBtnSx}>
-                        {working ? "Saving..." : "Mark Checked"}
+                    <Button onClick={() => completeCheck(false)} disabled={working} sx={dangerBtnSx}>
+                        {working ? "Saving..." : "QC Not Done"}
+                    </Button>
+                    <Button onClick={() => completeCheck(true)} disabled={working} sx={primaryBtnSx}>
+                        {working ? "Saving..." : "QC Done"}
                     </Button>
                 </DialogActions>
             </Dialog>
