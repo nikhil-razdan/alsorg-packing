@@ -11,6 +11,8 @@ import {
 	Card,
 	CardContent,
 	Chip,
+	IconButton,
+	Tooltip,
 	Typography,
 } from "@mui/material";
 
@@ -35,8 +37,19 @@ import ArrowForwardIcon
 import LogoutIcon
 	from "@mui/icons-material/Logout";
 
+import DarkModeOutlinedIcon
+	from "@mui/icons-material/DarkModeOutlined";
+
+import LightModeOutlinedIcon
+	from "@mui/icons-material/LightModeOutlined";
+
 import { useAuth }
 	from "../auth/AuthContext";
+
+import {
+	PackFlowThemeBoundary,
+	usePackFlowTheme,
+} from "../theme/PackFlowThemeContext";
 
 import ClientMasterPage
 	from "../pages/ClientMasterPage";
@@ -49,9 +62,14 @@ import {
 	hasModuleAccessFromUser,
 } from "../utils/moduleAccess";
 
-export default function ModuleHub() {
+function ModuleHubContent() {
 	const navigate = useNavigate();
 	const location = useLocation();
+
+	const {
+		mode,
+		toggleTheme,
+	} = usePackFlowTheme();
 
 	const {
 		user,
@@ -317,13 +335,37 @@ export default function ModuleHub() {
 					</Box>
 				</Box>
 
-				<Button
-					startIcon={<LogoutIcon />}
-					onClick={handleLogout}
-					sx={logoutBtnSx}
-				>
-					Logout
-				</Button>
+				<Box sx={topBarActionsSx}>
+					<Tooltip
+						title={
+							mode === "dark"
+								? "Switch to light mode"
+								: "Switch to dark mode"
+						}
+					>
+						<IconButton
+							onClick={toggleTheme}
+							sx={themeToggleSx}
+							aria-label={
+								mode === "dark"
+									? "Switch to light mode"
+									: "Switch to dark mode"
+							}
+						>
+							{mode === "dark"
+								? <LightModeOutlinedIcon />
+								: <DarkModeOutlinedIcon />}
+						</IconButton>
+					</Tooltip>
+
+					<Button
+						startIcon={<LogoutIcon />}
+						onClick={handleLogout}
+						sx={logoutBtnSx}
+					>
+						Logout
+					</Button>
+				</Box>
 			</Box>
 
 			<Box sx={containerSx}>
@@ -352,7 +394,7 @@ export default function ModuleHub() {
 							variant="h6"
 							sx={{
 								fontWeight: 900,
-								color: "#0f172a",
+								color: "var(--pf-text-strong)",
 							}}
 						>
 							No module access assigned
@@ -362,7 +404,7 @@ export default function ModuleHub() {
 							sx={{
 								mt: 1,
 								color:
-									"#64748b",
+									"var(--pf-text-muted)",
 							}}
 						>
 							Please contact Admin to assign PackFlow, BOMFlow or
@@ -442,6 +484,15 @@ export default function ModuleHub() {
 	);
 }
 
+
+export default function ModuleHub() {
+	return (
+		<PackFlowThemeBoundary>
+			<ModuleHubContent />
+		</PackFlowThemeBoundary>
+	);
+}
+
 const pageSx = {
 	minHeight: "100vh",
 	position: "relative",
@@ -449,12 +500,13 @@ const pageSx = {
 	overflowY: "auto",
 	fontFamily: "Inter, system-ui, sans-serif",
 	background: `
-		radial-gradient(circle at 7% 0%, rgba(59,130,246,.10), transparent 25%),
+		radial-gradient(circle at 7% 0%, rgba(59,130,246,.11), transparent 25%),
 		radial-gradient(circle at 94% 100%, rgba(14,165,233,.07), transparent 28%),
-		linear-gradient(180deg,#f8fbff 0%,#f3f7fc 48%,#eef4fa 100%)
+		linear-gradient(180deg,var(--pf-bg) 0%,var(--pf-bg-alt) 100%)
 	`,
-	color: "#0f172a",
+	color: "var(--pf-text-strong)",
 	p: { xs: 1.5, sm: 2, md: 3 },
+	transition: "background .18s ease,color .18s ease",
 };
 
 const ambientGlowOne = {
@@ -464,7 +516,7 @@ const ambientGlowOne = {
 	width: 380,
 	height: 380,
 	borderRadius: "50%",
-	background: "rgba(37,99,235,.10)",
+	background: "rgba(37,99,235,.12)",
 	filter: "blur(110px)",
 	pointerEvents: "none",
 };
@@ -476,7 +528,7 @@ const ambientGlowTwo = {
 	width: 420,
 	height: 420,
 	borderRadius: "50%",
-	background: "rgba(14,165,233,.08)",
+	background: "rgba(14,165,233,.09)",
 	filter: "blur(120px)",
 	pointerEvents: "none",
 };
@@ -486,7 +538,7 @@ const backgroundText = {
 	fontSize: { xs: 82, md: 168 },
 	fontWeight: 950,
 	background:
-		"linear-gradient(180deg, rgba(37,99,235,.035), rgba(37,99,235,.008))",
+		"linear-gradient(180deg,rgba(var(--pf-fg-rgb),.04),rgba(var(--pf-fg-rgb),.008))",
 	WebkitBackgroundClip: "text",
 	WebkitTextFillColor: "transparent",
 	top: "53%",
@@ -511,9 +563,9 @@ const topBarSx = {
 	px: { xs: 1.5, md: 2 },
 	py: 1,
 	borderRadius: "14px",
-	background: "rgba(255,255,255,.88)",
-	border: "1px solid rgba(148,163,184,.18)",
-	boxShadow: "0 10px 28px rgba(15,23,42,.07)",
+	background: "rgba(var(--pf-surface-rgb),.92)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "var(--pf-card-shadow)",
 	backdropFilter: "blur(16px)",
 };
 
@@ -537,17 +589,37 @@ const brandMarkSx = {
 };
 
 const brandTitleSx = {
-	color: "#0f172a",
+	color: "var(--pf-text-strong)",
 	fontWeight: 950,
 	fontSize: 18,
 	letterSpacing: 0.25,
 };
 
 const brandSubSx = {
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: 10.5,
 	fontWeight: 650,
 	mt: 0.2,
+};
+
+const topBarActionsSx = {
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+};
+
+const themeToggleSx = {
+	width: 38,
+	height: 38,
+	borderRadius: "9px",
+	color: "var(--pf-text)",
+	background: "rgba(var(--pf-fg-rgb),.045)",
+	border: "1px solid var(--pf-border)",
+	"&:hover": {
+		color: "#2563eb",
+		background: "rgba(59,130,246,.11)",
+		borderColor: "rgba(59,130,246,.26)",
+	},
 };
 
 const logoutBtnSx = {
@@ -558,13 +630,14 @@ const logoutBtnSx = {
 	textTransform: "none",
 	fontWeight: 850,
 	fontSize: 12,
-	color: "#1d4ed8",
-	background: "#eff6ff",
-	border: "1px solid #bfdbfe",
+	color: "#2563eb",
+	background: "rgba(59,130,246,.09)",
+	border: "1px solid rgba(59,130,246,.22)",
 	boxShadow: "none",
 	"&:hover": {
-		background: "#dbeafe",
-		borderColor: "#93c5fd",
+		color: "#fff",
+		background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+		borderColor: "rgba(59,130,246,.38)",
 	},
 };
 
@@ -585,9 +658,9 @@ const badgeSx = {
 	mb: 1.5,
 	height: 29,
 	borderRadius: "8px",
-	background: "#eff6ff",
-	border: "1px solid #bfdbfe",
-	color: "#2563eb",
+	background: "rgba(59,130,246,.10)",
+	border: "1px solid rgba(59,130,246,.22)",
+	color: "#3b82f6",
 	fontSize: 10.5,
 	fontWeight: 900,
 	letterSpacing: 1,
@@ -597,7 +670,7 @@ const badgeSx = {
 };
 
 const titleSx = {
-	color: "#0f172a",
+	color: "var(--pf-text-strong)",
 	fontWeight: 950,
 	letterSpacing: "-0.045em",
 	lineHeight: 1.05,
@@ -606,7 +679,7 @@ const titleSx = {
 };
 
 const subtitleSx = {
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: { xs: 13.5, md: 15 },
 	fontWeight: 600,
 	lineHeight: 1.65,
@@ -627,9 +700,9 @@ const moduleGridSx = {
 const emptyCardSx = {
 	borderRadius: "14px",
 	p: 3.5,
-	background: "rgba(255,255,255,.92)",
-	border: "1px solid rgba(148,163,184,.22)",
-	boxShadow: "0 12px 32px rgba(15,23,42,.07)",
+	background: "rgba(var(--pf-surface-rgb),.94)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "var(--pf-card-shadow)",
 };
 
 const moduleCardSx = {
@@ -638,9 +711,10 @@ const moduleCardSx = {
 	position: "relative",
 	overflow: "hidden",
 	borderRadius: "14px",
-	background: "rgba(255,255,255,.94)",
-	border: "1px solid rgba(148,163,184,.20)",
-	boxShadow: "0 10px 28px rgba(15,23,42,.065)",
+	background:
+		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.97),rgba(var(--pf-surface-alt-rgb),.94))",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "var(--pf-card-shadow)",
 	backdropFilter: "blur(12px)",
 	transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
 	"&:before": {
@@ -655,7 +729,7 @@ const moduleCardSx = {
 	},
 	"&:hover": {
 		transform: "translateY(-2px)",
-		boxShadow: "0 16px 36px rgba(15,23,42,.10)",
+		boxShadow: "0 18px 42px rgba(37,99,235,.13)",
 		borderColor: "rgba(59,130,246,.30)",
 	},
 };
@@ -687,9 +761,9 @@ const iconBoxSx = {
 	borderRadius: "12px",
 	display: "grid",
 	placeItems: "center",
-	color: "#2563eb",
-	background: "#eff6ff",
-	border: "1px solid #dbeafe",
+	color: "#3b82f6",
+	background: "rgba(59,130,246,.11)",
+	border: "1px solid rgba(59,130,246,.20)",
 	boxShadow: "none",
 	"& svg": {
 		fontSize: 27,
@@ -699,9 +773,9 @@ const iconBoxSx = {
 const cardChipSx = {
 	height: 25,
 	borderRadius: "7px",
-	color: "#1d4ed8",
-	background: "#f5f9ff",
-	border: "1px solid #dbeafe",
+	color: "#3b82f6",
+	background: "rgba(59,130,246,.09)",
+	border: "1px solid rgba(59,130,246,.19)",
 	fontWeight: 850,
 	fontSize: 9.5,
 	"& .MuiChip-label": {
@@ -710,7 +784,7 @@ const cardChipSx = {
 };
 
 const cardTitleSx = {
-	color: "#0f172a",
+	color: "var(--pf-text-strong)",
 	fontWeight: 950,
 	fontSize: { xs: 22, md: 24 },
 	mb: 0.7,
@@ -718,7 +792,7 @@ const cardTitleSx = {
 };
 
 const cardSubtitleSx = {
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: 12.5,
 	fontWeight: 600,
 	lineHeight: 1.6,
@@ -737,9 +811,9 @@ const tagWrapSx = {
 const tagSx = {
 	height: 24,
 	borderRadius: "7px",
-	color: "#475569",
-	background: "#f8fafc",
-	border: "1px solid #e2e8f0",
+	color: "var(--pf-text-soft)",
+	background: "rgba(var(--pf-fg-rgb),.045)",
+	border: "1px solid var(--pf-border)",
 	fontWeight: 750,
 	fontSize: 9.5,
 	"& .MuiChip-label": {
@@ -754,6 +828,7 @@ const openBtnSx = {
 	textTransform: "none",
 	fontWeight: 900,
 	fontSize: 12.5,
+	color: "#fff",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	boxShadow: "0 8px 20px rgba(37,99,235,.20)",
 	"&:hover": {
