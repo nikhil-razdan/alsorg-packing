@@ -39,13 +39,13 @@ const card = {
   borderRadius: 24,
 
   background:
-    "rgba(15,23,42,.78)",
+    "rgba(var(--pf-surface-rgb),.78)",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 
   boxShadow:
-    "0 18px 40px rgba(2,6,23,.34)",
+    "0 18px 40px rgba(var(--pf-surface-deep-rgb),.34)",
 
   backdropFilter: "blur(18px)",
 };
@@ -57,7 +57,7 @@ const title = {
 
   fontWeight: 900,
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const chart = {
@@ -86,7 +86,7 @@ const label = {
 
   fontSize: 11,
 
-  color: "rgba(255,255,255,.65)",
+  color: "rgba(var(--pf-fg-rgb),.65)",
 };
 
 export default StickerTrendChart;

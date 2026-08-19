@@ -282,7 +282,7 @@ const donutCenter = {
 };
 
 const donutCenterLabel = {
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 9.4,
   fontWeight: 950,
   letterSpacing: ".07em",
@@ -291,7 +291,7 @@ const donutCenterLabel = {
 
 const donutCenterValue = {
   marginTop: 3,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 31,
   fontWeight: 950,
   lineHeight: 1,
@@ -300,7 +300,7 @@ const donutCenterValue = {
 
 const donutCenterSub = {
   marginTop: 5,
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 9.1,
   fontWeight: 750,
 };
@@ -310,14 +310,14 @@ const legendPanel = {
   padding: 11,
   borderRadius: 14,
   background:
-    "rgba(2,6,23,.23)",
+    "rgba(var(--pf-surface-deep-rgb),.23)",
   border:
     "1px solid rgba(148,163,184,.055)",
 };
 
 const legendEyebrow = {
   marginBottom: 5,
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 8,
   fontWeight: 950,
   letterSpacing: ".09em",
@@ -355,14 +355,14 @@ const legendTextWrap = {
 };
 
 const legendLabel = {
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 9.4,
   fontWeight: 900,
 };
 
 const legendDetail = {
   marginTop: 2,
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 700,
 };
@@ -372,7 +372,7 @@ const legendNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 5,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 8.2,
   fontWeight: 800,
 };
@@ -393,7 +393,7 @@ const shareFill = {
 
 const legendFooter = {
   paddingTop: 7,
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 9.1,
   fontWeight: 650,
   lineHeight: 1.4,
@@ -424,7 +424,7 @@ const emptyTitle = {
 const emptyText = {
   maxWidth: 250,
   marginTop: 4,
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   lineHeight: 1.45,
   fontWeight: 700,

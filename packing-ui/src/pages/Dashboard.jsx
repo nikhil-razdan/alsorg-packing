@@ -1482,13 +1482,13 @@ function StatDrilldownModal({
           height: 10px;
         }
         .dashboard-drill-scroll::-webkit-scrollbar-track {
-          background: rgba(15,23,42,.92);
+          background: rgba(var(--pf-surface-rgb),.92);
           border-radius: 999px;
         }
         .dashboard-drill-scroll::-webkit-scrollbar-thumb {
           background: linear-gradient(90deg,#2563eb,#60a5fa);
           border-radius: 999px;
-          border: 2px solid rgba(15,23,42,.95);
+          border: 2px solid rgba(var(--pf-surface-rgb),.95);
         }
         .dashboard-drill-scroll::-webkit-scrollbar-thumb:hover {
           background: linear-gradient(90deg,#3b82f6,#93c5fd);
@@ -3933,7 +3933,7 @@ const page = {
     radial-gradient(circle at 10% 6%, rgba(59,130,246,.22), transparent 30%),
     radial-gradient(circle at 86% 12%, rgba(14,165,233,.14), transparent 24%),
     radial-gradient(circle at 72% 90%, rgba(168,85,247,.11), transparent 28%),
-    linear-gradient(135deg,#020617 0%,#07111f 44%,#0f172a 100%)
+    linear-gradient(135deg,var(--pf-surface-deep) 0%,#07111f 44%,var(--pf-surface) 100%)
   `,
 
   backgroundAttachment: "fixed",
@@ -3945,7 +3945,7 @@ const backgroundText = {
   fontWeight: 950,
 
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.010))",
+    "linear-gradient(180deg, rgba(var(--pf-fg-rgb),.055), rgba(var(--pf-fg-rgb),.010))",
 
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
@@ -3981,7 +3981,7 @@ const heroTitle = {
   margin: 0,
   fontSize: 36,
   fontWeight: 950,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   letterSpacing: 0.2,
 };
 
@@ -4005,20 +4005,20 @@ const modeBtn = (active) => ({
 
   border: active
     ? "1px solid rgba(96,165,250,.48)"
-    : "1px solid rgba(255,255,255,.08)",
+    : "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   cursor: "pointer",
 
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-    : "rgba(15,23,42,.70)",
+    : "rgba(var(--pf-surface-rgb),.70)",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
 
   boxShadow: active
     ? "0 14px 30px rgba(37,99,235,.32)"
-    : "0 12px 24px rgba(2,6,23,.18)",
+    : "0 12px 24px rgba(var(--pf-surface-deep-rgb),.18)",
 
   backdropFilter: "blur(16px)",
   transition: "all .25s ease",
@@ -4037,11 +4037,11 @@ const inventoryPulsePanel = {
   padding: 18,
   borderRadius: 24,
   background:
-    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.16),transparent 30%), radial-gradient(circle at 100% 100%,rgba(14,165,233,.09),transparent 28%), linear-gradient(135deg,rgba(15,23,42,.96),rgba(8,15,30,.92))",
+    "radial-gradient(circle at 0% 0%,rgba(59,130,246,.16),transparent 30%), radial-gradient(circle at 100% 100%,rgba(14,165,233,.09),transparent 28%), linear-gradient(135deg,rgba(var(--pf-surface-rgb),.96),rgba(8,15,30,.92))",
   border:
     "1px solid rgba(148,163,184,.10)",
   boxShadow:
-    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
+    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
 };
 
 const inventoryPulseHeader = {
@@ -4063,7 +4063,7 @@ const inventorySectionEyebrow = {
 
 const inventoryPulseTitle = {
   marginTop: 4,
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 21,
   fontWeight: 950,
   letterSpacing: "-.025em",
@@ -4072,7 +4072,7 @@ const inventoryPulseTitle = {
 const inventoryPulseSubtitle = {
   maxWidth: 720,
   marginTop: 5,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11.5,
   fontWeight: 650,
   lineHeight: 1.55,
@@ -4092,7 +4092,7 @@ const inventoryHealthBadge = (accent) => ({
   display: "inline-flex",
   alignItems: "center",
   gap: 7,
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   background: `${accent}14`,
   border: `1px solid ${accent}35`,
   fontSize: 9.5,
@@ -4108,7 +4108,7 @@ const inventoryHealthDot = (accent) => ({
 });
 
 const inventoryRefreshMeta = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 750,
 };
@@ -4126,7 +4126,7 @@ const inventoryPulseMetric = (accent) => ({
   padding: 12,
   borderRadius: 15,
   background:
-    `radial-gradient(circle at 100% 0%,${accent}16,transparent 42%), rgba(2,6,23,.34)`,
+    `radial-gradient(circle at 100% 0%,${accent}16,transparent 42%), rgba(var(--pf-surface-deep-rgb),.34)`,
   border: `1px solid ${accent}20`,
 });
 
@@ -4138,7 +4138,7 @@ const inventoryPulseMetricTop = {
 };
 
 const inventoryPulseMetricLabel = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 8.8,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4156,7 +4156,7 @@ const inventoryPulseDot = (accent) => ({
 
 const inventoryPulseMetricValue = {
   marginTop: 7,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
   lineHeight: 1,
@@ -4166,7 +4166,7 @@ const inventoryPulseMetricValue = {
 const inventoryPulseMetricDetail = {
   minHeight: 27,
   marginTop: 6,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.3,
   fontWeight: 700,
   lineHeight: 1.4,
@@ -4211,7 +4211,7 @@ const inventorySectionHeader = {
 
 const inventorySectionTitle = {
   marginTop: 3,
-  color: "#ffffff",
+  color: "var(--pf-text-strong)",
   fontSize: 29,
   fontWeight: 950,
   lineHeight: 1.2,
@@ -4242,23 +4242,23 @@ const inventoryStatCard = (
   borderRadius: 18,
   textAlign: "left",
   width: "100%",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontFamily: "inherit",
   cursor: clickable
     ? "pointer"
     : "default",
 
   background: active
-    ? `linear-gradient(160deg,${accent}16,rgba(15,23,42,.96) 44%,rgba(8,15,30,.94))`
-    : "linear-gradient(160deg,rgba(30,41,59,.72),rgba(15,23,42,.90) 48%,rgba(8,15,30,.90))",
+    ? `linear-gradient(160deg,${accent}16,rgba(var(--pf-surface-rgb),.96) 44%,rgba(8,15,30,.94))`
+    : "linear-gradient(160deg,rgba(var(--pf-surface-raised-rgb),.72),rgba(var(--pf-surface-rgb),.90) 48%,rgba(8,15,30,.90))",
 
   border: active
     ? `1px solid ${accent}55`
     : "1px solid rgba(148,163,184,.09)",
 
   boxShadow: active
-    ? `0 18px 38px ${accent}1D, inset 0 1px 0 rgba(255,255,255,.035)`
-    : "0 12px 28px rgba(2,6,23,.22), inset 0 1px 0 rgba(255,255,255,.018)",
+    ? `0 18px 38px ${accent}1D, inset 0 1px 0 rgba(var(--pf-fg-rgb),.035)`
+    : "0 12px 28px rgba(var(--pf-surface-deep-rgb),.22), inset 0 1px 0 rgba(var(--pf-fg-rgb),.018)",
 
   backdropFilter: "blur(18px)",
 
@@ -4315,7 +4315,7 @@ const inventoryStatIcon = (accent) => ({
   borderRadius: 10,
   display: "grid",
   placeItems: "center",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background: `${accent}17`,
   border: `1px solid ${accent}2E`,
   fontSize: 14,
@@ -4325,7 +4325,7 @@ const inventoryStatIcon = (accent) => ({
 
 const inventoryStatTitle = {
   minWidth: 0,
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 10.4,
   fontWeight: 950,
   letterSpacing: ".055em",
@@ -4363,7 +4363,7 @@ const inventoryStatValueRow = {
 };
 
 const inventoryStatValue = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 29,
   fontWeight: 950,
   lineHeight: 1,
@@ -4379,7 +4379,7 @@ const inventoryOpenIndicator = (active) => ({
   placeItems: "center",
   color: active
     ? "#bfdbfe"
-    : "#64748b",
+    : "var(--pf-text-dim)",
   background: active
     ? "rgba(59,130,246,.14)"
     : "rgba(148,163,184,.055)",
@@ -4412,7 +4412,7 @@ const inventoryProgressMeta = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 8,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 9.4,
   fontWeight: 800,
 };
@@ -4467,7 +4467,7 @@ const inventoryAnalyzePill = (accent, active) => ({
   borderRadius: 999,
   display: "inline-flex",
   alignItems: "center",
-  color: active ? "#fff" : accent,
+  color: active ? "var(--pf-text-strong)" : accent,
   background: active
     ? `${accent}28`
     : `${accent}10`,
@@ -4504,21 +4504,21 @@ const pulseWrap = {
   padding: 20,
   borderRadius: 28,
   background:
-    "linear-gradient(135deg, rgba(15,23,42,.92), rgba(15,23,42,.70))",
-  border: "1px solid rgba(255,255,255,.08)",
-  boxShadow: "0 24px 58px rgba(2,6,23,.36)",
+    "linear-gradient(135deg, rgba(var(--pf-surface-rgb),.92), rgba(var(--pf-surface-rgb),.70))",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  boxShadow: "0 24px 58px rgba(var(--pf-surface-deep-rgb),.36)",
   backdropFilter: "blur(22px)",
 };
 
 const pulseTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
 };
 
 const pulseSubtitle = {
   marginTop: 7,
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 13,
   fontWeight: 650,
   lineHeight: 1.6,
@@ -4534,12 +4534,12 @@ const pulseItem = (accent) => ({
   padding: 14,
   borderRadius: 18,
   background:
-    `radial-gradient(circle at top right, ${accent}24, transparent 44%), rgba(255,255,255,.035)`,
+    `radial-gradient(circle at top right, ${accent}24, transparent 44%), rgba(var(--pf-fg-rgb),.035)`,
   border: `1px solid ${accent}33`,
   display: "flex",
   flexDirection: "column",
   gap: 5,
-  color: "rgba(255,255,255,.60)",
+  color: "rgba(var(--pf-fg-rgb),.60)",
   fontSize: 11,
   fontWeight: 850,
   textTransform: "uppercase",
@@ -4592,7 +4592,7 @@ const trendLabelStyle = {
   position: "relative",
   zIndex: 1,
   marginTop: 7,
-  color: "rgba(255,255,255,.68)",
+  color: "rgba(var(--pf-fg-rgb),.68)",
   fontSize: 11.2,
   fontWeight: 750,
 };
@@ -4600,13 +4600,13 @@ const trendLabelStyle = {
 const sectionTitle = {
   fontSize: 24,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const sectionSubtitle = {
   fontSize: 14,
   marginTop: 4,
-  color: "rgba(255,255,255,.82)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
 };
 
 
@@ -4626,16 +4626,16 @@ const statCard = (accent, clickable = false, active = false) => ({
   borderRadius: 20,
 
   background: active
-    ? "linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.82))"
-    : "linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.70))",
+    ? "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.96), rgba(var(--pf-surface-rgb),.82))"
+    : "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.86), rgba(var(--pf-surface-rgb),.70))",
 
   border: active
     ? `1px solid ${accent}77`
-    : "1px solid rgba(255,255,255,.075)",
+    : "1px solid rgba(var(--pf-fg-rgb),.075)",
 
   boxShadow: active
     ? `0 20px 42px ${accent}22`
-    : "0 14px 32px rgba(2,6,23,.24)",
+    : "0 14px 32px rgba(var(--pf-surface-deep-rgb),.24)",
 
   overflow: "hidden",
   minHeight: 132,
@@ -4645,7 +4645,7 @@ const statCard = (accent, clickable = false, active = false) => ({
   cursor: clickable ? "pointer" : "default",
   textAlign: "left",
   width: "100%",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontFamily: "inherit",
 
   transition:
@@ -4655,7 +4655,7 @@ const statCard = (accent, clickable = false, active = false) => ({
 const statTitle = {
   position: "relative",
   zIndex: 1,
-  color: "rgba(255,255,255,.82)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
   marginBottom: 7,
   fontSize: 10.5,
   fontWeight: 950,
@@ -4670,7 +4670,7 @@ const statValue = {
   fontSize: 29,
   fontWeight: 950,
   lineHeight: 1,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const statSubtle = {
@@ -4679,7 +4679,7 @@ const statSubtle = {
   marginTop: 7,
   fontSize: 11,
   fontWeight: 750,
-  color: "rgba(255,255,255,.74)",
+  color: "rgba(var(--pf-fg-rgb),.74)",
 };
 
 const statClickHint = {
@@ -4688,7 +4688,7 @@ const statClickHint = {
   marginTop: 8,
   fontSize: 10.5,
   fontWeight: 950,
-  color: "rgba(255,255,255,.74)",
+  color: "rgba(var(--pf-fg-rgb),.74)",
 };
 
 const detailCard = (accent) => ({
@@ -4697,7 +4697,7 @@ const detailCard = (accent) => ({
   borderRadius: 24,
 
   background:
-    "linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.82))",
+    "linear-gradient(180deg, rgba(var(--pf-fg-rgb),.05), rgba(var(--pf-surface-rgb),.82))",
 
   border: `1px solid ${accent}55`,
 
@@ -4718,13 +4718,13 @@ const detailHeader = {
 const detailTitle = {
   fontSize: 20,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const detailSubtitle = {
   marginTop: 4,
   fontSize: 13.5,
-  color: "rgba(255,255,255,.78)",
+  color: "rgba(var(--pf-fg-rgb),.78)",
 };
 
 const detailTotalBox = {
@@ -4733,15 +4733,15 @@ const detailTotalBox = {
 
   borderRadius: 16,
 
-  background: "rgba(255,255,255,.05)",
+  background: "rgba(var(--pf-fg-rgb),.05)",
 
-  border: "1px solid rgba(255,255,255,.08)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   display: "flex",
   flexDirection: "column",
   gap: 4,
 
-  color: "rgba(255,255,255,.84)",
+  color: "rgba(var(--pf-fg-rgb),.84)",
 
   fontSize: 12.5,
   fontWeight: 700,
@@ -4758,9 +4758,9 @@ const detailItem = {
 
   borderRadius: 18,
 
-  background: "rgba(255,255,255,.04)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
 
-  border: "1px solid rgba(255,255,255,.06)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const detailHeaderActions = {
@@ -4777,7 +4777,7 @@ const detailInspectButton = (accent) => ({
   borderRadius: 12,
   border: `1px solid ${accent}42`,
   background: `${accent}16`,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontFamily: "inherit",
   fontSize: 10.5,
   fontWeight: 950,
@@ -4791,11 +4791,11 @@ const detailItemButton = (
   padding: 16,
   borderRadius: 18,
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(var(--pf-fg-rgb),.04)",
   border: clickable
     ? `1px solid ${accent}36`
-    : "1px solid rgba(255,255,255,.06)",
-  color: "#fff",
+    : "1px solid rgba(var(--pf-fg-rgb),.06)",
+  color: "var(--pf-text-strong)",
   textAlign: "left",
   fontFamily: "inherit",
   cursor: clickable
@@ -4816,7 +4816,7 @@ const throughputClickCard = (accent, enabled) => ({
 
   borderRadius: 18,
 
-  background: "rgba(255,255,255,.04)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
 
   border: `1px solid ${accent}44`,
 
@@ -4828,7 +4828,7 @@ const throughputClickCard = (accent, enabled) => ({
 
   fontFamily: "inherit",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   transition: "all .25s ease",
 });
@@ -4837,7 +4837,7 @@ const throughputCardHint = {
   marginTop: 10,
   fontSize: 11,
   fontWeight: 900,
-  color: "rgba(255,255,255,.68)",
+  color: "rgba(var(--pf-fg-rgb),.68)",
 };
 
 const modalOverlay = {
@@ -4845,7 +4845,7 @@ const modalOverlay = {
   inset: 0,
   zIndex: 9999,
 
-  background: "rgba(2,6,23,.72)",
+  background: "rgba(var(--pf-surface-deep-rgb),.72)",
 
   backdropFilter: "blur(12px)",
 
@@ -4864,15 +4864,15 @@ const modalCard = {
   padding: 22,
 
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.96), rgba(15,23,42,.88))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.96), rgba(var(--pf-surface-rgb),.88))",
 
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   boxShadow:
-    "0 28px 70px rgba(2,6,23,.55)",
+    "0 28px 70px rgba(var(--pf-surface-deep-rgb),.55)",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const modalHeader = {
@@ -4886,13 +4886,13 @@ const modalHeader = {
 const modalTitle = {
   fontSize: 20,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const modalSubtitle = {
   marginTop: 5,
   fontSize: 13.5,
-  color: "rgba(255,255,255,.78)",
+  color: "rgba(var(--pf-fg-rgb),.78)",
 };
 
 const modalCloseBtn = {
@@ -4902,11 +4902,11 @@ const modalCloseBtn = {
   borderRadius: "50%",
 
   border:
-    "1px solid rgba(255,255,255,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
 
-  background: "rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-fg-rgb),.06)",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   cursor: "pointer",
 
@@ -4929,7 +4929,7 @@ const modalTotalBox = {
   justifyContent: "space-between",
   alignItems: "center",
 
-  color: "rgba(255,255,255,.72)",
+  color: "rgba(var(--pf-fg-rgb),.72)",
 
   fontSize: 13,
   fontWeight: 800,
@@ -4951,9 +4951,9 @@ const modalUserRow = {
 
   borderRadius: 16,
 
-  background: "rgba(255,255,255,.045)",
+  background: "rgba(var(--pf-fg-rgb),.045)",
 
-  border: "1px solid rgba(255,255,255,.07)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const modalRank = {
@@ -4975,7 +4975,7 @@ const modalRank = {
 };
 
 const modalUserName = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 800,
 
@@ -4985,7 +4985,7 @@ const modalUserName = {
 };
 
 const modalCount = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 20,
   fontWeight: 900,
 };
@@ -4995,9 +4995,9 @@ const modalEmpty = {
 
   borderRadius: 16,
 
-  background: "rgba(255,255,255,.04)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
 
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
 
   fontSize: 13,
   fontWeight: 700,
@@ -5021,7 +5021,7 @@ const modalError = {
 const detailItemLabel = {
   fontSize: 12.5,
   fontWeight: 850,
-  color: "rgba(255,255,255,.82)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
   textTransform: "uppercase",
   letterSpacing: ".06em",
 };
@@ -5030,13 +5030,13 @@ const detailItemValue = {
   marginTop: 8,
   fontSize: 30,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const detailItemSubtle = {
   marginTop: 6,
   fontSize: 12.3,
-  color: "rgba(255,255,255,.72)",
+  color: "rgba(var(--pf-fg-rgb),.72)",
 };
 
 const adminPanel = {
@@ -5047,13 +5047,13 @@ const adminPanel = {
   padding: 18,
 
   background:
-    "rgba(15,23,42,.78)",
+    "rgba(var(--pf-surface-rgb),.78)",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 
   boxShadow:
-    "0 18px 35px rgba(2,6,23,.32)",
+    "0 18px 35px rgba(var(--pf-surface-deep-rgb),.32)",
 
   backdropFilter: "blur(18px)",
 };
@@ -5063,7 +5063,7 @@ const analyticsCardTitle = {
 
   fontWeight: 800,
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   marginBottom: 18,
 };
@@ -5073,13 +5073,13 @@ const metricValue = {
 
   fontWeight: 900,
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const metricSubtle = {
   marginTop: 8,
 
-  color: "rgba(255,255,255,.78)",
+  color: "rgba(var(--pf-fg-rgb),.78)",
 
   fontSize: 13.5,
   fontWeight: 650,
@@ -5101,7 +5101,7 @@ const agingItem = (color) => ({
   borderRadius: 18,
 
   background:
-    "rgba(255,255,255,.03)",
+    "rgba(var(--pf-fg-rgb),.03)",
 
   border:
     `1px solid ${color}33`,
@@ -5123,16 +5123,16 @@ const insightItem = {
   borderRadius: 16,
 
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(var(--pf-fg-rgb),.04)",
 
-  color: "rgba(255,255,255,.92)",
+  color: "rgba(var(--pf-fg-rgb),.92)",
 
   fontSize: 14,
 
   fontWeight: 650,
 
   border:
-    "1px solid rgba(255,255,255,.05)",
+    "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const analyticsCard = {
@@ -5141,13 +5141,13 @@ const analyticsCard = {
   borderRadius: 24,
 
   background:
-    "rgba(15,23,42,.78)",
+    "rgba(var(--pf-surface-rgb),.78)",
 
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 
   boxShadow:
-    "0 18px 40px rgba(2,6,23,.34)",
+    "0 18px 40px rgba(var(--pf-surface-deep-rgb),.34)",
 
   backdropFilter: "blur(18px)",
 };
@@ -5212,13 +5212,13 @@ const throughputMiniCard = (
 
   border: active
     ? `1px solid ${accent}77`
-    : "1px solid rgba(255,255,255,.07)",
+    : "1px solid rgba(var(--pf-fg-rgb),.07)",
 
   background: active
-    ? `linear-gradient(180deg, ${accent}22, rgba(255,255,255,.035))`
-    : "rgba(255,255,255,.04)",
+    ? `linear-gradient(180deg, ${accent}22, rgba(var(--pf-fg-rgb),.035))`
+    : "rgba(var(--pf-fg-rgb),.04)",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   textAlign: "left",
 
@@ -5238,7 +5238,7 @@ const throughputMiniCard = (
 const throughputMiniTitle = {
   fontSize: 12,
   fontWeight: 900,
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   letterSpacing: ".07em",
   textTransform: "uppercase",
 };
@@ -5247,21 +5247,21 @@ const throughputMiniValue = {
   marginTop: 10,
   fontSize: 34,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const throughputMiniSubtle = {
   marginTop: 6,
   fontSize: 12.3,
   fontWeight: 750,
-  color: "rgba(255,255,255,.76)",
+  color: "rgba(var(--pf-fg-rgb),.76)",
 };
 
 const throughputMiniHint = {
   marginTop: 12,
   fontSize: 11,
   fontWeight: 900,
-  color: "rgba(255,255,255,.72)",
+  color: "rgba(var(--pf-fg-rgb),.72)",
 };
 
 const workspaceGrid = {
@@ -5280,11 +5280,11 @@ const chartPanelSurface = {
   padding: 17,
   borderRadius: 24,
   background:
-    "radial-gradient(circle at 0% 0%,rgba(37,99,235,.14),transparent 31%), radial-gradient(circle at 100% 100%,rgba(34,197,94,.05),transparent 28%), linear-gradient(180deg,rgba(15,23,42,.95),rgba(8,15,30,.93))",
+    "radial-gradient(circle at 0% 0%,rgba(37,99,235,.14),transparent 31%), radial-gradient(circle at 100% 100%,rgba(34,197,94,.05),transparent 28%), linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(8,15,30,.93))",
   border:
     "1px solid rgba(148,163,184,.10)",
   boxShadow:
-    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
+    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
   backdropFilter: "blur(18px)",
   overflow: "hidden",
   display: "flex",
@@ -5304,7 +5304,7 @@ const chartPanelTitle = {
   marginTop: 3,
   fontSize: 18,
   fontWeight: 950,
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   letterSpacing: "-.025em",
 };
 
@@ -5323,7 +5323,7 @@ const chartToggleWrap = {
   padding: 4,
   borderRadius: 12,
   background:
-    "rgba(2,6,23,.52)",
+    "rgba(var(--pf-surface-deep-rgb),.52)",
   border:
     "1px solid rgba(148,163,184,.09)",
 };
@@ -5339,7 +5339,7 @@ const chartModeBtn = (active) => ({
   alignItems: "center",
   gap: 6,
   color: active
-    ? "#ffffff"
+    ? "var(--pf-text-strong)"
     : "#b1bfd0",
   background: active
     ? "linear-gradient(135deg,rgba(37,99,235,.28),rgba(59,130,246,.13))"
@@ -5372,7 +5372,7 @@ const chartStatusMetric = (accent) => ({
   padding: "9px 10px 11px",
   borderRadius: 13,
   background:
-    `linear-gradient(135deg,${accent}0D,rgba(2,6,23,.34))`,
+    `linear-gradient(135deg,${accent}0D,rgba(var(--pf-surface-deep-rgb),.34))`,
   border: `1px solid ${accent}1C`,
 });
 
@@ -5407,13 +5407,13 @@ const chartStatusValueRow = {
   justifyContent: "space-between",
   alignItems: "baseline",
   gap: 7,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 9.4,
   fontWeight: 800,
 };
 
 const chartStatusValue = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 950,
 };
@@ -5452,7 +5452,7 @@ const chartPanelBody = {
   padding: 9,
   borderRadius: 17,
   background:
-    "radial-gradient(circle at 50% 45%,rgba(59,130,246,.055),transparent 48%), linear-gradient(180deg,rgba(2,6,23,.34),rgba(2,6,23,.18))",
+    "radial-gradient(circle at 50% 45%,rgba(59,130,246,.055),transparent 48%), linear-gradient(180deg,rgba(var(--pf-surface-deep-rgb),.34),rgba(var(--pf-surface-deep-rgb),.18))",
   border:
     "1px solid rgba(148,163,184,.07)",
   display: "flex",
@@ -5470,7 +5470,7 @@ const chartInsightFooter = {
   padding: "8px 10px",
   borderRadius: 12,
   background:
-    "rgba(2,6,23,.28)",
+    "rgba(var(--pf-surface-deep-rgb),.28)",
   border:
     "1px solid rgba(148,163,184,.06)",
 };
@@ -5501,11 +5501,11 @@ const activityPanelSurface = {
   padding: 17,
   borderRadius: 24,
   background:
-    "radial-gradient(circle at 100% 0%,rgba(34,211,238,.08),transparent 31%), linear-gradient(180deg,rgba(15,23,42,.95),rgba(8,15,30,.93))",
+    "radial-gradient(circle at 100% 0%,rgba(34,211,238,.08),transparent 31%), linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(8,15,30,.93))",
   border:
     "1px solid rgba(148,163,184,.10)",
   boxShadow:
-    "0 20px 48px rgba(2,6,23,.30), inset 0 1px 0 rgba(255,255,255,.025)",
+    "0 20px 48px rgba(var(--pf-surface-deep-rgb),.30), inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
   backdropFilter: "blur(18px)",
   overflow: "hidden",
   display: "flex",
@@ -5522,7 +5522,7 @@ const activityPanelHeader = {
 
 const activityPanelTitle = {
   marginTop: 3,
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 18,
   fontWeight: 950,
   letterSpacing: "-.025em",
@@ -5600,7 +5600,7 @@ const activitySignal = {
   alignItems: "center",
   gap: 7,
   background:
-    "rgba(2,6,23,.31)",
+    "rgba(var(--pf-surface-deep-rgb),.31)",
   border:
     "1px solid rgba(148,163,184,.065)",
 };
@@ -5616,7 +5616,7 @@ const activitySignalDot = (accent) => ({
 });
 
 const activitySignalLabel = {
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 8.5,
   fontWeight: 850,
   textTransform: "uppercase",
@@ -5625,7 +5625,7 @@ const activitySignalLabel = {
 
 const activitySignalValue = {
   marginTop: 1,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 13,
   fontWeight: 950,
 };
@@ -5640,7 +5640,7 @@ const activityLatestMeta = {
   alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   background:
     "rgba(148,163,184,.025)",
   border:
@@ -5661,7 +5661,7 @@ const activityFeedShell = {
     "#334155 transparent",
   borderRadius: 14,
   background:
-    "rgba(2,6,23,.20)",
+    "rgba(var(--pf-surface-deep-rgb),.20)",
   border:
     "1px solid rgba(148,163,184,.055)",
 };
@@ -5674,7 +5674,7 @@ const dashboardDrillOverlay = {
   padding: 18,
   display: "grid",
   placeItems: "center",
-  background: "rgba(2,6,23,.84)",
+  background: "rgba(var(--pf-surface-deep-rgb),.84)",
   backdropFilter: "blur(14px)",
 };
 
@@ -5687,10 +5687,10 @@ const dashboardDrillModal = {
   overflow: "hidden",
   borderRadius: 28,
   background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,#0f172a,#07101d)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,var(--pf-surface),#07101d)",
   border: "1px solid rgba(96,165,250,.18)",
   boxShadow: "0 42px 120px rgba(0,0,0,.70)",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const dashboardDrillHeader = (accent) => ({
@@ -5701,7 +5701,7 @@ const dashboardDrillHeader = (accent) => ({
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 16,
-  background: `linear-gradient(135deg,${accent}10,rgba(255,255,255,.02))`,
+  background: `linear-gradient(135deg,${accent}10,rgba(var(--pf-fg-rgb),.02))`,
   borderBottom: "1px solid rgba(148,163,184,.08)",
 });
 
@@ -5714,7 +5714,7 @@ const dashboardDrillEyebrow = {
 
 const dashboardDrillTitle = {
   marginTop: 4,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 22,
   fontWeight: 950,
   letterSpacing: "-.02em",
@@ -5723,7 +5723,7 @@ const dashboardDrillTitle = {
 const dashboardDrillSubtitle = {
   marginTop: 5,
   maxWidth: 860,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11.5,
   fontWeight: 700,
   lineHeight: 1.5,
@@ -5741,7 +5741,7 @@ const dashboardDrillCount = (accent) => ({
   display: "inline-flex",
   alignItems: "center",
   borderRadius: 999,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background: `${accent}16`,
   border: `1px solid ${accent}35`,
   fontSize: 10,
@@ -5758,7 +5758,7 @@ const dashboardDrillFilters = {
   padding: 12,
   margin: 12,
   borderRadius: 16,
-  background: "rgba(255,255,255,.025)",
+  background: "rgba(var(--pf-fg-rgb),.025)",
   border: "1px solid rgba(148,163,184,.065)",
 };
 
@@ -5767,7 +5767,7 @@ const dashboardDrillField = {
   display: "flex",
   flexDirection: "column",
   gap: 5,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8.5,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -5783,9 +5783,9 @@ const dashboardDrillInput = {
   borderRadius: 11,
   border: "1px solid rgba(148,163,184,.09)",
   outline: "none",
-  background: "#0f172a",
-  color: "#e2e8f0",
-  colorScheme: "dark",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text)",
+  colorScheme: "var(--pf-color-scheme)",
   fontFamily: "inherit",
   fontSize: 10,
   fontWeight: 800,
@@ -5797,7 +5797,7 @@ const dashboardDrillApply = (accent) => ({
   borderRadius: 11,
   border: `1px solid ${accent}42`,
   background: `linear-gradient(135deg,${accent},#2563eb)`,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontFamily: "inherit",
   fontSize: 10,
   fontWeight: 950,
@@ -5824,7 +5824,7 @@ const dashboardDrillTableWrap = {
   borderRadius: 16,
   border: "1px solid rgba(148,163,184,.07)",
   scrollbarWidth: "thin",
-  scrollbarColor: "#3b82f6 rgba(15,23,42,.9)",
+  scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.9)",
 };
 
 const dashboardDrillTable = {
@@ -5840,8 +5840,8 @@ const dashboardDrillTh = {
   zIndex: 3,
   padding: "11px 10px",
   textAlign: "left",
-  background: "#0b1220",
-  color: "#94a3b8",
+  background: "var(--pf-scroll-track)",
+  color: "var(--pf-text-muted)",
   fontSize: 9,
   fontWeight: 950,
   letterSpacing: ".06em",
@@ -5852,19 +5852,19 @@ const dashboardDrillTh = {
 const dashboardDrillTd = {
   padding: "11px 10px",
   verticalAlign: "top",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   borderBottom: "1px solid rgba(148,163,184,.045)",
 };
 
 const dashboardDrillTdStrong = {
   ...dashboardDrillTd,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 850,
 };
 
 const dashboardDrillSub = {
   marginTop: 4,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 700,
 };
@@ -5893,7 +5893,7 @@ const dashboardOpenHint = {
 const dashboardDrillEmpty = {
   padding: 30,
   textAlign: "center",
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 800,
 };
 
@@ -5910,7 +5910,7 @@ const dashboardDrillPager = {
 };
 
 const dashboardDrillPagerMeta = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 800,
 };
@@ -5926,9 +5926,9 @@ const dashboardDrillPageSize = {
   padding: "0 8px",
   borderRadius: 10,
   border: "1px solid rgba(96,165,250,.14)",
-  background: "#0f172a",
+  background: "var(--pf-surface)",
   color: "#bfdbfe",
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
   fontFamily: "inherit",
   fontSize: 9,
   fontWeight: 850,
@@ -5957,7 +5957,7 @@ const dashboardDrillPageIndicator = {
   placeItems: "center",
   background: "rgba(148,163,184,.04)",
   border: "1px solid rgba(148,163,184,.07)",
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 9.5,
   fontWeight: 900,
 };
@@ -5969,7 +5969,7 @@ const dashboardRecordOverlay = {
   padding: 18,
   display: "grid",
   placeItems: "center",
-  background: "rgba(2,6,23,.88)",
+  background: "rgba(var(--pf-surface-deep-rgb),.88)",
   backdropFilter: "blur(14px)",
 };
 
@@ -5981,10 +5981,10 @@ const dashboardRecordModal = {
   overflow: "hidden",
   borderRadius: 26,
   background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,#0f172a,#08101d)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,var(--pf-surface),#08101d)",
   border: "1px solid rgba(96,165,250,.18)",
   boxShadow: "0 40px 110px rgba(0,0,0,.70)",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const dashboardRecordHeader = {
@@ -6005,14 +6005,14 @@ const dashboardRecordEyebrow = {
 
 const dashboardRecordTitle = {
   marginTop: 4,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 21,
   fontWeight: 950,
 };
 
 const dashboardRecordSub = {
   marginTop: 4,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 700,
 };
@@ -6023,8 +6023,8 @@ const dashboardRecordClose = {
   flexShrink: 0,
   borderRadius: 10,
   border: "1px solid rgba(148,163,184,.10)",
-  background: "rgba(255,255,255,.04)",
-  color: "#fff",
+  background: "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text-strong)",
   fontSize: 20,
   cursor: "pointer",
 };
@@ -6041,12 +6041,12 @@ const dashboardRecordActor = {
   minWidth: 0,
   padding: 11,
   borderRadius: 13,
-  background: "rgba(255,255,255,.035)",
+  background: "rgba(var(--pf-fg-rgb),.035)",
   border: "1px solid rgba(148,163,184,.065)",
   display: "flex",
   flexDirection: "column",
   gap: 5,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 850,
 };
@@ -6059,19 +6059,19 @@ const dashboardRecordFields = {
   gap: 8,
   padding: "0 20px 20px",
   scrollbarWidth: "thin",
-  scrollbarColor: "#3b82f6 rgba(15,23,42,.72)",
+  scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.72)",
 };
 
 const dashboardRecordField = {
   minWidth: 0,
   padding: 11,
   borderRadius: 12,
-  background: "rgba(2,6,23,.34)",
+  background: "rgba(var(--pf-surface-deep-rgb),.34)",
   border: "1px solid rgba(148,163,184,.055)",
 };
 
 const dashboardRecordFieldLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -6080,7 +6080,7 @@ const dashboardRecordFieldLabel = {
 
 const dashboardRecordFieldValue = {
   marginTop: 5,
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 10.5,
   fontWeight: 750,
   whiteSpace: "pre-wrap",

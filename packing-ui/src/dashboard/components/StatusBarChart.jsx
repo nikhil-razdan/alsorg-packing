@@ -237,7 +237,7 @@ function StatusBarChart({
                       x={x + 14}
                       y={y - 8}
                       textAnchor="middle"
-                      fill="#e2e8f0"
+                      fill="var(--pf-text)"
                       fontSize="10"
                       fontWeight="900"
                     >
@@ -248,7 +248,7 @@ function StatusBarChart({
                       x={x + 14}
                       y="211"
                       textAnchor="middle"
-                      fill="#64748b"
+                      fill="var(--pf-text-dim)"
                       fontSize="8.5"
                       fontWeight="900"
                     >
@@ -348,7 +348,7 @@ const summaryStrip = {
 };
 
 const summaryLabel = {
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 8,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -357,7 +357,7 @@ const summaryLabel = {
 
 const summaryValue = {
   marginTop: 3,
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 10.1,
   fontWeight: 900,
 };
@@ -372,7 +372,7 @@ const summaryMetric = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-end",
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 800,
 };
@@ -397,7 +397,7 @@ const legendPanel = {
   padding: 10,
   borderRadius: 13,
   background:
-    "rgba(2,6,23,.22)",
+    "rgba(var(--pf-surface-deep-rgb),.22)",
   border:
     "1px solid rgba(148,163,184,.05)",
 };
@@ -430,7 +430,7 @@ const legendDot = {
 };
 
 const legendLabel = {
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 9.1,
   fontWeight: 850,
 };
@@ -440,7 +440,7 @@ const legendNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 4,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 8,
   fontWeight: 800,
 };
@@ -464,7 +464,7 @@ const emptyState = {
   minHeight: 280,
   display: "grid",
   placeItems: "center",
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 10.1,
   fontWeight: 800,
 };

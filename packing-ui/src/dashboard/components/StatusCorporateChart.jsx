@@ -229,7 +229,7 @@ const eyebrow = {
 
 const summaryTitle = {
   marginTop: 3,
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 9.7,
   fontWeight: 900,
 };
@@ -294,14 +294,14 @@ const flowHeader = {
 };
 
 const flowLabel = {
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 9.6,
   fontWeight: 900,
 };
 
 const flowNote = {
   marginTop: 2,
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 700,
 };
@@ -310,7 +310,7 @@ const flowNumbers = {
   display: "flex",
   alignItems: "baseline",
   gap: 5,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 8.1,
   fontWeight: 800,
 };
@@ -358,9 +358,9 @@ const footerMetric = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 5,
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   background:
-    "rgba(2,6,23,.20)",
+    "rgba(var(--pf-surface-deep-rgb),.20)",
   border:
     "1px solid rgba(148,163,184,.045)",
   fontSize: 10,
@@ -372,7 +372,7 @@ const emptyState = {
   minHeight: 280,
   display: "grid",
   placeItems: "center",
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 10.1,
   fontWeight: 800,
 };

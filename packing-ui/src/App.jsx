@@ -15,240 +15,183 @@ import RequireRole from "./auth/RequireRole";
 import RequireWarehouseAccess from "./auth/RequireWarehouseAccess";
 import RequireModule from "./auth/RequireModule";
 import {
-	AuthProvider,
-	useAuth,
+  AuthProvider,
+  useAuth,
 } from "./auth/AuthContext";
 
 import ModuleHub from "./shell/ModuleHub";
 import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
 import useViewportHeight from "./useViewportHeight";
+import { PackFlowThemeProvider } from "./theme/PackFlowThemeContext";
 
 function PackFlowDefaultRedirect() {
-	const {
-		hasRole,
-		hasAnyRole,
-		authLoading,
-	} = useAuth();
+  const { hasRole, hasAnyRole, authLoading } = useAuth();
 
-	if (authLoading) {
-		return null;
-	}
+  if (authLoading) return null;
 
-	/*
-	 * Redirect only hardware-only users.
-	 *
-	 * PACKING + HARDWARE_PACKING users must still be
-	 * able to open the normal dashboard.
-	 */
-	const isHardwareOnly =
-		hasRole("HARDWARE_PACKING") &&
-		!hasAnyRole(
-			"ADMIN",
-			"PACKING",
-			"WAREHOUSE",
-			"DISPATCH",
-			"LOGISTICS"
-		);
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
 
-	return (
-		<Navigate
-			to={
-				isHardwareOnly
-					? "/packflow/zoho-items"
-					: "/packflow/dashboard"
-			}
-			replace
-		/>
-	);
+  return (
+    <Navigate
+      to={
+        isHardwareOnly
+          ? "/packflow/zoho-items"
+          : "/packflow/dashboard"
+      }
+      replace
+    />
+  );
 }
 
-function PackFlowDashboardAccess({
-	children,
-}) {
-	const {
-		hasRole,
-		hasAnyRole,
-		authLoading,
-	} = useAuth();
+function PackFlowDashboardAccess({ children }) {
+  const { hasRole, hasAnyRole, authLoading } = useAuth();
 
-	if (authLoading) {
-		return null;
-	}
+  if (authLoading) return null;
 
-	const isHardwareOnly =
-		hasRole("HARDWARE_PACKING") &&
-		!hasAnyRole(
-			"ADMIN",
-			"PACKING",
-			"WAREHOUSE",
-			"DISPATCH",
-			"LOGISTICS"
-		);
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
 
-	if (isHardwareOnly) {
-		return (
-			<Navigate
-				to="/packflow/zoho-items"
-				replace
-			/>
-		);
-	}
+  if (isHardwareOnly) {
+    return <Navigate to="/packflow/zoho-items" replace />;
+  }
 
-	return children;
+  return children;
 }
 
 function App() {
-	useViewportHeight();
+  useViewportHeight();
 
-	return (
-		<AuthProvider>
-			<BrowserRouter>
-				<Routes>
-					<Route path="/login" element={<LoginPage />} />
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
 
-					<Route
-						path="/modules"
-						element={
-							<RequireAuth>
-								<ModuleHub />
-							</RequireAuth>
-						}
-					/>
+          <Route
+            path="/modules"
+            element={
+              <RequireAuth>
+                <ModuleHub />
+              </RequireAuth>
+            }
+          />
 
-					<Route
-						path="/users"
-						element={
-							<RequireAuth>
-								<RequireRole allowed={["ADMIN"]}>
-									<UsersPage />
-								</RequireRole>
-							</RequireAuth>
-						}
-					/>
+          <Route
+            path="/users"
+            element={
+              <RequireAuth>
+                <RequireRole allowed={["ADMIN"]}>
+                  <UsersPage />
+                </RequireRole>
+              </RequireAuth>
+            }
+          />
 
-					<Route
-						path="/packflow"
-						element={
-							<RequireAuth>
-								<RequireModule moduleKey="PACKFLOW">
-									<Layout />
-								</RequireModule>
-							</RequireAuth>
-						}
-					>
-						<Route
-							index
-							element={
-								<PackFlowDefaultRedirect />
-							}
-						/>
-						<Route
-							path="dashboard"
-							element={
-								<PackFlowDashboardAccess>
-									<DashboardPage />
-								</PackFlowDashboardAccess>
-							}
-						/>
+          <Route
+            path="/packflow"
+            element={
+              <RequireAuth>
+                <RequireModule moduleKey="PACKFLOW">
+                  <PackFlowThemeProvider>
+                    <Layout />
+                  </PackFlowThemeProvider>
+                </RequireModule>
+              </RequireAuth>
+            }
+          >
+            <Route index element={<PackFlowDefaultRedirect />} />
+            <Route
+              path="dashboard"
+              element={
+                <PackFlowDashboardAccess>
+                  <DashboardPage />
+                </PackFlowDashboardAccess>
+              }
+            />
+            <Route
+              path="zoho-items"
+              element={
+                <RequireRole allowed={["ADMIN", "PACKING", "HARDWARE_PACKING"]}>
+                  <ZohoItemsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="warehouse"
+              element={
+                <RequireWarehouseAccess>
+                  <WarehousePage />
+                </RequireWarehouseAccess>
+              }
+            />
+            <Route
+              path="dispatched-items"
+              element={
+                <RequireRole allowed={["ADMIN", "PACKING", "DISPATCH", "WAREHOUSE"]}>
+                  <DispatchedItemsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="logistics"
+              element={
+                <RequireRole allowed={["ADMIN", "LOGISTICS"]}>
+                  <LogisticsPortalPage />
+                </RequireRole>
+              }
+            />
+            <Route path="users" element={<Navigate to="/users" replace />} />
+            <Route path="*" element={<PackFlowDefaultRedirect />} />
+          </Route>
 
-						<Route
-							path="zoho-items"
-							element={
-								<RequireRole
-									allowed={[
-										"ADMIN",
-										"PACKING",
-										"HARDWARE_PACKING",
-									]}
-								>
-									<ZohoItemsPage />
-								</RequireRole>
-							}
-						/>
+          <Route
+            path="/bomflow/*"
+            element={
+              <RequireAuth>
+                <RequireModule moduleKey="BOMFLOW">
+                  <BOMFlowRoutes />
+                </RequireModule>
+              </RequireAuth>
+            }
+          />
 
-						<Route
-							path="warehouse"
-							element={
-								<RequireWarehouseAccess>
-									<WarehousePage />
-								</RequireWarehouseAccess>
-							}
-						/>
+          <Route
+            path="/matflow/*"
+            element={
+              <RequireAuth>
+                <RequireModule moduleKey="MATFLOW">
+                  <MatFlowRoutes />
+                </RequireModule>
+              </RequireAuth>
+            }
+          />
 
-						<Route
-							path="dispatched-items"
-							element={
-								<RequireRole
-									allowed={[
-										"ADMIN",
-										"PACKING",
-										"DISPATCH",
-										"WAREHOUSE",
-									]}
-								>
-									<DispatchedItemsPage />
-								</RequireRole>
-							}
-						/>
-
-						<Route
-							path="logistics"
-							element={
-								<RequireRole
-									allowed={[
-										"ADMIN",
-										"LOGISTICS",
-									]}
-								>
-									<LogisticsPortalPage />
-								</RequireRole>
-							}
-						/>
-
-						<Route path="users" element={<Navigate to="/users" replace />} />
-						<Route
-							path="*"
-							element={
-								<PackFlowDefaultRedirect />
-							}
-						/>
-					</Route>
-
-					<Route
-						path="/bomflow/*"
-						element={
-							<RequireAuth>
-								<RequireModule moduleKey="BOMFLOW">
-									<BOMFlowRoutes />
-								</RequireModule>
-							</RequireAuth>
-						}
-					/>
-
-					<Route
-						path="/matflow/*"
-						element={
-							<RequireAuth>
-								<RequireModule moduleKey="MATFLOW">
-									<MatFlowRoutes />
-								</RequireModule>
-							</RequireAuth>
-						}
-					/>
-
-					<Route path="/" element={<Navigate to="/modules" replace />} />
-
-					<Route path="/dashboard" element={<Navigate to="/packflow/dashboard" replace />} />
-					<Route path="/zoho-items" element={<Navigate to="/packflow/zoho-items" replace />} />
-					<Route path="/warehouse" element={<Navigate to="/packflow/warehouse" replace />} />
-					<Route path="/dispatched-items" element={<Navigate to="/packflow/dispatched-items" replace />} />
-					<Route path="/logistics" element={<Navigate to="/packflow/logistics" replace />} />
-
-					<Route path="*" element={<Navigate to="/modules" replace />} />
-				</Routes>
-			</BrowserRouter>
-		</AuthProvider>
-	);
+          <Route path="/" element={<Navigate to="/modules" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/packflow/dashboard" replace />} />
+          <Route path="/zoho-items" element={<Navigate to="/packflow/zoho-items" replace />} />
+          <Route path="/warehouse" element={<Navigate to="/packflow/warehouse" replace />} />
+          <Route path="/dispatched-items" element={<Navigate to="/packflow/dispatched-items" replace />} />
+          <Route path="/logistics" element={<Navigate to="/packflow/logistics" replace />} />
+          <Route path="*" element={<Navigate to="/modules" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }
 
 export default App;

@@ -1,52 +1,10 @@
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import {
-	Outlet,
-	useLocation,
-} from "react-router-dom";
-
-/*
- * Client Master is shared FlowSuite master data, not a PackFlow workspace.
- *
- * The current application mounts PackFlow child routes through this Layout,
- * so /packflow/client-master would otherwise inherit the PackFlow Header and
- * Sidebar.  Keep the existing route for compatibility, but render that one
- * path as a standalone FlowSuite page.
- *
- * No other PackFlow route/layout behaviour is changed.
- */
-const isStandaloneFlowSuitePath = (
-	pathname
-) => {
-	const cleanPath = String(
-		pathname || ""
-	)
-		.trim()
-		.replace(/\/+$/, "");
-
-	return (
-		cleanPath ===
-		"/packflow/client-master"
-	);
-};
+import { Outlet } from "react-router-dom";
 
 function Layout() {
-	const location = useLocation();
-
-	if (
-		isStandaloneFlowSuitePath(
-			location.pathname
-		)
-	) {
-		return (
-			<div style={standaloneShell}>
-				<Outlet />
-			</div>
-		);
-	}
-
 	return (
-		<div style={shell}>
+		<div style={shell} className="packflow-theme-root">
 			<Sidebar />
 
 			<div style={main}>
@@ -62,13 +20,6 @@ function Layout() {
 	);
 }
 
-const standaloneShell = {
-	width: "100%",
-	minHeight: "100vh",
-	background:
-		"linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)",
-};
-
 const shell = {
 	display: "flex",
 
@@ -77,7 +28,7 @@ const shell = {
 	minHeight: "100vh",
 
 	background:
-		"linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)",
+		"linear-gradient(135deg,var(--pf-surface-deep) 0%,var(--pf-surface) 45%,var(--pf-surface-alt) 100%)",
 
 	overflow: "hidden",
 };

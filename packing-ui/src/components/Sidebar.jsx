@@ -181,8 +181,8 @@ function Sidebar() {
 		fontWeight: 700,
 		fontSize: 14,
 		color: active
-			? "#fff"
-			: "rgba(255,255,255,.72)",
+			? "var(--pf-text-strong)"
+			: "rgba(var(--pf-fg-rgb),.72)",
 		background: active
 			? "linear-gradient(135deg,#1d4ed8,#2563eb)"
 			: "transparent",
@@ -329,9 +329,9 @@ const sidebar = {
 	background:
 		"linear-gradient(180deg,#071120 0%,#0a162b 100%)",
 	borderRight:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 	boxShadow:
-		"8px 0 30px rgba(2,6,23,.45)",
+		"8px 0 30px rgba(var(--pf-surface-deep-rgb),.45)",
 	overflow: "hidden",
 	transition: "width .25s ease",
 };
@@ -343,7 +343,7 @@ const topHighlight = {
 	right: 0,
 	height: 90,
 	background:
-		"linear-gradient(180deg, rgba(255,255,255,0.16), transparent)",
+		"linear-gradient(180deg, rgba(var(--pf-fg-rgb),0.16), transparent)",
 	pointerEvents: "none",
 };
 
@@ -352,10 +352,10 @@ const toggleButton = {
 	height: 28,
 	borderRadius: 10,
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	background:
-		"rgba(255,255,255,.04)",
-	color: "#94a3b8",
+		"rgba(var(--pf-fg-rgb),.04)",
+	color: "var(--pf-text-muted)",
 	cursor: "pointer",
 	fontWeight: 900,
 	fontSize: 18,
@@ -371,7 +371,7 @@ const menuTitle = {
 	paddingLeft: 6,
 	fontWeight: 700,
 	fontSize: 11,
-	color: "rgba(255,255,255,0.55)",
+	color: "rgba(var(--pf-fg-rgb),0.55)",
 	letterSpacing: "0.12em",
 	textTransform: "uppercase",
 };
@@ -396,14 +396,14 @@ const icon = {
 const divider = {
 	height: 1,
 	background:
-		"linear-gradient(90deg, rgba(255,255,255,0.14), transparent)",
+		"linear-gradient(90deg, rgba(var(--pf-fg-rgb),0.14), transparent)",
 	marginTop: 24,
 };
 
 const smallDivider = {
 	height: 1,
 	background:
-		"linear-gradient(90deg, rgba(255,255,255,0.10), transparent)",
+		"linear-gradient(90deg, rgba(var(--pf-fg-rgb),0.10), transparent)",
 	margin: "10px 0 12px",
 };
 
@@ -424,7 +424,7 @@ const logoIcon = {
 	justifyContent: "center",
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontWeight: 900,
 	fontSize: 16,
 	boxShadow:
@@ -432,14 +432,14 @@ const logoIcon = {
 };
 
 const logoTitle = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontWeight: 900,
 	fontSize: 15,
 	letterSpacing: 1,
 };
 
 const logoSub = {
-	color: "rgba(255,255,255,.45)",
+	color: "rgba(var(--pf-fg-rgb),.45)",
 	fontSize: 11,
 	marginTop: 2,
 };

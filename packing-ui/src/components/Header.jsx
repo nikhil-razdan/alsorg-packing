@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
+import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import AppsIcon from "@mui/icons-material/Apps";
 import WarehouseIcon from "@mui/icons-material/Warehouse";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -27,6 +29,7 @@ import {
 } from "@mui/material";
 
 import { useAuth } from "../auth/AuthContext";
+import { usePackFlowTheme } from "../theme/PackFlowThemeContext";
 
 import {
 	fetchVehicles,
@@ -38,6 +41,8 @@ import {
 
 function Header() {
 	const navigate = useNavigate();
+
+	const { mode, setMode, toggleTheme } = usePackFlowTheme();
 
 	const {
 		user,
@@ -338,6 +343,16 @@ function Header() {
 							>
 								<NotificationsNoneIcon />
 							</Badge>
+						</IconButton>
+					</Tooltip>
+
+					<Tooltip title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+						<IconButton
+							sx={iconBtnSx}
+							onClick={toggleTheme}
+							aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+						>
+							{mode === "dark" ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
 						</IconButton>
 					</Tooltip>
 
@@ -689,6 +704,36 @@ function Header() {
 
 				<Box sx={settingsSection}>
 					<Box sx={sectionLabel}>
+						Appearance
+					</Box>
+
+					<Box sx={themeChoiceRow}>
+						<button
+							type="button"
+							onClick={() => setMode("dark")}
+							style={themeChoiceButton(mode === "dark")}
+						>
+							<DarkModeOutlinedIcon fontSize="small" />
+							Dark
+						</button>
+
+						<button
+							type="button"
+							onClick={() => setMode("light")}
+							style={themeChoiceButton(mode === "light")}
+						>
+							<LightModeOutlinedIcon fontSize="small" />
+							Light
+						</button>
+					</Box>
+
+					<Box sx={themeHelpText}>
+						PackFlow remembers this choice on this browser and applies it to every PackFlow page using the shared theme tokens.
+					</Box>
+				</Box>
+
+				<Box sx={settingsSection}>
+					<Box sx={sectionLabel}>
 						Quick Actions
 					</Box>
 
@@ -751,11 +796,11 @@ const header = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	background:
-		"linear-gradient(180deg,#081225 0%,#0b1730 100%)",
+		"linear-gradient(180deg,var(--pf-header-start) 0%,var(--pf-header-end) 100%)",
 	borderBottom:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 	boxShadow:
-		"0 10px 30px rgba(2,6,23,.35)",
+		"0 10px 30px rgba(var(--pf-surface-deep-rgb),.35)",
 	position: "sticky",
 	top: 0,
 	zIndex: 50,
@@ -781,7 +826,7 @@ const brandMark = {
 	justifyContent: "center",
 	fontWeight: 900,
 	fontSize: 20,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
 	boxShadow:
@@ -792,13 +837,13 @@ const title = {
 	fontSize: 18,
 	fontWeight: 900,
 	letterSpacing: 1,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
 	fontSize: 12,
 	marginTop: 4,
-	color: "rgba(255,255,255,.55)",
+	color: "rgba(var(--pf-fg-rgb),.55)",
 	letterSpacing: 0.4,
 };
 
@@ -842,11 +887,11 @@ const iconBtnSx = {
 	width: 42,
 	height: 42,
 	borderRadius: "14px",
-	color: "rgba(255,255,255,.82)",
+	color: "rgba(var(--pf-fg-rgb),.82)",
 	background:
-		"rgba(255,255,255,.04)",
+		"rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 
 	"&:hover": {
 		background:
@@ -865,7 +910,7 @@ const logoutButton = {
 	fontWeight: 700,
 	background:
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	boxShadow:
 		"0 10px 25px rgba(37,99,235,.35)",
 
@@ -879,10 +924,10 @@ const popoverPaper = {
 	mt: 1.5,
 	borderRadius: "22px",
 	background:
-		"linear-gradient(180deg,#0f172a,#111827)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+	color: "var(--pf-text-strong)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	boxShadow:
 		"0 24px 70px rgba(0,0,0,.45)",
 	p: 2,
@@ -891,7 +936,7 @@ const popoverPaper = {
 const popoverTitle = {
 	fontSize: 16,
 	fontWeight: 900,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const popoverHeader = {
@@ -903,7 +948,7 @@ const popoverHeader = {
 
 const dividerSx = {
 	borderColor:
-		"rgba(255,255,255,.08)",
+		"rgba(var(--pf-fg-rgb),.08)",
 	my: 1.5,
 };
 
@@ -919,10 +964,10 @@ const moduleCard = {
 	minHeight: 74,
 	borderRadius: 16,
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	background:
-		"rgba(255,255,255,.04)",
-	color: "#fff",
+		"rgba(var(--pf-fg-rgb),.04)",
+	color: "var(--pf-text-strong)",
 	cursor: "pointer",
 	display: "flex",
 	flexDirection: "column",
@@ -951,9 +996,9 @@ const notificationItem = {
 	p: 1.4,
 	borderRadius: "16px",
 	border:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 	background:
-		"rgba(255,255,255,.035)",
+		"rgba(var(--pf-fg-rgb),.035)",
 	mb: 1,
 };
 
@@ -978,7 +1023,7 @@ const notificationItemWarning = {
 
 const notificationHeaderSub = {
 	mt: 0.35,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 10,
 	fontWeight: 750,
 };
@@ -986,12 +1031,12 @@ const notificationHeaderSub = {
 const notificationTitle = {
 	fontSize: 13,
 	fontWeight: 900,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const notificationMsg = {
 	fontSize: 12,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	mt: 0.5,
 	lineHeight: 1.45,
 };
@@ -1010,7 +1055,7 @@ const notificationType = {
 };
 
 const emptyState = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 13,
 	py: 3,
 	textAlign: "center",
@@ -1020,7 +1065,7 @@ const healthRow = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1,
-	color: "#cbd5e1",
+	color: "var(--pf-text)",
 	fontWeight: 700,
 	fontSize: 13,
 	py: 1,
@@ -1045,7 +1090,7 @@ const healthyNotificationState = {
 
 const healthDivider = {
 	height: "1px",
-	background: "rgba(255,255,255,.08)",
+	background: "rgba(var(--pf-fg-rgb),.08)",
 	my: 1,
 };
 
@@ -1065,11 +1110,11 @@ const fleetHealthRow = (severity) => ({
 const settingsDrawer = {
 	width: 390,
 	background:
-		"linear-gradient(180deg,#020617,#0f172a)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-surface-deep),var(--pf-surface))",
+	color: "var(--pf-text-strong)",
 	p: 3,
 	borderLeft:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const settingsHeader = {
@@ -1085,16 +1130,16 @@ const settingsTitle = {
 
 const settingsSub = {
 	fontSize: 13,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	mt: 0.5,
 };
 
 const drawerCloseBtn = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	background:
-		"rgba(255,255,255,.04)",
+		"rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const profileCard = {
@@ -1104,9 +1149,9 @@ const profileCard = {
 	p: 2,
 	borderRadius: "18px",
 	background:
-		"rgba(255,255,255,.04)",
+		"rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const profileAvatar = {
@@ -1127,7 +1172,7 @@ const profileName = {
 };
 
 const profileRole = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 12,
 	mt: 0.4,
 };
@@ -1137,7 +1182,7 @@ const settingsSection = {
 };
 
 const sectionLabel = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	textTransform: "uppercase",
 	letterSpacing: "0.12em",
 	fontSize: 11,
@@ -1150,10 +1195,10 @@ const settingsAction = {
 	height: 44,
 	borderRadius: 14,
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	background:
-		"rgba(255,255,255,.04)",
-	color: "#fff",
+		"rgba(var(--pf-fg-rgb),.04)",
+	color: "var(--pf-text-strong)",
 	cursor: "pointer",
 	fontWeight: 800,
 	textAlign: "left",
@@ -1171,3 +1216,38 @@ const settingsActionDanger = {
 };
 
 export default Header;
+
+const themeChoiceRow = {
+	display: "grid",
+	gridTemplateColumns: "1fr 1fr",
+	gap: 1,
+	mt: 1,
+};
+
+const themeChoiceButton = (active) => ({
+	height: 44,
+	borderRadius: 12,
+	border: active
+		? "1px solid rgba(59,130,246,.42)"
+		: "1px solid rgba(var(--pf-fg-rgb),.08)",
+	background: active
+		? "linear-gradient(135deg,#2563eb,#3b82f6)"
+		: "rgba(var(--pf-fg-rgb),.035)",
+	color: active ? "#fff" : "var(--pf-text)",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: 8,
+	fontFamily: "inherit",
+	fontSize: 12,
+	fontWeight: 900,
+	cursor: "pointer",
+});
+
+const themeHelpText = {
+	mt: 1,
+	color: "var(--pf-text-dim)",
+	fontSize: 10.5,
+	fontWeight: 700,
+	lineHeight: 1.5,
+};
