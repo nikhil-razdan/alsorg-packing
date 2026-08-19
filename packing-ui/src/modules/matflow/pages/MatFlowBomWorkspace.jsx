@@ -721,14 +721,17 @@ function ProductReferencePanel({
     const ready = Boolean(project?.id && product?.id);
     const attachments = files?.attachments || emptyProductAttachmentState;
     const busy = files?.loading || files?.working;
+    const effectiveRequiredDate = product?.requiredDate || project?.requiredDate || "-";
+    const latestBomAvailable = Boolean(product?.latestBomId || product?.latestBomNumber);
+    const productCurrent = product?.currentDepartment || (latestBomAvailable ? "BOM" : "ENGINEERING / BOM");
 
     return (
         <Card sx={builderSidePanelSx}>
             <Box sx={builderSideTitleRowSx}>
                 <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={builderSideTitleSx}>Product References</Typography>
+                    <Typography sx={builderSideTitleSx}>Product Details & References</Typography>
                     <Typography sx={builderAssistantSubSx}>
-                        Product image and drawing stay linked to the Product across BOM revisions.
+                        Same Product details as Projects & Products, plus the linked Product image and drawing.
                     </Typography>
                 </Box>
                 <ImageOutlinedIcon sx={{ color: "#93c5fd" }} />
@@ -739,22 +742,58 @@ function ProductReferencePanel({
                     <ImageOutlinedIcon sx={{ fontSize: 28, opacity: .55 }} />
                     <Typography sx={{ ...builderAssistantSubSx, mt: .55, textAlign: "center" }}>
                         {contextUnavailable
-                            ? "Product attachment context could not be resolved from the Project portfolio."
-                            : "Select the Product / Drawing to show or attach its reference files."}
+                            ? "Product context could not be resolved from the Project portfolio."
+                            : "Select the Product / Drawing to show its Product details and reference files."}
                     </Typography>
                 </Box>
             ) : (
                 <Box sx={{ mt: 1.05, display: "grid", gap: 1 }}>
                     <Box sx={builderAttachmentIdentitySx}>
-                        <Typography noWrap sx={builderQuickTitleSx}>
-                            {product.productName || "Product / Item"}
-                        </Typography>
-                        <Typography sx={builderAssistantSubSx}>
-                            {project.projectCode || "-"} · {product.drawingNo || "-"} · Rev {product.drawingRevision || "0"}
-                        </Typography>
-                        <Typography sx={{ ...builderAssistantSubSx, mt: .25, fontWeight: 850 }}>
-                            Size: {productDimensionsText(product)} · L × B × H
-                        </Typography>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: .7 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                                <Typography sx={builderQuickTitleSx}>
+                                    {product.productName || "Product / Item"}
+                                </Typography>
+                                <Typography sx={builderAssistantSubSx}>
+                                    {project.projectCode || "-"} · {project.projectName || "-"}
+                                </Typography>
+                            </Box>
+                            <MatFlowStatusChip status={product.active === false ? "INACTIVE" : "ACTIVE"} />
+                        </Box>
+                    </Box>
+
+                    <Box sx={builderProductDetailGridSx}>
+                        <Box sx={builderProductDetailItemSx}>
+                            <Typography sx={builderAttachmentLabelSx}>DRAWING</Typography>
+                            <Typography sx={builderProductDetailValueSx}>{product.drawingNo || "-"}</Typography>
+                            <Typography sx={builderAssistantSubSx}>Rev {product.drawingRevision || "0"}</Typography>
+                        </Box>
+                        <Box sx={builderProductDetailItemSx}>
+                            <Typography sx={builderAttachmentLabelSx}>DIMENSIONS (L × B × H)</Typography>
+                            <Typography sx={builderProductDetailValueSx}>{productDimensionsText(product)}</Typography>
+                            <Typography sx={builderAssistantSubSx}>Length × Breadth × Height</Typography>
+                        </Box>
+                        <Box sx={builderProductDetailItemSx}>
+                            <Typography sx={builderAttachmentLabelSx}>REQUIRED DATE</Typography>
+                            <Typography sx={builderProductDetailValueSx}>{effectiveRequiredDate}</Typography>
+                            <Typography sx={builderAssistantSubSx}>{product?.requiredDate ? "Product required date" : "Project required date"}</Typography>
+                        </Box>
+                        <Box sx={builderProductDetailItemSx}>
+                            <Typography sx={builderAttachmentLabelSx}>LATEST BOM</Typography>
+                            <Typography sx={builderProductDetailValueSx}>
+                                {latestBomAvailable ? product.latestBomNumber || "BOM created" : "Not created"}
+                            </Typography>
+                            <Typography sx={builderAssistantSubSx}>
+                                {latestBomAvailable
+                                    ? `Rev ${product.latestBomRevision ?? "-"} · ${readable(product.latestBomStatus || "-")}`
+                                    : "No BOM revision yet"}
+                            </Typography>
+                        </Box>
+                        <Box sx={{ ...builderProductDetailItemSx, gridColumn: "1 / -1" }}>
+                            <Typography sx={builderAttachmentLabelSx}>CURRENT</Typography>
+                            <Typography sx={builderProductDetailValueSx}>{readable(productCurrent)}</Typography>
+                            <Typography sx={builderAssistantSubSx}>Current Product workflow position</Typography>
+                        </Box>
                     </Box>
 
                     <Box>
@@ -1243,6 +1282,8 @@ export function MatFlowBomDetailPage() {
     const [actionRemarks, setActionRemarks] = useState("");
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [productOwnerProjectId, setProductOwnerProjectId] = useState("");
+    const [productOwnerPortfolio, setProductOwnerPortfolio] = useState(null);
+    const [productOwnerProduct, setProductOwnerProduct] = useState(null);
     const [productOwnerLookupDone, setProductOwnerLookupDone] = useState(false);
 
     const load = useCallback(async () => {
@@ -1292,21 +1333,40 @@ export function MatFlowBomDetailPage() {
         const directProjectId = project?.parentProjectId || project?.projectId || "";
 
         setProductOwnerLookupDone(false);
+        setProductOwnerProjectId("");
+        setProductOwnerPortfolio(null);
+        setProductOwnerProduct(null);
 
         if (!productId) {
-            setProductOwnerProjectId("");
             setProductOwnerLookupDone(true);
             return () => { active = false; };
         }
 
-        if (directProjectId) {
-            setProductOwnerProjectId(String(directProjectId));
-            setProductOwnerLookupDone(true);
-            return () => { active = false; };
-        }
+        const acceptOwner = (owner) => {
+            if (!active || !owner?.id) return false;
+            const ownerProducts = Array.isArray(owner?.products) ? owner.products : [];
+            const canonicalProduct = ownerProducts.find(
+                (productRow) => String(productRow?.id) === String(productId)
+            ) || null;
+            if (!canonicalProduct) return false;
+
+            setProductOwnerProjectId(String(owner.id));
+            setProductOwnerPortfolio(owner);
+            setProductOwnerProduct(canonicalProduct);
+            return true;
+        };
 
         (async () => {
             try {
+                if (directProjectId) {
+                    try {
+                        const directResponse = await matflowApi.getProject(directProjectId);
+                        if (acceptOwner(directResponse?.data)) return;
+                    } catch {
+                        // Fall through to the portfolio search for legacy BOM snapshots.
+                    }
+                }
+
                 const response = await matflowApi.listProjects({
                     search: clean(project?.projectCode) || undefined,
                     plantCode: clean(project?.plantCode) || undefined,
@@ -1320,9 +1380,13 @@ export function MatFlowBomDetailPage() {
                         .some((productRow) => String(productRow?.id) === String(productId))
                 );
 
-                setProductOwnerProjectId(owner?.id ? String(owner.id) : "");
+                acceptOwner(owner);
             } catch {
-                if (active) setProductOwnerProjectId("");
+                if (active) {
+                    setProductOwnerProjectId("");
+                    setProductOwnerPortfolio(null);
+                    setProductOwnerProduct(null);
+                }
             } finally {
                 if (active) setProductOwnerLookupDone(true);
             }
@@ -1837,22 +1901,29 @@ export function MatFlowBomDetailPage() {
 
                 <Box sx={builderRightColumnSx}>
                     <ProductReferencePanel
-                        project={productOwnerProjectId ? {
+                        project={productOwnerPortfolio || (productOwnerProjectId ? {
                             id: productOwnerProjectId,
                             projectCode: project?.projectCode,
                             projectName: project?.projectName,
                             clientName: project?.clientName,
                             plantCode: project?.plantCode,
-                        } : null}
-                        product={{
+                            requiredDate: project?.requiredDate,
+                        } : null)}
+                        product={productOwnerProduct || {
                             id: resolvedProductId,
                             productName: project?.productName,
                             drawingNo: project?.drawingNo,
                             drawingRevision: project?.drawingRevision,
+                            dimensionLength: project?.dimensionLength,
+                            dimensionBreadth: project?.dimensionBreadth,
+                            dimensionHeight: project?.dimensionHeight,
+                            dimensionUom: project?.dimensionUom,
+                            requiredDate: project?.requiredDate,
+                            active: project?.active,
                         }}
                         files={productFiles}
                         canManage={canManageProductFiles}
-                        contextUnavailable={productOwnerLookupDone && !productOwnerProjectId}
+                        contextUnavailable={productOwnerLookupDone && !productOwnerProduct}
                     />
 
                     <Card sx={builderSidePanelSx}>
@@ -2082,6 +2153,9 @@ const builderProcessingChipSx = { height: 22, fontSize: 9.4, fontWeight: 800, co
 const builderDeleteIconSx = { width: 30, height: 30, color: "var(--mf-danger-text)", border: "1px solid var(--mf-danger-border)", borderRadius: 1.5 };
 const builderSidePanelSx = { ...panelSx, m: 0, p: 1.3, boxShadow: "none" };
 const builderAttachmentIdentitySx = { p: .85, borderRadius: 1.7, border: "1px solid var(--mf-border)", background: "var(--mf-surface)" };
+const builderProductDetailGridSx = { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: .7 };
+const builderProductDetailItemSx = { minWidth: 0, p: .75, borderRadius: 1.55, border: "1px solid var(--mf-border)", background: "var(--mf-card-bg)" };
+const builderProductDetailValueSx = { color: "var(--mf-text)", fontSize: 11.4, lineHeight: 1.35, fontWeight: 900, mt: .3, overflowWrap: "anywhere" };
 const builderAttachmentLabelRowSx = { display: "flex", justifyContent: "space-between", gap: .6, alignItems: "center" };
 const builderAttachmentLabelSx = { color: "var(--mf-text-muted)", fontSize: 9.4, fontWeight: 900, letterSpacing: .55 };
 const builderAttachmentAttachedChipSx = { height: 19, fontSize: 8.8, fontWeight: 900, color: "var(--mf-success-text)", background: "var(--mf-success-soft)", border: "1px solid var(--mf-success-border)" };
