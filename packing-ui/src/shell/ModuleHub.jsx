@@ -206,7 +206,7 @@ export default function ModuleHub() {
 					fontSize="large"
 				/>
 			),
-			path: "/packflow/client-master",
+			path: "/client-master",
 			tags: [
 				"Client Directory",
 				"Search",
