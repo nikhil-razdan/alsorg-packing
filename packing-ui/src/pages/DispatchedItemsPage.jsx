@@ -451,6 +451,24 @@ const qrDispatchButtonSx = {
 	},
 };
 
+const dispatchImportButtonSx = {
+	height: 38,
+	px: 2,
+	borderRadius: "10px",
+	textTransform: "none",
+	fontWeight: 900,
+	fontSize: 12,
+	color: "#ecfeff",
+	background:
+		"linear-gradient(135deg,rgba(8,145,178,.92),rgba(14,116,144,.9))",
+	border: "1px solid rgba(34,211,238,.30)",
+	boxShadow: "0 10px 24px rgba(8,145,178,.22)",
+	"&:hover": {
+		background:
+			"linear-gradient(135deg,#0891b2,#0e7490)",
+	},
+};
+
 const modalSelectMenuProps = {
 	disablePortal: true,
 	PaperProps: {
@@ -5988,6 +6006,25 @@ export default function DispatchedItemsPage() {
 	const [dispatchTripOpen, setDispatchTripOpen] = useState(false);
 	const [dispatchTripLoading, setDispatchTripLoading] = useState(false);
 
+
+	/*
+	 * Verified XLSX dispatch reconciliation.
+	 *
+	 * This is intentionally separate from the existing Dispatch status/challan
+	 * workflow. The file is parsed in the browser, then the backend performs the
+	 * authoritative Item + PD + DWG matching before anything can be applied.
+	 */
+	const dispatchImportInputRef = useRef(null);
+	const [dispatchImportOpen, setDispatchImportOpen] = useState(false);
+	const [dispatchImportLoading, setDispatchImportLoading] = useState(false);
+	const [dispatchImportApplying, setDispatchImportApplying] = useState(false);
+	const [dispatchImportFileName, setDispatchImportFileName] = useState("");
+	const [dispatchImportVerification, setDispatchImportVerification] = useState(null);
+	const [dispatchImportSelection, setDispatchImportSelection] = useState([]);
+	const [dispatchImportFilter, setDispatchImportFilter] = useState("ALL");
+	const [dispatchImportSearch, setDispatchImportSearch] = useState("");
+	const [dispatchImportVisibleCount, setDispatchImportVisibleCount] = useState(250);
+
 	const [dispatchTripContext, setDispatchTripContext] = useState({
 		mode: "",
 		itemIds: [],
@@ -7092,6 +7129,523 @@ export default function DispatchedItemsPage() {
 		} catch {
 			return fallbackMessage;
 		}
+	};
+
+
+	const normalizeDispatchImportHeader = (value) => {
+		return String(value ?? "")
+			.trim()
+			.toLowerCase()
+			.replace(/[_-]+/g, " ")
+			.replace(/[^a-z0-9]+/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+	};
+
+	const dispatchImportCellText = (cell) => {
+		if (!cell) return "";
+
+		const value = cell.value;
+
+		if (value == null) {
+			return String(cell.text || "").trim();
+		}
+
+		if (typeof value === "string" || typeof value === "number") {
+			return String(value).trim();
+		}
+
+		if (value instanceof Date) {
+			return String(cell.text || "").trim();
+		}
+
+		if (Array.isArray(value?.richText)) {
+			return value.richText
+				.map((part) => part?.text || "")
+				.join("")
+				.trim();
+		}
+
+		if (value?.result != null) {
+			return String(value.result).trim();
+		}
+
+		if (value?.text != null) {
+			return String(value.text).trim();
+		}
+
+		return String(cell.text || "").trim();
+	};
+
+	const padDispatchImportDatePart = (value) =>
+		String(value).padStart(2, "0");
+
+	const buildDispatchImportIsoDateTime = (
+		year,
+		month,
+		day,
+		hour = 0,
+		minute = 0,
+		second = 0
+	) => {
+		if (
+			!Number.isFinite(Number(year)) ||
+			!Number.isFinite(Number(month)) ||
+			!Number.isFinite(Number(day))
+		) {
+			return "";
+		}
+
+		return `${String(year).padStart(4, "0")}-${padDispatchImportDatePart(
+			month
+		)}-${padDispatchImportDatePart(day)}T${padDispatchImportDatePart(
+			hour
+		)}:${padDispatchImportDatePart(minute)}:${padDispatchImportDatePart(
+			second
+		)}`;
+	};
+
+	const dispatchImportDateTimeFromValue = (rawValue) => {
+		let value = rawValue;
+
+		if (value && typeof value === "object" && !(value instanceof Date)) {
+			if (value.result != null) {
+				value = value.result;
+			}
+		}
+
+		if (value instanceof Date && !Number.isNaN(value.getTime())) {
+			return buildDispatchImportIsoDateTime(
+				value.getFullYear(),
+				value.getMonth() + 1,
+				value.getDate(),
+				value.getHours(),
+				value.getMinutes(),
+				value.getSeconds()
+			);
+		}
+
+		if (typeof value === "number" && Number.isFinite(value)) {
+			/* Excel 1900 date system; 1899-12-30 handles Excel's leap-year bug. */
+			const epoch = Date.UTC(1899, 11, 30);
+			const date = new Date(epoch + value * 86400000);
+
+			return buildDispatchImportIsoDateTime(
+				date.getUTCFullYear(),
+				date.getUTCMonth() + 1,
+				date.getUTCDate(),
+				date.getUTCHours(),
+				date.getUTCMinutes(),
+				date.getUTCSeconds()
+			);
+		}
+
+		const text = String(value ?? "").trim();
+
+		if (!text) return "";
+
+		const isoMatch = text.match(
+			/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+		);
+
+		if (isoMatch) {
+			return buildDispatchImportIsoDateTime(
+				Number(isoMatch[1]),
+				Number(isoMatch[2]),
+				Number(isoMatch[3]),
+				Number(isoMatch[4] || 0),
+				Number(isoMatch[5] || 0),
+				Number(isoMatch[6] || 0)
+			);
+		}
+
+		const indianDateMatch = text.match(
+			/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+		);
+
+		if (indianDateMatch) {
+			return buildDispatchImportIsoDateTime(
+				Number(indianDateMatch[3]),
+				Number(indianDateMatch[2]),
+				Number(indianDateMatch[1]),
+				Number(indianDateMatch[4] || 0),
+				Number(indianDateMatch[5] || 0),
+				Number(indianDateMatch[6] || 0)
+			);
+		}
+
+		return "";
+	};
+
+	const findDispatchImportHeaderColumn = (headerMap, aliases) => {
+		for (const alias of aliases) {
+			const column = headerMap.get(normalizeDispatchImportHeader(alias));
+
+			if (column) return column;
+		}
+
+		return 0;
+	};
+
+	const parseDispatchImportWorkbook = async (file) => {
+		const excelJsModule = await import("exceljs");
+		const ExcelJS = excelJsModule.default ?? excelJsModule;
+		const workbook = new ExcelJS.Workbook();
+		const buffer = await file.arrayBuffer();
+
+		await workbook.xlsx.load(buffer);
+
+		const worksheet = workbook.worksheets?.[0];
+
+		if (!worksheet) {
+			throw new Error("The workbook does not contain a worksheet");
+		}
+
+		let headerRowNumber = 0;
+		let headerMap = new Map();
+
+		for (let rowNumber = 1; rowNumber <= Math.min(10, worksheet.rowCount || 10); rowNumber += 1) {
+			const row = worksheet.getRow(rowNumber);
+			const candidateMap = new Map();
+
+			row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+				const key = normalizeDispatchImportHeader(dispatchImportCellText(cell));
+
+				if (key) {
+					candidateMap.set(key, columnNumber);
+				}
+			});
+
+			if (
+				findDispatchImportHeaderColumn(candidateMap, ["Item Name", "Item"]) &&
+				findDispatchImportHeaderColumn(candidateMap, ["PD No", "PD Number", "PD"]) &&
+				findDispatchImportHeaderColumn(candidateMap, ["DWG No", "Drawing No", "Drawing Number", "DWG"])
+			) {
+				headerRowNumber = rowNumber;
+				headerMap = candidateMap;
+				break;
+			}
+		}
+
+		if (!headerRowNumber) {
+			throw new Error(
+				"Could not find Item Name, PD No and DWG No headers in the first 10 rows"
+			);
+		}
+
+		const columns = {
+			itemName: findDispatchImportHeaderColumn(headerMap, ["Item Name", "Item"]),
+			pdNo: findDispatchImportHeaderColumn(headerMap, ["PD No", "PD Number", "PD"]),
+			drawingNo: findDispatchImportHeaderColumn(headerMap, [
+				"DWG No",
+				"Drawing No",
+				"Drawing Number",
+				"DWG",
+			]),
+			description: findDispatchImportHeaderColumn(headerMap, ["Description", "Desc"]),
+			clientName: findDispatchImportHeaderColumn(headerMap, ["Client", "Client Name"]),
+			sourceStatus: findDispatchImportHeaderColumn(headerMap, ["Status"]),
+			dispatchDate: findDispatchImportHeaderColumn(headerMap, [
+				"Dispatch Date",
+				"Dispatched Date",
+				"Date",
+			]),
+			driverName: findDispatchImportHeaderColumn(headerMap, ["Driver Name", "Driver"]),
+		};
+
+		if (!columns.dispatchDate) {
+			throw new Error("Dispatch Date column is required");
+		}
+
+		if (!columns.driverName) {
+			throw new Error("Driver Name column is required");
+		}
+
+		const parsedRows = [];
+
+		for (
+			let rowNumber = headerRowNumber + 1;
+			rowNumber <= worksheet.rowCount;
+			rowNumber += 1
+		) {
+			const row = worksheet.getRow(rowNumber);
+			const itemName = dispatchImportCellText(row.getCell(columns.itemName));
+			const pdNo = dispatchImportCellText(row.getCell(columns.pdNo));
+			const drawingNo = dispatchImportCellText(row.getCell(columns.drawingNo));
+
+			if (!itemName && !pdNo && !drawingNo) {
+				continue;
+			}
+
+			parsedRows.push({
+				rowNumber,
+				itemName,
+				pdNo,
+				drawingNo,
+				description: columns.description
+					? dispatchImportCellText(row.getCell(columns.description))
+					: "",
+				clientName: columns.clientName
+					? dispatchImportCellText(row.getCell(columns.clientName))
+					: "",
+				sourceStatus: columns.sourceStatus
+					? dispatchImportCellText(row.getCell(columns.sourceStatus))
+					: "",
+				dispatchDateTime: dispatchImportDateTimeFromValue(
+					row.getCell(columns.dispatchDate)?.value
+				),
+				driverName: dispatchImportCellText(row.getCell(columns.driverName)),
+			});
+		}
+
+		if (parsedRows.length === 0) {
+			throw new Error("No dispatch rows were found in the workbook");
+		}
+
+		return parsedRows;
+	};
+
+	const handleDispatchImportFile = async (event) => {
+		const file = event?.target?.files?.[0];
+
+		if (!file) return;
+
+		try {
+			setDispatchImportOpen(true);
+			setDispatchImportLoading(true);
+			setDispatchImportApplying(false);
+			setDispatchImportFileName(file.name || "Dispatch import.xlsx");
+			setDispatchImportVerification(null);
+			setDispatchImportSelection([]);
+			setDispatchImportFilter("ALL");
+			setDispatchImportSearch("");
+			setDispatchImportVisibleCount(250);
+
+			const importRows = await parseDispatchImportWorkbook(file);
+
+			const response = await authFetch(
+				`${API_BASE_URL}/api/dispatched/import/verify`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					body: JSON.stringify(importRows),
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readResponseError(
+						response,
+						"Dispatch XLSX verification failed"
+					)
+				);
+			}
+
+			const verification = await response.json();
+			const verifiedRows = Array.isArray(verification?.rows)
+				? verification.rows
+				: [];
+
+			setDispatchImportVerification({
+				...verification,
+				rows: verifiedRows,
+			});
+
+			setDispatchImportSelection(
+				verifiedRows
+					.filter((row) => row?.matchStatus === "MATCHED" && row?.applyEligible)
+					.map((row) => row.rowNumber)
+			);
+		} catch (error) {
+			console.error("Dispatch XLSX import verification failed:", error);
+			alert(error?.message || "Could not verify the XLSX file");
+			setDispatchImportVerification(null);
+			setDispatchImportSelection([]);
+		} finally {
+			setDispatchImportLoading(false);
+
+			if (event?.target) {
+				event.target.value = "";
+			}
+		}
+	};
+
+	const dispatchImportRows = Array.isArray(dispatchImportVerification?.rows)
+		? dispatchImportVerification.rows
+		: [];
+
+	const dispatchImportSelectedSet = useMemo(
+		() => new Set(dispatchImportSelection || []),
+		[dispatchImportSelection]
+	);
+
+	const dispatchImportEligibleRows = useMemo(() => {
+		return dispatchImportRows.filter(
+			(row) =>
+				row?.matchStatus === "MATCHED" &&
+				row?.applyEligible &&
+				!row?.applied
+		);
+	}, [dispatchImportRows]);
+
+	const filteredDispatchImportRows = useMemo(() => {
+		const needle = String(dispatchImportSearch || "")
+			.trim()
+			.toLowerCase();
+
+		return dispatchImportRows.filter((row) => {
+			if (dispatchImportFilter !== "ALL" && row?.matchStatus !== dispatchImportFilter) {
+				return false;
+			}
+
+			if (!needle) return true;
+
+			return [
+				row?.rowNumber,
+				row?.itemName,
+				row?.pdNo,
+				row?.drawingNo,
+				row?.description,
+				row?.clientName,
+				row?.sku,
+				row?.zohoItemId,
+				row?.driverName,
+				row?.currentStatus,
+				row?.matchReason,
+			]
+				.map((value) => String(value ?? "").toLowerCase())
+				.some((value) => value.includes(needle));
+		});
+	}, [dispatchImportRows, dispatchImportFilter, dispatchImportSearch]);
+
+	const toggleDispatchImportRow = (rowNumber) => {
+		setDispatchImportSelection((previous) => {
+			const selected = new Set(previous || []);
+
+			if (selected.has(rowNumber)) {
+				selected.delete(rowNumber);
+			} else {
+				selected.add(rowNumber);
+			}
+
+			return Array.from(selected);
+		});
+	};
+
+	const selectAllDispatchImportMatches = () => {
+		const eligibleRowNumbers = dispatchImportEligibleRows.map((row) => row.rowNumber);
+		const allSelected =
+			eligibleRowNumbers.length > 0 &&
+			eligibleRowNumbers.every((rowNumber) => dispatchImportSelectedSet.has(rowNumber));
+
+		setDispatchImportSelection(allSelected ? [] : eligibleRowNumbers);
+	};
+
+	const applyDispatchImportRows = async (targetRows) => {
+		const rowsToApply = (Array.isArray(targetRows) ? targetRows : []).filter(
+			(row) => row?.matchStatus === "MATCHED" && row?.applyEligible && !row?.applied
+		);
+
+		if (rowsToApply.length === 0) {
+			alert("Select at least one verified matched row");
+			return;
+		}
+
+		try {
+			setDispatchImportApplying(true);
+
+			const response = await authFetch(
+				`${API_BASE_URL}/api/dispatched/import/apply`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					body: JSON.stringify({
+						rows: rowsToApply.map((row) => ({
+							rowNumber: row.rowNumber,
+							zohoItemId: row.zohoItemId,
+							itemName: row.itemName,
+							pdNo: row.pdNo,
+							drawingNo: row.drawingNo,
+							dispatchDateTime: row.dispatchDateTime,
+							driverName: row.driverName,
+						})),
+					}),
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readResponseError(
+						response,
+						"Dispatch XLSX apply failed"
+					)
+				);
+			}
+
+			const result = await response.json();
+			const appliedRows = Array.isArray(result?.rows) ? result.rows : [];
+			const appliedById = new Map(
+				appliedRows.map((row) => [String(row?.zohoItemId || ""), row])
+			);
+
+			setDispatchImportVerification((previous) => {
+				if (!previous) return previous;
+
+				return {
+					...previous,
+					rows: (previous.rows || []).map((row) => {
+						const applied = appliedById.get(String(row?.zohoItemId || ""));
+
+						if (!applied) return row;
+
+						return {
+							...row,
+							applied: true,
+							applyEligible: false,
+							currentStatus: "DISPATCHED",
+							currentDriverName: applied.driverName,
+							currentDispatchDateTime: applied.dispatchDateTime,
+							matchReason: applied.challanNumber
+								? `Applied. Existing challan preserved: ${applied.challanNumber}`
+								: "Applied. Item is DISPATCHED and remains available for challan generation later.",
+						};
+					}),
+				};
+			});
+
+			const appliedRowNumbers = new Set(appliedRows.map((row) => row?.rowNumber));
+
+			setDispatchImportSelection((previous) =>
+				(previous || []).filter((rowNumber) => !appliedRowNumbers.has(rowNumber))
+			);
+
+			await fetchData();
+
+			alert(
+				`${Number(result?.updatedCount || appliedRows.length)} item${
+					Number(result?.updatedCount || appliedRows.length) === 1 ? "" : "s"
+				} updated to DISPATCHED from the verified XLSX.`
+			);
+		} catch (error) {
+			console.error("Dispatch XLSX apply failed:", error);
+			alert(error?.message || "Could not apply verified XLSX rows");
+		} finally {
+			setDispatchImportApplying(false);
+		}
+	};
+
+	const applySelectedDispatchImportRows = async () => {
+		const selectedRows = dispatchImportEligibleRows.filter((row) =>
+			dispatchImportSelectedSet.has(row.rowNumber)
+		);
+
+		await applyDispatchImportRows(selectedRows);
 	};
 
 	const normalizeGatePassDropdownLocation = (row) => {
@@ -12839,12 +13393,16 @@ export default function DispatchedItemsPage() {
 							<Button
 								size="small"
 								onClick={() => {
+									const canGenerateLaterImportedChallan =
+										row.status === "DISPATCHED" &&
+										!String(getDispatchChallanNo(row) || "").trim();
+
 									if (
-										row.status !==
-										"READY_TO_DISPATCH"
+										row.status !== "READY_TO_DISPATCH" &&
+										!canGenerateLaterImportedChallan
 									) {
 										alert(
-											`Item not ready. Current status: ${row.status || "Unknown"}`
+											`Item not ready for challan. Current status: ${row.status || "Unknown"}`
 										);
 
 										return;
@@ -13588,6 +14146,24 @@ export default function DispatchedItemsPage() {
 		}
 
 		if (row.status === "READY_TO_DISPATCH") {
+			return "CHALAAN";
+		}
+
+		/*
+		 * Verified XLSX rows are allowed to be marked DISPATCHED before a
+		 * challan exists. Only those unchallaned dispatched rows get the
+		 * later-challan action; already challaned rows stay locked.
+		 */
+		if (
+			row.status === "DISPATCHED" &&
+			!String(
+				row?.challanNumber ||
+				row?.chalaanNumber ||
+				row?.dispatchChallanNumber ||
+				row?.chalaanNo ||
+				""
+			).trim()
+		) {
 			return "CHALAAN";
 		}
 
@@ -14668,12 +15244,65 @@ export default function DispatchedItemsPage() {
 			title,
 		});
 
+		const modalRows = cleanItemIds
+			.map((itemId) => {
+				return (
+					(rows || []).find(
+						(row) => String(row?.zohoItemId || "").trim() === itemId
+					) ||
+					dispatchSelectedRowCacheRef.current.get(itemId) ||
+					null
+				);
+			})
+			.filter(Boolean);
+
+		const allRowsAreLaterChallanRows =
+			modalRows.length > 0 &&
+			modalRows.length === cleanItemIds.length &&
+			modalRows.every(
+				(row) =>
+					row?.status === "DISPATCHED" &&
+					!String(getDispatchChallanNo(row) || "").trim()
+			);
+
+		let defaultDriverId = "";
+		let defaultDispatchTime = getNowDateTimeLocal();
+
+		if (allRowsAreLaterChallanRows) {
+			const driverIds = Array.from(
+				new Set(
+					modalRows
+						.map((row) => String(row?.driverId || "").trim())
+						.filter(Boolean)
+				)
+			);
+
+			if (driverIds.length === 1) {
+				defaultDriverId = driverIds[0];
+			}
+
+			const dispatchTimes = Array.from(
+				new Set(
+					modalRows
+						.map((row) =>
+							toAdminDateTimeLocalValue(
+								row?.dispatchedAt || row?.tripStartedAt
+							)
+						)
+						.filter(Boolean)
+				)
+			);
+
+			if (dispatchTimes.length === 1) {
+				defaultDispatchTime = dispatchTimes[0];
+			}
+		}
+
 		setDispatchTripForm({
-			driverId: "",
+			driverId: defaultDriverId,
 			vehicleId: "",
 			helperLoaderCount: "",
-			dispatchTime:
-				getNowDateTimeLocal(),
+			dispatchTime: defaultDispatchTime,
 		});
 
 		setDispatchTripStep(
@@ -17824,6 +18453,503 @@ export default function DispatchedItemsPage() {
 		}
 	}, [customChallanHistoryPageNo, customChallanHistoryTotalPages]);
 
+	const renderDispatchImportDrawer = () => {
+		const appliedCount = dispatchImportRows.filter((row) => row?.applied).length;
+		const selectedCount = dispatchImportEligibleRows.filter((row) =>
+			dispatchImportSelectedSet.has(row.rowNumber)
+		).length;
+		const visibleRows = filteredDispatchImportRows.slice(0, dispatchImportVisibleCount);
+		const hasMoreRows = filteredDispatchImportRows.length > visibleRows.length;
+
+		const summaryCards = [
+			{
+				label: "Excel Rows",
+				value: Number(dispatchImportVerification?.totalRows || dispatchImportRows.length || 0),
+				color: "#e2e8f0",
+			},
+			{
+				label: "Matched",
+				value: Number(dispatchImportVerification?.matchedCount || 0),
+				color: "#6ee7b7",
+			},
+			{
+				label: "Unmatched",
+				value: Number(dispatchImportVerification?.unmatchedCount || 0),
+				color: "#fca5a5",
+			},
+			{
+				label: "Invalid",
+				value: Number(dispatchImportVerification?.invalidCount || 0),
+				color: "#fcd34d",
+			},
+			{
+				label: "Duplicate Allocations",
+				value: Number(dispatchImportVerification?.duplicateAllocationCount || 0),
+				color: "#c4b5fd",
+			},
+			{
+				label: "Applied",
+				value: appliedCount,
+				color: "#67e8f9",
+			},
+		];
+
+		return (
+			<Drawer
+				anchor="right"
+				open={dispatchImportOpen}
+				onClose={() => {
+					if (!dispatchImportLoading && !dispatchImportApplying) {
+						setDispatchImportOpen(false);
+					}
+				}}
+				PaperProps={{
+					sx: {
+						width: { xs: "100vw", md: "min(1180px,96vw)" },
+						maxWidth: "100vw",
+						background:
+							"linear-gradient(180deg,#07111f 0%,#0b1220 45%,#0f172a 100%)",
+						color: "#fff",
+						borderLeft: "1px solid rgba(148,163,184,.16)",
+						boxShadow: "-26px 0 70px rgba(2,6,23,.52)",
+					},
+				}}
+			>
+				<Box sx={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
+					<Box
+						sx={{
+							position: "sticky",
+							top: 0,
+							zIndex: 10,
+							px: { xs: 2, md: 3 },
+							py: 2.2,
+							background: "rgba(7,17,31,.97)",
+							backdropFilter: "blur(18px)",
+							borderBottom: "1px solid rgba(148,163,184,.13)",
+						}}
+					>
+						<Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
+							<Box sx={{ flex: 1, minWidth: 0 }}>
+								<Box sx={{ fontSize: 22, fontWeight: 950, letterSpacing: "-.02em" }}>
+									Verified Dispatch XLSX Import
+								</Box>
+								<Box sx={{ color: "#94a3b8", fontSize: 12.5, mt: 0.5 }}>
+									Match authority: Item Name + PD No + DWG No. Description and Client only
+									disambiguate repeated packet rows.
+								</Box>
+								{dispatchImportFileName && (
+									<Box sx={{ color: "#67e8f9", fontSize: 12, fontWeight: 850, mt: 0.8 }}>
+										📎 {dispatchImportFileName}
+									</Box>
+								)}
+							</Box>
+
+							<Button
+								disabled={dispatchImportLoading || dispatchImportApplying}
+								onClick={() => dispatchImportInputRef.current?.click()}
+								sx={{
+									textTransform: "none",
+									fontWeight: 900,
+									color: "#cffafe",
+									border: "1px solid rgba(34,211,238,.25)",
+									borderRadius: "10px",
+								}}
+							>
+								Choose Another XLSX
+							</Button>
+
+							<IconButton
+								disabled={dispatchImportLoading || dispatchImportApplying}
+								onClick={() => setDispatchImportOpen(false)}
+								sx={{ color: "#94a3b8" }}
+							>
+								✕
+							</IconButton>
+						</Box>
+					</Box>
+
+					<Box sx={{ p: { xs: 2, md: 3 }, flex: 1 }}>
+						{dispatchImportLoading ? (
+							<Box
+								sx={{
+									minHeight: 420,
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									flexDirection: "column",
+									gap: 2,
+								}}
+							>
+								<CircularProgress size={34} />
+								<Box sx={{ fontWeight: 900 }}>Reading XLSX and verifying Dispatch records…</Box>
+								<Box sx={{ color: "#94a3b8", fontSize: 12 }}>
+									Nothing is updated until you confirm matched rows below.
+								</Box>
+							</Box>
+						) : !dispatchImportVerification ? (
+							<Box
+								sx={{
+									minHeight: 360,
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									flexDirection: "column",
+									gap: 1.5,
+									color: "#94a3b8",
+								}}
+							>
+								<Box sx={{ fontSize: 38 }}>📊</Box>
+								<Box sx={{ color: "#fff", fontWeight: 900 }}>Select an XLSX to verify</Box>
+								<Box sx={{ fontSize: 12.5 }}>
+									Expected columns include Item Name, PD No, DWG No, Dispatch Date and Driver Name.
+								</Box>
+							</Box>
+						) : (
+							<>
+								<Box
+									sx={{
+										display: "grid",
+										gridTemplateColumns: {
+											xs: "repeat(2,minmax(0,1fr))",
+											md: "repeat(6,minmax(0,1fr))",
+										},
+										gap: 1.2,
+										mb: 2,
+									}}
+								>
+									{summaryCards.map((card) => (
+										<Box
+											key={card.label}
+											sx={{
+												p: 1.5,
+												borderRadius: "12px",
+												background: "rgba(255,255,255,.035)",
+												border: "1px solid rgba(148,163,184,.10)",
+											}}
+										>
+											<Box sx={{ color: "#94a3b8", fontSize: 10.5, fontWeight: 850 }}>
+												{card.label}
+											</Box>
+											<Box sx={{ color: card.color, fontSize: 23, fontWeight: 950, mt: 0.25 }}>
+												{card.value}
+											</Box>
+										</Box>
+									))}
+								</Box>
+
+								<Box
+									sx={{
+										display: "flex",
+										gap: 1,
+										alignItems: "center",
+										flexWrap: "wrap",
+										mb: 1.4,
+									}}
+								>
+									{[
+										["ALL", "All"],
+										["MATCHED", "Matched"],
+										["UNMATCHED", "Unmatched"],
+										["INVALID", "Invalid"],
+									].map(([value, label]) => (
+										<Button
+											key={value}
+											onClick={() => {
+												setDispatchImportFilter(value);
+												setDispatchImportVisibleCount(250);
+											}}
+											sx={{
+												height: 34,
+												px: 1.5,
+												borderRadius: "9px",
+												textTransform: "none",
+												fontWeight: 900,
+												fontSize: 11,
+												color: dispatchImportFilter === value ? "#fff" : "#94a3b8",
+												background:
+													dispatchImportFilter === value
+														? "rgba(37,99,235,.34)"
+														: "rgba(255,255,255,.03)",
+												border: "1px solid rgba(148,163,184,.12)",
+											}}
+										>
+											{label}
+										</Button>
+									))}
+
+									<TextField
+										size="small"
+										placeholder="Search verification rows…"
+										value={dispatchImportSearch}
+										onChange={(event) => {
+											setDispatchImportSearch(event.target.value);
+											setDispatchImportVisibleCount(250);
+										}}
+										sx={{
+											minWidth: { xs: "100%", md: 280 },
+											ml: { md: "auto" },
+											"& .MuiOutlinedInput-root": {
+												color: "#fff",
+												background: "rgba(255,255,255,.035)",
+												borderRadius: "10px",
+												"& fieldset": { borderColor: "rgba(148,163,184,.15)" },
+											},
+										}}
+									/>
+								</Box>
+
+								<Box
+									sx={{
+										display: "flex",
+										alignItems: "center",
+										gap: 1.2,
+										mb: 1.2,
+										p: 1.2,
+										borderRadius: "11px",
+										background: "rgba(15,23,42,.72)",
+										border: "1px solid rgba(148,163,184,.10)",
+									}}
+								>
+									<Checkbox
+										checked={
+											dispatchImportEligibleRows.length > 0 &&
+											dispatchImportEligibleRows.every((row) =>
+												dispatchImportSelectedSet.has(row.rowNumber)
+											)
+										}
+										indeterminate={
+											selectedCount > 0 && selectedCount < dispatchImportEligibleRows.length
+										}
+										onChange={selectAllDispatchImportMatches}
+										sx={{ color: "#64748b", "&.Mui-checked": { color: "#22d3ee" } }}
+									/>
+									<Box sx={{ flex: 1, color: "#cbd5e1", fontSize: 12.5, fontWeight: 800 }}>
+										{selectedCount} verified row{selectedCount === 1 ? "" : "s"} selected. Applying
+										changes only Status → DISPATCHED, Dispatch Date, Driver, dispatch timestamps,
+										stock, and linked PacketItem status.
+									</Box>
+									<Button
+										disabled={dispatchImportApplying || selectedCount === 0}
+										onClick={applySelectedDispatchImportRows}
+										sx={{
+											height: 38,
+											px: 2.2,
+											borderRadius: "10px",
+											textTransform: "none",
+											fontWeight: 950,
+											color: "#fff",
+											background: "linear-gradient(135deg,#0891b2,#0e7490)",
+											"&.Mui-disabled": {
+												background: "rgba(255,255,255,.07)",
+												color: "rgba(255,255,255,.32)",
+											},
+										}}
+									>
+										{dispatchImportApplying ? "Applying…" : `Dispatch Selected (${selectedCount})`}
+									</Button>
+								</Box>
+
+								<Box
+									sx={{
+										overflow: "auto",
+										maxHeight: "calc(100vh - 350px)",
+										borderRadius: "12px",
+										border: "1px solid rgba(148,163,184,.11)",
+										background: "rgba(2,6,23,.36)",
+									}}
+								>
+									<Box
+										sx={{
+											display: "grid",
+											gridTemplateColumns:
+												"54px 86px minmax(250px,1.25fr) minmax(270px,1.15fr) minmax(190px,.85fr) minmax(180px,.8fr) minmax(260px,1fr)",
+											minWidth: 1230,
+											position: "sticky",
+											top: 0,
+											zIndex: 3,
+											background: "#0f172a",
+											borderBottom: "1px solid rgba(148,163,184,.14)",
+											color: "#94a3b8",
+											fontSize: 10.5,
+											fontWeight: 950,
+											textTransform: "uppercase",
+											letterSpacing: ".05em",
+										}}
+									>
+										{["", "Excel Row", "Excel Identity", "Matched Dispatch Record", "Dispatch Data", "Status Change", "Verification / Action"].map(
+											(label) => (
+												<Box key={label || "select"} sx={{ p: 1.2, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													{label}
+												</Box>
+											)
+										)}
+									</Box>
+
+									{visibleRows.map((row) => {
+										const matched = row?.matchStatus === "MATCHED";
+										const eligible = matched && row?.applyEligible && !row?.applied;
+										const selected = dispatchImportSelectedSet.has(row.rowNumber);
+										const matchColor = row?.applied
+											? "#22d3ee"
+											: matched
+												? "#34d399"
+												: row?.matchStatus === "INVALID"
+													? "#fbbf24"
+													: "#f87171";
+
+										return (
+											<Box
+												key={`${row?.rowNumber}-${row?.zohoItemId || row?.matchStatus || "row"}`}
+												sx={{
+													display: "grid",
+													gridTemplateColumns:
+														"54px 86px minmax(250px,1.25fr) minmax(270px,1.15fr) minmax(190px,.85fr) minmax(180px,.8fr) minmax(260px,1fr)",
+													minWidth: 1230,
+													alignItems: "stretch",
+													borderBottom: "1px solid rgba(148,163,184,.075)",
+													background: row?.applied
+														? "rgba(8,145,178,.07)"
+														: "rgba(15,23,42,.34)",
+												}}
+											>
+												<Box sx={{ p: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+													<Checkbox
+														disabled={!eligible || dispatchImportApplying}
+														checked={eligible && selected}
+														onChange={() => toggleDispatchImportRow(row.rowNumber)}
+														sx={{ color: "#475569", "&.Mui-checked": { color: "#22d3ee" } }}
+													/>
+												</Box>
+
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													<Box sx={{ fontWeight: 950 }}>#{row?.rowNumber || "—"}</Box>
+													<Chip
+														size="small"
+														label={row?.applied ? "APPLIED" : row?.matchStatus || "UNKNOWN"}
+														sx={{
+															mt: 0.7,
+															height: 22,
+															fontSize: 9.5,
+															fontWeight: 950,
+															color: matchColor,
+															background: `${matchColor}18`,
+															border: `1px solid ${matchColor}40`,
+														}}
+													/>
+												</Box>
+
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)", minWidth: 0 }}>
+													<Box sx={{ fontWeight: 900, fontSize: 12.5, lineHeight: 1.35 }}>{row?.itemName || "—"}</Box>
+													<Box sx={{ color: "#93c5fd", fontSize: 11.5, mt: 0.55 }}>
+														PD: {row?.pdNo || "—"} · DWG: {row?.drawingNo || "—"}
+													</Box>
+													<Box sx={{ color: "#64748b", fontSize: 10.5, mt: 0.45 }}>
+														{row?.description || "No description"}
+													</Box>
+												</Box>
+
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)", minWidth: 0 }}>
+													{matched ? (
+														<>
+															<Box sx={{ fontWeight: 900, fontSize: 12.5 }}>{row?.matchedItemName || row?.itemName || "—"}</Box>
+															<Box sx={{ color: "#c4b5fd", fontSize: 11, mt: 0.5, fontFamily: "monospace" }}>
+																{row?.sku || "No SKU"}
+															</Box>
+															<Box sx={{ color: "#64748b", fontSize: 9.5, mt: 0.4, wordBreak: "break-all" }}>
+																ID: {row?.zohoItemId || "—"}
+															</Box>
+															{Number(row?.candidateCount || 0) > 1 && (
+																<Box sx={{ color: "#fcd34d", fontSize: 10, mt: 0.5, fontWeight: 850 }}>
+																	{row.candidateCount} primary matches · unique ID allocated
+																</Box>
+															)}
+														</>
+													) : (
+														<Box sx={{ color: "#64748b", fontSize: 11.5 }}>No database item allocated</Box>
+													)}
+												</Box>
+
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													<Box sx={{ color: "#e2e8f0", fontSize: 11.5, fontWeight: 850 }}>
+														{String(row?.dispatchDateTime || "—").replace("T", " ")}
+													</Box>
+													<Box sx={{ color: "#67e8f9", fontSize: 11.5, mt: 0.5 }}>
+														Driver: {row?.driverName || "—"}
+													</Box>
+													{row?.sourceStatus && (
+														<Box sx={{ color: "#64748b", fontSize: 10, mt: 0.4 }}>
+															XLSX status: {row.sourceStatus}
+														</Box>
+													)}
+												</Box>
+
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													<Box sx={{ color: "#94a3b8", fontSize: 10.5 }}>Current</Box>
+													<Box sx={{ color: "#fcd34d", fontSize: 11.5, fontWeight: 900, mt: 0.25 }}>
+														{row?.currentStatus || "—"}
+													</Box>
+													<Box sx={{ color: "#64748b", fontSize: 10, my: 0.4 }}>↓</Box>
+													<Box sx={{ color: "#34d399", fontSize: 11.5, fontWeight: 950 }}>DISPATCHED</Box>
+												</Box>
+
+												<Box sx={{ p: 1.15, minWidth: 0 }}>
+													<Box sx={{ color: matched ? "#cbd5e1" : matchColor, fontSize: 10.8, lineHeight: 1.4 }}>
+														{row?.matchReason || "—"}
+													</Box>
+													{eligible && (
+														<Button
+															disabled={dispatchImportApplying}
+															onClick={() => applyDispatchImportRows([row])}
+															sx={{
+																mt: 0.9,
+																height: 30,
+																px: 1.4,
+																borderRadius: "8px",
+																textTransform: "none",
+																fontWeight: 900,
+																fontSize: 10.5,
+																color: "#ecfeff",
+																background: "rgba(8,145,178,.22)",
+																border: "1px solid rgba(34,211,238,.22)",
+															}}
+														>
+															Dispatch This Row
+														</Button>
+													)}
+												</Box>
+											</Box>
+										);
+									})}
+
+									{visibleRows.length === 0 && (
+										<Box sx={{ p: 4, color: "#64748b", textAlign: "center" }}>
+											No verification rows match the current filter.
+										</Box>
+									)}
+								</Box>
+
+								<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mt: 1.2 }}>
+									<Box sx={{ color: "#64748b", fontSize: 11 }}>
+										Showing {visibleRows.length} of {filteredDispatchImportRows.length} filtered rows.
+									</Box>
+
+									{hasMoreRows && (
+										<Button
+											onClick={() => setDispatchImportVisibleCount((count) => count + 250)}
+											sx={{ color: "#93c5fd", textTransform: "none", fontWeight: 900 }}
+										>
+											Show 250 More
+										</Button>
+									)}
+								</Box>
+							</>
+						)}
+					</Box>
+				</Box>
+			</Drawer>
+		);
+	};
+
 	return (
 		<div style={page}>
 			<div style={content}>
@@ -17883,6 +19009,26 @@ export default function DispatchedItemsPage() {
 							</span>
 						</Box>
 
+						{(isDispatch || isAdmin) && (
+							<>
+								<input
+									ref={dispatchImportInputRef}
+									type="file"
+									accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+									onChange={handleDispatchImportFile}
+									style={{ display: "none" }}
+								/>
+
+								<Button
+									disabled={dispatchImportLoading || dispatchImportApplying}
+									onClick={() => dispatchImportInputRef.current?.click()}
+									sx={dispatchImportButtonSx}
+								>
+									⬆ Import Dispatch XLSX
+								</Button>
+							</>
+						)}
+
 						<Button
 							disabled={loading}
 							onClick={openDispatchExportModal}
@@ -17919,6 +19065,8 @@ export default function DispatchedItemsPage() {
 					</Box>
 
 				</div>
+
+				{renderDispatchImportDrawer()}
 
 				<Box
 					sx={{

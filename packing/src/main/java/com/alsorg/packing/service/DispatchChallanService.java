@@ -140,9 +140,17 @@ public class DispatchChallanService {
                         items.add(prepared);
                 }
 
+                Set<String> previouslyDispatchedWithoutChallanIds = items
+                                .stream()
+                                .filter(this::isPreviouslyDispatchedWithoutChallan)
+                                .map(DispatchedItem::getZohoItemId)
+                                .filter(id -> id != null && !id.isBlank())
+                                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
                 LocalDateTime dispatchTimeIst = dispatchTime != null
                                 ? dispatchTime
-                                : LocalDateTime.now(INDIA_ZONE);
+                                : resolveDispatchTimeForChallan(
+                                                items);
 
                 String actor = safeActor(username);
 
@@ -171,7 +179,9 @@ public class DispatchChallanService {
                                         vehicle,
                                         dispatchTimeIst,
                                         finalHelperLoaderCount,
-                                        actor);
+                                        actor,
+                                        previouslyDispatchedWithoutChallanIds.contains(
+                                                        item.getZohoItemId()));
                 }
 
                 dispatchedRepo.saveAll(items);
@@ -182,9 +192,16 @@ public class DispatchChallanService {
                  * markDispatchedFromChalaan overwrites time, final saved time stays correct.
                  */
                 for (DispatchedItem item : items) {
-                        dispatchedItemService.markDispatchedFromChalaan(
-                                        item.getZohoItemId(),
-                                        actor);
+                        if (previouslyDispatchedWithoutChallanIds.contains(
+                                        item.getZohoItemId())) {
+                                dispatchedItemService.finalizeChallanForPreviouslyDispatchedItem(
+                                                item.getZohoItemId(),
+                                                actor);
+                        } else {
+                                dispatchedItemService.markDispatchedFromChalaan(
+                                                item.getZohoItemId(),
+                                                actor);
+                        }
                 }
 
                 List<DispatchedItem> finalItems = new ArrayList<>();
@@ -202,7 +219,9 @@ public class DispatchChallanService {
                                         vehicle,
                                         dispatchTimeIst,
                                         finalHelperLoaderCount,
-                                        actor);
+                                        actor,
+                                        previouslyDispatchedWithoutChallanIds.contains(
+                                                        saved.getZohoItemId()));
 
                         saved.setStatus(ItemDispatchStatus.DISPATCHED);
                         saved.setStock(0);
@@ -366,6 +385,15 @@ public class DispatchChallanService {
                 }
 
                 if (status == ItemDispatchStatus.DISPATCHED) {
+                        /*
+                         * Verified XLSX / compatible legacy rows can be dispatched first
+                         * and receive their challan later. Existing challaned rows remain
+                         * protected from duplicate challan generation.
+                         */
+                        if (isPreviouslyDispatchedWithoutChallan(item)) {
+                                return;
+                        }
+
                         throw new RuntimeException(
                                         "Item already dispatched. Challan: "
                                                         + safe(
@@ -513,6 +541,10 @@ public class DispatchChallanService {
                         return item;
                 }
 
+                if (isPreviouslyDispatchedWithoutChallan(item)) {
+                        return item;
+                }
+
                 /*
                  * A valid QR READY item is promoted only during
                  * final creation, never during preview.
@@ -553,7 +585,7 @@ public class DispatchChallanService {
                         LocalDateTime dispatchTimeIst,
                         Integer helperLoaderCount,
                         boolean preview) {
-                                
+
                 ChalaanPdfData data = new ChalaanPdfData();
 
                 data.setPreview(
@@ -567,10 +599,9 @@ public class DispatchChallanService {
                 data.setDesignerName("-");
                 data.setOt("-");
                 data.setDriverName(
-                                driver == null
-                                                ? null
-                                                : cleanNullable(
-                                                                driver.getName()));
+                                resolveChallanDriverName(
+                                                driver,
+                                                items));
 
                 data.setVehicleNumber(
                                 vehicle == null
@@ -614,33 +645,36 @@ public class DispatchChallanService {
                         Vehicle vehicle,
                         LocalDateTime dispatchTimeIst,
                         Integer helperLoaderCount,
-                        String actor) {
+                        String actor,
+                        boolean preserveExistingTransportMetadata) {
                 item.setChalaanNumber(challanNo);
 
                 item.setHelperLoaderCount(
                                 helperLoaderCount);
 
-                item.setDriverId(
-                                driver == null
-                                                ? null
-                                                : driver.getId());
+                if (driver != null) {
+                        item.setDriverId(
+                                        driver.getId());
 
-                item.setDriverName(
-                                driver == null
-                                                ? null
-                                                : cleanNullable(
-                                                                driver.getName()));
+                        item.setDriverName(
+                                        cleanNullable(
+                                                        driver.getName()));
+                } else if (!preserveExistingTransportMetadata) {
+                        item.setDriverId(null);
+                        item.setDriverName(null);
+                }
 
-                item.setVehicleId(
-                                vehicle == null
-                                                ? null
-                                                : vehicle.getId());
+                if (vehicle != null) {
+                        item.setVehicleId(
+                                        vehicle.getId());
 
-                item.setVehicleNumber(
-                                vehicle == null
-                                                ? null
-                                                : cleanNullable(
-                                                                vehicle.getVehicleNumber()));
+                        item.setVehicleNumber(
+                                        cleanNullable(
+                                                        vehicle.getVehicleNumber()));
+                } else if (!preserveExistingTransportMetadata) {
+                        item.setVehicleId(null);
+                        item.setVehicleNumber(null);
+                }
 
                 /*
                  * Main rule:
@@ -706,6 +740,86 @@ public class DispatchChallanService {
                                                 : "1");
 
                 return ci;
+        }
+
+        private boolean isPreviouslyDispatchedWithoutChallan(
+                        DispatchedItem item) {
+
+                if (item == null || item.getStatus() != ItemDispatchStatus.DISPATCHED) {
+                        return false;
+                }
+
+                return isBlank(item.getChalaanNumber());
+        }
+
+        private LocalDateTime resolveDispatchTimeForChallan(
+                        List<DispatchedItem> items) {
+
+                if (items != null && !items.isEmpty()
+                                && items.stream().allMatch(this::isPreviouslyDispatchedWithoutChallan)) {
+
+                        LocalDateTime common = null;
+
+                        for (DispatchedItem item : items) {
+                                LocalDateTime value = item.getDispatchedAt();
+
+                                if (value == null) {
+                                        return LocalDateTime.now(INDIA_ZONE);
+                                }
+
+                                if (common == null) {
+                                        common = value;
+                                } else if (!common.equals(value)) {
+                                        return LocalDateTime.now(INDIA_ZONE);
+                                }
+                        }
+
+                        if (common != null) {
+                                return common;
+                        }
+                }
+
+                return LocalDateTime.now(INDIA_ZONE);
+        }
+
+        private String resolveChallanDriverName(
+                        Driver selectedDriver,
+                        List<DispatchedItem> items) {
+
+                if (selectedDriver != null) {
+                        return cleanNullable(
+                                        selectedDriver.getName());
+                }
+
+                if (items == null || items.isEmpty()) {
+                        return null;
+                }
+
+                String commonName = null;
+
+                for (DispatchedItem item : items) {
+                        if (!isPreviouslyDispatchedWithoutChallan(item)) {
+                                continue;
+                        }
+
+                        String name = cleanNullable(
+                                        item.getDriverName());
+
+                        if (name == null) {
+                                continue;
+                        }
+
+                        if (commonName == null) {
+                                commonName = name;
+                                continue;
+                        }
+
+                        if (!commonName.equalsIgnoreCase(name)) {
+                                return null;
+                        }
+                }
+
+                return commonName;
         }
 
         private void assertPlantAccess(

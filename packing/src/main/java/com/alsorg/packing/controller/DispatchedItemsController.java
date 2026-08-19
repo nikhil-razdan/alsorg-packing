@@ -9,6 +9,10 @@ import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyRequest;
+import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyResponse;
+import com.alsorg.packing.service.DispatchedItemService.DispatchImportRow;
+import com.alsorg.packing.service.DispatchedItemService.DispatchImportVerificationResponse;
 
 import jakarta.validation.Valid;
 
@@ -466,6 +470,55 @@ public class DispatchedItemsController {
                                 user.getUsername());
 
                 return ResponseEntity.ok().build();
+        }
+
+        /*
+         * ============================================================
+         * VERIFIED XLSX DISPATCH IMPORT
+         * ============================================================
+         *
+         * Additive endpoints only. Existing Dispatch transitions, warehouse,
+         * restore, challan, QR and Admin Edit endpoints remain unchanged.
+         */
+
+        @PostMapping(
+                        value = "/import/verify",
+                        consumes = MediaType.APPLICATION_JSON_VALUE,
+                        produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<DispatchImportVerificationResponse> verifyDispatchImport(
+                        @RequestBody List<DispatchImportRow> rows,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.isDispatch(user)
+                                && !currentUserService.isAdmin(user)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                }
+
+                return ResponseEntity.ok(
+                                dispatchedItemService.verifyDispatchImport(rows));
+        }
+
+        @PostMapping(
+                        value = "/import/apply",
+                        consumes = MediaType.APPLICATION_JSON_VALUE,
+                        produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<DispatchImportApplyResponse> applyDispatchImport(
+                        @RequestBody DispatchImportApplyRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                if (!currentUserService.isDispatch(user)
+                                && !currentUserService.isAdmin(user)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+                }
+
+                return ResponseEntity.ok(
+                                dispatchedItemService.applyVerifiedDispatchImport(
+                                                request,
+                                                user.getUsername()));
         }
 
         /* ===================== DISPATCH STATUS ===================== */

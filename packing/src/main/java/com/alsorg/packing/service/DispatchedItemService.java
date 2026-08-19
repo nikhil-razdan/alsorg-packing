@@ -1300,6 +1300,703 @@ public class DispatchedItemService {
 
         /*
          * ============================================================
+         * VERIFIED XLSX DISPATCH IMPORT
+         * ============================================================
+         *
+         * This is intentionally isolated from updateDispatchStatus().
+         * The normal live workflow keeps all of its existing transition rules.
+         * XLSX import is a controlled reconciliation path for historical/physical
+         * dispatch data and is therefore allowed to move a verified Dispatch-page
+         * row from ANY current status to DISPATCHED.
+         *
+         * Matching is authoritative on:
+         *   Item Name + PD No + DWG No
+         *
+         * Description and Client are used only as duplicate tie-breakers. Every
+         * database row can be allocated only once per verification request, which
+         * prevents repeated Excel lines from dispatching the same packet twice.
+         */
+
+        @Transactional
+        public DispatchImportVerificationResponse verifyDispatchImport(
+                        List<DispatchImportRow> importRows) {
+
+                if (importRows == null || importRows.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "No Excel rows were supplied for verification");
+                }
+
+                if (importRows.size() > 5000) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "A maximum of 5000 Excel rows can be verified at one time");
+                }
+
+                List<DispatchedItem> allDispatchItems = dispatchedRepo.findAll();
+
+                Map<String, List<DispatchedItem>> candidatesByKey = new LinkedHashMap<>();
+
+                for (DispatchedItem item : allDispatchItems) {
+                        if (item == null || item.getZohoItemId() == null) {
+                                continue;
+                        }
+
+                        String key = buildDispatchImportKey(
+                                        item.getName(),
+                                        item.getPdNo(),
+                                        item.getDrawingNo());
+
+                        if (key == null) {
+                                continue;
+                        }
+
+                        candidatesByKey
+                                        .computeIfAbsent(key, ignored -> new ArrayList<>())
+                                        .add(item);
+                }
+
+                /* Stable allocation keeps verification repeatable. */
+                for (List<DispatchedItem> candidates : candidatesByKey.values()) {
+                        candidates.sort((left, right) -> safeDispatchImportId(left)
+                                        .compareToIgnoreCase(safeDispatchImportId(right)));
+                }
+
+                Set<String> allocatedItemIds = new LinkedHashSet<>();
+                List<DispatchImportVerificationRow> resultRows = new ArrayList<>();
+
+                int matched = 0;
+                int unmatched = 0;
+                int invalid = 0;
+                int duplicateAllocations = 0;
+
+                for (int index = 0; index < importRows.size(); index++) {
+                        DispatchImportRow row = importRows.get(index);
+                        Integer rowNumber = row != null && row.rowNumber() != null
+                                        ? row.rowNumber()
+                                        : index + 2;
+
+                        if (row == null) {
+                                invalid++;
+                                resultRows.add(invalidDispatchImportRow(
+                                                rowNumber,
+                                                null,
+                                                "Excel row is empty"));
+                                continue;
+                        }
+
+                        String key = buildDispatchImportKey(
+                                        row.itemName(),
+                                        row.pdNo(),
+                                        row.drawingNo());
+
+                        if (key == null) {
+                                invalid++;
+                                resultRows.add(invalidDispatchImportRow(
+                                                rowNumber,
+                                                row,
+                                                "Item Name, PD No and DWG No are required"));
+                                continue;
+                        }
+
+                        LocalDateTime dispatchDateTime = tryParseDispatchImportDateTime(
+                                        row.dispatchDateTime());
+
+                        if (dispatchDateTime == null) {
+                                invalid++;
+                                resultRows.add(invalidDispatchImportRow(
+                                                rowNumber,
+                                                row,
+                                                "Dispatch Date is missing or invalid"));
+                                continue;
+                        }
+
+                        List<DispatchedItem> allCandidates = candidatesByKey.getOrDefault(
+                                        key,
+                                        List.of());
+
+                        List<DispatchedItem> availableCandidates = allCandidates
+                                        .stream()
+                                        .filter(candidate -> !allocatedItemIds.contains(
+                                                        candidate.getZohoItemId()))
+                                        .collect(Collectors.toCollection(ArrayList::new));
+
+                        if (availableCandidates.isEmpty()) {
+                                unmatched++;
+
+                                String reason = allCandidates.isEmpty()
+                                                ? "No Dispatch-page item matched Item Name + PD No + DWG No"
+                                                : "Matching database items exist, but all were already allocated to earlier Excel rows";
+
+                                resultRows.add(new DispatchImportVerificationRow(
+                                                rowNumber,
+                                                "UNMATCHED",
+                                                reason,
+                                                row.itemName(),
+                                                row.pdNo(),
+                                                row.drawingNo(),
+                                                row.description(),
+                                                row.clientName(),
+                                                row.sourceStatus(),
+                                                dispatchDateTime.toString(),
+                                                cleanDriverName(row.driverName()),
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                null,
+                                                allCandidates.size(),
+                                                0,
+                                                false));
+                                continue;
+                        }
+
+                        availableCandidates.sort((left, right) -> {
+                                int rightScore = scoreDispatchImportCandidate(right, row);
+                                int leftScore = scoreDispatchImportCandidate(left, row);
+
+                                int scoreCompare = Integer.compare(rightScore, leftScore);
+
+                                if (scoreCompare != 0) {
+                                        return scoreCompare;
+                                }
+
+                                return safeDispatchImportId(left)
+                                                .compareToIgnoreCase(safeDispatchImportId(right));
+                        });
+
+                        DispatchedItem selected = availableCandidates.get(0);
+                        allocatedItemIds.add(selected.getZohoItemId());
+                        matched++;
+
+                        if (allCandidates.size() > 1) {
+                                duplicateAllocations++;
+                        }
+
+                        String reason = allCandidates.size() > 1
+                                        ? "Verified Item + PD + DWG; uniquely allocated from "
+                                                        + allCandidates.size()
+                                                        + " matching database rows (Description/Client used as tie-breakers)"
+                                        : "Verified Item Name + PD No + DWG No";
+
+                        resultRows.add(new DispatchImportVerificationRow(
+                                        rowNumber,
+                                        "MATCHED",
+                                        reason,
+                                        row.itemName(),
+                                        row.pdNo(),
+                                        row.drawingNo(),
+                                        row.description(),
+                                        row.clientName(),
+                                        row.sourceStatus(),
+                                        dispatchDateTime.toString(),
+                                        cleanDriverName(row.driverName()),
+                                        selected.getZohoItemId(),
+                                        selected.getName(),
+                                        selected.getSku(),
+                                        selected.getStatus() == null
+                                                        ? null
+                                                        : selected.getStatus().name(),
+                                        selected.getDriverName(),
+                                        selected.getDispatchedAt() == null
+                                                        ? null
+                                                        : selected.getDispatchedAt().toString(),
+                                        selected.getPlantCode(),
+                                        firstNonBlank(
+                                                        selected.getCurrentLocationCode(),
+                                                        selected.getLocation()),
+                                        allCandidates.size(),
+                                        availableCandidates.size(),
+                                        true));
+                }
+
+                return new DispatchImportVerificationResponse(
+                                importRows.size(),
+                                matched,
+                                unmatched,
+                                invalid,
+                                duplicateAllocations,
+                                resultRows);
+        }
+
+        @Transactional
+        public DispatchImportApplyResponse applyVerifiedDispatchImport(
+                        DispatchImportApplyRequest request,
+                        String username) {
+
+                if (request == null || request.rows() == null || request.rows().isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "No verified Excel rows were selected for dispatch");
+                }
+
+                if (request.rows().size() > 5000) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "A maximum of 5000 Excel rows can be applied at one time");
+                }
+
+                String actor = cleanNullable(username);
+                actor = actor == null ? "SYSTEM" : actor;
+
+                LinkedHashMap<String, DispatchImportApplyRow> requestedById = new LinkedHashMap<>();
+
+                for (DispatchImportApplyRow row : request.rows()) {
+                        if (row == null || cleanNullable(row.zohoItemId()) == null) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "A verified Dispatch item id is missing");
+                        }
+
+                        String itemId = row.zohoItemId().trim();
+
+                        if (requestedById.putIfAbsent(itemId, row) != null) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "The same Dispatch item was selected more than once: " + itemId);
+                        }
+                }
+
+                List<DispatchedItem> items = dispatchedRepo.findAllById(requestedById.keySet());
+
+                if (items.size() != requestedById.size()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "One or more verified Dispatch items no longer exist");
+                }
+
+                Map<String, DispatchedItem> itemsById = new LinkedHashMap<>();
+
+                for (DispatchedItem item : items) {
+                        itemsById.put(item.getZohoItemId(), item);
+                }
+
+                /* Validate every selected row before changing anything. */
+                Map<String, LocalDateTime> dispatchTimesById = new LinkedHashMap<>();
+
+                for (Map.Entry<String, DispatchImportApplyRow> entry : requestedById.entrySet()) {
+                        String itemId = entry.getKey();
+                        DispatchImportApplyRow row = entry.getValue();
+                        DispatchedItem item = itemsById.get(itemId);
+
+                        String expectedKey = buildDispatchImportKey(
+                                        row.itemName(),
+                                        row.pdNo(),
+                                        row.drawingNo());
+
+                        String actualKey = buildDispatchImportKey(
+                                        item.getName(),
+                                        item.getPdNo(),
+                                        item.getDrawingNo());
+
+                        if (expectedKey == null || !Objects.equals(expectedKey, actualKey)) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.CONFLICT,
+                                                "Verified identity changed before apply for Excel row "
+                                                                + safe(row.rowNumber())
+                                                                + ". Please verify the file again.");
+                        }
+
+                        LocalDateTime dispatchDateTime = tryParseDispatchImportDateTime(
+                                        row.dispatchDateTime());
+
+                        if (dispatchDateTime == null) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Invalid Dispatch Date for Excel row " + safe(row.rowNumber()));
+                        }
+
+                        dispatchTimesById.put(itemId, dispatchDateTime);
+                }
+
+                Map<String, Driver> driversByName = new LinkedHashMap<>();
+
+                for (Driver driver : driverRepository.findAll()) {
+                        if (driver == null || driver.getId() == null) {
+                                continue;
+                        }
+
+                        String key = normalizeDispatchImportDriver(driver.getName());
+
+                        if (!key.isBlank()) {
+                                driversByName.putIfAbsent(key, driver);
+                        }
+                }
+
+                Set<UUID> packetItemIds = items.stream()
+                                .map(DispatchedItem::getPacketItemId)
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+                Map<UUID, PacketItem> packetItemsById = new LinkedHashMap<>();
+
+                if (!packetItemIds.isEmpty()) {
+                        packetItemRepo.findAllById(packetItemIds)
+                                        .forEach(packetItem -> packetItemsById.put(
+                                                        packetItem.getId(),
+                                                        packetItem));
+                }
+
+                List<DispatchImportAppliedRow> appliedRows = new ArrayList<>();
+
+                for (Map.Entry<String, DispatchImportApplyRow> entry : requestedById.entrySet()) {
+                        String itemId = entry.getKey();
+                        DispatchImportApplyRow importRow = entry.getValue();
+                        DispatchedItem item = itemsById.get(itemId);
+
+                        ItemDispatchStatus previousStatus = item.getStatus();
+                        LocalDateTime dispatchDateTime = dispatchTimesById.get(itemId);
+
+                        String requestedDriverName = cleanDriverName(importRow.driverName());
+                        Driver matchedDriver = requestedDriverName == null
+                                        ? null
+                                        : driversByName.get(normalizeDispatchImportDriver(requestedDriverName));
+
+                        item.setStatus(ItemDispatchStatus.DISPATCHED);
+                        item.setStock(0);
+                        item.setDispatchedAt(dispatchDateTime);
+                        item.setTripStartedAt(dispatchDateTime);
+                        item.setTripEndedAt(null);
+                        item.setDeliveredAt(null);
+                        item.setDispatchedBy(actor);
+
+                        if (matchedDriver != null) {
+                                item.setDriverId(matchedDriver.getId());
+                                item.setDriverName(cleanDriverName(matchedDriver.getName()));
+                        } else {
+                                item.setDriverId(null);
+                                item.setDriverName(requestedDriverName);
+                        }
+
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
+
+                        if (packetItem != null) {
+                                /*
+                                 * Keep the underlying packet/item lifecycle consistent with
+                                 * the Dispatch register. No other packet data is edited.
+                                 */
+                                packetItem.setStatus("DISPATCHED");
+                        }
+
+                        auditLogService.log(
+                                        itemId,
+                                        "Dispatched via verified XLSX import | Excel row: "
+                                                        + safe(importRow.rowNumber())
+                                                        + " | Dispatch Date: "
+                                                        + dispatchDateTime
+                                                        + " | Driver: "
+                                                        + safe(item.getDriverName()),
+                                        actor,
+                                        "DISPATCH");
+
+                        activityLogService.log(
+                                        itemId,
+                                        "XLSX IMPORT → DISPATCHED",
+                                        actor,
+                                        "DISPATCH",
+                                        previousStatus == null
+                                                        ? null
+                                                        : previousStatus.name(),
+                                        ItemDispatchStatus.DISPATCHED.name(),
+                                        item.getChalaanNumber());
+
+                        appliedRows.add(new DispatchImportAppliedRow(
+                                        importRow.rowNumber(),
+                                        itemId,
+                                        item.getName(),
+                                        previousStatus == null
+                                                        ? null
+                                                        : previousStatus.name(),
+                                        ItemDispatchStatus.DISPATCHED.name(),
+                                        dispatchDateTime.toString(),
+                                        item.getDriverName(),
+                                        item.getChalaanNumber()));
+                }
+
+                dispatchedRepo.saveAll(items);
+
+                if (!packetItemsById.isEmpty()) {
+                        packetItemRepo.saveAll(packetItemsById.values());
+                }
+
+                return new DispatchImportApplyResponse(
+                                request.rows().size(),
+                                appliedRows.size(),
+                                appliedRows);
+        }
+
+        private DispatchImportVerificationRow invalidDispatchImportRow(
+                        Integer rowNumber,
+                        DispatchImportRow row,
+                        String reason) {
+
+                return new DispatchImportVerificationRow(
+                                rowNumber,
+                                "INVALID",
+                                reason,
+                                row == null ? null : row.itemName(),
+                                row == null ? null : row.pdNo(),
+                                row == null ? null : row.drawingNo(),
+                                row == null ? null : row.description(),
+                                row == null ? null : row.clientName(),
+                                row == null ? null : row.sourceStatus(),
+                                row == null ? null : row.dispatchDateTime(),
+                                row == null ? null : cleanDriverName(row.driverName()),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                0,
+                                0,
+                                false);
+        }
+
+        private int scoreDispatchImportCandidate(
+                        DispatchedItem candidate,
+                        DispatchImportRow row) {
+
+                int score = 0;
+
+                String rowDescription = normalizeDispatchImportText(row.description());
+                String candidateDescription = normalizeDispatchImportText(candidate.getDescription());
+
+                if (!rowDescription.isBlank() && rowDescription.equals(candidateDescription)) {
+                        score += 8;
+                } else if (!rowDescription.isBlank()
+                                && !candidateDescription.isBlank()
+                                && (rowDescription.contains(candidateDescription)
+                                                || candidateDescription.contains(rowDescription))) {
+                        score += 3;
+                }
+
+                String rowClient = normalizeDispatchImportText(row.clientName());
+                String candidateClient = normalizeDispatchImportText(candidate.getClientName());
+
+                if (!rowClient.isBlank() && rowClient.equals(candidateClient)) {
+                        score += 4;
+                }
+
+                return score;
+        }
+
+        private String buildDispatchImportKey(
+                        String itemName,
+                        String pdNo,
+                        String drawingNo) {
+
+                String item = normalizeDispatchImportName(itemName);
+                String pd = normalizeDispatchImportIdentifier(pdNo);
+                String drawing = normalizeDispatchImportIdentifier(drawingNo);
+
+                if (item.isBlank() || pd.isBlank() || drawing.isBlank()) {
+                        return null;
+                }
+
+                return item + "||" + pd + "||" + drawing;
+        }
+
+        private String normalizeDispatchImportName(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                return value
+                                .trim()
+                                .toLowerCase(Locale.ROOT)
+                                .replaceAll("[^\\p{L}\\p{N}]", "");
+        }
+
+        private String normalizeDispatchImportText(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                return value
+                                .trim()
+                                .toLowerCase(Locale.ROOT)
+                                .replace('–', '-')
+                                .replace('—', '-')
+                                .replaceAll("\\s+", " ")
+                                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                                .trim();
+        }
+
+        private String normalizeDispatchImportIdentifier(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                String upper = value
+                                .trim()
+                                .toUpperCase(Locale.ROOT)
+                                .replace('–', '-')
+                                .replace('—', '-');
+
+                String compact = upper.replaceAll("[^A-Z0-9]", "");
+
+                if (compact.isBlank()) {
+                        return "";
+                }
+
+                if (Set.of("NA", "NIL", "NOTAPPLICABLE").contains(compact)) {
+                        return "NA";
+                }
+
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                                .compile("[A-Z]+|\\d+")
+                                .matcher(upper);
+
+                List<String> tokens = new ArrayList<>();
+
+                while (matcher.find()) {
+                        String token = matcher.group();
+
+                        if (token.matches("\\d+")) {
+                                token = token.replaceFirst("^0+(?!$)", "");
+                        }
+
+                        tokens.add(token);
+                }
+
+                return tokens.isEmpty()
+                                ? compact
+                                : String.join("|", tokens);
+        }
+
+        private String normalizeDispatchImportDriver(
+                        String value) {
+
+                String clean = cleanDriverName(value);
+
+                return clean == null
+                                ? ""
+                                : clean.toLowerCase(Locale.ROOT);
+        }
+
+        private LocalDateTime tryParseDispatchImportDateTime(
+                        String value) {
+
+                String clean = cleanNullable(value);
+
+                if (clean == null) {
+                        return null;
+                }
+
+                try {
+                        return LocalDateTime.parse(clean);
+                } catch (DateTimeParseException ignored) {
+                        /* try date-only below */
+                }
+
+                try {
+                        return LocalDate.parse(clean).atStartOfDay();
+                } catch (DateTimeParseException ignored) {
+                        return null;
+                }
+        }
+
+        private String safeDispatchImportId(
+                        DispatchedItem item) {
+
+                return item == null || item.getZohoItemId() == null
+                                ? ""
+                                : item.getZohoItemId().trim();
+        }
+
+        public record DispatchImportRow(
+                        Integer rowNumber,
+                        String itemName,
+                        String pdNo,
+                        String drawingNo,
+                        String description,
+                        String clientName,
+                        String sourceStatus,
+                        String dispatchDateTime,
+                        String driverName) {
+        }
+
+        public record DispatchImportVerificationRow(
+                        Integer rowNumber,
+                        String matchStatus,
+                        String matchReason,
+                        String itemName,
+                        String pdNo,
+                        String drawingNo,
+                        String description,
+                        String clientName,
+                        String sourceStatus,
+                        String dispatchDateTime,
+                        String driverName,
+                        String zohoItemId,
+                        String matchedItemName,
+                        String sku,
+                        String currentStatus,
+                        String currentDriverName,
+                        String currentDispatchDateTime,
+                        String plantCode,
+                        String currentLocation,
+                        int candidateCount,
+                        int availableCandidateCount,
+                        boolean applyEligible) {
+        }
+
+        public record DispatchImportVerificationResponse(
+                        int totalRows,
+                        int matchedCount,
+                        int unmatchedCount,
+                        int invalidCount,
+                        int duplicateAllocationCount,
+                        List<DispatchImportVerificationRow> rows) {
+        }
+
+        public record DispatchImportApplyRow(
+                        Integer rowNumber,
+                        String zohoItemId,
+                        String itemName,
+                        String pdNo,
+                        String drawingNo,
+                        String dispatchDateTime,
+                        String driverName) {
+        }
+
+        public record DispatchImportApplyRequest(
+                        List<DispatchImportApplyRow> rows) {
+        }
+
+        public record DispatchImportAppliedRow(
+                        Integer rowNumber,
+                        String zohoItemId,
+                        String itemName,
+                        String previousStatus,
+                        String currentStatus,
+                        String dispatchDateTime,
+                        String driverName,
+                        String challanNumber) {
+        }
+
+        public record DispatchImportApplyResponse(
+                        int requestedCount,
+                        int updatedCount,
+                        List<DispatchImportAppliedRow> rows) {
+        }
+
+        /*
+         * ============================================================
          * WAREHOUSE
          * ============================================================
          */
@@ -1857,6 +2554,68 @@ public class DispatchedItemService {
                                                 : previousStatus.name(),
                                 "DISPATCHED",
                                 null);
+        }
+
+        /**
+         * Completes challan attachment for a row that was already DISPATCHED by
+         * the verified XLSX reconciliation path (or a compatible legacy import).
+         *
+         * No status transition is performed here; the item stays DISPATCHED and
+         * its existing imported dispatch timestamp/driver can be retained by the
+         * caller when no replacement values were supplied.
+         */
+        public void finalizeChallanForPreviouslyDispatchedItem(
+                        String zohoItemId,
+                        String username) {
+
+                DispatchedItem item = dispatchedRepo
+                                .findById(zohoItemId)
+                                .orElseThrow(() -> new IllegalStateException(
+                                                "Item not found"));
+
+                if (item.getStatus() != ItemDispatchStatus.DISPATCHED) {
+                        throw new IllegalStateException(
+                                        "Only an already DISPATCHED item can attach a later challan");
+                }
+
+                if (cleanNullable(item.getChalaanNumber()) == null) {
+                        throw new IllegalStateException(
+                                        "Challan number was not assigned before finalization");
+                }
+
+                LocalDateTime nowIst = LocalDateTime.now(APP_ZONE);
+
+                if (item.getDispatchedAt() == null) {
+                        item.setDispatchedAt(nowIst);
+                }
+
+                if (item.getTripStartedAt() == null) {
+                        item.setTripStartedAt(item.getDispatchedAt());
+                }
+
+                item.setStock(0);
+                item.setDispatchedBy(
+                                cleanNullable(username) == null
+                                                ? "SYSTEM"
+                                                : username.trim());
+
+                dispatchedRepo.save(item);
+
+                auditLogService.log(
+                                zohoItemId,
+                                "Challan attached to previously dispatched item | Challan: "
+                                                + item.getChalaanNumber(),
+                                username,
+                                "DISPATCH");
+
+                activityLogService.log(
+                                zohoItemId,
+                                "CHALLAN ATTACHED",
+                                username,
+                                "DISPATCH",
+                                ItemDispatchStatus.DISPATCHED.name(),
+                                ItemDispatchStatus.DISPATCHED.name(),
+                                item.getChalaanNumber());
         }
 
         /*
