@@ -738,6 +738,199 @@ public class AdminDeletionService {
                 }
         }
 
+
+        /*
+         * =====================================================
+         * PREVIEW / DELETE ONE DISPATCH ITEM
+         * =====================================================
+         *
+         * Dispatch deletion is intentionally separate from Warehouse deletion.
+         * Warehouse deletion is restricted to Warehouse-visible statuses, while
+         * an ADMIN may permanently delete ANY row visible in the Dispatch page.
+         *
+         * The deletion graph still uses the same central cascade engine, so a
+         * linked PacketItem is removed from Packet/Sticker/Dispatch/Logistics
+         * data and empty parent Packet/Master records are reconciled. Standalone
+         * Excel-import Dispatch rows are supported as well.
+         */
+
+        @Transactional(readOnly = true)
+        public AdminDeletePreviewResponse previewDispatchItem(
+                        String itemId,
+                        User user) {
+                assertAdmin(user);
+
+                DispatchedItem item = requireDispatchDeleteItem(itemId);
+
+                DeletionContext context = buildDispatchDeletionContext(
+                                List.of(item));
+
+                Map<String, Long> affectedRows = buildAffectedRowPreview(
+                                context,
+                                false);
+
+                String requiredConfirmation = "DELETE DISPATCH " + item.getZohoItemId();
+
+                boolean deletesMaster = affectedRows.getOrDefault(
+                                "masterItems",
+                                0L) > 0;
+
+                boolean deletesInternalPacket = affectedRows.getOrDefault(
+                                "internalPackets",
+                                0L) > 0;
+
+                return new AdminDeletePreviewResponse(
+                                "DISPATCH_ITEM",
+                                item.getZohoItemId(),
+                                buildDispatchDisplayName(item),
+                                safe(item.getDescription()),
+                                safe(item.getPdNo()),
+                                safe(item.getDrawingNo()),
+                                firstNonBlank(
+                                                item.getSku(),
+                                                "-"),
+                                item.getStatus() == null ? "" : item.getStatus().name(),
+                                firstNonBlank(
+                                                item.getCurrentLocationCode(),
+                                                item.getWarehouseCode(),
+                                                item.getLocation(),
+                                                "-"),
+                                requiredConfirmation,
+                                affectedRows,
+                                deletesMaster,
+                                deletesInternalPacket,
+                                buildDispatchWarning(context));
+        }
+
+        @Transactional
+        public AdminDeleteResultResponse deleteDispatchItem(
+                        String itemId,
+                        AdminDeleteRequest request,
+                        User user) {
+                assertAdmin(user);
+
+                DispatchedItem item = requireDispatchDeleteItem(itemId);
+
+                String requiredConfirmation = "DELETE DISPATCH " + item.getZohoItemId();
+
+                validateDeleteRequest(
+                                request,
+                                requiredConfirmation);
+
+                DeletionContext context = buildDispatchDeletionContext(
+                                List.of(item));
+
+                String displayName = buildDispatchDisplayName(item);
+
+                try {
+                        return executeDeletion(
+                                        context,
+                                        "DISPATCH_ITEM",
+                                        item.getZohoItemId(),
+                                        displayName,
+                                        cleanRequiredReason(request.reason()),
+                                        safeActor(user.getUsername()),
+                                        buildDispatchSnapshotJson(
+                                                        List.of(item),
+                                                        context,
+                                                        "SINGLE"),
+                                        null);
+                } catch (DataIntegrityViolationException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "Dispatch deletion was blocked because another linked database record still exists",
+                                        exception);
+                }
+        }
+
+        /*
+         * =====================================================
+         * PREVIEW / DELETE DISPATCH ITEMS IN BULK
+         * =====================================================
+         */
+
+        @Transactional(readOnly = true)
+        public AdminDeletePreviewResponse previewDispatchItemsBulk(
+                        List<String> itemIds,
+                        User user) {
+                assertAdmin(user);
+
+                List<DispatchedItem> items = requireDispatchDeleteItems(itemIds);
+
+                DeletionContext context = buildDispatchDeletionContext(items);
+
+                Map<String, Long> affectedRows = buildAffectedRowPreview(
+                                context,
+                                false);
+
+                String requiredConfirmation = "DELETE DISPATCH BULK " + items.size();
+
+                return new AdminDeletePreviewResponse(
+                                "DISPATCH_BULK",
+                                "BULK",
+                                items.size() + " Dispatch Items",
+                                "Permanent bulk deletion of the selected Dispatch rows and all linked PackFlow records.",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                "MULTIPLE",
+                                requiredConfirmation,
+                                affectedRows,
+                                affectedRows.getOrDefault("masterItems", 0L) > 0,
+                                affectedRows.getOrDefault("internalPackets", 0L) > 0,
+                                buildDispatchWarning(context));
+        }
+
+        @Transactional
+        public AdminDeleteResultResponse deleteDispatchItemsBulk(
+                        AdminWarehouseBulkDeleteRequest request,
+                        User user) {
+                assertAdmin(user);
+
+                if (request == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch bulk deletion request is missing");
+                }
+
+                List<DispatchedItem> items = requireDispatchDeleteItems(
+                                request.itemIds());
+
+                String requiredConfirmation = "DELETE DISPATCH BULK " + items.size();
+
+                validateDeleteRequest(
+                                new AdminDeleteRequest(
+                                                request.confirmationText(),
+                                                request.reason()),
+                                requiredConfirmation);
+
+                DeletionContext context = buildDispatchDeletionContext(items);
+
+                String auditTargetId = "BULK-" + UUID.randomUUID();
+                String displayName = items.size() + " Dispatch Items";
+
+                try {
+                        return executeDeletion(
+                                        context,
+                                        "DISPATCH_BULK",
+                                        auditTargetId,
+                                        displayName,
+                                        cleanRequiredReason(request.reason()),
+                                        safeActor(user.getUsername()),
+                                        buildDispatchSnapshotJson(
+                                                        items,
+                                                        context,
+                                                        "BULK"),
+                                        null);
+                } catch (DataIntegrityViolationException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "Bulk Dispatch deletion was blocked because another linked database record still exists",
+                                        exception);
+                }
+        }
+
         /*
          * =====================================================
          * DELETION HISTORY
@@ -923,6 +1116,10 @@ public class AdminDeletionService {
 
                 if ("MASTER_ITEM".equals(targetType)) {
                         message = "Master item and all linked packets were permanently deleted";
+                } else if ("DISPATCH_BULK".equals(targetType)) {
+                        message = "Selected Dispatch items and all linked operational records were permanently deleted";
+                } else if ("DISPATCH_ITEM".equals(targetType)) {
+                        message = "Dispatch item and all linked operational records were permanently deleted";
                 } else if ("WAREHOUSE_BULK".equals(targetType)) {
                         message = "Selected Warehouse items and all linked operational records were permanently deleted";
                 } else if ("WAREHOUSE_ITEM".equals(targetType)) {
@@ -1253,6 +1450,155 @@ public class AdminDeletionService {
                                                 lookupIds);
 
                 LinkedHashMap<String, DispatchedItem> allDispatchRows = new LinkedHashMap<>(requestedRows);
+
+                for (DispatchedItem row : relatedDispatchRows) {
+                        if (row == null || !hasText(row.getZohoItemId())) {
+                                continue;
+                        }
+
+                        allDispatchRows.put(row.getZohoItemId(), row);
+                        lookupIds.add(row.getZohoItemId());
+
+                        if (row.getPacketId() != null) {
+                                packetIds.add(row.getPacketId());
+                        }
+
+                        if (row.getLinkedMasterItemId() != null) {
+                                masterIds.add(row.getLinkedMasterItemId());
+                        }
+                }
+
+                List<LogisticsTripItem> tripItems = logisticsTripItemRepository
+                                .findForAdminDeletion(
+                                                packetItemIdsForRepository(packetItemIds),
+                                                lookupIds);
+
+                Set<UUID> tripIds = new LinkedHashSet<>();
+
+                for (LogisticsTripItem tripItem : tripItems) {
+                        if (tripItem.getTrip() != null && tripItem.getTrip().getId() != null) {
+                                tripIds.add(tripItem.getTrip().getId());
+                        }
+                }
+
+                for (DispatchedItem row : allDispatchRows.values()) {
+                        if (row.getLogisticsTripId() != null) {
+                                tripIds.add(row.getLogisticsTripId());
+                        }
+                }
+
+                return new DeletionContext(
+                                List.copyOf(packetItems),
+                                packetItemIds,
+                                packetIds,
+                                masterIds,
+                                lookupIds,
+                                List.copyOf(hardwarePacketLines),
+                                List.copyOf(allDispatchRows.values()),
+                                List.copyOf(tripItems),
+                                tripIds);
+        }
+
+
+        /*
+         * =====================================================
+         * BUILD DISPATCH DELETION GRAPH
+         * =====================================================
+         *
+         * Unlike buildWarehouseDeletionContext(), this deliberately has no
+         * status restriction: every DispatchedItem shown on the Dispatch page
+         * is an eligible ADMIN deletion target.
+         */
+        private DeletionContext buildDispatchDeletionContext(
+                        List<DispatchedItem> dispatchItems) {
+                if (dispatchItems == null || dispatchItems.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "No Dispatch items found for deletion");
+                }
+
+                LinkedHashMap<String, DispatchedItem> requestedRows = new LinkedHashMap<>();
+
+                Set<UUID> linkedPacketItemIds = new LinkedHashSet<>();
+                Set<UUID> packetIds = new LinkedHashSet<>();
+                Set<UUID> masterIds = new LinkedHashSet<>();
+                Set<String> lookupIds = new LinkedHashSet<>();
+
+                for (DispatchedItem item : dispatchItems) {
+                        if (item == null || !hasText(item.getZohoItemId())) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Dispatch item is missing a valid ID");
+                        }
+
+                        String dispatchItemId = item.getZohoItemId().trim();
+
+                        requestedRows.put(dispatchItemId, item);
+                        lookupIds.add(dispatchItemId);
+
+                        if (item.getPacketItemId() != null) {
+                                linkedPacketItemIds.add(item.getPacketItemId());
+                        }
+
+                        if (item.getLinkedPacketItemId() != null) {
+                                linkedPacketItemIds.add(item.getLinkedPacketItemId());
+                        }
+
+                        if (item.getPacketId() != null) {
+                                packetIds.add(item.getPacketId());
+                        }
+
+                        if (item.getLinkedMasterItemId() != null) {
+                                masterIds.add(item.getLinkedMasterItemId());
+                        }
+                }
+
+                List<PacketItem> packetItems = linkedPacketItemIds.isEmpty()
+                                ? List.of()
+                                : packetItemRepository.findAllById(linkedPacketItemIds);
+
+                Set<UUID> packetItemIds = new LinkedHashSet<>(
+                                linkedPacketItemIds);
+
+                packetItems.stream()
+                                .map(PacketItem::getId)
+                                .filter(Objects::nonNull)
+                                .forEach(packetItemIds::add);
+
+                List<HardwarePacketLine> hardwarePacketLines = packetItemIds.isEmpty()
+                                ? List.of()
+                                : hardwarePacketLineRepository.findForAdminDeletion(packetItemIds);
+
+                for (PacketItem item : packetItems) {
+                        if (item.getId() != null) {
+                                lookupIds.add(item.getId().toString());
+                        }
+
+                        if (hasText(item.getZohoItemId())) {
+                                lookupIds.add(item.getZohoItemId().trim());
+                        }
+
+                        if (item.getPacket() != null && item.getPacket().getId() != null) {
+                                packetIds.add(item.getPacket().getId());
+                        }
+
+                        if (item.getMasterItem() != null && item.getMasterItem().getId() != null) {
+                                masterIds.add(item.getMasterItem().getId());
+                        }
+                }
+
+                /*
+                 * When the selected Dispatch row belongs to a PacketItem, remove
+                 * every operational Dispatch row that points to that same packet.
+                 * Otherwise a duplicate/legacy row could survive in stats.
+                 */
+                List<DispatchedItem> relatedDispatchRows = dispatchedItemRepository
+                                .findForAdminDeletion(
+                                                packetItemIdsForRepository(packetItemIds),
+                                                lookupIds);
+
+                LinkedHashMap<String, DispatchedItem> allDispatchRows = new LinkedHashMap<>(
+                                requestedRows);
 
                 for (DispatchedItem row : relatedDispatchRows) {
                         if (row == null || !hasText(row.getZohoItemId())) {
@@ -1917,6 +2263,185 @@ public class AdminDeletionService {
                 }
 
                 return result;
+        }
+
+
+        private DispatchedItem requireDispatchDeleteItem(
+                        String rawItemId) {
+                String itemId = clean(rawItemId);
+
+                if (itemId == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch item ID is required");
+                }
+
+                DispatchedItem item = dispatchedItemRepository
+                                .findById(itemId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Dispatch item not found"));
+
+                if (!hasText(item.getZohoItemId())) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch item has no valid system ID");
+                }
+
+                return item;
+        }
+
+        private List<DispatchedItem> requireDispatchDeleteItems(
+                        List<String> rawItemIds) {
+                List<String> itemIds = cleanUniqueDispatchIds(rawItemIds);
+
+                if (itemIds.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Select at least one Dispatch item");
+                }
+
+                if (itemIds.size() > 500) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "A maximum of 500 Dispatch items can be permanently deleted at once");
+                }
+
+                List<DispatchedItem> foundItems = dispatchedItemRepository
+                                .findAllById(itemIds);
+
+                Map<String, DispatchedItem> byId = foundItems.stream()
+                                .filter(Objects::nonNull)
+                                .filter(item -> hasText(item.getZohoItemId()))
+                                .collect(Collectors.toMap(
+                                                item -> item.getZohoItemId().trim(),
+                                                item -> item,
+                                                (first, second) -> first,
+                                                LinkedHashMap::new));
+
+                List<String> missingIds = itemIds.stream()
+                                .filter(id -> !byId.containsKey(id))
+                                .toList();
+
+                if (!missingIds.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Dispatch items not found: "
+                                                        + String.join(", ", missingIds.stream().limit(10).toList()));
+                }
+
+                return itemIds.stream()
+                                .map(byId::get)
+                                .toList();
+        }
+
+        private List<String> cleanUniqueDispatchIds(
+                        List<String> rawItemIds) {
+                if (rawItemIds == null) {
+                        return List.of();
+                }
+
+                return rawItemIds.stream()
+                                .map(this::clean)
+                                .filter(Objects::nonNull)
+                                .distinct()
+                                .toList();
+        }
+
+        private String buildDispatchDisplayName(
+                        DispatchedItem item) {
+                String name = firstNonBlank(
+                                item.getName(),
+                                "Dispatch Item");
+
+                String identifier = firstNonBlank(
+                                item.getSku(),
+                                item.getPdNo(),
+                                item.getDrawingNo(),
+                                item.getZohoItemId());
+
+                return name + " | " + identifier;
+        }
+
+        private String buildDispatchWarning(
+                        DeletionContext context) {
+                if (!context.packetItems().isEmpty()) {
+                        return "This Dispatch row is linked to PackFlow packet data. Permanent deletion removes the linked packet item, sticker history, Dispatch/Warehouse/logistics records, activity/audit rows, and empty parent packet/master records where applicable. The deletion snapshot itself remains only in Admin Delete History.";
+                }
+
+                if (!context.tripIds().isEmpty()) {
+                        return "This standalone Dispatch row has challan/logistics history. Permanent deletion removes the Dispatch record and its linked logistics/activity/audit records. The deletion snapshot itself remains only in Admin Delete History.";
+                }
+
+                return "This is a standalone Dispatch/Excel-import record. Permanent deletion removes it from operational data and statistics. The deletion snapshot itself remains only in Admin Delete History.";
+        }
+
+        private String buildDispatchSnapshotJson(
+                        List<DispatchedItem> dispatchItems,
+                        DeletionContext context,
+                        String mode) {
+                Map<String, Object> snapshot = new LinkedHashMap<>();
+
+                snapshot.put("mode", mode);
+                snapshot.put("dispatchItems", buildDispatchItemSnapshots(dispatchItems));
+                snapshot.put("linkedPacketItemIds", context.packetItemIds());
+                snapshot.put("linkedPacketIds", context.packetIds());
+                snapshot.put("linkedMasterItemIds", context.masterIds());
+                snapshot.put("affectedTripIds", context.tripIds());
+                snapshot.put("lookupIds", context.lookupIds());
+
+                return toJson(snapshot);
+        }
+
+        private List<Map<String, Object>> buildDispatchItemSnapshots(
+                        List<DispatchedItem> items) {
+                List<Map<String, Object>> snapshots = new ArrayList<>();
+
+                for (DispatchedItem item : items) {
+                        Map<String, Object> row = new LinkedHashMap<>();
+
+                        row.put("zohoItemId", item.getZohoItemId());
+                        row.put("packetItemId", item.getPacketItemId());
+                        row.put("packetId", item.getPacketId());
+                        row.put("linkedPacketItemId", item.getLinkedPacketItemId());
+                        row.put("linkedMasterItemId", item.getLinkedMasterItemId());
+
+                        row.put("name", item.getName());
+                        row.put("sku", item.getSku());
+                        row.put("pdNo", item.getPdNo());
+                        row.put("drawingNo", item.getDrawingNo());
+                        row.put("description", item.getDescription());
+                        row.put("clientName", item.getClientName());
+                        row.put("clientAddress", item.getClientAddress());
+
+                        row.put("status", item.getStatus());
+                        row.put("plantCode", item.getPlantCode());
+                        row.put("currentLocationCode", item.getCurrentLocationCode());
+                        row.put("location", item.getLocation());
+                        row.put("warehouseCode", item.getWarehouseCode());
+                        row.put("gatePassNumber", item.getGatePassNumber());
+
+                        row.put("chalaanNumber", item.getChalaanNumber());
+                        row.put("logisticsTripId", item.getLogisticsTripId());
+                        row.put("driverId", item.getDriverId());
+                        row.put("driverName", item.getDriverName());
+                        row.put("vehicleId", item.getVehicleId());
+                        row.put("vehicleNumber", item.getVehicleNumber());
+
+                        row.put("packedAt", item.getPackedAt());
+                        row.put("dispatchedAt", item.getDispatchedAt());
+                        row.put("tripStartedAt", item.getTripStartedAt());
+                        row.put("tripEndedAt", item.getTripEndedAt());
+                        row.put("deliveredAt", item.getDeliveredAt());
+
+                        row.put("createdBy", item.getCreatedBy());
+                        row.put("createdAt", item.getCreatedAt());
+                        row.put("dispatchedBy", item.getDispatchedBy());
+
+                        snapshots.add(row);
+                }
+
+                return snapshots;
         }
 
         private DispatchedItem requireWarehouseDeleteItem(

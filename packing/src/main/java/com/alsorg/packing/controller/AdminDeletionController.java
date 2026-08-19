@@ -288,6 +288,71 @@ public class AdminDeletionController {
 
         /*
          * =====================================================
+         * DISPATCH SINGLE PREVIEW / EXECUTE
+         * =====================================================
+         * ADMIN ONLY via requireAdminUser().
+         * Any Dispatch-page status is eligible.
+         * =====================================================
+         */
+
+        @GetMapping("/dispatch-items/{itemId:.+}/preview")
+        public ResponseEntity<AdminDeletePreviewResponse> previewDispatchItem(
+                        @PathVariable String itemId,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.requireAdminUser(auth);
+
+                return ResponseEntity.ok(
+                                deletionService.previewDispatchItem(
+                                                itemId,
+                                                user));
+        }
+
+        @PostMapping("/dispatch-items/{itemId:.+}/execute")
+        public ResponseEntity<AdminDeleteResultResponse> deleteDispatchItem(
+                        @PathVariable String itemId,
+                        @RequestBody AdminDeleteRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.requireAdminUser(auth);
+
+                return ResponseEntity.ok(
+                                deletionService.deleteDispatchItem(
+                                                itemId,
+                                                request,
+                                                user));
+        }
+
+        /*
+         * =====================================================
+         * DISPATCH BULK PREVIEW / EXECUTE
+         * =====================================================
+         */
+
+        @PostMapping("/dispatch-items/bulk/preview")
+        public ResponseEntity<AdminDeletePreviewResponse> previewDispatchItemsBulk(
+                        @RequestBody List<String> itemIds,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.requireAdminUser(auth);
+
+                return ResponseEntity.ok(
+                                deletionService.previewDispatchItemsBulk(
+                                                itemIds,
+                                                user));
+        }
+
+        @PostMapping("/dispatch-items/bulk/execute")
+        public ResponseEntity<AdminDeleteResultResponse> deleteDispatchItemsBulk(
+                        @RequestBody AdminWarehouseBulkDeleteRequest request,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                User user = currentUserService.requireAdminUser(auth);
+
+                return ResponseEntity.ok(
+                                deletionService.deleteDispatchItemsBulk(
+                                                request,
+                                                user));
+        }
+
+        /*
+         * =====================================================
          * DELETION HISTORY
          * =====================================================
          */

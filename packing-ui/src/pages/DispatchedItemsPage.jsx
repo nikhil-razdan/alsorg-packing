@@ -36,6 +36,9 @@ import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
 import {
+	publishPackFlowDataChanged,
+} from "../utils/packFlowDataEvents";
+import {
 	fetchDrivers,
 	fetchVehicles,
 	createDriver,
@@ -6112,6 +6115,15 @@ export default function DispatchedItemsPage() {
 		adminEditLoading,
 		setAdminEditLoading,
 	] = useState(false);
+
+	const [adminDeleteOpen, setAdminDeleteOpen] = useState(false);
+	const [adminDeleteRows, setAdminDeleteRows] = useState([]);
+	const [adminDeletePreview, setAdminDeletePreview] = useState(null);
+	const [adminDeletePreviewLoading, setAdminDeletePreviewLoading] = useState(false);
+	const [adminDeleteExecuting, setAdminDeleteExecuting] = useState(false);
+	const [adminDeleteReason, setAdminDeleteReason] = useState("");
+	const [adminDeleteConfirmation, setAdminDeleteConfirmation] = useState("");
+	const [adminDeleteError, setAdminDeleteError] = useState("");
 
 	const [dispatchExportOpen, setDispatchExportOpen] =
 		useState(false);
@@ -12833,6 +12845,247 @@ export default function DispatchedItemsPage() {
 	};
 
 
+
+	/* ===================== ADMIN PERMANENT DISPATCH DELETE ===================== */
+
+	const resetAdminDispatchDeleteState = () => {
+		setAdminDeleteRows([]);
+		setAdminDeletePreview(null);
+		setAdminDeletePreviewLoading(false);
+		setAdminDeleteExecuting(false);
+		setAdminDeleteReason("");
+		setAdminDeleteConfirmation("");
+		setAdminDeleteError("");
+	};
+
+	const closeAdminDispatchDelete = () => {
+		if (adminDeletePreviewLoading || adminDeleteExecuting) return;
+		setAdminDeleteOpen(false);
+		resetAdminDispatchDeleteState();
+	};
+
+	const openAdminDispatchDelete = async (targetRows) => {
+		if (!isAdmin) {
+			alert("Only Admin can permanently delete Dispatch items");
+			return;
+		}
+
+		const byId = new Map();
+
+		(Array.isArray(targetRows) ? targetRows : []).forEach((row) => {
+			const id = String(row?.zohoItemId || row?.id || "").trim();
+			if (id) byId.set(id, row);
+		});
+
+		const cleanRows = Array.from(byId.values());
+		const itemIds = Array.from(byId.keys());
+
+		if (itemIds.length === 0) {
+			alert("No valid Dispatch items selected");
+			return;
+		}
+
+		if (itemIds.length > 500) {
+			alert("A maximum of 500 Dispatch items can be deleted at once");
+			return;
+		}
+
+		setAdminDeleteRows(cleanRows);
+		setAdminDeletePreview(null);
+		setAdminDeleteReason("");
+		setAdminDeleteConfirmation("");
+		setAdminDeleteError("");
+		setAdminDeleteOpen(true);
+		setAdminDeletePreviewLoading(true);
+
+		try {
+			const bulk = itemIds.length > 1;
+
+			const response = await authFetch(
+				bulk
+					? `${API_BASE_URL}/api/admin/deletions/dispatch-items/bulk/preview`
+					: `${API_BASE_URL}/api/admin/deletions/dispatch-items/${encodeURIComponent(itemIds[0])}/preview`,
+				bulk
+					? {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Accept: "application/json",
+						},
+						body: JSON.stringify(itemIds),
+					}
+					: {
+						method: "GET",
+						headers: { Accept: "application/json" },
+					}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readResponseError(
+						response,
+						"Unable to calculate deletion impact"
+					)
+				);
+			}
+
+			setAdminDeletePreview(await response.json());
+		} catch (error) {
+			console.error("Dispatch deletion preview failed:", error);
+			setAdminDeleteError(
+				error?.message || "Unable to calculate deletion impact"
+			);
+		} finally {
+			setAdminDeletePreviewLoading(false);
+		}
+	};
+
+	const executeAdminDispatchDelete = async () => {
+		if (!isAdmin) {
+			alert("Only Admin can permanently delete Dispatch items");
+			return;
+		}
+
+		const itemIds = Array.from(
+			new Set(
+				(adminDeleteRows || [])
+					.map((row) =>
+						String(row?.zohoItemId || row?.id || "").trim()
+					)
+					.filter(Boolean)
+			)
+		);
+
+		if (itemIds.length === 0 || !adminDeletePreview) {
+			setAdminDeleteError("Deletion preview is required before execution");
+			return;
+		}
+
+		const reason = String(adminDeleteReason || "").trim();
+		const confirmation = String(adminDeleteConfirmation || "").trim();
+		const required = String(
+			adminDeletePreview?.requiredConfirmation || ""
+		).trim();
+
+		if (reason.length < 5) {
+			setAdminDeleteError(
+				"Deletion reason must contain at least 5 characters"
+			);
+			return;
+		}
+
+		if (reason.length > 1000) {
+			setAdminDeleteError(
+				"Deletion reason cannot exceed 1000 characters"
+			);
+			return;
+		}
+
+		if (
+			!required ||
+			confirmation.toLowerCase() !== required.toLowerCase()
+		) {
+			setAdminDeleteError(`Type exactly: ${required}`);
+			return;
+		}
+
+		const bulk = itemIds.length > 1;
+
+		setAdminDeleteExecuting(true);
+		setAdminDeleteError("");
+
+		try {
+			const response = await authFetch(
+				bulk
+					? `${API_BASE_URL}/api/admin/deletions/dispatch-items/bulk/execute`
+					: `${API_BASE_URL}/api/admin/deletions/dispatch-items/${encodeURIComponent(itemIds[0])}/execute`,
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					body: JSON.stringify(
+						bulk
+							? {
+								itemIds,
+								confirmationText: confirmation,
+								reason,
+							}
+							: {
+								confirmationText: confirmation,
+								reason,
+							}
+					),
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					await readResponseError(
+						response,
+						"Permanent Dispatch deletion failed"
+					)
+				);
+			}
+
+			const result = await response.json();
+
+			itemIds.forEach((id) => {
+				dispatchSelectedRowCacheRef.current.delete(id);
+			});
+
+			setSelectionModel([]);
+			dispatchPageCacheRef.current.clear();
+
+			setAdminDeleteOpen(false);
+			resetAdminDispatchDeleteState();
+
+			const selectedSet = new Set(itemIds);
+			const visibleRemaining = (rows || []).filter(
+				(row) =>
+					!selectedSet.has(
+						String(row?.zohoItemId || "").trim()
+					)
+			);
+
+			if (pageNo > 1 && visibleRemaining.length === 0) {
+				setPageNo((previous) => Math.max(1, previous - 1));
+			} else {
+				await fetchData({ preferCache: false });
+			}
+
+			publishPackFlowDataChanged({
+				action: bulk
+					? "DISPATCH_BULK_DELETION"
+					: "DISPATCH_ITEM_DELETION",
+				targetType: bulk
+					? "DISPATCH_BULK"
+					: "DISPATCH_ITEM",
+				result,
+				scopes: [
+					"inventory",
+					"warehouse",
+					"dispatch",
+					"dashboard",
+				],
+			});
+
+			alert(
+				result?.message ||
+					"Dispatch item(s) permanently deleted"
+			);
+		} catch (error) {
+			console.error("Permanent Dispatch deletion failed:", error);
+			setAdminDeleteError(
+				error?.message || "Permanent Dispatch deletion failed"
+			);
+		} finally {
+			setAdminDeleteExecuting(false);
+		}
+	};
+
+
 	/* ===================== COLUMNS ===================== */
 
 	const selectableStatuses = [
@@ -13489,6 +13742,23 @@ export default function DispatchedItemsPage() {
 								}}
 							>
 								Edit Details
+							</Button>
+						)}
+						{isAdmin && (
+							<Button
+								size="small"
+								onClick={() =>
+									openAdminDispatchDelete([row])
+								}
+								sx={{
+									...actionDanger,
+									...tableActionButton,
+									background:
+										"linear-gradient(180deg,#dc2626,#b91c1c)",
+									color: "#fff",
+								}}
+							>
+								Delete
 							</Button>
 						)}
 						{canRequestRestore && (
@@ -21141,6 +21411,30 @@ export default function DispatchedItemsPage() {
 								</Button>
 							)}
 
+							{isAdmin && (
+								<Button
+									size="small"
+									disabled={selectedItems.length === 0}
+									onClick={() =>
+										openAdminDispatchDelete(selectedItems)
+									}
+									sx={{
+										px: 2.4,
+										height: 38,
+										borderRadius: "12px",
+										fontWeight: 900,
+										textTransform: "none",
+										background:
+											"linear-gradient(180deg,#dc2626,#b91c1c)",
+										color: "#fff",
+										boxShadow:
+											"0 10px 24px rgba(220,38,38,.24)",
+									}}
+								>
+									Delete Selected
+								</Button>
+							)}
+
 							{/*
 			 * DISPATCH-SPECIFIC ACTIONS
 			 *
@@ -24526,6 +24820,300 @@ export default function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				<Drawer
+					anchor="right"
+					open={adminDeleteOpen}
+					onClose={closeAdminDispatchDelete}
+					PaperProps={{
+						sx: {
+							width: { xs: "100%", sm: 560 },
+							maxWidth: "100vw",
+							background:
+								"linear-gradient(180deg,#020617,#0f172a,#111827)",
+							color: "#fff",
+							borderLeft:
+								"1px solid rgba(248,113,113,.20)",
+						},
+					}}
+				>
+					<Box sx={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+						<Box
+							sx={{
+								px: 3,
+								py: 2.3,
+								borderBottom:
+									"1px solid rgba(248,113,113,.16)",
+								background: "rgba(2,6,23,.96)",
+							}}
+						>
+							<Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+								<Box>
+									<Box
+										sx={{
+											color: "#fca5a5",
+											fontSize: 10.5,
+											fontWeight: 950,
+											letterSpacing: ".11em",
+											textTransform: "uppercase",
+										}}
+									>
+										Admin • Permanent Delete
+									</Box>
+									<Box sx={{ mt: 0.5, fontSize: 22, fontWeight: 950 }}>
+										{adminDeleteRows.length > 1
+											? `Delete ${adminDeleteRows.length} Dispatch Items`
+											: "Delete Dispatch Item"}
+									</Box>
+									<Box sx={{ mt: 0.7, color: "#94a3b8", fontSize: 12.5, lineHeight: 1.5 }}>
+										Live PackFlow records and statistics are purged. Only the
+										separate Admin Delete History audit snapshot remains.
+									</Box>
+								</Box>
+
+								<IconButton
+									disabled={adminDeletePreviewLoading || adminDeleteExecuting}
+									onClick={closeAdminDispatchDelete}
+									sx={{ color: "#cbd5e1" }}
+								>
+									<Box component="span" sx={{ fontSize: 24, lineHeight: 1 }}>
+										×
+									</Box>
+								</IconButton>
+							</Box>
+						</Box>
+
+						<Box sx={{ flex: 1, overflowY: "auto", px: 3, py: 2.5 }}>
+							{adminDeletePreviewLoading && (
+								<Box
+									sx={{
+										minHeight: 220,
+										display: "flex",
+										flexDirection: "column",
+										alignItems: "center",
+										justifyContent: "center",
+										gap: 1.2,
+									}}
+								>
+									<CircularProgress size={28} />
+									<Box sx={{ color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}>
+										Calculating linked records...
+									</Box>
+								</Box>
+							)}
+
+							{adminDeleteError && (
+								<Box
+									sx={{
+										mb: 2,
+										p: 1.5,
+										borderRadius: "12px",
+										color: "#fecaca",
+										background: "rgba(127,29,29,.30)",
+										border: "1px solid rgba(248,113,113,.24)",
+										fontSize: 12.5,
+										fontWeight: 750,
+									}}
+								>
+									{adminDeleteError}
+								</Box>
+							)}
+
+							{!adminDeletePreviewLoading && adminDeletePreview && (
+								<>
+									<Box
+										sx={{
+											p: 1.8,
+											borderRadius: "15px",
+											background: "rgba(15,23,42,.72)",
+											border: "1px solid rgba(255,255,255,.08)",
+										}}
+									>
+										<Box sx={{ color: "#64748b", fontSize: 10, fontWeight: 900 }}>
+											TARGET
+										</Box>
+										<Box sx={{ mt: 0.4, fontSize: 15, fontWeight: 950 }}>
+											{adminDeletePreview?.displayName ||
+												`${adminDeleteRows.length} Dispatch item(s)`}
+										</Box>
+
+										{adminDeletePreview?.warning && (
+											<Box
+												sx={{
+													mt: 1.4,
+													p: 1.3,
+													borderRadius: "11px",
+													color: "#fde68a",
+													background: "rgba(120,53,15,.22)",
+													border: "1px solid rgba(245,158,11,.20)",
+													fontSize: 12,
+													lineHeight: 1.5,
+												}}
+											>
+												{adminDeletePreview.warning}
+											</Box>
+										)}
+									</Box>
+
+									<Box sx={{ mt: 2.2, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
+										Records that will be removed
+									</Box>
+
+									<Box
+										sx={{
+											mt: 1,
+											display: "grid",
+											gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+											gap: 1,
+										}}
+									>
+										{Object.entries(adminDeletePreview?.affectedRows || {}).map(
+											([key, value]) => (
+												<Box
+													key={key}
+													sx={{
+														p: 1.2,
+														borderRadius: "11px",
+														background: "rgba(255,255,255,.035)",
+														border: "1px solid rgba(255,255,255,.06)",
+													}}
+												>
+													<Box sx={{ color: "#64748b", fontSize: 9.5, fontWeight: 900 }}>
+														{String(key)
+															.replace(/([a-z])([A-Z])/g, "$1 $2")
+															.replace(/_/g, " ")}
+													</Box>
+													<Box sx={{ mt: 0.2, fontSize: 19, fontWeight: 950 }}>
+														{Number(value || 0)}
+													</Box>
+												</Box>
+											)
+										)}
+									</Box>
+
+									<Box sx={{ mt: 2.3, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
+										Deletion reason
+									</Box>
+									<TextField
+										fullWidth
+										multiline
+										minRows={3}
+										value={adminDeleteReason}
+										disabled={adminDeleteExecuting}
+										onChange={(event) => setAdminDeleteReason(event.target.value)}
+										placeholder="Required. Minimum 5 characters."
+										inputProps={{ maxLength: 1000 }}
+										sx={{
+											mt: 0.8,
+											"& .MuiOutlinedInput-root": {
+												color: "#fff",
+												borderRadius: "13px",
+												background: "rgba(255,255,255,.04)",
+											},
+										}}
+									/>
+
+									<Box sx={{ mt: 2.2, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
+										Type exact confirmation
+									</Box>
+									<Box
+										sx={{
+											mt: 0.8,
+											p: 1.2,
+											borderRadius: "11px",
+											color: "#fecaca",
+											fontFamily: "monospace",
+											fontSize: 12,
+											fontWeight: 850,
+											background: "rgba(127,29,29,.22)",
+											border: "1px dashed rgba(248,113,113,.30)",
+											wordBreak: "break-word",
+										}}
+									>
+										{adminDeletePreview?.requiredConfirmation}
+									</Box>
+									<TextField
+										fullWidth
+										value={adminDeleteConfirmation}
+										disabled={adminDeleteExecuting}
+										onChange={(event) =>
+											setAdminDeleteConfirmation(event.target.value)
+										}
+										placeholder="Type confirmation text"
+										sx={{
+											mt: 1,
+											"& .MuiOutlinedInput-root": {
+												color: "#fff",
+												borderRadius: "13px",
+												background: "rgba(255,255,255,.04)",
+											},
+										}}
+									/>
+								</>
+							)}
+						</Box>
+
+						<Box
+							sx={{
+								display: "flex",
+								gap: 1.2,
+								px: 3,
+								py: 2,
+								borderTop: "1px solid rgba(255,255,255,.07)",
+								background: "rgba(2,6,23,.96)",
+							}}
+						>
+							<Button
+								fullWidth
+								disabled={adminDeletePreviewLoading || adminDeleteExecuting}
+								onClick={closeAdminDispatchDelete}
+								sx={{
+									height: 44,
+									borderRadius: "12px",
+									textTransform: "none",
+									fontWeight: 900,
+									color: "#cbd5e1",
+									background: "rgba(255,255,255,.06)",
+								}}
+							>
+								Cancel
+							</Button>
+
+							<Button
+								fullWidth
+								disabled={
+									!adminDeletePreview ||
+									adminDeletePreviewLoading ||
+									adminDeleteExecuting ||
+									String(adminDeleteReason || "").trim().length < 5 ||
+									String(adminDeleteConfirmation || "").trim().toLowerCase() !==
+										String(
+											adminDeletePreview?.requiredConfirmation || ""
+										).trim().toLowerCase()
+								}
+								onClick={executeAdminDispatchDelete}
+								sx={{
+									height: 44,
+									borderRadius: "12px",
+									textTransform: "none",
+									fontWeight: 950,
+									color: "#fff",
+									background: "linear-gradient(180deg,#dc2626,#991b1b)",
+									"&.Mui-disabled": {
+										color: "rgba(255,255,255,.30)",
+										background: "rgba(255,255,255,.06)",
+									},
+								}}
+							>
+								{adminDeleteExecuting
+									? "Deleting Permanently..."
+									: adminDeleteRows.length > 1
+										? `Delete ${adminDeleteRows.length} Permanently`
+										: "Delete Permanently"}
+							</Button>
+						</Box>
+					</Box>
+				</Drawer>
+
 				{adminEditOpen && (
 					<Box
 						sx={{
