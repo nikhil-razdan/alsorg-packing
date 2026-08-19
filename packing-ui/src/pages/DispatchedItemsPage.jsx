@@ -646,6 +646,8 @@ const auditLogButton = {
 const enhancedOverlaySx = {
 	position: "fixed",
 	inset: 0,
+	p: { xs: "10px", sm: "16px" },
+	boxSizing: "border-box",
 
 	background: `
     radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
@@ -670,7 +672,11 @@ const enhancedModalSx = {
 
 	overflow: "hidden",
 
-	borderRadius: 12,
+	// MUI numeric borderRadius values are theme multipliers (12 => ~96px).
+	// Use an explicit pixel radius so modal corners never clip actions.
+	borderRadius: "12px",
+	maxWidth: "calc(100vw - 20px)",
+	boxSizing: "border-box",
 
 	color: "var(--pf-text-strong)",
 
@@ -823,6 +829,8 @@ const modalScrollBodySx = {
 const modalFooterSx = {
 	display: "flex",
 	justifyContent: "flex-end",
+	alignItems: "center",
+	flexWrap: "wrap",
 	gap: 1.2,
 
 	px: 3,
@@ -1223,7 +1231,7 @@ const customChallanModalShellSx = {
 	maxHeight: "92vh",
 	display: "flex",
 	flexDirection: "column",
-	borderRadius: "24px",
+	borderRadius: "12px",
 	background: `
 		radial-gradient(circle at 8% 0%, rgba(139,92,246,.24), transparent 30%),
 		radial-gradient(circle at 92% 8%, rgba(59,130,246,.16), transparent 30%),
@@ -2392,7 +2400,9 @@ const dateTimeFieldSx = {
 };
 
 const darkModalBox = {
-	borderRadius: 12,
+	borderRadius: "12px",
+	maxWidth: "calc(100vw - 24px)",
+	boxSizing: "border-box",
 
 	position: "relative",
 
@@ -3766,7 +3776,7 @@ const normalChallanViewModalSx = {
 	maxHeight: "92vh",
 	display: "flex",
 	flexDirection: "column",
-	borderRadius: "24px",
+	borderRadius: "12px",
 	background:
 		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.22),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.12),transparent 28%),linear-gradient(180deg,#07101f,var(--pf-surface))",
 	border: "1px solid rgba(96,165,250,.20)",

@@ -14432,6 +14432,8 @@ const pageCountSx = {
 const enhancedOverlaySx = {
   position: "fixed",
   inset: 0,
+  p: { xs: "10px", sm: "16px" },
+  boxSizing: "border-box",
   background: `
     radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
     radial-gradient(circle at 80% 90%, rgba(16,185,129,.12), transparent 30%),
@@ -14450,7 +14452,11 @@ const enhancedModalSx = {
   position: "relative",
   zIndex: 5001,
   overflow: "hidden",
-  borderRadius: 14,
+  // MUI numeric borderRadius values are theme multipliers (14 => ~112px).
+  // Keep modal edges compact so header/footer actions are never clipped.
+  borderRadius: "12px",
+  maxWidth: "calc(100vw - 20px)",
+  boxSizing: "border-box",
   color: "var(--pf-text-strong)",
   background: `
     radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
@@ -14537,6 +14543,8 @@ const modalContentSx = {
 const modalFooterSx = {
   display: "flex",
   justifyContent: "flex-end",
+  alignItems: "center",
+  flexWrap: "wrap",
   gap: 1.2,
   px: 3,
   py: 2,
