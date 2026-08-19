@@ -2,14 +2,19 @@ import { useState } from "react";
 import API from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import {
+  PackFlowThemeBoundary,
+  usePackFlowTheme,
+} from "../theme/PackFlowThemeContext";
 
-function LoginPage() {
+function LoginPageContent() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { loadMe } = useAuth();
+  const { mode, toggleTheme } = usePackFlowTheme();
 
   const submit = async (e) => {
 	e.preventDefault();
@@ -37,7 +42,19 @@ function LoginPage() {
 };
 
   return (
-    <div style={pageStyle}>
+    <div style={pageStyle} className="packflow-theme-root">
+      <button
+        type="button"
+        aria-label="Toggle appearance"
+        title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        onClick={toggleTheme}
+        style={appearanceToggle}
+      >
+        <span style={appearanceToggleIcon}>
+          {mode === "dark" ? "☀" : "☾"}
+        </span>
+        {mode === "dark" ? "Light Mode" : "Dark Mode"}
+      </button>
       <div style={ambientGlowOne} />
       <div style={ambientGlowTwo} />
       <div style={backgroundText}>Alsorg</div>
@@ -102,7 +119,7 @@ function LoginPage() {
 
               onBlur={(e) => {
                 e.target.style.border =
-                  "1px solid rgba(255,255,255,.08)";
+                  "1px solid rgba(var(--pf-fg-rgb),.08)";
               }}
 
               style={glassInput}
@@ -123,7 +140,7 @@ function LoginPage() {
 
               onBlur={(e) => {
                 e.target.style.border =
-                  "1px solid rgba(255,255,255,.08)";
+                  "1px solid rgba(var(--pf-fg-rgb),.08)";
               }}
 
               style={glassInput}
@@ -178,9 +195,9 @@ const pageStyle = {
 
     linear-gradient(
       135deg,
-      #020617 0%,
-      #0f172a 45%,
-      #111827 100%
+      var(--pf-bg) 0%,
+      var(--pf-surface) 45%,
+      var(--pf-surface-alt) 100%
     )
   `,
 };
@@ -231,7 +248,7 @@ const backgroundText = {
   fontWeight: 900,
 
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015))",
+    "linear-gradient(180deg, rgba(var(--pf-fg-rgb),0.06), rgba(var(--pf-fg-rgb),0.015))",
 
   WebkitBackgroundClip: "text",
 
@@ -255,7 +272,7 @@ const leftPanel = {
 
   padding: "72px 90px",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   zIndex: 1,
 
@@ -324,7 +341,7 @@ const title = {
 
   marginBottom: 26,
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   letterSpacing: -2,
 };
@@ -345,7 +362,7 @@ const subtitle = {
 
   marginBottom: 14,
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const description = {
@@ -353,7 +370,7 @@ const description = {
 
   fontSize: 16,
 
-  color: "rgba(255,255,255,.72)",
+  color: "rgba(var(--pf-fg-rgb),.72)",
 
   maxWidth: 580,
 };
@@ -361,7 +378,7 @@ const description = {
 const descriptionMuted = {
   ...description,
 
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
 };
 
 const divider = {
@@ -403,10 +420,10 @@ const glassCard = {
   borderRadius: 30,
 
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.84))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.92), rgba(var(--pf-surface-rgb),.84))",
 
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   boxShadow:
     "0 30px 80px rgba(2,6,23,.55)",
@@ -432,7 +449,7 @@ const cardHighlight = {
 };
 
 const cardTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   marginBottom: 8,
 
@@ -442,7 +459,7 @@ const cardTitle = {
 };
 
 const cardSubtitle = {
-  color: "rgba(255,255,255,.55)",
+  color: "rgba(var(--pf-fg-rgb),.55)",
 
   marginBottom: 30,
 
@@ -459,19 +476,19 @@ const glassInput = {
   borderRadius: 16,
 
   boxShadow:
-    "inset 0 1px 1px rgba(255,255,255,.04)",
+    "inset 0 1px 1px rgba(var(--pf-fg-rgb),.04)",
 
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   outline: "none",
 
   fontSize: 14,
 
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(var(--pf-fg-rgb),.04)",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   transition: "all .2s ease",
 
@@ -541,7 +558,7 @@ const statusDot = {
 };
 
 const topBarText = {
-  color: "rgba(255,255,255,.55)",
+  color: "rgba(var(--pf-fg-rgb),.55)",
 
   fontSize: 11,
 
@@ -550,4 +567,39 @@ const topBarText = {
   letterSpacing: 1.5,
 };
 
-export default LoginPage;
+const appearanceToggle = {
+  position: "absolute",
+  top: 28,
+  right: 30,
+  zIndex: 5,
+  minHeight: 38,
+  padding: "0 14px",
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  border: "1px solid var(--pf-border)",
+  background: "rgba(var(--pf-surface-rgb),.78)",
+  color: "var(--pf-text-strong)",
+  boxShadow: "var(--pf-card-shadow)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 12,
+  fontWeight: 850,
+};
+
+const appearanceToggleIcon = {
+  color: "#60a5fa",
+  fontSize: 16,
+  lineHeight: 1,
+};
+
+export default function LoginPage() {
+  return (
+    <PackFlowThemeBoundary>
+      <LoginPageContent />
+    </PackFlowThemeBoundary>
+  );
+}

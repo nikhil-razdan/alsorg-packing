@@ -25,6 +25,7 @@ import { motion } from "framer-motion";
 import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
+import { usePackFlowTheme } from "../theme/PackFlowThemeContext";
 import ExcelJS from "exceljs";
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -1073,10 +1074,10 @@ const HARDWARE_UOM_MENU_PROPS = {
 
       overflowY: "auto",
 
-      color: "#e2e8f0",
+      color: "var(--pf-text)",
 
       background:
-        "linear-gradient(180deg,#172033 0%,#0f172a 100%)",
+        "linear-gradient(180deg,var(--pf-surface-raised) 0%,var(--pf-surface) 100%)",
 
       border:
         "1px solid rgba(148,163,184,.20)",
@@ -1088,7 +1089,7 @@ const HARDWARE_UOM_MENU_PROPS = {
 
       scrollbarWidth: "thin",
       scrollbarColor:
-        "rgba(167,139,250,.65) rgba(15,23,42,.70)",
+        "rgba(167,139,250,.65) rgba(var(--pf-surface-rgb),.70)",
 
       "&::-webkit-scrollbar": {
         width: 7,
@@ -1096,7 +1097,7 @@ const HARDWARE_UOM_MENU_PROPS = {
 
       "&::-webkit-scrollbar-track": {
         background:
-          "rgba(15,23,42,.70)",
+          "rgba(var(--pf-surface-rgb),.70)",
       },
 
       "&::-webkit-scrollbar-thumb": {
@@ -1120,20 +1121,20 @@ const HARDWARE_UOM_MENU_PROPS = {
 
         borderRadius: "8px",
 
-        color: "#cbd5e1",
+        color: "var(--pf-text-soft)",
 
         fontSize: 12,
         fontWeight: 800,
 
         "&:hover": {
-          color: "#fff",
+          color: "var(--pf-text-strong)",
 
           background:
             "rgba(139,92,246,.16)",
         },
 
         "&.Mui-selected": {
-          color: "#fff",
+          color: "var(--pf-text-strong)",
 
           background:
             "rgba(139,92,246,.24)",
@@ -1168,13 +1169,13 @@ function HardwareUomSelect({
         mb: 0,
 
         "& .MuiSelect-select": {
-          color: "#fff",
-          WebkitTextFillColor: "#fff",
+          color: "var(--pf-text-strong)",
+          WebkitTextFillColor: "var(--pf-text-strong)",
           fontWeight: 800,
         },
 
         "& .MuiSvgIcon-root": {
-          color: "#94a3b8",
+          color: "var(--pf-text-muted)",
         },
       }}
       SelectProps={{
@@ -1397,9 +1398,9 @@ function ClientNameAutocomplete({
         paper: {
           sx: {
             mt: 0.6,
-            color: "#e2e8f0",
+            color: "var(--pf-text)",
             background:
-              "linear-gradient(180deg,#172033 0%,#0f172a 100%)",
+              "linear-gradient(180deg,var(--pf-surface-raised) 0%,var(--pf-surface) 100%)",
             border:
               "1px solid rgba(148,163,184,.20)",
             borderRadius: "12px",
@@ -1421,7 +1422,7 @@ function ClientNameAutocomplete({
           <Box sx={{ minWidth: 0 }}>
             <Box
               sx={{
-                color: "#fff",
+                color: "var(--pf-text-strong)",
                 fontSize: 13,
                 fontWeight: 850,
               }}
@@ -1433,7 +1434,7 @@ function ClientNameAutocomplete({
               <Box
                 sx={{
                   mt: 0.25,
-                  color: "#94a3b8",
+                  color: "var(--pf-text-muted)",
                   fontSize: 11,
                   whiteSpace: "normal",
                 }}
@@ -1835,7 +1836,7 @@ function ZohoItemsPage() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
-  const darkMode = true;
+  const { isDark: darkMode } = usePackFlowTheme();
 
   const [
     inventoryColumnWidths,
@@ -8548,7 +8549,7 @@ function ZohoItemsPage() {
               color:
                 inventorySearchPending
                   ? "#60a5fa"
-                  : "rgba(255,255,255,.45)",
+                  : "rgba(var(--pf-fg-rgb),.45)",
               transition:
                 "color .16s ease",
             }}
@@ -8676,20 +8677,20 @@ function ZohoItemsPage() {
                 850,
 
               color:
-                "#cbd5e1",
+                "var(--pf-text-soft)",
 
               background:
-                "rgba(255,255,255,.05)",
+                "rgba(var(--pf-fg-rgb),.05)",
 
               border:
-                "1px solid rgba(255,255,255,.08)",
+                "1px solid rgba(var(--pf-fg-rgb),.08)",
 
               "&:hover": {
                 color:
-                  "#fff",
+                  "var(--pf-text-strong)",
 
                 background:
-                  "rgba(255,255,255,.10)",
+                  "rgba(var(--pf-fg-rgb),.10)",
               },
             }}
           >
@@ -9025,7 +9026,7 @@ function ZohoItemsPage() {
                           "pointer",
 
                         background:
-                          "rgba(15,23,42,.42)",
+                          "rgba(var(--pf-surface-rgb),.42)",
 
                         transition:
                           "background .16s ease, border-color .16s ease, box-shadow .16s ease",
@@ -9033,7 +9034,7 @@ function ZohoItemsPage() {
                         ...(isHardwarePacketRow(row)
                           ? {
                             background:
-                              "linear-gradient(90deg, rgba(139,92,246,.10), rgba(15,23,42,.72))",
+                              "linear-gradient(90deg, rgba(139,92,246,.10), rgba(var(--pf-surface-rgb),.72))",
 
                             borderLeft:
                               "4px solid #a78bfa",
@@ -9652,7 +9653,7 @@ function ZohoItemsPage() {
                 height="100%"
                 title="Sticker Preview Before Generate"
                 style={{
-                  border: "1px solid rgba(255,255,255,.08)",
+                  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
                   borderRadius: 12,
                   background: "#fff",
                 }}
@@ -10795,7 +10796,7 @@ function ZohoItemsPage() {
                         />
                       ))}
 
-                      <span style={{ color: "#94a3b8", fontWeight: 700 }}>
+                      <span style={{ color: "var(--pf-text-muted)", fontWeight: 700 }}>
                         inches
                       </span>
                     </Box>
@@ -12046,7 +12047,7 @@ function ZohoItemsPage() {
                         height="100%"
                         title="Generated Sticker PDF Preview"
                         style={{
-                          border: "1px solid rgba(255,255,255,.08)",
+                          border: "1px solid rgba(var(--pf-fg-rgb),.08)",
                           borderRadius: 12,
                           background: "#fff",
                         }}
@@ -12140,7 +12141,7 @@ function ZohoItemsPage() {
                     sx={{
                       mt: -1,
                       mb: 2,
-                      color: "#94a3b8",
+                      color: "var(--pf-text-muted)",
                       fontSize: 12,
                       lineHeight: 1.5,
                     }}
@@ -12413,7 +12414,7 @@ function ZohoItemsPage() {
                     <Box
                       sx={{
                         mt: -1,
-                        color: "#94a3b8",
+                        color: "var(--pf-text-muted)",
                         fontSize: 12,
                       }}
                     >
@@ -12667,9 +12668,9 @@ function ZohoItemsPage() {
                                   borderRadius:
                                     "12px",
                                   background:
-                                    "rgba(255,255,255,.025)",
+                                    "rgba(var(--pf-fg-rgb),.025)",
                                   border:
-                                    "1px solid rgba(255,255,255,.06)",
+                                    "1px solid rgba(var(--pf-fg-rgb),.06)",
                                 }}
                               >
                                 <Box
@@ -12851,7 +12852,7 @@ function ZohoItemsPage() {
                   component="pre"
                   sx={{
                     m: 0,
-                    color: "#cbd5e1",
+                    color: "var(--pf-text-soft)",
                     whiteSpace: "pre-wrap",
                     fontFamily: "inherit",
                     fontSize: 12,
@@ -12944,7 +12945,7 @@ const inventoryMinWidth = 2940;
 const page = {
   minHeight: "100vh",
   background:
-    "linear-gradient(135deg,#020617,#0f172a)",
+    "linear-gradient(135deg,var(--pf-bg),var(--pf-surface))",
 };
 
 const content = {
@@ -12964,19 +12965,19 @@ const headerRow = {
 };
 
 const logo = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 32,
   fontWeight: 900,
   marginBottom: 8,
 };
 
 const subtitle = {
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 14,
 };
 
 const countBadgeSx = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 14,
   fontWeight: 700,
   px: 2,
@@ -12988,17 +12989,17 @@ const countBadgeSx = {
   whiteSpace: "nowrap",
   fontVariantNumeric: "tabular-nums",
   borderRadius: "12px",
-  background: "rgba(255,255,255,.035)",
-  border: "1px solid rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-fg-rgb),.035)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const wrap = {
   background:
-    "linear-gradient(180deg,#0f172a,#111827)",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   borderRadius: 24,
   padding: 24,
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   boxShadow:
     "0 18px 46px rgba(2,6,23,.22)",
 };
@@ -13010,9 +13011,9 @@ const searchPanel = {
   height: 52,
   padding: "0 18px",
   borderRadius: 16,
-  background: "rgba(255,255,255,0.03)",
+  background: "rgba(var(--pf-fg-rgb),0.03)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const searchActivitySlotSx = {
@@ -13056,19 +13057,19 @@ const activeSearchPanelSx = {
   boxShadow:
     "0 0 0 3px rgba(59,130,246,.055), 0 14px 32px rgba(2,6,23,.18)",
   background:
-    "linear-gradient(135deg,rgba(37,99,235,.075),rgba(255,255,255,.028))",
+    "linear-gradient(135deg,rgba(37,99,235,.075),rgba(var(--pf-fg-rgb),.028))",
 };
 
 const searchInputSx = {
   flex: 1,
 
   "& .MuiInputBase-root": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 14,
   },
 
   "& input::placeholder": {
-    color: "rgba(255,255,255,.42)",
+    color: "rgba(var(--pf-fg-rgb),.42)",
     opacity: 1,
   },
 };
@@ -13080,12 +13081,12 @@ const selectFieldSx = {
     height: 44,
     borderRadius: "14px",
     background:
-      "rgba(255,255,255,.04)",
-    color: "#fff",
+      "rgba(var(--pf-fg-rgb),.04)",
+    color: "var(--pf-text-strong)",
 
     "& fieldset": {
       borderColor:
-        "rgba(255,255,255,.08)",
+        "rgba(var(--pf-fg-rgb),.08)",
     },
 
     "&:hover fieldset": {
@@ -13099,12 +13100,12 @@ const selectFieldSx = {
   },
 
   "& .MuiSelect-select": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 500,
   },
 
   "& .MuiSvgIcon-root": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
   },
 };
 
@@ -13117,17 +13118,17 @@ const selectMenuSlotProps = {
           mt: 1,
           borderRadius: "14px",
           background:
-            "linear-gradient(180deg,#0f172a,#111827)",
-          color: "#fff",
+            "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+          color: "var(--pf-text-strong)",
           border:
-            "1px solid rgba(255,255,255,.06)",
+            "1px solid rgba(var(--pf-fg-rgb),.06)",
           backdropFilter: "blur(20px)",
           zIndex: 8000,
 
           "& .MuiMenuItem-root": {
             fontSize: 14,
             fontWeight: 500,
-            color: "#fff",
+            color: "var(--pf-text-strong)",
           },
 
           "& .MuiMenuItem-root:hover": {
@@ -13154,14 +13155,14 @@ const tableWrapper = {
 
   borderRadius: "18px",
   background:
-    "linear-gradient(180deg,rgba(15,23,42,.72),rgba(2,6,23,.46))",
+    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.72),rgba(var(--pf-surface-deep-rgb),.46))",
   border:
     "1px solid rgba(148,163,184,.11)",
   boxShadow:
     "0 18px 42px rgba(2,6,23,.24)",
 
   scrollbarWidth: "thin",
-  scrollbarColor: "#3b82f6 #0f172a",
+  scrollbarColor: "#3b82f6 var(--pf-surface)",
 
   WebkitOverflowScrolling: "touch",
   overscrollBehaviorX: "contain",
@@ -13173,7 +13174,7 @@ const tableWrapper = {
 
   "&::-webkit-scrollbar-track": {
     background:
-      "linear-gradient(180deg,#0f172a,#111827)",
+      "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
     borderRadius: 999,
   },
 
@@ -13198,8 +13199,8 @@ const tableHeader = {
   alignItems: "center",
   padding: "14px 16px",
   background:
-    "linear-gradient(180deg,rgba(15,23,42,.995),rgba(17,24,39,.985))",
-  color: "#94a3b8",
+    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.995),rgba(var(--pf-surface-alt-rgb),.985))",
+  color: "var(--pf-text-muted)",
   fontWeight: 950,
   fontSize: 10.5,
   letterSpacing: ".075em",
@@ -13223,13 +13224,13 @@ const tableRow = {
   minWidth: inventoryMinWidth,
   alignItems: "center",
   padding: "14px 16px",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   borderBottom:
     "1px solid rgba(148,163,184,.075)",
   minHeight: 58,
   fontSize: 13,
   background:
-    "rgba(15,23,42,.40)",
+    "rgba(var(--pf-surface-rgb),.40)",
   transition:
     "background .16s ease, border-color .16s ease, box-shadow .16s ease",
 };
@@ -13244,7 +13245,7 @@ const tableCellWrap = {
 };
 
 const simpleCellText = {
-  color: "#ffffff",
+  color: "var(--pf-text-strong)",
   fontWeight: 800,
   fontSize: 13,
   lineHeight: 1.25,
@@ -13255,7 +13256,7 @@ const simpleCellText = {
 };
 
 const simpleMutedText = {
-  color: "#f1f5f9",
+  color: "var(--pf-text)",
   fontWeight: 750,
   fontSize: 13,
   lineHeight: 1.25,
@@ -13266,7 +13267,7 @@ const simpleMutedText = {
 };
 
 const simpleMonoText = {
-  color: "#ffffff",
+  color: "var(--pf-text-strong)",
   fontWeight: 800,
   fontSize: 13,
   lineHeight: 1.25,
@@ -13279,10 +13280,10 @@ const simpleMonoText = {
 
 const emptyTableState = {
   padding: "30px 16px",
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 800,
   borderTop:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const actionCell = {
@@ -13356,14 +13357,14 @@ const actionSecondary = {
   height: 38,
   px: 2,
   background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
+    "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text-strong)",
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   "&:hover": {
     background:
-      "rgba(255,255,255,.08)",
+      "rgba(var(--pf-fg-rgb),.08)",
   },
 };
 
@@ -13378,7 +13379,7 @@ const deleteWarningBoxSx = {
   borderRadius: "12px",
 
   background:
-    "linear-gradient(135deg,rgba(239,68,68,.14),rgba(255,255,255,.035))",
+    "linear-gradient(135deg,rgba(239,68,68,.14),rgba(var(--pf-fg-rgb),.035))",
 
   border:
     "1px solid rgba(239,68,68,.24)",
@@ -13404,14 +13405,14 @@ const deleteWarningIconSx = {
 };
 
 const deleteWarningTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 15,
   fontWeight: 900,
   mb: 0.5,
 };
 
 const deleteWarningTextSx = {
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 12,
   fontWeight: 600,
   lineHeight: 1.5,
@@ -13423,10 +13424,10 @@ const deleteItemCardSx = {
   borderRadius: "12px",
 
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
 
   border:
-    "1px solid rgba(255,255,255,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const deleteItemLabelSx = {
@@ -13439,7 +13440,7 @@ const deleteItemLabelSx = {
 };
 
 const deleteItemValueSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 15,
   fontWeight: 900,
   lineHeight: 1.35,
@@ -13451,7 +13452,7 @@ function premiumScrollbarSx(
 ) {
   return {
     scrollbarWidth: "thin",
-    scrollbarColor: `${accent} rgba(15,23,42,.65)`,
+    scrollbarColor: `${accent} rgba(var(--pf-surface-rgb),.65)`,
 
     "&::-webkit-scrollbar": {
       width: 10,
@@ -13460,7 +13461,7 @@ function premiumScrollbarSx(
 
     "&::-webkit-scrollbar-track": {
       background:
-        "rgba(15,23,42,.65)",
+        "rgba(var(--pf-surface-rgb),.65)",
       borderRadius: 999,
     },
 
@@ -13490,7 +13491,7 @@ function premiumScrollbarSx(
 }
 
 const deleteItemMetaSx = {
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 12,
   fontWeight: 700,
   lineHeight: 1.7,
@@ -13516,7 +13517,7 @@ const uiAlertBoxSx = {
 
   borderRadius: "14px",
 
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 
   backdropFilter: "blur(18px)",
   WebkitBackdropFilter: "blur(18px)",
@@ -13554,7 +13555,7 @@ const uiAlertIconSx = {
   justifyContent: "center",
 
   background:
-    "rgba(255,255,255,.14)",
+    "rgba(var(--pf-fg-rgb),.14)",
 
   flexShrink: 0,
 };
@@ -13570,7 +13571,7 @@ const uiAlertMessageSx = {
   fontSize: 12,
   fontWeight: 650,
   lineHeight: 1.4,
-  color: "rgba(255,255,255,.82)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
 };
 
 const inventoryHeroSx = {
@@ -13583,8 +13584,8 @@ const inventoryHeroSx = {
   p: "16px",
   borderRadius: "14px",
   background:
-    "radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.88), rgba(15,23,42,.74))",
-  border: "1px solid rgba(255,255,255,.08)",
+    "radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(var(--pf-surface-rgb),.88), rgba(var(--pf-surface-rgb),.74))",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
   boxShadow: "0 16px 32px rgba(2,6,23,.28)",
   backdropFilter: "blur(18px)",
 };
@@ -13611,9 +13612,9 @@ const inventoryLabelChipSx = {
 const inventorySoftChipSx = {
   height: 24,
   borderRadius: 999,
-  background: "rgba(255,255,255,.06)",
-  color: "#cbd5e1",
-  border: "1px solid rgba(255,255,255,.10)",
+  background: "rgba(var(--pf-fg-rgb),.06)",
+  color: "var(--pf-text-soft)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.10)",
   fontWeight: 850,
   fontSize: 11,
 };
@@ -13640,7 +13641,7 @@ const inventoryPlantMiniChipSx = {
 };
 
 const inventoryHeroTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: {
     xs: 22,
     md: 30,
@@ -13652,7 +13653,7 @@ const inventoryHeroTitleSx = {
 
 const inventoryHeroSubSx = {
   mt: "8px",
-  color: "rgba(255,255,255,.68)",
+  color: "rgba(var(--pf-fg-rgb),.68)",
   fontSize: 13,
   fontWeight: 650,
   lineHeight: 1.5,
@@ -13678,7 +13679,7 @@ const inventoryMiniStatSx = (accent) => ({
 });
 
 const inventoryMiniStatValueSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 22,
   fontWeight: 950,
   lineHeight: 1,
@@ -13686,7 +13687,7 @@ const inventoryMiniStatValueSx = {
 
 const inventoryMiniStatLabelSx = {
   mt: "6px",
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 10,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -13697,11 +13698,11 @@ const inventoryMasterCardSx = (accent, open) => ({
   flexShrink: 0,
   borderRadius: "12px",
   background: open
-    ? `linear-gradient(180deg, ${accent}13, rgba(15,23,42,.86))`
-    : "rgba(15,23,42,.80)",
+    ? `linear-gradient(180deg, ${accent}13, rgba(var(--pf-surface-rgb),.86))`
+    : "rgba(var(--pf-surface-rgb),.80)",
   border: open
     ? `1px solid ${accent}50`
-    : "1px solid rgba(255,255,255,.07)",
+    : "1px solid rgba(var(--pf-fg-rgb),.07)",
   borderLeft: `3px solid ${accent}`,
   boxShadow: open
     ? `0 18px 36px ${accent}18`
@@ -13720,8 +13721,8 @@ const inventoryMasterHeaderSx = {
   px: "14px",
   py: "9px",
 
-  background: "rgba(2,6,23,.24)",
-  borderBottom: "1px solid rgba(255,255,255,.07)",
+  background: "rgba(var(--pf-surface-deep-rgb),.24)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
 
   flexWrap: "nowrap",
   overflow: "hidden",
@@ -13767,14 +13768,14 @@ const inventorySectionListSx = {
 
   overscrollBehavior: "contain",
   scrollbarWidth: "thin",
-  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+  scrollbarColor: "#60a5fa rgba(var(--pf-surface-rgb),.85)",
 
   "&::-webkit-scrollbar": {
     width: 10,
   },
 
   "&::-webkit-scrollbar-track": {
-    background: "rgba(15,23,42,.85)",
+    background: "rgba(var(--pf-surface-rgb),.85)",
     borderRadius: 999,
   },
 
@@ -13791,7 +13792,7 @@ const inventoryWorkbenchPaginationSx = {
   padding: "12px",
   borderRadius: "14px",
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.94), rgba(2,6,23,.88))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.94), rgba(var(--pf-surface-deep-rgb),.88))",
   border: "1px solid rgba(96,165,250,.15)",
   boxShadow: "0 18px 40px rgba(2,6,23,.30)",
   display: "grid",
@@ -13835,12 +13836,12 @@ const inventoryPaginationRightSx = {
 };
 
 const inventoryPaginationTextSx = {
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 12,
   fontWeight: 800,
 
   "& b": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 950,
   },
 };
@@ -13851,9 +13852,9 @@ const inventoryPaginationButtonSx = {
   textTransform: "none",
   fontWeight: 900,
   fontSize: 12,
-  color: "#fff",
-  background: "rgba(255,255,255,.055)",
-  border: "1px solid rgba(255,255,255,.09)",
+  color: "var(--pf-text-strong)",
+  background: "rgba(var(--pf-fg-rgb),.055)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.09)",
   minWidth: 104,
 
   "&:hover": {
@@ -13862,9 +13863,9 @@ const inventoryPaginationButtonSx = {
   },
 
   "&.Mui-disabled": {
-    color: "rgba(255,255,255,.28)",
-    background: "rgba(255,255,255,.025)",
-    borderColor: "rgba(255,255,255,.05)",
+    color: "rgba(var(--pf-fg-rgb),.28)",
+    background: "rgba(var(--pf-fg-rgb),.025)",
+    borderColor: "rgba(var(--pf-fg-rgb),.05)",
   },
 };
 
@@ -13872,11 +13873,11 @@ const inventoryPageCountSx = {
   minHeight: 34,
   padding: "0 12px",
   borderRadius: "9px",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.07)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.07)",
   display: "flex",
   alignItems: "center",
-  color: "rgba(255,255,255,.70)",
+  color: "rgba(var(--pf-fg-rgb),.70)",
   fontSize: 12,
   fontWeight: 850,
 
@@ -13891,13 +13892,13 @@ const inventoryPageSizeSelectStyle = {
   height: 34,
   minWidth: 72,
   borderRadius: 9,
-  border: "1px solid rgba(255,255,255,.10)",
-  background: "#0f172a",
-  color: "#fff",
+  border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
   padding: "0 10px",
   outline: "none",
   fontWeight: 900,
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const inventoryExpandBtnSx = {
@@ -13914,9 +13915,9 @@ const inventoryExpandBtnSx = {
   alignItems: "center",
   justifyContent: "center",
 
-  color: "#cbd5e1",
-  background: "rgba(255,255,255,.045)",
-  border: "1px solid rgba(255,255,255,.08)",
+  color: "var(--pf-text-soft)",
+  background: "rgba(var(--pf-fg-rgb),.045)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
   borderRadius: "9px",
 
   lineHeight: 1,
@@ -13925,7 +13926,7 @@ const inventoryExpandBtnSx = {
   "&:hover": {
     background: "rgba(59,130,246,.16)",
     borderColor: "rgba(96,165,250,.34)",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
   },
 };
 
@@ -13954,7 +13955,7 @@ const inventoryMasterTitleRowSx = {
 };
 
 const inventoryMasterTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 17,
   fontWeight: 950,
   lineHeight: "22px",
@@ -13967,7 +13968,7 @@ const inventoryMasterTitleSx = {
 
 const inventoryMasterMetaSx = {
   mt: "3px",
-  color: "rgba(255,255,255,.52)",
+  color: "rgba(var(--pf-fg-rgb),.52)",
   fontSize: 11,
   fontWeight: 650,
 };
@@ -13989,20 +13990,20 @@ const inventoryProgressBlockSx = {
 const inventoryProgressTopSx = {
   display: "flex",
   justifyContent: "space-between",
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 10,
   fontWeight: 900,
   mb: "6px",
 
   "& b": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
   },
 };
 
 const inventoryProgressSx = (accent) => ({
   height: 7,
   borderRadius: 999,
-  background: "rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-fg-rgb),.06)",
 
   "& .MuiLinearProgress-bar": {
     borderRadius: 999,
@@ -14012,14 +14013,14 @@ const inventoryProgressSx = (accent) => ({
 
 const inventoryMasterCountSx = {
   minWidth: 64,
-  color: "rgba(255,255,255,.55)",
+  color: "rgba(var(--pf-fg-rgb),.55)",
   fontSize: 10,
   fontWeight: 850,
   textAlign: "center",
 
   "& span": {
     display: "block",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 18,
     fontWeight: 950,
     lineHeight: 1,
@@ -14041,7 +14042,7 @@ const inventoryPacketTableSx = {
     "14px",
 
   border:
-    "1px solid rgba(255,255,255,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 
   ...premiumScrollbarSx(
     "#a78bfa"
@@ -14081,7 +14082,7 @@ const inventoryPacketHeadSx = {
     1.2,
 
   color:
-    "#94a3b8",
+    "var(--pf-text-muted)",
 
   fontSize:
     11,
@@ -14096,10 +14097,10 @@ const inventoryPacketHeadSx = {
     ".08em",
 
   background:
-    "rgba(15,23,42,.92)",
+    "rgba(var(--pf-surface-rgb),.92)",
 
   borderBottom:
-    "1px solid rgba(255,255,255,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const inventoryPacketRowSx = {
@@ -14128,7 +14129,7 @@ const inventoryPacketRowSx = {
     1,
 
   borderBottom:
-    "1px solid rgba(255,255,255,.055)",
+    "1px solid rgba(var(--pf-fg-rgb),.055)",
 
   "& > *": {
     minWidth:
@@ -14146,13 +14147,13 @@ const inventoryPacketRowSx = {
 };
 
 const inventoryPacketTextSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 12,
 };
 
 const inventoryPacketMonoSx = {
-  color: "#cbd5e1",
+  color: "var(--pf-text-soft)",
   fontFamily: "monospace",
   fontWeight: 800,
   fontSize: 11,
@@ -14163,7 +14164,7 @@ const inventoryPacketMonoSx = {
 
 const inventoryPacketSubSx = {
   color:
-    "#94a3b8",
+    "var(--pf-text-muted)",
 
   fontSize:
     12,
@@ -14204,7 +14205,7 @@ const inventoryMiniBtnSx = (accent) => ({
   textTransform: "none",
   fontSize: 10.5,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background: `${accent}18`,
   border: `1px solid ${accent}30`,
 
@@ -14225,16 +14226,16 @@ const inventoryPacketFooterSx = {
   px: "14px",
 
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.96), rgba(2,6,23,.98))",
-  borderTop: "1px solid rgba(255,255,255,.08)",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.96), rgba(var(--pf-surface-deep-rgb),.98))",
+  borderTop: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const inventoryEmptyWorkbenchSx = {
   p: "24px",
   borderRadius: "12px",
-  background: "rgba(15,23,42,.75)",
-  border: "1px dashed rgba(255,255,255,.14)",
-  color: "rgba(255,255,255,.62)",
+  background: "rgba(var(--pf-surface-rgb),.75)",
+  border: "1px dashed rgba(var(--pf-fg-rgb),.14)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontWeight: 800,
   textAlign: "center",
 };
@@ -14245,17 +14246,17 @@ const uiAlertCloseSx = {
 
   ml: "auto",
 
-  color: "rgba(255,255,255,.75)",
+  color: "rgba(var(--pf-fg-rgb),.75)",
 
   background:
-    "rgba(255,255,255,.10)",
+    "rgba(var(--pf-fg-rgb),.10)",
 
   borderRadius: "8px",
 
   "&:hover": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     background:
-      "rgba(255,255,255,.18)",
+      "rgba(var(--pf-fg-rgb),.18)",
   },
 };
 
@@ -14281,7 +14282,7 @@ const actionWarning = {
   fontWeight: 800,
   background:
     "linear-gradient(135deg,#d97706,#f59e0b)",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   border:
     "1px solid rgba(245,158,11,.35)",
 
@@ -14341,7 +14342,7 @@ const paginationLeftSx = {
 };
 
 const paginationTextSx = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 600,
   fontSize: 14,
 };
@@ -14359,12 +14360,12 @@ const paginationSelectSx = {
     height: 36,
     borderRadius: "12px",
     background:
-      "rgba(255,255,255,.04)",
-    color: "#fff",
+      "rgba(var(--pf-fg-rgb),.04)",
+    color: "var(--pf-text-strong)",
 
     "& fieldset": {
       borderColor:
-        "rgba(255,255,255,.08)",
+        "rgba(var(--pf-fg-rgb),.08)",
     },
 
     "&:hover fieldset": {
@@ -14374,7 +14375,7 @@ const paginationSelectSx = {
   },
 
   "& .MuiSvgIcon-root": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
   },
 };
 
@@ -14398,16 +14399,16 @@ const paginationButtonSx = {
   height: 30,
   borderRadius: "12px",
   background:
-    "linear-gradient(180deg,#1e293b,#0f172a)",
-  color: "#fff",
+    "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
+  color: "var(--pf-text-strong)",
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   fontSize: 10,
   fontWeight: 700,
 
   "&:disabled": {
     opacity: 0.45,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
   },
 };
 
@@ -14418,10 +14419,10 @@ const pageCountSx = {
   alignItems: "center",
   borderRadius: "12px",
   background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  color: "#cbd5e1",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  color: "var(--pf-text-soft)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   fontSize: 10,
   fontWeight: 700,
 };
@@ -14434,7 +14435,7 @@ const enhancedOverlaySx = {
   background: `
     radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
     radial-gradient(circle at 80% 90%, rgba(16,185,129,.12), transparent 30%),
-    rgba(2,6,23,.72)
+    rgba(var(--pf-surface-deep-rgb),.72)
   `,
   backdropFilter: "blur(14px)",
   WebkitBackdropFilter: "blur(14px)",
@@ -14450,10 +14451,10 @@ const enhancedModalSx = {
   zIndex: 5001,
   overflow: "hidden",
   borderRadius: 14,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background: `
     radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
-    linear-gradient(180deg,#0f172a,#111827)
+    linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))
   `,
   border:
     "1px solid rgba(148,163,184,.14)",
@@ -14473,7 +14474,7 @@ const modalHeaderSx = {
   px: 3,
   py: 2.4,
   borderBottom:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const modalTitleWrapSx = {
@@ -14493,18 +14494,18 @@ const modalIconBubble = () => ({
   background:
     "linear-gradient(135deg,rgba(59,130,246,.24),rgba(59,130,246,.08))",
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 });
 
 const modalTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 22,
   fontWeight: 900,
   lineHeight: 1.1,
 };
 
 const modalSubtitleSx = {
-  color: "rgba(255,255,255,.55)",
+  color: "rgba(var(--pf-fg-rgb),.55)",
   fontSize: 12,
   fontWeight: 600,
   mt: 0.4,
@@ -14514,14 +14515,14 @@ const modalCloseButtonSx = {
   width: 36,
   height: 36,
   borderRadius: "8px",
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(var(--pf-fg-rgb),.04)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 
   "&:hover": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     background:
       "rgba(239,68,68,.16)",
     borderColor:
@@ -14540,7 +14541,7 @@ const modalFooterSx = {
   px: 3,
   py: 2,
   borderTop:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const modalSecondaryButtonSx = {
@@ -14549,16 +14550,16 @@ const modalSecondaryButtonSx = {
   borderRadius: "8px",
   textTransform: "none",
   fontWeight: 800,
-  color: "#cbd5e1",
+  color: "var(--pf-text-soft)",
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(var(--pf-fg-rgb),.04)",
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 
   "&:hover": {
     background:
-      "rgba(255,255,255,.08)",
-    color: "#fff",
+      "rgba(var(--pf-fg-rgb),.08)",
+    color: "var(--pf-text-strong)",
   },
 };
 
@@ -14572,7 +14573,7 @@ const modalScrollBodySx = {
   },
 
   "&::-webkit-scrollbar-track": {
-    background: "rgba(255,255,255,.03)",
+    background: "rgba(var(--pf-fg-rgb),.03)",
     borderRadius: 999,
   },
 
@@ -14587,7 +14588,7 @@ const sidePanelOverlaySx = {
   position: "fixed",
   inset: 0,
   background:
-    "rgba(2,6,23,.62)",
+    "rgba(var(--pf-surface-deep-rgb),.62)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
   zIndex: 5000,
@@ -14598,11 +14599,11 @@ const sidePanelOverlaySx = {
 const sidePanelSx = {
   width: 540,
   height: "100%",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background:
-    "linear-gradient(180deg,#0f172a,#111827)",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   borderLeft:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   boxShadow:
     "-18px 0 60px rgba(0,0,0,.55)",
   display: "flex",
@@ -14621,10 +14622,10 @@ const stickerHeroCardSx = {
   mb: 2,
   borderRadius: "22px",
   background:
-    "radial-gradient(circle at top left, rgba(59,130,246,.35), transparent 38%), linear-gradient(135deg, rgba(15,23,42,.98), rgba(30,41,59,.92))",
+    "radial-gradient(circle at top left, rgba(59,130,246,.35), transparent 38%), linear-gradient(135deg, rgba(var(--pf-surface-rgb),.98), rgba(var(--pf-surface-raised-rgb),.92))",
   border: "1px solid rgba(96,165,250,.28)",
   boxShadow:
-    "0 22px 50px rgba(2,6,23,.42), inset 0 1px 0 rgba(255,255,255,.08)",
+    "0 22px 50px rgba(2,6,23,.42), inset 0 1px 0 rgba(var(--pf-fg-rgb),.08)",
 };
 
 const stickerHeroTopSx = {
@@ -14650,7 +14651,7 @@ const stickerHeroIconSx = {
 };
 
 const stickerSkuSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
   letterSpacing: ".03em",
@@ -14660,7 +14661,7 @@ const stickerSkuSx = {
 
 const stickerItemNameSx = {
   mt: 0.7,
-  color: "#cbd5e1",
+  color: "var(--pf-text-soft)",
   fontSize: 14,
   fontWeight: 800,
   lineHeight: 1.35,
@@ -14684,14 +14685,14 @@ const drawerSectionCardSx = {
   p: 1.7,
   mb: 2,
   borderRadius: "20px",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.08)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  boxShadow: "inset 0 1px 0 rgba(var(--pf-fg-rgb),.04)",
 };
 
 const drawerSectionTitleSx = {
   mb: 1.3,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 13,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -14708,12 +14709,12 @@ const detailMiniCardSx = {
   p: 1.2,
   minHeight: 68,
   borderRadius: "14px",
-  background: "rgba(15,23,42,.62)",
-  border: "1px solid rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-surface-rgb),.62)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const detailLabelSx = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -14722,7 +14723,7 @@ const detailLabelSx = {
 
 const detailValueSx = {
   mt: 0.6,
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 13,
   fontWeight: 850,
   lineHeight: 1.35,
@@ -14733,8 +14734,8 @@ const descriptionBoxSx = {
   mt: 1,
   p: 1.2,
   borderRadius: "14px",
-  background: "rgba(15,23,42,.62)",
-  border: "1px solid rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-surface-rgb),.62)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const descriptionTextSx = {
@@ -14754,19 +14755,19 @@ const stickerOptionRowSx = {
   p: 1.2,
   borderRadius: "16px",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(15,23,42,.45))",
+    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(var(--pf-surface-rgb),.45))",
   border: "1px solid rgba(59,130,246,.16)",
 };
 
 const optionMainTextSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 900,
 };
 
 const optionSubTextSx = {
   mt: 0.4,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 12,
   fontWeight: 700,
   lineHeight: 1.4,
@@ -14797,7 +14798,7 @@ const generateStickerMainButtonSx = {
   },
 
   "&.Mui-disabled": {
-    color: "rgba(255,255,255,.55)",
+    color: "rgba(var(--pf-fg-rgb),.55)",
     background: "rgba(148,163,184,.16)",
     boxShadow: "none",
   },
@@ -14819,7 +14820,7 @@ const formSectionHeaderSx = {
   borderRadius: "12px",
   color: "#93c5fd",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,.12), rgba(15,23,42,.42))",
+    "linear-gradient(135deg, rgba(59,130,246,.12), rgba(var(--pf-surface-rgb),.42))",
   border: "1px solid rgba(59,130,246,.18)",
   fontSize: 12,
   fontWeight: 950,
@@ -14835,7 +14836,7 @@ const resultSuccessCardSx = {
   mb: 1.4,
   borderRadius: "18px",
   background:
-    "linear-gradient(135deg, rgba(34,197,94,.15), rgba(15,23,42,.72))",
+    "linear-gradient(135deg, rgba(34,197,94,.15), rgba(var(--pf-surface-rgb),.72))",
   border: "1px solid rgba(34,197,94,.22)",
 };
 
@@ -14859,7 +14860,7 @@ const resultSuccessTitleSx = {
 
 const resultSuccessTextSx = {
   mt: 0.4,
-  color: "#cbd5e1",
+  color: "var(--pf-text-soft)",
   fontSize: 12,
   fontWeight: 700,
   lineHeight: 1.45,
@@ -14905,7 +14906,7 @@ const openPdfButtonSx = {
 
 const pdfPreviewHeaderSx = {
   mb: 1,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 13,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -14914,7 +14915,7 @@ const pdfPreviewHeaderSx = {
 
 const pdfFrameSx = {
   borderRadius: 16,
-  border: "1px solid rgba(255,255,255,.10)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.10)",
   background: "#fff",
   boxShadow:
     "0 18px 38px rgba(0,0,0,.28)",
@@ -14925,9 +14926,9 @@ const packetCardSx = {
   p: 2,
   borderRadius: "12px",
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(255,255,255,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const sectionCardSx = {
@@ -14935,9 +14936,9 @@ const sectionCardSx = {
   p: 2,
   borderRadius: "12px",
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(255,255,255,.07)",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const sectionTitleSx = {
@@ -14958,13 +14959,13 @@ const dimensionRowSx = {
 };
 
 const dimensionUnitText = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 700,
   fontSize: 12,
 };
 
 const packetTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 14,
   mb: 1.5,
@@ -14978,19 +14979,19 @@ const plantAccessInfoCardSx = {
   p: 1.2,
   borderRadius: "16px",
   background:
-    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(15,23,42,.62))",
+    "linear-gradient(135deg, rgba(59,130,246,.10), rgba(var(--pf-surface-rgb),.62))",
   border: "1px solid rgba(59,130,246,.18)",
 };
 
 const plantAccessInfoItemSx = {
   p: 1.1,
   borderRadius: "12px",
-  background: "rgba(15,23,42,.62)",
-  border: "1px solid rgba(255,255,255,.06)",
+  background: "rgba(var(--pf-surface-rgb),.62)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const plantAccessLabelSx = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -14999,7 +15000,7 @@ const plantAccessLabelSx = {
 
 const plantAccessValueSx = {
   mt: 0.5,
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 13,
   fontWeight: 900,
   wordBreak: "break-word",
@@ -15009,7 +15010,7 @@ const stepperSx = {
   mb: 3,
 
   "& .MuiStepLabel-label": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontWeight: 700,
   },
 
@@ -15022,7 +15023,7 @@ const stepperSx = {
   },
 
   "& .MuiStepIcon-root": {
-    color: "rgba(255,255,255,.18)",
+    color: "rgba(var(--pf-fg-rgb),.18)",
   },
 
   "& .MuiStepIcon-root.Mui-active": {
@@ -15038,7 +15039,7 @@ const formFieldSx = () => ({
   mb: 2,
 
   "& .MuiFormLabel-root": {
-    color: "rgba(255,255,255,.62)",
+    color: "rgba(var(--pf-fg-rgb),.62)",
     fontWeight: 600,
   },
 
@@ -15049,12 +15050,12 @@ const formFieldSx = () => ({
   "& .MuiOutlinedInput-root": {
     borderRadius: "12px",
     background:
-      "rgba(255,255,255,.04)",
-    color: "#fff",
+      "rgba(var(--pf-fg-rgb),.04)",
+    color: "var(--pf-text-strong)",
 
     "& fieldset": {
       borderColor:
-        "rgba(255,255,255,.08)",
+        "rgba(var(--pf-fg-rgb),.08)",
     },
 
     "&:hover fieldset": {
@@ -15071,18 +15072,18 @@ const formFieldSx = () => ({
   },
 
   "& .MuiInputBase-input": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 600,
-    WebkitTextFillColor: "#fff",
+    WebkitTextFillColor: "var(--pf-text-strong)",
   },
 
   "& textarea": {
-    color: "#fff",
-    WebkitTextFillColor: "#fff",
+    color: "var(--pf-text-strong)",
+    WebkitTextFillColor: "var(--pf-text-strong)",
   },
 
   "& .MuiFormHelperText-root": {
-    color: "rgba(255,255,255,.55)",
+    color: "rgba(var(--pf-fg-rgb),.55)",
   },
 
   "& .MuiFormHelperText-root.Mui-error": {
@@ -15095,7 +15096,7 @@ const historyReportWrapSx = {
   borderRadius: "18px",
   overflow: "hidden",
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.95), rgba(15,23,42,.88))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.95), rgba(var(--pf-surface-rgb),.88))",
   border: "1px solid rgba(96,165,250,.16)",
   boxShadow: "0 18px 42px rgba(0,0,0,.28)",
 };
@@ -15112,7 +15113,7 @@ const historyHeaderButtonSx = {
   textTransform: "none",
   fontWeight: 900,
   fontSize: 12,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   background:
     "linear-gradient(135deg,rgba(59,130,246,.22),rgba(59,130,246,.10))",
   border:
@@ -15128,13 +15129,13 @@ const historySearchInputSx = {
   flex: 1,
 
   "& .MuiInputBase-root": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 14,
     fontWeight: 700,
   },
 
   "& input::placeholder": {
-    color: "rgba(255,255,255,.42)",
+    color: "rgba(var(--pf-fg-rgb),.42)",
     opacity: 1,
   },
 };
@@ -15143,18 +15144,18 @@ const historyUserSelectSx = {
   minWidth: 190,
 
   "& .MuiInputLabel-root": {
-    color: "rgba(255,255,255,.55)",
+    color: "rgba(var(--pf-fg-rgb),.55)",
     fontWeight: 700,
   },
 
   "& .MuiOutlinedInput-root": {
     height: 42,
     borderRadius: "12px",
-    background: "rgba(255,255,255,.04)",
-    color: "#fff",
+    background: "rgba(var(--pf-fg-rgb),.04)",
+    color: "var(--pf-text-strong)",
 
     "& fieldset": {
-      borderColor: "rgba(255,255,255,.08)",
+      borderColor: "rgba(var(--pf-fg-rgb),.08)",
     },
 
     "&:hover fieldset": {
@@ -15167,11 +15168,11 @@ const historyUserSelectSx = {
   },
 
   "& .MuiSvgIcon-root": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
   },
 
   "& .MuiSelect-select": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 800,
   },
 };
@@ -15199,7 +15200,7 @@ const historyLayoutSx = {
 const historyTableWrapSx = {
   overflowX: "auto",
   borderRadius: "12px",
-  border: "1px solid rgba(255,255,255,.07)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const plantChipSx = {
@@ -15247,7 +15248,7 @@ const historyCellWrap = {
 
 const historyMainText = {
   display: "block",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 12,
   fontWeight: 850,
   whiteSpace: "nowrap",
@@ -15258,7 +15259,7 @@ const historyMainText = {
 const historySubText = {
   display: "block",
   marginTop: 3,
-  color: "rgba(255,255,255,.48)",
+  color: "rgba(var(--pf-fg-rgb),.48)",
   fontSize: 11,
   fontWeight: 700,
   whiteSpace: "nowrap",
@@ -15268,7 +15269,7 @@ const historySubText = {
 
 const historyMonoText = {
   display: "block",
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 12,
   fontWeight: 850,
   fontFamily: "monospace",
@@ -15278,7 +15279,7 @@ const historyMonoText = {
 };
 
 const historyDateText = {
-  color: "#cbd5e1",
+  color: "var(--pf-text-soft)",
   fontSize: 12,
   fontWeight: 800,
 };
@@ -15295,12 +15296,12 @@ const pdfModalFrameWrapSx = {
   borderRadius: "12px",
   overflow: "hidden",
   background: "#fff",
-  border: "1px solid rgba(255,255,255,.08)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const historyEmptySx = {
   p: 3,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 800,
 };
 
@@ -15310,7 +15311,7 @@ const historyTopBarSx = {
   mb: 1.4,
   borderRadius: "18px",
   background:
-    "linear-gradient(180deg, rgba(30,41,59,.72), rgba(15,23,42,.72))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-raised-rgb),.72), rgba(var(--pf-surface-rgb),.72))",
   border: "1px solid rgba(148,163,184,.16)",
   display: "flex",
   flexDirection: "column",
@@ -15363,13 +15364,13 @@ const historyMiniFilterFieldSx = {
   "& .MuiOutlinedInput-root": {
     height: 40,
     borderRadius: "12px",
-    color: "#fff",
-    background: "rgba(255,255,255,.045)",
-    border: "1px solid rgba(255,255,255,.07)",
+    color: "var(--pf-text-strong)",
+    background: "rgba(var(--pf-fg-rgb),.045)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
   },
 
   "& .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(255,255,255,.08)",
+    borderColor: "rgba(var(--pf-fg-rgb),.08)",
   },
 
   "&:hover .MuiOutlinedInput-notchedOutline": {
@@ -15381,7 +15382,7 @@ const historyMiniFilterFieldSx = {
   },
 
   "& .MuiInputLabel-root": {
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
     fontWeight: 900,
     fontSize: 11,
   },
@@ -15391,19 +15392,19 @@ const historyMiniFilterFieldSx = {
   },
 
   "& input": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 12,
     fontWeight: 800,
   },
 
   "& .MuiSelect-select": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 12,
     fontWeight: 800,
   },
 
   "& .MuiSvgIcon-root": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
   },
 
   "& input[type='date']::-webkit-calendar-picker-indicator": {
@@ -15431,13 +15432,13 @@ const historyTableHeader = {
   top: 0,
   zIndex: 5,
   padding: "12px 14px",
-  background: "#111827",
-  color: "rgba(255,255,255,.68)",
+  background: "var(--pf-surface-alt)",
+  color: "rgba(var(--pf-fg-rgb),.68)",
   fontSize: 11,
   fontWeight: 900,
   textTransform: "uppercase",
   letterSpacing: ".04em",
-  borderBottom: "1px solid rgba(255,255,255,.08)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const historyTableRow = {
@@ -15446,8 +15447,8 @@ const historyTableRow = {
   minWidth: 1790,
   padding: "12px 14px",
   alignItems: "center",
-  borderBottom: "1px solid rgba(255,255,255,.055)",
-  color: "rgba(255,255,255,.82)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.055)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
   fontSize: 12,
 };
 
@@ -15460,8 +15461,8 @@ const historyReportTitleSx = {
   fontSize: 14,
   fontWeight: 950,
   color: "#93c5fd",
-  background: "#111827",
-  borderBottom: "1px solid rgba(255,255,255,.08)",
+  background: "var(--pf-surface-alt)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const historyReportHeader = {
@@ -15472,13 +15473,13 @@ const historyReportHeader = {
   top: 43,
   zIndex: 5,
   padding: "12px 14px",
-  background: "#0f172a",
-  color: "rgba(255,255,255,.7)",
+  background: "var(--pf-surface)",
+  color: "rgba(var(--pf-fg-rgb),.7)",
   fontSize: 11,
   fontWeight: 900,
   textTransform: "uppercase",
   letterSpacing: ".04em",
-  borderBottom: "1px solid rgba(255,255,255,.08)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const historyReportRow = {
@@ -15487,13 +15488,13 @@ const historyReportRow = {
   minWidth: 1620,
   padding: "12px 14px",
   alignItems: "center",
-  borderBottom: "1px solid rgba(255,255,255,.055)",
-  color: "rgba(255,255,255,.82)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.055)",
+  color: "rgba(var(--pf-fg-rgb),.82)",
   fontSize: 12,
 };
 
 const historyInlinePdfSubSx = {
-  color: "rgba(255,255,255,.5)",
+  color: "rgba(var(--pf-fg-rgb),.5)",
   fontSize: 11,
   fontWeight: 700,
   mt: 0.3,
@@ -15532,10 +15533,10 @@ const historyTableViewportSx = {
   minHeight: 0,
   overflow: "auto",
   borderRadius: "16px",
-  border: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(15,23,42,.58)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "rgba(var(--pf-surface-rgb),.58)",
   scrollbarWidth: "thin",
-  scrollbarColor: "#60a5fa rgba(15,23,42,.85)",
+  scrollbarColor: "#60a5fa rgba(var(--pf-surface-rgb),.85)",
 
   "&::-webkit-scrollbar": {
     width: 10,
@@ -15543,7 +15544,7 @@ const historyTableViewportSx = {
   },
 
   "&::-webkit-scrollbar-track": {
-    background: "rgba(15,23,42,.85)",
+    background: "rgba(var(--pf-surface-rgb),.85)",
     borderRadius: 999,
   },
 
@@ -15566,7 +15567,7 @@ const historyPaginationBarSx = {
   alignItems: "center",
   gap: 1.4,
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(2,6,23,.88))",
+    "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.92), rgba(var(--pf-surface-deep-rgb),.88))",
   border: "1px solid rgba(96,165,250,.16)",
   boxShadow:
     "0 16px 36px rgba(2,6,23,.32)",
@@ -15577,12 +15578,12 @@ const historyPaginationBarSx = {
 };
 
 const historyPaginationTextSx = {
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 12,
   fontWeight: 850,
 
   "& b": {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 950,
   },
 };
@@ -15602,9 +15603,9 @@ const historyPaginationButtonSx = {
   textTransform: "none",
   fontSize: 12,
   fontWeight: 900,
-  color: "#fff",
-  background: "rgba(255,255,255,.055)",
-  border: "1px solid rgba(255,255,255,.09)",
+  color: "var(--pf-text-strong)",
+  background: "rgba(var(--pf-fg-rgb),.055)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.09)",
 
   "&:hover": {
     background: "rgba(59,130,246,.16)",
@@ -15612,9 +15613,9 @@ const historyPaginationButtonSx = {
   },
 
   "&.Mui-disabled": {
-    color: "rgba(255,255,255,.28)",
-    background: "rgba(255,255,255,.025)",
-    borderColor: "rgba(255,255,255,.05)",
+    color: "rgba(var(--pf-fg-rgb),.28)",
+    background: "rgba(var(--pf-fg-rgb),.025)",
+    borderColor: "rgba(var(--pf-fg-rgb),.05)",
   },
 };
 
@@ -15622,11 +15623,11 @@ const historyPageCountSx = {
   minHeight: 34,
   px: 1.5,
   borderRadius: "10px",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.07)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.07)",
   display: "flex",
   alignItems: "center",
-  color: "rgba(255,255,255,.70)",
+  color: "rgba(var(--pf-fg-rgb),.70)",
   fontSize: 12,
   fontWeight: 850,
 
@@ -15642,7 +15643,7 @@ const historyPageSizeWrapSx = {
   alignItems: "center",
   justifyContent: "flex-end",
   gap: 1,
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 12,
   fontWeight: 850,
 };
@@ -15651,13 +15652,13 @@ const historyPageSizeSelectStyle = {
   height: 34,
   minWidth: 76,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,.10)",
-  background: "#0f172a",
-  color: "#fff",
+  border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
   padding: "0 10px",
   outline: "none",
   fontWeight: 900,
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const historyInlinePdfSx = {
@@ -15667,7 +15668,7 @@ const historyInlinePdfSx = {
   flexDirection: "column",
   borderRadius: "18px",
   background:
-    "linear-gradient(180deg,rgba(15,23,42,.96),rgba(2,6,23,.96))",
+    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-deep-rgb),.96))",
   border: "1px solid rgba(96,165,250,.20)",
   overflow: "hidden",
 };
@@ -15679,8 +15680,8 @@ const historyInlinePdfHeaderSx = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 1.4,
-  borderBottom: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(255,255,255,.035)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "rgba(var(--pf-fg-rgb),.035)",
 };
 
 const historyInlinePdfFrameWrapSx = {
@@ -15691,7 +15692,7 @@ const historyInlinePdfFrameWrapSx = {
 };
 
 const historyInlinePdfTitleSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 950,
 };

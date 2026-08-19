@@ -67,6 +67,7 @@ import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
+import { PackFlowThemeBoundary } from "../theme/PackFlowThemeContext";
 
 /* =========================================================
  * ACCESS CONFIGURATION
@@ -1071,7 +1072,7 @@ const getUserAccessHealth = (user) => {
  * PAGE
  * ========================================================= */
 
-export default function UsersPage() {
+function UsersPageContent() {
 	const navigate = useNavigate();
 
 	const {
@@ -2753,7 +2754,7 @@ export default function UsersPage() {
 	};
 
 	return (
-		<Box sx={pageSx}>
+		<Box sx={pageSx} className="packflow-theme-root">
 			<Box sx={contentSx}>
 				<PageHeader
 					canOpenPackFlow={
@@ -2954,7 +2955,7 @@ export default function UsersPage() {
 									<InputAdornment position="start">
 										<SearchIcon
 											sx={{
-												color: "#94a3b8",
+												color: "var(--pf-text-muted)",
 											}}
 										/>
 									</InputAdornment>
@@ -4431,7 +4432,7 @@ function AccessProfileSelector({
 
 												<Typography
 													sx={{
-														color: "#64748b",
+														color: "var(--pf-text-dim)",
 														fontSize: 11,
 													}}
 												>
@@ -5056,9 +5057,9 @@ const pageSx = {
 	background: `
 		radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 24%),
 		radial-gradient(circle at bottom right, rgba(20,184,166,.10), transparent 24%),
-		linear-gradient(135deg,#020617 0%,#0f172a 48%,#111827 100%)
+		linear-gradient(135deg,var(--pf-bg) 0%,var(--pf-surface) 48%,var(--pf-surface-alt) 100%)
 	`,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const contentSx = {
@@ -5087,9 +5088,9 @@ const headerSx = {
 	gap: 2,
 	flexWrap: "wrap",
 	background:
-		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.82))",
+		"linear-gradient(180deg, rgba(var(--pf-surface-rgb),.94), rgba(var(--pf-surface-rgb),.82))",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	boxShadow:
 		"0 28px 70px rgba(2,6,23,.38)",
 };
@@ -5122,7 +5123,7 @@ const suiteTitleSx = {
 
 const suiteSubSx = {
 	mt: 0.3,
-	color: "rgba(255,255,255,.52)",
+	color: "rgba(var(--pf-fg-rgb),.52)",
 	fontSize: 11.5,
 	fontWeight: 700,
 };
@@ -5139,7 +5140,7 @@ const pageTitleSx = {
 const pageSubtitleSx = {
 	mt: 0.8,
 	maxWidth: 760,
-	color: "rgba(255,255,255,.62)",
+	color: "rgba(var(--pf-fg-rgb),.62)",
 	fontSize: 13,
 	fontWeight: 650,
 	lineHeight: 1.6,
@@ -5163,7 +5164,7 @@ const breadcrumbSx = {
 };
 
 const breadcrumbTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 12.5,
 	fontWeight: 750,
 };
@@ -5194,7 +5195,7 @@ const statCardSx = (accent) => ({
 	alignItems: "center",
 	gap: 1.3,
 	background:
-		"linear-gradient(180deg,rgba(30,41,59,.76),rgba(15,23,42,.80))",
+		"linear-gradient(180deg,rgba(var(--pf-surface-raised-rgb),.76),rgba(var(--pf-surface-rgb),.80))",
 	border: `1px solid ${accent}30`,
 	boxShadow:
 		"0 16px 32px rgba(2,6,23,.28)",
@@ -5212,7 +5213,7 @@ const statIconSx = (accent) => ({
 });
 
 const statLabelSx = {
-	color: "rgba(255,255,255,.58)",
+	color: "rgba(var(--pf-fg-rgb),.58)",
 	fontSize: 10.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -5232,9 +5233,9 @@ const searchPanelSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1.2,
-	background: "rgba(15,23,42,.78)",
+	background: "rgba(var(--pf-surface-rgb),.78)",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 	boxShadow:
 		"0 18px 38px rgba(2,6,23,.28)",
 };
@@ -5243,7 +5244,7 @@ const smartControlPanelSx = {
 	p: 1.5,
 	borderRadius: "20px",
 	background:
-		"radial-gradient(circle at top left,rgba(59,130,246,.10),transparent 35%),linear-gradient(180deg,rgba(15,23,42,.88),rgba(2,6,23,.68))",
+		"radial-gradient(circle at top left,rgba(59,130,246,.10),transparent 35%),linear-gradient(180deg,rgba(var(--pf-surface-rgb),.88),rgba(var(--pf-surface-deep-rgb),.68))",
 	border:
 		"1px solid rgba(96,165,250,.10)",
 	boxShadow:
@@ -5269,13 +5270,13 @@ const smartControlTitleSx = {
 	mt: 0.3,
 	fontSize: 20,
 	fontWeight: 950,
-	color: "#f8fafc",
+	color: "var(--pf-text-strong)",
 };
 
 const smartControlSubSx = {
 	mt: 0.4,
 	maxWidth: 850,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 12,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -5333,7 +5334,7 @@ const smartFilterChipSx = {
 };
 
 const smartLoadedAtSx = {
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 10.5,
 	fontWeight: 700,
 };
@@ -5350,7 +5351,7 @@ const performanceCellSx = {
 	minWidth: 0,
 	padding: "7px 8px",
 	borderRadius: "11px",
-	background: "rgba(2,6,23,.25)",
+	background: "rgba(var(--pf-surface-deep-rgb),.25)",
 	border:
 		"1px solid rgba(148,163,184,.06)",
 };
@@ -5365,7 +5366,7 @@ const performanceTopSx = {
 const performanceTotalSx = {
 	fontSize: 20,
 	fontWeight: 950,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	lineHeight: 1,
 };
 
@@ -5394,21 +5395,21 @@ const performanceSplitSx = {
 	display: "flex",
 	gap: 1,
 	flexWrap: "wrap",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.5,
 	fontWeight: 700,
 };
 
 const performanceBandSx = {
 	mt: 0.4,
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	fontSize: 9.5,
 	fontWeight: 850,
 };
 
 const performanceLastSx = {
 	mt: 0.25,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 8.8,
 	fontWeight: 650,
 };
@@ -5495,7 +5496,7 @@ const intelligenceToolbarSx = {
 	justifyContent: "space-between",
 	gap: 1,
 	flexWrap: "wrap",
-	background: "rgba(2,6,23,.34)",
+	background: "rgba(var(--pf-surface-deep-rgb),.34)",
 	border: "1px solid rgba(148,163,184,.08)",
 };
 
@@ -5507,7 +5508,7 @@ const intelligenceToolbarGroupSx = {
 };
 
 const intelligenceToolbarLabelSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 10.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -5544,7 +5545,7 @@ const screenCountChipSx = {
 
 const performancePeriodCaptionSx = {
 	mt: 0.25,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 8.5,
 	fontWeight: 800,
 	textTransform: "uppercase",
@@ -5558,8 +5559,8 @@ const pagerMiniButtonSx = {
 	px: 1,
 	textTransform: "none",
 	fontWeight: 900,
-	color: "#cbd5e1",
-	background: "rgba(255,255,255,.035)",
+	color: "var(--pf-text-soft)",
+	background: "rgba(var(--pf-fg-rgb),.035)",
 	border: "1px solid rgba(148,163,184,.12)",
 	"&:hover": {
 		background: "rgba(59,130,246,.12)",
@@ -5578,29 +5579,29 @@ const effectiveScreenChipSx = (granted) => ({
 	height: 24,
 	fontSize: 9.2,
 	fontWeight: 850,
-	color: granted ? "#86efac" : "#94a3b8",
+	color: granted ? "#86efac" : "var(--pf-text-muted)",
 	background: granted ? "rgba(34,197,94,.08)" : "rgba(100,116,139,.07)",
 	border: `1px solid ${granted ? "rgba(34,197,94,.18)" : "rgba(100,116,139,.14)"}`,
-	"& .MuiChip-icon": { color: granted ? "#4ade80" : "#64748b" },
+	"& .MuiChip-icon": { color: granted ? "#4ade80" : "var(--pf-text-dim)" },
 });
 
 const tablePanelSx = {
 	borderRadius: "22px",
 	background:
-		"linear-gradient(180deg,rgba(15,23,42,.94),rgba(17,24,39,.92))",
+		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.94),rgba(var(--pf-surface-alt-rgb),.92))",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 	boxShadow:
 		"0 24px 64px rgba(2,6,23,.34)",
 	overflowX: "auto",
 	scrollbarWidth: "thin",
 	scrollbarColor:
-		"rgba(96,165,250,.72) rgba(15,23,42,.35)",
+		"rgba(96,165,250,.72) rgba(var(--pf-surface-rgb),.35)",
 	"&::-webkit-scrollbar": {
 		height: 10,
 	},
 	"&::-webkit-scrollbar-track": {
-		background: "rgba(15,23,42,.35)",
+		background: "rgba(var(--pf-surface-rgb),.35)",
 		borderRadius: 999,
 	},
 	"&::-webkit-scrollbar-thumb": {
@@ -5620,9 +5621,9 @@ const tableHeaderSx = {
 	alignItems: "center",
 	p: "15px 20px",
 	color: "#93c5fd",
-	background: "rgba(2,6,23,.34)",
+	background: "rgba(var(--pf-surface-deep-rgb),.34)",
 	borderBottom:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	fontSize: 10.5,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -5638,7 +5639,7 @@ const tableRowSx = {
 	alignItems: "center",
 	p: "15px 20px",
 	borderBottom:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 	transition: "background .2s ease",
 
 	"&:hover": {
@@ -5668,7 +5669,7 @@ const avatarSx = (accent) => ({
 });
 
 const usernameSx = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 13.5,
 	fontWeight: 900,
 	whiteSpace: "nowrap",
@@ -5678,7 +5679,7 @@ const usernameSx = {
 
 const smallMutedSx = {
 	mt: 0.3,
-	color: "rgba(255,255,255,.42)",
+	color: "rgba(var(--pf-fg-rgb),.42)",
 	fontSize: 10.5,
 	fontWeight: 650,
 };
@@ -5761,7 +5762,7 @@ const allPlantChipSx = {
 
 const neutralChipSx = {
 	height: 23,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	background: "rgba(148,163,184,.09)",
 	border:
 		"1px solid rgba(148,163,184,.14)",
@@ -5769,7 +5770,7 @@ const neutralChipSx = {
 	fontSize: 10,
 
 	"& .MuiChip-icon": {
-		color: "#94a3b8",
+		color: "var(--pf-text-muted)",
 	},
 };
 
@@ -5850,7 +5851,7 @@ const emptyStateSx = {
 	minWidth: 1660,
 	p: 5,
 	textAlign: "center",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontWeight: 750,
 };
 
@@ -5862,7 +5863,7 @@ const paginationSx = {
 	justifyContent: "space-between",
 	gap: 2,
 	flexWrap: "wrap",
-	background: "rgba(2,6,23,.26)",
+	background: "rgba(var(--pf-surface-deep-rgb),.26)",
 };
 
 const pageSizeSx = {
@@ -5878,15 +5879,15 @@ const pageControlsSx = {
 };
 
 const pageChipSx = {
-	color: "#cbd5e1",
-	background: "rgba(255,255,255,.05)",
+	color: "var(--pf-text-soft)",
+	background: "rgba(var(--pf-fg-rgb),.05)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	fontWeight: 850,
 };
 
 const mutedTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11.5,
 	fontWeight: 750,
 };
@@ -5911,8 +5912,8 @@ const primaryButtonSx = {
 	},
 
 	"&.Mui-disabled": {
-		color: "rgba(255,255,255,.28)",
-		background: "rgba(255,255,255,.04)",
+		color: "rgba(var(--pf-fg-rgb),.28)",
+		background: "rgba(var(--pf-fg-rgb),.04)",
 	},
 };
 
@@ -5922,10 +5923,10 @@ const secondaryButtonSx = {
 	px: 1.5,
 	textTransform: "none",
 	fontWeight: 800,
-	color: "#cbd5e1",
-	background: "rgba(255,255,255,.04)",
+	color: "var(--pf-text-soft)",
+	background: "rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 
 	"&:hover": {
 		background:
@@ -5935,7 +5936,7 @@ const secondaryButtonSx = {
 	},
 
 	"&.Mui-disabled": {
-		color: "rgba(255,255,255,.25)",
+		color: "rgba(var(--pf-fg-rgb),.25)",
 	},
 };
 
@@ -5957,8 +5958,8 @@ const dangerButtonSx = {
 	},
 
 	"&.Mui-disabled": {
-		color: "rgba(255,255,255,.25)",
-		background: "rgba(255,255,255,.04)",
+		color: "rgba(var(--pf-fg-rgb),.25)",
+		background: "rgba(var(--pf-fg-rgb),.04)",
 	},
 };
 
@@ -5972,7 +5973,7 @@ const dangerOutlineButtonSx = {
 
 const fieldSx = {
 	"& .MuiInputLabel-root": {
-		color: "rgba(255,255,255,.55)",
+		color: "rgba(var(--pf-fg-rgb),.55)",
 		fontSize: 12,
 		fontWeight: 750,
 	},
@@ -5982,14 +5983,14 @@ const fieldSx = {
 	},
 
 	"& .MuiOutlinedInput-root": {
-		color: "#fff",
-		background: "rgba(255,255,255,.04)",
+		color: "var(--pf-text-strong)",
+		background: "rgba(var(--pf-fg-rgb),.04)",
 		borderRadius: "13px",
 		fontSize: 13,
 
 		"& fieldset": {
 			borderColor:
-				"rgba(255,255,255,.08)",
+				"rgba(var(--pf-fg-rgb),.08)",
 		},
 
 		"&:hover fieldset": {
@@ -6005,15 +6006,15 @@ const fieldSx = {
 	},
 
 	"& .MuiInputBase-input": {
-		color: "#fff",
+		color: "var(--pf-text-strong)",
 	},
 
 	"& .MuiFormHelperText-root": {
-		color: "#64748b",
+		color: "var(--pf-text-dim)",
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "#94a3b8",
+		color: "var(--pf-text-muted)",
 	},
 };
 
@@ -6025,10 +6026,10 @@ const drawerPaperSx = {
 	},
 	maxWidth: "100vw",
 	background:
-		"linear-gradient(180deg,#020617,#0f172a)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-bg),var(--pf-surface))",
+	color: "var(--pf-text-strong)",
 	borderLeft:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const drawerHeaderSx = {
@@ -6046,7 +6047,7 @@ const drawerTitleSx = {
 
 const drawerSubSx = {
 	mt: 0.5,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 12.5,
 	fontWeight: 650,
 };
@@ -6056,15 +6057,15 @@ const closeButtonSx = {
 	width: 38,
 	height: 38,
 	borderRadius: "12px",
-	color: "#cbd5e1",
-	background: "rgba(255,255,255,.04)",
+	color: "var(--pf-text-soft)",
+	background: "rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const dividerSx = {
 	borderColor:
-		"rgba(255,255,255,.08)",
+		"rgba(var(--pf-fg-rgb),.08)",
 };
 
 const drawerBodySx = {
@@ -6089,7 +6090,7 @@ const sectionTitleSx = {
 
 const sectionDescriptionSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 11.5,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -6113,10 +6114,10 @@ const accessCardSx = (
 	cursor: "pointer",
 	background: selected
 		? `${accent}12`
-		: "rgba(255,255,255,.025)",
+		: "rgba(var(--pf-fg-rgb),.025)",
 	border: selected
 		? `1px solid ${accent}55`
-		: "1px solid rgba(255,255,255,.07)",
+		: "1px solid rgba(var(--pf-fg-rgb),.07)",
 	transition: "all .2s ease",
 	outline: "none",
 
@@ -6145,14 +6146,14 @@ const accessCardIconSx = (accent) => ({
 });
 
 const accessCardTitleSx = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 12.5,
 	fontWeight: 900,
 };
 
 const accessCardSubSx = {
 	mt: 0.3,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 10.5,
 	fontWeight: 650,
 	lineHeight: 1.4,
@@ -6167,13 +6168,13 @@ const selectionDotSx = (
 	borderRadius: "50%",
 	display: "grid",
 	placeItems: "center",
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	background: selected
 		? accent
 		: "transparent",
 	border: selected
 		? `1px solid ${accent}`
-		: "1px solid rgba(255,255,255,.16)",
+		: "1px solid rgba(var(--pf-fg-rgb),.16)",
 	fontSize: 11,
 	fontWeight: 950,
 });
@@ -6184,9 +6185,9 @@ const accessSummarySx = {
 	display: "flex",
 	alignItems: "flex-start",
 	gap: 1.3,
-	background: "rgba(255,255,255,.035)",
+	background: "rgba(var(--pf-fg-rgb),.035)",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const summaryIconSx = (accent) => ({
@@ -6208,7 +6209,7 @@ const summaryTitleSx = {
 
 const summaryDescriptionSx = {
 	mt: 0.3,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 11.5,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -6221,9 +6222,9 @@ const permissionCardSx = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 2,
-	background: "rgba(255,255,255,.035)",
+	background: "rgba(var(--pf-fg-rgb),.035)",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const permissionTitleSx = {
@@ -6233,7 +6234,7 @@ const permissionTitleSx = {
 
 const permissionSubSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 11,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -6257,14 +6258,14 @@ const drawerFooterSx = {
 	gridTemplateColumns: "1fr 1fr",
 	gap: 1.2,
 	borderTop:
-		"1px solid rgba(255,255,255,.08)",
-	background: "rgba(2,6,23,.65)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
+	background: "rgba(var(--pf-surface-deep-rgb),.65)",
 };
 
 const performanceDialogPaperSx = {
 	background:
-		"linear-gradient(180deg,#071120,#0f172a)",
-	color: "#fff",
+		"linear-gradient(180deg,#071120,var(--pf-surface))",
+	color: "var(--pf-text-strong)",
 	borderRadius: "22px",
 	border:
 		"1px solid rgba(96,165,250,.12)",
@@ -6313,7 +6314,7 @@ const performanceDialogNameSx = {
 
 const performanceDialogSubSx = {
 	mt: 0.25,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11.5,
 	fontWeight: 650,
 };
@@ -6342,12 +6343,12 @@ const performanceMetricCardSx = (accent) => ({
 	p: 1.4,
 	borderRadius: "14px",
 	background:
-		`radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(2,6,23,.28)`,
+		`radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(var(--pf-surface-deep-rgb),.28)`,
 	border: `1px solid ${accent}26`,
 });
 
 const performanceMetricLabelSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -6358,12 +6359,12 @@ const performanceMetricValueSx = {
 	mt: 0.6,
 	fontSize: 24,
 	fontWeight: 950,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const performanceMetricDetailSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 700,
 	lineHeight: 1.4,
@@ -6382,13 +6383,13 @@ const performanceSectionGridSx = {
 const performanceSectionCardSx = {
 	p: 1.5,
 	borderRadius: "15px",
-	background: "rgba(2,6,23,.25)",
+	background: "rgba(var(--pf-surface-deep-rgb),.25)",
 	border:
 		"1px solid rgba(148,163,184,.07)",
 };
 
 const performanceSectionTitleSx = {
-	color: "#f1f5f9",
+	color: "var(--pf-text)",
 	fontSize: 12.5,
 	fontWeight: 950,
 	mb: 1,
@@ -6403,11 +6404,11 @@ const performanceAccessListSx = {
 		display: "flex",
 		justifyContent: "space-between",
 		gap: 1,
-		color: "#64748b",
+		color: "var(--pf-text-dim)",
 		fontSize: 10.5,
 	},
 	"& strong": {
-		color: "#cbd5e1",
+		color: "var(--pf-text-soft)",
 		fontWeight: 850,
 		textAlign: "right",
 	},
@@ -6426,7 +6427,7 @@ const performanceMixItemSx = (accent) => ({
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	background: `${accent}0d`,
 	border: `1px solid ${accent}1f`,
 	fontSize: 10,
@@ -6439,7 +6440,7 @@ const performanceMixItemSx = (accent) => ({
 
 const performanceNoteSx = {
 	mt: 1.1,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 650,
 	lineHeight: 1.45,
@@ -6477,7 +6478,7 @@ const performanceRecentCardSx = {
 	mt: 1.3,
 	p: 1.5,
 	borderRadius: "15px",
-	background: "rgba(2,6,23,.25)",
+	background: "rgba(var(--pf-surface-deep-rgb),.25)",
 	border:
 		"1px solid rgba(148,163,184,.07)",
 };
@@ -6507,9 +6508,9 @@ const performanceRecentRowSx = {
 	alignItems: "center",
 	p: 0.9,
 	borderRadius: "10px",
-	background: "rgba(255,255,255,.025)",
+	background: "rgba(var(--pf-fg-rgb),.025)",
 	border:
-		"1px solid rgba(255,255,255,.045)",
+		"1px solid rgba(var(--pf-fg-rgb),.045)",
 };
 
 const performanceRecentDotSx = (category) => {
@@ -6535,14 +6536,14 @@ const performanceRecentDotSx = (category) => {
 };
 
 const performanceRecentActionSx = {
-	color: "#e2e8f0",
+	color: "var(--pf-text)",
 	fontSize: 10.5,
 	fontWeight: 850,
 };
 
 const performanceRecentMetaSx = {
 	mt: 0.2,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9,
 	fontWeight: 650,
 };
@@ -6551,8 +6552,8 @@ const performanceEmptySx = {
 	p: 2,
 	borderRadius: "12px",
 	textAlign: "center",
-	color: "#64748b",
-	background: "rgba(255,255,255,.02)",
+	color: "var(--pf-text-dim)",
+	background: "rgba(var(--pf-fg-rgb),.02)",
 	fontSize: 10.5,
 };
 
@@ -6562,15 +6563,15 @@ const dialogPaperSx = {
 		sm: 440,
 	},
 	background:
-		"linear-gradient(180deg,#0f172a,#111827)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+	color: "var(--pf-text-strong)",
 	borderRadius: "20px",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const dialogTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 13,
 	lineHeight: 1.6,
 };
@@ -6579,3 +6580,11 @@ const dialogActionsSx = {
 	p: 2,
 	gap: 1,
 };
+
+export default function UsersPage() {
+	return (
+		<PackFlowThemeBoundary>
+			<UsersPageContent />
+		</PackFlowThemeBoundary>
+	);
+}

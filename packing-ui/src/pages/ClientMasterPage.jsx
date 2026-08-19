@@ -63,6 +63,7 @@ import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
+import { PackFlowThemeBoundary } from "../theme/PackFlowThemeContext";
 
 /* =========================================================
  * CLIENT MASTER CONFIGURATION
@@ -430,7 +431,7 @@ const buildEmptyClientInsight = (name = "") => ({
  * PAGE
  * ========================================================= */
 
-export default function ClientMasterPage() {
+function ClientMasterPageContent() {
 	const navigate = useNavigate();
 
 	const {
@@ -1513,7 +1514,7 @@ export default function ClientMasterPage() {
 		};
 
 	return (
-		<Box sx={pageSx}>
+		<Box sx={pageSx} className="packflow-theme-root">
 			<Box sx={contentSx}>
 				<PageHeader
 					canOpenPackFlow={
@@ -1741,7 +1742,7 @@ export default function ClientMasterPage() {
 									<InputAdornment position="start">
 										<SearchIcon
 											sx={{
-												color: "#94a3b8",
+												color: "var(--pf-text-muted)",
 											}}
 										/>
 									</InputAdornment>
@@ -2420,7 +2421,7 @@ function ClientRow({
 						fontSize: 17,
 						color: row?.address
 							? "#60a5fa"
-							: "#475569",
+							: "var(--pf-text-soft)",
 						flexShrink: 0,
 					}}
 				/>
@@ -3210,9 +3211,9 @@ const pageSx = {
 	background: `
 		radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 24%),
 		radial-gradient(circle at bottom right, rgba(20,184,166,.10), transparent 24%),
-		linear-gradient(135deg,#020617 0%,#0f172a 48%,#111827 100%)
+		linear-gradient(135deg,var(--pf-bg) 0%,var(--pf-surface) 48%,var(--pf-surface-alt) 100%)
 	`,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const contentSx = {
@@ -3241,9 +3242,9 @@ const headerSx = {
 	gap: 2,
 	flexWrap: "wrap",
 	background:
-		"linear-gradient(180deg, rgba(15,23,42,.94), rgba(15,23,42,.82))",
+		"linear-gradient(180deg, rgba(var(--pf-surface-rgb),.94), rgba(var(--pf-surface-rgb),.82))",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	boxShadow:
 		"0 28px 70px rgba(2,6,23,.38)",
 };
@@ -3277,7 +3278,7 @@ const suiteTitleSx = {
 const suiteSubSx = {
 	mt: 0.3,
 	color:
-		"rgba(255,255,255,.52)",
+		"rgba(var(--pf-fg-rgb),.52)",
 	fontSize: 11.5,
 	fontWeight: 700,
 };
@@ -3295,7 +3296,7 @@ const pageSubtitleSx = {
 	mt: 0.8,
 	maxWidth: 760,
 	color:
-		"rgba(255,255,255,.62)",
+		"rgba(var(--pf-fg-rgb),.62)",
 	fontSize: 13,
 	fontWeight: 650,
 	lineHeight: 1.6,
@@ -3320,7 +3321,7 @@ const breadcrumbSx = {
 };
 
 const breadcrumbTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 12.5,
 	fontWeight: 750,
 };
@@ -3356,7 +3357,7 @@ const statCardSx = (
 	alignItems: "center",
 	gap: 1.3,
 	background:
-		"linear-gradient(180deg,rgba(30,41,59,.76),rgba(15,23,42,.80))",
+		"linear-gradient(180deg,rgba(var(--pf-surface-raised-rgb),.76),rgba(var(--pf-surface-rgb),.80))",
 	border:
 		`1px solid ${accent}30`,
 	boxShadow:
@@ -3380,7 +3381,7 @@ const statIconSx = (
 
 const statLabelSx = {
 	color:
-		"rgba(255,255,255,.58)",
+		"rgba(var(--pf-fg-rgb),.58)",
 	fontSize: 10.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -3398,7 +3399,7 @@ const smartControlPanelSx = {
 	p: 1.5,
 	borderRadius: "20px",
 	background:
-		"radial-gradient(circle at top left,rgba(59,130,246,.10),transparent 35%),linear-gradient(180deg,rgba(15,23,42,.88),rgba(2,6,23,.68))",
+		"radial-gradient(circle at top left,rgba(59,130,246,.10),transparent 35%),linear-gradient(180deg,rgba(var(--pf-surface-rgb),.88),rgba(var(--pf-surface-deep-rgb),.68))",
 	border:
 		"1px solid rgba(96,165,250,.10)",
 	boxShadow:
@@ -3425,13 +3426,13 @@ const smartControlTitleSx = {
 	mt: 0.3,
 	fontSize: 20,
 	fontWeight: 950,
-	color: "#f8fafc",
+	color: "var(--pf-text-strong)",
 };
 
 const smartControlSubSx = {
 	mt: 0.4,
 	maxWidth: 900,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 12,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -3480,7 +3481,7 @@ const filterInsightCardSx = {
 };
 
 const filterInsightLabelSx = {
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -3489,7 +3490,7 @@ const filterInsightLabelSx = {
 
 const filterInsightValueSx = {
 	mt: 0.1,
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	fontSize: 12,
 	fontWeight: 900,
 };
@@ -3534,7 +3535,7 @@ const intelligenceToolbarSx = {
 	justifyContent: "space-between",
 	gap: 1,
 	flexWrap: "wrap",
-	background: "rgba(2,6,23,.34)",
+	background: "rgba(var(--pf-surface-deep-rgb),.34)",
 	border: "1px solid rgba(148,163,184,.08)",
 };
 
@@ -3546,7 +3547,7 @@ const intelligenceToolbarGroupSx = {
 };
 
 const intelligenceToolbarLabelSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 10.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -3572,7 +3573,7 @@ const sourceHealthChipSx = (ok) => ({
 });
 
 const smartLoadedAtSx = {
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.8,
 	fontWeight: 700,
 };
@@ -3597,7 +3598,7 @@ const insightsButtonSx = {
 	background: "rgba(139,92,246,.09)",
 	border: "1px solid rgba(167,139,250,.20)",
 	"&:hover": {
-		color: "#fff",
+		color: "var(--pf-text-strong)",
 		background: "rgba(139,92,246,.16)",
 		borderColor: "rgba(167,139,250,.34)",
 	},
@@ -3607,7 +3608,7 @@ const clientInsightCellSx = {
 	minWidth: 0,
 	p: 1,
 	borderRadius: "12px",
-	background: "rgba(2,6,23,.22)",
+	background: "rgba(var(--pf-surface-deep-rgb),.22)",
 	border: "1px solid rgba(96,165,250,.08)",
 };
 
@@ -3619,7 +3620,7 @@ const performanceTopSx = {
 };
 
 const performanceTotalSx = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 21,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -3627,7 +3628,7 @@ const performanceTotalSx = {
 
 const performancePeriodCaptionSx = {
 	mt: 0.25,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 8.5,
 	fontWeight: 800,
 	textTransform: "uppercase",
@@ -3653,25 +3654,25 @@ const performanceSplitSx = {
 	display: "flex",
 	gap: 0.7,
 	flexWrap: "wrap",
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 8.8,
 	fontWeight: 800,
 	"& strong": {
-		color: "#cbd5e1",
+		color: "var(--pf-text-soft)",
 		fontWeight: 950,
 	},
 };
 
 const performanceBandSx = {
 	mt: 0.65,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.4,
 	fontWeight: 850,
 };
 
 const performanceLastSx = {
 	mt: 0.25,
-	color: "#475569",
+	color: "var(--pf-text-soft)",
 	fontSize: 8.9,
 	fontWeight: 700,
 };
@@ -3679,15 +3680,15 @@ const performanceLastSx = {
 const tablePanelSx = {
 	borderRadius: "22px",
 	background:
-		"linear-gradient(180deg,rgba(15,23,42,.94),rgba(17,24,39,.92))",
+		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.94),rgba(var(--pf-surface-alt-rgb),.92))",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 	boxShadow:
 		"0 24px 64px rgba(2,6,23,.34)",
 	overflowX: "auto",
 	scrollbarWidth: "thin",
 	scrollbarColor:
-		"rgba(96,165,250,.72) rgba(15,23,42,.35)",
+		"rgba(96,165,250,.72) rgba(var(--pf-surface-rgb),.35)",
 
 	"&::-webkit-scrollbar": {
 		height: 10,
@@ -3695,7 +3696,7 @@ const tablePanelSx = {
 
 	"&::-webkit-scrollbar-track": {
 		background:
-			"rgba(15,23,42,.35)",
+			"rgba(var(--pf-surface-rgb),.35)",
 		borderRadius: 999,
 	},
 
@@ -3718,9 +3719,9 @@ const tableHeaderSx = {
 	p: "15px 20px",
 	color: "#93c5fd",
 	background:
-		"rgba(2,6,23,.34)",
+		"rgba(var(--pf-surface-deep-rgb),.34)",
 	borderBottom:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	fontSize: 10.5,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -3736,7 +3737,7 @@ const tableRowSx = {
 	alignItems: "center",
 	p: "15px 20px",
 	borderBottom:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 	transition:
 		"background .2s ease",
 
@@ -3771,7 +3772,7 @@ const avatarSx = (
 });
 
 const clientNameSx = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 13.5,
 	fontWeight: 900,
 	whiteSpace: "normal",
@@ -3781,7 +3782,7 @@ const clientNameSx = {
 const smallMutedSx = {
 	mt: 0.3,
 	color:
-		"rgba(255,255,255,.42)",
+		"rgba(var(--pf-fg-rgb),.42)",
 	fontSize: 10.5,
 	fontWeight: 650,
 };
@@ -3794,7 +3795,7 @@ const addressCellSx = {
 };
 
 const addressTextSx = {
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	fontSize: 11.5,
 	fontWeight: 700,
 	lineHeight: 1.45,
@@ -3803,7 +3804,7 @@ const addressTextSx = {
 
 const addressEmptySx = {
 	...addressTextSx,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontStyle: "italic",
 	fontWeight: 650,
 };
@@ -3813,7 +3814,7 @@ const auditCellSx = {
 };
 
 const auditPrimarySx = {
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	fontSize: 11.5,
 	fontWeight: 850,
 	whiteSpace: "nowrap",
@@ -3883,7 +3884,7 @@ const emptyStateSx = {
 	minWidth: 1660,
 	p: 5,
 	textAlign: "center",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontWeight: 750,
 };
 
@@ -3897,7 +3898,7 @@ const paginationSx = {
 	gap: 2,
 	flexWrap: "wrap",
 	background:
-		"rgba(2,6,23,.26)",
+		"rgba(var(--pf-surface-deep-rgb),.26)",
 };
 
 const pageSizeSx = {
@@ -3913,11 +3914,11 @@ const pageControlsSx = {
 };
 
 const pageChipSx = {
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	background:
-		"rgba(255,255,255,.05)",
+		"rgba(var(--pf-fg-rgb),.05)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	fontWeight: 850,
 };
 
@@ -3928,9 +3929,9 @@ const pagerMiniButtonSx = {
 	px: 1,
 	textTransform: "none",
 	fontWeight: 900,
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	background:
-		"rgba(255,255,255,.035)",
+		"rgba(var(--pf-fg-rgb),.035)",
 	border:
 		"1px solid rgba(148,163,184,.12)",
 
@@ -3943,7 +3944,7 @@ const pagerMiniButtonSx = {
 };
 
 const mutedTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11.5,
 	fontWeight: 750,
 };
@@ -3969,9 +3970,9 @@ const primaryButtonSx = {
 
 	"&.Mui-disabled": {
 		color:
-			"rgba(255,255,255,.28)",
+			"rgba(var(--pf-fg-rgb),.28)",
 		background:
-			"rgba(255,255,255,.04)",
+			"rgba(var(--pf-fg-rgb),.04)",
 	},
 };
 
@@ -3981,11 +3982,11 @@ const secondaryButtonSx = {
 	px: 1.5,
 	textTransform: "none",
 	fontWeight: 800,
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	background:
-		"rgba(255,255,255,.04)",
+		"rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 
 	"&:hover": {
 		background:
@@ -3996,7 +3997,7 @@ const secondaryButtonSx = {
 
 	"&.Mui-disabled": {
 		color:
-			"rgba(255,255,255,.25)",
+			"rgba(var(--pf-fg-rgb),.25)",
 	},
 };
 
@@ -4052,7 +4053,7 @@ const reactivateButtonSx = {
 const fieldSx = {
 	"& .MuiInputLabel-root": {
 		color:
-			"rgba(255,255,255,.55)",
+			"rgba(var(--pf-fg-rgb),.55)",
 		fontSize: 12,
 		fontWeight: 750,
 	},
@@ -4062,15 +4063,15 @@ const fieldSx = {
 	},
 
 	"& .MuiOutlinedInput-root": {
-		color: "#fff",
+		color: "var(--pf-text-strong)",
 		background:
-			"rgba(255,255,255,.04)",
+			"rgba(var(--pf-fg-rgb),.04)",
 		borderRadius: "13px",
 		fontSize: 13,
 
 		"& fieldset": {
 			borderColor:
-				"rgba(255,255,255,.08)",
+				"rgba(var(--pf-fg-rgb),.08)",
 		},
 
 		"&:hover fieldset": {
@@ -4086,15 +4087,15 @@ const fieldSx = {
 	},
 
 	"& .MuiInputBase-input": {
-		color: "#fff",
+		color: "var(--pf-text-strong)",
 	},
 
 	"& .MuiFormHelperText-root": {
-		color: "#64748b",
+		color: "var(--pf-text-dim)",
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "#94a3b8",
+		color: "var(--pf-text-muted)",
 	},
 };
 
@@ -4106,10 +4107,10 @@ const drawerPaperSx = {
 	},
 	maxWidth: "100vw",
 	background:
-		"linear-gradient(180deg,#020617,#0f172a)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-bg),var(--pf-surface))",
+	color: "var(--pf-text-strong)",
 	borderLeft:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	display: "flex",
 	flexDirection: "column",
 };
@@ -4130,7 +4131,7 @@ const drawerTitleSx = {
 
 const drawerSubSx = {
 	mt: 0.5,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 12.5,
 	fontWeight: 650,
 };
@@ -4140,16 +4141,16 @@ const closeButtonSx = {
 	width: 38,
 	height: 38,
 	borderRadius: "12px",
-	color: "#cbd5e1",
+	color: "var(--pf-text-soft)",
 	background:
-		"rgba(255,255,255,.04)",
+		"rgba(var(--pf-fg-rgb),.04)",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const dividerSx = {
 	borderColor:
-		"rgba(255,255,255,.08)",
+		"rgba(var(--pf-fg-rgb),.08)",
 };
 
 const drawerBodySx = {
@@ -4168,9 +4169,9 @@ const drawerFooterSx = {
 		"1fr 1fr",
 	gap: 1.2,
 	borderTop:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	background:
-		"rgba(2,6,23,.65)",
+		"rgba(var(--pf-surface-deep-rgb),.65)",
 };
 
 const sectionSx = {
@@ -4186,7 +4187,7 @@ const sectionTitleSx = {
 
 const sectionDescriptionSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 11.5,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -4201,9 +4202,9 @@ const permissionCardSx = {
 		"space-between",
 	gap: 2,
 	background:
-		"rgba(255,255,255,.035)",
+		"rgba(var(--pf-fg-rgb),.035)",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const permissionTitleSx = {
@@ -4213,7 +4214,7 @@ const permissionTitleSx = {
 
 const permissionSubSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 11,
 	fontWeight: 650,
 	lineHeight: 1.5,
@@ -4242,8 +4243,8 @@ const errorAlertSx = {
 };
 
 const performanceDialogPaperSx = {
-	background: "linear-gradient(180deg,#071120,#0f172a)",
-	color: "#fff",
+	background: "linear-gradient(180deg,#071120,var(--pf-surface))",
+	color: "var(--pf-text-strong)",
 	borderRadius: "22px",
 	border: "1px solid rgba(96,165,250,.12)",
 	boxShadow: "0 30px 80px rgba(2,6,23,.58)",
@@ -4287,7 +4288,7 @@ const performanceDialogNameSx = {
 
 const performanceDialogSubSx = {
 	mt: 0.25,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11.5,
 	fontWeight: 650,
 };
@@ -4315,12 +4316,12 @@ const performanceHeroGridSx = {
 const performanceMetricCardSx = (accent) => ({
 	p: 1.4,
 	borderRadius: "14px",
-	background: `radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(2,6,23,.28)`,
+	background: `radial-gradient(circle at top right,${accent}18,transparent 45%),rgba(var(--pf-surface-deep-rgb),.28)`,
 	border: `1px solid ${accent}26`,
 });
 
 const performanceMetricLabelSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -4331,12 +4332,12 @@ const performanceMetricValueSx = {
 	mt: 0.6,
 	fontSize: 24,
 	fontWeight: 950,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 };
 
 const performanceMetricDetailSx = {
 	mt: 0.4,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 700,
 	lineHeight: 1.4,
@@ -4355,12 +4356,12 @@ const performanceSectionGridSx = {
 const performanceSectionCardSx = {
 	p: 1.5,
 	borderRadius: "15px",
-	background: "rgba(2,6,23,.25)",
+	background: "rgba(var(--pf-surface-deep-rgb),.25)",
 	border: "1px solid rgba(148,163,184,.07)",
 };
 
 const performanceSectionTitleSx = {
-	color: "#f1f5f9",
+	color: "var(--pf-text)",
 	fontSize: 12.5,
 	fontWeight: 950,
 	mb: 1,
@@ -4375,11 +4376,11 @@ const performanceAccessListSx = {
 		display: "flex",
 		justifyContent: "space-between",
 		gap: 1,
-		color: "#64748b",
+		color: "var(--pf-text-dim)",
 		fontSize: 10.5,
 	},
 	"& strong": {
-		color: "#cbd5e1",
+		color: "var(--pf-text-soft)",
 		fontWeight: 850,
 		textAlign: "right",
 		maxWidth: "65%",
@@ -4399,7 +4400,7 @@ const performanceMixItemSx = (accent) => ({
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	background: `${accent}0d`,
 	border: `1px solid ${accent}1f`,
 	fontSize: 10,
@@ -4412,7 +4413,7 @@ const performanceMixItemSx = (accent) => ({
 
 const performanceNoteSx = {
 	mt: 1.1,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 650,
 	lineHeight: 1.45,
@@ -4422,7 +4423,7 @@ const performanceRecentCardSx = {
 	mt: 1.3,
 	p: 1.5,
 	borderRadius: "15px",
-	background: "rgba(2,6,23,.25)",
+	background: "rgba(var(--pf-surface-deep-rgb),.25)",
 	border: "1px solid rgba(148,163,184,.07)",
 };
 
@@ -4451,8 +4452,8 @@ const performanceRecentRowSx = {
 	alignItems: "center",
 	p: 0.9,
 	borderRadius: "10px",
-	background: "rgba(255,255,255,.025)",
-	border: "1px solid rgba(255,255,255,.045)",
+	background: "rgba(var(--pf-fg-rgb),.025)",
+	border: "1px solid rgba(var(--pf-fg-rgb),.045)",
 };
 
 const performanceRecentDotSx = (category) => {
@@ -4476,14 +4477,14 @@ const performanceRecentDotSx = (category) => {
 };
 
 const performanceRecentActionSx = {
-	color: "#e2e8f0",
+	color: "var(--pf-text)",
 	fontSize: 10.5,
 	fontWeight: 850,
 };
 
 const performanceRecentMetaSx = {
 	mt: 0.2,
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9,
 	fontWeight: 650,
 };
@@ -4492,8 +4493,8 @@ const performanceEmptySx = {
 	p: 2,
 	borderRadius: "12px",
 	textAlign: "center",
-	color: "#64748b",
-	background: "rgba(255,255,255,.02)",
+	color: "var(--pf-text-dim)",
+	background: "rgba(var(--pf-fg-rgb),.02)",
 	fontSize: 10.5,
 };
 
@@ -4514,7 +4515,7 @@ const insightTagSx = (accent) => ({
 
 const neutralInsightChipSx = {
 	height: 24,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	background: "rgba(100,116,139,.08)",
 	border: "1px solid rgba(100,116,139,.16)",
 	fontWeight: 800,
@@ -4522,7 +4523,7 @@ const neutralInsightChipSx = {
 };
 
 const insightMiniHeadingSx = {
-	color: "#64748b",
+	color: "var(--pf-text-dim)",
 	fontSize: 9.5,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -4542,7 +4543,7 @@ const insightSourceRowSx = (ok) => ({
 	gap: 1,
 	p: 0.8,
 	borderRadius: "9px",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	background: ok ? "rgba(34,197,94,.04)" : "rgba(239,68,68,.04)",
 	border: `1px solid ${ok ? "rgba(34,197,94,.12)" : "rgba(239,68,68,.12)"}`,
 	fontSize: 9.8,
@@ -4570,15 +4571,15 @@ const dialogPaperSx = {
 		sm: 440,
 	},
 	background:
-		"linear-gradient(180deg,#0f172a,#111827)",
-	color: "#fff",
+		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+	color: "var(--pf-text-strong)",
 	borderRadius: "20px",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const dialogTextSx = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 13,
 	lineHeight: 1.6,
 };
@@ -4587,3 +4588,12 @@ const dialogActionsSx = {
 	p: 2,
 	gap: 1,
 };
+
+
+export default function ClientMasterPage() {
+	return (
+		<PackFlowThemeBoundary>
+			<ClientMasterPageContent />
+		</PackFlowThemeBoundary>
+	);
+}

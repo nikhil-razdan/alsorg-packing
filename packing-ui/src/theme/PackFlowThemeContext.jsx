@@ -98,6 +98,24 @@ export function PackFlowThemeProvider({ children }) {
   );
 }
 
+export function PackFlowThemeBoundary({ children }) {
+  const existingContext = useContext(PackFlowThemeContext);
+
+  if (existingContext) {
+    return children;
+  }
+
+  return (
+    <PackFlowThemeProvider>
+      {children}
+    </PackFlowThemeProvider>
+  );
+}
+
+export function useOptionalPackFlowTheme() {
+  return useContext(PackFlowThemeContext);
+}
+
 export function usePackFlowTheme() {
   const context = useContext(PackFlowThemeContext);
 

@@ -1,74 +1,82 @@
 :root[data-packflow-theme="dark"] {
-  --pf-color-scheme: dark;
-  --pf-bg: #020617;
-  --pf-bg-alt: #0b1220;
-  --pf-surface: #0f172a;
-  --pf-surface-alt: #111827;
-  --pf-surface-raised: #1e293b;
-  --pf-surface-deep: #020617;
-  --pf-header-start: #081225;
-  --pf-header-end: #0b1730;
-  --pf-scroll-track: #0b1220;
-  --pf-surface-rgb: 15,23,42;
-  --pf-surface-deep-rgb: 2,6,23;
-  --pf-surface-raised-rgb: 30,41,59;
-  --pf-fg-rgb: 255,255,255;
-  --pf-text-strong: #ffffff;
-  --pf-text: #e2e8f0;
-  --pf-text-soft: #aebdd0;
-  --pf-text-muted: #94a3b8;
-  --pf-text-dim: #64748b;
-  --pf-border: rgba(255,255,255,.08);
-  --pf-border-soft: rgba(255,255,255,.055);
-  --pf-card-shadow: 0 18px 42px rgba(2,6,23,.32);
-  --pf-overlay: rgba(2,6,23,.84);
-  --pf-input: rgba(2,6,23,.55);
+    --pf-color-scheme: dark;
+    --pf-bg: #020617;
+    --pf-bg-alt: #0b1220;
+    --pf-surface: #0f172a;
+    --pf-surface-alt: #111827;
+    --pf-surface-raised: #1e293b;
+    --pf-surface-deep: #020617;
+    --pf-header-start: #081225;
+    --pf-header-end: #0b1730;
+    --pf-scroll-track: #0b1220;
+    --pf-surface-rgb: 15, 23, 42;
+    --pf-surface-alt-rgb: 17, 24, 39;
+    --pf-surface-deep-rgb: 2, 6, 23;
+    --pf-surface-raised-rgb: 30, 41, 59;
+    --pf-fg-rgb: 255, 255, 255;
+    --pf-text-strong: #ffffff;
+    --pf-text: #e2e8f0;
+    --pf-text-soft: #aebdd0;
+    --pf-text-muted: #94a3b8;
+    --pf-text-dim: #64748b;
+    --pf-border: rgba(255, 255, 255, .08);
+    --pf-border-soft: rgba(255, 255, 255, .055);
+    --pf-card-shadow: 0 18px 42px rgba(2, 6, 23, .32);
+    --pf-overlay: rgba(2, 6, 23, .84);
+    --pf-input: rgba(2, 6, 23, .55);
+    --pf-hover: rgba(255, 255, 255, .045);
+    --pf-selected: rgba(59, 130, 246, .13);
+    --pf-shadow-rgb: 2, 6, 23;
 }
 
 :root[data-packflow-theme="light"] {
-  --pf-color-scheme: light;
-  --pf-bg: #f4f7fb;
-  --pf-bg-alt: #edf2f7;
-  --pf-surface: #ffffff;
-  --pf-surface-alt: #f8fafc;
-  --pf-surface-raised: #ffffff;
-  --pf-surface-deep: #eef2f7;
-  --pf-header-start: #ffffff;
-  --pf-header-end: #f8fafc;
-  --pf-scroll-track: #e2e8f0;
-  --pf-surface-rgb: 255,255,255;
-  --pf-surface-deep-rgb: 238,242,247;
-  --pf-surface-raised-rgb: 255,255,255;
-  --pf-fg-rgb: 15,23,42;
-  --pf-text-strong: #0f172a;
-  --pf-text: #334155;
-  --pf-text-soft: #475569;
-  --pf-text-muted: #64748b;
-  --pf-text-dim: #94a3b8;
-  --pf-border: rgba(15,23,42,.10);
-  --pf-border-soft: rgba(15,23,42,.07);
-  --pf-card-shadow: 0 14px 34px rgba(15,23,42,.09);
-  --pf-overlay: rgba(15,23,42,.28);
-  --pf-input: rgba(255,255,255,.92);
+    --pf-color-scheme: light;
+    --pf-bg: #f4f7fb;
+    --pf-bg-alt: #edf2f7;
+    --pf-surface: #ffffff;
+    --pf-surface-alt: #f8fafc;
+    --pf-surface-raised: #ffffff;
+    --pf-surface-deep: #eef2f7;
+    --pf-header-start: #ffffff;
+    --pf-header-end: #f8fafc;
+    --pf-scroll-track: #e2e8f0;
+    --pf-surface-rgb: 255, 255, 255;
+    --pf-surface-alt-rgb: 248, 250, 252;
+    --pf-surface-deep-rgb: 238, 242, 247;
+    --pf-surface-raised-rgb: 255, 255, 255;
+    --pf-fg-rgb: 15, 23, 42;
+    --pf-text-strong: #0f172a;
+    --pf-text: #334155;
+    --pf-text-soft: #475569;
+    --pf-text-muted: #64748b;
+    --pf-text-dim: #94a3b8;
+    --pf-border: rgba(15, 23, 42, .10);
+    --pf-border-soft: rgba(15, 23, 42, .07);
+    --pf-card-shadow: 0 14px 34px rgba(15, 23, 42, .09);
+    --pf-overlay: rgba(15, 23, 42, .28);
+    --pf-input: rgba(255, 255, 255, .92);
+    --pf-hover: rgba(15, 23, 42, .045);
+    --pf-selected: rgba(59, 130, 246, .10);
+    --pf-shadow-rgb: 15, 23, 42;
 }
 
 html[data-packflow-theme] body,
 .packflow-theme-root {
-  background: var(--pf-bg);
-  color: var(--pf-text-strong);
+    background: var(--pf-bg);
+    color: var(--pf-text-strong);
 }
 
 .packflow-theme-root,
 .packflow-theme-root * {
-  transition-property: background-color, border-color, color, box-shadow;
-  transition-duration: .18s;
-  transition-timing-function: ease;
+    transition-property: background-color, border-color, color, box-shadow;
+    transition-duration: .18s;
+    transition-timing-function: ease;
 }
 
 .packflow-theme-root input,
 .packflow-theme-root select,
 .packflow-theme-root textarea {
-  color-scheme: var(--pf-color-scheme);
+    color-scheme: var(--pf-color-scheme);
 }
 
 /* Preserve readable contrast on semantic blue action buttons after neutral token conversion. */
@@ -77,7 +85,7 @@ html[data-packflow-theme="light"] .packflow-theme-root [style*="linear-gradient"
 html[data-packflow-theme="light"] .packflow-theme-root [style*="linear-gradient"][style*="29, 78, 216"],
 html[data-packflow-theme="light"] .packflow-theme-root button[style*="37, 99, 235"],
 html[data-packflow-theme="light"] .packflow-theme-root button[style*="59, 130, 246"] {
-  color: #fff !important;
+    color: #fff !important;
 }
 
 /* Compatibility bridge for legacy plain-inline Dashboard / Logistics surfaces.
@@ -86,72 +94,73 @@ html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][st
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="2, 6, 23"],
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="17, 24, 39"],
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="30, 41, 59"] {
-  background: var(--pf-surface) !important;
+    background: var(--pf-surface) !important;
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root [style*="color: rgb(255, 255, 255)"],
 html[data-packflow-theme="light"] .packflow-theme-root [style*="color: rgba(255, 255, 255"] {
-  color: var(--pf-text-strong) !important;
+    color: var(--pf-text-strong) !important;
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root [style*="border"][style*="255, 255, 255"] {
-  border-color: var(--pf-border) !important;
+    border-color: var(--pf-border) !important;
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="15, 23, 42"],
 html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="2, 6, 23"],
 html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="30, 41, 59"] {
-  background: var(--pf-surface) !important;
-  box-shadow: var(--pf-card-shadow) !important;
+    background: var(--pf-surface) !important;
+    box-shadow: var(--pf-card-shadow) !important;
 }
 
 /* Native controls / autofill. */
 html[data-packflow-theme="light"] .packflow-theme-root input,
 html[data-packflow-theme="light"] .packflow-theme-root select,
 html[data-packflow-theme="light"] .packflow-theme-root textarea {
-  background-color: var(--pf-input);
-  color: var(--pf-text-strong);
+    background-color: var(--pf-input);
+    color: var(--pf-text-strong);
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root option {
-  background: #ffffff;
-  color: #0f172a;
+    background: #ffffff;
+    color: #0f172a;
 }
 
 /* Shared scrollbars. */
 .packflow-theme-root,
 .packflow-theme-root * {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(96,165,250,.72) var(--pf-scroll-track);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(96, 165, 250, .72) var(--pf-scroll-track);
 }
 
 .packflow-theme-root::-webkit-scrollbar,
 .packflow-theme-root *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+    width: 10px;
+    height: 10px;
 }
 
 .packflow-theme-root::-webkit-scrollbar-track,
 .packflow-theme-root *::-webkit-scrollbar-track {
-  background: var(--pf-scroll-track);
-  border-radius: 999px;
+    background: var(--pf-scroll-track);
+    border-radius: 999px;
 }
 
 .packflow-theme-root::-webkit-scrollbar-thumb,
 .packflow-theme-root *::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  border: 2px solid var(--pf-scroll-track);
-  background: linear-gradient(135deg,#475569,#3b82f6,#60a5fa);
+    border-radius: 999px;
+    border: 2px solid var(--pf-scroll-track);
+    background: linear-gradient(135deg, #475569, #3b82f6, #60a5fa);
 }
 
 .packflow-theme-root::-webkit-scrollbar-thumb:hover,
 .packflow-theme-root *::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg,#60a5fa,#2563eb);
+    background: linear-gradient(135deg, #60a5fa, #2563eb);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .packflow-theme-root,
-  .packflow-theme-root * {
-    transition: none !important;
-  }
+
+    .packflow-theme-root,
+    .packflow-theme-root * {
+        transition: none !important;
+    }
 }

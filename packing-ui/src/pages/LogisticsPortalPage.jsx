@@ -192,11 +192,11 @@ function SidebarButton({
 
         background: active
           ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-          : "rgba(255,255,255,.035)",
+          : "rgba(var(--pf-fg-rgb),.035)",
 
         border: active
           ? "1px solid rgba(96,165,250,.52)"
-          : "1px solid rgba(255,255,255,.065)",
+          : "1px solid rgba(var(--pf-fg-rgb),.065)",
 
         boxShadow: active
           ? "0 10px 28px rgba(37,99,235,.28)"
@@ -215,7 +215,7 @@ function SidebarButton({
 const page = {
   minHeight: "100vh",
   background:
-    "radial-gradient(circle at top right,rgba(37,99,235,.10),transparent 32%),linear-gradient(135deg,#020617,#0f172a)",
+    "radial-gradient(circle at top right,rgba(37,99,235,.10),transparent 32%),linear-gradient(135deg,var(--pf-bg),var(--pf-surface))",
 };
 
 const content = {
@@ -232,14 +232,14 @@ const headerRow = {
 };
 
 const logo = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 32,
   fontWeight: 950,
   marginBottom: 7,
 };
 
 const subtitle = {
-  color: "rgba(255,255,255,.62)",
+  color: "rgba(var(--pf-fg-rgb),.62)",
   fontSize: 13,
   fontWeight: 600,
 };
@@ -280,7 +280,7 @@ const tabsRow = {
 const sidebarBtn = {
   height: 44,
   borderRadius: 13,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   cursor: "pointer",
   paddingLeft: 17,
   paddingRight: 17,
@@ -301,14 +301,14 @@ const reportNotice = {
 };
 
 const reportNoticeTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 13,
 };
 
 const reportNoticeText = {
   marginTop: 5,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 12,
   fontWeight: 650,
   lineHeight: 1.55,
