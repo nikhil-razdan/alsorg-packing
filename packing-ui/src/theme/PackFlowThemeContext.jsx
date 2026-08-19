@@ -18,6 +18,7 @@ import {
 import "./packFlowTheme.css";
 
 const STORAGE_KEY = "packflow:theme-mode:v1";
+const BODY_CLASS = "packflow-theme-body";
 const PackFlowThemeContext = createContext(null);
 
 const normalizeMode = (value) =>
@@ -54,13 +55,20 @@ export function PackFlowThemeProvider({ children }) {
     if (typeof document === "undefined") return undefined;
 
     const root = document.documentElement;
+    const body = document.body;
+
     root.dataset.packflowTheme = mode;
     root.style.colorScheme = mode;
+
+    if (body) {
+      body.classList.add(BODY_CLASS);
+      body.dataset.packflowTheme = mode;
+    }
 
     try {
       window.localStorage.setItem(STORAGE_KEY, mode);
     } catch {
-      // Theme persistence is optional; UI still works without storage.
+      // Theme persistence is optional.
     }
 
     return () => {
@@ -69,6 +77,11 @@ export function PackFlowThemeProvider({ children }) {
       }
 
       root.style.removeProperty("color-scheme");
+
+      if (body) {
+        body.classList.remove(BODY_CLASS);
+        delete body.dataset.packflowTheme;
+      }
     };
   }, [mode]);
 

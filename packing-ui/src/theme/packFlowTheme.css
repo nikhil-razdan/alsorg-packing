@@ -1,166 +1,276 @@
 :root[data-packflow-theme="dark"] {
-    --pf-color-scheme: dark;
-    --pf-bg: #020617;
-    --pf-bg-alt: #0b1220;
-    --pf-surface: #0f172a;
-    --pf-surface-alt: #111827;
-    --pf-surface-raised: #1e293b;
-    --pf-surface-deep: #020617;
-    --pf-header-start: #081225;
-    --pf-header-end: #0b1730;
-    --pf-scroll-track: #0b1220;
-    --pf-surface-rgb: 15, 23, 42;
-    --pf-surface-alt-rgb: 17, 24, 39;
-    --pf-surface-deep-rgb: 2, 6, 23;
-    --pf-surface-raised-rgb: 30, 41, 59;
-    --pf-fg-rgb: 255, 255, 255;
-    --pf-text-strong: #ffffff;
-    --pf-text: #e2e8f0;
-    --pf-text-soft: #aebdd0;
-    --pf-text-muted: #94a3b8;
-    --pf-text-dim: #64748b;
-    --pf-border: rgba(255, 255, 255, .08);
-    --pf-border-soft: rgba(255, 255, 255, .055);
-    --pf-card-shadow: 0 18px 42px rgba(2, 6, 23, .32);
-    --pf-overlay: rgba(2, 6, 23, .84);
-    --pf-input: rgba(2, 6, 23, .55);
-    --pf-hover: rgba(255, 255, 255, .045);
-    --pf-selected: rgba(59, 130, 246, .13);
-    --pf-shadow-rgb: 2, 6, 23;
+  --pf-color-scheme: dark;
+  --pf-bg: #020617;
+  --pf-bg-alt: #0b1220;
+  --pf-surface: #0f172a;
+  --pf-surface-alt: #111827;
+  --pf-surface-raised: #1e293b;
+  --pf-surface-deep: #020617;
+  --pf-header-start: #081225;
+  --pf-header-end: #0b1730;
+  --pf-scroll-track: #0b1220;
+  --pf-surface-rgb: 15,23,42;
+  --pf-surface-alt-rgb: 17,24,39;
+  --pf-surface-deep-rgb: 2,6,23;
+  --pf-surface-raised-rgb: 30,41,59;
+  --pf-fg-rgb: 255,255,255;
+  --pf-text-strong: #ffffff;
+  --pf-text: #e2e8f0;
+  --pf-text-soft: #aebdd0;
+  --pf-text-muted: #94a3b8;
+  --pf-text-dim: #64748b;
+  --pf-border: rgba(255,255,255,.08);
+  --pf-border-soft: rgba(255,255,255,.055);
+  --pf-card-shadow: 0 18px 42px rgba(2,6,23,.32);
+  --pf-overlay: rgba(2,6,23,.84);
+  --pf-input: rgba(2,6,23,.55);
+
+  --pf-sidebar-bg: linear-gradient(180deg,#071120 0%,#0a162b 100%);
+  --pf-sidebar-text: rgba(255,255,255,.74);
+  --pf-sidebar-muted: rgba(255,255,255,.48);
+  --pf-sidebar-border: rgba(255,255,255,.07);
+  --pf-sidebar-control: rgba(255,255,255,.045);
+  --pf-sidebar-divider: linear-gradient(90deg,rgba(255,255,255,.12),transparent);
+  --pf-sidebar-highlight: linear-gradient(180deg,rgba(255,255,255,.08),transparent);
+  --pf-sidebar-shadow: 8px 0 30px rgba(2,6,23,.34);
 }
 
 :root[data-packflow-theme="light"] {
-    --pf-color-scheme: light;
-    --pf-bg: #f4f7fb;
-    --pf-bg-alt: #edf2f7;
-    --pf-surface: #ffffff;
-    --pf-surface-alt: #f8fafc;
-    --pf-surface-raised: #ffffff;
-    --pf-surface-deep: #eef2f7;
-    --pf-header-start: #ffffff;
-    --pf-header-end: #f8fafc;
-    --pf-scroll-track: #e2e8f0;
-    --pf-surface-rgb: 255, 255, 255;
-    --pf-surface-alt-rgb: 248, 250, 252;
-    --pf-surface-deep-rgb: 238, 242, 247;
-    --pf-surface-raised-rgb: 255, 255, 255;
-    --pf-fg-rgb: 15, 23, 42;
-    --pf-text-strong: #0f172a;
-    --pf-text: #334155;
-    --pf-text-soft: #475569;
-    --pf-text-muted: #64748b;
-    --pf-text-dim: #94a3b8;
-    --pf-border: rgba(15, 23, 42, .10);
-    --pf-border-soft: rgba(15, 23, 42, .07);
-    --pf-card-shadow: 0 14px 34px rgba(15, 23, 42, .09);
-    --pf-overlay: rgba(15, 23, 42, .28);
-    --pf-input: rgba(255, 255, 255, .92);
-    --pf-hover: rgba(15, 23, 42, .045);
-    --pf-selected: rgba(59, 130, 246, .10);
-    --pf-shadow-rgb: 15, 23, 42;
+  --pf-color-scheme: light;
+  --pf-bg: #f4f7fb;
+  --pf-bg-alt: #edf2f7;
+  --pf-surface: #ffffff;
+  --pf-surface-alt: #f8fafc;
+  --pf-surface-raised: #ffffff;
+  --pf-surface-deep: #eef2f7;
+  --pf-header-start: #ffffff;
+  --pf-header-end: #f8fafc;
+  --pf-scroll-track: #e2e8f0;
+  --pf-surface-rgb: 255,255,255;
+  --pf-surface-alt-rgb: 248,250,252;
+  --pf-surface-deep-rgb: 238,242,247;
+  --pf-surface-raised-rgb: 255,255,255;
+  --pf-fg-rgb: 15,23,42;
+  --pf-text-strong: #0f172a;
+  --pf-text: #334155;
+  --pf-text-soft: #475569;
+  --pf-text-muted: #64748b;
+  --pf-text-dim: #94a3b8;
+  --pf-border: rgba(15,23,42,.10);
+  --pf-border-soft: rgba(15,23,42,.07);
+  --pf-card-shadow: 0 14px 34px rgba(15,23,42,.09);
+  --pf-overlay: rgba(15,23,42,.28);
+  --pf-input: rgba(255,255,255,.96);
+
+  --pf-sidebar-bg: linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);
+  --pf-sidebar-text: #334155;
+  --pf-sidebar-muted: #94a3b8;
+  --pf-sidebar-border: rgba(15,23,42,.09);
+  --pf-sidebar-control: #f1f5f9;
+  --pf-sidebar-divider: linear-gradient(90deg,rgba(15,23,42,.10),transparent);
+  --pf-sidebar-highlight: linear-gradient(180deg,rgba(59,130,246,.055),transparent);
+  --pf-sidebar-shadow: 6px 0 24px rgba(15,23,42,.055);
 }
 
 html[data-packflow-theme] body,
+body.packflow-theme-body,
 .packflow-theme-root {
-    background: var(--pf-bg);
-    color: var(--pf-text-strong);
+  background: var(--pf-bg);
+  color: var(--pf-text-strong);
 }
 
 .packflow-theme-root,
-.packflow-theme-root * {
-    transition-property: background-color, border-color, color, box-shadow;
-    transition-duration: .18s;
-    transition-timing-function: ease;
+.packflow-theme-root *,
+body.packflow-theme-body .MuiPaper-root,
+body.packflow-theme-body .MuiButton-root,
+body.packflow-theme-body .MuiIconButton-root {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: .18s;
+  transition-timing-function: ease;
 }
 
 .packflow-theme-root input,
 .packflow-theme-root select,
-.packflow-theme-root textarea {
-    color-scheme: var(--pf-color-scheme);
+.packflow-theme-root textarea,
+body.packflow-theme-body input,
+body.packflow-theme-body select,
+body.packflow-theme-body textarea {
+  color-scheme: var(--pf-color-scheme);
 }
 
-/* Preserve readable contrast on semantic blue action buttons after neutral token conversion. */
-html[data-packflow-theme="light"] .packflow-theme-root [style*="linear-gradient"][style*="37, 99, 235"],
-html[data-packflow-theme="light"] .packflow-theme-root [style*="linear-gradient"][style*="59, 130, 246"],
-html[data-packflow-theme="light"] .packflow-theme-root [style*="linear-gradient"][style*="29, 78, 216"],
-html[data-packflow-theme="light"] .packflow-theme-root button[style*="37, 99, 235"],
-html[data-packflow-theme="light"] .packflow-theme-root button[style*="59, 130, 246"] {
-    color: #fff !important;
-}
-
-/* Compatibility bridge for legacy plain-inline Dashboard / Logistics surfaces.
- * New/updated files should use the --pf-* variables directly. */
+/* ---------------------------------------------------------
+ * Legacy Dashboard bridge
+ * --------------------------------------------------------- */
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="15, 23, 42"],
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="2, 6, 23"],
 html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="17, 24, 39"],
-html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="30, 41, 59"] {
-    background: var(--pf-surface) !important;
+html[data-packflow-theme="light"] .packflow-theme-root [style*="background:"][style*="30, 41, 59"],
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="background:"][style*="#0f172a"],
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="background:"][style*="#111827"],
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="background:"][style*="#020617"] {
+  background: var(--pf-surface) !important;
+  border-color: var(--pf-border) !important;
+}
+
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="box-shadow"] {
+  box-shadow: var(--pf-card-shadow) !important;
+}
+
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="backdrop-filter"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root [style*="color: rgb(255, 255, 255)"],
-html[data-packflow-theme="light"] .packflow-theme-root [style*="color: rgba(255, 255, 255"] {
-    color: var(--pf-text-strong) !important;
+html[data-packflow-theme="light"] .packflow-theme-root [style*="color: rgba(255, 255, 255"],
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="color: #fff"],
+html[data-packflow-theme="light"] .packflow-page-dashboard [style*="color: #ffffff"] {
+  color: var(--pf-text-strong) !important;
 }
 
 html[data-packflow-theme="light"] .packflow-theme-root [style*="border"][style*="255, 255, 255"] {
-    border-color: var(--pf-border) !important;
+  border-color: var(--pf-border) !important;
 }
 
-html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="15, 23, 42"],
-html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="2, 6, 23"],
-html[data-packflow-theme="light"] .packflow-theme-root .logistics-dashboard-shell [style*="background:"][style*="30, 41, 59"] {
-    background: var(--pf-surface) !important;
-    box-shadow: var(--pf-card-shadow) !important;
+/* Keep accent/semantic buttons readable in light mode. */
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="37, 99, 235"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="59, 130, 246"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="29, 78, 216"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="220, 38, 38"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="239, 68, 68"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="5, 150, 105"],
+html[data-packflow-theme="light"] .packflow-theme-root button[style*="16, 185, 129"],
+html[data-packflow-theme="light"] body.packflow-theme-body button[style*="37, 99, 235"],
+html[data-packflow-theme="light"] body.packflow-theme-body button[style*="59, 130, 246"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Disabled actions must remain visibly disabled, not invisible. */
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiButton-root.Mui-disabled,
+html[data-packflow-theme="light"] .packflow-theme-root .MuiButton-root.Mui-disabled {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  background-color: rgba(148,163,184,.13) !important;
+  border-color: rgba(100,116,139,.18) !important;
+  opacity: .72 !important;
+  box-shadow: none !important;
+}
+
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiIconButton-root.Mui-disabled,
+html[data-packflow-theme="light"] .packflow-theme-root .MuiIconButton-root.Mui-disabled {
+  color: #94a3b8 !important;
+  opacity: .62 !important;
 }
 
 /* Native controls / autofill. */
 html[data-packflow-theme="light"] .packflow-theme-root input,
 html[data-packflow-theme="light"] .packflow-theme-root select,
-html[data-packflow-theme="light"] .packflow-theme-root textarea {
-    background-color: var(--pf-input);
-    color: var(--pf-text-strong);
+html[data-packflow-theme="light"] .packflow-theme-root textarea,
+html[data-packflow-theme="light"] body.packflow-theme-body input,
+html[data-packflow-theme="light"] body.packflow-theme-body select,
+html[data-packflow-theme="light"] body.packflow-theme-body textarea {
+  background-color: var(--pf-input);
+  color: var(--pf-text-strong);
+  -webkit-text-fill-color: var(--pf-text-strong);
 }
 
+html[data-packflow-theme="light"] body.packflow-theme-body option,
 html[data-packflow-theme="light"] .packflow-theme-root option {
-    background: #ffffff;
-    color: #0f172a;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+/* ---------------------------------------------------------
+ * Portal surfaces: Dialog / Drawer / Menu / Popover
+ * --------------------------------------------------------- */
+body.packflow-theme-body .MuiDialog-paper {
+  border-radius: 14px !important;
+  background: var(--pf-surface) !important;
+  color: var(--pf-text-strong) !important;
+  border: 1px solid var(--pf-border) !important;
+}
+
+body.packflow-theme-body .MuiDrawer-paper {
+  border-radius: 0 !important;
+  background: var(--pf-surface) !important;
+  color: var(--pf-text-strong) !important;
+  border-color: var(--pf-border) !important;
+}
+
+body.packflow-theme-body .MuiPopover-paper,
+body.packflow-theme-body .MuiMenu-paper {
+  border-radius: 11px !important;
+  background: var(--pf-surface) !important;
+  color: var(--pf-text-strong) !important;
+  border: 1px solid var(--pf-border) !important;
+}
+
+body.packflow-theme-body .MuiBackdrop-root {
+  background: var(--pf-overlay) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+/* Local page drawers/modals that hard-code old dark surfaces. */
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiDrawer-paper [style*="background:"][style*="7, 17, 31"],
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiDrawer-paper [style*="background:"][style*="15, 23, 42"],
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiDrawer-paper [style*="background:"][style*="17, 24, 39"],
+html[data-packflow-theme="light"] body.packflow-theme-body .MuiDialog-paper [style*="background:"][style*="15, 23, 42"] {
+  background: var(--pf-surface) !important;
+  color: var(--pf-text-strong) !important;
+}
+
+/* Professional radius normalization. Pills remain pills. */
+.packflow-theme-root .MuiButton-root,
+body.packflow-theme-body .MuiButton-root {
+  border-radius: 9px;
+}
+
+.packflow-theme-root .MuiOutlinedInput-root,
+body.packflow-theme-body .MuiOutlinedInput-root {
+  border-radius: 10px;
 }
 
 /* Shared scrollbars. */
 .packflow-theme-root,
-.packflow-theme-root * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(96, 165, 250, .72) var(--pf-scroll-track);
+.packflow-theme-root *,
+body.packflow-theme-body,
+body.packflow-theme-body * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96,165,250,.72) var(--pf-scroll-track);
 }
 
 .packflow-theme-root::-webkit-scrollbar,
-.packflow-theme-root *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+.packflow-theme-root *::-webkit-scrollbar,
+body.packflow-theme-body::-webkit-scrollbar,
+body.packflow-theme-body *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
 .packflow-theme-root::-webkit-scrollbar-track,
-.packflow-theme-root *::-webkit-scrollbar-track {
-    background: var(--pf-scroll-track);
-    border-radius: 999px;
+.packflow-theme-root *::-webkit-scrollbar-track,
+body.packflow-theme-body::-webkit-scrollbar-track,
+body.packflow-theme-body *::-webkit-scrollbar-track {
+  background: var(--pf-scroll-track);
+  border-radius: 999px;
 }
 
 .packflow-theme-root::-webkit-scrollbar-thumb,
-.packflow-theme-root *::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    border: 2px solid var(--pf-scroll-track);
-    background: linear-gradient(135deg, #475569, #3b82f6, #60a5fa);
-}
-
-.packflow-theme-root::-webkit-scrollbar-thumb:hover,
-.packflow-theme-root *::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #60a5fa, #2563eb);
+.packflow-theme-root *::-webkit-scrollbar-thumb,
+body.packflow-theme-body::-webkit-scrollbar-thumb,
+body.packflow-theme-body *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid var(--pf-scroll-track);
+  background: linear-gradient(135deg,#475569,#3b82f6,#60a5fa);
 }
 
 @media (prefers-reduced-motion: reduce) {
-
-    .packflow-theme-root,
-    .packflow-theme-root * {
-        transition: none !important;
-    }
+  .packflow-theme-root,
+  .packflow-theme-root *,
+  body.packflow-theme-body,
+  body.packflow-theme-body * {
+    transition: none !important;
+  }
 }

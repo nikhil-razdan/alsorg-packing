@@ -66,7 +66,7 @@ const page = {
 	minHeight: "100vh",
 
 	background:
-		"linear-gradient(135deg,var(--pf-bg),var(--pf-surface))",
+		"linear-gradient(135deg,#020617,#0f172a)",
 };
 
 /*
@@ -118,9 +118,9 @@ const tableHeader = {
 	padding: 0,
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.995),rgba(var(--pf-surface-alt-rgb),.985))",
+		"linear-gradient(180deg,rgba(15,23,42,.995),rgba(17,24,39,.985))",
 
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 
 	fontWeight: 950,
 	fontSize: 10.5,
@@ -148,7 +148,7 @@ const dispatchHeaderCellSx = {
 	py: 1.15,
 
 	borderRight:
-		"1px solid rgba(var(--pf-fg-rgb),.045)",
+		"1px solid rgba(255,255,255,.045)",
 
 	whiteSpace: "nowrap",
 	overflow: "hidden",
@@ -167,7 +167,7 @@ const tableCellWrap = {
 	padding: "10px 14px",
 
 	borderRight:
-		"1px solid rgba(var(--pf-fg-rgb),.038)",
+		"1px solid rgba(255,255,255,.038)",
 };
 
 const tableBody = {
@@ -184,7 +184,7 @@ const tableRow = {
 
 	padding: 0,
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	borderBottom:
 		"1px solid rgba(148,163,184,.075)",
@@ -194,7 +194,7 @@ const tableRow = {
 	fontSize: 13,
 
 	background:
-		"rgba(var(--pf-surface-rgb),.40)",
+		"rgba(15,23,42,.40)",
 
 	transition:
 		"background .16s ease, border-color .16s ease, box-shadow .16s ease",
@@ -211,32 +211,32 @@ const dispatchTableRowSx = (
 				"4px solid #a78bfa",
 
 			background:
-				"linear-gradient(90deg,rgba(139,92,246,.10),rgba(var(--pf-surface-rgb),.72))",
+				"linear-gradient(90deg,rgba(139,92,246,.10),rgba(15,23,42,.72))",
 		}
 		: {}),
 
 	"&:nth-of-type(even)": {
 		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.115),rgba(var(--pf-surface-rgb),.80))"
-			: "rgba(var(--pf-surface-alt-rgb),.48)",
+			? "linear-gradient(90deg,rgba(139,92,246,.115),rgba(15,23,42,.80))"
+			: "rgba(17,24,39,.48)",
 	},
 
 	"&:hover": {
 		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(var(--pf-surface-raised-rgb),.72))"
-			: "linear-gradient(90deg,rgba(37,99,235,.075),rgba(var(--pf-surface-raised-rgb),.58))",
+			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(30,41,59,.72))"
+			: "linear-gradient(90deg,rgba(37,99,235,.075),rgba(30,41,59,.58))",
 
 		borderBottomColor:
 			"rgba(96,165,250,.18)",
 
 		boxShadow:
-			"inset 0 1px 0 rgba(var(--pf-fg-rgb),.018), inset 0 -1px 0 rgba(96,165,250,.035)",
+			"inset 0 1px 0 rgba(255,255,255,.018), inset 0 -1px 0 rgba(96,165,250,.035)",
 	},
 
 	"&:focus-within": {
 		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(var(--pf-surface-raised-rgb),.74))"
-			: "linear-gradient(90deg,rgba(37,99,235,.085),rgba(var(--pf-surface-raised-rgb),.60))",
+			? "linear-gradient(90deg,rgba(139,92,246,.17),rgba(30,41,59,.74))"
+			: "linear-gradient(90deg,rgba(37,99,235,.085),rgba(30,41,59,.60))",
 	},
 });
 
@@ -259,10 +259,10 @@ const dispatchSelectCellSx = (
 		: 68,
 
 	background: header
-		? "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.998),rgba(var(--pf-surface-alt-rgb),.995))"
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
 		: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.16),rgba(var(--pf-surface-rgb),.985))"
-			: "rgba(var(--pf-surface-rgb),.985)",
+			? "linear-gradient(90deg,rgba(139,92,246,.16),rgba(15,23,42,.985))"
+			: "rgba(15,23,42,.985)",
 
 	borderRight:
 		"1px solid rgba(148,163,184,.13)",
@@ -292,10 +292,10 @@ const dispatchActionCellSx = (
 	py: header ? 1.15 : 0.85,
 
 	background: header
-		? "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.998),rgba(var(--pf-surface-alt-rgb),.995))"
+		? "linear-gradient(180deg,rgba(15,23,42,.998),rgba(17,24,39,.995))"
 		: hardwareRow
-			? "linear-gradient(90deg,rgba(var(--pf-surface-rgb),.95),rgba(37,25,60,.985))"
-			: "linear-gradient(90deg,rgba(var(--pf-surface-rgb),.95),rgba(var(--pf-surface-rgb),.995))",
+			? "linear-gradient(90deg,rgba(15,23,42,.95),rgba(37,25,60,.985))"
+			: "linear-gradient(90deg,rgba(15,23,42,.95),rgba(15,23,42,.995))",
 
 	borderLeft:
 		"1px solid rgba(148,163,184,.13)",
@@ -323,10 +323,10 @@ const nativeFgSelectSx = {
 	px: 1.5,
 	borderRadius: "12px",
 	outline: "none",
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontWeight: 900,
-	background: "rgba(var(--pf-fg-rgb),.04)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.10)",
 
 	"&:focus": {
 		borderColor: "#3b82f6",
@@ -346,10 +346,10 @@ const dispatchTripNativeSelectSx = {
 	px: 1.5,
 	borderRadius: "14px",
 	outline: "none",
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontWeight: 800,
-	background: "rgba(var(--pf-fg-rgb),.04)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.10)",
 
 	"&:focus": {
 		borderColor: "#3b82f6",
@@ -364,7 +364,7 @@ const dispatchTripNativeSelectSx = {
 };
 
 const dispatchTripFieldLabelSx = {
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 	fontSize: 12,
 	fontWeight: 900,
 	mb: 0.8,
@@ -395,13 +395,13 @@ const tableActionButton = {
 const rowChallanPdfButtonSx = {
 	...tableActionButton,
 	minWidth: 128,
-	color: "#dbeafe",
+	color: "#1d4ed8",
 	background:
-		"linear-gradient(135deg,rgba(37,99,235,.20),rgba(59,130,246,.10))",
+		"linear-gradient(135deg,rgba(219,234,254,.96),rgba(239,246,255,.96))",
 	border:
-		"1px solid rgba(96,165,250,.28)",
+		"1px solid rgba(59,130,246,.28)",
 	boxShadow:
-		"0 8px 20px rgba(37,99,235,.16)",
+		"0 8px 20px rgba(37,99,235,.10)",
 
 	"& .MuiButton-startIcon": {
 		marginRight: "6px",
@@ -419,7 +419,7 @@ const rowChallanPdfButtonSx = {
 };
 
 const simpleCellText = {
-	color: "var(--pf-text-strong)",
+	color: "#ffffff",
 	fontWeight: 800,
 	fontSize: 13,
 	lineHeight: 1.25,
@@ -479,16 +479,16 @@ const modalSelectMenuProps = {
 			mt: 1,
 			borderRadius: "14px",
 			background:
-				"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
-			color: "var(--pf-text-strong)",
+				"linear-gradient(180deg,#0f172a,#111827)",
+			color: "#fff",
 			border:
-				"1px solid rgba(var(--pf-fg-rgb),.06)",
+				"1px solid rgba(255,255,255,.06)",
 			zIndex: 8000,
 
 			"& .MuiMenuItem-root": {
 				fontSize: 14,
 				fontWeight: 700,
-				color: "var(--pf-text-strong)",
+				color: "#fff",
 			},
 
 			"& .MuiMenuItem-root:hover": {
@@ -511,12 +511,12 @@ const scannerModeButtonSx = {
 	borderRadius: "8px",
 	textTransform: "none",
 	fontWeight: 900,
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 	background: "transparent",
 
 	"&:hover": {
-		color: "var(--pf-text-strong)",
-		background: "rgba(var(--pf-fg-rgb),.05)",
+		color: "#fff",
+		background: "rgba(255,255,255,.05)",
 	},
 };
 
@@ -531,8 +531,8 @@ const scannerModeActiveSx = {
 const scannerInputSx = {
 	"& .MuiOutlinedInput-root": {
 		borderRadius: "10px",
-		background: "rgba(var(--pf-fg-rgb),.04)",
-		color: "var(--pf-text-strong)",
+		background: "rgba(255,255,255,.04)",
+		color: "#fff",
 		fontSize: 14,
 		fontWeight: 800,
 
@@ -551,12 +551,12 @@ const scannerInputSx = {
 	},
 
 	"& textarea": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontWeight: 800,
 	},
 
 	"& textarea::placeholder": {
-		color: "rgba(var(--pf-fg-rgb),.42)",
+		color: "rgba(255,255,255,.42)",
 		opacity: 1,
 	},
 };
@@ -573,14 +573,14 @@ const scannerCartCardSx = {
 	borderRadius: "10px",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+		"rgba(255,255,255,.035)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 
 	"&:hover": {
 		background:
-			"rgba(var(--pf-fg-rgb),.055)",
+			"rgba(255,255,255,.055)",
 		borderColor:
 			"rgba(59,130,246,.22)",
 	},
@@ -609,14 +609,14 @@ const scannerGenerateButtonSx = {
 
 	"&.Mui-disabled": {
 		background:
-			"rgba(var(--pf-fg-rgb),.08)",
+			"rgba(255,255,255,.08)",
 		color:
-			"rgba(var(--pf-fg-rgb),.35)",
+			"rgba(255,255,255,.35)",
 	},
 };
 
 const simpleMutedText = {
-	color: "var(--pf-text)",
+	color: "#f1f5f9",
 	fontWeight: 750,
 	fontSize: 13,
 	lineHeight: 1.25,
@@ -627,7 +627,7 @@ const simpleMutedText = {
 };
 
 const simpleMonoText = {
-	color: "var(--pf-text-strong)",
+	color: "#ffffff",
 	fontWeight: 800,
 	fontSize: 13,
 	lineHeight: 1.25,
@@ -658,7 +658,7 @@ const tableIconButton = {
 	borderRadius: "12px",
 	flexShrink: 0,
 	transition: "all .2s ease",
-	border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+	border: "1px solid rgba(255,255,255,.08)",
 	backdropFilter: "blur(12px)",
 
 	"& svg": {
@@ -719,7 +719,7 @@ const enhancedOverlaySx = {
 	background: `
     radial-gradient(circle at 20% 10%, rgba(59,130,246,.18), transparent 28%),
     radial-gradient(circle at 80% 90%, rgba(16,185,129,.12), transparent 30%),
-    rgba(var(--pf-surface-deep-rgb),.72)
+    rgba(2,6,23,.72)
   `,
 
 	backdropFilter: "blur(14px)",
@@ -739,13 +739,13 @@ const enhancedModalSx = {
 
 	overflow: "hidden",
 
-	borderRadius: 14,
+	borderRadius: 12,
 
 	color: "var(--pf-text-strong)",
 
 	background: `
-    radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 28%),
-    linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))
+    radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 30%),
+    var(--pf-surface)
   `,
 
 	border:
@@ -760,7 +760,7 @@ const enhancedModalSx = {
 		inset: 0,
 		pointerEvents: "none",
 		background:
-			"linear-gradient(135deg,rgba(var(--pf-fg-rgb),.08),transparent 28%,rgba(var(--pf-fg-rgb),.03))",
+			"linear-gradient(135deg,rgba(255,255,255,.08),transparent 28%,rgba(255,255,255,.03))",
 	},
 
 	"& > *": {
@@ -778,7 +778,7 @@ const modalHeaderSx = {
 	py: 2.4,
 
 	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(255,255,255,.06)",
 };
 
 const packedYellowChip = {
@@ -821,21 +821,21 @@ const modalIconBubble = (color = "#3b82f6") => ({
 				: "linear-gradient(135deg,rgba(59,130,246,.24),rgba(59,130,246,.08))",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	boxShadow:
 		"0 12px 28px rgba(0,0,0,.25)",
 });
 
 const modalTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 22,
 	fontWeight: 900,
 	lineHeight: 1.1,
 };
 
 const modalSubtitleSx = {
-	color: "rgba(var(--pf-fg-rgb),.55)",
+	color: "rgba(255,255,255,.55)",
 	fontSize: 12,
 	fontWeight: 600,
 	mt: 0.4,
@@ -847,16 +847,16 @@ const modalCloseButtonSx = {
 
 	borderRadius: "8px",
 
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+		"rgba(255,255,255,.04)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(255,255,255,.06)",
 
 	"&:hover": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background:
 			"rgba(239,68,68,.16)",
 		borderColor:
@@ -878,7 +878,7 @@ const modalScrollBodySx = {
 	},
 
 	"&::-webkit-scrollbar-track": {
-		background: "rgba(var(--pf-fg-rgb),.03)",
+		background: "rgba(255,255,255,.03)",
 		borderRadius: 999,
 	},
 
@@ -898,7 +898,7 @@ const modalFooterSx = {
 	py: 2,
 
 	borderTop:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(255,255,255,.06)",
 };
 
 const modalSecondaryButtonSx = {
@@ -912,18 +912,18 @@ const modalSecondaryButtonSx = {
 
 	fontWeight: 800,
 
-	color: "var(--pf-text-soft)",
+	color: "#cbd5e1",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+		"rgba(255,255,255,.04)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	"&:hover": {
 		background:
-			"rgba(var(--pf-fg-rgb),.08)",
-		color: "var(--pf-text-strong)",
+			"rgba(255,255,255,.08)",
+		color: "#fff",
 	},
 };
 
@@ -934,13 +934,13 @@ const modalEmptyStateSx = {
 
 	textAlign: "center",
 
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.03)",
+		"rgba(255,255,255,.03)",
 
 	border:
-		"1px dashed rgba(var(--pf-fg-rgb),.12)",
+		"1px dashed rgba(255,255,255,.12)",
 
 	fontWeight: 700,
 };
@@ -950,11 +950,11 @@ const customChallanAccent = "#8b5cf6";
 const customChallanSectionCardSx = (open) => ({
 	borderRadius: "14px",
 	background: open
-		? `linear-gradient(180deg, ${customChallanAccent}12, rgba(var(--pf-surface-rgb),.82))`
-		: "rgba(var(--pf-surface-rgb),.82)",
+		? `linear-gradient(180deg, ${customChallanAccent}12, rgba(15,23,42,.82))`
+		: "rgba(15,23,42,.82)",
 	border: open
 		? `1px solid ${customChallanAccent}44`
-		: "1px solid rgba(var(--pf-fg-rgb),.07)",
+		: "1px solid rgba(255,255,255,.07)",
 	borderLeft: `3px solid ${customChallanAccent}`,
 	boxShadow: open
 		? `0 14px 32px ${customChallanAccent}16`
@@ -972,8 +972,8 @@ const customChallanHeaderSx = {
 	gap: 2,
 	px: 1.8,
 	py: 1.2,
-	background: "rgba(var(--pf-surface-deep-rgb),.24)",
-	borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "rgba(2,6,23,.24)",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
 };
 
 const customChallanLeftSx = {
@@ -984,21 +984,21 @@ const customChallanLeftSx = {
 };
 
 const customChallanIconBtnSx = {
-	color: "var(--pf-text-muted)",
-	background: "rgba(var(--pf-fg-rgb),.04)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.06)",
+	color: "#94a3b8",
+	background: "rgba(255,255,255,.04)",
+	border: "1px solid rgba(255,255,255,.06)",
 	width: 32,
 	height: 32,
 	borderRadius: "9px",
 
 	"&:hover": {
 		background: "rgba(139,92,246,.16)",
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 	},
 };
 
 const customChallanTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 18,
 	fontWeight: 950,
 	lineHeight: 1.1,
@@ -1007,7 +1007,7 @@ const customChallanTitleSx = {
 
 const customChallanSubSx = {
 	mt: 0.3,
-	color: "rgba(var(--pf-fg-rgb),.52)",
+	color: "rgba(255,255,255,.52)",
 	fontSize: 11,
 	fontWeight: 650,
 };
@@ -1030,7 +1030,7 @@ const customChallanCountChipSx = {
 };
 
 const customChallanBodySx = {
-	background: "rgba(var(--pf-surface-deep-rgb),.18)",
+	background: "rgba(2,6,23,.18)",
 	p: 1.4,
 };
 
@@ -1046,7 +1046,7 @@ const customChallanSearchPanelSx = {
 	p: 1.35,
 	borderRadius: "18px",
 	background:
-		"radial-gradient(circle at 0% 0%,rgba(139,92,246,.16),transparent 34%),linear-gradient(135deg,rgba(var(--pf-surface-rgb),.90),rgba(var(--pf-surface-raised-rgb),.58))",
+		"radial-gradient(circle at 0% 0%,rgba(139,92,246,.16),transparent 34%),linear-gradient(135deg,rgba(15,23,42,.90),rgba(30,41,59,.58))",
 	border: "1px solid rgba(167,139,250,.20)",
 	boxShadow: "0 14px 32px rgba(2,6,23,.24)",
 };
@@ -1083,7 +1083,7 @@ const customChallanSearchIconSx = {
 };
 
 const customChallanSearchTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 12.5,
 	fontWeight: 950,
 	letterSpacing: ".01em",
@@ -1091,7 +1091,7 @@ const customChallanSearchTitleSx = {
 
 const customChallanSearchSubSx = {
 	mt: 0.25,
-	color: "rgba(var(--pf-fg-rgb),.48)",
+	color: "rgba(255,255,255,.48)",
 	fontSize: 9.8,
 	fontWeight: 700,
 	lineHeight: 1.35,
@@ -1101,9 +1101,9 @@ const customChallanSearchFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		minHeight: 46,
 		borderRadius: "14px",
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background:
-			"linear-gradient(180deg,rgba(var(--pf-fg-rgb),.055),rgba(var(--pf-fg-rgb),.03))",
+			"linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.03))",
 
 		"& fieldset": {
 			borderColor: "rgba(167,139,250,.20)",
@@ -1120,13 +1120,13 @@ const customChallanSearchFieldSx = {
 	},
 
 	"& input": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontSize: 12,
 		fontWeight: 800,
 	},
 
 	"& input::placeholder": {
-		color: "rgba(var(--pf-fg-rgb),.43)",
+		color: "rgba(226,232,240,.43)",
 		opacity: 1,
 	},
 };
@@ -1150,11 +1150,11 @@ const customChallanSearchCoverageSx = {
 const customChallanSearchHintChipSx = {
 	height: 22,
 	borderRadius: 999,
-	color: "var(--pf-text-soft)",
+	color: "#cbd5e1",
 	fontSize: 9,
 	fontWeight: 850,
-	background: "rgba(var(--pf-fg-rgb),.035)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.07)",
 };
 
 const customChallanSearchResultChipSx = {
@@ -1170,7 +1170,7 @@ const customChallanSearchResultChipSx = {
 
 const premiumScrollbarSx = (accent = "#60a5fa") => ({
 	scrollbarWidth: "thin",
-	scrollbarColor: `${accent} rgba(var(--pf-surface-rgb),.78)`,
+	scrollbarColor: `${accent} rgba(15,23,42,.78)`,
 
 	"&::-webkit-scrollbar": {
 		width: 10,
@@ -1179,9 +1179,9 @@ const premiumScrollbarSx = (accent = "#60a5fa") => ({
 
 	"&::-webkit-scrollbar-track": {
 		background:
-			"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(var(--pf-surface-deep-rgb),.88))",
+			"linear-gradient(180deg,rgba(15,23,42,.95),rgba(2,6,23,.88))",
 		borderRadius: 999,
-		border: "1px solid rgba(var(--pf-fg-rgb),.05)",
+		border: "1px solid rgba(255,255,255,.05)",
 	},
 
 	"&::-webkit-scrollbar-thumb": {
@@ -1233,7 +1233,7 @@ const customChallanPagerWrapSx = {
 	borderRadius: "16px",
 
 	background:
-		"linear-gradient(135deg,rgba(139,92,246,.10),rgba(var(--pf-fg-rgb),.025))",
+		"linear-gradient(135deg,rgba(139,92,246,.10),rgba(255,255,255,.025))",
 
 	border:
 		"1px solid rgba(139,92,246,.20)",
@@ -1251,12 +1251,12 @@ const dispatchPageSizeNativeSelectSx = {
 
 	outline: "none",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 12,
 	fontWeight: 900,
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-raised-rgb),.88))",
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(30,41,59,.88))",
 
 	border:
 		"1px solid rgba(96,165,250,.25)",
@@ -1285,11 +1285,11 @@ const customChallanRowSx = {
 	gap: 1.5,
 	p: 1.4,
 	borderRadius: "12px",
-	background: "rgba(var(--pf-fg-rgb),.035)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "rgba(255,255,255,.035)",
+	border: "1px solid rgba(255,255,255,.07)",
 
 	"&:hover": {
-		background: "rgba(var(--pf-fg-rgb),.055)",
+		background: "rgba(255,255,255,.055)",
 		borderColor: "rgba(139,92,246,.26)",
 	},
 };
@@ -1305,7 +1305,7 @@ const customChallanModalShellSx = {
 	background: `
 		radial-gradient(circle at 8% 0%, rgba(139,92,246,.24), transparent 30%),
 		radial-gradient(circle at 92% 8%, rgba(59,130,246,.16), transparent 30%),
-		linear-gradient(180deg,var(--pf-bg-alt),var(--pf-surface))
+		linear-gradient(180deg,#09111f,#0f172a)
 	`,
 	border: "1px solid rgba(167,139,250,.20)",
 	boxShadow: "0 42px 120px rgba(0,0,0,.72)",
@@ -1320,7 +1320,7 @@ const customChallanHeroHeaderSx = {
 	gap: 2,
 	flexShrink: 0,
 	background: "linear-gradient(135deg,rgba(139,92,246,.16),rgba(59,130,246,.05))",
-	borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
 };
 
 const customChallanModalBodySx = {
@@ -1335,13 +1335,13 @@ const customFormSectionSx = {
 	p: 2.2,
 	mb: 2,
 	borderRadius: "18px",
-	background: "rgba(var(--pf-fg-rgb),.028)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.075)",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.075)",
 	boxShadow: "0 14px 34px rgba(2,6,23,.20)",
 };
 
 const customFormSectionTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontWeight: 950,
 	fontSize: 14,
 	letterSpacing: ".01em",
@@ -1350,7 +1350,7 @@ const customFormSectionTitleSx = {
 const customFormSectionSubSx = {
 	mt: 0.35,
 	mb: 2,
-	color: "rgba(var(--pf-fg-rgb),.48)",
+	color: "rgba(255,255,255,.48)",
 	fontWeight: 650,
 	fontSize: 11,
 };
@@ -1358,7 +1358,7 @@ const customFormSectionSubSx = {
 const customChallanItemCardSx = {
 	p: 2,
 	borderRadius: "17px",
-	background: "linear-gradient(135deg,rgba(139,92,246,.08),rgba(var(--pf-fg-rgb),.025))",
+	background: "linear-gradient(135deg,rgba(139,92,246,.08),rgba(255,255,255,.025))",
 	border: "1px solid rgba(139,92,246,.16)",
 	boxShadow: "0 12px 28px rgba(2,6,23,.18)",
 };
@@ -1395,7 +1395,7 @@ const customChallanEditButtonSx = {
 	border: "1px solid rgba(245,158,11,.30)",
 
 	"&:hover": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background: "linear-gradient(135deg,#d97706,#f59e0b)",
 		boxShadow: "0 10px 24px rgba(245,158,11,.22)",
 	},
@@ -1410,7 +1410,7 @@ const customAdminCommandCenterSx = {
 	p: 1.4,
 	borderRadius: "18px",
 	background:
-		"radial-gradient(circle at top left, rgba(139,92,246,.18), transparent 36%), linear-gradient(135deg,rgba(var(--pf-surface-rgb),.92),rgba(var(--pf-surface-raised-rgb),.72))",
+		"radial-gradient(circle at top left, rgba(139,92,246,.18), transparent 36%), linear-gradient(135deg,rgba(15,23,42,.92),rgba(30,41,59,.72))",
 	border: "1px solid rgba(167,139,250,.22)",
 	boxShadow: "0 16px 36px rgba(2,6,23,.28)",
 };
@@ -1424,7 +1424,7 @@ const customAdminCommandTopSx = {
 };
 
 const customAdminCommandTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 13,
 	fontWeight: 950,
 	letterSpacing: ".02em",
@@ -1432,7 +1432,7 @@ const customAdminCommandTitleSx = {
 
 const customAdminCommandSubSx = {
 	mt: 0.25,
-	color: "rgba(var(--pf-fg-rgb),.50)",
+	color: "rgba(255,255,255,.50)",
 	fontSize: 10.5,
 	fontWeight: 700,
 };
@@ -1444,10 +1444,10 @@ const customAdminActionButtonSx = (accent = "#8b5cf6", active = false) => ({
 	textTransform: "none",
 	fontSize: 11,
 	fontWeight: 950,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background: active
 		? `linear-gradient(135deg,${accent},rgba(79,70,229,.92))`
-		: `linear-gradient(180deg,${accent}22,rgba(var(--pf-fg-rgb),.035))`,
+		: `linear-gradient(180deg,${accent}22,rgba(255,255,255,.035))`,
 	border: `1px solid ${accent}${active ? "66" : "3d"}`,
 	boxShadow: active ? `0 10px 22px ${accent}28` : "none",
 
@@ -1455,12 +1455,12 @@ const customAdminActionButtonSx = (accent = "#8b5cf6", active = false) => ({
 		transform: "translateY(-1px)",
 		background: active
 			? `linear-gradient(135deg,${accent},rgba(67,56,202,.96))`
-			: `linear-gradient(180deg,${accent}33,rgba(var(--pf-fg-rgb),.055))`,
+			: `linear-gradient(180deg,${accent}33,rgba(255,255,255,.055))`,
 	},
 
 	"&.Mui-disabled": {
 		opacity: 0.45,
-		color: "rgba(var(--pf-fg-rgb),.55)",
+		color: "rgba(255,255,255,.55)",
 	},
 });
 
@@ -1478,11 +1478,11 @@ const customAdminFilterFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		minHeight: 42,
 		borderRadius: "12px",
-		color: "var(--pf-text-strong)",
-		background: "rgba(var(--pf-fg-rgb),.035)",
+		color: "#fff",
+		background: "rgba(255,255,255,.035)",
 
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.08)",
+			borderColor: "rgba(255,255,255,.08)",
 		},
 
 		"&:hover fieldset": {
@@ -1496,19 +1496,19 @@ const customAdminFilterFieldSx = {
 	},
 
 	"& .MuiInputLabel-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 		fontSize: 11.5,
 		fontWeight: 800,
 	},
 
 	"& input, & .MuiSelect-select": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontSize: 11.5,
 		fontWeight: 800,
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 	},
 
 	"& input::-webkit-calendar-picker-indicator": {
@@ -1528,13 +1528,13 @@ const customAdminKpiCardSx = (accent = "#8b5cf6") => ({
 	p: 1.3,
 	borderRadius: "15px",
 	background:
-		`radial-gradient(circle at top right,${accent}26,transparent 46%),rgba(var(--pf-fg-rgb),.03)`,
+		`radial-gradient(circle at top right,${accent}26,transparent 46%),rgba(255,255,255,.03)`,
 	border: `1px solid ${accent}33`,
 	minWidth: 0,
 });
 
 const customAdminKpiLabelSx = {
-	color: "rgba(var(--pf-fg-rgb),.49)",
+	color: "rgba(255,255,255,.49)",
 	fontSize: 9.5,
 	fontWeight: 950,
 	letterSpacing: ".08em",
@@ -1543,7 +1543,7 @@ const customAdminKpiLabelSx = {
 
 const customAdminKpiValueSx = {
 	mt: 0.45,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 23,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -1551,7 +1551,7 @@ const customAdminKpiValueSx = {
 
 const customAdminKpiMetaSx = {
 	mt: 0.55,
-	color: "rgba(var(--pf-fg-rgb),.45)",
+	color: "rgba(255,255,255,.45)",
 	fontSize: 9.5,
 	fontWeight: 700,
 	whiteSpace: "nowrap",
@@ -1563,7 +1563,7 @@ const customAdminInsightPanelSx = {
 	mt: 1.25,
 	p: 1.4,
 	borderRadius: "17px",
-	background: "rgba(var(--pf-surface-deep-rgb),.34)",
+	background: "rgba(2,6,23,.34)",
 	border: "1px solid rgba(167,139,250,.16)",
 };
 
@@ -1580,8 +1580,8 @@ const customAdminInsightGridSx = {
 const customAdminInsightCardSx = {
 	p: 1.3,
 	borderRadius: "14px",
-	background: "rgba(var(--pf-fg-rgb),.025)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+	background: "rgba(255,255,255,.025)",
+	border: "1px solid rgba(255,255,255,.065)",
 	minWidth: 0,
 };
 
@@ -1597,7 +1597,7 @@ const customAdminInsightTitleSx = {
 const customAdminBarTrackSx = {
 	height: 7,
 	borderRadius: 999,
-	background: "rgba(var(--pf-fg-rgb),.055)",
+	background: "rgba(255,255,255,.055)",
 	overflow: "hidden",
 };
 
@@ -1625,8 +1625,8 @@ const customAdminActivityRowSx = {
 	gap: 1.1,
 	p: 1.05,
 	borderRadius: "13px",
-	background: "rgba(var(--pf-fg-rgb),.028)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.065)",
 };
 
 const customAdminActivityIconSx = {
@@ -1654,17 +1654,17 @@ const historyCardSx = {
 	borderRadius: "10px",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+		"rgba(255,255,255,.035)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 
 	transition: "all .2s ease",
 
 	"&:hover": {
 		transform: "translateY(-1px)",
 		background:
-			"rgba(var(--pf-fg-rgb),.055)",
+			"rgba(255,255,255,.055)",
 		borderColor:
 			"rgba(59,130,246,.22)",
 	},
@@ -1674,20 +1674,20 @@ const latestHistoryCardSx = {
 	...historyCardSx,
 
 	background:
-		"linear-gradient(135deg,rgba(16,185,129,.13),rgba(var(--pf-fg-rgb),.035))",
+		"linear-gradient(135deg,rgba(16,185,129,.13),rgba(255,255,255,.035))",
 
 	border:
 		"1px solid rgba(16,185,129,.22)",
 };
 
 const historyNumberSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 14,
 	fontWeight: 900,
 };
 
 const historyMetaSx = {
-	color: "rgba(var(--pf-fg-rgb),.56)",
+	color: "rgba(255,255,255,.56)",
 	fontSize: 12,
 	fontWeight: 600,
 	mt: 0.4,
@@ -1699,13 +1699,13 @@ const modalMiniButtonSx = {
 
 	borderRadius: "8px",
 
-	color: "var(--pf-text-soft)",
+	color: "#cbd5e1",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+		"rgba(255,255,255,.04)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	"&:hover": {
 		color: "#fff",
@@ -1727,10 +1727,10 @@ const auditFilterBarSx = {
 	borderRadius: "10px",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+		"rgba(255,255,255,.035)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 };
 
 const modalFilterFieldSx = {
@@ -1739,11 +1739,11 @@ const modalFilterFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		height: 38,
 		borderRadius: "8px",
-		background: "rgba(var(--pf-fg-rgb),.04)",
-		color: "var(--pf-text-strong)",
+		background: "rgba(255,255,255,.04)",
+		color: "#fff",
 
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.08)",
+			borderColor: "rgba(255,255,255,.08)",
 		},
 
 		"&:hover fieldset": {
@@ -1756,13 +1756,13 @@ const modalFilterFieldSx = {
 	},
 
 	"& .MuiSelect-select": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontSize: 12,
 		fontWeight: 700,
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 	},
 };
 
@@ -1789,16 +1789,16 @@ const auditLogCardSx = {
 	borderRadius: "10px",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+		"rgba(255,255,255,.035)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 
 	transition: "all .2s ease",
 
 	"&:hover": {
 		background:
-			"rgba(var(--pf-fg-rgb),.055)",
+			"rgba(255,255,255,.055)",
 		borderColor:
 			"rgba(59,130,246,.22)",
 	},
@@ -1813,11 +1813,11 @@ const auditActionChipBaseSx = {
 	fontWeight: 900,
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 };
 
 const auditTimeSx = {
-	color: "rgba(var(--pf-fg-rgb),.55)",
+	color: "rgba(255,255,255,.55)",
 	fontSize: 12,
 	fontWeight: 600,
 	mt: 0.7,
@@ -1836,10 +1836,10 @@ const statusChoiceCardSx = (color = "#3b82f6") => ({
 
 	background:
 		color === "#10b981"
-			? "linear-gradient(135deg,rgba(16,185,129,.14),rgba(var(--pf-fg-rgb),.035))"
+			? "linear-gradient(135deg,rgba(16,185,129,.14),rgba(255,255,255,.035))"
 			: color === "#f59e0b"
-				? "linear-gradient(135deg,rgba(245,158,11,.14),rgba(var(--pf-fg-rgb),.035))"
-				: "linear-gradient(135deg,rgba(59,130,246,.14),rgba(var(--pf-fg-rgb),.035))",
+				? "linear-gradient(135deg,rgba(245,158,11,.14),rgba(255,255,255,.035))"
+				: "linear-gradient(135deg,rgba(59,130,246,.14),rgba(255,255,255,.035))",
 
 	border:
 		color === "#10b981"
@@ -1883,17 +1883,17 @@ const statusChoiceIconSx = (color = "#3b82f6") => ({
 				: "rgba(59,130,246,.18)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 });
 
 const statusChoiceTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 15,
 	fontWeight: 900,
 };
 
 const statusChoiceSubtitleSx = {
-	color: "rgba(var(--pf-fg-rgb),.58)",
+	color: "rgba(255,255,255,.58)",
 	fontSize: 12,
 	fontWeight: 600,
 	mt: 0.4,
@@ -1909,13 +1909,13 @@ const statusChoiceArrowSx = {
 	alignItems: "center",
 	justifyContent: "center",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	background:
-		"rgba(var(--pf-fg-rgb),.07)",
+		"rgba(255,255,255,.07)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 };
 
 const readyStatusChip = {
@@ -2014,7 +2014,7 @@ const headerRow = {
 };
 
 const logo = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	fontSize: 32,
 
@@ -2025,7 +2025,7 @@ const logo = {
 };
 
 const subtitle = {
-	color: "rgba(var(--pf-fg-rgb),.62)",
+	color: "rgba(255,255,255,.62)",
 
 	fontSize: 14,
 };
@@ -2039,7 +2039,7 @@ const tableWrapper = {
 	borderRadius: "18px",
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.72),rgba(var(--pf-surface-deep-rgb),.46))",
+		"linear-gradient(180deg,rgba(15,23,42,.72),rgba(2,6,23,.46))",
 
 	border:
 		"1px solid rgba(148,163,184,.11)",
@@ -2048,7 +2048,7 @@ const tableWrapper = {
 		"0 18px 42px rgba(2,6,23,.24)",
 
 	scrollbarWidth: "thin",
-	scrollbarColor: "#3b82f6 var(--pf-surface)",
+	scrollbarColor: "#3b82f6 #0f172a",
 
 	WebkitOverflowScrolling: "touch",
 	overscrollBehaviorX: "contain",
@@ -2059,7 +2059,7 @@ const tableWrapper = {
 	},
 
 	"&::-webkit-scrollbar-track": {
-		background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+		background: "linear-gradient(180deg,#0f172a,#111827)",
 		borderRadius: 999,
 	},
 
@@ -2084,11 +2084,11 @@ const pendingChip = {
 	background:
 		"linear-gradient(135deg, rgba(254,215,170,0.88), rgba(253,186,116,0.62))",
 
-	border: "1px solid rgba(var(--pf-fg-rgb),0.35)",
+	border: "1px solid rgba(255,255,255,0.35)",
 
 	boxShadow: `
     0 6px 16px rgba(245,158,11,0.3),
-    inset 0 1px 0 rgba(var(--pf-fg-rgb),0.5)
+    inset 0 1px 0 rgba(255,255,255,0.5)
   `,
 };
 
@@ -2099,7 +2099,7 @@ const dispatchExportButtonSx = {
 	textTransform: "none",
 	fontWeight: 900,
 	fontSize: 13,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background:
 		"linear-gradient(135deg,rgba(16,185,129,.26),rgba(5,150,105,.20))",
 	border: "1px solid rgba(16,185,129,.30)",
@@ -2229,10 +2229,10 @@ const dispatchTripReviewPdfCardSx = {
 	overflow: "hidden",
 
 	background:
-		"rgba(var(--pf-surface-deep-rgb),.42)",
+		"rgba(2,6,23,.42)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	boxShadow:
 		"0 22px 50px rgba(2,6,23,.32)",
@@ -2252,10 +2252,10 @@ const dispatchTripReviewPdfHeaderSx = {
 	gap: 2,
 
 	background:
-		"rgba(var(--pf-fg-rgb),.035)",
+		"rgba(255,255,255,.035)",
 
 	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 };
 
 const dispatchTripReviewPdfViewportSx = {
@@ -2290,13 +2290,13 @@ const exportFormatButtonSx = (active, accent = "#60a5fa") => ({
 	borderRadius: "13px",
 	textTransform: "none",
 	fontWeight: 950,
-	color: active ? "#fff" : "var(--pf-text-soft)",
+	color: active ? "#fff" : "#cbd5e1",
 	background: active
 		? `linear-gradient(135deg,${accent},rgba(37,99,235,.86))`
-		: "rgba(var(--pf-fg-rgb),.04)",
+		: "rgba(255,255,255,.04)",
 	border: active
 		? `1px solid ${accent}66`
-		: "1px solid rgba(var(--pf-fg-rgb),.08)",
+		: "1px solid rgba(255,255,255,.08)",
 	boxShadow: active
 		? `0 12px 26px ${accent}22`
 		: "none",
@@ -2304,7 +2304,7 @@ const exportFormatButtonSx = (active, accent = "#60a5fa") => ({
 	"&:hover": {
 		background: active
 			? `linear-gradient(135deg,${accent},rgba(37,99,235,.92))`
-			: "rgba(var(--pf-fg-rgb),.075)",
+			: "rgba(255,255,255,.075)",
 	},
 });
 
@@ -2323,8 +2323,8 @@ const dispatchExportPreviewTableSx = {
 		fontWeight: 950,
 		textTransform: "uppercase",
 		letterSpacing: ".08em",
-		background: "rgba(var(--pf-surface-rgb),.96)",
-		borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
+		background: "rgba(15,23,42,.96)",
+		borderBottom: "1px solid rgba(255,255,255,.08)",
 		whiteSpace: "nowrap",
 	},
 
@@ -2333,7 +2333,7 @@ const dispatchExportPreviewTableSx = {
 		color: "#e5e7eb",
 		fontSize: 12,
 		fontWeight: 750,
-		borderBottom: "1px solid rgba(var(--pf-fg-rgb),.06)",
+		borderBottom: "1px solid rgba(255,255,255,.06)",
 		whiteSpace: "nowrap",
 		maxWidth: 260,
 		overflow: "hidden",
@@ -2341,7 +2341,7 @@ const dispatchExportPreviewTableSx = {
 	},
 
 	"& tr:hover td": {
-		background: "rgba(var(--pf-fg-rgb),.035)",
+		background: "rgba(255,255,255,.035)",
 	},
 };
 
@@ -2363,10 +2363,10 @@ const bulkBar = {
 	padding: "12px 18px",
 
 	background:
-		"rgba(var(--pf-surface-rgb),.94)",
+		"rgba(15,23,42,.94)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	borderRadius: 18,
 
@@ -2375,7 +2375,7 @@ const bulkBar = {
 	boxShadow:
 		"0 20px 50px rgba(0,0,0,.45)",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	zIndex: 3000,
 };
@@ -2438,7 +2438,7 @@ const actionWarning = {
 	background:
 		"linear-gradient(135deg,#d97706,#f59e0b)",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	border:
 		"1px solid rgba(245,158,11,.35)",
@@ -2458,7 +2458,7 @@ const moveToFgButtonSx = {
 	background:
 		"linear-gradient(180deg,#f59e0b,#d97706)",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 
 	border:
 		"1px solid rgba(245,158,11,.35)",
@@ -2477,13 +2477,13 @@ const formFieldSx = {
 		borderRadius: "16px",
 
 		background:
-			"rgba(var(--pf-fg-rgb),.04)",
+			"rgba(255,255,255,.04)",
 
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 
 		"& fieldset": {
 			borderColor:
-				"rgba(var(--pf-fg-rgb),.08)",
+				"rgba(255,255,255,.08)",
 		},
 
 		"&:hover fieldset": {
@@ -2498,7 +2498,7 @@ const formFieldSx = {
 	},
 
 	"& input": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 	},
 };
 
@@ -2514,42 +2514,43 @@ const dateTimeFieldSx = {
 };
 
 const darkModalBox = {
-	borderRadius: 28,
+	borderRadius: 12,
 
 	position: "relative",
 
 	overflow: "hidden",
 
 	background:
-		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+		"var(--pf-surface)",
 
 	color: "var(--pf-text-strong)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid var(--pf-border)",
 
 	boxShadow:
 		"0 35px 90px rgba(0,0,0,.55)",
 };
 
 const actionSecondary = {
-	borderRadius: 12,
+	borderRadius: 9,
 
 	textTransform: "none",
 
-	fontWeight: 700,
+	fontWeight: 800,
 
 	background:
-		"rgba(var(--pf-fg-rgb),.04)",
+		"var(--pf-surface-alt)",
 
 	color: "var(--pf-text-strong)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid var(--pf-border)",
 
 	"&:hover": {
 		background:
-			"rgba(var(--pf-fg-rgb),.08)",
+			"rgba(59,130,246,.09)",
+		borderColor: "rgba(59,130,246,.24)",
 	},
 };
 
@@ -2611,10 +2612,10 @@ const searchPanel = {
 
 	borderRadius: 16,
 
-	background: "rgba(var(--pf-fg-rgb),0.03)",
+	background: "rgba(255,255,255,0.03)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(255,255,255,.06)",
 };
 
 const searchActivitySlotSx = {
@@ -2658,7 +2659,7 @@ const activeSearchPanelSx = {
 	boxShadow:
 		"0 0 0 3px rgba(59,130,246,.055), 0 14px 32px rgba(2,6,23,.18)",
 	background:
-		"linear-gradient(135deg,rgba(37,99,235,.075),rgba(var(--pf-fg-rgb),.028))",
+		"linear-gradient(135deg,rgba(37,99,235,.075),rgba(255,255,255,.028))",
 };
 
 
@@ -2671,13 +2672,13 @@ const dateFilterButtonSx = (
 	borderRadius: "14px",
 	textTransform: "none",
 	justifyContent: "flex-start",
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background: active
 		? "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))"
-		: "rgba(var(--pf-fg-rgb),.04)",
+		: "rgba(255,255,255,.04)",
 	border: active
 		? "1px solid rgba(96,165,250,.42)"
-		: "1px solid rgba(var(--pf-fg-rgb),.08)",
+		: "1px solid rgba(255,255,255,.08)",
 	boxShadow: active
 		? "0 12px 26px rgba(37,99,235,.18)"
 		: "none",
@@ -2685,13 +2686,13 @@ const dateFilterButtonSx = (
 	"& .MuiButton-startIcon": {
 		color: active
 			? "#93c5fd"
-			: "var(--pf-text-dim)",
+			: "#64748b",
 	},
 
 	"&:hover": {
 		background: active
 			? "linear-gradient(135deg,rgba(37,99,235,.42),rgba(59,130,246,.24))"
-			: "rgba(var(--pf-fg-rgb),.075)",
+			: "rgba(255,255,255,.075)",
 		borderColor:
 			"rgba(96,165,250,.34)",
 	},
@@ -2707,9 +2708,9 @@ const dateFilterPopoverPaperSx = {
 	overscrollBehavior: "contain",
 	scrollbarGutter: "stable",
 	...premiumScrollbarSx("#60a5fa"),
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background:
-		"radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 34%), linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+		"radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 34%), linear-gradient(180deg,#0f172a,#111827)",
 	border:
 		"1px solid rgba(148,163,184,.16)",
 	boxShadow:
@@ -2746,14 +2747,14 @@ const dateFilterIconSx = {
 };
 
 const dateFilterTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 16,
 	fontWeight: 950,
 };
 
 const dateFilterSubtitleSx = {
 	mt: 0.35,
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 	fontSize: 10.5,
 	fontWeight: 650,
 };
@@ -2775,7 +2776,7 @@ const dateModeSectionSx = {
 
 const dateModeSectionLabelSx = {
 	mb: 0.8,
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 	fontSize: 10,
 	fontWeight: 950,
 	letterSpacing: ".10em",
@@ -2806,15 +2807,15 @@ const dateModeCardSx = (
 	alignItems: "flex-start",
 	gap: 1,
 	textAlign: "left",
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background: active
 		? "linear-gradient(135deg,rgba(37,99,235,.30),rgba(59,130,246,.14))"
-		: "rgba(var(--pf-fg-rgb),.035)",
+		: "rgba(255,255,255,.035)",
 	border: active
 		? "1px solid rgba(96,165,250,.48)"
-		: "1px solid rgba(var(--pf-fg-rgb),.075)",
+		: "1px solid rgba(255,255,255,.075)",
 	boxShadow: active
-		? "0 12px 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(var(--pf-fg-rgb),.04)"
+		? "0 12px 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.04)"
 		: "none",
 	transition:
 		"background .16s ease, border-color .16s ease, transform .16s ease",
@@ -2823,7 +2824,7 @@ const dateModeCardSx = (
 		transform: "translateY(-1px)",
 		background: active
 			? "linear-gradient(135deg,rgba(37,99,235,.38),rgba(59,130,246,.20))"
-			: "rgba(var(--pf-fg-rgb),.065)",
+			: "rgba(255,255,255,.065)",
 		borderColor:
 			"rgba(96,165,250,.34)",
 	},
@@ -2835,7 +2836,7 @@ const dateModeCardTextSx = {
 };
 
 const dateModeCardTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 11.5,
 	fontWeight: 950,
 	lineHeight: 1.25,
@@ -2843,7 +2844,7 @@ const dateModeCardTitleSx = {
 
 const dateModeCardDescriptionSx = {
 	mt: 0.35,
-	color: "var(--pf-text-muted)",
+	color: "#94a3b8",
 	fontSize: 9.5,
 	fontWeight: 650,
 	lineHeight: 1.35,
@@ -2866,10 +2867,10 @@ const dateModeCheckSx = (
 	fontWeight: 950,
 	background: active
 		? "linear-gradient(135deg,#2563eb,#60a5fa)"
-		: "rgba(var(--pf-fg-rgb),.035)",
+		: "rgba(255,255,255,.035)",
 	border: active
 		? "1px solid rgba(147,197,253,.48)"
-		: "1px solid rgba(var(--pf-fg-rgb),.10)",
+		: "1px solid rgba(255,255,255,.10)",
 });
 
 const datePresetRowSx = {
@@ -2899,7 +2900,7 @@ const datePresetButtonSx = {
 		"1px solid rgba(96,165,250,.18)",
 
 	"&:hover": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background:
 			"rgba(59,130,246,.18)",
 		borderColor:
@@ -2922,7 +2923,7 @@ const dateFilterGridSx = {
 
 const dateFilterFieldSx = {
 	"& .MuiInputLabel-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 		fontSize: 12,
 		fontWeight: 800,
 	},
@@ -2934,13 +2935,13 @@ const dateFilterFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		minHeight: 46,
 		borderRadius: "13px",
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background:
-			"rgba(var(--pf-fg-rgb),.04)",
+			"rgba(255,255,255,.04)",
 
 		"& fieldset": {
 			borderColor:
-				"rgba(var(--pf-fg-rgb),.09)",
+				"rgba(255,255,255,.09)",
 		},
 
 		"&:hover fieldset": {
@@ -2956,20 +2957,20 @@ const dateFilterFieldSx = {
 	},
 
 	"& input": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontSize: 12,
 		fontWeight: 850,
-		colorScheme: "var(--pf-color-scheme)",
+		colorScheme: "dark",
 	},
 
 	"& .MuiSelect-select": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontSize: 12,
 		fontWeight: 850,
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 	},
 
 	"& input::-webkit-calendar-picker-indicator": {
@@ -2999,7 +3000,7 @@ const dateFilterFooterSx = {
 	mt: 1.5,
 	pt: 1.4,
 	borderTop:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+		"1px solid rgba(255,255,255,.07)",
 };
 
 const dateFilterClearButtonSx = {
@@ -3020,7 +3021,7 @@ const dateFilterClearButtonSx = {
 
 	"&.Mui-disabled": {
 		opacity: 0.35,
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 	},
 };
 
@@ -3044,14 +3045,14 @@ const dateFilterDoneButtonSx = {
 
 const wrap = {
 	background:
-		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+		"linear-gradient(180deg,#0f172a,#111827)",
 
 	borderRadius: 20,
 
 	padding: 16,
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+		"1px solid rgba(255,255,255,.06)",
 
 	boxShadow:
 		"0 18px 46px rgba(2,6,23,.22)",
@@ -3106,8 +3107,8 @@ const dispatchItemDrawerPaperSx = {
 	maxWidth: "96vw",
 	color: "var(--pf-text-strong)",
 	background:
-		"radial-gradient(circle at top right,rgba(59,130,246,.16),transparent 34%),linear-gradient(180deg,var(--pf-bg-alt),var(--pf-surface) 46%,var(--pf-surface-alt))",
-	borderLeft: "1px solid rgba(96,165,250,.18)",
+		"radial-gradient(circle at top right,rgba(59,130,246,.07),transparent 34%),var(--pf-surface)",
+	borderLeft: "1px solid var(--pf-border)",
 	boxShadow: "-28px 0 80px rgba(2,6,23,.58)",
 };
 
@@ -3122,8 +3123,8 @@ const dispatchItemDrawerHeaderSx = {
 	justifyContent: "space-between",
 	gap: 2,
 	background:
-		"linear-gradient(180deg,rgba(8,17,31,.99),rgba(var(--pf-surface-rgb),.96))",
-	borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
+		"linear-gradient(180deg,rgba(8,17,31,.99),rgba(15,23,42,.96))",
+	borderBottom: "1px solid rgba(255,255,255,.07)",
 	backdropFilter: "blur(18px)",
 };
 
@@ -3136,9 +3137,9 @@ const dispatchItemDrawerBodySx = {
 const dispatchItemDrawerHeroSx = {
 	mb: 1.5,
 	p: 1.55,
-	borderRadius: "18px",
+	borderRadius: "12px",
 	background:
-		"linear-gradient(135deg,rgba(37,99,235,.15),rgba(var(--pf-fg-rgb),.025))",
+		"linear-gradient(135deg,rgba(37,99,235,.15),rgba(255,255,255,.025))",
 	border: "1px solid rgba(96,165,250,.18)",
 	boxShadow: "0 14px 32px rgba(2,6,23,.22)",
 };
@@ -3146,9 +3147,9 @@ const dispatchItemDrawerHeroSx = {
 const dispatchItemDrawerSectionSx = {
 	mb: 1.4,
 	p: 1.45,
-	borderRadius: "17px",
-	background: "rgba(var(--pf-fg-rgb),.026)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+	borderRadius: "11px",
+	background: "rgba(255,255,255,.026)",
+	border: "1px solid rgba(255,255,255,.065)",
 };
 
 const dispatchItemDrawerSectionTitleSx = {
@@ -3173,12 +3174,12 @@ const dispatchItemDrawerFieldSx = {
 	minWidth: 0,
 	p: 1.05,
 	borderRadius: "12px",
-	background: "rgba(var(--pf-surface-deep-rgb),.28)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.055)",
+	background: "rgba(2,6,23,.28)",
+	border: "1px solid rgba(255,255,255,.055)",
 };
 
 const dispatchItemDrawerFieldLabelSx = {
-	color: "var(--pf-text-dim)",
+	color: "#64748b",
 	fontSize: 8.5,
 	fontWeight: 950,
 	letterSpacing: ".07em",
@@ -3187,7 +3188,7 @@ const dispatchItemDrawerFieldLabelSx = {
 
 const dispatchItemDrawerFieldValueSx = {
 	mt: 0.4,
-	color: "var(--pf-text-strong)",
+	color: "#f8fafc",
 	fontSize: 11.5,
 	fontWeight: 850,
 	lineHeight: 1.42,
@@ -3198,7 +3199,7 @@ const dispatchItemDrawerActionPanelSx = {
 	p: 1.35,
 	borderRadius: "15px",
 	background:
-		"linear-gradient(135deg,rgba(16,185,129,.08),rgba(var(--pf-fg-rgb),.025))",
+		"linear-gradient(135deg,rgba(16,185,129,.08),rgba(255,255,255,.025))",
 	border: "1px solid rgba(16,185,129,.14)",
 
 	"& .MuiButton-root": {
@@ -3218,7 +3219,7 @@ const dispatchDrawerQuickActionSx = {
 	border: "1px solid rgba(96,165,250,.20)",
 
 	"&:hover": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		background: "rgba(59,130,246,.20)",
 		borderColor: "rgba(96,165,250,.38)",
 	},
@@ -3232,7 +3233,7 @@ const pdfPreviewOverlaySx = {
 	background: `
 		radial-gradient(circle at 20% 10%, rgba(59,130,246,.16), transparent 30%),
 		radial-gradient(circle at 80% 90%, rgba(16,185,129,.10), transparent 32%),
-		rgba(var(--pf-surface-deep-rgb),.82)
+		rgba(2,6,23,.82)
 	`,
 
 	backdropFilter: "blur(16px)",
@@ -3252,20 +3253,20 @@ const pdfPreviewModalSx = {
 	display: "flex",
 	flexDirection: "column",
 
-	borderRadius: "22px",
+	borderRadius: "12px",
 
 	overflow: "hidden",
 
 	background:
-		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+		"linear-gradient(180deg,#0f172a,#111827)",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.10)",
+		"1px solid rgba(255,255,255,.10)",
 
 	boxShadow:
 		"0 45px 120px rgba(0,0,0,.72)",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 };
 
 const pdfPreviewHeaderSx = {
@@ -3278,17 +3279,17 @@ const pdfPreviewHeaderSx = {
 	px: 2.5,
 
 	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	background:
-		"rgba(var(--pf-surface-rgb),.92)",
+		"rgba(15,23,42,.92)",
 };
 
 const pdfPreviewBodySx = {
 	flex: 1,
 	p: 1.5,
 	minHeight: 0,
-	background: "rgba(var(--pf-surface-deep-rgb),.45)",
+	background: "rgba(2,6,23,.45)",
 };
 
 const pdfPreviewFooterSx = {
@@ -3302,16 +3303,16 @@ const pdfPreviewFooterSx = {
 	px: 2.5,
 
 	borderTop:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	background:
-		"rgba(var(--pf-surface-rgb),.92)",
+		"rgba(15,23,42,.92)",
 };
 
 const popupOverlay = {
 	position: "fixed",
 	inset: 0,
-	background: "rgba(var(--pf-surface-rgb),0.55)",
+	background: "rgba(15,23,42,0.55)",
 	backdropFilter: "blur(8px)",
 	WebkitBackdropFilter: "blur(8px)",
 	display: "flex",
@@ -3338,8 +3339,8 @@ const dispatchControlDockSx = {
 	mb: 2,
 	borderRadius: "22px",
 	background:
-		"radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 36%), rgba(var(--pf-surface-rgb),.72)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.075)",
+		"radial-gradient(circle at top left, rgba(59,130,246,.14), transparent 36%), rgba(15,23,42,.72)",
+	border: "1px solid rgba(255,255,255,.075)",
 	boxShadow: "0 18px 42px rgba(2,6,23,.28)",
 	backdropFilter: "blur(18px)",
 };
@@ -3358,7 +3359,7 @@ const challanHistoryButtonSx = {
 	textTransform: "none",
 	fontWeight: 900,
 	fontSize: 13,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background:
 		"linear-gradient(135deg,rgba(96,165,250,.22),rgba(59,130,246,.18))",
 	border: "1px solid rgba(96,165,250,.28)",
@@ -3381,12 +3382,12 @@ const challanHistoryStatSx = (accent) => ({
 	p: 1.4,
 	borderRadius: "16px",
 	background:
-		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(var(--pf-fg-rgb),.035)`,
+		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(255,255,255,.035)`,
 	border: `1px solid ${accent}33`,
 });
 
 const challanHistoryStatLabelSx = {
-	color: "rgba(var(--pf-fg-rgb),.54)",
+	color: "rgba(255,255,255,.54)",
 	fontSize: 10,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -3395,7 +3396,7 @@ const challanHistoryStatLabelSx = {
 
 const challanHistoryStatValueSx = {
 	mt: 0.6,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 24,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -3437,10 +3438,10 @@ const challanHistorySectionHeaderSx = {
 	borderRadius: "16px",
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-rgb),.80))",
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(15,23,42,.80))",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.075)",
+		"1px solid rgba(255,255,255,.075)",
 
 	backdropFilter: "blur(18px)",
 	WebkitBackdropFilter: "blur(18px)",
@@ -3462,10 +3463,10 @@ const challanHistoryPagerSx = {
 	maxWidth: "100%",
 
 	background:
-		"linear-gradient(135deg,rgba(var(--pf-fg-rgb),.045),rgba(var(--pf-fg-rgb),.025))",
+		"linear-gradient(135deg,rgba(255,255,255,.045),rgba(255,255,255,.025))",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.075)",
+		"1px solid rgba(255,255,255,.075)",
 };
 
 const challanHistoryPagerLeftSx = {
@@ -3483,7 +3484,7 @@ const challanHistoryPagerRightSx = {
 };
 
 const challanHistoryRangeSx = {
-	color: "rgba(var(--pf-fg-rgb),.58)",
+	color: "rgba(255,255,255,.58)",
 	fontSize: 11,
 	fontWeight: 850,
 	whiteSpace: "nowrap",
@@ -3498,12 +3499,12 @@ const challanHistoryPagePillSx = {
 
 	borderRadius: "999px",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 11,
 	fontWeight: 950,
 
 	background:
-		"linear-gradient(135deg,rgba(96,165,250,.18),rgba(var(--pf-fg-rgb),.04))",
+		"linear-gradient(135deg,rgba(96,165,250,.18),rgba(255,255,255,.04))",
 
 	border:
 		"1px solid rgba(96,165,250,.25)",
@@ -3518,12 +3519,12 @@ const challanHistoryNativePageSizeSelectSx = {
 
 	outline: "none",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 11,
 	fontWeight: 950,
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-raised-rgb),.88))",
+		"linear-gradient(180deg,rgba(15,23,42,.96),rgba(30,41,59,.88))",
 
 	border:
 		"1px solid rgba(96,165,250,.25)",
@@ -3559,10 +3560,10 @@ const challanHistoryPageButtonSx = {
 	fontWeight: 950,
 
 	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-raised-rgb),.92),rgba(var(--pf-surface-rgb),.92))",
+		"linear-gradient(180deg,rgba(30,41,59,.92),rgba(15,23,42,.92))",
 
 	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
+		"1px solid rgba(255,255,255,.08)",
 
 	boxShadow:
 		"0 8px 18px rgba(2,6,23,.22)",
@@ -3579,7 +3580,7 @@ const challanHistoryPageButtonSx = {
 		opacity: 0.38,
 		color: "rgba(203,213,225,.55)",
 		background:
-			"rgba(var(--pf-fg-rgb),.035)",
+			"rgba(255,255,255,.035)",
 	},
 };
 
@@ -3589,13 +3590,13 @@ const challanHistoryPageSizeFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		height: 32,
 		borderRadius: "11px",
-		background: "rgba(var(--pf-fg-rgb),.04)",
-		color: "var(--pf-text-strong)",
+		background: "rgba(255,255,255,.04)",
+		color: "#fff",
 		fontSize: 11,
 		fontWeight: 900,
 
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.08)",
+			borderColor: "rgba(255,255,255,.08)",
 		},
 
 		"&:hover fieldset": {
@@ -3609,13 +3610,13 @@ const challanHistoryPageSizeFieldSx = {
 	},
 
 	"& .MuiSelect-select": {
-		color: "var(--pf-text-strong)",
+		color: "#fff",
 		fontWeight: 950,
 		fontSize: 11,
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "var(--pf-text-muted)",
+		color: "#94a3b8",
 	},
 };
 
@@ -3634,7 +3635,7 @@ const masterChallanCardSx = {
 	p: 1.4,
 	borderRadius: "18px",
 	background:
-		"radial-gradient(circle at top left, rgba(96,165,250,.13), transparent 38%), rgba(var(--pf-fg-rgb),.035)",
+		"radial-gradient(circle at top left, rgba(96,165,250,.13), transparent 38%), rgba(255,255,255,.035)",
 	border: "1px solid rgba(96,165,250,.18)",
 };
 
@@ -3647,7 +3648,7 @@ const masterChallanHeaderSx = {
 };
 
 const masterChallanTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 15,
 	fontWeight: 950,
 	whiteSpace: "nowrap",
@@ -3657,7 +3658,7 @@ const masterChallanTitleSx = {
 
 const masterChallanMetaSx = {
 	mt: 0.4,
-	color: "rgba(var(--pf-fg-rgb),.55)",
+	color: "rgba(255,255,255,.55)",
 	fontSize: 11,
 	fontWeight: 750,
 	whiteSpace: "nowrap",
@@ -3675,7 +3676,7 @@ const masterChallanCountSx = {
 };
 
 const masterChallanCountValueSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 22,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -3701,8 +3702,8 @@ const challanHistoryRowSx = {
 	gap: 1.4,
 	p: 1.2,
 	borderRadius: "15px",
-	background: "rgba(var(--pf-surface-rgb),.62)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "rgba(15,23,42,.62)",
+	border: "1px solid rgba(255,255,255,.07)",
 };
 
 const customChallanHistoryCardSx = {
@@ -3714,12 +3715,12 @@ const customChallanHistoryCardSx = {
 	mb: 1.1,
 	borderRadius: "16px",
 	background:
-		"radial-gradient(circle at top right, rgba(139,92,246,.15), transparent 42%), rgba(var(--pf-fg-rgb),.035)",
+		"radial-gradient(circle at top right, rgba(139,92,246,.15), transparent 42%), rgba(255,255,255,.035)",
 	border: "1px solid rgba(139,92,246,.24)",
 };
 
 const challanHistoryNoSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontFamily: "monospace",
 	fontSize: 14,
 	fontWeight: 950,
@@ -3730,7 +3731,7 @@ const challanHistoryNoSx = {
 
 const challanHistoryMetaSx = {
 	mt: 0.4,
-	color: "rgba(var(--pf-fg-rgb),.58)",
+	color: "rgba(255,255,255,.58)",
 	fontSize: 11,
 	fontWeight: 750,
 	whiteSpace: "nowrap",
@@ -3776,7 +3777,7 @@ const dispatchControlIconSx = {
 };
 
 const dispatchControlTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 16,
 	fontWeight: 950,
 	letterSpacing: "-.02em",
@@ -3784,7 +3785,7 @@ const dispatchControlTitleSx = {
 
 const dispatchControlSubSx = {
 	mt: 0.25,
-	color: "rgba(var(--pf-fg-rgb),.54)",
+	color: "rgba(255,255,255,.54)",
 	fontSize: 11,
 	fontWeight: 700,
 };
@@ -3803,15 +3804,15 @@ const dispatchDockBtnSx = (accent) => ({
 	textTransform: "none",
 	fontSize: 12,
 	fontWeight: 950,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	background:
-		`linear-gradient(180deg, ${accent}24, rgba(var(--pf-fg-rgb),.045))`,
+		`linear-gradient(180deg, ${accent}24, rgba(255,255,255,.045))`,
 	border: `1px solid ${accent}44`,
 	boxShadow: `0 10px 24px ${accent}18`,
 
 	"&:hover": {
 		background:
-			`linear-gradient(180deg, ${accent}34, rgba(var(--pf-fg-rgb),.070))`,
+			`linear-gradient(180deg, ${accent}34, rgba(255,255,255,.070))`,
 	},
 });
 
@@ -3826,12 +3827,12 @@ const historyMiniStatSx = (accent) => ({
 	p: 1.4,
 	borderRadius: "16px",
 	background:
-		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(var(--pf-fg-rgb),.035)`,
+		`radial-gradient(circle at top right, ${accent}22, transparent 46%), rgba(255,255,255,.035)`,
 	border: `1px solid ${accent}33`,
 });
 
 const historyMiniLabelSx = {
-	color: "rgba(var(--pf-fg-rgb),.54)",
+	color: "rgba(255,255,255,.54)",
 	fontSize: 10,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -3840,7 +3841,7 @@ const historyMiniLabelSx = {
 
 const historyMiniValueSx = {
 	mt: 0.6,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 24,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -3863,7 +3864,7 @@ const premiumHistoryRowSx = (accent) => ({
 	p: 1.4,
 	borderRadius: "16px",
 	background:
-		`linear-gradient(90deg, ${accent}10, rgba(var(--pf-fg-rgb),.030))`,
+		`linear-gradient(90deg, ${accent}10, rgba(255,255,255,.030))`,
 	border: `1px solid ${accent}26`,
 });
 
@@ -3880,7 +3881,7 @@ const historyDocIconSx = (accent) => ({
 });
 
 const historyDocTitleSx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 13,
 	fontWeight: 950,
 	whiteSpace: "nowrap",
@@ -3890,7 +3891,7 @@ const historyDocTitleSx = {
 
 const historyDocMetaSx = {
 	mt: 0.4,
-	color: "rgba(var(--pf-fg-rgb),.58)",
+	color: "rgba(255,255,255,.58)",
 	fontSize: 11,
 	fontWeight: 750,
 	whiteSpace: "nowrap",
@@ -3900,7 +3901,7 @@ const historyDocMetaSx = {
 
 const historyDocDateSx = {
 	mt: 0.35,
-	color: "rgba(var(--pf-fg-rgb),.42)",
+	color: "rgba(255,255,255,.42)",
 	fontSize: 10.5,
 	fontWeight: 750,
 	whiteSpace: "nowrap",
@@ -3937,7 +3938,7 @@ const normalChallanAnalyticsPanelSx = {
 	p: 1.35,
 	borderRadius: "18px",
 	background:
-		"radial-gradient(circle at top left,rgba(37,99,235,.16),transparent 36%),linear-gradient(135deg,rgba(var(--pf-surface-rgb),.90),rgba(var(--pf-surface-raised-rgb),.58))",
+		"radial-gradient(circle at top left,rgba(37,99,235,.16),transparent 36%),linear-gradient(135deg,rgba(15,23,42,.90),rgba(30,41,59,.58))",
 	border: "1px solid rgba(96,165,250,.20)",
 	boxShadow: "0 14px 32px rgba(2,6,23,.22)",
 };
@@ -3960,13 +3961,13 @@ const normalChallanAnalyticsGridSx = {
 const normalChallanMetricCardSx = (accent = "#60a5fa") => ({
 	p: 1.15,
 	borderRadius: "14px",
-	background: `radial-gradient(circle at top right,${accent}20,transparent 50%),rgba(var(--pf-fg-rgb),.025)`,
+	background: `radial-gradient(circle at top right,${accent}20,transparent 50%),rgba(255,255,255,.025)`,
 	border: `1px solid ${accent}2e`,
 	minWidth: 0,
 });
 
 const normalChallanMetricLabelSx = {
-	color: "rgba(var(--pf-fg-rgb),.48)",
+	color: "rgba(255,255,255,.48)",
 	fontSize: 8.8,
 	fontWeight: 950,
 	letterSpacing: ".07em",
@@ -3975,7 +3976,7 @@ const normalChallanMetricLabelSx = {
 
 const normalChallanMetricValueSx = {
 	mt: 0.45,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 21,
 	fontWeight: 950,
 	lineHeight: 1,
@@ -3983,7 +3984,7 @@ const normalChallanMetricValueSx = {
 
 const normalChallanMetricMetaSx = {
 	mt: 0.45,
-	color: "rgba(var(--pf-fg-rgb),.42)",
+	color: "rgba(255,255,255,.42)",
 	fontSize: 8.8,
 	fontWeight: 700,
 	whiteSpace: "nowrap",
@@ -4000,7 +4001,7 @@ const normalChallanViewModalSx = {
 	flexDirection: "column",
 	borderRadius: "24px",
 	background:
-		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.22),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.12),transparent 28%),linear-gradient(180deg,#07101f,var(--pf-surface))",
+		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.22),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.12),transparent 28%),linear-gradient(180deg,#07101f,#0f172a)",
 	border: "1px solid rgba(96,165,250,.20)",
 	boxShadow: "0 44px 130px rgba(0,0,0,.74)",
 };
@@ -4028,13 +4029,13 @@ const normalChallanSummaryGridSx = {
 const normalChallanInfoCardSx = {
 	p: 1.15,
 	borderRadius: "14px",
-	background: "rgba(var(--pf-fg-rgb),.028)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "rgba(255,255,255,.028)",
+	border: "1px solid rgba(255,255,255,.07)",
 	minWidth: 0,
 };
 
 const normalChallanInfoLabelSx = {
-	color: "var(--pf-text-dim)",
+	color: "#64748b",
 	fontSize: 8.5,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -4043,7 +4044,7 @@ const normalChallanInfoLabelSx = {
 
 const normalChallanInfoValueSx = {
 	mt: 0.45,
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 11.5,
 	fontWeight: 900,
 	whiteSpace: "nowrap",
@@ -4073,7 +4074,7 @@ const normalChallanItemsPanelSx = {
 	display: "flex",
 	flexDirection: "column",
 	borderRadius: "18px",
-	background: "rgba(var(--pf-surface-deep-rgb),.34)",
+	background: "rgba(2,6,23,.34)",
 	border: "1px solid rgba(96,165,250,.14)",
 	overflow: "hidden",
 };
@@ -4085,8 +4086,8 @@ const normalChallanItemsToolbarSx = {
 	justifyContent: "space-between",
 	gap: 1,
 	flexWrap: "wrap",
-	background: "rgba(var(--pf-fg-rgb),.025)",
-	borderBottom: "1px solid rgba(var(--pf-fg-rgb),.06)",
+	background: "rgba(255,255,255,.025)",
+	borderBottom: "1px solid rgba(255,255,255,.06)",
 };
 
 const normalChallanItemListSx = {
@@ -4109,15 +4110,15 @@ const normalChallanItemRowSx = (selected = false) => ({
 	cursor: "pointer",
 	background: selected
 		? "linear-gradient(135deg,rgba(37,99,235,.18),rgba(59,130,246,.07))"
-		: "rgba(var(--pf-fg-rgb),.025)",
+		: "rgba(255,255,255,.025)",
 	border: selected
 		? "1px solid rgba(96,165,250,.34)"
-		: "1px solid rgba(var(--pf-fg-rgb),.06)",
+		: "1px solid rgba(255,255,255,.06)",
 	transition: "all .16s ease",
 	"&:hover": {
 		background: selected
 			? "linear-gradient(135deg,rgba(37,99,235,.24),rgba(59,130,246,.10))"
-			: "rgba(var(--pf-fg-rgb),.05)",
+			: "rgba(255,255,255,.05)",
 		borderColor: "rgba(96,165,250,.24)",
 	},
 });
@@ -4137,7 +4138,7 @@ const normalChallanItemIndexSx = {
 };
 
 const normalChallanItemPrimarySx = {
-	color: "var(--pf-text-strong)",
+	color: "#fff",
 	fontSize: 11.5,
 	fontWeight: 900,
 	whiteSpace: "nowrap",
@@ -4147,7 +4148,7 @@ const normalChallanItemPrimarySx = {
 
 const normalChallanItemSecondarySx = {
 	mt: 0.28,
-	color: "rgba(var(--pf-fg-rgb),.46)",
+	color: "rgba(255,255,255,.46)",
 	fontSize: 9.5,
 	fontWeight: 700,
 	whiteSpace: "nowrap",
@@ -4162,7 +4163,7 @@ const normalChallanDetailPanelSx = {
 	flexDirection: "column",
 	borderRadius: "18px",
 	background:
-		"radial-gradient(circle at top right,rgba(16,185,129,.10),transparent 36%),rgba(var(--pf-surface-deep-rgb),.36)",
+		"radial-gradient(circle at top right,rgba(16,185,129,.10),transparent 36%),rgba(2,6,23,.36)",
 	border: "1px solid rgba(16,185,129,.15)",
 	overflow: "hidden",
 };
@@ -4179,8 +4180,8 @@ const normalChallanDetailSectionSx = {
 	p: 1.25,
 	mb: 1,
 	borderRadius: "14px",
-	background: "rgba(var(--pf-fg-rgb),.026)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.06)",
+	background: "rgba(255,255,255,.026)",
+	border: "1px solid rgba(255,255,255,.06)",
 };
 
 const normalChallanDetailSectionTitleSx = {
@@ -4203,7 +4204,7 @@ const normalChallanDetailFieldSx = {
 };
 
 const normalChallanDetailFieldLabelSx = {
-	color: "var(--pf-text-dim)",
+	color: "#64748b",
 	fontSize: 8.4,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -4212,7 +4213,7 @@ const normalChallanDetailFieldLabelSx = {
 
 const normalChallanDetailFieldValueSx = {
 	mt: 0.3,
-	color: "var(--pf-text)",
+	color: "#e2e8f0",
 	fontSize: 10.5,
 	fontWeight: 800,
 	wordBreak: "break-word",
@@ -11198,7 +11199,7 @@ export default function DispatchedItemsPage() {
 			<Box sx={{ mb: 2 }}>
 				<Box
 					sx={{
-						color: "var(--pf-text-muted)",
+						color: "#94a3b8",
 						fontSize: 12,
 						fontWeight: 800,
 						mb: 0.8,
@@ -13335,7 +13336,7 @@ export default function DispatchedItemsPage() {
 								""
 							}
 							sx={{
-								color: "var(--pf-text-muted)",
+								color: "#94a3b8",
 								fontSize: 12,
 								fontWeight: 650,
 								lineHeight: 1.45,
@@ -13450,8 +13451,8 @@ export default function DispatchedItemsPage() {
 							sx={{
 								color:
 									dateInfo.date
-										? "var(--pf-text-strong)"
-										: "var(--pf-text-dim)",
+										? "#f8fafc"
+										: "#64748b",
 								fontSize: 12,
 								fontWeight: 850,
 								whiteSpace: "nowrap",
@@ -13476,7 +13477,7 @@ export default function DispatchedItemsPage() {
 								color:
 									dateInfo.date
 										? "#bfdbfe"
-										: "var(--pf-text-muted)",
+										: "#94a3b8",
 								fontSize: 9,
 								fontWeight: 950,
 								background:
@@ -13530,7 +13531,7 @@ export default function DispatchedItemsPage() {
 						{(row.driverName || row.vehicleNumber) && (
 							<Box
 								sx={{
-									color: "var(--pf-text-muted)",
+									color: "#94a3b8",
 									fontSize: 11,
 									fontWeight: 700,
 									whiteSpace: "nowrap",
@@ -14245,7 +14246,7 @@ export default function DispatchedItemsPage() {
 		return {
 			bg:
 				"rgba(148,163,184,.12)",
-			color: "var(--pf-text-soft)",
+			color: "#cbd5e1",
 			border:
 				"1px solid rgba(148,163,184,.20)",
 		};
@@ -14309,8 +14310,8 @@ export default function DispatchedItemsPage() {
 			normalizedRole === "ADMIN"
 		) {
 			return {
-				bg: "var(--pf-surface-alt)",
-				color: "var(--pf-text-strong)",
+				bg: "#111827",
+				color: "#fff",
 			};
 		}
 
@@ -18735,7 +18736,7 @@ export default function DispatchedItemsPage() {
 			{
 				label: "Excel Rows",
 				value: Number(dispatchImportVerification?.totalRows || dispatchImportRows.length || 0),
-				color: "var(--pf-text)",
+				color: "#e2e8f0",
 			},
 			{
 				label: "Matched",
@@ -18778,9 +18779,9 @@ export default function DispatchedItemsPage() {
 						width: { xs: "100vw", md: "min(1180px,96vw)" },
 						maxWidth: "100vw",
 						background:
-							"linear-gradient(180deg,#07111f 0%,var(--pf-bg-alt) 45%,var(--pf-surface) 100%)",
+							"var(--pf-surface)",
 						color: "var(--pf-text-strong)",
-						borderLeft: "1px solid rgba(148,163,184,.16)",
+						borderLeft: "1px solid var(--pf-border)",
 						boxShadow: "-26px 0 70px rgba(2,6,23,.52)",
 					},
 				}}
@@ -18803,7 +18804,7 @@ export default function DispatchedItemsPage() {
 								<Box sx={{ fontSize: 22, fontWeight: 950, letterSpacing: "-.02em" }}>
 									Verified Dispatch XLSX Import
 								</Box>
-								<Box sx={{ color: "var(--pf-text-muted)", fontSize: 12.5, mt: 0.5 }}>
+								<Box sx={{ color: "#94a3b8", fontSize: 12.5, mt: 0.5 }}>
 									Match authority: Item Name + PD No + DWG No. Description and Client only
 									disambiguate repeated packet rows.
 								</Box>
@@ -18831,7 +18832,7 @@ export default function DispatchedItemsPage() {
 							<IconButton
 								disabled={dispatchImportLoading || dispatchImportApplying}
 								onClick={() => setDispatchImportOpen(false)}
-								sx={{ color: "var(--pf-text-muted)" }}
+								sx={{ color: "#94a3b8" }}
 							>
 								✕
 							</IconButton>
@@ -18852,7 +18853,7 @@ export default function DispatchedItemsPage() {
 							>
 								<CircularProgress size={34} />
 								<Box sx={{ fontWeight: 900 }}>Reading XLSX and verifying Dispatch records…</Box>
-								<Box sx={{ color: "var(--pf-text-muted)", fontSize: 12 }}>
+								<Box sx={{ color: "#94a3b8", fontSize: 12 }}>
 									Nothing is updated until you confirm matched rows below.
 								</Box>
 							</Box>
@@ -18865,11 +18866,11 @@ export default function DispatchedItemsPage() {
 									justifyContent: "center",
 									flexDirection: "column",
 									gap: 1.5,
-									color: "var(--pf-text-muted)",
+									color: "#94a3b8",
 								}}
 							>
 								<Box sx={{ fontSize: 38 }}>📊</Box>
-								<Box sx={{ color: "var(--pf-text-strong)", fontWeight: 900 }}>Select an XLSX to verify</Box>
+								<Box sx={{ color: "#fff", fontWeight: 900 }}>Select an XLSX to verify</Box>
 								<Box sx={{ fontSize: 12.5 }}>
 									Expected columns include Item Name, PD No, DWG No, Dispatch Date and Driver Name.
 								</Box>
@@ -18893,11 +18894,11 @@ export default function DispatchedItemsPage() {
 											sx={{
 												p: 1.5,
 												borderRadius: "12px",
-												background: "rgba(var(--pf-fg-rgb),.035)",
+												background: "rgba(255,255,255,.035)",
 												border: "1px solid rgba(148,163,184,.10)",
 											}}
 										>
-											<Box sx={{ color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 850 }}>
+											<Box sx={{ color: "#94a3b8", fontSize: 10.5, fontWeight: 850 }}>
 												{card.label}
 											</Box>
 											<Box sx={{ color: card.color, fontSize: 23, fontWeight: 950, mt: 0.25 }}>
@@ -18935,11 +18936,11 @@ export default function DispatchedItemsPage() {
 												textTransform: "none",
 												fontWeight: 900,
 												fontSize: 11,
-												color: dispatchImportFilter === value ? "var(--pf-text-strong)" : "var(--pf-text-muted)",
+												color: dispatchImportFilter === value ? "#fff" : "#94a3b8",
 												background:
 													dispatchImportFilter === value
 														? "rgba(37,99,235,.34)"
-														: "rgba(var(--pf-fg-rgb),.03)",
+														: "rgba(255,255,255,.03)",
 												border: "1px solid rgba(148,163,184,.12)",
 											}}
 										>
@@ -18959,8 +18960,8 @@ export default function DispatchedItemsPage() {
 											minWidth: { xs: "100%", md: 280 },
 											ml: { md: "auto" },
 											"& .MuiOutlinedInput-root": {
-												color: "var(--pf-text-strong)",
-												background: "rgba(var(--pf-fg-rgb),.035)",
+												color: "#fff",
+												background: "rgba(255,255,255,.035)",
 												borderRadius: "10px",
 												"& fieldset": { borderColor: "rgba(148,163,184,.15)" },
 											},
@@ -18976,7 +18977,7 @@ export default function DispatchedItemsPage() {
 										mb: 1.2,
 										p: 1.2,
 										borderRadius: "11px",
-										background: "rgba(var(--pf-surface-rgb),.72)",
+										background: "rgba(15,23,42,.72)",
 										border: "1px solid rgba(148,163,184,.10)",
 									}}
 								>
@@ -18991,9 +18992,9 @@ export default function DispatchedItemsPage() {
 											selectedCount > 0 && selectedCount < dispatchImportEligibleRows.length
 										}
 										onChange={selectAllDispatchImportMatches}
-										sx={{ color: "var(--pf-text-dim)", "&.Mui-checked": { color: "#22d3ee" } }}
+										sx={{ color: "#64748b", "&.Mui-checked": { color: "#22d3ee" } }}
 									/>
-									<Box sx={{ flex: 1, color: "var(--pf-text-soft)", fontSize: 12.5, fontWeight: 800 }}>
+									<Box sx={{ flex: 1, color: "#cbd5e1", fontSize: 12.5, fontWeight: 800 }}>
 										{selectedCount} verified row{selectedCount === 1 ? "" : "s"} selected. Applying
 										changes only Status → DISPATCHED, Dispatch Date, Driver, dispatch timestamps,
 										stock, and linked PacketItem status.
@@ -19010,8 +19011,8 @@ export default function DispatchedItemsPage() {
 											color: "#fff",
 											background: "linear-gradient(135deg,#0891b2,#0e7490)",
 											"&.Mui-disabled": {
-												background: "rgba(var(--pf-fg-rgb),.07)",
-												color: "rgba(var(--pf-fg-rgb),.32)",
+												background: "rgba(255,255,255,.07)",
+												color: "rgba(255,255,255,.32)",
 											},
 										}}
 									>
@@ -19025,7 +19026,7 @@ export default function DispatchedItemsPage() {
 										maxHeight: "calc(100vh - 350px)",
 										borderRadius: "12px",
 										border: "1px solid rgba(148,163,184,.11)",
-										background: "rgba(var(--pf-surface-deep-rgb),.36)",
+										background: "rgba(2,6,23,.36)",
 									}}
 								>
 									<Box
@@ -19037,9 +19038,9 @@ export default function DispatchedItemsPage() {
 											position: "sticky",
 											top: 0,
 											zIndex: 3,
-											background: "var(--pf-surface)",
+											background: "#0f172a",
 											borderBottom: "1px solid rgba(148,163,184,.14)",
-											color: "var(--pf-text-muted)",
+											color: "#94a3b8",
 											fontSize: 10.5,
 											fontWeight: 950,
 											textTransform: "uppercase",
@@ -19048,7 +19049,7 @@ export default function DispatchedItemsPage() {
 									>
 										{["", "Excel Row", "Excel Identity", "Matched Dispatch Record", "Dispatch Data", "Status Change", "Verification / Action"].map(
 											(label) => (
-												<Box key={label || "select"} sx={{ p: 1.2, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)" }}>
+												<Box key={label || "select"} sx={{ p: 1.2, borderRight: "1px solid rgba(255,255,255,.04)" }}>
 													{label}
 												</Box>
 											)
@@ -19079,7 +19080,7 @@ export default function DispatchedItemsPage() {
 													borderBottom: "1px solid rgba(148,163,184,.075)",
 													background: row?.applied
 														? "rgba(8,145,178,.07)"
-														: "rgba(var(--pf-surface-rgb),.34)",
+														: "rgba(15,23,42,.34)",
 												}}
 											>
 												<Box sx={{ p: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -19087,11 +19088,11 @@ export default function DispatchedItemsPage() {
 														disabled={!eligible || dispatchImportApplying}
 														checked={eligible && selected}
 														onChange={() => toggleDispatchImportRow(row.rowNumber)}
-														sx={{ color: "var(--pf-text-soft)", "&.Mui-checked": { color: "#22d3ee" } }}
+														sx={{ color: "#475569", "&.Mui-checked": { color: "#22d3ee" } }}
 													/>
 												</Box>
 
-												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)" }}>
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
 													<Box sx={{ fontWeight: 950 }}>#{row?.rowNumber || "—"}</Box>
 													<Chip
 														size="small"
@@ -19108,24 +19109,24 @@ export default function DispatchedItemsPage() {
 													/>
 												</Box>
 
-												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)", minWidth: 0 }}>
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)", minWidth: 0 }}>
 													<Box sx={{ fontWeight: 900, fontSize: 12.5, lineHeight: 1.35 }}>{row?.itemName || "—"}</Box>
 													<Box sx={{ color: "#93c5fd", fontSize: 11.5, mt: 0.55 }}>
 														PD: {row?.pdNo || "—"} · DWG: {row?.drawingNo || "—"}
 													</Box>
-													<Box sx={{ color: "var(--pf-text-dim)", fontSize: 10.5, mt: 0.45 }}>
+													<Box sx={{ color: "#64748b", fontSize: 10.5, mt: 0.45 }}>
 														{row?.description || "No description"}
 													</Box>
 												</Box>
 
-												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)", minWidth: 0 }}>
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)", minWidth: 0 }}>
 													{matched ? (
 														<>
 															<Box sx={{ fontWeight: 900, fontSize: 12.5 }}>{row?.matchedItemName || row?.itemName || "—"}</Box>
 															<Box sx={{ color: "#c4b5fd", fontSize: 11, mt: 0.5, fontFamily: "monospace" }}>
 																{row?.sku || "No SKU"}
 															</Box>
-															<Box sx={{ color: "var(--pf-text-dim)", fontSize: 9.5, mt: 0.4, wordBreak: "break-all" }}>
+															<Box sx={{ color: "#64748b", fontSize: 9.5, mt: 0.4, wordBreak: "break-all" }}>
 																ID: {row?.zohoItemId || "—"}
 															</Box>
 															{Number(row?.candidateCount || 0) > 1 && (
@@ -19135,35 +19136,35 @@ export default function DispatchedItemsPage() {
 															)}
 														</>
 													) : (
-														<Box sx={{ color: "var(--pf-text-dim)", fontSize: 11.5 }}>No database item allocated</Box>
+														<Box sx={{ color: "#64748b", fontSize: 11.5 }}>No database item allocated</Box>
 													)}
 												</Box>
 
-												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)" }}>
-													<Box sx={{ color: "var(--pf-text)", fontSize: 11.5, fontWeight: 850 }}>
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													<Box sx={{ color: "#e2e8f0", fontSize: 11.5, fontWeight: 850 }}>
 														{String(row?.dispatchDateTime || "—").replace("T", " ")}
 													</Box>
 													<Box sx={{ color: "#67e8f9", fontSize: 11.5, mt: 0.5 }}>
 														Driver: {row?.driverName || "—"}
 													</Box>
 													{row?.sourceStatus && (
-														<Box sx={{ color: "var(--pf-text-dim)", fontSize: 10, mt: 0.4 }}>
+														<Box sx={{ color: "#64748b", fontSize: 10, mt: 0.4 }}>
 															XLSX status: {row.sourceStatus}
 														</Box>
 													)}
 												</Box>
 
-												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(var(--pf-fg-rgb),.04)" }}>
-													<Box sx={{ color: "var(--pf-text-muted)", fontSize: 10.5 }}>Current</Box>
+												<Box sx={{ p: 1.15, borderRight: "1px solid rgba(255,255,255,.04)" }}>
+													<Box sx={{ color: "#94a3b8", fontSize: 10.5 }}>Current</Box>
 													<Box sx={{ color: "#fcd34d", fontSize: 11.5, fontWeight: 900, mt: 0.25 }}>
 														{row?.currentStatus || "—"}
 													</Box>
-													<Box sx={{ color: "var(--pf-text-dim)", fontSize: 10, my: 0.4 }}>↓</Box>
+													<Box sx={{ color: "#64748b", fontSize: 10, my: 0.4 }}>↓</Box>
 													<Box sx={{ color: "#34d399", fontSize: 11.5, fontWeight: 950 }}>DISPATCHED</Box>
 												</Box>
 
 												<Box sx={{ p: 1.15, minWidth: 0 }}>
-													<Box sx={{ color: matched ? "var(--pf-text-soft)" : matchColor, fontSize: 10.8, lineHeight: 1.4 }}>
+													<Box sx={{ color: matched ? "#cbd5e1" : matchColor, fontSize: 10.8, lineHeight: 1.4 }}>
 														{row?.matchReason || "—"}
 													</Box>
 													{eligible && (
@@ -19192,14 +19193,14 @@ export default function DispatchedItemsPage() {
 									})}
 
 									{visibleRows.length === 0 && (
-										<Box sx={{ p: 4, color: "var(--pf-text-dim)", textAlign: "center" }}>
+										<Box sx={{ p: 4, color: "#64748b", textAlign: "center" }}>
 											No verification rows match the current filter.
 										</Box>
 									)}
 								</Box>
 
 								<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mt: 1.2 }}>
-									<Box sx={{ color: "var(--pf-text-dim)", fontSize: 11 }}>
+									<Box sx={{ color: "#64748b", fontSize: 11 }}>
 										Showing {visibleRows.length} of {filteredDispatchImportRows.length} filtered rows.
 									</Box>
 
@@ -19263,7 +19264,7 @@ export default function DispatchedItemsPage() {
 					>
 						<Box
 							sx={{
-								color: "var(--pf-text-muted)",
+								color: "#94a3b8",
 								fontSize: 14,
 								fontWeight: 600,
 							}}
@@ -19351,7 +19352,7 @@ export default function DispatchedItemsPage() {
 							color:
 								dispatchSearchPending
 									? "#60a5fa"
-									: "rgba(var(--pf-fg-rgb),.45)",
+									: "rgba(255,255,255,.45)",
 							transition:
 								"color .16s ease",
 						}}
@@ -19378,12 +19379,12 @@ export default function DispatchedItemsPage() {
 							maxWidth: 600,
 
 							"& .MuiInputBase-root": {
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 								fontSize: 14,
 							},
 
 							"& input::placeholder": {
-								color: "rgba(var(--pf-fg-rgb),.42)",
+								color: "rgba(255,255,255,.42)",
 								opacity: 1,
 							},
 						}}
@@ -19423,13 +19424,13 @@ export default function DispatchedItemsPage() {
 								borderRadius: "10px",
 								textTransform: "none",
 								fontWeight: 800,
-								color: "var(--pf-text-soft)",
-								background: "rgba(var(--pf-fg-rgb),.05)",
-								border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+								color: "#cbd5e1",
+								background: "rgba(255,255,255,.05)",
+								border: "1px solid rgba(255,255,255,.08)",
 
 								"&:hover": {
-									background: "rgba(var(--pf-fg-rgb),.10)",
-									color: "var(--pf-text-strong)",
+									background: "rgba(255,255,255,.10)",
+									color: "#fff",
 								},
 							}}
 						>
@@ -19462,7 +19463,7 @@ export default function DispatchedItemsPage() {
 						>
 							<Box
 								sx={{
-									color: "var(--pf-text-strong)",
+									color: "#fff",
 									fontSize: 11,
 									fontWeight: 950,
 									whiteSpace: "nowrap",
@@ -19480,7 +19481,7 @@ export default function DispatchedItemsPage() {
 									color:
 										dateFilterActive
 											? "#bfdbfe"
-											: "var(--pf-text-muted)",
+											: "#94a3b8",
 									fontSize: 9.5,
 									fontWeight: 750,
 									whiteSpace: "nowrap",
@@ -19824,7 +19825,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 0.3,
-											color: "var(--pf-text-muted)",
+											color: "#94a3b8",
 											fontSize: 10,
 											fontWeight: 650,
 										}}
@@ -19893,16 +19894,16 @@ export default function DispatchedItemsPage() {
 											mt: 1,
 											borderRadius: "18px",
 											background:
-												"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
-											color: "var(--pf-text-strong)",
+												"linear-gradient(180deg,#0f172a,#111827)",
+											color: "#fff",
 											border:
-												"1px solid rgba(var(--pf-fg-rgb),.06)",
+												"1px solid rgba(255,255,255,.06)",
 											backdropFilter: "blur(20px)",
 
 											"& .MuiMenuItem-root": {
 												fontSize: 14,
 												fontWeight: 700,
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 											},
 
 											"& .MuiMenuItem-root:hover": {
@@ -19928,11 +19929,11 @@ export default function DispatchedItemsPage() {
 							"& .MuiOutlinedInput-root": {
 								height: 44,
 								borderRadius: "14px",
-								background: "rgba(var(--pf-fg-rgb),.04)",
-								color: "var(--pf-text-strong)",
+								background: "rgba(255,255,255,.04)",
+								color: "#fff",
 
 								"& fieldset": {
-									borderColor: "rgba(var(--pf-fg-rgb),.08)",
+									borderColor: "rgba(255,255,255,.08)",
 								},
 
 								"&:hover fieldset": {
@@ -19945,12 +19946,12 @@ export default function DispatchedItemsPage() {
 							},
 
 							"& .MuiSelect-select": {
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 								fontWeight: 800,
 							},
 
 							"& .MuiSvgIcon-root": {
-								color: "var(--pf-text-muted)",
+								color: "#94a3b8",
 							},
 						}}
 					>
@@ -19972,7 +19973,7 @@ export default function DispatchedItemsPage() {
 										size="small"
 										checked={checked}
 										sx={{
-											color: "rgba(var(--pf-fg-rgb),.45)",
+											color: "rgba(255,255,255,.45)",
 											"&.Mui-checked": {
 												color: "#60a5fa",
 											},
@@ -20016,13 +20017,13 @@ export default function DispatchedItemsPage() {
 								borderRadius: "14px",
 
 								background:
-									"rgba(var(--pf-fg-rgb),.04)",
+									"rgba(255,255,255,.04)",
 
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 
 								"& fieldset": {
 									borderColor:
-										"rgba(var(--pf-fg-rgb),.08)",
+										"rgba(255,255,255,.08)",
 								},
 
 								"&:hover fieldset": {
@@ -20037,12 +20038,12 @@ export default function DispatchedItemsPage() {
 							},
 
 							"& .MuiSelect-select": {
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 								fontWeight: 800,
 							},
 
 							"& .MuiSvgIcon-root": {
-								color: "var(--pf-text-muted)",
+								color: "#94a3b8",
 							},
 						}}
 					>
@@ -20088,13 +20089,13 @@ export default function DispatchedItemsPage() {
 								borderRadius: "14px",
 
 								background:
-									"rgba(var(--pf-fg-rgb),.04)",
+									"rgba(255,255,255,.04)",
 
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 
 								"& fieldset": {
 									borderColor:
-										"rgba(var(--pf-fg-rgb),.08)",
+										"rgba(255,255,255,.08)",
 								},
 
 								"&:hover fieldset": {
@@ -20108,12 +20109,12 @@ export default function DispatchedItemsPage() {
 							},
 
 							"& .MuiSelect-select": {
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 								fontWeight: 500,
 							},
 
 							"& .MuiSvgIcon-root": {
-								color: "var(--pf-text-muted)",
+								color: "#94a3b8",
 							},
 						}}
 					>
@@ -20181,7 +20182,7 @@ export default function DispatchedItemsPage() {
 								{customChallans.length > 0 && (
 									<Box
 										sx={{
-											color: "var(--pf-text-muted)",
+											color: "#94a3b8",
 											fontSize: 11,
 											fontWeight: 800,
 											textAlign: "right",
@@ -20207,7 +20208,7 @@ export default function DispatchedItemsPage() {
 										sx={{
 											...modalSecondaryButtonSx,
 											height: 34,
-											color: "var(--pf-text-strong)",
+											color: "#fff",
 											background:
 												"rgba(139,92,246,.14)",
 											border:
@@ -20346,7 +20347,7 @@ export default function DispatchedItemsPage() {
 
 												<Box
 													sx={{
-														color: "rgba(var(--pf-fg-rgb),.43)",
+														color: "rgba(255,255,255,.43)",
 														fontSize: 9.5,
 														fontWeight: 750,
 														whiteSpace: "nowrap",
@@ -20571,7 +20572,7 @@ export default function DispatchedItemsPage() {
 																		return (
 																			<Box key={entry.type} sx={{ mb: 1 }}>
 																				<Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.45 }}>
-																					<Box sx={{ color: "var(--pf-text)", fontSize: 10.5, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.label}</Box>
+																					<Box sx={{ color: "#e2e8f0", fontSize: 10.5, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.label}</Box>
 																					<Box sx={{ color: "#c4b5fd", fontSize: 10.5, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans} • {percent.toFixed(0)}%</Box>
 																				</Box>
 																				<Box sx={customAdminBarTrackSx}><Box sx={customAdminBarFillSx(percent, "#8b5cf6")} /></Box>
@@ -20584,11 +20585,11 @@ export default function DispatchedItemsPage() {
 															<Box sx={customAdminInsightCardSx}>
 																<Box sx={customAdminInsightTitleSx}>Top Creators</Box>
 																{customChallanAdminStats.creatorBreakdown.slice(0, 6).map((entry, index) => (
-																	<Box key={entry.name} sx={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr) auto", alignItems: "center", gap: 0.8, py: 0.65, borderBottom: index < Math.min(5, customChallanAdminStats.creatorBreakdown.length - 1) ? "1px solid rgba(var(--pf-fg-rgb),.05)" : "none" }}>
+																	<Box key={entry.name} sx={{ display: "grid", gridTemplateColumns: "24px minmax(0,1fr) auto", alignItems: "center", gap: 0.8, py: 0.65, borderBottom: index < Math.min(5, customChallanAdminStats.creatorBreakdown.length - 1) ? "1px solid rgba(255,255,255,.05)" : "none" }}>
 																		<Box sx={{ color: "#a78bfa", fontWeight: 950, fontSize: 10.5 }}>#{index + 1}</Box>
 																		<Box sx={{ minWidth: 0 }}>
-																			<Box sx={{ color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.name}</Box>
-																			<Box sx={{ color: "rgba(var(--pf-fg-rgb),.42)", fontSize: 9.5, fontWeight: 700 }}>{entry.items} item(s)</Box>
+																			<Box sx={{ color: "#fff", fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.name}</Box>
+																			<Box sx={{ color: "rgba(255,255,255,.42)", fontSize: 9.5, fontWeight: 700 }}>{entry.items} item(s)</Box>
 																		</Box>
 																		<Chip size="small" label={`${entry.challans} challan${entry.challans === 1 ? "" : "s"}`} sx={{ height: 22, color: "#bfdbfe", fontSize: 9.5, fontWeight: 900, background: "rgba(59,130,246,.10)", border: "1px solid rgba(96,165,250,.18)" }} />
 																	</Box>
@@ -20598,12 +20599,12 @@ export default function DispatchedItemsPage() {
 															<Box sx={customAdminInsightCardSx}>
 																<Box sx={customAdminInsightTitleSx}>Top Routes</Box>
 																{customChallanAdminStats.routeBreakdown.slice(0, 6).map((entry, index) => (
-																	<Box key={entry.route} sx={{ py: 0.7, borderBottom: index < Math.min(5, customChallanAdminStats.routeBreakdown.length - 1) ? "1px solid rgba(var(--pf-fg-rgb),.05)" : "none" }}>
+																	<Box key={entry.route} sx={{ py: 0.7, borderBottom: index < Math.min(5, customChallanAdminStats.routeBreakdown.length - 1) ? "1px solid rgba(255,255,255,.05)" : "none" }}>
 																		<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-																			<Box sx={{ color: "var(--pf-text-strong)", fontSize: 10.2, fontWeight: 850, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={entry.route}>{entry.route}</Box>
+																			<Box sx={{ color: "#fff", fontSize: 10.2, fontWeight: 850, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={entry.route}>{entry.route}</Box>
 																			<Box sx={{ color: "#6ee7b7", fontSize: 10, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans}</Box>
 																		</Box>
-																		<Box sx={{ mt: 0.25, color: "rgba(var(--pf-fg-rgb),.40)", fontSize: 9.3, fontWeight: 700 }}>{entry.items} item(s) • Last {formatLocalDateTimeDisplay(entry.lastAt)}</Box>
+																		<Box sx={{ mt: 0.25, color: "rgba(255,255,255,.40)", fontSize: 9.3, fontWeight: 700 }}>{entry.items} item(s) • Last {formatLocalDateTimeDisplay(entry.lastAt)}</Box>
 																	</Box>
 																))}
 															</Box>
@@ -20619,8 +20620,8 @@ export default function DispatchedItemsPage() {
 																				<Box sx={{ height: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
 																					<Box sx={{ width: 24, height, minHeight: 10, borderRadius: "7px 7px 3px 3px", background: "linear-gradient(180deg,#a78bfa,#6d28d9)", boxShadow: "0 8px 20px rgba(139,92,246,.18)" }} />
 																				</Box>
-																				<Box sx={{ mt: 0.45, color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
-																				<Box sx={{ color: "rgba(var(--pf-fg-rgb),.42)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
+																				<Box sx={{ mt: 0.45, color: "#fff", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
+																				<Box sx={{ color: "rgba(255,255,255,.42)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
 																			</Box>
 																		);
 																	})}
@@ -20648,14 +20649,14 @@ export default function DispatchedItemsPage() {
 																		<Box sx={customAdminActivityIconSx}>🧾</Box>
 																		<Box sx={{ minWidth: 0 }}>
 																			<Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap" }}>
-																				<Box sx={{ color: "var(--pf-text-strong)", fontFamily: "monospace", fontSize: 11.5, fontWeight: 950 }}>{challan.challanNumber}</Box>
+																				<Box sx={{ color: "#fff", fontFamily: "monospace", fontSize: 11.5, fontWeight: 950 }}>{challan.challanNumber}</Box>
 																				<Chip size="small" label={challan.challanTypeLabel || getCustomChallanTypeLabel(challan.challanType)} sx={{ height: 20, color: "#ddd6fe", fontSize: 8.8, fontWeight: 900, background: "rgba(139,92,246,.11)", border: "1px solid rgba(167,139,250,.18)" }} />
 																			</Box>
-																			<Box sx={{ mt: 0.3, color: "rgba(var(--pf-fg-rgb),.54)", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+																			<Box sx={{ mt: 0.3, color: "rgba(255,255,255,.54)", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
 																				{challan.generatedBy || "Unknown user"} • {challan.fromLocation || "—"} → {challan.toLocation || "—"} • {challan.totalItems || 0} item(s)
 																			</Box>
 																		</Box>
-																		<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9.7, fontWeight: 800, whiteSpace: "nowrap" }}>
+																		<Box sx={{ color: "#94a3b8", fontSize: 9.7, fontWeight: 800, whiteSpace: "nowrap" }}>
 																			{formatLocalDateTimeDisplay(challan.generatedAt)}
 																		</Box>
 																	</Box>
@@ -20711,7 +20712,7 @@ export default function DispatchedItemsPage() {
 													<Box sx={{ minWidth: 0 }}>
 														<Box
 															sx={{
-																color: "var(--pf-text-strong)",
+																color: "#fff",
 																fontWeight: 900,
 																fontSize: 13,
 																whiteSpace: "nowrap",
@@ -20725,7 +20726,7 @@ export default function DispatchedItemsPage() {
 
 														<Box
 															sx={{
-																color: "var(--pf-text-muted)",
+																color: "#94a3b8",
 																fontSize: 11,
 																fontWeight: 700,
 																mt: 0.4,
@@ -20753,7 +20754,7 @@ export default function DispatchedItemsPage() {
 													<Box sx={{ minWidth: 0 }}>
 														<Box
 															sx={{
-																color: "var(--pf-text-strong)",
+																color: "#fff",
 																fontSize: 13,
 																fontWeight: 800,
 																whiteSpace: "nowrap",
@@ -20767,7 +20768,7 @@ export default function DispatchedItemsPage() {
 
 														<Box
 															sx={{
-																color: "rgba(var(--pf-fg-rgb),.55)",
+																color: "rgba(255,255,255,.55)",
 																fontSize: 11,
 																fontWeight: 700,
 																mt: 0.4,
@@ -20792,7 +20793,7 @@ export default function DispatchedItemsPage() {
 
 													<Box
 														sx={{
-															color: "var(--pf-text-soft)",
+															color: "#cbd5e1",
 															fontSize: 12,
 															fontWeight: 800,
 														}}
@@ -20833,7 +20834,7 @@ export default function DispatchedItemsPage() {
 															sx={{
 																...modalSecondaryButtonSx,
 																height: 34,
-																color: "var(--pf-text-strong)",
+																color: "#fff",
 															}}
 														>
 															View PDF
@@ -21061,7 +21062,7 @@ export default function DispatchedItemsPage() {
 						>
 							<Box
 								sx={{
-									color: "var(--pf-text-muted)",
+									color: "#94a3b8",
 									fontWeight: 600,
 									fontSize: 14,
 								}}
@@ -21092,7 +21093,7 @@ export default function DispatchedItemsPage() {
 
 							<Box
 								sx={{
-									color: "var(--pf-text-muted)",
+									color: "#94a3b8",
 									fontSize: 14,
 								}}
 							>
@@ -21123,17 +21124,17 @@ export default function DispatchedItemsPage() {
 									height: 30,
 									borderRadius: "12px",
 									background:
-										"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
-									color: "var(--pf-text-strong)",
+										"linear-gradient(180deg,#1e293b,#0f172a)",
+									color: "#fff",
 									border:
-										"1px solid rgba(var(--pf-fg-rgb),.08)",
+										"1px solid rgba(255,255,255,.08)",
 
 									fontSize: 10,
 									fontWeight: 500,
 
 									"&:disabled": {
 										opacity: 0.45,
-										color: "var(--pf-text-muted)",
+										color: "#94a3b8",
 									},
 								}}
 							>
@@ -21151,12 +21152,12 @@ export default function DispatchedItemsPage() {
 									borderRadius: "12px",
 
 									background:
-										"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+										"linear-gradient(180deg,#0f172a,#111827)",
 
-									color: "var(--pf-text-soft)",
+									color: "#cbd5e1",
 
 									border:
-										"1px solid rgba(var(--pf-fg-rgb),.06)",
+										"1px solid rgba(255,255,255,.06)",
 
 									fontSize: 10,
 									fontWeight: 500,
@@ -21205,7 +21206,7 @@ export default function DispatchedItemsPage() {
 
 									"&:disabled": {
 										opacity: 0.45,
-										color: "var(--pf-text-soft)",
+										color: "#cbd5e1",
 									},
 								}}
 							>
@@ -21223,7 +21224,7 @@ export default function DispatchedItemsPage() {
 									display: "flex",
 									alignItems: "center",
 									gap: 1.2,
-									color: "var(--pf-text-soft)",
+									color: "#cbd5e1",
 									fontWeight: 800,
 									fontSize: 13,
 									flexWrap: "wrap",
@@ -21321,7 +21322,7 @@ export default function DispatchedItemsPage() {
 												selectedBulkAction ===
 													"MIXED"
 													? "1px solid rgba(239,68,68,.25)"
-													: "1px solid rgba(var(--pf-fg-rgb),.08)",
+													: "1px solid rgba(255,255,255,.08)",
 										}}
 									/>
 								)}
@@ -21393,7 +21394,7 @@ export default function DispatchedItemsPage() {
 										background:
 											"linear-gradient(180deg,#f59e0b,#d97706)",
 
-										color: "var(--pf-text-strong)",
+										color: "#fff",
 
 										border:
 											"1px solid rgba(245,158,11,.35)",
@@ -21459,7 +21460,7 @@ export default function DispatchedItemsPage() {
 												background:
 													"linear-gradient(180deg,#f59e0b,#d97706)",
 
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 
 												border:
 													"1px solid rgba(245,158,11,.35)",
@@ -21604,7 +21605,7 @@ export default function DispatchedItemsPage() {
 														"none",
 													background:
 														"#64748b",
-													color: "var(--pf-text-strong)",
+													color: "#fff",
 												}}
 											>
 												Select same action
@@ -21626,13 +21627,13 @@ export default function DispatchedItemsPage() {
 									textTransform: "none",
 
 									background:
-										"rgba(var(--pf-fg-rgb),.08)",
+										"rgba(255,255,255,.08)",
 
-									color: "var(--pf-text-strong)",
+									color: "#fff",
 
 									"&:hover": {
 										background:
-											"rgba(var(--pf-fg-rgb),.14)",
+											"rgba(255,255,255,.14)",
 									},
 								}}
 							>
@@ -21718,11 +21719,11 @@ export default function DispatchedItemsPage() {
 												"& .MuiOutlinedInput-root": {
 													height: 46,
 													borderRadius: "14px",
-													background: "rgba(var(--pf-fg-rgb),.04)",
-													color: "var(--pf-text-strong)",
+													background: "rgba(255,255,255,.04)",
+													color: "#fff",
 
 													"& fieldset": {
-														borderColor: "rgba(var(--pf-fg-rgb),.10)",
+														borderColor: "rgba(255,255,255,.10)",
 													},
 
 													"&:hover fieldset": {
@@ -21736,13 +21737,13 @@ export default function DispatchedItemsPage() {
 												},
 
 												"& .MuiSelect-select": {
-													color: "var(--pf-text-strong)",
+													color: "#fff",
 													fontWeight: 900,
 													fontSize: 13,
 												},
 
 												"& .MuiSvgIcon-root": {
-													color: "var(--pf-text-muted)",
+													color: "#94a3b8",
 												},
 											}}
 										>
@@ -21765,7 +21766,7 @@ export default function DispatchedItemsPage() {
 															size="small"
 															checked={checked}
 															sx={{
-																color: "rgba(var(--pf-fg-rgb),.45)",
+																color: "rgba(255,255,255,.45)",
 																"&.Mui-checked": {
 																	color: "#10b981",
 																},
@@ -21858,7 +21859,7 @@ export default function DispatchedItemsPage() {
 								<Box
 									sx={{
 										mb: 1,
-										color: "rgba(var(--pf-fg-rgb),.55)",
+										color: "rgba(255,255,255,.55)",
 										fontSize: 12,
 										fontWeight: 750,
 									}}
@@ -21872,8 +21873,8 @@ export default function DispatchedItemsPage() {
 										maxHeight: 280,
 										overflow: "auto",
 										borderRadius: "16px",
-										border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-										background: "rgba(var(--pf-surface-deep-rgb),.25)",
+										border: "1px solid rgba(255,255,255,.08)",
+										background: "rgba(2,6,23,.25)",
 										...premiumScrollbarSx("#10b981"),
 									}}
 								>
@@ -21941,7 +21942,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 1,
-											color: "rgba(var(--pf-fg-rgb),.48)",
+											color: "rgba(255,255,255,.48)",
 											fontSize: 11,
 											fontWeight: 750,
 										}}
@@ -21980,9 +21981,9 @@ export default function DispatchedItemsPage() {
 
 										"&.Mui-disabled": {
 											color:
-												"rgba(var(--pf-fg-rgb),.45)",
+												"rgba(255,255,255,.45)",
 											background:
-												"rgba(var(--pf-fg-rgb),.08)",
+												"rgba(255,255,255,.08)",
 										},
 									}}
 								>
@@ -22532,7 +22533,7 @@ export default function DispatchedItemsPage() {
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Driver Name
-												<Box component="span" sx={{ ml: 0.7, color: "var(--pf-text-dim)", fontSize: 11, fontWeight: 750 }}>
+												<Box component="span" sx={{ ml: 0.7, color: "#64748b", fontSize: 11, fontWeight: 750 }}>
 													(Optional)
 												</Box>
 											</Box>
@@ -22589,7 +22590,7 @@ export default function DispatchedItemsPage() {
 										<Box>
 											<Box sx={dispatchTripFieldLabelSx}>
 												Vehicle Number
-												<Box component="span" sx={{ ml: 0.7, color: "var(--pf-text-dim)", fontSize: 11, fontWeight: 750 }}>
+												<Box component="span" sx={{ ml: 0.7, color: "#64748b", fontSize: 11, fontWeight: 750 }}>
 													(Optional)
 												</Box>
 											</Box>
@@ -22821,14 +22822,14 @@ export default function DispatchedItemsPage() {
 
 							<Box sx={customChallanStickyFooterSx}>
 								<Box sx={{ flex: 1, minWidth: 0 }}>
-									<Box sx={{ color: "var(--pf-text-strong)", fontSize: 12, fontWeight: 900 }}>
+									<Box sx={{ color: "#fff", fontSize: 12, fontWeight: 900 }}>
 										{customChallanForm.items.length} Item
 										{customChallanForm.items.length === 1 ? "" : "s"}
 									</Box>
 									<Box
 										sx={{
 											mt: 0.25,
-											color: "rgba(var(--pf-fg-rgb),.43)",
+											color: "rgba(255,255,255,.43)",
 											fontSize: 10.5,
 											fontWeight: 650,
 										}}
@@ -22922,8 +22923,8 @@ export default function DispatchedItemsPage() {
 										mb: 2,
 										p: 1,
 										borderRadius: "10px",
-										background: "rgba(var(--pf-fg-rgb),.035)",
-										border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+										background: "rgba(255,255,255,.035)",
+										border: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Button
@@ -22965,14 +22966,14 @@ export default function DispatchedItemsPage() {
 										p: 2,
 										borderRadius: "12px",
 										background:
-											"linear-gradient(135deg,rgba(59,130,246,.10),rgba(var(--pf-fg-rgb),.035))",
+											"linear-gradient(135deg,rgba(59,130,246,.10),rgba(255,255,255,.035))",
 										border: "1px solid rgba(59,130,246,.18)",
 										mb: 2,
 									}}
 								>
 									<Box
 										sx={{
-											color: "var(--pf-text-strong)",
+											color: "#fff",
 											fontWeight: 900,
 											mb: 0.8,
 										}}
@@ -22984,7 +22985,7 @@ export default function DispatchedItemsPage() {
 
 									<Box
 										sx={{
-											color: "rgba(var(--pf-fg-rgb),.58)",
+											color: "rgba(255,255,255,.58)",
 											fontSize: 12,
 											fontWeight: 600,
 										}}
@@ -23018,7 +23019,7 @@ export default function DispatchedItemsPage() {
 									>
 										<Box
 											sx={{
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 												fontWeight: 900,
 												mb: 0.5,
 											}}
@@ -23114,7 +23115,7 @@ export default function DispatchedItemsPage() {
 								>
 									<Box
 										sx={{
-											color: scanLoading ? "#fcd34d" : "var(--pf-text-muted)",
+											color: scanLoading ? "#fcd34d" : "#94a3b8",
 											fontSize: 12,
 											fontWeight: 700,
 										}}
@@ -23145,7 +23146,7 @@ export default function DispatchedItemsPage() {
 										>
 											<Box
 												sx={{
-													color: "var(--pf-text-strong)",
+													color: "#fff",
 													fontWeight: 900,
 												}}
 											>
@@ -23187,7 +23188,7 @@ export default function DispatchedItemsPage() {
 														<Box sx={{ minWidth: 0 }}>
 															<Box
 																sx={{
-																	color: "var(--pf-text-strong)",
+																	color: "#fff",
 																	fontWeight: 900,
 																	fontSize: 13,
 																	whiteSpace: "nowrap",
@@ -23200,7 +23201,7 @@ export default function DispatchedItemsPage() {
 
 															<Box
 																sx={{
-																	color: "rgba(var(--pf-fg-rgb),.55)",
+																	color: "rgba(255,255,255,.55)",
 																	fontSize: 12,
 																	fontWeight: 600,
 																	mt: 0.4,
@@ -23665,8 +23666,8 @@ export default function DispatchedItemsPage() {
 																	sx={{
 																		color: "#e5e7eb",
 																		fontWeight: 800,
-																		background: "rgba(var(--pf-fg-rgb),.05)",
-																		border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+																		background: "rgba(255,255,255,.05)",
+																		border: "1px solid rgba(255,255,255,.08)",
 																	}}
 																/>
 
@@ -23677,7 +23678,7 @@ export default function DispatchedItemsPage() {
 																		background: roleStyle.bg,
 																		color: roleStyle.color,
 																		fontWeight: 800,
-																		border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+																		border: "1px solid rgba(255,255,255,.08)",
 																	}}
 																/>
 															</Box>
@@ -23707,8 +23708,8 @@ export default function DispatchedItemsPage() {
 							position: "fixed",
 							inset: 0,
 							background: `
-			  radial-gradient(circle at top left, rgba(var(--pf-fg-rgb),0.08), transparent 20%),
-			  rgba(var(--pf-surface-rgb),0.55)
+			  radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 20%),
+			  rgba(15,23,42,0.55)
 			`,
 							backdropFilter: "blur(8px)",
 							WebkitBackdropFilter: "blur(8px)",
@@ -23726,12 +23727,12 @@ export default function DispatchedItemsPage() {
 								padding: 24,
 
 								background:
-									"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+									"linear-gradient(180deg,#0f172a,#111827)",
 
-								color: "var(--pf-text-strong)",
+								color: "#fff",
 
 								borderLeft:
-									"1px solid rgba(var(--pf-fg-rgb),.06)",
+									"1px solid rgba(255,255,255,.06)",
 
 								boxShadow:
 									"-10px 0 40px rgba(0,0,0,.55)",
@@ -23755,10 +23756,10 @@ export default function DispatchedItemsPage() {
 												mb: 1,
 												borderRadius: 10,
 												background:
-													"rgba(var(--pf-fg-rgb),.03)",
+													"rgba(255,255,255,.03)",
 
 												border:
-													"1px solid rgba(var(--pf-fg-rgb),.06)",
+													"1px solid rgba(255,255,255,.06)",
 											}}
 										>
 											<div style={{ fontWeight: 600 }}>{item.name}</div>
@@ -23938,7 +23939,7 @@ export default function DispatchedItemsPage() {
 									sx={{
 										...premiumButton,
 										background: bulkGatePassPreview?.gatePass
-											? "rgba(var(--pf-fg-rgb),.08)"
+											? "rgba(255,255,255,.08)"
 											: "linear-gradient(135deg,#059669,#10b981)",
 									}}
 								>
@@ -23998,13 +23999,13 @@ export default function DispatchedItemsPage() {
 									mb: 2,
 									p: 1.4,
 									borderRadius: "12px",
-									background: "rgba(var(--pf-fg-rgb),.035)",
-									border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+									background: "rgba(255,255,255,.035)",
+									border: "1px solid rgba(255,255,255,.07)",
 								}}
 							>
 								<Box
 									sx={{
-										color: "var(--pf-text-strong)",
+										color: "#fff",
 										fontWeight: 900,
 										fontSize: 14,
 										whiteSpace: "nowrap",
@@ -24018,7 +24019,7 @@ export default function DispatchedItemsPage() {
 
 								<Box
 									sx={{
-										color: "var(--pf-text-muted)",
+										color: "#94a3b8",
 										fontSize: 12,
 										fontWeight: 700,
 										mt: 0.5,
@@ -24125,7 +24126,7 @@ export default function DispatchedItemsPage() {
 									sx={{
 										...premiumButton,
 										background: gatePassPreview?.gatePass
-											? "rgba(var(--pf-fg-rgb),.08)"
+											? "rgba(255,255,255,.08)"
 											: "linear-gradient(135deg,#059669,#10b981)",
 									}}
 								>
@@ -24214,13 +24215,13 @@ export default function DispatchedItemsPage() {
 										p: 1.6,
 										mb: 2,
 										borderRadius: "12px",
-										background: "rgba(var(--pf-fg-rgb),.035)",
-										border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+										background: "rgba(255,255,255,.035)",
+										border: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
 										sx={{
-											color: "var(--pf-text-strong)",
+											color: "#fff",
 											fontWeight: 900,
 											mb: 0.5,
 										}}
@@ -24230,7 +24231,7 @@ export default function DispatchedItemsPage() {
 
 									<Box
 										sx={{
-											color: "var(--pf-text-muted)",
+											color: "#94a3b8",
 											fontSize: 12,
 											fontWeight: 700,
 										}}
@@ -24549,13 +24550,13 @@ export default function DispatchedItemsPage() {
 										p: 1.6,
 										mb: 2,
 										borderRadius: "12px",
-										background: "rgba(var(--pf-fg-rgb),.035)",
-										border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+										background: "rgba(255,255,255,.035)",
+										border: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
 										sx={{
-											color: "var(--pf-text-strong)",
+											color: "#fff",
 											fontWeight: 900,
 											mb: 0.5,
 										}}
@@ -24566,7 +24567,7 @@ export default function DispatchedItemsPage() {
 
 									<Box
 										sx={{
-											color: "var(--pf-text-muted)",
+											color: "#94a3b8",
 											fontSize: 12,
 											fontWeight: 700,
 										}}
@@ -24829,8 +24830,8 @@ export default function DispatchedItemsPage() {
 							width: { xs: "100%", sm: 560 },
 							maxWidth: "100vw",
 							background:
-								"linear-gradient(180deg,var(--pf-bg),var(--pf-surface),var(--pf-surface-alt))",
-							color: "var(--pf-text-strong)",
+								"linear-gradient(180deg,#020617,#0f172a,#111827)",
+							color: "#fff",
 							borderLeft:
 								"1px solid rgba(248,113,113,.20)",
 						},
@@ -24843,7 +24844,7 @@ export default function DispatchedItemsPage() {
 								py: 2.3,
 								borderBottom:
 									"1px solid rgba(248,113,113,.16)",
-								background: "rgba(var(--pf-surface-deep-rgb),.96)",
+								background: "rgba(2,6,23,.96)",
 							}}
 						>
 							<Box sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
@@ -24864,7 +24865,7 @@ export default function DispatchedItemsPage() {
 											? `Delete ${adminDeleteRows.length} Dispatch Items`
 											: "Delete Dispatch Item"}
 									</Box>
-									<Box sx={{ mt: 0.7, color: "var(--pf-text-muted)", fontSize: 12.5, lineHeight: 1.5 }}>
+									<Box sx={{ mt: 0.7, color: "#94a3b8", fontSize: 12.5, lineHeight: 1.5 }}>
 										Live PackFlow records and statistics are purged. Only the
 										separate Admin Delete History audit snapshot remains.
 									</Box>
@@ -24873,7 +24874,7 @@ export default function DispatchedItemsPage() {
 								<IconButton
 									disabled={adminDeletePreviewLoading || adminDeleteExecuting}
 									onClick={closeAdminDispatchDelete}
-									sx={{ color: "var(--pf-text-soft)" }}
+									sx={{ color: "#cbd5e1" }}
 								>
 									<Box component="span" sx={{ fontSize: 24, lineHeight: 1 }}>
 										×
@@ -24895,7 +24896,7 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									<CircularProgress size={28} />
-									<Box sx={{ color: "var(--pf-text-soft)", fontSize: 13, fontWeight: 850 }}>
+									<Box sx={{ color: "#cbd5e1", fontSize: 13, fontWeight: 850 }}>
 										Calculating linked records...
 									</Box>
 								</Box>
@@ -24924,11 +24925,11 @@ export default function DispatchedItemsPage() {
 										sx={{
 											p: 1.8,
 											borderRadius: "15px",
-											background: "rgba(var(--pf-surface-rgb),.72)",
-											border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+											background: "rgba(15,23,42,.72)",
+											border: "1px solid rgba(255,255,255,.08)",
 										}}
 									>
-										<Box sx={{ color: "var(--pf-text-dim)", fontSize: 10, fontWeight: 900 }}>
+										<Box sx={{ color: "#64748b", fontSize: 10, fontWeight: 900 }}>
 											TARGET
 										</Box>
 										<Box sx={{ mt: 0.4, fontSize: 15, fontWeight: 950 }}>
@@ -24954,7 +24955,7 @@ export default function DispatchedItemsPage() {
 										)}
 									</Box>
 
-									<Box sx={{ mt: 2.2, color: "var(--pf-text-soft)", fontSize: 12, fontWeight: 950 }}>
+									<Box sx={{ mt: 2.2, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
 										Records that will be removed
 									</Box>
 
@@ -24973,11 +24974,11 @@ export default function DispatchedItemsPage() {
 													sx={{
 														p: 1.2,
 														borderRadius: "11px",
-														background: "rgba(var(--pf-fg-rgb),.035)",
-														border: "1px solid rgba(var(--pf-fg-rgb),.06)",
+														background: "rgba(255,255,255,.035)",
+														border: "1px solid rgba(255,255,255,.06)",
 													}}
 												>
-													<Box sx={{ color: "var(--pf-text-dim)", fontSize: 9.5, fontWeight: 900 }}>
+													<Box sx={{ color: "#64748b", fontSize: 9.5, fontWeight: 900 }}>
 														{String(key)
 															.replace(/([a-z])([A-Z])/g, "$1 $2")
 															.replace(/_/g, " ")}
@@ -24990,7 +24991,7 @@ export default function DispatchedItemsPage() {
 										)}
 									</Box>
 
-									<Box sx={{ mt: 2.3, color: "var(--pf-text-soft)", fontSize: 12, fontWeight: 950 }}>
+									<Box sx={{ mt: 2.3, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
 										Deletion reason
 									</Box>
 									<TextField
@@ -25005,14 +25006,14 @@ export default function DispatchedItemsPage() {
 										sx={{
 											mt: 0.8,
 											"& .MuiOutlinedInput-root": {
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 												borderRadius: "13px",
-												background: "rgba(var(--pf-fg-rgb),.04)",
+												background: "rgba(255,255,255,.04)",
 											},
 										}}
 									/>
 
-									<Box sx={{ mt: 2.2, color: "var(--pf-text-soft)", fontSize: 12, fontWeight: 950 }}>
+									<Box sx={{ mt: 2.2, color: "#cbd5e1", fontSize: 12, fontWeight: 950 }}>
 										Type exact confirmation
 									</Box>
 									<Box
@@ -25042,9 +25043,9 @@ export default function DispatchedItemsPage() {
 										sx={{
 											mt: 1,
 											"& .MuiOutlinedInput-root": {
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 												borderRadius: "13px",
-												background: "rgba(var(--pf-fg-rgb),.04)",
+												background: "rgba(255,255,255,.04)",
 											},
 										}}
 									/>
@@ -25058,8 +25059,8 @@ export default function DispatchedItemsPage() {
 								gap: 1.2,
 								px: 3,
 								py: 2,
-								borderTop: "1px solid rgba(var(--pf-fg-rgb),.07)",
-								background: "rgba(var(--pf-surface-deep-rgb),.96)",
+								borderTop: "1px solid rgba(255,255,255,.07)",
+								background: "rgba(2,6,23,.96)",
 							}}
 						>
 							<Button
@@ -25071,8 +25072,8 @@ export default function DispatchedItemsPage() {
 									borderRadius: "12px",
 									textTransform: "none",
 									fontWeight: 900,
-									color: "var(--pf-text-soft)",
-									background: "rgba(var(--pf-fg-rgb),.06)",
+									color: "#cbd5e1",
+									background: "rgba(255,255,255,.06)",
 								}}
 							>
 								Cancel
@@ -25099,8 +25100,8 @@ export default function DispatchedItemsPage() {
 									color: "#fff",
 									background: "linear-gradient(180deg,#dc2626,#991b1b)",
 									"&.Mui-disabled": {
-										color: "rgba(var(--pf-fg-rgb),.30)",
-										background: "rgba(var(--pf-fg-rgb),.06)",
+										color: "rgba(255,255,255,.30)",
+										background: "rgba(255,255,255,.06)",
 									},
 								}}
 							>
@@ -25254,12 +25255,12 @@ export default function DispatchedItemsPage() {
 														background:
 															enabled
 																? "rgba(245,158,11,.08)"
-																: "rgba(var(--pf-fg-rgb),.025)",
+																: "rgba(255,255,255,.025)",
 
 														border:
 															enabled
 																? "1px solid rgba(245,158,11,.24)"
-																: "1px solid rgba(var(--pf-fg-rgb),.07)",
+																: "1px solid rgba(255,255,255,.07)",
 
 														gridColumn:
 															field.multiline
@@ -25302,7 +25303,7 @@ export default function DispatchedItemsPage() {
 																p: 0.3,
 
 																color:
-																	"rgba(var(--pf-fg-rgb),.42)",
+																	"rgba(255,255,255,.42)",
 
 																"&.Mui-checked":
 																{
@@ -25317,7 +25318,7 @@ export default function DispatchedItemsPage() {
 																color:
 																	enabled
 																		? "#fcd34d"
-																		: "var(--pf-text-muted)",
+																		: "#94a3b8",
 
 																fontSize: 11,
 																fontWeight: 950,
@@ -25390,12 +25391,12 @@ export default function DispatchedItemsPage() {
 										background:
 											adminEditApply.packingDate
 												? "rgba(168,85,247,.09)"
-												: "rgba(var(--pf-fg-rgb),.025)",
+												: "rgba(255,255,255,.025)",
 
 										border:
 											adminEditApply.packingDate
 												? "1px solid rgba(168,85,247,.28)"
-												: "1px solid rgba(var(--pf-fg-rgb),.07)",
+												: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
@@ -25470,7 +25471,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 1,
-											color: "rgba(var(--pf-fg-rgb),.52)",
+											color: "rgba(255,255,255,.52)",
 											fontSize: 11,
 											fontWeight: 750,
 										}}
@@ -25490,12 +25491,12 @@ export default function DispatchedItemsPage() {
 										background:
 											adminEditApply.dispatchDateTime
 												? "rgba(16,185,129,.08)"
-												: "rgba(var(--pf-fg-rgb),.025)",
+												: "rgba(255,255,255,.025)",
 
 										border:
 											adminEditApply.dispatchDateTime
 												? "1px solid rgba(16,185,129,.24)"
-												: "1px solid rgba(var(--pf-fg-rgb),.07)",
+												: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
@@ -25571,7 +25572,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 1,
-											color: "rgba(var(--pf-fg-rgb),.52)",
+											color: "rgba(255,255,255,.52)",
 											fontSize: 11,
 											fontWeight: 750,
 										}}
@@ -25591,12 +25592,12 @@ export default function DispatchedItemsPage() {
 										background:
 											adminEditApply.driver
 												? "rgba(59,130,246,.08)"
-												: "rgba(var(--pf-fg-rgb),.025)",
+												: "rgba(255,255,255,.025)",
 
 										border:
 											adminEditApply.driver
 												? "1px solid rgba(59,130,246,.24)"
-												: "1px solid rgba(var(--pf-fg-rgb),.07)",
+												: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
@@ -25780,12 +25781,12 @@ export default function DispatchedItemsPage() {
 										background:
 											adminEditApply.vehicle
 												? "rgba(16,185,129,.08)"
-												: "rgba(var(--pf-fg-rgb),.025)",
+												: "rgba(255,255,255,.025)",
 
 										border:
 											adminEditApply.vehicle
 												? "1px solid rgba(16,185,129,.24)"
-												: "1px solid rgba(var(--pf-fg-rgb),.07)",
+												: "1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
@@ -25991,10 +25992,10 @@ export default function DispatchedItemsPage() {
 
 										"&.Mui-disabled": {
 											color:
-												"rgba(var(--pf-fg-rgb),.40)",
+												"rgba(255,255,255,.40)",
 
 											background:
-												"rgba(var(--pf-fg-rgb),.08)",
+												"rgba(255,255,255,.08)",
 										},
 									}}
 								>
@@ -26077,9 +26078,9 @@ export default function DispatchedItemsPage() {
 										p: 0.8,
 										borderRadius: "14px",
 										background:
-											"rgba(var(--pf-fg-rgb),.035)",
+											"rgba(255,255,255,.035)",
 										border:
-											"1px solid rgba(var(--pf-fg-rgb),.07)",
+											"1px solid rgba(255,255,255,.07)",
 									}}
 								>
 									<Box
@@ -26094,8 +26095,8 @@ export default function DispatchedItemsPage() {
 											color:
 												dispatchTripStep ===
 													"DETAILS"
-													? "var(--pf-text-strong)"
-													: "var(--pf-text-muted)",
+													? "#fff"
+													: "#94a3b8",
 											fontSize: 12,
 											fontWeight: 900,
 											background:
@@ -26126,8 +26127,8 @@ export default function DispatchedItemsPage() {
 											color:
 												dispatchTripStep ===
 													"REVIEW"
-													? "var(--pf-text-strong)"
-													: "var(--pf-text-muted)",
+													? "#fff"
+													: "#94a3b8",
 											fontSize: 12,
 											fontWeight: 900,
 											background:
@@ -26161,14 +26162,14 @@ export default function DispatchedItemsPage() {
 													borderRadius:
 														"12px",
 													background:
-														"rgba(var(--pf-fg-rgb),.035)",
+														"rgba(255,255,255,.035)",
 													border:
-														"1px solid rgba(var(--pf-fg-rgb),.07)",
+														"1px solid rgba(255,255,255,.07)",
 												}}
 											>
 												<Box
 													sx={{
-														color: "var(--pf-text-strong)",
+														color: "#fff",
 														fontWeight: 900,
 													}}
 												>
@@ -26180,7 +26181,7 @@ export default function DispatchedItemsPage() {
 
 												<Box
 													sx={{
-														color: "var(--pf-text-muted)",
+														color: "#94a3b8",
 														fontSize: 12,
 														fontWeight: 700,
 														mt: 0.5,
@@ -26233,7 +26234,7 @@ export default function DispatchedItemsPage() {
 														component="span"
 														sx={{
 															ml: 0.7,
-															color: "var(--pf-text-dim)",
+															color: "#64748b",
 															fontSize: 11,
 															fontWeight: 750,
 														}}
@@ -26357,7 +26358,7 @@ export default function DispatchedItemsPage() {
 														component="span"
 														sx={{
 															ml: 0.7,
-															color: "var(--pf-text-dim)",
+															color: "#64748b",
 															fontSize: 11,
 															fontWeight: 750,
 														}}
@@ -26492,7 +26493,7 @@ export default function DispatchedItemsPage() {
 														component="span"
 														sx={{
 															ml: 0.7,
-															color: "var(--pf-text-dim)",
+															color: "#64748b",
 															fontSize: 11,
 															fontWeight: 750,
 														}}
@@ -26655,7 +26656,7 @@ export default function DispatchedItemsPage() {
 												<Box
 													sx={{
 														mb: 1,
-														color: "var(--pf-text-strong)",
+														color: "#fff",
 														fontSize: 14,
 														fontWeight: 950,
 													}}
@@ -26676,9 +26677,9 @@ export default function DispatchedItemsPage() {
 																	borderRadius:
 																		"14px",
 																	background:
-																		"rgba(var(--pf-fg-rgb),.035)",
+																		"rgba(255,255,255,.035)",
 																	border:
-																		"1px solid rgba(var(--pf-fg-rgb),.07)",
+																		"1px solid rgba(255,255,255,.07)",
 																}}
 															>
 																<Box
@@ -26701,7 +26702,7 @@ export default function DispatchedItemsPage() {
 																		<Box
 																			sx={{
 																				color:
-																					"var(--pf-text-strong)",
+																					"#fff",
 																				fontSize:
 																					13,
 																				fontWeight:
@@ -26729,7 +26730,7 @@ export default function DispatchedItemsPage() {
 																		<Box
 																			sx={{
 																				color:
-																					"var(--pf-text-muted)",
+																					"#94a3b8",
 																				fontSize:
 																					11,
 																				fontWeight:
@@ -26875,7 +26876,7 @@ export default function DispatchedItemsPage() {
 															<Box
 																sx={{
 																	color:
-																		"var(--pf-text-strong)",
+																		"#fff",
 																	fontSize:
 																		14,
 																	fontWeight:
@@ -26889,7 +26890,7 @@ export default function DispatchedItemsPage() {
 															<Box
 																sx={{
 																	color:
-																		"var(--pf-text-muted)",
+																		"#94a3b8",
 																	fontSize:
 																		11,
 																	fontWeight:
@@ -26972,7 +26973,7 @@ export default function DispatchedItemsPage() {
 																color:
 																	"#fcd34d",
 																background:
-																	"rgba(var(--pf-surface-rgb),.65)",
+																	"rgba(15,23,42,.65)",
 																fontWeight:
 																	900,
 															}}
@@ -27022,7 +27023,7 @@ export default function DispatchedItemsPage() {
 																<Box
 																	sx={{
 																		color:
-																			"var(--pf-text-muted)",
+																			"#94a3b8",
 																		fontSize:
 																			12,
 																		fontWeight:
@@ -27088,7 +27089,7 @@ export default function DispatchedItemsPage() {
 																sx={{
 																	...dispatchTripReviewPdfStateSx,
 																	color:
-																		"var(--pf-text-muted)",
+																		"#94a3b8",
 																	fontWeight:
 																		800,
 																}}
@@ -27112,7 +27113,7 @@ export default function DispatchedItemsPage() {
 									zIndex: 5,
 
 									background:
-										"rgba(var(--pf-surface-rgb),.98)",
+										"rgba(15,23,42,.98)",
 
 									boxShadow:
 										"0 -16px 34px rgba(2,6,23,.32)",
@@ -27199,10 +27200,10 @@ export default function DispatchedItemsPage() {
 
 													"&.Mui-disabled": {
 														color:
-															"rgba(var(--pf-fg-rgb),.45)",
+															"rgba(255,255,255,.45)",
 
 														background:
-															"rgba(var(--pf-fg-rgb),.08)",
+															"rgba(255,255,255,.08)",
 													},
 												}}
 											>
@@ -27394,7 +27395,7 @@ export default function DispatchedItemsPage() {
 											<Box>
 												<Box
 													sx={{
-														color: "var(--pf-text-strong)",
+														color: "#fff",
 														fontSize: 12.5,
 														fontWeight: 950,
 													}}
@@ -27404,7 +27405,7 @@ export default function DispatchedItemsPage() {
 												<Box
 													sx={{
 														mt: 0.25,
-														color: "var(--pf-text-dim)",
+														color: "#64748b",
 														fontSize: 9.5,
 														fontWeight: 750,
 													}}
@@ -27500,8 +27501,8 @@ export default function DispatchedItemsPage() {
 										<Box
 											sx={{
 												p: 1,
-												borderTop: "1px solid rgba(var(--pf-fg-rgb),.06)",
-												background: "rgba(var(--pf-fg-rgb),.02)",
+												borderTop: "1px solid rgba(255,255,255,.06)",
+												background: "rgba(255,255,255,.02)",
 											}}
 										>
 											<ChallanHistoryPager
@@ -27521,14 +27522,14 @@ export default function DispatchedItemsPage() {
 										<Box
 											sx={{
 												p: 1.3,
-												borderBottom: "1px solid rgba(var(--pf-fg-rgb),.06)",
+												borderBottom: "1px solid rgba(255,255,255,.06)",
 												background: "rgba(16,185,129,.045)",
 											}}
 										>
-											<Box sx={{ color: "var(--pf-text-strong)", fontSize: 12.5, fontWeight: 950 }}>
+											<Box sx={{ color: "#fff", fontSize: 12.5, fontWeight: 950 }}>
 												Selected Item / Row
 											</Box>
-											<Box sx={{ mt: 0.25, color: "var(--pf-text-dim)", fontSize: 9.5, fontWeight: 750 }}>
+											<Box sx={{ mt: 0.25, color: "#64748b", fontSize: 9.5, fontWeight: 750 }}>
 												Pinpoint record-level information available in the current dispatch register
 											</Box>
 										</Box>
@@ -27604,7 +27605,7 @@ export default function DispatchedItemsPage() {
 								<Box
 									sx={{
 										mr: "auto",
-										color: "var(--pf-text-dim)",
+										color: "#64748b",
 										fontSize: 10,
 										fontWeight: 800,
 									}}
@@ -28173,7 +28174,7 @@ export default function DispatchedItemsPage() {
 									<Box sx={{ minWidth: 0 }}>
 										<Box
 											sx={{
-												color: "var(--pf-text-strong)",
+												color: "#fff",
 												fontSize: 18,
 												fontWeight: 950,
 												whiteSpace: "nowrap",
@@ -28186,7 +28187,7 @@ export default function DispatchedItemsPage() {
 
 										<Box
 											sx={{
-												color: "rgba(var(--pf-fg-rgb),.55)",
+												color: "rgba(255,255,255,.55)",
 												fontSize: 12,
 												fontWeight: 700,
 												mt: 0.3,
@@ -28494,7 +28495,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 0.55,
-											color: "var(--pf-text-strong)",
+											color: "#fff",
 											fontSize: 20,
 											fontWeight: 950,
 											lineHeight: 1.15,
@@ -28532,7 +28533,7 @@ export default function DispatchedItemsPage() {
 										<Box
 											component="span"
 											sx={{
-												color: "var(--pf-text-muted)",
+												color: "#94a3b8",
 												fontSize: 11,
 												fontWeight: 800,
 											}}
@@ -28760,14 +28761,14 @@ function DispatchReviewValue({
 						? "10px"
 						: "12px",
 				background:
-					"rgba(var(--pf-surface-deep-rgb),.26)",
+					"rgba(2,6,23,.26)",
 				border:
-					"1px solid rgba(var(--pf-fg-rgb),.06)",
+					"1px solid rgba(255,255,255,.06)",
 			}}
 		>
 			<Box
 				sx={{
-					color: "var(--pf-text-dim)",
+					color: "#64748b",
 					fontSize:
 						compact
 							? 9
@@ -28785,7 +28786,7 @@ function DispatchReviewValue({
 
 			<Box
 				sx={{
-					color: "var(--pf-text-strong)",
+					color: "#f8fafc",
 					fontSize:
 						compact
 							? 11
