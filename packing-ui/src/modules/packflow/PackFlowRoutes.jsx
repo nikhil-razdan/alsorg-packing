@@ -11,7 +11,6 @@ import DispatchedItemsPage from "../../pages/DispatchedItemsPage";
 import LogisticsPortalPage from "../../pages/LogisticsPortalPage";
 import UsersPage from "../../pages/UsersPage";
 import ZohoItemsPage from "../../pages/ZohoItemsPage";
-import ClientMasterPage from "../../pages/ClientMasterPage";
 
 import RequireRole from "../../auth/RequireRole";
 import RequireWarehouseAccess from "../../auth/RequireWarehouseAccess";
@@ -90,18 +89,18 @@ export default function PackFlowRoutes() {
 
 
       {/*
-       * Shared FlowSuite Client Master.
-       *
-       * The route stays under /packflow for compatibility with the current
-       * root router, but Layout.jsx renders this exact path in standalone
-       * FlowSuite mode (without PackFlow Header/Sidebar).
+       * Legacy compatibility only.
+       * Client Master is shared FlowSuite master data and is hosted by the
+       * already-existing /modules route, not inside PackFlow.  Keeping this
+       * redirect means old bookmarks still land on the correct module.
        */}
       <Route
         path="client-master"
         element={
-          <RequireRole allowed={["ADMIN"]}>
-            <ClientMasterPage />
-          </RequireRole>
+          <Navigate
+            to="/modules?module=client-master"
+            replace
+          />
         }
       />
 

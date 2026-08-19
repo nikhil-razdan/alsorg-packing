@@ -1,6 +1,7 @@
 import React from "react";
 
 import {
+	useLocation,
 	useNavigate,
 } from "react-router-dom";
 
@@ -37,6 +38,12 @@ import LogoutIcon
 import { useAuth }
 	from "../auth/AuthContext";
 
+import ClientMasterPage
+	from "./ClientMasterPage";
+
+import RequireRole
+	from "../auth/RequireRole";
+
 import {
 	MODULE_KEYS,
 	hasModuleAccessFromUser,
@@ -44,6 +51,7 @@ import {
 
 export default function ModuleHub() {
 	const navigate = useNavigate();
+	const location = useLocation();
 
 	const {
 		user,
@@ -59,6 +67,37 @@ export default function ModuleHub() {
 		user?.username ||
 		localStorage.getItem("username") ||
 		"User";
+
+	/*
+	 * Shared FlowSuite module hosting.
+	 *
+	 * Client Master intentionally lives on the already-registered /modules
+	 * route instead of beneath /packflow.  This avoids any dependency on the
+	 * application's outer/root router and prevents PackFlow wildcard/default
+	 * redirects from swallowing the shared module.
+	 *
+	 * The backend remains ADMIN-protected for master maintenance. PackFlow
+	 * packing users continue to use only the authenticated search endpoint.
+	 */
+	const requestedSharedModule =
+		new URLSearchParams(
+			location.search
+		)
+			.get("module")
+			?.trim()
+			.toLowerCase() || "";
+
+	const clientMasterView =
+		requestedSharedModule === "client-master" ||
+		requestedSharedModule === "clients";
+
+	if (clientMasterView) {
+		return (
+			<RequireRole allowed={["ADMIN"]}>
+				<ClientMasterPage />
+			</RequireRole>
+		);
+	}
 
 	/*
 	 * AuthContext may keep role/modules separately from user.
@@ -206,7 +245,7 @@ export default function ModuleHub() {
 					fontSize="large"
 				/>
 			),
-			path: "/client-master",
+			path: "/modules?module=client-master",
 			tags: [
 				"Client Directory",
 				"Search",
