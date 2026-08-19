@@ -88,6 +88,14 @@ export default function PackFlowRoutes() {
         }
       />
 
+
+      {/*
+       * Shared FlowSuite Client Master.
+       *
+       * The route stays under /packflow for compatibility with the current
+       * root router, but Layout.jsx renders this exact path in standalone
+       * FlowSuite mode (without PackFlow Header/Sidebar).
+       */}
       <Route
         path="client-master"
         element={
