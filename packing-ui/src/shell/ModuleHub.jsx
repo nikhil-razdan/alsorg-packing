@@ -31,6 +31,9 @@ import AdminPanelSettingsOutlinedIcon
 import PeopleAltOutlinedIcon
 	from "@mui/icons-material/PeopleAltOutlined";
 
+import BadgeOutlinedIcon
+	from "@mui/icons-material/BadgeOutlined";
+
 import ArrowForwardIcon
 	from "@mui/icons-material/ArrowForward";
 
@@ -57,10 +60,35 @@ import ClientMasterPage
 import RequireRole
 	from "../auth/RequireRole";
 
+import HrFlowWorkspace
+	from "../modules/hrflow/HrFlowWorkspace";
+
+import hrflowApi
+	from "../modules/hrflow/hrflowApi";
+
 import {
 	MODULE_KEYS,
 	hasModuleAccessFromUser,
 } from "../utils/moduleAccess";
+
+const hasHrFlowBackendAccess = (payload) => {
+	const roles = Array.isArray(payload?.roles)
+		? payload.roles
+		: Array.isArray(payload?.hrRoles)
+			? payload.hrRoles
+			: Array.isArray(payload?.accessRoles)
+				? payload.accessRoles
+				: [];
+
+	return Boolean(
+		payload?.allowed === true ||
+		payload?.hasAccess === true ||
+		payload?.globalAdmin === true ||
+		payload?.isGlobalAdmin === true ||
+		payload?.admin === true ||
+		roles.length > 0
+	);
+};
 
 function ModuleHubContent() {
 	const navigate = useNavigate();
@@ -87,6 +115,44 @@ function ModuleHubContent() {
 		"User";
 
 	/*
+	 * HRFlow uses its own backend access grants instead of the ordinary
+	 * FlowSuite user.modules list.  Verify that grant independently so an
+	 * HR_EXECUTIVE / HR_HEAD / RECRUITER / HOD user can see HRFlow even if
+	 * HRFLOW is not present in /auth/me modules. Global ADMIN always passes.
+	 */
+	const [hrFlowAllowed, setHrFlowAllowed] =
+		React.useState(() => Boolean(hasRole("ADMIN")));
+
+	React.useEffect(() => {
+		let active = true;
+
+		if (hasRole("ADMIN")) {
+			setHrFlowAllowed(true);
+			return () => {
+				active = false;
+			};
+		}
+
+		hrflowApi
+			.me()
+			.then((response) => {
+				if (!active) return;
+
+				setHrFlowAllowed(
+					hasHrFlowBackendAccess(response?.data)
+				);
+			})
+			.catch(() => {
+				if (!active) return;
+				setHrFlowAllowed(false);
+			});
+
+		return () => {
+			active = false;
+		};
+	}, [user?.username, role, roles, hasRole]);
+
+	/*
 	 * Shared FlowSuite module hosting.
 	 *
 	 * Client Master intentionally lives on the already-registered /modules
@@ -109,12 +175,20 @@ function ModuleHubContent() {
 		requestedSharedModule === "client-master" ||
 		requestedSharedModule === "clients";
 
+	const hrFlowView =
+		requestedSharedModule === "hrflow" ||
+		requestedSharedModule === "hr";
+
 	if (clientMasterView) {
 		return (
 			<RequireRole allowed={["ADMIN"]}>
 				<ClientMasterPage />
 			</RequireRole>
 		);
+	}
+
+	if (hrFlowView) {
+		return <HrFlowWorkspace />;
 	}
 
 	/*
@@ -252,6 +326,26 @@ function ModuleHubContent() {
 				canAccess(MODULE_KEYS.MATERIALS) ||
 				canAccess(MODULE_KEYS.MATFLOW),
 			accent: "Global Material Control",
+		},
+		{
+			key: MODULE_KEYS.HRFLOW,
+			title: "HRFlow",
+			subtitle:
+				"Recruitment, joining, employee documents, policies, orientation and onboarding.",
+			icon: (
+				<BadgeOutlinedIcon
+					fontSize="large"
+				/>
+			),
+			path: "/modules?module=hrflow",
+			tags: [
+				"Recruitment",
+				"Joining",
+				"Onboarding",
+				"Employees",
+			],
+			visible: hrFlowAllowed,
+			accent: "People Operations",
 		},
 		{
 			key: MODULE_KEYS.CLIENTS,
@@ -407,8 +501,8 @@ function ModuleHubContent() {
 									"var(--pf-text-muted)",
 							}}
 						>
-							Please contact Admin to assign PackFlow, BOMFlow or
-							MatFlow access.
+							Please contact Admin to assign access to the required
+							FlowSuite module.
 						</Typography>
 					</Card>
 				) : (
@@ -500,12 +594,12 @@ const pageSx = {
 	overflowY: "auto",
 	fontFamily: "Inter, system-ui, sans-serif",
 	background: `
-		radial-gradient(circle at 7% 0%, rgba(59,130,246,.11), transparent 25%),
-		radial-gradient(circle at 94% 100%, rgba(14,165,233,.07), transparent 28%),
+		radial-gradient(circle at 7% 0%, rgba(59,130,246,.10), transparent 24%),
+		radial-gradient(circle at 94% 100%, rgba(14,165,233,.06), transparent 26%),
 		linear-gradient(180deg,var(--pf-bg) 0%,var(--pf-bg-alt) 100%)
 	`,
 	color: "var(--pf-text-strong)",
-	p: { xs: 1.5, sm: 2, md: 3 },
+	p: { xs: 1.25, sm: 1.5, md: 2 },
 	transition: "background .18s ease,color .18s ease",
 };
 
@@ -556,13 +650,13 @@ const topBarSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	maxWidth: 1240,
+	maxWidth: 1320,
 	mx: "auto",
-	mb: { xs: 3, md: 4 },
-	minHeight: 66,
-	px: { xs: 1.5, md: 2 },
-	py: 1,
-	borderRadius: "14px",
+	mb: { xs: 2, md: 2.25 },
+	minHeight: 58,
+	px: { xs: 1.25, md: 1.6 },
+	py: 0.75,
+	borderRadius: "12px",
 	background: "rgba(var(--pf-surface-rgb),.92)",
 	border: "1px solid var(--pf-border)",
 	boxShadow: "var(--pf-card-shadow)",
@@ -576,30 +670,30 @@ const brandWrapSx = {
 };
 
 const brandMarkSx = {
-	width: 42,
-	height: 42,
-	borderRadius: "11px",
+	width: 36,
+	height: 36,
+	borderRadius: "9px",
 	display: "grid",
 	placeItems: "center",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
 	color: "#fff",
 	fontWeight: 950,
-	fontSize: 17,
-	boxShadow: "0 8px 20px rgba(37,99,235,.22)",
+	fontSize: 15,
+	boxShadow: "0 7px 16px rgba(37,99,235,.20)",
 };
 
 const brandTitleSx = {
 	color: "var(--pf-text-strong)",
 	fontWeight: 950,
-	fontSize: 18,
-	letterSpacing: 0.25,
+	fontSize: 16.5,
+	letterSpacing: 0.2,
 };
 
 const brandSubSx = {
 	color: "var(--pf-text-muted)",
-	fontSize: 10.5,
+	fontSize: 9.5,
 	fontWeight: 650,
-	mt: 0.2,
+	mt: 0.1,
 };
 
 const topBarActionsSx = {
@@ -609,12 +703,13 @@ const topBarActionsSx = {
 };
 
 const themeToggleSx = {
-	width: 38,
-	height: 38,
-	borderRadius: "9px",
+	width: 34,
+	height: 34,
+	borderRadius: "8px",
 	color: "var(--pf-text)",
 	background: "rgba(var(--pf-fg-rgb),.045)",
 	border: "1px solid var(--pf-border)",
+	"& svg": { fontSize: 19 },
 	"&:hover": {
 		color: "#2563eb",
 		background: "rgba(59,130,246,.11)",
@@ -623,17 +718,18 @@ const themeToggleSx = {
 };
 
 const logoutBtnSx = {
-	minHeight: 38,
-	borderRadius: "9px",
-	px: 2,
-	py: 0.8,
+	minHeight: 34,
+	borderRadius: "8px",
+	px: 1.5,
+	py: 0.55,
 	textTransform: "none",
 	fontWeight: 850,
-	fontSize: 12,
+	fontSize: 11,
 	color: "#2563eb",
 	background: "rgba(59,130,246,.09)",
 	border: "1px solid rgba(59,130,246,.22)",
 	boxShadow: "none",
+	"& .MuiButton-startIcon svg": { fontSize: 17 },
 	"&:hover": {
 		color: "#fff",
 		background: "linear-gradient(135deg,#2563eb,#3b82f6)",
@@ -644,62 +740,61 @@ const logoutBtnSx = {
 const containerSx = {
 	position: "relative",
 	zIndex: 1,
-	maxWidth: 1240,
+	maxWidth: 1320,
 	mx: "auto",
 };
 
 const heroSx = {
-	mb: { xs: 3, md: 3.5 },
-	maxWidth: 820,
-	px: { xs: 0.5, md: 1 },
+	mb: { xs: 2, md: 2.25 },
+	maxWidth: 800,
+	px: { xs: 0.25, md: 0.5 },
 };
 
 const badgeSx = {
-	mb: 1.5,
-	height: 29,
-	borderRadius: "8px",
+	mb: 1,
+	height: 24,
+	borderRadius: "7px",
 	background: "rgba(59,130,246,.10)",
 	border: "1px solid rgba(59,130,246,.22)",
 	color: "#3b82f6",
-	fontSize: 10.5,
+	fontSize: 8.8,
 	fontWeight: 900,
-	letterSpacing: 1,
-	"& .MuiChip-label": {
-		px: 1.2,
-	},
+	letterSpacing: 0.9,
+	"& .MuiChip-label": { px: 1 },
 };
 
 const titleSx = {
 	color: "var(--pf-text-strong)",
 	fontWeight: 950,
-	letterSpacing: "-0.045em",
-	lineHeight: 1.05,
-	mb: 1.2,
-	fontSize: { xs: 34, sm: 40, md: 48 },
+	letterSpacing: "-0.04em",
+	lineHeight: 1.04,
+	mb: 0.75,
+	fontSize: { xs: 29, sm: 33, md: 38 },
 };
 
 const subtitleSx = {
 	color: "var(--pf-text-muted)",
-	fontSize: { xs: 13.5, md: 15 },
+	fontSize: { xs: 12, md: 13 },
 	fontWeight: 600,
-	lineHeight: 1.65,
-	maxWidth: 760,
+	lineHeight: 1.55,
+	maxWidth: 720,
 };
 
 const moduleGridSx = {
 	display: "grid",
 	gridTemplateColumns: {
 		xs: "1fr",
-		md: "repeat(2, minmax(0, 1fr))",
-		xl: "repeat(3, minmax(0, 1fr))",
+		sm: "repeat(2, minmax(0, 1fr))",
+		lg: "repeat(3, minmax(0, 1fr))",
+		xl: "repeat(4, minmax(0, 1fr))",
 	},
-	gap: { xs: 1.5, md: 2 },
+	gap: { xs: 1.1, md: 1.35 },
 	alignItems: "stretch",
 };
 
 const emptyCardSx = {
-	borderRadius: "14px",
-	p: 3.5,
+	borderRadius: "12px",
+	p: 2.5,
 	background: "rgba(var(--pf-surface-rgb),.94)",
 	border: "1px solid var(--pf-border)",
 	boxShadow: "var(--pf-card-shadow)",
@@ -707,43 +802,43 @@ const emptyCardSx = {
 
 const moduleCardSx = {
 	height: "100%",
-	minHeight: 274,
+	minHeight: 218,
 	position: "relative",
 	overflow: "hidden",
-	borderRadius: "14px",
+	borderRadius: "12px",
 	background:
 		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.97),rgba(var(--pf-surface-alt-rgb),.94))",
 	border: "1px solid var(--pf-border)",
-	boxShadow: "var(--pf-card-shadow)",
+	boxShadow: "0 8px 24px rgba(var(--pf-fg-rgb),.055)",
 	backdropFilter: "blur(12px)",
-	transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
+	transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
 	"&:before": {
-		content: '\"\"',
+		content: '""',
 		position: "absolute",
 		top: 0,
 		left: 0,
 		bottom: 0,
-		width: 4,
+		width: 3,
 		background: "linear-gradient(180deg,#2563eb,#60a5fa)",
 		pointerEvents: "none",
 	},
 	"&:hover": {
 		transform: "translateY(-2px)",
-		boxShadow: "0 18px 42px rgba(37,99,235,.13)",
-		borderColor: "rgba(59,130,246,.30)",
+		boxShadow: "0 14px 30px rgba(37,99,235,.11)",
+		borderColor: "rgba(59,130,246,.28)",
 	},
 };
 
 const cardContentSx = {
-	p: { xs: 2.25, md: 2.6 },
-	pl: { xs: 2.5, md: 2.85 },
+	p: { xs: 1.65, md: 1.8 },
+	pl: { xs: 1.85, md: 2 },
 	position: "relative",
 	zIndex: 1,
 	height: "100%",
 	display: "flex",
 	flexDirection: "column",
 	"&:last-child": {
-		pb: { xs: 2.25, md: 2.6 },
+		pb: { xs: 1.65, md: 1.8 },
 	},
 };
 
@@ -751,88 +846,96 @@ const cardTopSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	gap: 1.5,
-	mb: 1.8,
+	gap: 1,
+	mb: 1.15,
 };
 
 const iconBoxSx = {
-	width: 48,
-	height: 48,
-	borderRadius: "12px",
+	width: 40,
+	height: 40,
+	borderRadius: "10px",
 	display: "grid",
 	placeItems: "center",
 	color: "#3b82f6",
-	background: "rgba(59,130,246,.11)",
-	border: "1px solid rgba(59,130,246,.20)",
+	background: "rgba(59,130,246,.10)",
+	border: "1px solid rgba(59,130,246,.18)",
 	boxShadow: "none",
 	"& svg": {
-		fontSize: 27,
+		fontSize: 22,
 	},
 };
 
 const cardChipSx = {
-	height: 25,
-	borderRadius: "7px",
+	height: 22,
+	maxWidth: "58%",
+	borderRadius: "6px",
 	color: "#3b82f6",
-	background: "rgba(59,130,246,.09)",
-	border: "1px solid rgba(59,130,246,.19)",
+	background: "rgba(59,130,246,.08)",
+	border: "1px solid rgba(59,130,246,.18)",
 	fontWeight: 850,
-	fontSize: 9.5,
+	fontSize: 8.2,
 	"& .MuiChip-label": {
-		px: 1,
+		px: 0.8,
+		overflow: "hidden",
+		textOverflow: "ellipsis",
 	},
 };
 
 const cardTitleSx = {
 	color: "var(--pf-text-strong)",
 	fontWeight: 950,
-	fontSize: { xs: 22, md: 24 },
-	mb: 0.7,
-	letterSpacing: "-0.035em",
+	fontSize: { xs: 18, md: 19 },
+	mb: 0.45,
+	letterSpacing: "-0.03em",
 };
 
 const cardSubtitleSx = {
 	color: "var(--pf-text-muted)",
-	fontSize: 12.5,
+	fontSize: 10.8,
 	fontWeight: 600,
-	lineHeight: 1.6,
-	minHeight: 62,
-	mb: 1.8,
+	lineHeight: 1.45,
+	minHeight: 47,
+	mb: 1.1,
+	display: "-webkit-box",
+	WebkitLineClamp: 3,
+	WebkitBoxOrient: "vertical",
+	overflow: "hidden",
 };
 
 const tagWrapSx = {
 	display: "flex",
 	flexWrap: "wrap",
-	gap: 0.7,
-	mb: 2,
+	gap: 0.45,
+	mb: 1.2,
 	mt: "auto",
 };
 
 const tagSx = {
-	height: 24,
-	borderRadius: "7px",
+	height: 20,
+	borderRadius: "6px",
 	color: "var(--pf-text-soft)",
-	background: "rgba(var(--pf-fg-rgb),.045)",
+	background: "rgba(var(--pf-fg-rgb),.04)",
 	border: "1px solid var(--pf-border)",
 	fontWeight: 750,
-	fontSize: 9.5,
+	fontSize: 8.1,
 	"& .MuiChip-label": {
-		px: 0.95,
+		px: 0.72,
 	},
 };
 
 const openBtnSx = {
-	minHeight: 40,
-	borderRadius: "9px",
-	py: 0.9,
+	minHeight: 34,
+	borderRadius: "8px",
+	py: 0.55,
 	textTransform: "none",
 	fontWeight: 900,
-	fontSize: 12.5,
+	fontSize: 11,
 	color: "#fff",
 	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 8px 20px rgba(37,99,235,.20)",
+	boxShadow: "0 6px 16px rgba(37,99,235,.18)",
+	"& .MuiButton-endIcon svg": { fontSize: 17 },
 	"&:hover": {
 		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
-		boxShadow: "0 10px 24px rgba(37,99,235,.24)",
+		boxShadow: "0 8px 19px rgba(37,99,235,.22)",
 	},
 };

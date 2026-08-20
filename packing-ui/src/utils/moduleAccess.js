@@ -4,6 +4,7 @@ export const MODULE_KEYS = Object.freeze({
 	MATFLOW: "MATFLOW",
 	MATERIALS: "MATERIALS",
 	CLIENTS: "CLIENTS",
+	HRFLOW: "HRFLOW",
 });
 
 const normalizeValue = (value) => {

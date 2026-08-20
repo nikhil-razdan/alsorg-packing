@@ -1,0 +1,77 @@
+package com.alsorg.packing.hrflow.controller;
+
+import com.alsorg.packing.hrflow.domain.HrAccessRole;
+import com.alsorg.packing.hrflow.domain.HrCandidateStage;
+import com.alsorg.packing.hrflow.dto.HrAuditDtos;
+import com.alsorg.packing.hrflow.dto.HrCandidateDtos;
+import com.alsorg.packing.hrflow.security.HrAccessService;
+import com.alsorg.packing.hrflow.service.HrAuditService;
+import com.alsorg.packing.hrflow.service.HrCandidateService;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/hrflow/candidates")
+public class HrCandidateController {
+
+    private final HrCandidateService candidateService;
+    private final HrAuditService auditService;
+    private final HrAccessService accessService;
+
+    public HrCandidateController(HrCandidateService candidateService,
+                                 HrAuditService auditService,
+                                 HrAccessService accessService) {
+        this.candidateService = candidateService;
+        this.auditService = auditService;
+        this.accessService = accessService;
+    }
+
+    @PostMapping
+    public HrCandidateDtos.CandidateDetailResponse create(@Valid @RequestBody HrCandidateDtos.CreateCandidateRequest request) {
+        return candidateService.create(request);
+    }
+
+    @GetMapping
+    public Page<HrCandidateDtos.CandidateSummaryResponse> list(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) HrCandidateStage stage,
+            Pageable pageable) {
+        return candidateService.list(q, stage, pageable);
+    }
+
+    @GetMapping("/{id}")
+    public HrCandidateDtos.CandidateDetailResponse get(@PathVariable UUID id) {
+        return candidateService.get(id);
+    }
+
+    @PatchMapping("/{id}")
+    public HrCandidateDtos.CandidateDetailResponse update(@PathVariable UUID id,
+                                                           @Valid @RequestBody HrCandidateDtos.HrCandidateUpdateRequest request) {
+        return candidateService.updateInternal(id, request);
+    }
+
+    @PostMapping("/{id}/application-link")
+    public HrCandidateDtos.ApplicationLinkResponse applicationLink(@PathVariable UUID id) {
+        return candidateService.createApplicationLink(id);
+    }
+
+    @PostMapping("/{id}/stage")
+    public HrCandidateDtos.CandidateDetailResponse changeStage(@PathVariable UUID id,
+                                                                @Valid @RequestBody HrCandidateDtos.ChangeStageRequest request) {
+        return candidateService.changeStage(id, request);
+    }
+
+    @GetMapping("/{id}/audit")
+    public List<HrAuditDtos.AuditResponse> audit(@PathVariable UUID id) {
+        accessService.requireAny(HrAccessRole.HR_ADMIN, HrAccessRole.HR_HEAD, HrAccessRole.HR_EXECUTIVE, HrAccessRole.RECRUITER, HrAccessRole.HOD);
+        return auditService.recentFor("CANDIDATE", id.toString()).stream()
+                .map(x -> new HrAuditDtos.AuditResponse(x.getId(), x.getAction(), x.getEntityType(), x.getEntityId(),
+                        x.getActor(), x.getMessage(), x.getMetadataJson(), x.getCreatedAt()))
+                .toList();
+    }
+}

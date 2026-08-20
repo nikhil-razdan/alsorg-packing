@@ -33,18 +33,24 @@ function RequireRole({
 				replace
 				state={{
 					from:
-						location.pathname,
+						location.pathname +
+						location.search,
 				}}
 			/>
 		);
 	}
 
+	const allowedValues = Array.isArray(allowed)
+		? allowed.flat()
+		: [allowed];
+
 	const normalizedAllowed =
-		allowed
+		allowedValues
 			.map(normalizeRole)
 			.filter(Boolean);
 
 	const permitted =
+		normalizedAllowed.length > 0 &&
 		hasAnyRole(
 			...normalizedAllowed
 		);
@@ -58,7 +64,8 @@ function RequireRole({
 					deniedRoles:
 						normalizedAllowed,
 					from:
-						location.pathname,
+						location.pathname +
+						location.search,
 				}}
 			/>
 		);

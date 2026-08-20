@@ -1,4 +1,8 @@
-import { Navigate } from "react-router-dom";
+import {
+	Navigate,
+	useLocation,
+} from "react-router-dom";
+
 import { useAuth } from "./AuthContext";
 
 function AuthLoadingScreen() {
@@ -25,6 +29,8 @@ function AuthLoadingScreen() {
 export default function RequireAuth({
 	children,
 }) {
+	const location = useLocation();
+
 	const {
 		isLoggedIn,
 		authLoading,
@@ -39,6 +45,11 @@ export default function RequireAuth({
 			<Navigate
 				to="/login"
 				replace
+				state={{
+					from:
+						location.pathname +
+						location.search,
+				}}
 			/>
 		);
 	}

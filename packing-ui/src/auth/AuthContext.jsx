@@ -58,6 +58,9 @@ const modulesForRoles = (roles) => {
 			"PACKFLOW",
 			"BOMFLOW",
 			"MATFLOW",
+			"MATERIALS",
+			"CLIENTS",
+			"HRFLOW",
 		];
 	}
 
@@ -92,6 +95,19 @@ const modulesForRoles = (roles) => {
 			)
 		) {
 			modules.add("MATFLOW");
+			modules.add("MATERIALS");
+		}
+
+		/*
+		 * HRFlow normally uses its own /hrflow/me grant check. This fallback
+		 * only helps installations that also expose HR roles through /auth/me.
+		 */
+		if (
+			role.startsWith("HRFLOW_") ||
+			role.startsWith("HR_") ||
+			role === "RECRUITER"
+		) {
+			modules.add("HRFLOW");
 		}
 	});
 
