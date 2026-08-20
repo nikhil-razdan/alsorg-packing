@@ -763,6 +763,151 @@ function CandidateDocuments({ documents, completeness, upload, setUpload, canRec
 	return <Box sx={{ display: "grid", gap: 1.5 }}><Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Document completeness" /><Box sx={{ display: "flex", gap: .8, flexWrap: "wrap" }}>{[["Photo",completeness?.hasPhoto],["Resume",completeness?.hasResume],["Aadhaar",completeness?.hasAadhaar],["PAN",completeness?.hasPan]].map(([label,ok]) => <Chip key={label} label={`${label}: ${ok ? "Yes" : "No"}`} sx={{ borderRadius: 1.2, fontWeight: 850, color: ok ? hrColors.green : hrColors.red, background: ok ? "var(--hr-success-soft)" : "var(--hr-danger-soft)" }} />)}</Box></Paper>{canRecruit ? <Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Upload document" /><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "200px 1fr auto auto" }, gap: 1 }}><TextField select size="small" label="Type" value={upload.documentType} onChange={(e) => setUpload((c) => ({ ...c, documentType: e.target.value }))} sx={fieldSx}>{HR_UPLOAD_DOCUMENT_TYPES.map((type) => <MenuItem key={type} value={type}>{humanize(type)}</MenuItem>)}</TextField><TextField size="small" label="Remarks" value={upload.remarks} onChange={(e) => setUpload((c) => ({ ...c, remarks: e.target.value }))} sx={fieldSx} /><Button component="label" variant="outlined" startIcon={<UploadFileOutlinedIcon />} sx={secondaryButtonSx}>{upload.file ? upload.file.name : "Choose file"}<input hidden type="file" onChange={(e) => setUpload((c) => ({ ...c, file: e.target.files?.[0] || null }))} /></Button><Button variant="contained" disabled={busy || !upload.file} onClick={onUpload} sx={primaryButtonSx}>Upload</Button></Box></Paper> : null}<Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Active documents" />{documents.length ? <Box sx={{ display: "grid", gap: .8 }}>{documents.map((doc) => <Box key={doc.id} sx={{ p: 1, borderRadius: 1.3, border: `1px solid ${hrColors.line}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}><Box><Typography sx={mainCellSx}>{humanize(doc.documentType)}</Typography><Typography sx={subCellSx}>{doc.originalFileName} • {formatDateTime(doc.uploadedAt)} • {doc.uploadedBy}</Typography></Box><Box sx={{ display: "flex", gap: .7 }}><Button size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => onDownload(doc)} sx={secondaryButtonSx}>Download</Button>{canArchive ? <Button size="small" color="error" startIcon={<ArchiveOutlinedIcon />} onClick={() => onArchive(doc)} sx={{ ...secondaryButtonSx, color: hrColors.red }}>Archive</Button> : null}</Box></Box>)}</Box> : <EmptyState title="No documents" />}</Paper></Box>;
 }
 
+
+function AuditList({ rows }) {
+	const auditRows = Array.isArray(rows) ? rows : [];
+
+	if (auditRows.length === 0) {
+		return (
+			<Paper variant="outlined" sx={sectionCardSx}>
+				<SectionTitle
+					title="Candidate audit history"
+					subtitle="Candidate changes, application activity, document events and workflow actions are recorded here."
+				/>
+				<EmptyState
+					title="No audit history"
+					description="No audit events have been recorded for this candidate yet."
+				/>
+			</Paper>
+		);
+	}
+
+	const metadataText = (value) => {
+		if (value === null || value === undefined || value === "") return "";
+		if (typeof value === "string") {
+			try {
+				const parsed = JSON.parse(value);
+				return JSON.stringify(parsed, null, 2);
+			} catch {
+				return value;
+			}
+		}
+		try {
+			return JSON.stringify(value, null, 2);
+		} catch {
+			return String(value);
+		}
+	};
+
+	return (
+		<Paper variant="outlined" sx={sectionCardSx}>
+			<SectionTitle
+				title="Candidate audit history"
+				subtitle={`${auditRows.length} recorded event${auditRows.length === 1 ? "" : "s"}. The backend audit trail remains authoritative.`}
+			/>
+
+			<Box sx={{ display: "grid", gap: .9 }}>
+				{auditRows.map((row, index) => {
+					const meta = metadataText(row?.metadataJson);
+					return (
+						<Box
+							key={row?.id || `${row?.action || "AUDIT"}-${row?.createdAt || index}-${index}`}
+							sx={{
+								p: 1.15,
+								borderRadius: 1.45,
+								border: `1px solid ${hrColors.line}`,
+								background: "var(--hr-surface)",
+							}}
+						>
+							<Box
+								sx={{
+									display: "flex",
+									justifyContent: "space-between",
+									alignItems: "flex-start",
+									gap: 1,
+									flexWrap: "wrap",
+								}}
+							>
+								<Box sx={{ minWidth: 0, flex: "1 1 320px" }}>
+									<Box sx={{ display: "flex", gap: .65, alignItems: "center", flexWrap: "wrap" }}>
+										<StatusChip value={row?.action || "AUDIT"} />
+										{row?.entityType ? (
+											<Chip
+												size="small"
+												label={humanize(row.entityType)}
+												sx={{
+													height: 23,
+													borderRadius: 1.1,
+													fontSize: 10,
+													fontWeight: 850,
+													color: "var(--hr-text-secondary)",
+													background: "var(--hr-surface-strong)",
+													border: "1px solid var(--hr-border)",
+												}}
+											/>
+										) : null}
+									</Box>
+
+									<Typography
+										sx={{
+											mt: .8,
+											fontSize: 12.7,
+											fontWeight: 760,
+											lineHeight: 1.55,
+											color: hrColors.ink,
+										}}
+									>
+										{row?.message || humanize(row?.action) || "Audit event"}
+									</Typography>
+								</Box>
+
+								<Box sx={{ textAlign: { xs: "left", sm: "right" }, minWidth: 150 }}>
+									<Typography sx={{ fontSize: 11.2, fontWeight: 850, color: hrColors.ink }}>
+										{row?.actor || "SYSTEM"}
+									</Typography>
+									<Typography sx={{ mt: .2, fontSize: 10.8, color: hrColors.muted }}>
+										{formatDateTime(row?.createdAt)}
+									</Typography>
+								</Box>
+							</Box>
+
+							{row?.entityId ? (
+								<Typography sx={{ mt: .65, fontSize: 10.5, color: hrColors.muted, wordBreak: "break-all" }}>
+									Record: {row.entityId}
+								</Typography>
+							) : null}
+
+							{meta ? (
+								<Box
+									component="pre"
+									sx={{
+										m: 0,
+										mt: .8,
+										p: .9,
+										maxHeight: 180,
+										overflow: "auto",
+										whiteSpace: "pre-wrap",
+										wordBreak: "break-word",
+										borderRadius: 1.1,
+										fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+										fontSize: 10.5,
+										lineHeight: 1.5,
+										color: "var(--hr-text-secondary)",
+										background: "var(--hr-field-bg)",
+										border: "1px solid var(--hr-border)",
+									}}
+								>
+									{meta}
+								</Box>
+							) : null}
+						</Box>
+					);
+				})}
+			</Box>
+		</Paper>
+	);
+}
+
 function CandidateOnboardingStarter({ candidate, canOnboard, canOperate, form, setForm, busy, onCreate }) {
 	const set = (key) => (e) => setForm((c) => ({ ...c, [key]: e.target.value }));
 	return <Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Convert to onboarding" subtitle="Only SELECTED, OFFERED or PRE_JOINING candidates can enter onboarding. The backend prevents duplicate onboarding cases." />{!canOnboard ? <Alert severity="info" sx={{ borderRadius: 1.5 }}>Current stage is {humanize(candidate?.stage)}. Move the candidate to SELECTED / OFFERED / PRE_JOINING first.</Alert> : <><Box sx={formGridSx}><TextField type="date" InputLabelProps={{ shrink: true }} size="small" label="Joining date" value={form.joiningDate} onChange={set("joiningDate")} sx={fieldSx} /><TextField size="small" label="Department" value={form.department} onChange={set("department")} sx={fieldSx} /><TextField size="small" label="Designation" value={form.designation} onChange={set("designation")} sx={fieldSx} /><TextField size="small" label="Location" value={form.location} onChange={set("location")} sx={fieldSx} /><TextField size="small" label="Reporting manager" value={form.reportingManager} onChange={set("reportingManager")} sx={fieldSx} /><TextField size="small" label="Appointed by" value={form.appointedBy} onChange={set("appointedBy")} sx={fieldSx} /><TextField size="small" label="Remarks" value={form.remarks} onChange={set("remarks")} sx={fieldSx} /></Box>{canOperate ? <Button variant="contained" disabled={busy || !form.department.trim() || !form.designation.trim()} onClick={onCreate} sx={{ ...primaryButtonSx, mt: 1.5 }}>Create onboarding case</Button> : <Alert severity="info" sx={{ mt: 1.5 }}>Your HRFlow role can review this candidate but cannot create onboarding cases.</Alert>}</>}</Paper>;
