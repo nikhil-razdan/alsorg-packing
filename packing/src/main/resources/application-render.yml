@@ -64,3 +64,15 @@ app:
   mail:
     from: ${MAIL_FROM:no-reply@alsorg.com}
     reply-to: ${MAIL_REPLY_TO:${MAIL_USERNAME:no-reply@alsorg.com}}
+
+# ---------------------------------------------------------------------------
+# HRFLOW
+# ---------------------------------------------------------------------------
+# IMPORTANT:
+# Configure HRFLOW_CRYPTO_KEY_BASE64 only in the BACKEND Render service.
+# Do not expose this value to the frontend/Vite environment.
+#
+# The same encryption key must be retained permanently. Changing it later
+# would prevent previously encrypted HRFlow data/documents from being read.
+hrflow:
+  crypto-key-base64: ${HRFLOW_CRYPTO_KEY_BASE64}
