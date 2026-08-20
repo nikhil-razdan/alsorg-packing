@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * MatFlow master/reference controller.
  *
- * Tally is the physical stock authority. Therefore this controller
  * intentionally
  * exposes no Store stock balance, opening balance or stock-adjustment
  * endpoints.
