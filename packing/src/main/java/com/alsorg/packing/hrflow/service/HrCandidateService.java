@@ -168,6 +168,76 @@ public class HrCandidateService {
         return toDetail(c, true);
     }
 
+    /**
+     * Permanently deletes a recruitment candidate and candidate-owned pre-joining
+     * data. This operation is intentionally restricted to a FlowSuite global ADMIN.
+     *
+     * Joined candidates / employee masters are protected: deleting them through the
+     * recruitment screen would silently become an employee deletion and could break
+     * employment records. Such records must be handled by an employee-specific
+     * lifecycle operation instead.
+     */
+    @Transactional
+    public void deleteCandidate(UUID id, Long requestRowVersion) {
+        accessService.requireGlobalAdmin();
+
+        HrCandidate candidate = find(id);
+
+        if (requestRowVersion == null) {
+            throw HrFlowException.badRequest("Candidate rowVersion is required for deletion.");
+        }
+        assertRowVersion(candidate, requestRowVersion);
+
+        Number employeeCount = (Number) entityManager.createNativeQuery(
+                        "select count(*) from hr_employee where candidate_id = :candidateId")
+                .setParameter("candidateId", id)
+                .getSingleResult();
+
+        Number joiningReportCount = (Number) entityManager.createNativeQuery(
+                        "select count(*) from hr_joining_report where candidate_id = :candidateId")
+                .setParameter("candidateId", id)
+                .getSingleResult();
+
+        if (candidate.getStage() == HrCandidateStage.JOINED
+                || employeeCount.longValue() > 0
+                || joiningReportCount.longValue() > 0) {
+            throw HrFlowException.conflict(
+                    "This candidate has already been converted to an employee and cannot be deleted from Recruitment.");
+        }
+
+        String actor = accessService.actor();
+        String candidateNumber = candidate.getCandidateNumber();
+        HrCandidateStage candidateStage = candidate.getStage();
+
+        // Batch-2 relations do not use ON DELETE CASCADE, so remove the
+        // candidate-owned pre-joining rows first. A pre-joining onboarding case
+        // is safe to remove because the employee guard above guarantees that no
+        // employee or joining report exists.
+        entityManager.createNativeQuery(
+                        "delete from hr_onboarding_case where candidate_id = :candidateId")
+                .setParameter("candidateId", id)
+                .executeUpdate();
+
+        entityManager.createNativeQuery(
+                        "delete from hr_candidate_document where candidate_id = :candidateId")
+                .setParameter("candidateId", id)
+                .executeUpdate();
+
+        // Tokens and the candidate's element-collection tables are already
+        // ON DELETE CASCADE in the recruitment foundation migration.
+        auditService.log(
+                HrAuditAction.CANDIDATE_DELETED,
+                "CANDIDATE",
+                id.toString(),
+                actor,
+                "Candidate permanently deleted by FlowSuite ADMIN: " + candidateNumber,
+                "{\"candidateNumber\":\"" + candidateNumber + "\",\"stage\":\"" + candidateStage + "\"}"
+        );
+
+        entityManager.remove(candidate);
+        entityManager.flush();
+    }
+
     @Transactional
     public HrCandidateDtos.PublicCandidateApplicationResponse getPublicApplication(String rawToken) {
         HrCandidate c = tokenService.resolveApplicationToken(rawToken);

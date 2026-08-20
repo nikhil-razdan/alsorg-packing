@@ -10,6 +10,7 @@ import com.alsorg.packing.hrflow.service.HrCandidateService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -64,6 +65,14 @@ public class HrCandidateController {
     public HrCandidateDtos.CandidateDetailResponse changeStage(@PathVariable UUID id,
                                                                 @Valid @RequestBody HrCandidateDtos.ChangeStageRequest request) {
         return candidateService.changeStage(id, request);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCandidate(
+            @PathVariable UUID id,
+            @RequestParam Long rowVersion) {
+        candidateService.deleteCandidate(id, rowVersion);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/audit")

@@ -414,7 +414,7 @@ export default function HrCandidateApplicationPage({ token }) {
 			case 6:
 				return (
 					<Section title="Documents" subtitle="Upload the documents requested by HR. Files are encrypted by the HRFlow backend. Document access remains available after final application submission while this secure link is active.">
-						<Paper variant="outlined" sx={{ p: 1.7, borderRadius: 1.7, mb: 2, background: "#f8fafc" }}>
+						<Paper variant="outlined" sx={{ p: 1.7, borderRadius: 1.7, mb: 2, background: "var(--hr-surface)" }}>
 								<Grid>
 									<SelectField label="Document type" value={documentType} onChange={setDocumentType} disabled={saving} options={DOCUMENT_TYPES} />
 									<Field label="Remarks" value={documentRemarks} onChange={setDocumentRemarks} disabled={saving} />
@@ -535,7 +535,7 @@ function SelectField({ label, value, onChange, disabled, options }) {
 
 function RowCard({ index, onRemove, disabled, children }) {
 	return (
-		<Paper variant="outlined" sx={{ p: 1.4, borderRadius: 1.5, mb: 1.2, position: "relative", background: "#fcfdff" }}>
+		<Paper variant="outlined" sx={{ p: 1.4, borderRadius: 1.5, mb: 1.2, position: "relative", background: "var(--hr-card-bg-elevated)" }}>
 			<Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
 				<Chip label={`Row ${index + 1}`} size="small" sx={{ borderRadius: 1, fontWeight: 800 }} />
 				<IconButton size="small" onClick={onRemove} disabled={disabled} color="error"><DeleteOutlineOutlinedIcon fontSize="small" /></IconButton>
@@ -546,5 +546,5 @@ function RowCard({ index, onRemove, disabled, children }) {
 }
 
 function Hint({ text }) {
-	return <Paper variant="outlined" sx={{ p: 2, borderRadius: 1.5, color: hrColors.muted, background: "#f8fafc", borderStyle: "dashed" }}><Typography sx={{ fontSize: 13 }}>{text}</Typography></Paper>;
+	return <Paper variant="outlined" sx={{ p: 2, borderRadius: 1.5, color: hrColors.muted, background: "var(--hr-surface)", borderStyle: "dashed" }}><Typography sx={{ fontSize: 13 }}>{text}</Typography></Paper>;
 }

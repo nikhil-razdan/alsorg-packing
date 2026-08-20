@@ -40,6 +40,10 @@ const hrflowApi = {
 		API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}`),
 	updateCandidate: (candidateId, body) =>
 		API.patch(`${BASE}/candidates/${id(candidateId, "Candidate ID")}`, body),
+	deleteCandidate: (candidateId, rowVersion) =>
+		API.delete(`${BASE}/candidates/${id(candidateId, "Candidate ID")}`, {
+			params: { rowVersion },
+		}),
 	changeCandidateStage: (candidateId, body) =>
 		API.post(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/stage`, body),
 	createApplicationLink: (candidateId) =>
