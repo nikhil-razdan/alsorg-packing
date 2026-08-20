@@ -81,21 +81,27 @@ public class HrEmployeeService {
         );
 
         HrEmployee employee = requireEmployee(employeeId);
-        String key = normalizeFormKey(formKey);
+        EmployeeFormRequest request = parseFormRequest(formKey);
+        String key = request.key();
 
         if (key.equals("FULL_PERSONNEL_PACK")) {
+            String candidateKey = "CANDIDATE_PACK_" + request.style().name();
             HrCandidateService.FormPdf candidate =
-                    candidateService.candidateFormPdfSystem(employee.getCandidateId(), "CANDIDATE_PACK");
+                    candidateService.candidateFormPdfSystem(employee.getCandidateId(), candidateKey);
             HrOnboardingService.FormPdf onboarding =
                     onboardingService.employeeFormPdfSystem(employee.getId(), "ONBOARDING_PACK");
             return new FormPdf(
-                    safeFilePart(employee.getEmployeeCode()) + "_FULL_PERSONNEL_PACK.pdf",
+                    safeFilePart(employee.getEmployeeCode()) + "_FULL_PERSONNEL_PACK_"
+                            + request.style().name() + ".pdf",
                     merge(candidate.bytes(), onboarding.bytes())
             );
         }
 
-        if (key.equals("PERSONAL_DATA") || key.equals("EMPLOYMENT_APPLICATION") || key.equals("CANDIDATE_PACK")) {
-            HrCandidateService.FormPdf pdf = candidateService.candidateFormPdfSystem(employee.getCandidateId(), key);
+        if (isCandidateFormKey(key)) {
+            HrCandidateService.FormPdf pdf = candidateService.candidateFormPdfSystem(
+                    employee.getCandidateId(),
+                    key + "_" + request.style().name()
+            );
             return new FormPdf(pdf.fileName(), pdf.bytes());
         }
 
@@ -117,18 +123,47 @@ public class HrEmployeeService {
         }
     }
 
-    private String normalizeFormKey(String value) {
-        String key = value == null ? "" : value.trim().toUpperCase(Locale.ROOT)
+    private boolean isCandidateFormKey(String key) {
+        return "PERSONAL_DATA".equals(key)
+                || "EMPLOYMENT_APPLICATION".equals(key)
+                || "CANDIDATE_PACK".equals(key);
+    }
+
+    private EmployeeFormRequest parseFormRequest(String value) {
+        String raw = value == null ? "" : value.trim().toUpperCase(Locale.ROOT)
                 .replace('-', '_')
                 .replace(' ', '_');
-        if (key.isBlank()) throw HrFlowException.badRequest("Form key is required.");
-        return switch (key) {
+        if (raw.isBlank()) throw HrFlowException.badRequest("Form key is required.");
+
+        PdfStyle style = PdfStyle.MODERN;
+        for (String suffix : new String[]{"_ORIGINAL", "_CLASSIC", "_LEGACY"}) {
+            if (raw.endsWith(suffix)) {
+                raw = raw.substring(0, raw.length() - suffix.length());
+                style = PdfStyle.ORIGINAL;
+                break;
+            }
+        }
+        if (style == PdfStyle.MODERN) {
+            for (String suffix : new String[]{"_MODERN", "_UPDATED", "_NEW"}) {
+                if (raw.endsWith(suffix)) {
+                    raw = raw.substring(0, raw.length() - suffix.length());
+                    break;
+                }
+            }
+        }
+
+        String key = switch (raw) {
             case "FULL", "ALL", "PERSONNEL_PACK", "EMPLOYEE_PACK" -> "FULL_PERSONNEL_PACK";
             case "PERSONAL", "PERSONAL_DATA_FORM" -> "PERSONAL_DATA";
             case "APPLICATION", "EMPLOYMENT", "EMPLOYMENT_APPLICATION_FORM" -> "EMPLOYMENT_APPLICATION";
-            default -> key;
+            default -> raw;
         };
+        return new EmployeeFormRequest(key, style);
     }
+
+    private enum PdfStyle { ORIGINAL, MODERN }
+
+    private record EmployeeFormRequest(String key, PdfStyle style) {}
 
     private String safeFilePart(String value) {
         String v = value == null ? "" : value.trim().replaceAll("[^A-Za-z0-9._-]+", "_");

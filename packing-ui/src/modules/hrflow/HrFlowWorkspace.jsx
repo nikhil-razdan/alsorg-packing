@@ -54,6 +54,7 @@ import {
 	HR_ONBOARDING_STATUSES,
 	HR_UPLOAD_DOCUMENT_TYPES,
 	apiMessage,
+	blobApiMessage,
 	copyText,
 	formatDate,
 	formatDateTime,
@@ -394,22 +395,24 @@ function FormsView({ onNavigate, canViewOnboarding }) {
 
 	const forms = [
 		{
+			candidateStyleChoice: true,
 			key: "PERSONAL_DATA",
 			title: "Personal Data Form",
-			source: "PDF page 1",
+			source: "Original + Modern • 1 page",
 			who: "Candidate",
-			description: "Standard personal-data format covering identity, experience, education, employers, addresses, contact details, reference and salary information.",
+			description: "Download either the original ALSORG form with corrected font sizing/alignment or the modern HRFlow A4 layout. Both use the same Personal Data fields.",
 			location: "Candidates → Open candidate → Candidate Form.",
 			action: "Open Candidates",
 			view: "candidates",
 			file: "HR_Personal_Data_Form_Blank.pdf",
 		},
 		{
+			candidateStyleChoice: true,
 			key: "EMPLOYMENT_APPLICATION",
 			title: "Employment Application Form",
-			source: "PDF pages 3–5",
+			source: "Original + Modern • 3 pages",
 			who: "Candidate",
-			description: "Managerial / Administrative application format with photograph, family, education, employment history, languages, salary, declaration and office-use section.",
+			description: "Download either the corrected original ALSORG Employment Application or the modern HRFlow version. Both contain the same saved candidate fields and photograph.",
 			location: "Candidates → Open candidate → Candidate Form; candidate fills through the secure application link.",
 			action: "Open Candidates",
 			view: "candidates",
@@ -483,27 +486,31 @@ function FormsView({ onNavigate, canViewOnboarding }) {
 		},
 	];
 
-	const downloadSample = async (form) => {
-		setDownloading(form.key);
+	const downloadSample = async (form, style = null) => {
+		const busyKey = `${form.key}:${style || "DEFAULT"}`;
+		setDownloading(busyKey);
 		setDownloadError("");
 		try {
-			const response = await hrflowApi.downloadFormTemplate(form.key);
-			saveBlob(response, form.file);
+			const response = await hrflowApi.downloadFormTemplate(form.key, style);
+			const suffix = style ? `_${style === "ORIGINAL" ? "Original" : "Modern"}` : "";
+			const fallback = form.file.replace(/\.pdf$/i, `${suffix}.pdf`);
+			saveBlob(response, fallback);
 		} catch (e) {
-			setDownloadError(apiMessage(e, `${form.title} sample could not be downloaded.`));
+			setDownloadError(await blobApiMessage(e, `${form.title} sample could not be downloaded.`));
 		} finally {
 			setDownloading("");
 		}
 	};
 
-	const downloadFullPack = async () => {
-		setDownloading("FULL_PACK");
+	const downloadFullPack = async (style = "MODERN") => {
+		const busyKey = `FULL_PACK:${style}`;
+		setDownloading(busyKey);
 		setDownloadError("");
 		try {
-			const response = await hrflowApi.downloadFormTemplate("FULL_PACK");
-			saveBlob(response, "HR_Module_Forms_Full_Blank.pdf");
+			const response = await hrflowApi.downloadFormTemplate("FULL_PACK", style);
+			saveBlob(response, `HR_Module_Forms_Full_Blank_${style === "ORIGINAL" ? "Original" : "Modern"}.pdf`);
 		} catch (e) {
-			setDownloadError(apiMessage(e, "The full blank HR form pack could not be downloaded."));
+			setDownloadError(await blobApiMessage(e, "The full blank HR form pack could not be downloaded."));
 		} finally {
 			setDownloading("");
 		}
@@ -514,8 +521,11 @@ function FormsView({ onNavigate, canViewOnboarding }) {
 			<PageTitle
 				eyebrow="INTEGRATED HR FORMS"
 				title="Candidate & employee forms"
-				subtitle="Every sample below is extracted directly from the approved HR Module PDF. Filled PDFs keep the same source pages and print the candidate / employee data over the original format."
-				actions={<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={downloadFullPack} sx={secondaryButtonSx}>Download full blank pack</Button>}
+				subtitle="Candidate forms are available in both the corrected original ALSORG layout and the modern HRFlow layout. Onboarding/legal forms continue to use the approved HR template format."
+				actions={<>
+					<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadFullPack("ORIGINAL")} sx={secondaryButtonSx}>Original blank pack</Button>
+					<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadFullPack("MODERN")} sx={secondaryButtonSx}>Modern blank pack</Button>
+				</>}
 			/>
 			<ErrorAlert error={downloadError} />
 			<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 1.25 }}>
@@ -536,9 +546,18 @@ function FormsView({ onNavigate, canViewOnboarding }) {
 								<Typography sx={{ mt: .3, color: hrColors.ink, fontSize: 12.2, fontWeight: 800 }}>{form.location}</Typography>
 							</Box>
 							<Box sx={{ display: "flex", gap: .8, flexWrap: "wrap" }}>
-								<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadSample(form)} sx={primaryButtonSx}>
-									{downloading === form.key ? "Preparing…" : "Download blank PDF"}
-								</Button>
+								{form.candidateStyleChoice ? (<>
+									<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadSample(form, "ORIGINAL")} sx={secondaryButtonSx}>
+										{downloading === `${form.key}:ORIGINAL` ? "Preparing…" : "Original blank"}
+									</Button>
+									<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadSample(form, "MODERN")} sx={primaryButtonSx}>
+										{downloading === `${form.key}:MODERN` ? "Preparing…" : "Modern blank"}
+									</Button>
+								</>) : (
+									<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadSample(form)} sx={primaryButtonSx}>
+										{downloading === `${form.key}:DEFAULT` ? "Preparing…" : "Download blank PDF"}
+									</Button>
+								)}
 								<Button variant="outlined" disabled={disabled} onClick={() => onNavigate(form.view)} sx={secondaryButtonSx}>
 									{disabled ? "Role restricted" : form.action}
 								</Button>
@@ -711,15 +730,15 @@ function CandidateDrawer({ candidateId, open, onClose, onChanged, canRecruit, ca
 		}
 	};
 
-	const downloadCandidateForm = async (formKey, fileName) => {
+	const downloadCandidateForm = async (formKey, fileName, style = "MODERN") => {
 		if (!candidateId) return;
 		setBusy(true);
 		setError("");
 		try {
-			const response = await hrflowApi.downloadCandidateForm(candidateId, formKey);
+			const response = await hrflowApi.downloadCandidateForm(candidateId, formKey, style);
 			saveBlob(response, fileName);
 		} catch (e) {
-			setError(apiMessage(e, "Candidate form PDF could not be downloaded."));
+			setError(await blobApiMessage(e, "Candidate form PDF could not be downloaded."));
 		} finally {
 			setBusy(false);
 		}
@@ -822,11 +841,24 @@ function CandidateApplicationView({ candidate, onDownloadForm, busy }) {
 	return (
 		<Box sx={{ display: "grid", gap: 1.5 }}>
 			<Paper variant="outlined" sx={sectionCardSx}>
-				<SectionTitle title="Official PDF copies" subtitle="Downloads use the exact original HR form pages and overlay this candidate's current saved data." />
-				<Box sx={{ display: "flex", gap: .8, flexWrap: "wrap" }}>
-					<Button startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("PERSONAL_DATA", `${candidatePrefix}_Personal_Data_Form.pdf`)} sx={secondaryButtonSx}>Personal Data PDF</Button>
-					<Button startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("EMPLOYMENT_APPLICATION", `${candidatePrefix}_Employment_Application.pdf`)} sx={secondaryButtonSx}>Employment Application PDF</Button>
-					<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("CANDIDATE_PACK", `${candidatePrefix}_Candidate_Form_Pack.pdf`)} sx={primaryButtonSx}>Candidate PDF pack</Button>
+				<SectionTitle title="Official PDF copies" subtitle="Both styles use the same saved candidate record. Original preserves the ALSORG form structure with corrected placement; Modern uses the new HRFlow A4 layout." />
+				<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 1 }}>
+					<Box sx={{ p: 1, borderRadius: 1.4, background: "var(--hr-surface)", border: `1px solid ${hrColors.line}` }}>
+						<Typography sx={{ fontSize: 11.5, fontWeight: 950, mb: .7 }}>Original ALSORG</Typography>
+						<Box sx={{ display: "flex", gap: .6, flexWrap: "wrap" }}>
+							<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("PERSONAL_DATA", `${candidatePrefix}_Personal_Data_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Personal</Button>
+							<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("EMPLOYMENT_APPLICATION", `${candidatePrefix}_Application_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Application</Button>
+							<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("CANDIDATE_PACK", `${candidatePrefix}_Candidate_Pack_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Full pack</Button>
+						</Box>
+					</Box>
+					<Box sx={{ p: 1, borderRadius: 1.4, background: "var(--hr-primary-soft)", border: "1px solid var(--hr-primary-border)" }}>
+						<Typography sx={{ fontSize: 11.5, fontWeight: 950, color: hrColors.blue, mb: .7 }}>Modern HRFlow</Typography>
+						<Box sx={{ display: "flex", gap: .6, flexWrap: "wrap" }}>
+							<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("PERSONAL_DATA", `${candidatePrefix}_Personal_Data_Modern.pdf`, "MODERN")} sx={secondaryButtonSx}>Personal</Button>
+							<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("EMPLOYMENT_APPLICATION", `${candidatePrefix}_Application_Modern.pdf`, "MODERN")} sx={secondaryButtonSx}>Application</Button>
+							<Button variant="contained" size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("CANDIDATE_PACK", `${candidatePrefix}_Candidate_Pack_Modern.pdf`, "MODERN")} sx={primaryButtonSx}>Full pack</Button>
+						</Box>
+					</Box>
 				</Box>
 			</Paper>
 			<Paper variant="outlined" sx={sectionCardSx}>
@@ -1022,7 +1054,7 @@ function OnboardingDrawer({ onboardingId, open, onClose, onChanged, canOperate, 
 	const downloadOnboardingForm = async (formKey, fileName) => {
 		setBusy(true); setError("");
 		try { const response = await hrflowApi.downloadOnboardingForm(onboardingId, formKey); saveBlob(response, fileName); }
-		catch (e) { setError(apiMessage(e, "Onboarding form PDF could not be downloaded.")); }
+		catch (e) { setError(await blobApiMessage(e, "Onboarding form PDF could not be downloaded.")); }
 		finally { setBusy(false); }
 	};
 	const pdfPrefix = detail?.candidateNumber || "Onboarding";
@@ -1064,23 +1096,22 @@ function EmployeeDrawer({ id, open, onClose }) {
 			.finally(() => setLoading(false));
 	}, [id, open]);
 
-	const downloadEmployeePdf = async (formKey, fileName) => {
-		setPdfBusy(formKey);
+	const downloadEmployeePdf = async (formKey, fileName, style = null) => {
+		const busyKey = `${formKey}:${style || "DEFAULT"}`;
+		setPdfBusy(busyKey);
 		setError("");
 		try {
-			const response = await hrflowApi.downloadEmployeeForm(id, formKey);
+			const response = await hrflowApi.downloadEmployeeForm(id, formKey, style);
 			saveBlob(response, fileName);
 		} catch (e) {
-			setError(apiMessage(e, "Employee form PDF could not be downloaded."));
+			setError(await blobApiMessage(e, "Employee form PDF could not be downloaded."));
 		} finally {
 			setPdfBusy("");
 		}
 	};
 
 	const prefix = employee?.employeeCode || "Employee";
-	const pdfButtons = [
-		["PERSONAL_DATA", "Personal Data", `${prefix}_Personal_Data.pdf`],
-		["EMPLOYMENT_APPLICATION", "Employment Application", `${prefix}_Employment_Application.pdf`],
+	const onboardingPdfButtons = [
 		["JOINING_REPORT", "Joining Report", `${prefix}_Joining_Report.pdf`],
 		["HOLIDAY_LEAVE", "Holiday & Leave", `${prefix}_Holiday_Leave.pdf`],
 		["ORIENTATION", "Orientation", `${prefix}_Orientation.pdf`],
@@ -1097,10 +1128,20 @@ function EmployeeDrawer({ id, open, onClose }) {
 		<Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} />{employee ? <Box sx={{ display: "grid", gap: 1.5 }}>
 			<Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Employee profile" /><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>{[["Status", humanize(employee.status)], ["Department", employee.department], ["Designation", employee.designation], ["Location", employee.location], ["Reporting manager", employee.reportingManager], ["Appointed by", employee.appointedBy], ["Date of joining", formatDate(employee.dateOfJoining)], ["DOB", formatDate(employee.dateOfBirth)], ["Mobile", employee.mobileNo], ["Email", employee.email], ["Present address", employee.presentAddress], ["Permanent address", employee.permanentAddress], ["FlowSuite user", employee.flowSuiteUserId || "Not linked"]].map(([l, v]) => <Info key={l} label={l} value={v} />)}</Box></Paper>
 			<Paper variant="outlined" sx={sectionCardSx}>
-				<SectionTitle title="Official filled HR forms" subtitle="Each PDF uses the original HR Module page format. The full personnel pack combines the candidate application and onboarding documents." />
-				<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-					{pdfButtons.map(([key, label, fileName]) => <Button key={key} size="small" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf(key, fileName)} sx={secondaryButtonSx}>{pdfBusy === key ? "Preparing…" : label}</Button>)}
-					<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("FULL_PERSONNEL_PACK", `${prefix}_Full_Personnel_Pack.pdf`)} sx={primaryButtonSx}>{pdfBusy === "FULL_PERSONNEL_PACK" ? "Preparing…" : "Full personnel PDF pack"}</Button>
+				<SectionTitle title="Official filled HR forms" subtitle="Candidate/application pages are available in Original and Modern styles. Onboarding/legal pages keep the approved HR form layout." />
+				<Box sx={{ display: "grid", gap: 1 }}>
+					<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+						<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("CANDIDATE_PACK", `${prefix}_Candidate_Pack_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Original candidate pack</Button>
+						<Button variant="contained" size="small" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("CANDIDATE_PACK", `${prefix}_Candidate_Pack_Modern.pdf`, "MODERN")} sx={primaryButtonSx}>Modern candidate pack</Button>
+					</Box>
+					<Divider />
+					<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+						{onboardingPdfButtons.map(([key, label, fileName]) => <Button key={key} size="small" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf(key, fileName)} sx={secondaryButtonSx}>{label}</Button>)}
+					</Box>
+					<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+						<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("FULL_PERSONNEL_PACK", `${prefix}_Full_Personnel_Pack_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Full personnel pack • Original</Button>
+						<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("FULL_PERSONNEL_PACK", `${prefix}_Full_Personnel_Pack_Modern.pdf`, "MODERN")} sx={primaryButtonSx}>Full personnel pack • Modern</Button>
+					</Box>
 				</Box>
 			</Paper>
 		</Box> : null}</>}</Box>

@@ -27,6 +27,7 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import hrflowApi from "./hrflowApi";
 import {
 	apiMessage,
+	blobApiMessage,
 	formatDateTime,
 	humanize,
 	saveBlob,
@@ -291,14 +292,14 @@ export default function HrCandidateApplicationPage({ token }) {
 		}
 	};
 
-	const downloadFormPdf = async (formKey, fileName) => {
+	const downloadFormPdf = async (formKey, fileName, style = "MODERN") => {
 		setSaving(true);
 		setError("");
 		try {
-			const response = await hrflowApi.publicDownloadCandidateForm(token, formKey);
+			const response = await hrflowApi.publicDownloadCandidateForm(token, formKey, style);
 			saveBlob(response, fileName);
 		} catch (e) {
-			setError(apiMessage(e, "Your application PDF could not be downloaded."));
+			setError(await blobApiMessage(e, "Your application PDF could not be downloaded."));
 		} finally {
 			setSaving(false);
 		}
@@ -484,15 +485,29 @@ export default function HrCandidateApplicationPage({ token }) {
 			<ErrorAlert error={error} onRetry={load} />
 			{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 2, borderRadius: 1.7 }}>{message}</Alert> : null}
 
-			<Paper sx={{ ...panelSx, p: 1.4, mb: 2 }}>
-				<Box sx={{ display: "flex", gap: .8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-					<Box>
-						<Typography sx={{ fontSize: 13.5, fontWeight: 900, color: hrColors.ink }}>PDF copy of your form</Typography>
-						<Typography sx={{ fontSize: 11.5, color: hrColors.muted }}>Uses the same official HR form layout supplied by ALSORG.</Typography>
+			<Paper sx={{ ...panelSx, p: { xs: 1.5, md: 1.8 }, mb: 2 }}>
+				<Box sx={{ display: "flex", justifyContent: "space-between", gap: 1.4, alignItems: "flex-start", flexWrap: "wrap" }}>
+					<Box sx={{ maxWidth: 620 }}>
+						<Typography sx={{ fontSize: 15.5, fontWeight: 950, color: hrColors.ink }}>Official PDF copies</Typography>
+						<Typography sx={{ mt: .35, fontSize: 12.2, lineHeight: 1.55, color: hrColors.muted }}>Choose the original ALSORG form with corrected alignment, or the modern HRFlow print layout. Both use the same saved application data.</Typography>
 					</Box>
-					<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
-						<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("PERSONAL_DATA", `${candidateNumber || "Candidate"}_Personal_Data_Form.pdf`)} sx={secondaryButtonSx}>Personal Data PDF</Button>
-						<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("EMPLOYMENT_APPLICATION", `${candidateNumber || "Candidate"}_Employment_Application.pdf`)} sx={secondaryButtonSx}>Employment Application PDF</Button>
+					<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1, width: { xs: "100%", md: "auto" } }}>
+						<Box sx={{ p: 1, borderRadius: 1.5, border: `1px solid ${hrColors.line}`, background: "var(--hr-surface)" }}>
+							<Typography sx={{ fontSize: 11.5, fontWeight: 950, color: hrColors.ink, mb: .7 }}>Original ALSORG</Typography>
+							<Box sx={{ display: "flex", gap: .6, flexWrap: "wrap" }}>
+								<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("PERSONAL_DATA", `${candidateNumber || "Candidate"}_Personal_Data_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Personal</Button>
+								<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("EMPLOYMENT_APPLICATION", `${candidateNumber || "Candidate"}_Application_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Application</Button>
+								<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("CANDIDATE_PACK", `${candidateNumber || "Candidate"}_Candidate_Pack_Original.pdf`, "ORIGINAL")} sx={secondaryButtonSx}>Full pack</Button>
+							</Box>
+						</Box>
+						<Box sx={{ p: 1, borderRadius: 1.5, border: "1px solid var(--hr-primary-border)", background: "var(--hr-primary-soft)" }}>
+							<Typography sx={{ fontSize: 11.5, fontWeight: 950, color: hrColors.blue, mb: .7 }}>Modern HRFlow</Typography>
+							<Box sx={{ display: "flex", gap: .6, flexWrap: "wrap" }}>
+								<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("PERSONAL_DATA", `${candidateNumber || "Candidate"}_Personal_Data_Modern.pdf`, "MODERN")} sx={secondaryButtonSx}>Personal</Button>
+								<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("EMPLOYMENT_APPLICATION", `${candidateNumber || "Candidate"}_Application_Modern.pdf`, "MODERN")} sx={secondaryButtonSx}>Application</Button>
+								<Button variant="contained" size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("CANDIDATE_PACK", `${candidateNumber || "Candidate"}_Candidate_Pack_Modern.pdf`, "MODERN")} sx={primaryButtonSx}>Full pack</Button>
+							</Box>
+						</Box>
 					</Box>
 				</Box>
 			</Paper>

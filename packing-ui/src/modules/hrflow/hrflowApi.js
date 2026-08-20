@@ -21,6 +21,15 @@ const id = (value, label = "ID") => {
 
 const token = (value) => id(value, "Token");
 
+const styledFormKey = (formKey, style) => {
+	const key = String(formKey || "").trim();
+	const cleanStyle = String(style || "").trim().toUpperCase();
+	if (!cleanStyle) return key;
+	if (["ORIGINAL", "CLASSIC", "LEGACY"].includes(cleanStyle)) return `${key}_ORIGINAL`;
+	if (["MODERN", "UPDATED", "NEW"].includes(cleanStyle)) return `${key}_MODERN`;
+	return key;
+};
+
 const downloadBlob = async (requestPromise) => {
 	const response = await requestPromise;
 	return response;
@@ -50,13 +59,13 @@ const hrflowApi = {
 		API.post(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/application-link`),
 	candidateAudit: (candidateId) =>
 		API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/audit`),
-	downloadFormTemplate: (formKey) =>
+	downloadFormTemplate: (formKey, style) =>
 		downloadBlob(
-			API.get(`${BASE}/candidates/reference/form-template/${id(formKey, "Form key")}`, { responseType: "blob" })
+			API.get(`${BASE}/candidates/reference/form-template/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
 		),
-	downloadCandidateForm: (candidateId, formKey) =>
+	downloadCandidateForm: (candidateId, formKey, style) =>
 		downloadBlob(
-			API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+			API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/form-pdf/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
 		),
 
 	listCandidateDocuments: (candidateId, includeArchived = false) =>
@@ -135,9 +144,9 @@ const hrflowApi = {
 		API.get(`${BASE}/employees`, { params: cleanParams(params) }),
 	getEmployee: (employeeId) =>
 		API.get(`${BASE}/employees/${id(employeeId, "Employee ID")}`),
-	downloadEmployeeForm: (employeeId, formKey) =>
+	downloadEmployeeForm: (employeeId, formKey, style) =>
 		downloadBlob(
-			API.get(`${BASE}/employees/${id(employeeId, "Employee ID")}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+			API.get(`${BASE}/employees/${id(employeeId, "Employee ID")}/form-pdf/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
 		),
 
 	publicGetApplication: (rawToken) =>
@@ -146,9 +155,9 @@ const hrflowApi = {
 		API.put(`${BASE}/public/applications/${token(rawToken)}`, body),
 	publicSubmitApplication: (rawToken, body) =>
 		API.post(`${BASE}/public/applications/${token(rawToken)}/submit`, body),
-	publicDownloadCandidateForm: (rawToken, formKey) =>
+	publicDownloadCandidateForm: (rawToken, formKey, style) =>
 		downloadBlob(
-			API.get(`${BASE}/public/applications/${token(rawToken)}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+			API.get(`${BASE}/public/applications/${token(rawToken)}/form-pdf/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
 		),
 	publicListDocuments: (rawToken) =>
 		API.get(`${BASE}/public/applications/${token(rawToken)}/documents`),

@@ -94,6 +94,26 @@ export const apiMessage = (error, fallback = "Something went wrong.") =>
 	error?.message ||
 	fallback;
 
+export const blobApiMessage = async (error, fallback = "Something went wrong.") => {
+	const data = error?.response?.data;
+	if (typeof Blob !== "undefined" && data instanceof Blob) {
+		try {
+			const text = await data.text();
+			if (text) {
+				try {
+					const json = JSON.parse(text);
+					return json?.message || json?.error || text || fallback;
+				} catch {
+					return text;
+				}
+			}
+		} catch {
+			// Fall through to the ordinary Axios error message.
+		}
+	}
+	return apiMessage(error, fallback);
+};
+
 export const pageContent = (response) => response?.data?.content || [];
 export const totalElements = (response) => Number(response?.data?.totalElements || 0);
 
