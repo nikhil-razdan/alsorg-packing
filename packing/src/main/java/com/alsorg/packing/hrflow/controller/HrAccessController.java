@@ -12,7 +12,7 @@ import java.util.UUID;
 @RequestMapping("/api/hrflow/access-grants")
 public class HrAccessController {
 
-    private final HrAccessGrantService service;
+    private final HrAccessGrantService service
 
     public HrAccessController(HrAccessGrantService service) {
         this.service = service;
