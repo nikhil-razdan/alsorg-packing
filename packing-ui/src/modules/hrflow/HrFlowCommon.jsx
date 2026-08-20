@@ -91,6 +91,7 @@ const variables = (mode) => {
 		"--hr-scroll-track": dark ? "rgba(255,255,255,.025)" : "rgba(15,23,42,.035)",
 		"--hr-scroll-thumb": dark ? "rgba(96,165,250,.46)" : "rgba(59,130,246,.42)",
 		"--hr-scroll-thumb-hover": dark ? "rgba(125,211,252,.78)" : "rgba(37,99,235,.68)",
+		"--hr-scroll-corner": dark ? "#081424" : "#eef3f9",
 	};
 };
 
@@ -245,6 +246,30 @@ export function HrFlowThemeProvider({ children }) {
 							backgroundClip: "padding-box",
 						},
 						"& *::-webkit-scrollbar-thumb:hover": {
+							background: "var(--hr-scroll-thumb-hover)",
+							backgroundClip: "padding-box",
+						},
+						"& *::-webkit-scrollbar-corner": {
+							background: "var(--hr-scroll-corner)",
+						},
+						"& .hr-sidebar-scroll": {
+							scrollbarWidth: "thin",
+							scrollbarColor: "var(--hr-scroll-thumb) transparent",
+							scrollbarGutter: "stable",
+						},
+						"& .hr-sidebar-scroll::-webkit-scrollbar": {
+							width: 8,
+						},
+						"& .hr-sidebar-scroll::-webkit-scrollbar-track": {
+							background: "transparent",
+							marginBlock: 6,
+						},
+						"& .hr-sidebar-scroll::-webkit-scrollbar-thumb": {
+							border: "2px solid transparent",
+							background: "var(--hr-scroll-thumb)",
+							backgroundClip: "padding-box",
+						},
+						"& .hr-sidebar-scroll::-webkit-scrollbar-thumb:hover": {
 							background: "var(--hr-scroll-thumb-hover)",
 							backgroundClip: "padding-box",
 						},

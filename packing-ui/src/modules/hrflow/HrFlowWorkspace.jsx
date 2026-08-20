@@ -41,6 +41,8 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import MenuIcon from "@mui/icons-material/Menu";
+import AppsIcon from "@mui/icons-material/Apps";
 
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
@@ -89,6 +91,41 @@ const NAV = [
 	{ key: "employees", label: "Employees", icon: <BadgeOutlinedIcon /> },
 ];
 
+
+const HR_HEADER = Object.freeze({
+	dashboard: {
+		title: "HRFlow Dashboard",
+		subtitle: "Recruitment, joining, onboarding and employee control.",
+	},
+	candidates: {
+		title: "Candidates",
+		subtitle: "Applications, documents, recruitment stages and selection.",
+	},
+	forms: {
+		title: "HR Forms",
+		subtitle: "Integrated candidate and new-joinee forms from the HR pack.",
+	},
+	onboarding: {
+		title: "Onboarding",
+		subtitle: "Joining, policy, NDA, declaration, orientation and feedback.",
+	},
+	employees: {
+		title: "Employees",
+		subtitle: "Employee master created from confirmed joining records.",
+	},
+	access: {
+		title: "HR Access",
+		subtitle: "HRFlow-specific roles and permission administration.",
+	},
+});
+
+const HR_SECTION_LABELS = Object.freeze({
+	HOME: "Home",
+	PEOPLE: "People",
+	WORKFLOW: "Workflow",
+	ADMIN: "Administration",
+});
+
 const hrAccessRoles = (payload) => {
 	const raw = payload?.roles ?? payload?.hrRoles ?? payload?.accessRoles ?? [];
 	return Array.isArray(raw) ? raw.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean) : [];
@@ -120,11 +157,12 @@ const blankCandidate = {
 
 function HrFlowWorkspaceContent() {
 	const navigate = useNavigate();
-	const { logout } = useAuth();
+	const { user, logout } = useAuth();
 	const [accessLoading, setAccessLoading] = useState(true);
 	const [access, setAccess] = useState(null);
 	const [accessError, setAccessError] = useState("");
 	const [view, setView] = useState("dashboard");
+	const [collapsed, setCollapsed] = useState(false);
 
 	const loadAccess = useCallback(async () => {
 		setAccessLoading(true);
@@ -141,16 +179,38 @@ function HrFlowWorkspaceContent() {
 
 	useEffect(() => { loadAccess(); }, [loadAccess]);
 
-	if (accessLoading) return <Box sx={{ minHeight: "100vh", background: "var(--hr-page-bg)" }}><LoadingBlock minHeight="100vh" /></Box>;
+	if (accessLoading) {
+		return (
+			<Box sx={{ minHeight: "100vh", background: "var(--hr-page-bg)" }}>
+				<LoadingBlock minHeight="100vh" />
+			</Box>
+		);
+	}
 
 	if (accessError || !hasHrAccess(access)) {
 		return (
 			<Box sx={{ minHeight: "100vh", background: "var(--hr-page-bg)", p: 2, display: "grid", placeItems: "center" }}>
 				<Paper sx={{ ...panelSx, p: 3, width: "min(560px,100%)" }}>
 					<HrBrand />
-					<Typography sx={{ mt: 2.5, fontSize: 23, fontWeight: 950, color: hrColors.ink }}>HRFlow access required</Typography>
-					<Alert severity="warning" sx={{ mt: 1.5, borderRadius: 1.6 }}>{accessError || "Your FlowSuite account does not currently have an active HRFlow access grant."}</Alert>
-					<Box sx={{ mt: 2, display: "flex", gap: 1 }}><Button variant="outlined" startIcon={<ArrowBackOutlinedIcon />} onClick={() => navigate("/modules")} sx={secondaryButtonSx}>Module Hub</Button><Button variant="contained" onClick={loadAccess} sx={primaryButtonSx}>Check again</Button></Box>
+					<Typography sx={{ mt: 2.5, fontSize: 23, fontWeight: 950, color: hrColors.ink }}>
+						HRFlow access required
+					</Typography>
+					<Alert severity="warning" sx={{ mt: 1.5, borderRadius: 1.6 }}>
+						{accessError || "Your FlowSuite account does not currently have an active HRFlow access grant."}
+					</Alert>
+					<Box sx={{ mt: 2, display: "flex", gap: 1 }}>
+						<Button
+							variant="outlined"
+							startIcon={<ArrowBackOutlinedIcon />}
+							onClick={() => navigate("/modules")}
+							sx={secondaryButtonSx}
+						>
+							Module Hub
+						</Button>
+						<Button variant="contained" onClick={loadAccess} sx={primaryButtonSx}>
+							Check again
+						</Button>
+					</Box>
 				</Paper>
 			</Box>
 		);
@@ -164,31 +224,151 @@ function HrFlowWorkspaceContent() {
 	const hodOnly = !canOperate && roles.includes("HOD");
 	const canOrientation = canOperate || hodOnly;
 	const canViewOnboarding = canOperate || roles.includes("HOD");
+
 	const navItems = [
-		NAV[0],
-		NAV[1],
-		NAV[2],
-		...(canViewOnboarding ? [NAV[3], NAV[4]] : []),
-		...(globalAdmin ? [{ key: "access", label: "HR Access", icon: <AdminPanelSettingsOutlinedIcon /> }] : []),
+		{ ...NAV[0], section: "HOME" },
+		{ ...NAV[1], section: "PEOPLE" },
+		{ ...NAV[2], section: "WORKFLOW" },
+		...(canViewOnboarding ? [
+			{ ...NAV[3], section: "WORKFLOW" },
+			{ ...NAV[4], section: "PEOPLE" },
+		] : []),
+		...(globalAdmin ? [{ key: "access", label: "HR Access", icon: <AdminPanelSettingsOutlinedIcon />, section: "ADMIN" }] : []),
 	];
 
-	const handleLogout = async () => { await logout(); navigate("/login", { replace: true }); };
+	const groupedNav = navItems.reduce((groups, item) => {
+		const section = item.section || "WORKFLOW";
+		if (!groups[section]) groups[section] = [];
+		groups[section].push(item);
+		return groups;
+	}, { HOME: [], PEOPLE: [], WORKFLOW: [], ADMIN: [] });
+
+	const currentHeader = HR_HEADER[view] || HR_HEADER.dashboard;
+	const roleLabel = globalAdmin
+		? "Administrator"
+		: roles.length
+			? humanize(roles[0])
+			: "HRFlow User";
+	const roleSummary = globalAdmin ? "GLOBAL ADMIN" : roles.map(humanize).join(" • ");
+	const userName = user?.username || user?.name || "User";
+	const avatarLetter = String(userName).trim().charAt(0).toUpperCase() || "U";
+
+	const handleLogout = async () => {
+		await logout();
+		navigate("/login", { replace: true });
+	};
+
+	const renderNavItem = (item) => {
+		const active = view === item.key;
+		return (
+			<Tooltip key={item.key} title={collapsed ? item.label : ""} placement="right">
+				<Button
+					onClick={() => setView(item.key)}
+					sx={hrSidebarLinkSx(active, collapsed)}
+				>
+					<Box component="span" sx={hrSidebarIconSx}>
+						{item.icon}
+					</Box>
+					{!collapsed ? <Box component="span">{item.label}</Box> : null}
+				</Button>
+			</Tooltip>
+		);
+	};
 
 	return (
-		<Box sx={{ minHeight: "100vh", background: "var(--hr-page-bg)", color: hrColors.ink }}>
-			<Box sx={{ height: 64, px: { xs: 1.5, md: 2.5 }, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, background: "var(--hr-card-bg)", borderBottom: `1px solid ${hrColors.line}`, position: "sticky", top: 0, zIndex: 20 }}>
-				<Box sx={{ display: "flex", gap: 1.2, alignItems: "center" }}><Button startIcon={<ArrowBackOutlinedIcon />} onClick={() => navigate("/modules")} sx={secondaryButtonSx}>Modules</Button><HrBrand compact /></Box>
-				<Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><Chip label={globalAdmin ? "GLOBAL ADMIN" : roles.map(humanize).join(" • ")} size="small" sx={{ display: { xs: "none", md: "inline-flex" }, borderRadius: 1.2, fontWeight: 850, background: "var(--hr-primary-soft)", color: hrColors.blue }} /><ThemeToggleButton /><Button startIcon={<LogoutOutlinedIcon />} onClick={handleLogout} sx={secondaryButtonSx}>Logout</Button></Box>
+		<Box sx={hrShellSx}>
+			<Box component="aside" sx={hrSidebarSx(collapsed)}>
+				<Box sx={hrLogoSx}>
+					<Box sx={hrMarkSx}>H</Box>
+					{!collapsed ? (
+						<Box sx={{ minWidth: 0 }}>
+							<Typography sx={hrLogoTitleSx}>HRFlow</Typography>
+							<Typography sx={hrMutedSx}>People Operations</Typography>
+						</Box>
+					) : null}
+				</Box>
+
+				<Box sx={hrSidebarIdentitySx(collapsed)}>
+					<Box sx={hrAvatarSx}>{avatarLetter}</Box>
+					{!collapsed ? (
+						<Box sx={{ minWidth: 0 }}>
+							<Typography noWrap sx={{ color: "var(--hr-text)", fontWeight: 900, fontSize: 12.5 }}>
+								{userName}
+							</Typography>
+							<Typography noWrap sx={hrMutedSx}>{roleLabel}</Typography>
+						</Box>
+					) : null}
+				</Box>
+
+				<Divider sx={{ borderColor: "var(--hr-border)" }} />
+
+				<Box
+					component="nav"
+					className="hr-sidebar-scroll"
+					sx={{ py: .75, overflowY: "auto", overflowX: "hidden", flex: 1, scrollbarGutter: "stable" }}
+				>
+					{["HOME", "PEOPLE", "WORKFLOW", "ADMIN"].map((section) => {
+						const sectionItems = groupedNav[section] || [];
+						if (!sectionItems.length) return null;
+						return (
+							<Box key={section} sx={{ mb: .6 }}>
+								{!collapsed ? (
+									<Typography sx={hrSectionTitleSx}>
+										{HR_SECTION_LABELS[section] || section}
+									</Typography>
+								) : null}
+								{sectionItems.map(renderNavItem)}
+							</Box>
+						);
+					})}
+				</Box>
+
+				<Divider sx={{ borderColor: "var(--hr-border)" }} />
+				<Button
+					onClick={() => setCollapsed((value) => !value)}
+					sx={{ ...secondaryButtonSx, m: .8, minWidth: 0, justifyContent: collapsed ? "center" : "flex-start" }}
+				>
+					<MenuIcon />
+					{!collapsed ? <Box component="span" sx={{ ml: .8 }}>Collapse</Box> : null}
+				</Button>
 			</Box>
 
-			<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "220px minmax(0,1fr)" }, maxWidth: 1540, mx: "auto" }}>
-				<Box sx={{ p: { xs: 1, md: 1.5 }, borderRight: { md: `1px solid ${hrColors.line}` }, background: { md: "var(--hr-sidebar-bg)" }, minHeight: { md: "calc(100vh - 64px)" }, position: { md: "sticky" }, top: { md: 64 }, alignSelf: "start" }}>
-					<Box sx={{ display: { xs: "flex", md: "grid" }, gap: .7, overflowX: { xs: "auto", md: "visible" }, pb: { xs: .5, md: 0 } }}>
-						{navItems.map((item) => <Button key={item.key} startIcon={item.icon} onClick={() => setView(item.key)} sx={{ justifyContent: "flex-start", whiteSpace: "nowrap", minWidth: { xs: "max-content", md: "auto" }, borderRadius: 1.5, textTransform: "none", fontWeight: view === item.key ? 900 : 750, color: view === item.key ? hrColors.blue : "var(--hr-text-secondary)", background: view === item.key ? "var(--hr-primary-soft)" : "transparent", px: 1.4, py: 1.1, "&:hover": { background: view === item.key ? "var(--hr-primary-soft)" : "var(--hr-hover)" } }}>{item.label}</Button>)}
+			<Box sx={hrMainSx(collapsed)}>
+				<Box component="header" sx={hrHeaderSx}>
+					<Box sx={{ minWidth: 0 }}>
+						<Typography sx={{ color: "var(--hr-text)", fontWeight: 950, fontSize: 17 }}>
+							{currentHeader.title}
+						</Typography>
+						<Typography sx={hrMutedSx}>{currentHeader.subtitle}</Typography>
+					</Box>
+
+					<Box sx={{ display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+						<Chip
+							label={roleSummary || "HRFLOW"}
+							size="small"
+							sx={hrRoleChipSx}
+						/>
+						<ThemeToggleButton />
+						<Tooltip title="Modules">
+							<Button
+								onClick={() => navigate("/modules")}
+								sx={{ ...secondaryButtonSx, minWidth: 38, px: .8 }}
+							>
+								<AppsIcon />
+							</Button>
+						</Tooltip>
+						<Tooltip title="Logout">
+							<Button
+								onClick={handleLogout}
+								sx={{ ...secondaryButtonSx, minWidth: 38, px: .8 }}
+							>
+								<LogoutOutlinedIcon />
+							</Button>
+						</Tooltip>
 					</Box>
 				</Box>
 
-				<Box sx={{ p: { xs: 1.4, md: 2.5 }, minWidth: 0 }}>
+				<Box component="main" sx={hrContentSx}>
 					{view === "dashboard" ? <DashboardView onNavigate={setView} canViewOnboarding={canViewOnboarding} /> : null}
 					{view === "candidates" ? <CandidatesView canRecruit={canRecruit} canOperate={canOperate} globalAdmin={globalAdmin} /> : null}
 					{view === "forms" ? <FormsView onNavigate={setView} canViewOnboarding={canViewOnboarding} /> : null}
@@ -200,7 +380,6 @@ function HrFlowWorkspaceContent() {
 		</Box>
 	);
 }
-
 export default function HrFlowWorkspace() {
 	return (
 		<HrFlowThemeProvider>
@@ -645,6 +824,164 @@ function Cell({ children }) { return <Box sx={{minWidth:0,fontSize:12.5,color:hr
 function SectionTitle({ title, subtitle }) { return <Box sx={{mb:1.25}}><Typography sx={{fontSize:15.5,fontWeight:950,color:hrColors.ink}}>{title}</Typography>{subtitle?<Typography sx={{mt:.3,fontSize:11.8,color:hrColors.muted,lineHeight:1.55}}>{subtitle}</Typography>:null}</Box>; }
 function Info({ label, value }) { return <Box sx={{p:.9,borderRadius:1.2,background:"var(--hr-surface)",border:`1px solid ${hrColors.line}`}}><Typography sx={{fontSize:10.5,fontWeight:800,color:hrColors.muted}}>{label}</Typography><Typography sx={{mt:.2,fontSize:12.2,fontWeight:800,color:hrColors.ink,whiteSpace:"pre-wrap"}}>{value||"—"}</Typography></Box>; }
 function ArraySummary({ title, rows, render }) { return <Paper variant="outlined" sx={sectionCardSx}><SectionTitle title={title}/>{rows?.length?<Box sx={{display:"grid",gap:.6}}>{rows.map((r,i)=><Box key={i} sx={{p:.9,borderRadius:1.1,background:"var(--hr-surface)",fontSize:12.3}}>{render(r)}</Box>)}</Box>:<Typography sx={subCellSx}>No entries.</Typography>}</Paper>; }
+
+
+const hrShellSx = {
+	minHeight: "100vh",
+	background: "var(--hr-page-bg)",
+	color: "var(--hr-text)",
+};
+
+const hrSidebarSx = (collapsed) => ({
+	position: "fixed",
+	inset: "0 auto 0 0",
+	width: collapsed ? 64 : 208,
+	zIndex: 1200,
+	display: "flex",
+	flexDirection: "column",
+	background: "var(--hr-sidebar-bg)",
+	borderRight: "1px solid var(--hr-border)",
+	transition: "width .2s ease",
+});
+
+const hrMainSx = (collapsed) => ({
+	ml: collapsed ? "64px" : "208px",
+	minHeight: "100vh",
+	transition: "margin-left .2s ease",
+});
+
+const hrLogoSx = {
+	minHeight: 58,
+	px: 1.15,
+	py: .9,
+	display: "flex",
+	gap: .8,
+	alignItems: "center",
+};
+
+const hrMarkSx = {
+	width: 32,
+	height: 32,
+	borderRadius: 2,
+	display: "grid",
+	placeItems: "center",
+	background: "var(--hr-primary)",
+	color: "#fff",
+	fontWeight: 950,
+};
+
+const hrLogoTitleSx = {
+	color: "var(--hr-text)",
+	fontWeight: 950,
+	fontSize: 14.5,
+	lineHeight: 1.1,
+};
+
+const hrMutedSx = {
+	color: "var(--hr-text-muted)",
+	fontSize: 9.5,
+	fontWeight: 700,
+};
+
+const hrSidebarIdentitySx = (collapsed) => ({
+	px: collapsed ? .7 : 1,
+	py: .85,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: collapsed ? "center" : "flex-start",
+	gap: .75,
+});
+
+const hrAvatarSx = {
+	width: 30,
+	height: 30,
+	flex: "0 0 auto",
+	borderRadius: "50%",
+	display: "grid",
+	placeItems: "center",
+	color: "var(--hr-primary-text)",
+	background: "var(--hr-primary-soft)",
+	border: "1px solid var(--hr-primary-border)",
+	fontSize: 11,
+	fontWeight: 950,
+};
+
+const hrSectionTitleSx = {
+	px: 1.15,
+	pt: .55,
+	pb: .2,
+	color: "var(--hr-text-muted)",
+	fontSize: 8.8,
+	fontWeight: 950,
+	letterSpacing: ".08em",
+	textTransform: "uppercase",
+};
+
+const hrSidebarIconSx = {
+	display: "grid",
+	placeItems: "center",
+	flex: "0 0 auto",
+	"& svg": { fontSize: 19 },
+};
+
+const hrSidebarLinkSx = (active, collapsed) => ({
+	width: "calc(100% - 14px)",
+	minWidth: 0,
+	minHeight: 34,
+	mx: .875,
+	my: .25,
+	px: collapsed ? 1.45 : 1.1,
+	py: .8,
+	borderRadius: 1,
+	justifyContent: collapsed ? "center" : "flex-start",
+	gap: collapsed ? 0 : 1.1,
+	textTransform: "none",
+	fontSize: 10.8,
+	fontWeight: active ? 900 : 760,
+	color: active ? "var(--hr-primary-text)" : "var(--hr-text-secondary)",
+	background: active ? "var(--hr-primary-soft)" : "transparent",
+	border: active ? "1px solid var(--hr-primary-border)" : "1px solid transparent",
+	whiteSpace: "nowrap",
+	overflow: "hidden",
+	transition: "background .14s ease,color .14s ease,border-color .14s ease",
+	"&:hover": {
+		background: active ? "var(--hr-primary-soft)" : "var(--hr-hover)",
+		borderColor: active ? "var(--hr-primary-border)" : "transparent",
+	},
+});
+
+const hrHeaderSx = {
+	minHeight: 58,
+	px: { xs: 1.25, md: 1.7 },
+	py: .65,
+	position: "sticky",
+	top: 0,
+	zIndex: 1100,
+	display: "flex",
+	justifyContent: "space-between",
+	gap: 1.2,
+	alignItems: "center",
+	background: "var(--hr-header-bg)",
+	backdropFilter: "blur(14px)",
+	borderBottom: "1px solid var(--hr-border)",
+};
+
+const hrContentSx = {
+	p: { xs: 1.05, md: 1.45 },
+	maxWidth: 1640,
+	mx: "auto",
+	minWidth: 0,
+};
+
+const hrRoleChipSx = {
+	display: { xs: "none", md: "inline-flex" },
+	borderRadius: 1.2,
+	fontWeight: 850,
+	fontSize: 10,
+	color: "var(--hr-primary-text)",
+	background: "var(--hr-primary-soft)",
+	border: "1px solid var(--hr-primary-border)",
+};
 
 const dangerButtonSx = {
 	...secondaryButtonSx,
