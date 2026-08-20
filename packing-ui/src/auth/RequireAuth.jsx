@@ -6,12 +6,30 @@ import {
 import { useAuth } from "./AuthContext";
 import HrFlowPublicEntry from "../modules/hrflow/HrFlowPublicEntry";
 
-const isHrPublicPath = (pathname = "") => {
-	const clean = String(pathname || "").trim().toLowerCase();
-	return (
-		clean.includes("/hr/apply/") ||
-		clean.includes("/hr/onboarding/")
-	);
+const isHrPublicPath = (location) => {
+	const candidates = [
+		String(location?.pathname || ""),
+		String(location?.hash || ""),
+		typeof window !== "undefined"
+			? String(window.location?.pathname || "")
+			: "",
+		typeof window !== "undefined"
+			? String(window.location?.hash || "")
+			: "",
+	];
+
+	return candidates.some((value) => {
+		const clean = value
+			.toLowerCase()
+			.replace(/^#/, "")
+			.replace(/\/+/g, "/")
+			.replace(/\/+$/, "");
+
+		return (
+			/(^|\/)hr\/apply\/[^/]+/.test(clean) ||
+			/(^|\/)hr\/onboarding\/[^/]+/.test(clean)
+		);
+	});
 };
 
 function AuthLoadingScreen() {
@@ -22,10 +40,12 @@ function AuthLoadingScreen() {
 				display: "flex",
 				alignItems: "center",
 				justifyContent: "center",
-				background: "linear-gradient(135deg,#020617,#0f172a,#111827)",
+				background:
+					"linear-gradient(135deg,#020617,#0f172a,#111827)",
 				color: "#fff",
 				fontWeight: 800,
-				fontFamily: "Inter, system-ui, sans-serif",
+				fontFamily:
+					"Inter, system-ui, sans-serif",
 			}}
 		>
 			Loading session...
@@ -33,23 +53,30 @@ function AuthLoadingScreen() {
 	);
 }
 
-export default function RequireAuth({ children }) {
+export default function RequireAuth({
+	children,
+}) {
 	const location = useLocation();
+
 	const {
 		isLoggedIn,
 		authLoading,
 	} = useAuth();
 
 	/*
-	 * HRFlow candidate and onboarding links are public frontend routes.
-	 * Their backend APIs are secured by the short-lived HRFlow token itself.
+	 * SECONDARY DEFENSIVE GATE
 	 *
-	 * This bypass protects deployments where the app's catch-all route is
-	 * wrapped in RequireAuth. The explicit /hr/* route in App.jsx is still
-	 * required as the primary route so a top-level wildcard Navigate cannot
-	 * swallow these links.
+	 * AuthContext is now the primary direct-link gate for HRFlow public token
+	 * pages. This check is retained so the links also remain public if this
+	 * guard is rendered directly by an authenticated wildcard route.
+	 *
+	 * The match is limited strictly to:
+	 *   /hr/apply/{token}
+	 *   /hr/onboarding/{token}
+	 *
+	 * Every other FlowSuite route keeps the original authentication behaviour.
 	 */
-	if (isHrPublicPath(location.pathname)) {
+	if (isHrPublicPath(location)) {
 		return <HrFlowPublicEntry />;
 	}
 
@@ -63,7 +90,9 @@ export default function RequireAuth({ children }) {
 				to="/login"
 				replace
 				state={{
-					from: location.pathname + location.search,
+					from:
+						location.pathname +
+						location.search,
 				}}
 			/>
 		);

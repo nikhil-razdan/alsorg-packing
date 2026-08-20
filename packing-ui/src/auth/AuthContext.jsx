@@ -10,6 +10,21 @@ import {
 import API from "../services/api";
 import { normalizeRole } from "../utils/permissions";
 
+/*
+ * HRFLOW PUBLIC-PORTAL IMPORTS
+ *
+ * These are used only when the browser is opened directly on:
+ *   /hr/apply/{token}
+ *   /hr/onboarding/{token}
+ *
+ * AuthProvider intercepts those two exact public flows before the ordinary
+ * FlowSuite router/authenticated application is rendered. All ordinary
+ * FlowSuite routes continue through the unchanged authentication path below.
+ */
+import HrCandidateApplicationPage from "../modules/hrflow/HrCandidateApplicationPage";
+import HrOnboardingPortalPage from "../modules/hrflow/HrOnboardingPortalPage";
+import { HrFlowThemeProvider } from "../modules/hrflow/HrFlowCommon";
+
 const AuthContext = createContext(null);
 
 const normalizeValues = (values) => {
@@ -209,6 +224,89 @@ const unwrapAuthResponse = (response) => {
 	);
 };
 
+/*
+ * Reads only the two HRFlow token portals.
+ *
+ * It supports:
+ *   /hr/apply/{token}
+ *   /hr/onboarding/{token}
+ *
+ * It also tolerates a deployment basename before /hr and HashRouter-style
+ * URLs such as #/hr/apply/{token}. It deliberately does NOT treat the
+ * authenticated internal HR module (/modules?module=hrflow) as public.
+ */
+const resolveHrPublicPortal = () => {
+	if (typeof window === "undefined") {
+		return null;
+	}
+
+	const sources = [
+		String(window.location.pathname || ""),
+		String(window.location.hash || "").replace(/^#/, ""),
+	];
+
+	for (const source of sources) {
+		const path = source
+			.split("?")[0]
+			.replace(/\/+/g, "/");
+
+		const parts = path
+			.split("/")
+			.filter(Boolean);
+
+		const hrIndex = parts.findIndex(
+			(part) =>
+				String(part || "")
+					.toLowerCase() === "hr"
+		);
+
+		if (hrIndex < 0) {
+			continue;
+		}
+
+		const mode = String(
+			parts[hrIndex + 1] || ""
+		).toLowerCase();
+
+		if (
+			mode !== "apply" &&
+			mode !== "onboarding"
+		) {
+			continue;
+		}
+
+		const encodedToken = parts
+			.slice(hrIndex + 2)
+			.join("/")
+			.trim();
+
+		if (!encodedToken) {
+			continue;
+		}
+
+		let rawToken = encodedToken;
+
+		try {
+			rawToken =
+				decodeURIComponent(
+					encodedToken
+				);
+		} catch {
+			/*
+			 * Base64URL tokens normally need no decoding.
+			 * Keep the original value if a malformed percent sequence exists.
+			 */
+		}
+
+		return {
+			mode,
+			token: rawToken,
+		};
+	}
+
+	return null;
+};
+
 export function AuthProvider({
 	children,
 }) {
@@ -219,6 +317,15 @@ export function AuthProvider({
 		authLoading,
 		setAuthLoading,
 	] = useState(true);
+
+	/*
+	 * Resolve once for this page load. Public candidate/joinee links are opened
+	 * as standalone pages, so they must not be forced through FlowSuite login.
+	 */
+	const publicHrPortal = useMemo(
+		() => resolveHrPublicPortal(),
+		[]
+	);
 
 	const setUser = useCallback(
 		(nextUser) => {
@@ -402,9 +509,29 @@ export function AuthProvider({
 	);
 
 	useEffect(() => {
-		loadMe();
+		/*
+		 * Critical HRFlow isolation:
+		 *
+		 * Candidate/joinee links are authenticated by their HRFlow token, not
+		 * by /auth/me. Do not initialise the ordinary FlowSuite session on
+		 * those two standalone public pages.
+		 */
+		if (publicHrPortal) {
+			setAuthLoading(false);
+		} else {
+			loadMe();
+		}
 
 		const onUnauthorized = () => {
+			/*
+			 * A 401 from an invalid/expired HRFlow public token must be shown
+			 * inside the public portal. It must not turn into a FlowSuite login
+			 * redirect or clear a user's stored FlowSuite session.
+			 */
+			if (resolveHrPublicPortal()) {
+				return;
+			}
+
 			clearSession();
 		};
 
@@ -422,6 +549,7 @@ export function AuthProvider({
 	}, [
 		clearSession,
 		loadMe,
+		publicHrPortal,
 	]);
 
 	const logout = useCallback(
@@ -535,6 +663,41 @@ export function AuthProvider({
 			logout,
 		]
 	);
+
+	/*
+	 * PRIMARY PUBLIC-HR GATE
+	 *
+	 * This is intentionally above the application's normal router content.
+	 * Therefore even if App.jsx currently has an authenticated wildcard or
+	 * login redirect, a direct /hr/apply/... or /hr/onboarding/... browser
+	 * request renders the correct token portal instead.
+	 *
+	 * No PackFlow/BOMFlow/MatFlow/other-module route is changed.
+	 */
+	if (publicHrPortal) {
+		return (
+			<AuthContext.Provider
+				value={value}
+			>
+				<HrFlowThemeProvider>
+					{publicHrPortal.mode ===
+					"apply" ? (
+						<HrCandidateApplicationPage
+							token={
+								publicHrPortal.token
+							}
+						/>
+					) : (
+						<HrOnboardingPortalPage
+							token={
+								publicHrPortal.token
+							}
+						/>
+					)}
+				</HrFlowThemeProvider>
+			</AuthContext.Provider>
+		);
+	}
 
 	return (
 		<AuthContext.Provider
