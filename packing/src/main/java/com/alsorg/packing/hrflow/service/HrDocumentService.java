@@ -42,12 +42,13 @@ public class HrDocumentService {
             HrCandidateStage.SELECTED,
             HrCandidateStage.OFFERED,
             HrCandidateStage.PRE_JOINING,
-            HrCandidateStage.JOINED
-    );
+            HrCandidateStage.JOINED);
 
     /**
-     * These document types are written only by HRFLOW itself. Candidates and HR users
-     * must not be able to spoof them through the ordinary multipart upload endpoint.
+     * These document types are written only by HRFLOW itself. Candidates and HR
+     * users
+     * must not be able to spoof them through the ordinary multipart upload
+     * endpoint.
      */
     private static final EnumSet<HrDocumentType> MANAGED_WORKFLOW_TYPES = EnumSet.of(
             HrDocumentType.ONBOARDING_POLICY_SNAPSHOT,
@@ -61,8 +62,7 @@ public class HrDocumentService {
             HrDocumentType.EMPLOYMENT_DECLARATION_SNAPSHOT,
             HrDocumentType.EMPLOYMENT_DECLARATION_ACCEPTANCE,
             HrDocumentType.JOINING_REPORT_SNAPSHOT,
-            HrDocumentType.ONBOARDING_COMPLETION_RECORD
-    );
+            HrDocumentType.ONBOARDING_COMPLETION_RECORD);
 
     private final HrCandidateDocumentRepository repository;
     private final HrAccessService accessService;
@@ -79,8 +79,7 @@ public class HrDocumentService {
             HrFlowProperties properties,
             HrCryptoService cryptoService,
             EntityManager entityManager,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.repository = repository;
         this.accessService = accessService;
         this.auditService = auditService;
@@ -97,8 +96,7 @@ public class HrDocumentService {
                 HrAccessRole.HR_HEAD,
                 HrAccessRole.HR_EXECUTIVE,
                 HrAccessRole.RECRUITER,
-                HrAccessRole.HOD
-        );
+                HrAccessRole.HOD);
         requireCandidate(candidateId);
 
         List<HrCandidateDocument> rows = includeArchived
@@ -113,14 +111,12 @@ public class HrDocumentService {
             UUID candidateId,
             HrDocumentType documentType,
             String remarks,
-            MultipartFile file
-    ) {
+            MultipartFile file) {
         accessService.requireAny(
                 HrAccessRole.HR_ADMIN,
                 HrAccessRole.HR_HEAD,
                 HrAccessRole.HR_EXECUTIVE,
-                HrAccessRole.RECRUITER
-        );
+                HrAccessRole.RECRUITER);
         requireCandidate(candidateId);
         rejectManagedUploadType(documentType);
         return storeUploaded(candidateId, documentType, remarks, file, accessService.actor());
@@ -131,23 +127,20 @@ public class HrDocumentService {
             HrCandidate candidate,
             HrDocumentType documentType,
             String remarks,
-            MultipartFile file
-    ) {
-        if (candidate == null || candidate.getId() == null) {
-            throw HrFlowException.notFound("Candidate was not found.");
-        }
-        if (!PUBLIC_DOCUMENT_STAGES.contains(candidate.getStage())) {
-            throw HrFlowException.conflict("Documents can no longer be changed for this candidate.");
-        }
+            MultipartFile file) {
+        HrCandidate managedCandidate = requirePublicDocumentAccess(candidate);
+        UUID candidateId = managedCandidate.getId();
+
         rejectManagedUploadType(documentType);
-        return storeUploaded(candidate.getId(), documentType, remarks, file, "CANDIDATE");
+        return storeUploaded(candidateId, documentType, remarks, file, "CANDIDATE");
     }
 
     @Transactional(readOnly = true)
     public List<HrDocumentDtos.DocumentResponse> listPublic(HrCandidate candidate) {
-        requirePublicDocumentAccess(candidate);
+        HrCandidate managedCandidate = requirePublicDocumentAccess(candidate);
+        UUID candidateId = managedCandidate.getId();
 
-        return repository.findAllByCandidateIdAndActiveTrueOrderByUploadedAtDesc(candidate.getId())
+        return repository.findAllByCandidateIdAndActiveTrueOrderByUploadedAtDesc(candidateId)
                 .stream()
                 .filter(d -> !isManagedWorkflowType(d.getDocumentType()))
                 .map(this::toResponse)
@@ -161,8 +154,7 @@ public class HrDocumentService {
                 HrAccessRole.HR_HEAD,
                 HrAccessRole.HR_EXECUTIVE,
                 HrAccessRole.RECRUITER,
-                HrAccessRole.HOD
-        );
+                HrAccessRole.HOD);
         requireCandidate(candidateId);
         HrCandidateDocument document = requireDocument(candidateId, documentId);
         return decrypted(document);
@@ -170,8 +162,8 @@ public class HrDocumentService {
 
     @Transactional(readOnly = true)
     public DownloadedDocument downloadPublic(HrCandidate candidate, UUID documentId) {
-        requirePublicDocumentAccess(candidate);
-        HrCandidateDocument document = requireDocument(candidate.getId(), documentId);
+        HrCandidate managedCandidate = requirePublicDocumentAccess(candidate);
+        HrCandidateDocument document = requireDocument(managedCandidate.getId(), documentId);
         if (!document.isActive() || isManagedWorkflowType(document.getDocumentType())) {
             throw HrFlowException.notFound("Document was not found.");
         }
@@ -183,15 +175,13 @@ public class HrDocumentService {
         accessService.requireAny(
                 HrAccessRole.HR_ADMIN,
                 HrAccessRole.HR_HEAD,
-                HrAccessRole.HR_EXECUTIVE
-        );
+                HrAccessRole.HR_EXECUTIVE);
         requireCandidate(candidateId);
         HrCandidateDocument document = requireDocument(candidateId, documentId);
 
         if (isManagedWorkflowType(document.getDocumentType())) {
             throw HrFlowException.badRequest(
-                    "Managed HRFLOW workflow records cannot be archived manually. Use the related workflow action instead."
-            );
+                    "Managed HRFLOW workflow records cannot be archived manually. Use the related workflow action instead.");
         }
 
         if (!document.isActive()) {
@@ -207,8 +197,7 @@ public class HrDocumentService {
                 candidateId.toString(),
                 actor,
                 "Candidate document archived: " + document.getDocumentType() + " / " + document.getOriginalFileName(),
-                null
-        );
+                null);
 
         return toResponse(document);
     }
@@ -221,7 +210,8 @@ public class HrDocumentService {
     @Transactional(readOnly = true)
     public Optional<DownloadedDocument> latestActiveSystem(UUID candidateId, HrDocumentType documentType) {
         requireCandidate(candidateId);
-        if (documentType == null) return Optional.empty();
+        if (documentType == null)
+            return Optional.empty();
         return repository
                 .findFirstByCandidateIdAndDocumentTypeAndActiveTrueOrderByUploadedAtDesc(candidateId, documentType)
                 .map(this::decrypted);
@@ -234,13 +224,13 @@ public class HrDocumentService {
                 HrAccessRole.HR_HEAD,
                 HrAccessRole.HR_EXECUTIVE,
                 HrAccessRole.RECRUITER,
-                HrAccessRole.HOD
-        );
+                HrAccessRole.HOD);
         return completenessSystem(candidateId);
     }
 
     /**
-     * Same calculation without an access check. Used only from another trusted HRFLOW
+     * Same calculation without an access check. Used only from another trusted
+     * HRFLOW
      * service while serving the secure onboarding token portal.
      */
     @Transactional(readOnly = true)
@@ -257,13 +247,13 @@ public class HrDocumentService {
                 repository.existsByCandidateIdAndDocumentTypeAndActiveTrue(candidateId, HrDocumentType.RESUME),
                 repository.existsByCandidateIdAndDocumentTypeAndActiveTrue(candidateId, HrDocumentType.AADHAAR),
                 repository.existsByCandidateIdAndDocumentTypeAndActiveTrue(candidateId, HrDocumentType.PAN),
-                candidateUploadedCount
-        );
+                candidateUploadedCount);
     }
 
     @Transactional(readOnly = true)
     public boolean hasActive(UUID candidateId, HrDocumentType documentType) {
-        if (candidateId == null || documentType == null) return false;
+        if (candidateId == null || documentType == null)
+            return false;
         return repository.existsByCandidateIdAndDocumentTypeAndActiveTrue(candidateId, documentType);
     }
 
@@ -271,42 +261,42 @@ public class HrDocumentService {
     public <T> Optional<GeneratedJson<T>> latestGeneratedJson(
             UUID candidateId,
             HrDocumentType documentType,
-            Class<T> payloadType
-    ) {
+            Class<T> payloadType) {
         requireManagedType(documentType);
-        if (candidateId == null) return Optional.empty();
+        if (candidateId == null)
+            return Optional.empty();
 
         return repository
                 .findFirstByCandidateIdAndDocumentTypeAndActiveTrueOrderByUploadedAtDesc(candidateId, documentType)
                 .map(document -> new GeneratedJson<>(
                         toResponse(document),
-                        readJsonPayload(document, payloadType)
-                ));
+                        readJsonPayload(document, payloadType)));
     }
 
     @Transactional(readOnly = true)
     public <T> List<GeneratedJson<T>> activeGeneratedJson(
             UUID candidateId,
             HrDocumentType documentType,
-            Class<T> payloadType
-    ) {
+            Class<T> payloadType) {
         requireManagedType(documentType);
-        if (candidateId == null) return List.of();
+        if (candidateId == null)
+            return List.of();
 
         return repository
                 .findAllByCandidateIdAndDocumentTypeAndActiveTrueOrderByUploadedAtDesc(candidateId, documentType)
                 .stream()
                 .map(document -> new GeneratedJson<>(
                         toResponse(document),
-                        readJsonPayload(document, payloadType)
-                ))
+                        readJsonPayload(document, payloadType)))
                 .toList();
     }
 
     /**
      * Stores encrypted JSON in the already-existing hr_candidate_document table.
-     * replaceActive=true is used for mutable/current state snapshots (policy template,
-     * orientation progress, NDA template, declaration template). Immutable acceptance
+     * replaceActive=true is used for mutable/current state snapshots (policy
+     * template,
+     * orientation progress, NDA template, declaration template). Immutable
+     * acceptance
      * records use replaceActive=false and remain preserved as audit evidence.
      */
     @Transactional
@@ -316,8 +306,7 @@ public class HrDocumentService {
             Object payload,
             boolean replaceActive,
             String actor,
-            String remarks
-    ) {
+            String remarks) {
         requireCandidate(candidateId);
         requireManagedType(documentType);
         if (payload == null) {
@@ -377,8 +366,7 @@ public class HrDocumentService {
             HrDocumentType documentType,
             String remarks,
             MultipartFile file,
-            String actor
-    ) {
+            String actor) {
         if (documentType == null) {
             throw HrFlowException.badRequest("Document type is required.");
         }
@@ -389,8 +377,7 @@ public class HrDocumentService {
         long maxBytes = Math.max(1L, properties.getMaxDocumentBytes());
         if (file.getSize() > maxBytes) {
             throw HrFlowException.badRequest(
-                    "Document is too large. Maximum allowed size is " + maxBytes + " bytes."
-            );
+                    "Document is too large. Maximum allowed size is " + maxBytes + " bytes.");
         }
 
         byte[] bytes;
@@ -402,7 +389,8 @@ public class HrDocumentService {
 
         String originalName = cleanFileName(file.getOriginalFilename());
         String contentType = clean(file.getContentType());
-        if (contentType == null) contentType = "application/octet-stream";
+        if (contentType == null)
+            contentType = "application/octet-stream";
 
         HrCandidateDocument document = new HrCandidateDocument();
         document.setCandidateId(candidateId);
@@ -424,8 +412,7 @@ public class HrDocumentService {
                 candidateId.toString(),
                 document.getUploadedBy(),
                 "Candidate document uploaded: " + documentType + " / " + originalName,
-                null
-        );
+                null);
 
         return toResponse(document);
     }
@@ -436,8 +423,7 @@ public class HrDocumentService {
         }
         if (isManagedWorkflowType(documentType)) {
             throw HrFlowException.badRequest(
-                    documentType + " is managed by HRFLOW and cannot be uploaded manually."
-            );
+                    documentType + " is managed by HRFLOW and cannot be uploaded manually.");
         }
     }
 
@@ -447,13 +433,24 @@ public class HrDocumentService {
         }
     }
 
-    private void requirePublicDocumentAccess(HrCandidate candidate) {
+    /**
+     * Never trust a candidate entity/proxy that crossed a transactional service
+     * boundary. The public token service may have resolved it in a different
+     * persistence context. Re-load it in THIS transaction before reading stage
+     * or any other state.
+     */
+    private HrCandidate requirePublicDocumentAccess(HrCandidate candidate) {
         if (candidate == null || candidate.getId() == null) {
             throw HrFlowException.notFound("Candidate was not found.");
         }
-        if (!PUBLIC_DOCUMENT_STAGES.contains(candidate.getStage())) {
+
+        HrCandidate managedCandidate = requireCandidate(candidate.getId());
+
+        if (!PUBLIC_DOCUMENT_STAGES.contains(managedCandidate.getStage())) {
             throw HrFlowException.conflict("Candidate document access is no longer available.");
         }
+
+        return managedCandidate;
     }
 
     private HrCandidate requireCandidate(UUID candidateId) {
@@ -485,8 +482,7 @@ public class HrDocumentService {
         } catch (Exception ex) {
             throw new IllegalStateException(
                     "HRFLOW could not read stored generated document " + document.getDocumentType() + ".",
-                    ex
-            );
+                    ex);
         }
     }
 
@@ -494,12 +490,12 @@ public class HrDocumentService {
         return new DownloadedDocument(
                 document.getOriginalFileName(),
                 document.getContentType(),
-                cryptoService.decryptBytes(document.getContent())
-        );
+                cryptoService.decryptBytes(document.getContent()));
     }
 
     private void archive(HrCandidateDocument document, String actor) {
-        if (document == null || !document.isActive()) return;
+        if (document == null || !document.isActive())
+            return;
         document.setActive(false);
         document.setArchivedBy(actor == null || actor.isBlank() ? "SYSTEM" : actor);
         document.setArchivedAt(LocalDateTime.now());
@@ -519,8 +515,7 @@ public class HrDocumentService {
                 d.getUploadedBy(),
                 d.getUploadedAt(),
                 d.getArchivedBy(),
-                d.getArchivedAt()
-        );
+                d.getArchivedAt());
     }
 
     private String generatedFileName(HrDocumentType type) {
@@ -530,16 +525,19 @@ public class HrDocumentService {
 
     private String cleanFileName(String value) {
         String v = clean(value);
-        if (v == null) return "document.bin";
+        if (v == null)
+            return "document.bin";
         v = v.replace("\\", "/");
         int slash = v.lastIndexOf('/');
-        if (slash >= 0) v = v.substring(slash + 1);
+        if (slash >= 0)
+            v = v.substring(slash + 1);
         v = v.replaceAll("[\\r\\n\\t]", "_");
         return v.length() > 500 ? v.substring(v.length() - 500) : v;
     }
 
     private String clean(String value) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         String v = value.trim();
         return v.isEmpty() ? null : v;
     }
@@ -556,11 +554,11 @@ public class HrDocumentService {
     public record DownloadedDocument(
             String fileName,
             String contentType,
-            byte[] bytes
-    ) {}
+            byte[] bytes) {
+    }
 
     public record GeneratedJson<T>(
             HrDocumentDtos.DocumentResponse document,
-            T payload
-    ) {}
+            T payload) {
+    }
 }

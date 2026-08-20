@@ -94,7 +94,7 @@ const NAV = [
 
 const HR_HEADER = Object.freeze({
 	dashboard: {
-		title: "HRFlow Dashboard",
+		title: "Dashboard",
 		subtitle: "Recruitment, joining, onboarding and employee control.",
 	},
 	candidates: {

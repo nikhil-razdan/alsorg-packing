@@ -183,7 +183,23 @@ public class HrCandidateTokenService {
         }
 
         token.setLastUsedAt(LocalDateTime.now());
-        return token.getCandidate();
+
+        /*
+         * The token -> candidate association is LAZY. Some public controllers
+         * resolve the token in this service and then pass the candidate into a
+         * second transactional service. If we return an uninitialized Hibernate
+         * proxy here, the first transaction closes and the next service can hit
+         * LazyInitializationException when reading candidate fields.
+         *
+         * Touch a non-identifier field while this transaction is still open so
+         * the proxy is initialized before it leaves the token boundary.
+         */
+        HrCandidate candidate = token.getCandidate();
+        if (candidate == null) {
+            throw HrFlowException.notFound("Candidate was not found.");
+        }
+        candidate.getStage();
+        return candidate;
     }
 
     private String hash(String value) {
