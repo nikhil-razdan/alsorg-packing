@@ -83,7 +83,7 @@ const HEADER = [
     ["/matflow/dashboard", "MatFlow Dashboard", "Overall workflow, tracker and bottlenecks."],
     ["/matflow/production-execution", "Production", "Receive material, start work and close material accounting."],
     ["/matflow/boms", "BOMs", "Engineering BOM creation and Production review."],
-    ["/matflow/store", "Store", "Forward MR, check Tally availability, allocate and hand over material."],
+    ["/matflow/store", "Store", "Forward MR, check availability, allocate and hand over material."],
     ["/matflow/production", "Requisitions", "Production material demand against an effective BOM."],
     ["/matflow/purchase", "Purchase", "Shortage PI to vendor PO."],
     ["/matflow/receiving", "Receiving", "GRN at AL-P1 Main Store."],
