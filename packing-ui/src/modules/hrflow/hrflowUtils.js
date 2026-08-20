@@ -139,8 +139,43 @@ export const saveBlob = (response, fallbackName = "download") => {
 	setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
+const normalizedBasePath = () => {
+	if (typeof window === "undefined") return "";
+
+	// Prefer the bundler/deployment base when one is configured.
+	const viteBase = String(import.meta.env?.BASE_URL || "").trim();
+	if (viteBase && viteBase !== "/" && viteBase !== "./") {
+		const clean = `/${viteBase}`.replace(/\/+/g, "/").replace(/\/$/, "");
+		return clean === "/" ? "" : clean;
+	}
+
+	// Fallback for reverse-proxy deployments that mount FlowSuite below a path
+	// even when Vite BASE_URL was left at '/'.
+	const pathname = String(window.location.pathname || "");
+	const markers = [
+		"/modules",
+		"/packflow",
+		"/bomflow",
+		"/matflow",
+		"/users",
+		"/hr",
+	];
+	const indexes = markers
+		.map((marker) => pathname.toLowerCase().indexOf(marker))
+		.filter((index) => index >= 0);
+	if (!indexes.length) return "";
+	const index = Math.min(...indexes);
+	return index > 0 ? pathname.slice(0, index).replace(/\/$/, "") : "";
+};
+
+const publicHrUrl = (mode, rawToken) => {
+	const cleanToken = String(rawToken || "").trim();
+	if (!cleanToken) return "";
+	return `${window.location.origin}${normalizedBasePath()}/hr/${mode}/${encodeURIComponent(cleanToken)}`;
+};
+
 export const publicApplicationUrl = (rawToken) =>
-	`${window.location.origin}/hr/apply/${encodeURIComponent(rawToken)}`;
+	publicHrUrl("apply", rawToken);
 
 export const publicOnboardingUrl = (rawToken) =>
-	`${window.location.origin}/hr/onboarding/${encodeURIComponent(rawToken)}`;
+	publicHrUrl("onboarding", rawToken);

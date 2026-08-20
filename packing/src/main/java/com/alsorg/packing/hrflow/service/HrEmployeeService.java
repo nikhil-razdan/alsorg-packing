@@ -8,12 +8,14 @@ import com.alsorg.packing.hrflow.exception.HrFlowException;
 import com.alsorg.packing.hrflow.repository.HrEmployeeRepository;
 import com.alsorg.packing.hrflow.security.HrAccessService;
 import jakarta.persistence.EntityManager;
-import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.io.MemoryUsageSetting;
+import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Locale;
@@ -102,13 +104,13 @@ public class HrEmployeeService {
     }
 
     private byte[] merge(byte[] first, byte[] second) {
-        try (PDDocument output = new PDDocument();
-             PDDocument one = PDDocument.load(first);
-             PDDocument two = PDDocument.load(second)) {
-            for (int i = 0; i < one.getNumberOfPages(); i++) output.importPage(one.getPage(i));
-            for (int i = 0; i < two.getNumberOfPages(); i++) output.importPage(two.getPage(i));
+        try {
+            PDFMergerUtility merger = new PDFMergerUtility();
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            output.save(bytes);
+            merger.setDestinationStream(bytes);
+            merger.addSource(new ByteArrayInputStream(first));
+            merger.addSource(new ByteArrayInputStream(second));
+            merger.mergeDocuments(MemoryUsageSetting.setupMainMemoryOnly());
             return bytes.toByteArray();
         } catch (IOException ex) {
             throw new IllegalStateException("HRFLOW could not merge the employee personnel PDF pack.", ex);

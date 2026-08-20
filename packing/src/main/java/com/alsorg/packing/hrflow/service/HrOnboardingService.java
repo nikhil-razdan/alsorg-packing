@@ -51,6 +51,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class HrOnboardingService {
@@ -63,7 +65,7 @@ public class HrOnboardingService {
 
     private static final Set<String> FEEDBACK_ANSWERS = Set.of("Y", "N", "NA");
 
-    private static final String HR_FORM_MASTER = "hrflow/HR_Module_Forms_Master.pdf";
+    private static final String HR_FORM_TEMPLATES = "hrflow/HR_Module_Form_Templates.zip";
     private static final PDFont FORM_FONT = PDType1Font.HELVETICA;
     private static final PDFont FORM_FONT_BOLD = PDType1Font.HELVETICA_BOLD;
     private static final DateTimeFormatter FORM_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -1646,33 +1648,31 @@ public class HrOnboardingService {
                 feedback
         );
 
-        try (PDDocument master = loadMasterPdf(); PDDocument output = new PDDocument()) {
-            if (key.equals("JOINING_REPORT") || key.equals("ONBOARDING_PACK")) {
-                PDPage page = output.importPage(master.getPage(1));
-                overlayJoiningReport(output, page, ctx);
-            }
-            if (key.equals("HOLIDAY_LEAVE") || key.equals("ONBOARDING_PACK")) {
-                PDPage page = output.importPage(master.getPage(5));
-                overlayHolidayLeave(output, page, ctx);
-            }
-            if (key.equals("ORIENTATION") || key.equals("ONBOARDING_PACK")) {
-                PDPage page = output.importPage(master.getPage(6));
-                overlayOrientation(output, page, ctx);
-            }
-            if (key.equals("INDUCTION_FEEDBACK") || key.equals("ONBOARDING_PACK")) {
-                PDPage page = output.importPage(master.getPage(7));
-                overlayFeedback(output, page, ctx);
-            }
-            if (key.equals("NDA") || key.equals("ONBOARDING_PACK")) {
-                PDPage page9 = output.importPage(master.getPage(8));
-                overlayNdaFirstPage(output, page9, ctx);
-                output.importPage(master.getPage(9));
-                PDPage page11 = output.importPage(master.getPage(10));
-                overlayNdaSignaturePage(output, page11, ctx);
-            }
-            if (key.equals("DECLARATION") || key.equals("ONBOARDING_PACK")) {
-                PDPage page = output.importPage(master.getPage(11));
-                overlayDeclaration(output, page, ctx);
+        try (PDDocument output = loadTemplatePdf(key)) {
+            if (key.equals("JOINING_REPORT")) {
+                overlayJoiningReport(output, output.getPage(0), ctx);
+            } else if (key.equals("HOLIDAY_LEAVE")) {
+                overlayHolidayLeave(output, output.getPage(0), ctx);
+            } else if (key.equals("ORIENTATION")) {
+                overlayOrientation(output, output.getPage(0), ctx);
+            } else if (key.equals("INDUCTION_FEEDBACK")) {
+                overlayFeedback(output, output.getPage(0), ctx);
+            } else if (key.equals("NDA")) {
+                overlayNdaFirstPage(output, output.getPage(0), ctx);
+                // Page 2 is the unchanged middle NDA page.
+                overlayNdaSignaturePage(output, output.getPage(2), ctx);
+            } else if (key.equals("DECLARATION")) {
+                overlayDeclaration(output, output.getPage(0), ctx);
+            } else {
+                // ONBOARDING_PACK page order:
+                // Joining, Holiday/Leave, Orientation, Feedback, NDA x3, Declaration.
+                overlayJoiningReport(output, output.getPage(0), ctx);
+                overlayHolidayLeave(output, output.getPage(1), ctx);
+                overlayOrientation(output, output.getPage(2), ctx);
+                overlayFeedback(output, output.getPage(3), ctx);
+                overlayNdaFirstPage(output, output.getPage(4), ctx);
+                overlayNdaSignaturePage(output, output.getPage(6), ctx);
+                overlayDeclaration(output, output.getPage(7), ctx);
             }
 
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -2021,53 +2021,62 @@ public class HrOnboardingService {
         return result;
     }
 
-    private PDDocument loadMasterPdf() throws IOException {
-        ClassPathResource resource = new ClassPathResource(HR_FORM_MASTER);
+    private PDDocument loadTemplatePdf(String key) throws IOException {
+        return PDDocument.load(loadTemplateBytes(key));
+    }
 
+    private byte[] loadTemplateBytes(String key) {
+        String entryName = switch (key) {
+            case "JOINING_REPORT" -> "JOINING_REPORT.pdf";
+            case "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE.pdf";
+            case "ORIENTATION" -> "ORIENTATION.pdf";
+            case "INDUCTION_FEEDBACK" -> "INDUCTION_FEEDBACK.pdf";
+            case "NDA" -> "NDA.pdf";
+            case "DECLARATION" -> "DECLARATION.pdf";
+            case "ONBOARDING_PACK" -> "ONBOARDING_PACK.pdf";
+            default -> throw HrFlowException.badRequest(
+                    "Onboarding filled PDF supports JOINING_REPORT, HOLIDAY_LEAVE, ORIENTATION, " +
+                            "INDUCTION_FEEDBACK, NDA, DECLARATION or ONBOARDING_PACK."
+            );
+        };
+
+        ClassPathResource resource = new ClassPathResource(HR_FORM_TEMPLATES);
         if (!resource.exists()) {
             throw new IllegalStateException(
-                    "Missing HRFLOW PDF resource on the runtime classpath: " + HR_FORM_MASTER
+                    "Missing HRFLOW PDF template resource: src/main/resources/" + HR_FORM_TEMPLATES
             );
         }
 
-        /*
-         * IMPORTANT:
-         * Do not return PDDocument.load(InputStream) from inside a try-with-resources
-         * block. PDFBox may continue reading from its source after PDDocument.load(...)
-         * returns. Closing the ClassPathResource InputStream before the PDDocument is
-         * actually used causes every page-extract / overlay download to fail with HTTP
-         * 500 at runtime.
-         *
-         * Read the complete resource first and load PDFBox from the independent byte[].
-         */
-        byte[] pdfBytes;
-        try (InputStream in = resource.getInputStream()) {
-            pdfBytes = in.readAllBytes();
-        }
-
-        if (pdfBytes.length < 5
-                || pdfBytes[0] != '%'
-                || pdfBytes[1] != 'P'
-                || pdfBytes[2] != 'D'
-                || pdfBytes[3] != 'F'
-                || pdfBytes[4] != '-') {
+        try (InputStream raw = resource.getInputStream();
+             ZipInputStream zip = new ZipInputStream(raw)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.isDirectory() && entryName.equals(entry.getName())) {
+                    byte[] bytes = zip.readAllBytes();
+                    if (bytes.length < 5
+                            || bytes[0] != '%'
+                            || bytes[1] != 'P'
+                            || bytes[2] != 'D'
+                            || bytes[3] != 'F'
+                            || bytes[4] != '-') {
+                        throw new IllegalStateException(
+                                "HRFLOW template entry is not a valid PDF: " + entryName
+                        );
+                    }
+                    return bytes;
+                }
+                zip.closeEntry();
+            }
+        } catch (IOException ex) {
             throw new IllegalStateException(
-                    "HRFLOW master form resource is not a valid PDF: " + HR_FORM_MASTER
+                    "HRFLOW could not read PDF template " + entryName + " from " + HR_FORM_TEMPLATES + ".",
+                    ex
             );
         }
 
-        PDDocument document = PDDocument.load(pdfBytes);
-
-        if (document.getNumberOfPages() < 12) {
-            int pages = document.getNumberOfPages();
-            document.close();
-            throw new IllegalStateException(
-                    "HRFLOW master form PDF must contain 12 pages, but runtime resource contains "
-                            + pages + " page(s)."
-            );
-        }
-
-        return document;
+        throw new IllegalStateException(
+                "HRFLOW PDF template entry is missing from " + HR_FORM_TEMPLATES + ": " + entryName
+        );
     }
 
     private String normalizeFormKey(String value) {

@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class HrCandidateService {
@@ -46,7 +48,7 @@ public class HrCandidateService {
             HrCandidateStage.APPLICATION_SENT,
             HrCandidateStage.APPLICATION_IN_PROGRESS);
 
-    private static final String HR_FORM_MASTER = "hrflow/HR_Module_Forms_Master.pdf";
+    private static final String HR_FORM_TEMPLATES = "hrflow/HR_Module_Form_Templates.zip";
     private static final PDFont FORM_FONT = PDType1Font.HELVETICA;
     private static final PDFont FORM_FONT_BOLD = PDType1Font.HELVETICA_BOLD;
     private static final DateTimeFormatter FORM_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -313,8 +315,8 @@ public class HrCandidateService {
     // -------------------------------------------------------------------------
 
     /**
-     * Downloads an untouched sample/format from the exact HR master PDF bundled in
-     * src/main/resources/hrflow/HR_Module_Forms_Master.pdf.
+     * Downloads an untouched sample/format from the pre-split, verified HR template
+     * bundle at src/main/resources/hrflow/HR_Module_Form_Templates.zip.
      */
     @Transactional(readOnly = true)
     public FormPdf formTemplate(String formKey) {
@@ -326,8 +328,7 @@ public class HrCandidateService {
                 HrAccessRole.HOD
         );
         String key = normalizeFormKey(formKey);
-        int[] pages = templatePages(key);
-        return new FormPdf(templateFileName(key), extractMasterPages(pages));
+        return new FormPdf(templateFileName(key), loadTemplateBytes(key));
     }
 
     @Transactional(readOnly = true)
@@ -362,21 +363,22 @@ public class HrCandidateService {
             );
         }
 
-        try (PDDocument master = loadMasterPdf(); PDDocument output = new PDDocument()) {
-            Optional<HrDocumentService.DownloadedDocument> photo =
-                    documentService.latestActiveSystem(candidate.getId(), HrDocumentType.PHOTO);
+        Optional<HrDocumentService.DownloadedDocument> photo =
+                documentService.latestActiveSystem(candidate.getId(), HrDocumentType.PHOTO);
 
-            if (key.equals("PERSONAL_DATA") || key.equals("CANDIDATE_PACK")) {
-                PDPage page = output.importPage(master.getPage(0));
-                overlayPersonalData(output, page, candidate, photo.orElse(null));
-            }
-            if (key.equals("EMPLOYMENT_APPLICATION") || key.equals("CANDIDATE_PACK")) {
-                PDPage page3 = output.importPage(master.getPage(2));
-                overlayEmploymentApplicationPage1(output, page3, candidate, photo.orElse(null));
-                PDPage page4 = output.importPage(master.getPage(3));
-                overlayEmploymentApplicationPage2(output, page4, candidate);
-                PDPage page5 = output.importPage(master.getPage(4));
-                overlayEmploymentApplicationPage3(output, page5, candidate);
+        try (PDDocument output = loadTemplatePdf(key)) {
+            if (key.equals("PERSONAL_DATA")) {
+                overlayPersonalData(output, output.getPage(0), candidate, photo.orElse(null));
+            } else if (key.equals("EMPLOYMENT_APPLICATION")) {
+                overlayEmploymentApplicationPage1(output, output.getPage(0), candidate, photo.orElse(null));
+                overlayEmploymentApplicationPage2(output, output.getPage(1), candidate);
+                overlayEmploymentApplicationPage3(output, output.getPage(2), candidate);
+            } else {
+                // CANDIDATE_PACK = Personal Data + 3-page Employment Application.
+                overlayPersonalData(output, output.getPage(0), candidate, photo.orElse(null));
+                overlayEmploymentApplicationPage1(output, output.getPage(1), candidate, photo.orElse(null));
+                overlayEmploymentApplicationPage2(output, output.getPage(2), candidate);
+                overlayEmploymentApplicationPage3(output, output.getPage(3), candidate);
             }
 
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -611,84 +613,64 @@ public class HrCandidateService {
         return result;
     }
 
-    private byte[] extractMasterPages(int... pageIndexes) {
-        try (PDDocument master = loadMasterPdf(); PDDocument output = new PDDocument()) {
-            for (int pageIndex : pageIndexes) {
-                if (pageIndex < 0 || pageIndex >= master.getNumberOfPages()) {
-                    throw HrFlowException.badRequest("Invalid HR master form page index: " + pageIndex);
-                }
-                output.importPage(master.getPage(pageIndex));
-            }
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            output.save(bytes);
-            return bytes.toByteArray();
-        } catch (IOException ex) {
-            throw new IllegalStateException("HRFLOW could not read the HR master form PDF.", ex);
-        }
+    private PDDocument loadTemplatePdf(String key) throws IOException {
+        return PDDocument.load(loadTemplateBytes(key));
     }
 
-    private PDDocument loadMasterPdf() throws IOException {
-        ClassPathResource resource = new ClassPathResource(HR_FORM_MASTER);
-
+    private byte[] loadTemplateBytes(String key) {
+        String entryName = templateZipEntry(key);
+        ClassPathResource resource = new ClassPathResource(HR_FORM_TEMPLATES);
         if (!resource.exists()) {
             throw new IllegalStateException(
-                    "Missing HRFLOW PDF resource on the runtime classpath: " + HR_FORM_MASTER
+                    "Missing HRFLOW PDF template resource: src/main/resources/" + HR_FORM_TEMPLATES
             );
         }
 
-        /*
-         * IMPORTANT:
-         * Do not return PDDocument.load(InputStream) from inside a try-with-resources
-         * block. PDFBox may continue reading from its source after PDDocument.load(...)
-         * returns. Closing the ClassPathResource InputStream before the PDDocument is
-         * actually used causes every page-extract / overlay download to fail with HTTP
-         * 500 at runtime.
-         *
-         * Read the complete resource first and load PDFBox from the independent byte[].
-         */
-        byte[] pdfBytes;
-        try (InputStream in = resource.getInputStream()) {
-            pdfBytes = in.readAllBytes();
-        }
-
-        if (pdfBytes.length < 5
-                || pdfBytes[0] != '%'
-                || pdfBytes[1] != 'P'
-                || pdfBytes[2] != 'D'
-                || pdfBytes[3] != 'F'
-                || pdfBytes[4] != '-') {
+        try (InputStream raw = resource.getInputStream();
+             ZipInputStream zip = new ZipInputStream(raw)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (!entry.isDirectory() && entryName.equals(entry.getName())) {
+                    byte[] bytes = zip.readAllBytes();
+                    if (bytes.length < 5
+                            || bytes[0] != '%'
+                            || bytes[1] != 'P'
+                            || bytes[2] != 'D'
+                            || bytes[3] != 'F'
+                            || bytes[4] != '-') {
+                        throw new IllegalStateException(
+                                "HRFLOW template entry is not a valid PDF: " + entryName
+                        );
+                    }
+                    return bytes;
+                }
+                zip.closeEntry();
+            }
+        } catch (IOException ex) {
             throw new IllegalStateException(
-                    "HRFLOW master form resource is not a valid PDF: " + HR_FORM_MASTER
+                    "HRFLOW could not read PDF template " + entryName + " from " + HR_FORM_TEMPLATES + ".",
+                    ex
             );
         }
 
-        PDDocument document = PDDocument.load(pdfBytes);
-
-        if (document.getNumberOfPages() < 12) {
-            int pages = document.getNumberOfPages();
-            document.close();
-            throw new IllegalStateException(
-                    "HRFLOW master form PDF must contain 12 pages, but runtime resource contains "
-                            + pages + " page(s)."
-            );
-        }
-
-        return document;
+        throw new IllegalStateException(
+                "HRFLOW PDF template entry is missing from " + HR_FORM_TEMPLATES + ": " + entryName
+        );
     }
 
-    private int[] templatePages(String key) {
+    private String templateZipEntry(String key) {
         return switch (key) {
-            case "PERSONAL_DATA" -> new int[]{0};
-            case "JOINING_REPORT" -> new int[]{1};
-            case "EMPLOYMENT_APPLICATION" -> new int[]{2, 3, 4};
-            case "HOLIDAY_LEAVE" -> new int[]{5};
-            case "ORIENTATION" -> new int[]{6};
-            case "INDUCTION_FEEDBACK" -> new int[]{7};
-            case "NDA" -> new int[]{8, 9, 10};
-            case "DECLARATION" -> new int[]{11};
-            case "CANDIDATE_PACK" -> new int[]{0, 2, 3, 4};
-            case "ONBOARDING_PACK" -> new int[]{1, 5, 6, 7, 8, 9, 10, 11};
-            case "FULL_PACK", "FULL_HR_PACK" -> new int[]{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+            case "PERSONAL_DATA" -> "PERSONAL_DATA.pdf";
+            case "JOINING_REPORT" -> "JOINING_REPORT.pdf";
+            case "EMPLOYMENT_APPLICATION" -> "EMPLOYMENT_APPLICATION.pdf";
+            case "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE.pdf";
+            case "ORIENTATION" -> "ORIENTATION.pdf";
+            case "INDUCTION_FEEDBACK" -> "INDUCTION_FEEDBACK.pdf";
+            case "NDA" -> "NDA.pdf";
+            case "DECLARATION" -> "DECLARATION.pdf";
+            case "CANDIDATE_PACK" -> "CANDIDATE_PACK.pdf";
+            case "ONBOARDING_PACK" -> "ONBOARDING_PACK.pdf";
+            case "FULL_PACK", "FULL_HR_PACK" -> "FULL_PACK.pdf";
             default -> throw HrFlowException.badRequest(
                     "Unknown HR form key. Use PERSONAL_DATA, JOINING_REPORT, EMPLOYMENT_APPLICATION, " +
                             "HOLIDAY_LEAVE, ORIENTATION, INDUCTION_FEEDBACK, NDA, DECLARATION, " +
