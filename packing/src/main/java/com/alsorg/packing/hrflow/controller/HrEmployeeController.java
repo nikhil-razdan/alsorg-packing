@@ -5,6 +5,9 @@ import com.alsorg.packing.hrflow.dto.HrEmployeeDtos;
 import com.alsorg.packing.hrflow.service.HrEmployeeService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -32,4 +35,17 @@ public class HrEmployeeController {
     public HrEmployeeDtos.EmployeeDetailResponse get(@PathVariable UUID id) {
         return employeeService.get(id);
     }
+    @GetMapping(value = "/{id}/form-pdf/{formKey}", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> formPdf(
+            @PathVariable UUID id,
+            @PathVariable String formKey
+    ) {
+        HrEmployeeService.FormPdf pdf = employeeService.formPdf(id, formKey);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
+                .body(pdf.bytes());
+    }
+
 }

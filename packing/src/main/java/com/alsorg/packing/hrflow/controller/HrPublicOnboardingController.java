@@ -4,6 +4,9 @@ import com.alsorg.packing.hrflow.domain.HrCandidate;
 import com.alsorg.packing.hrflow.dto.HrOnboardingDtos;
 import com.alsorg.packing.hrflow.service.HrCandidateTokenService;
 import com.alsorg.packing.hrflow.service.HrOnboardingService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,6 +30,20 @@ public class HrPublicOnboardingController {
     public HrOnboardingDtos.OnboardingPortalResponse portal(@PathVariable String token) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.publicPortal(candidate);
+    }
+
+    @GetMapping(value = "/{token}/form-pdf/{formKey}", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> formPdf(
+            @PathVariable String token,
+            @PathVariable String formKey
+    ) {
+        HrCandidate candidate = tokenService.resolveOnboardingToken(token);
+        HrOnboardingService.FormPdf pdf = onboardingService.publicFormPdf(candidate, formKey);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
+                .body(pdf.bytes());
     }
 
     @GetMapping("/{token}/joining-report")

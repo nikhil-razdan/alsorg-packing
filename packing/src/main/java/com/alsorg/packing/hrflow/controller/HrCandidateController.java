@@ -10,6 +10,8 @@ import com.alsorg.packing.hrflow.service.HrCandidateService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -75,6 +77,18 @@ public class HrCandidateController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping(value = "/reference/form-template/{formKey}", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> formTemplate(@PathVariable String formKey) {
+        return pdf(candidateService.formTemplate(formKey));
+    }
+
+    @GetMapping(value = "/{id}/form-pdf/{formKey}", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> candidateFormPdf(
+            @PathVariable UUID id,
+            @PathVariable String formKey) {
+        return pdf(candidateService.candidateFormPdf(id, formKey));
+    }
+
     @GetMapping("/{id}/audit")
     public List<HrAuditDtos.AuditResponse> audit(@PathVariable UUID id) {
         accessService.requireAny(HrAccessRole.HR_ADMIN, HrAccessRole.HR_HEAD, HrAccessRole.HR_EXECUTIVE, HrAccessRole.RECRUITER, HrAccessRole.HOD);
@@ -83,4 +97,12 @@ public class HrCandidateController {
                         x.getActor(), x.getMessage(), x.getMetadataJson(), x.getCreatedAt()))
                 .toList();
     }
+    private ResponseEntity<byte[]> pdf(HrCandidateService.FormPdf pdf) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
+                .body(pdf.bytes());
+    }
+
 }

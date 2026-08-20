@@ -21,12 +21,23 @@ import com.alsorg.packing.hrflow.repository.HrJoiningReportRepository;
 import com.alsorg.packing.hrflow.repository.HrOnboardingCaseRepository;
 import com.alsorg.packing.hrflow.security.HrAccessService;
 import jakarta.persistence.EntityManager;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -51,6 +62,11 @@ public class HrOnboardingService {
     );
 
     private static final Set<String> FEEDBACK_ANSWERS = Set.of("Y", "N", "NA");
+
+    private static final String HR_FORM_MASTER = "hrflow/HR_Module_Forms_Master.pdf";
+    private static final PDFont FORM_FONT = PDType1Font.HELVETICA;
+    private static final PDFont FORM_FONT_BOLD = PDType1Font.HELVETICA_BOLD;
+    private static final DateTimeFormatter FORM_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
     private static final List<HrOnboardingDtos.FeedbackQuestion> FEEDBACK_QUESTIONS = List.of(
             new HrOnboardingDtos.FeedbackQuestion("F01", "Did you get assistance when you asked for it during your induction training?"),
@@ -1516,6 +1532,591 @@ public class HrOnboardingService {
         }
         return base;
     }
+
+    // -------------------------------------------------------------------------
+    // Official onboarding / employee form PDFs
+    // -------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public FormPdf formPdf(UUID onboardingId, String formKey) {
+        accessService.requireAny(
+                HrAccessRole.HR_ADMIN,
+                HrAccessRole.HR_HEAD,
+                HrAccessRole.HR_EXECUTIVE,
+                HrAccessRole.HOD
+        );
+        HrOnboardingCase onboarding = requireOnboarding(onboardingId);
+        HrCandidate candidate = requireCandidate(onboarding.getCandidateId());
+        return buildOnboardingFormPdf(onboarding, candidate, formKey);
+    }
+
+    @Transactional(readOnly = true)
+    public FormPdf publicFormPdf(HrCandidate candidate, String formKey) {
+        HrOnboardingCase onboarding = requirePortalOnboarding(candidate);
+        return buildOnboardingFormPdf(onboarding, candidate, formKey);
+    }
+
+    /** Trusted call used by Employee Master downloads after EmployeeService auth. */
+    @Transactional(readOnly = true)
+    public FormPdf employeeFormPdfSystem(UUID employeeId, String formKey) {
+        if (employeeId == null) throw HrFlowException.badRequest("Employee id is required.");
+        HrEmployee employee = entityManager.find(HrEmployee.class, employeeId);
+        if (employee == null) throw HrFlowException.notFound("Employee not found: " + employeeId);
+        HrOnboardingCase onboarding = onboardingRepository.findByCandidateId(employee.getCandidateId())
+                .orElseThrow(() -> HrFlowException.notFound("Onboarding case was not found for this employee."));
+        HrCandidate candidate = requireCandidate(employee.getCandidateId());
+        return buildOnboardingFormPdf(onboarding, candidate, formKey);
+    }
+
+    private FormPdf buildOnboardingFormPdf(
+            HrOnboardingCase onboarding,
+            HrCandidate candidate,
+            String formKey
+    ) {
+        String key = normalizeFormKey(formKey);
+        if (!List.of(
+                "JOINING_REPORT",
+                "HOLIDAY_LEAVE",
+                "ORIENTATION",
+                "INDUCTION_FEEDBACK",
+                "NDA",
+                "DECLARATION",
+                "ONBOARDING_PACK"
+        ).contains(key)) {
+            throw HrFlowException.badRequest(
+                    "Onboarding filled PDF supports JOINING_REPORT, HOLIDAY_LEAVE, ORIENTATION, " +
+                            "INDUCTION_FEEDBACK, NDA, DECLARATION or ONBOARDING_PACK."
+            );
+        }
+
+        HrOnboardingDtos.JoiningReportResponse joining = joiningReportRepository
+                .findByOnboardingCaseId(onboarding.getId())
+                .map(this::toJoiningReport)
+                .orElse(null);
+
+        HrEmployee employee = onboarding.getEmployeeId() == null
+                ? null
+                : entityManager.find(HrEmployee.class, onboarding.getEmployeeId());
+
+        Optional<HrOnboardingDtos.LegalSnapshotResponse> policy =
+                latestLegalSnapshot(candidate.getId(), HrDocumentType.ONBOARDING_POLICY_SNAPSHOT);
+        Optional<HrOnboardingDtos.AgreementAcceptanceResponse> policyAck = policy.flatMap(x ->
+                currentAcceptance(
+                        candidate.getId(),
+                        HrDocumentType.ONBOARDING_POLICY_ACKNOWLEDGEMENT,
+                        x.snapshotSha256()
+                )
+        );
+
+        Optional<HrOnboardingDtos.LegalSnapshotResponse> nda =
+                latestLegalSnapshot(candidate.getId(), HrDocumentType.NDA_SNAPSHOT);
+        Optional<HrOnboardingDtos.AgreementAcceptanceResponse> ndaAcceptance = nda.flatMap(x ->
+                currentAcceptance(candidate.getId(), HrDocumentType.NDA_ACCEPTANCE, x.snapshotSha256())
+        );
+        Optional<HrOnboardingDtos.AgreementAcceptanceResponse> ndaVerification = nda.flatMap(x ->
+                currentAcceptance(candidate.getId(), HrDocumentType.NDA_VERIFICATION, x.snapshotSha256())
+        );
+
+        Optional<HrOnboardingDtos.LegalSnapshotResponse> declaration =
+                latestLegalSnapshot(candidate.getId(), HrDocumentType.EMPLOYMENT_DECLARATION_SNAPSHOT);
+        Optional<HrOnboardingDtos.AgreementAcceptanceResponse> declarationAcceptance = declaration.flatMap(x ->
+                currentAcceptance(
+                        candidate.getId(),
+                        HrDocumentType.EMPLOYMENT_DECLARATION_ACCEPTANCE,
+                        x.snapshotSha256()
+                )
+        );
+
+        HrOnboardingDtos.OrientationResponse orientation = orientationResponse(candidate.getId());
+        HrOnboardingDtos.FeedbackSubmissionResponse feedback = latestFeedback(candidate.getId()).orElse(null);
+
+        FormContext ctx = new FormContext(
+                onboarding,
+                candidate,
+                employee,
+                joining,
+                policy.orElse(null),
+                policyAck.orElse(null),
+                nda.orElse(null),
+                ndaAcceptance.orElse(null),
+                ndaVerification.orElse(null),
+                declaration.orElse(null),
+                declarationAcceptance.orElse(null),
+                orientation,
+                feedback
+        );
+
+        try (PDDocument master = loadMasterPdf(); PDDocument output = new PDDocument()) {
+            if (key.equals("JOINING_REPORT") || key.equals("ONBOARDING_PACK")) {
+                PDPage page = output.importPage(master.getPage(1));
+                overlayJoiningReport(output, page, ctx);
+            }
+            if (key.equals("HOLIDAY_LEAVE") || key.equals("ONBOARDING_PACK")) {
+                PDPage page = output.importPage(master.getPage(5));
+                overlayHolidayLeave(output, page, ctx);
+            }
+            if (key.equals("ORIENTATION") || key.equals("ONBOARDING_PACK")) {
+                PDPage page = output.importPage(master.getPage(6));
+                overlayOrientation(output, page, ctx);
+            }
+            if (key.equals("INDUCTION_FEEDBACK") || key.equals("ONBOARDING_PACK")) {
+                PDPage page = output.importPage(master.getPage(7));
+                overlayFeedback(output, page, ctx);
+            }
+            if (key.equals("NDA") || key.equals("ONBOARDING_PACK")) {
+                PDPage page9 = output.importPage(master.getPage(8));
+                overlayNdaFirstPage(output, page9, ctx);
+                output.importPage(master.getPage(9));
+                PDPage page11 = output.importPage(master.getPage(10));
+                overlayNdaSignaturePage(output, page11, ctx);
+            }
+            if (key.equals("DECLARATION") || key.equals("ONBOARDING_PACK")) {
+                PDPage page = output.importPage(master.getPage(11));
+                overlayDeclaration(output, page, ctx);
+            }
+
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            output.save(bytes);
+            String identity = firstNonBlank(
+                    employee == null ? null : employee.getEmployeeCode(),
+                    candidate.getCandidateNumber(),
+                    candidate.getFullName(),
+                    "HR_Record"
+            );
+            return new FormPdf(safeFilePart(identity) + "_" + key + ".pdf", bytes.toByteArray());
+        } catch (IOException ex) {
+            throw new IllegalStateException("HRFLOW could not generate the onboarding form PDF.", ex);
+        }
+    }
+
+    private void overlayJoiningReport(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.JoiningReportResponse report = ctx.joining();
+        String employeeCode = firstNonBlank(
+                report == null ? null : report.employeeCode(),
+                ctx.employee() == null ? null : ctx.employee().getEmployeeCode()
+        );
+        String name = firstNonBlank(
+                report == null ? null : report.employeeName(),
+                ctx.employee() == null ? null : ctx.employee().getFullName(),
+                ctx.candidate().getFullName()
+        );
+        String father = firstNonBlank(
+                report == null ? null : report.fatherName(),
+                ctx.employee() == null ? null : ctx.employee().getFatherOrHusbandName(),
+                ctx.candidate().getFatherOrHusbandName()
+        );
+        String designation = firstNonBlank(
+                report == null ? null : report.designation(),
+                ctx.onboarding().getDesignation(),
+                ctx.candidate().getDesignation(),
+                ctx.candidate().getPostAppliedFor()
+        );
+        String department = firstNonBlank(
+                report == null ? null : report.department(),
+                ctx.onboarding().getDepartment(),
+                ctx.candidate().getDepartment()
+        );
+        LocalDate joiningDate = report == null ? ctx.onboarding().getJoiningDate() : report.joiningDate();
+
+        try (PDPageContentStream cs = append(document, page)) {
+            textTop(cs, page, 435, 191, dateText(joiningDate), 8.2f, false);
+            textTop(cs, page, 292, 397, designation, 8.0f, false);
+            textTop(cs, page, 192, 459, name, 8.0f, false);
+            textTop(cs, page, 210, 494, father, 8.0f, false);
+            textTop(cs, page, 220, 529, employeeCode, 8.0f, false);
+            textTop(cs, page, 210, 564, designation, 8.0f, false);
+            textTop(cs, page, 205, 598, department, 8.0f, false);
+            if (report != null && report.employeeAcknowledged()) {
+                textTop(cs, page, 414, 724, name + " / e-acknowledged", 6.7f, false);
+                textTop(cs, page, 414, 736, dateTimeText(report.employeeAcknowledgedAt()), 6.2f, false);
+            }
+        }
+    }
+
+    private void overlayHolidayLeave(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.LegalSnapshotResponse policy = ctx.policy();
+        HrOnboardingDtos.AgreementAcceptanceResponse ack = ctx.policyAck();
+        try (PDPageContentStream cs = append(document, page)) {
+            String version = policy == null ? "Master sample" : "Version " + nullSafe(policy.version());
+            String status = ack == null
+                    ? "Not yet acknowledged"
+                    : "Acknowledged by " + firstNonBlank(ack.typedName(), ctx.candidate().getFullName())
+                    + " on " + dateTimeText(ack.acceptedAt());
+            textTop(cs, page, 80, 752, "HRFLOW record: " + version + " - " + status, 6.6f, true);
+            if (policy != null) {
+                textTop(cs, page, 80, 764, "Snapshot SHA-256: " + shortHash(policy.snapshotSha256()), 5.9f, false);
+            }
+        }
+    }
+
+    private void overlayOrientation(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.OrientationResponse orientation = ctx.orientation();
+        Map<String, HrOnboardingDtos.OrientationTask> byCode = orientation == null || orientation.tasks() == null
+                ? Map.of()
+                : orientation.tasks().stream().collect(Collectors.toMap(
+                        HrOnboardingDtos.OrientationTask::code,
+                        Function.identity(),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        try (PDPageContentStream cs = append(document, page)) {
+            float firstHrTop = 230f;
+            float hrStep = 16.0f;
+            for (int i = 0; i < 16; i++) {
+                HrOnboardingDtos.OrientationTask left = byCode.get(String.format("HR%02d", i + 1));
+                HrOnboardingDtos.OrientationTask right = byCode.get(String.format("HR%02d", i + 17));
+                if (left != null && left.completed()) textTop(cs, page, 300, firstHrTop + i * hrStep, "X", 8.0f, true);
+                if (right != null && right.completed()) textTop(cs, page, 555, firstHrTop + i * hrStep, "X", 8.0f, true);
+            }
+
+            markTask(cs, page, byCode.get("DEPT01"), 300, 535);
+            markTask(cs, page, byCode.get("DEPT04"), 555, 535);
+            markTask(cs, page, byCode.get("DEPT02"), 300, 552);
+            markTask(cs, page, byCode.get("DEPT05"), 555, 552);
+            markTask(cs, page, byCode.get("DEPT03"), 300, 569);
+
+            HrOnboardingDtos.OrientationTask hrOwner = firstCompleted(byCode, "HR01", "HR32");
+            if (hrOwner != null) {
+                textTop(cs, page, 388, 503, firstNonBlank(hrOwner.completedBy(), "Recorded in HRFLOW"), 6.2f, false);
+            }
+            HrOnboardingDtos.OrientationTask deptOwner = firstCompleted(byCode, "DEPT01", "DEPT05");
+            if (deptOwner != null) {
+                textTop(cs, page, 390, 603, firstNonBlank(deptOwner.completedBy(), deptOwner.assistedBy()), 6.2f, false);
+            }
+
+            String[] visitCodes = {"VISIT01", "VISIT02", "VISIT03", "VISIT04"};
+            float[] visitTop = {635, 652, 669, 686};
+            for (int i = 0; i < visitCodes.length; i++) {
+                HrOnboardingDtos.OrientationTask task = byCode.get(visitCodes[i]);
+                if (task == null || !task.completed()) continue;
+                textTop(cs, page, 300, visitTop[i], dateText(task.visitDate()), 6.2f, false);
+                textTop(cs, page, 390, visitTop[i], firstNonBlank(task.assistedBy(), task.completedBy()), 6.2f, false);
+            }
+
+            if (orientation != null && orientation.employeeAcknowledged()) {
+                textTop(cs, page, 350, 727,
+                        firstNonBlank(orientation.employeeAcknowledgedName(), ctx.candidate().getFullName())
+                                + " / e-acknowledged",
+                        6.2f,
+                        false);
+                textTop(cs, page, 350, 739, dateTimeText(orientation.employeeAcknowledgedAt()), 5.8f, false);
+            }
+        }
+    }
+
+    private void overlayFeedback(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.FeedbackSubmissionResponse feedback = ctx.feedback();
+        Map<String, HrOnboardingDtos.FeedbackAnswer> answers = feedback == null || feedback.answers() == null
+                ? Map.of()
+                : feedback.answers().stream().collect(Collectors.toMap(
+                        HrOnboardingDtos.FeedbackAnswer::code,
+                        Function.identity(),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        try (PDPageContentStream cs = append(document, page)) {
+            textTop(cs, page, 118, 126, ctx.candidate().getFullName(), 7.0f, false);
+            textTop(cs, page, 118, 155, ctx.onboarding().getDepartment(), 7.0f, false);
+            textTop(cs, page, 362, 155, ctx.onboarding().getLocation(), 7.0f, false);
+
+            float[] answerTop = {222, 255, 310, 365, 393, 423, 453, 483, 514, 543, 566};
+            for (int i = 0; i < answerTop.length; i++) {
+                HrOnboardingDtos.FeedbackAnswer answer = answers.get(String.format("F%02d", i + 1));
+                if (answer == null) continue;
+                textTop(cs, page, 316, answerTop[i], answer.answer(), 7.0f, true);
+                wrappedTop(cs, page, 365, answerTop[i], answer.suggestion(), 205, 5.9f, 7.0f, 2);
+            }
+
+            if (feedback != null) {
+                textTop(cs, page, 440, 655, ctx.candidate().getFullName() + " / e-submitted", 6.2f, false);
+                textTop(cs, page, 440, 667, dateTimeText(feedback.submittedAt()), 5.8f, false);
+            }
+        }
+    }
+
+    private void overlayNdaFirstPage(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.LegalSnapshotResponse nda = ctx.nda();
+        HrOnboardingDtos.AgreementAcceptanceResponse acceptance = ctx.ndaAcceptance();
+        try (PDPageContentStream cs = append(document, page)) {
+            if (acceptance != null) {
+                textTop(cs, page, 75, 744,
+                        "HRFLOW NDA record: " + firstNonBlank(nda == null ? null : nda.version(), acceptance.version(), "1.0")
+                                + " - accepted by " + firstNonBlank(acceptance.typedName(), ctx.candidate().getFullName())
+                                + " on " + dateTimeText(acceptance.acceptedAt()),
+                        5.9f,
+                        true);
+            } else if (nda != null) {
+                textTop(cs, page, 75, 744, "HRFLOW NDA snapshot: Version " + nullSafe(nda.version()) + " - not yet accepted", 5.9f, true);
+            }
+            if (nda != null) {
+                textTop(cs, page, 75, 755, "Snapshot SHA-256: " + shortHash(nda.snapshotSha256()), 5.6f, false);
+            }
+        }
+    }
+
+    private void overlayNdaSignaturePage(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.AgreementAcceptanceResponse acceptance = ctx.ndaAcceptance();
+        HrOnboardingDtos.AgreementAcceptanceResponse verification = ctx.ndaVerification();
+        String employeeName = firstNonBlank(
+                acceptance == null ? null : acceptance.typedName(),
+                ctx.employee() == null ? null : ctx.employee().getFullName(),
+                ctx.candidate().getFullName()
+        );
+        String employeeCode = ctx.employee() == null ? null : ctx.employee().getEmployeeCode();
+        String designation = firstNonBlank(
+                ctx.employee() == null ? null : ctx.employee().getDesignation(),
+                ctx.onboarding().getDesignation(),
+                ctx.candidate().getDesignation()
+        );
+        String department = firstNonBlank(
+                ctx.employee() == null ? null : ctx.employee().getDepartment(),
+                ctx.onboarding().getDepartment(),
+                ctx.candidate().getDepartment()
+        );
+
+        try (PDPageContentStream cs = append(document, page)) {
+            if (acceptance != null) {
+                textTop(cs, page, 390, 500, employeeName + " / e-accepted", 6.5f, false);
+                textTop(cs, page, 390, 523, employeeName, 6.5f, false);
+                textTop(cs, page, 390, 542, ctx.candidate().getFatherOrHusbandName(), 6.5f, false);
+                textTop(cs, page, 390, 560, designation, 6.5f, false);
+                textTop(cs, page, 390, 579, joinDepartmentCode(department, employeeCode), 6.5f, false);
+                textTop(cs, page, 390, 597, employeeCode, 6.5f, false);
+                textTop(cs, page, 390, 616, dateTimeDate(acceptance.acceptedAt()), 6.5f, false);
+            }
+            if (verification != null) {
+                String verifier = firstNonBlank(verification.verifiedBy(), verification.acceptedBy(), "HRFLOW");
+                textTop(cs, page, 390, 654, verifier, 6.5f, false);
+                textTop(cs, page, 390, 673, verifier, 6.5f, false);
+                textTop(cs, page, 390, 692, dateTimeDate(firstNonNull(verification.verifiedAt(), verification.acceptedAt())), 6.5f, false);
+
+                textTop(cs, page, 92, 500, verifier, 6.3f, false);
+                textTop(cs, page, 92, 523, verifier, 6.3f, false);
+                textTop(cs, page, 92, 542, "HRFLOW verifier", 6.3f, false);
+                textTop(cs, page, 92, 560, dateTimeDate(firstNonNull(verification.verifiedAt(), verification.acceptedAt())), 6.3f, false);
+            }
+        }
+    }
+
+    private void overlayDeclaration(PDDocument document, PDPage page, FormContext ctx) throws IOException {
+        HrOnboardingDtos.AgreementAcceptanceResponse acceptance = ctx.declarationAcceptance();
+        String name = firstNonBlank(
+                acceptance == null ? null : acceptance.typedName(),
+                ctx.employee() == null ? null : ctx.employee().getFullName(),
+                ctx.candidate().getFullName()
+        );
+        String employeeCode = ctx.employee() == null ? null : ctx.employee().getEmployeeCode();
+        String department = firstNonBlank(
+                ctx.employee() == null ? null : ctx.employee().getDepartment(),
+                ctx.onboarding().getDepartment(),
+                ctx.candidate().getDepartment()
+        );
+        String designation = firstNonBlank(
+                ctx.employee() == null ? null : ctx.employee().getDesignation(),
+                ctx.onboarding().getDesignation(),
+                ctx.candidate().getDesignation(),
+                ctx.candidate().getPostAppliedFor()
+        );
+        LocalDateTime acceptedAt = acceptance == null ? null : acceptance.acceptedAt();
+
+        try (PDPageContentStream cs = append(document, page)) {
+            textTop(cs, page, 430, 133, dateTimeDate(acceptedAt), 7.2f, false);
+            textTop(cs, page, 145, 192, name, 7.2f, false);
+            textTop(cs, page, 165, 222, department, 7.2f, false);
+            textTop(cs, page, 170, 251, designation, 7.2f, false);
+            textTop(cs, page, 170, 281, employeeCode, 7.2f, false);
+            if (acceptance != null) {
+                textTop(cs, page, 145, 606, name + " / e-accepted", 6.7f, false);
+                textTop(cs, page, 145, 638, dateTimeText(acceptedAt), 6.2f, false);
+            }
+        }
+    }
+
+    private void markTask(
+            PDPageContentStream cs,
+            PDPage page,
+            HrOnboardingDtos.OrientationTask task,
+            float x,
+            float top
+    ) throws IOException {
+        if (task != null && task.completed()) textTop(cs, page, x, top, "X", 8.0f, true);
+    }
+
+    private HrOnboardingDtos.OrientationTask firstCompleted(
+            Map<String, HrOnboardingDtos.OrientationTask> byCode,
+            String firstCode,
+            String lastCode
+    ) {
+        if (byCode == null || byCode.isEmpty()) return null;
+        String prefix = firstCode.replaceAll("\\d+$", "");
+        int first = Integer.parseInt(firstCode.replaceAll("\\D+", ""));
+        int last = Integer.parseInt(lastCode.replaceAll("\\D+", ""));
+        for (int i = first; i <= last; i++) {
+            HrOnboardingDtos.OrientationTask task = byCode.get(prefix + String.format("%02d", i));
+            if (task != null && task.completed()) return task;
+        }
+        return null;
+    }
+
+    private PDPageContentStream append(PDDocument document, PDPage page) throws IOException {
+        return new PDPageContentStream(document, page, AppendMode.APPEND, true, true);
+    }
+
+    private void textTop(
+            PDPageContentStream cs,
+            PDPage page,
+            float x,
+            float top,
+            String value,
+            float fontSize,
+            boolean bold
+    ) throws IOException {
+        String text = pdfSafe(value);
+        if (text == null) return;
+        cs.beginText();
+        cs.setFont(bold ? FORM_FONT_BOLD : FORM_FONT, fontSize);
+        cs.newLineAtOffset(x, page.getMediaBox().getHeight() - top - fontSize);
+        cs.showText(text);
+        cs.endText();
+    }
+
+    private void wrappedTop(
+            PDPageContentStream cs,
+            PDPage page,
+            float x,
+            float top,
+            String value,
+            float maxWidth,
+            float fontSize,
+            float leading,
+            int maxLines
+    ) throws IOException {
+        String text = pdfSafe(value);
+        if (text == null) return;
+        List<String> lines = wrap(text, FORM_FONT, fontSize, maxWidth, maxLines);
+        for (int i = 0; i < lines.size(); i++) {
+            textTop(cs, page, x, top + i * leading, lines.get(i), fontSize, false);
+        }
+    }
+
+    private List<String> wrap(String text, PDFont font, float fontSize, float maxWidth, int maxLines) throws IOException {
+        List<String> result = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String word : text.split("\\s+")) {
+            String candidate = line.length() == 0 ? word : line + " " + word;
+            float width = font.getStringWidth(candidate) / 1000f * fontSize;
+            if (width <= maxWidth || line.length() == 0) {
+                line.setLength(0);
+                line.append(candidate);
+            } else {
+                result.add(line.toString());
+                line.setLength(0);
+                line.append(word);
+                if (result.size() >= maxLines - 1) break;
+            }
+        }
+        if (line.length() > 0 && result.size() < maxLines) result.add(line.toString());
+        return result;
+    }
+
+    private PDDocument loadMasterPdf() throws IOException {
+        ClassPathResource resource = new ClassPathResource(HR_FORM_MASTER);
+        if (!resource.exists()) {
+            throw new IllegalStateException(
+                    "Missing HRFLOW PDF resource: src/main/resources/" + HR_FORM_MASTER
+            );
+        }
+        try (InputStream in = resource.getInputStream()) {
+            return PDDocument.load(in);
+        }
+    }
+
+    private String normalizeFormKey(String value) {
+        String key = nullSafe(value).trim().toUpperCase(Locale.ROOT)
+                .replace('-', '_')
+                .replace(' ', '_');
+        if (key.isBlank()) throw HrFlowException.badRequest("Form key is required.");
+        return switch (key) {
+            case "JOINING", "JOINING_FORM" -> "JOINING_REPORT";
+            case "HOLIDAY", "LEAVE", "POLICY", "HOLIDAY_LEAVE_2026" -> "HOLIDAY_LEAVE";
+            case "ORIENTATION_CHECKLIST", "ORIENTATION_FORM" -> "ORIENTATION";
+            case "FEEDBACK", "INDUCTION", "INDUCTION_BACK" -> "INDUCTION_FEEDBACK";
+            case "MUTUAL_NDA", "NON_DISCLOSURE_AGREEMENT" -> "NDA";
+            case "EMPLOYMENT_DECLARATION" -> "DECLARATION";
+            case "PACK", "ALL", "ONBOARDING" -> "ONBOARDING_PACK";
+            default -> key;
+        };
+    }
+
+    private String pdfSafe(String value) {
+        String v = clean(value);
+        if (v == null) return null;
+        v = v.replace('\u2018', '\'').replace('\u2019', '\'')
+                .replace('\u201c', '"').replace('\u201d', '"')
+                .replace('\u2013', '-').replace('\u2014', '-')
+                .replace('\u00a0', ' ');
+        StringBuilder out = new StringBuilder(v.length());
+        for (char ch : v.toCharArray()) out.append(ch >= 32 && ch <= 126 ? ch : '?');
+        return out.toString();
+    }
+
+    private String dateText(LocalDate value) {
+        return value == null ? null : FORM_DATE.format(value);
+    }
+
+    private String dateTimeDate(LocalDateTime value) {
+        return value == null ? null : FORM_DATE.format(value.toLocalDate());
+    }
+
+    private String dateTimeText(LocalDateTime value) {
+        if (value == null) return null;
+        return FORM_DATE.format(value.toLocalDate()) + " " + value.toLocalTime().withSecond(0).withNano(0);
+    }
+
+    private String shortHash(String value) {
+        String v = clean(value);
+        if (v == null) return "-";
+        return v.length() <= 24 ? v : v.substring(0, 24) + "...";
+    }
+
+    private String joinDepartmentCode(String department, String code) {
+        if (clean(department) == null) return code;
+        if (clean(code) == null) return department;
+        return department + " / " + code;
+    }
+
+    private String safeFilePart(String value) {
+        String v = nullSafe(value).trim().replaceAll("[^A-Za-z0-9._-]+", "_");
+        return v.isBlank() ? "HR_Form" : v;
+    }
+
+    private String nullSafe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private LocalDateTime firstNonNull(LocalDateTime a, LocalDateTime b) {
+        return a != null ? a : b;
+    }
+
+    public record FormPdf(String fileName, byte[] bytes) {}
+
+    private record FormContext(
+            HrOnboardingCase onboarding,
+            HrCandidate candidate,
+            HrEmployee employee,
+            HrOnboardingDtos.JoiningReportResponse joining,
+            HrOnboardingDtos.LegalSnapshotResponse policy,
+            HrOnboardingDtos.AgreementAcceptanceResponse policyAck,
+            HrOnboardingDtos.LegalSnapshotResponse nda,
+            HrOnboardingDtos.AgreementAcceptanceResponse ndaAcceptance,
+            HrOnboardingDtos.AgreementAcceptanceResponse ndaVerification,
+            HrOnboardingDtos.LegalSnapshotResponse declaration,
+            HrOnboardingDtos.AgreementAcceptanceResponse declarationAcceptance,
+            HrOnboardingDtos.OrientationResponse orientation,
+            HrOnboardingDtos.FeedbackSubmissionResponse feedback
+    ) {}
 
     // -------------------------------------------------------------------------
     // Entity / DTO mapping helpers

@@ -6,6 +6,9 @@ import com.alsorg.packing.hrflow.dto.HrOnboardingDtos;
 import com.alsorg.packing.hrflow.service.HrOnboardingService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 
@@ -62,6 +65,19 @@ public class HrOnboardingController {
             @Valid @RequestBody(required = false) HrOnboardingDtos.ConfirmJoiningRequest request
     ) {
         return onboardingService.confirmJoining(id, request);
+    }
+
+    @GetMapping(value = "/{id}/form-pdf/{formKey}", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> formPdf(
+            @PathVariable UUID id,
+            @PathVariable String formKey
+    ) {
+        HrOnboardingService.FormPdf pdf = onboardingService.formPdf(id, formKey);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
+                .body(pdf.bytes());
     }
 
     @GetMapping("/{id}/joining-report")

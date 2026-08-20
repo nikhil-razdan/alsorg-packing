@@ -101,6 +101,19 @@ export default function HrOnboardingPortalPage({ token }) {
 		}
 	};
 
+	const downloadFormPdf = async (formKey, fileName) => {
+		setBusy(true);
+		setError("");
+		try {
+			const response = await hrflowApi.publicDownloadOnboardingForm(token, formKey);
+			saveBlob(response, fileName);
+		} catch (e) {
+			setError(apiMessage(e, "Your onboarding PDF could not be downloaded."));
+		} finally {
+			setBusy(false);
+		}
+	};
+
 	const feedbackQuestions = portal?.feedbackQuestions || [];
 	const canSubmitFeedback = feedbackQuestions.length > 0 && feedbackQuestions.every((q) => feedbackAnswers[q.code]?.answer);
 	const submitFeedback = () => run(
@@ -151,6 +164,19 @@ export default function HrOnboardingPortalPage({ token }) {
 								<CompletionBar completion={portal.completion} />
 								{portal.completion?.pending?.length ? <Typography sx={{ mt: 1, color: hrColors.muted, fontSize: 12 }}>{portal.completion.pending.length} control point(s) still pending.</Typography> : <Alert severity="success" sx={{ mt: 1.2, borderRadius: 1.4 }}>All onboarding controls are complete.</Alert>}
 							</Box>
+						</Box>
+					</Paper>
+
+					<Paper sx={{ ...panelSx, p: 2.2, mb: 2 }}>
+						<SectionHeader title="Official PDF copies" subtitle="Download the HR forms in the same layout as the original ALSORG HR form pack. Buttons appear when that workflow record exists." />
+						<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+							{portal.joiningReport ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("JOINING_REPORT", `${portal.candidateNumber}_Joining_Report.pdf`)} sx={secondaryButtonSx}>Joining Report</Button> : null}
+							{portal.policy ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("HOLIDAY_LEAVE", `${portal.candidateNumber}_Holiday_Leave.pdf`)} sx={secondaryButtonSx}>Holiday & Leave</Button> : null}
+							{portal.nda ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("NDA", `${portal.candidateNumber}_NDA.pdf`)} sx={secondaryButtonSx}>NDA</Button> : null}
+							{portal.declaration ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("DECLARATION", `${portal.candidateNumber}_Declaration.pdf`)} sx={secondaryButtonSx}>Declaration</Button> : null}
+							{portal.orientation ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("ORIENTATION", `${portal.candidateNumber}_Orientation.pdf`)} sx={secondaryButtonSx}>Orientation</Button> : null}
+							{portal.feedbackSubmission ? <Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("INDUCTION_FEEDBACK", `${portal.candidateNumber}_Induction_Feedback.pdf`)} sx={secondaryButtonSx}>Induction Feedback</Button> : null}
+							<Button variant="contained" size="small" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => downloadFormPdf("ONBOARDING_PACK", `${portal.candidateNumber}_Onboarding_Form_Pack.pdf`)} sx={primaryButtonSx}>Onboarding PDF pack</Button>
 						</Box>
 					</Paper>
 

@@ -389,84 +389,140 @@ export default function HrFlowWorkspace() {
 }
 
 function FormsView({ onNavigate, canViewOnboarding }) {
+	const [downloadError, setDownloadError] = useState("");
+	const [downloading, setDownloading] = useState("");
+
 	const forms = [
 		{
-			title: "Personal Data / Employment Application",
-			source: "PDF pages 1 and 3–5",
+			key: "PERSONAL_DATA",
+			title: "Personal Data Form",
+			source: "PDF page 1",
 			who: "Candidate",
-			description: "The secure candidate application collects personal details, identity, family, education, last employers, languages, salary and the applicant declaration. Standard and Managerial / Administrative application types use the same candidate master.",
-			location: "Candidates → Open candidate → Candidate Form; Generate Application Link for the candidate to fill it.",
+			description: "Standard personal-data format covering identity, experience, education, employers, addresses, contact details, reference and salary information.",
+			location: "Candidates → Open candidate → Candidate Form.",
 			action: "Open Candidates",
 			view: "candidates",
+			file: "HR_Personal_Data_Form_Blank.pdf",
 		},
 		{
+			key: "EMPLOYMENT_APPLICATION",
+			title: "Employment Application Form",
+			source: "PDF pages 3–5",
+			who: "Candidate",
+			description: "Managerial / Administrative application format with photograph, family, education, employment history, languages, salary, declaration and office-use section.",
+			location: "Candidates → Open candidate → Candidate Form; candidate fills through the secure application link.",
+			action: "Open Candidates",
+			view: "candidates",
+			file: "HR_Employment_Application_Form_Blank.pdf",
+		},
+		{
+			key: "JOINING_REPORT",
 			title: "Joining Report by an Employee",
 			source: "PDF page 2",
 			who: "New joinee",
-			description: "Generated from confirmed employee code, name, designation, department and joining date. The joinee acknowledges the report through the secure onboarding portal.",
+			description: "Day-one joining report populated from employee code, name, designation, department and joining date, with electronic acknowledgement evidence.",
 			location: "Onboarding → Open case → Joining Form / Portal.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_Joining_Report_Blank.pdf",
 		},
 		{
-			title: "Holiday & Leave / HR Policy",
+			key: "HOLIDAY_LEAVE",
+			title: "Holiday & Leave 2026",
 			source: "PDF page 6",
 			who: "New joinee",
-			description: "HR publishes the approved version and the employee acknowledges that exact snapshot. Historical accepted versions remain traceable.",
+			description: "Exact Holiday & Leave sample. Filled copies append the HRFlow policy version and employee acknowledgement evidence without changing the original layout.",
 			location: "Onboarding → Policy / NDA / Declaration.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_Holiday_Leave_2026_Blank.pdf",
 		},
 		{
-			title: "New Employee Orientation Checklist",
+			key: "ORIENTATION",
+			title: "New Employee Orientation Check List",
 			source: "PDF page 7",
 			who: "HR + HOD + New joinee",
-			description: "HR orientation, department orientation and workplace visits are digital checklist items with completion, dates, assisted-by details and employee acknowledgement.",
+			description: "The original checklist format is retained; completed HR/HOD items, visit dates, assisted-by information and employee acknowledgement are printed into the PDF.",
 			location: "Onboarding → Orientation Form.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_New_Employee_Orientation_Checklist_Blank.pdf",
 		},
 		{
+			key: "INDUCTION_FEEDBACK",
 			title: "Induction Feedback",
 			source: "PDF page 8",
 			who: "New joinee",
-			description: "The Y / N / N.A. induction questions and suggestions are filled by the employee in the onboarding portal and reviewed by HR.",
+			description: "The original Y / N / N.A. feedback grid is retained and completed answers/suggestions are placed in the same table.",
 			location: "Onboarding → Induction Feedback.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_Induction_Feedback_Blank.pdf",
 		},
 		{
+			key: "NDA",
 			title: "Mutual Non-Disclosure Agreement",
 			source: "PDF pages 9–11",
-			who: "New joinee + HR verification",
-			description: "HR publishes the approved NDA version, the employee accepts the frozen text through the portal, and HR verifies the acceptance before onboarding completion.",
+			who: "New joinee + HR",
+			description: "The three-page NDA format remains the source layout. Employee acceptance and HR verification details are printed on the signature page with snapshot evidence.",
 			location: "Onboarding → Policy / NDA / Declaration.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_Mutual_NDA_Blank.pdf",
 		},
 		{
+			key: "DECLARATION",
 			title: "Employment Declaration",
 			source: "PDF page 12",
 			who: "New joinee",
-			description: "The probation, notice and employment declaration is published as an approved snapshot and accepted by the employee through the onboarding portal.",
+			description: "The original probation / notice declaration is retained and populated with employee details and electronic acceptance evidence.",
 			location: "Onboarding → Policy / NDA / Declaration.",
 			action: "Open Onboarding",
 			view: "onboarding",
+			file: "HR_Employment_Declaration_Blank.pdf",
 		},
 	];
+
+	const downloadSample = async (form) => {
+		setDownloading(form.key);
+		setDownloadError("");
+		try {
+			const response = await hrflowApi.downloadFormTemplate(form.key);
+			saveBlob(response, form.file);
+		} catch (e) {
+			setDownloadError(apiMessage(e, `${form.title} sample could not be downloaded.`));
+		} finally {
+			setDownloading("");
+		}
+	};
+
+	const downloadFullPack = async () => {
+		setDownloading("FULL_PACK");
+		setDownloadError("");
+		try {
+			const response = await hrflowApi.downloadFormTemplate("FULL_PACK");
+			saveBlob(response, "HR_Module_Forms_Full_Blank.pdf");
+		} catch (e) {
+			setDownloadError(apiMessage(e, "The full blank HR form pack could not be downloaded."));
+		} finally {
+			setDownloading("");
+		}
+	};
 
 	return (
 		<>
 			<PageTitle
 				eyebrow="INTEGRATED HR FORMS"
 				title="Candidate & employee forms"
-				subtitle="These are the digital FlowSuite equivalents of the forms in your HR Module PDF. Candidate forms are filled through the secure application link; joinee forms are completed through the onboarding case and secure employee portal."
+				subtitle="Every sample below is extracted directly from the approved HR Module PDF. Filled PDFs keep the same source pages and print the candidate / employee data over the original format."
+				actions={<Button startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={downloadFullPack} sx={secondaryButtonSx}>Download full blank pack</Button>}
 			/>
+			<ErrorAlert error={downloadError} />
 			<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 1.25 }}>
 				{forms.map((form) => {
 					const disabled = form.view === "onboarding" && !canViewOnboarding;
 					return (
-						<Paper key={form.title} sx={{ ...panelSx, p: 1.7, display: "flex", flexDirection: "column", gap: 1.1 }}>
+						<Paper key={form.key} sx={{ ...panelSx, p: 1.7, display: "flex", flexDirection: "column", gap: 1.1 }}>
 							<Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
 								<Box sx={{ minWidth: 0 }}>
 									<Typography sx={{ color: hrColors.ink, fontSize: 15.5, fontWeight: 950 }}>{form.title}</Typography>
@@ -476,12 +532,17 @@ function FormsView({ onNavigate, canViewOnboarding }) {
 							</Box>
 							<Typography sx={{ color: hrColors.muted, fontSize: 12.5, lineHeight: 1.65 }}>{form.description}</Typography>
 							<Box sx={{ mt: "auto", p: 1, borderRadius: 1.3, background: "var(--hr-surface)", border: `1px solid ${hrColors.line}` }}>
-								<Typography sx={{ color: hrColors.muted, fontSize: 10.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: .7 }}>Where it is</Typography>
+								<Typography sx={{ color: hrColors.muted, fontSize: 10.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: .7 }}>Where filled copies are available</Typography>
 								<Typography sx={{ mt: .3, color: hrColors.ink, fontSize: 12.2, fontWeight: 800 }}>{form.location}</Typography>
 							</Box>
-							<Button variant="outlined" disabled={disabled} onClick={() => onNavigate(form.view)} sx={secondaryButtonSx}>
-								{disabled ? "Role restricted" : form.action}
-							</Button>
+							<Box sx={{ display: "flex", gap: .8, flexWrap: "wrap" }}>
+								<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(downloading)} onClick={() => downloadSample(form)} sx={primaryButtonSx}>
+									{downloading === form.key ? "Preparing…" : "Download blank PDF"}
+								</Button>
+								<Button variant="outlined" disabled={disabled} onClick={() => onNavigate(form.view)} sx={secondaryButtonSx}>
+									{disabled ? "Role restricted" : form.action}
+								</Button>
+							</Box>
 						</Paper>
 					);
 				})}
@@ -650,6 +711,20 @@ function CandidateDrawer({ candidateId, open, onClose, onChanged, canRecruit, ca
 		}
 	};
 
+	const downloadCandidateForm = async (formKey, fileName) => {
+		if (!candidateId) return;
+		setBusy(true);
+		setError("");
+		try {
+			const response = await hrflowApi.downloadCandidateForm(candidateId, formKey);
+			saveBlob(response, fileName);
+		} catch (e) {
+			setError(apiMessage(e, "Candidate form PDF could not be downloaded."));
+		} finally {
+			setBusy(false);
+		}
+	};
+
 	const canOnboard = ["SELECTED", "OFFERED", "PRE_JOINING"].includes(candidate?.stage);
 	return <Drawer anchor="right" open={open} onClose={busy ? undefined : onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 720, lg: 860 }, maxWidth: "100%", borderRadius: 0 } }}>
 		<Box sx={{ p: 1.7, borderBottom: `1px solid ${hrColors.line}`, display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
@@ -660,7 +735,7 @@ function CandidateDrawer({ candidateId, open, onClose, onChanged, canRecruit, ca
 			</Box>
 		</Box>
 		<Box sx={{ px: 1.5, borderBottom: `1px solid ${hrColors.line}` }}><Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto"><Tab label="Overview" /><Tab label="Candidate Form" /><Tab label="Documents" /><Tab label="Audit" /><Tab label="Onboarding" /></Tabs></Box>
-		<Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} onRetry={load} />{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 1.5, borderRadius: 1.5 }}>{message}</Alert> : null}{tab === 0 ? <CandidateOverview candidate={candidate} edit={edit} setEdit={setEdit} canOperate={canOperate} busy={busy} onSave={saveEdit} stageForm={stageForm} setStageForm={setStageForm} canRecruit={canRecruit} onStage={changeStage} onApplicationLink={applicationLink} generatedLink={generatedLink} /> : null}{tab === 1 ? <CandidateApplicationView candidate={candidate} /> : null}{tab === 2 ? <CandidateDocuments documents={documents} completeness={completeness} upload={upload} setUpload={setUpload} canRecruit={canRecruit} canArchive={canOperate} busy={busy} onUpload={uploadDoc} onDownload={downloadDoc} onArchive={archiveDoc} /> : null}{tab === 3 ? <AuditList rows={audit} /> : null}{tab === 4 ? <CandidateOnboardingStarter candidate={candidate} canOnboard={canOnboard} canOperate={canOperate} form={onboardingForm} setForm={setOnboardingForm} busy={busy} onCreate={createOnboarding} /> : null}</>}</Box>
+		<Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} onRetry={load} />{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 1.5, borderRadius: 1.5 }}>{message}</Alert> : null}{tab === 0 ? <CandidateOverview candidate={candidate} edit={edit} setEdit={setEdit} canOperate={canOperate} busy={busy} onSave={saveEdit} stageForm={stageForm} setStageForm={setStageForm} canRecruit={canRecruit} onStage={changeStage} onApplicationLink={applicationLink} generatedLink={generatedLink} /> : null}{tab === 1 ? <CandidateApplicationView candidate={candidate} onDownloadForm={downloadCandidateForm} busy={busy} /> : null}{tab === 2 ? <CandidateDocuments documents={documents} completeness={completeness} upload={upload} setUpload={setUpload} canRecruit={canRecruit} canArchive={canOperate} busy={busy} onUpload={uploadDoc} onDownload={downloadDoc} onArchive={archiveDoc} /> : null}{tab === 3 ? <AuditList rows={audit} /> : null}{tab === 4 ? <CandidateOnboardingStarter candidate={candidate} canOnboard={canOnboard} canOperate={canOperate} form={onboardingForm} setForm={setOnboardingForm} busy={busy} onCreate={createOnboarding} /> : null}</>}</Box>
 
 		<Dialog open={deleteOpen} onClose={busy ? undefined : () => setDeleteOpen(false)} fullWidth maxWidth="sm">
 			<DialogTitle sx={{ fontWeight: 950, color: hrColors.red }}>Permanently delete candidate?</DialogTitle>
@@ -706,8 +781,9 @@ function CandidateOverview({ candidate, edit, setEdit, canOperate, busy, onSave,
 	</Box>;
 }
 
-function CandidateApplicationView({ candidate }) {
+function CandidateApplicationView({ candidate, onDownloadForm, busy }) {
 	if (!candidate) return null;
+	const candidatePrefix = candidate.candidateNumber || "Candidate";
 	const info = [
 		["Application type", humanize(candidate.applicationType)],
 		["Post applied for", candidate.postAppliedFor],
@@ -745,6 +821,14 @@ function CandidateApplicationView({ candidate }) {
 	];
 	return (
 		<Box sx={{ display: "grid", gap: 1.5 }}>
+			<Paper variant="outlined" sx={sectionCardSx}>
+				<SectionTitle title="Official PDF copies" subtitle="Downloads use the exact original HR form pages and overlay this candidate's current saved data." />
+				<Box sx={{ display: "flex", gap: .8, flexWrap: "wrap" }}>
+					<Button startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("PERSONAL_DATA", `${candidatePrefix}_Personal_Data_Form.pdf`)} sx={secondaryButtonSx}>Personal Data PDF</Button>
+					<Button startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("EMPLOYMENT_APPLICATION", `${candidatePrefix}_Employment_Application.pdf`)} sx={secondaryButtonSx}>Employment Application PDF</Button>
+					<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={busy} onClick={() => onDownloadForm?.("CANDIDATE_PACK", `${candidatePrefix}_Candidate_Form_Pack.pdf`)} sx={primaryButtonSx}>Candidate PDF pack</Button>
+				</Box>
+			</Paper>
 			<Paper variant="outlined" sx={sectionCardSx}>
 				<SectionTitle title="Candidate form" subtitle={`Digital Personal Data / Employment Application • ${humanize(candidate.applicationType)} • ${humanize(candidate.stage)}`} />
 				<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
@@ -935,7 +1019,14 @@ function OnboardingDrawer({ onboardingId, open, onClose, onChanged, canOperate, 
 	const verifyNda = () => run(() => hrflowApi.verifyNda(onboardingId), "NDA acceptance verified.");
 	const saveOrientation = () => run(() => hrflowApi.updateOrientation(onboardingId, { expectedStateSha256: orientation?.stateSha256 || null, tasks: orientationDraft.filter((task) => !hodOnly || ["DEPARTMENT", "VISIT"].includes(task.section)).map((task) => ({ code: task.code, completed: Boolean(task.completed), remarks: task.remarks || null, visitDate: task.visitDate || null, assistedBy: task.assistedBy || null })) }), "Orientation checklist updated.");
 	const complete = () => run(() => hrflowApi.completeOnboarding(onboardingId), "Onboarding marked complete.");
-	return <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 820, lg: 980 }, maxWidth: "100%" } }}><Box sx={{ p: 1.7, borderBottom: `1px solid ${hrColors.line}`, display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontWeight: 950, fontSize: 19 }}>{detail?.candidateName || "Onboarding"}</Typography><Typography sx={{ color: hrColors.muted, fontSize: 12 }}>{detail?.candidateNumber} • {humanize(detail?.status)}</Typography></Box><IconButton onClick={onClose}><CloseOutlinedIcon /></IconButton></Box><Box sx={{ px: 1.5, borderBottom: `1px solid ${hrColors.line}` }}><Tabs value={tab} onChange={(_,v) => setTab(v)} variant="scrollable" scrollButtons="auto"><Tab label="Joining Form" /><Tab label="Policy / NDA / Declaration" /><Tab label="Orientation Form" /><Tab label="Induction Feedback" /><Tab label="Completion" /></Tabs></Box><Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} onRetry={load} />{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 1.5, borderRadius: 1.5 }}>{message}</Alert> : null}{tab === 0 ? <OnboardingOverview detail={detail} edit={edit} setEdit={setEdit} canOperate={canOperate} busy={busy} onSave={updateDetail} portalLink={portalLink} onPortal={createPortal} joining={joining} joinForm={joinForm} setJoinForm={setJoinForm} onConfirm={confirmJoining} /> : null}{tab === 1 ? <LegalEditor canPublish={canPublish} busy={busy} drafts={legalDraft} setDrafts={setLegalDraft} policy={policy} nda={nda} declaration={declaration} completion={completion} onPublish={setLegal} onVerifyNda={verifyNda} /> : null}{tab === 2 ? <OrientationEditor orientation={orientation} draft={orientationDraft} setDraft={setOrientationDraft} canOrientation={canOrientation} hodOnly={hodOnly} busy={busy} onSave={saveOrientation} /> : null}{tab === 3 ? <FeedbackView feedback={feedback} /> : null}{tab === 4 ? <CompletionView completion={completion} canOperate={canOperate} busy={busy} onComplete={complete} /> : null}</>}</Box></Drawer>;
+	const downloadOnboardingForm = async (formKey, fileName) => {
+		setBusy(true); setError("");
+		try { const response = await hrflowApi.downloadOnboardingForm(onboardingId, formKey); saveBlob(response, fileName); }
+		catch (e) { setError(apiMessage(e, "Onboarding form PDF could not be downloaded.")); }
+		finally { setBusy(false); }
+	};
+	const pdfPrefix = detail?.candidateNumber || "Onboarding";
+	return <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 820, lg: 980 }, maxWidth: "100%" } }}><Box sx={{ p: 1.7, borderBottom: `1px solid ${hrColors.line}`, display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontWeight: 950, fontSize: 19 }}>{detail?.candidateName || "Onboarding"}</Typography><Typography sx={{ color: hrColors.muted, fontSize: 12 }}>{detail?.candidateNumber} • {humanize(detail?.status)}</Typography></Box><IconButton onClick={onClose}><CloseOutlinedIcon /></IconButton></Box><Box sx={{ px: 1.5, borderBottom: `1px solid ${hrColors.line}` }}><Tabs value={tab} onChange={(_,v) => setTab(v)} variant="scrollable" scrollButtons="auto"><Tab label="Joining Form" /><Tab label="Policy / NDA / Declaration" /><Tab label="Orientation Form" /><Tab label="Induction Feedback" /><Tab label="Completion" /></Tabs></Box><Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} onRetry={load} />{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 1.5, borderRadius: 1.5 }}>{message}</Alert> : null}<Paper variant="outlined" sx={{ ...sectionCardSx, mb: 1.5 }}><SectionTitle title="Official PDF copy" subtitle="Download the currently selected filled form in the same source format as the HR master PDF."/><Box sx={{display:"flex",gap:.7,flexWrap:"wrap"}}>{tab===0?<Button startIcon={<DownloadOutlinedIcon/>} disabled={busy} onClick={()=>downloadOnboardingForm("JOINING_REPORT",`${pdfPrefix}_Joining_Report.pdf`)} sx={secondaryButtonSx}>Joining Report PDF</Button>:null}{tab===1?<><Button startIcon={<DownloadOutlinedIcon/>} disabled={busy||!policy} onClick={()=>downloadOnboardingForm("HOLIDAY_LEAVE",`${pdfPrefix}_Holiday_Leave.pdf`)} sx={secondaryButtonSx}>Policy PDF</Button><Button startIcon={<DownloadOutlinedIcon/>} disabled={busy||!nda} onClick={()=>downloadOnboardingForm("NDA",`${pdfPrefix}_NDA.pdf`)} sx={secondaryButtonSx}>NDA PDF</Button><Button startIcon={<DownloadOutlinedIcon/>} disabled={busy||!declaration} onClick={()=>downloadOnboardingForm("DECLARATION",`${pdfPrefix}_Declaration.pdf`)} sx={secondaryButtonSx}>Declaration PDF</Button></>:null}{tab===2?<Button startIcon={<DownloadOutlinedIcon/>} disabled={busy} onClick={()=>downloadOnboardingForm("ORIENTATION",`${pdfPrefix}_Orientation.pdf`)} sx={secondaryButtonSx}>Orientation PDF</Button>:null}{tab===3?<Button startIcon={<DownloadOutlinedIcon/>} disabled={busy||!feedback} onClick={()=>downloadOnboardingForm("INDUCTION_FEEDBACK",`${pdfPrefix}_Induction_Feedback.pdf`)} sx={secondaryButtonSx}>Feedback PDF</Button>:null}{tab===4?<Button variant="contained" startIcon={<DownloadOutlinedIcon/>} disabled={busy} onClick={()=>downloadOnboardingForm("ONBOARDING_PACK",`${pdfPrefix}_Onboarding_Form_Pack.pdf`)} sx={primaryButtonSx}>Full onboarding PDF pack</Button>:null}</Box></Paper>{tab === 0 ? <OnboardingOverview detail={detail} edit={edit} setEdit={setEdit} canOperate={canOperate} busy={busy} onSave={updateDetail} portalLink={portalLink} onPortal={createPortal} joining={joining} joinForm={joinForm} setJoinForm={setJoinForm} onConfirm={confirmJoining} /> : null}{tab === 1 ? <LegalEditor canPublish={canPublish} busy={busy} drafts={legalDraft} setDrafts={setLegalDraft} policy={policy} nda={nda} declaration={declaration} completion={completion} onPublish={setLegal} onVerifyNda={verifyNda} /> : null}{tab === 2 ? <OrientationEditor orientation={orientation} draft={orientationDraft} setDraft={setOrientationDraft} canOrientation={canOrientation} hodOnly={hodOnly} busy={busy} onSave={saveOrientation} /> : null}{tab === 3 ? <FeedbackView feedback={feedback} /> : null}{tab === 4 ? <CompletionView completion={completion} canOperate={canOperate} busy={busy} onComplete={complete} /> : null}</>}</Box></Drawer>;
 }
 
 function OnboardingOverview({ detail, edit, setEdit, canOperate, busy, onSave, portalLink, onPortal, joining, joinForm, setJoinForm, onConfirm }) {
@@ -957,7 +1048,64 @@ function CompletionView({ completion, canOperate, busy, onComplete }) { if (!com
 
 function EmployeesView() { const [loading,setLoading] = useState(true); const [error,setError] = useState(""); const [rows,setRows] = useState([]); const [total,setTotal] = useState(0); const [search,setSearch] = useState(""); const [status,setStatus] = useState(""); const [selectedId,setSelectedId] = useState(null); const load = useCallback(async () => { setLoading(true); setError(""); try { const response = await hrflowApi.listEmployees({ q: search, status, page:0, size:50, sort:"createdAt,desc" }); setRows(pageContent(response)); setTotal(totalElements(response)); } catch(e) { setError(apiMessage(e,"Employees could not be loaded.")); } finally { setLoading(false); } },[search,status]); useEffect(() => { const t=setTimeout(load,250); return () => clearTimeout(t); },[load]); return <><PageTitle eyebrow="EMPLOYEE MASTER" title="Employees" subtitle="Authoritative employee records created only through controlled joining confirmation. FlowSuite user linkage remains optional and separate." actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>} /><ErrorAlert error={error} onRetry={load} /><Paper sx={{ ...panelSx,p:1.4,mb:1.5 }}><Box sx={{ display:"grid",gridTemplateColumns:{xs:"1fr",md:"1fr 220px auto"},gap:1 }}><TextField size="small" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search employee…" InputProps={{startAdornment:<InputAdornment position="start"><SearchOutlinedIcon fontSize="small" /></InputAdornment>}} sx={fieldSx}/><TextField select size="small" label="Status" value={status} onChange={(e)=>setStatus(e.target.value)} sx={fieldSx}><MenuItem value="">All statuses</MenuItem>{HR_EMPLOYEE_STATUSES.map((v)=><MenuItem key={v} value={v}>{humanize(v)}</MenuItem>)}</TextField><Chip label={`${total} employee${total===1?"":"s"}`} sx={{alignSelf:"center",borderRadius:1.2,fontWeight:850}}/></Box></Paper><Paper sx={{...panelSx,overflow:"hidden"}}>{loading?<LoadingBlock/>:rows.length?<Box sx={{overflowX:"auto"}}><Box sx={{minWidth:850}}><TableHead columns={["Employee","Status","Department","Designation","Location","Joined",""]}/>{rows.map((r)=><Box key={r.id} sx={tableRowSx}><Cell><Typography sx={mainCellSx}>{r.fullName}</Typography><Typography sx={subCellSx}>{r.employeeCode} • {r.mobileNo||"—"}</Typography></Cell><Cell><StatusChip value={r.status}/></Cell><Cell>{r.department||"—"}</Cell><Cell>{r.designation||"—"}</Cell><Cell>{r.location||"—"}</Cell><Cell>{formatDate(r.dateOfJoining)}</Cell><Cell><Button size="small" onClick={()=>setSelectedId(r.id)} sx={secondaryButtonSx}>Open</Button></Cell></Box>)}</Box></Box>:<EmptyState title="No employees found"/>}</Paper><EmployeeDrawer id={selectedId} open={Boolean(selectedId)} onClose={()=>setSelectedId(null)}/></>; }
 
-function EmployeeDrawer({ id, open, onClose }) { const [loading,setLoading]=useState(false); const [error,setError]=useState(""); const [employee,setEmployee]=useState(null); useEffect(()=>{ if(!open||!id)return; setLoading(true); setError(""); hrflowApi.getEmployee(id).then(r=>setEmployee(r.data)).catch(e=>setError(apiMessage(e))).finally(()=>setLoading(false)); },[id,open]); return <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{sx:{width:{xs:"100%",sm:620},maxWidth:"100%"}}}><Box sx={{p:1.7,borderBottom:`1px solid ${hrColors.line}`,display:"flex",justifyContent:"space-between"}}><Box><Typography sx={{fontSize:19,fontWeight:950}}>{employee?.fullName||"Employee"}</Typography><Typography sx={{fontSize:12,color:hrColors.muted}}>{employee?.employeeCode}</Typography></Box><IconButton onClick={onClose}><CloseOutlinedIcon/></IconButton></Box><Box sx={{p:2}}>{loading?<LoadingBlock/>:<><ErrorAlert error={error}/>{employee?<Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Employee profile"/><Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"1fr 1fr"},gap:1 }}>{[["Status",humanize(employee.status)],["Department",employee.department],["Designation",employee.designation],["Location",employee.location],["Reporting manager",employee.reportingManager],["Appointed by",employee.appointedBy],["Date of joining",formatDate(employee.dateOfJoining)],["DOB",formatDate(employee.dateOfBirth)],["Mobile",employee.mobileNo],["Email",employee.email],["Present address",employee.presentAddress],["Permanent address",employee.permanentAddress],["FlowSuite user",employee.flowSuiteUserId||"Not linked"]].map(([l,v])=><Info key={l} label={l} value={v}/>)}</Box></Paper>:null}</>}</Box></Drawer>; }
+function EmployeeDrawer({ id, open, onClose }) {
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState("");
+	const [employee, setEmployee] = useState(null);
+	const [pdfBusy, setPdfBusy] = useState("");
+
+	useEffect(() => {
+		if (!open || !id) return;
+		setLoading(true);
+		setError("");
+		hrflowApi.getEmployee(id)
+			.then((r) => setEmployee(r.data))
+			.catch((e) => setError(apiMessage(e)))
+			.finally(() => setLoading(false));
+	}, [id, open]);
+
+	const downloadEmployeePdf = async (formKey, fileName) => {
+		setPdfBusy(formKey);
+		setError("");
+		try {
+			const response = await hrflowApi.downloadEmployeeForm(id, formKey);
+			saveBlob(response, fileName);
+		} catch (e) {
+			setError(apiMessage(e, "Employee form PDF could not be downloaded."));
+		} finally {
+			setPdfBusy("");
+		}
+	};
+
+	const prefix = employee?.employeeCode || "Employee";
+	const pdfButtons = [
+		["PERSONAL_DATA", "Personal Data", `${prefix}_Personal_Data.pdf`],
+		["EMPLOYMENT_APPLICATION", "Employment Application", `${prefix}_Employment_Application.pdf`],
+		["JOINING_REPORT", "Joining Report", `${prefix}_Joining_Report.pdf`],
+		["HOLIDAY_LEAVE", "Holiday & Leave", `${prefix}_Holiday_Leave.pdf`],
+		["ORIENTATION", "Orientation", `${prefix}_Orientation.pdf`],
+		["INDUCTION_FEEDBACK", "Induction Feedback", `${prefix}_Induction_Feedback.pdf`],
+		["NDA", "NDA", `${prefix}_NDA.pdf`],
+		["DECLARATION", "Declaration", `${prefix}_Declaration.pdf`],
+	];
+
+	return <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 720 }, maxWidth: "100%" } }}>
+		<Box sx={{ p: 1.7, borderBottom: `1px solid ${hrColors.line}`, display: "flex", justifyContent: "space-between" }}>
+			<Box><Typography sx={{ fontSize: 19, fontWeight: 950 }}>{employee?.fullName || "Employee"}</Typography><Typography sx={{ fontSize: 12, color: hrColors.muted }}>{employee?.employeeCode}</Typography></Box>
+			<IconButton onClick={onClose}><CloseOutlinedIcon /></IconButton>
+		</Box>
+		<Box sx={{ p: 2, overflowY: "auto" }}>{loading ? <LoadingBlock /> : <><ErrorAlert error={error} />{employee ? <Box sx={{ display: "grid", gap: 1.5 }}>
+			<Paper variant="outlined" sx={sectionCardSx}><SectionTitle title="Employee profile" /><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>{[["Status", humanize(employee.status)], ["Department", employee.department], ["Designation", employee.designation], ["Location", employee.location], ["Reporting manager", employee.reportingManager], ["Appointed by", employee.appointedBy], ["Date of joining", formatDate(employee.dateOfJoining)], ["DOB", formatDate(employee.dateOfBirth)], ["Mobile", employee.mobileNo], ["Email", employee.email], ["Present address", employee.presentAddress], ["Permanent address", employee.permanentAddress], ["FlowSuite user", employee.flowSuiteUserId || "Not linked"]].map(([l, v]) => <Info key={l} label={l} value={v} />)}</Box></Paper>
+			<Paper variant="outlined" sx={sectionCardSx}>
+				<SectionTitle title="Official filled HR forms" subtitle="Each PDF uses the original HR Module page format. The full personnel pack combines the candidate application and onboarding documents." />
+				<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+					{pdfButtons.map(([key, label, fileName]) => <Button key={key} size="small" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf(key, fileName)} sx={secondaryButtonSx}>{pdfBusy === key ? "Preparing…" : label}</Button>)}
+					<Button variant="contained" startIcon={<DownloadOutlinedIcon />} disabled={Boolean(pdfBusy)} onClick={() => downloadEmployeePdf("FULL_PERSONNEL_PACK", `${prefix}_Full_Personnel_Pack.pdf`)} sx={primaryButtonSx}>{pdfBusy === "FULL_PERSONNEL_PACK" ? "Preparing…" : "Full personnel PDF pack"}</Button>
+				</Box>
+			</Paper>
+		</Box> : null}</>}</Box>
+	</Drawer>;
+}
 
 function AccessView() { const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [rows,setRows]=useState([]); const [principal,setPrincipal]=useState(""); const [role,setRole]=useState("HR_EXECUTIVE"); const load=useCallback(async()=>{setLoading(true);setError("");try{const r=await hrflowApi.listAccessGrants();setRows(r.data||[]);}catch(e){setError(apiMessage(e));}finally{setLoading(false);}},[]); useEffect(()=>{load();},[load]); const grant=async()=>{try{await hrflowApi.grantAccess({principalName:principal.trim(),role});setPrincipal("");await load();}catch(e){setError(apiMessage(e));}}; const revoke=async(row)=>{try{await hrflowApi.revokeAccess(row.id);await load();}catch(e){setError(apiMessage(e));}}; return <><PageTitle eyebrow="GLOBAL ADMIN" title="HRFlow access grants" subtitle="HRFlow roles are intentionally separate from the global FlowSuite role enum. Global ADMIN can grant or revoke HR-specific permissions here." actions={<Button startIcon={<RefreshOutlinedIcon/>} onClick={load} sx={secondaryButtonSx}>Refresh</Button>}/><ErrorAlert error={error} onRetry={load}/><Paper sx={{...panelSx,p:1.5,mb:1.5}}><Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"1fr 230px auto"},gap:1}}><TextField size="small" label="Username / principal name" value={principal} onChange={(e)=>setPrincipal(e.target.value)} sx={fieldSx}/><TextField select size="small" label="HRFlow role" value={role} onChange={(e)=>setRole(e.target.value)} sx={fieldSx}>{HR_ACCESS_ROLES.map((r)=><MenuItem key={r} value={r}>{humanize(r)}</MenuItem>)}</TextField><Button variant="contained" disabled={!principal.trim()} onClick={grant} sx={primaryButtonSx}>Grant access</Button></Box></Paper><Paper sx={{...panelSx,overflow:"hidden"}}>{loading?<LoadingBlock/>:rows.length?<Box>{rows.map((row)=><Box key={row.id} sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"1.2fr .8fr 120px auto"},gap:1,p:1.2,borderBottom:`1px solid ${hrColors.line}`,alignItems:"center"}}><Box><Typography sx={mainCellSx}>{row.principalName}</Typography><Typography sx={subCellSx}>Updated {formatDateTime(row.updatedAt)}</Typography></Box><StatusChip value={row.role}/><StatusChip value={row.active?"ACTIVE":"REVOKED"}/><Button size="small" color="error" disabled={!row.active} onClick={()=>revoke(row)} sx={{...secondaryButtonSx,color:hrColors.red}}>Revoke</Button></Box>)}</Box>:<EmptyState title="No HR access grants"/>}</Paper></>; }
 

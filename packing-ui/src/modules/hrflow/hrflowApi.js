@@ -50,6 +50,14 @@ const hrflowApi = {
 		API.post(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/application-link`),
 	candidateAudit: (candidateId) =>
 		API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/audit`),
+	downloadFormTemplate: (formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/candidates/reference/form-template/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
+	downloadCandidateForm: (candidateId, formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
 
 	listCandidateDocuments: (candidateId, includeArchived = false) =>
 		API.get(`${BASE}/candidates/${id(candidateId, "Candidate ID")}/documents`, {
@@ -118,11 +126,19 @@ const hrflowApi = {
 		API.get(`${BASE}/onboarding/${id(onboardingId, "Onboarding ID")}/completion`),
 	completeOnboarding: (onboardingId) =>
 		API.post(`${BASE}/onboarding/${id(onboardingId, "Onboarding ID")}/complete`),
+	downloadOnboardingForm: (onboardingId, formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/onboarding/${id(onboardingId, "Onboarding ID")}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
 
 	listEmployees: (params = {}) =>
 		API.get(`${BASE}/employees`, { params: cleanParams(params) }),
 	getEmployee: (employeeId) =>
 		API.get(`${BASE}/employees/${id(employeeId, "Employee ID")}`),
+	downloadEmployeeForm: (employeeId, formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/employees/${id(employeeId, "Employee ID")}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
 
 	publicGetApplication: (rawToken) =>
 		API.get(`${BASE}/public/applications/${token(rawToken)}`),
@@ -130,6 +146,10 @@ const hrflowApi = {
 		API.put(`${BASE}/public/applications/${token(rawToken)}`, body),
 	publicSubmitApplication: (rawToken, body) =>
 		API.post(`${BASE}/public/applications/${token(rawToken)}/submit`, body),
+	publicDownloadCandidateForm: (rawToken, formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/public/applications/${token(rawToken)}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
 	publicListDocuments: (rawToken) =>
 		API.get(`${BASE}/public/applications/${token(rawToken)}/documents`),
 	publicUploadDocument: (rawToken, { documentType, remarks, file }) => {
@@ -152,6 +172,10 @@ const hrflowApi = {
 
 	publicOnboardingPortal: (rawToken) =>
 		API.get(`${BASE}/public/onboarding/${token(rawToken)}`),
+	publicDownloadOnboardingForm: (rawToken, formKey) =>
+		downloadBlob(
+			API.get(`${BASE}/public/onboarding/${token(rawToken)}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+		),
 	publicAcknowledgeJoining: (rawToken) =>
 		API.post(`${BASE}/public/onboarding/${token(rawToken)}/joining-report/acknowledge`),
 	publicAcknowledgePolicy: (rawToken, body) =>

@@ -291,6 +291,19 @@ export default function HrCandidateApplicationPage({ token }) {
 		}
 	};
 
+	const downloadFormPdf = async (formKey, fileName) => {
+		setSaving(true);
+		setError("");
+		try {
+			const response = await hrflowApi.publicDownloadCandidateForm(token, formKey);
+			saveBlob(response, fileName);
+		} catch (e) {
+			setError(apiMessage(e, "Your application PDF could not be downloaded."));
+		} finally {
+			setSaving(false);
+		}
+	};
+
 	const stepContent = useMemo(() => {
 		const disabled = !editable || saving;
 		switch (activeStep) {
@@ -470,6 +483,19 @@ export default function HrCandidateApplicationPage({ token }) {
 		>
 			<ErrorAlert error={error} onRetry={load} />
 			{message ? <Alert severity="success" onClose={() => setMessage("")} sx={{ mb: 2, borderRadius: 1.7 }}>{message}</Alert> : null}
+
+			<Paper sx={{ ...panelSx, p: 1.4, mb: 2 }}>
+				<Box sx={{ display: "flex", gap: .8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+					<Box>
+						<Typography sx={{ fontSize: 13.5, fontWeight: 900, color: hrColors.ink }}>PDF copy of your form</Typography>
+						<Typography sx={{ fontSize: 11.5, color: hrColors.muted }}>Uses the same official HR form layout supplied by ALSORG.</Typography>
+					</Box>
+					<Box sx={{ display: "flex", gap: .7, flexWrap: "wrap" }}>
+						<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("PERSONAL_DATA", `${candidateNumber || "Candidate"}_Personal_Data_Form.pdf`)} sx={secondaryButtonSx}>Personal Data PDF</Button>
+						<Button size="small" startIcon={<DownloadOutlinedIcon />} disabled={saving} onClick={() => downloadFormPdf("EMPLOYMENT_APPLICATION", `${candidateNumber || "Candidate"}_Employment_Application.pdf`)} sx={secondaryButtonSx}>Employment Application PDF</Button>
+					</Box>
+				</Box>
+			</Paper>
 
 			<Paper sx={{ ...panelSx, p: { xs: 1, md: 1.5 }, mb: 2, overflowX: "auto" }}>
 				<Stepper nonLinear activeStep={activeStep} alternativeLabel sx={{ minWidth: 760 }}>

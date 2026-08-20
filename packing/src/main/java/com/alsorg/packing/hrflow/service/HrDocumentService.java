@@ -213,6 +213,20 @@ public class HrDocumentService {
         return toResponse(document);
     }
 
+    /**
+     * Trusted HRFLOW-internal lookup used when a generated official form needs an
+     * existing uploaded source asset, for example the candidate photograph. No
+     * external controller calls this method directly.
+     */
+    @Transactional(readOnly = true)
+    public Optional<DownloadedDocument> latestActiveSystem(UUID candidateId, HrDocumentType documentType) {
+        requireCandidate(candidateId);
+        if (documentType == null) return Optional.empty();
+        return repository
+                .findFirstByCandidateIdAndDocumentTypeAndActiveTrueOrderByUploadedAtDesc(candidateId, documentType)
+                .map(this::decrypted);
+    }
+
     @Transactional(readOnly = true)
     public HrDocumentDtos.DocumentCompletenessResponse completeness(UUID candidateId) {
         accessService.requireAny(
