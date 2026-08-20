@@ -2023,14 +2023,51 @@ public class HrOnboardingService {
 
     private PDDocument loadMasterPdf() throws IOException {
         ClassPathResource resource = new ClassPathResource(HR_FORM_MASTER);
+
         if (!resource.exists()) {
             throw new IllegalStateException(
-                    "Missing HRFLOW PDF resource: src/main/resources/" + HR_FORM_MASTER
+                    "Missing HRFLOW PDF resource on the runtime classpath: " + HR_FORM_MASTER
             );
         }
+
+        /*
+         * IMPORTANT:
+         * Do not return PDDocument.load(InputStream) from inside a try-with-resources
+         * block. PDFBox may continue reading from its source after PDDocument.load(...)
+         * returns. Closing the ClassPathResource InputStream before the PDDocument is
+         * actually used causes every page-extract / overlay download to fail with HTTP
+         * 500 at runtime.
+         *
+         * Read the complete resource first and load PDFBox from the independent byte[].
+         */
+        byte[] pdfBytes;
         try (InputStream in = resource.getInputStream()) {
-            return PDDocument.load(in);
+            pdfBytes = in.readAllBytes();
         }
+
+        if (pdfBytes.length < 5
+                || pdfBytes[0] != '%'
+                || pdfBytes[1] != 'P'
+                || pdfBytes[2] != 'D'
+                || pdfBytes[3] != 'F'
+                || pdfBytes[4] != '-') {
+            throw new IllegalStateException(
+                    "HRFLOW master form resource is not a valid PDF: " + HR_FORM_MASTER
+            );
+        }
+
+        PDDocument document = PDDocument.load(pdfBytes);
+
+        if (document.getNumberOfPages() < 12) {
+            int pages = document.getNumberOfPages();
+            document.close();
+            throw new IllegalStateException(
+                    "HRFLOW master form PDF must contain 12 pages, but runtime resource contains "
+                            + pages + " page(s)."
+            );
+        }
+
+        return document;
     }
 
     private String normalizeFormKey(String value) {
