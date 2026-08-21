@@ -144,6 +144,12 @@ public class BomFlowCommercialController {
         return service.saveCostingSettings(revisionId, request);
     }
 
+    @PostMapping("/costing/{revisionId}/labour-lines/sync")
+    public LabourSyncResponse syncLabourMaster(
+            @PathVariable UUID revisionId) {
+        return service.syncLabourMaster(revisionId);
+    }
+
     @PostMapping("/costing/{revisionId}/labour-lines")
     public LabourLineResponse addLabourLine(
             @PathVariable UUID revisionId,

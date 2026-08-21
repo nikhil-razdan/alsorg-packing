@@ -728,7 +728,7 @@ public class BomFlowCommercialService {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         RevisionContext context = revisionContext(revisionId);
-        requireEditableRevision(context);
+        requireCommercialEditableRevision(context);
         if (request == null) throw badRequest("Costing settings are required.");
 
         CostingSettingsResponse existing = findCostingSettings(revisionId);
@@ -811,6 +811,179 @@ public class BomFlowCommercialService {
         return getCostingSettings(revisionId);
     }
 
+    public LabourSyncResponse syncLabourMaster(
+            UUID revisionId) {
+
+        access.requireEditor();
+        requireId(revisionId, "Revision ID");
+        RevisionContext context = revisionContext(revisionId);
+        requireCommercialEditableRevision(context);
+
+        LocalDate today = LocalDate.now();
+
+        List<LabourRateResponse> masters = jdbc.query("""
+                SELECT *
+                FROM bom_flow_labour_rates
+                WHERE active = true
+                  AND effective_from <= ?
+                  AND (effective_to IS NULL OR effective_to >= ?)
+                ORDER BY department, process_name, effective_from DESC, updated_at DESC
+                """,
+                this::mapLabourRate,
+                Date.valueOf(today),
+                Date.valueOf(today));
+
+        List<BomSection> sections = jdbc.query("""
+                SELECT section_name, category, COALESCE(SUM(required_qty),0) AS total_qty
+                FROM bom_flow_items
+                WHERE revision_id = ? AND active = true
+                GROUP BY section_name, category
+                ORDER BY section_name, category
+                """,
+                (rs, rowNum) -> new BomSection(
+                        rs.getString("section_name"),
+                        rs.getString("category"),
+                        decimal(rs, "total_qty")),
+                revisionId);
+
+        List<UUID> existingRateIds = jdbc.query("""
+                SELECT labour_rate_id
+                FROM bom_flow_revision_labour
+                WHERE revision_id = ? AND labour_rate_id IS NOT NULL
+                """,
+                (rs, rowNum) -> uuidNullable(rs, "labour_rate_id"),
+                revisionId);
+
+        int matched = 0;
+        int inserted = 0;
+        int existing = 0;
+        int incomplete = 0;
+        List<String> matchedProcesses = new ArrayList<>();
+        List<String> unmatchedProcesses = new ArrayList<>();
+
+        String actor = access.currentUsername();
+        LocalDateTime now = LocalDateTime.now();
+
+        for (LabourRateResponse master : masters) {
+            BomSection section = findBestLabourSection(master, sections);
+
+            if (section == null) {
+                unmatchedProcesses.add(master.department() + " • " + master.processName());
+                continue;
+            }
+
+            matched++;
+            matchedProcesses.add(master.department() + " • " + master.processName());
+
+            if (existingRateIds.contains(master.id())) {
+                existing++;
+                continue;
+            }
+
+            BigDecimal labourCount = nonNegative(
+                    defaultValue(master.defaultLabourCount(), BigDecimal.ONE),
+                    "Default labour count");
+
+            BigDecimal workingHours = nonNegative(
+                    defaultZero(master.defaultWorkingHours()),
+                    "Default working hours");
+
+            String basis = labourBasis(master.basis());
+            BigDecimal quantity = "PER_ITEM".equals(basis)
+                    ? defaultZero(section.quantity())
+                    : ZERO;
+
+            BigDecimal rate = nonNegative(master.rate(), "Labour rate");
+            BigDecimal amount = labourAmountForSync(
+                    basis,
+                    labourCount,
+                    workingHours,
+                    quantity,
+                    rate);
+
+            boolean needsInput = labourInputIncomplete(
+                    basis,
+                    labourCount,
+                    workingHours,
+                    quantity);
+
+            if (needsInput) {
+                incomplete++;
+            }
+
+            UUID id = UUID.randomUUID();
+            String remarks = "Synced from Labour Master for BOM section: "
+                    + defaultText(section.section(), section.category())
+                    + (needsInput
+                            ? ". Enter the required working hours/quantity before final costing."
+                            : ".");
+
+            jdbc.update("""
+                    INSERT INTO bom_flow_revision_labour (
+                        id, revision_id, labour_rate_id, department, process_code,
+                        process_name, basis, unit, labour_count, working_hours, quantity,
+                        rate, amount, remarks, created_by, created_at, updated_by, updated_at, row_version
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
+                    """,
+                    id,
+                    revisionId,
+                    master.id(),
+                    master.department(),
+                    master.processCode(),
+                    master.processName(),
+                    basis,
+                    master.unit(),
+                    labourCount,
+                    workingHours,
+                    quantity,
+                    rate,
+                    amount,
+                    remarks,
+                    actor,
+                    Timestamp.valueOf(now),
+                    actor,
+                    Timestamp.valueOf(now));
+
+            existingRateIds.add(master.id());
+            inserted++;
+
+            audit(
+                    "REVISION_LABOUR",
+                    id,
+                    revisionId,
+                    "LABOUR_MASTER_SYNC",
+                    null,
+                    master.department() + "|" + master.processName() + "|section=" + section.section(),
+                    actor);
+        }
+
+        String message;
+        if (masters.isEmpty()) {
+            message = "No active Labour Master rates are effective today.";
+        } else if (matched == 0) {
+            message = "No Labour Master process matched the BOM sections. Match Department or Process Name to a BOM section/category, or add the process manually.";
+        } else if (inserted == 0) {
+            message = "Applicable Labour Master processes are already linked to this revision.";
+        } else if (incomplete > 0) {
+            message = inserted + " Labour Master process(es) synced. "
+                    + incomplete + " line(s) still need working hours or quantity before they contribute to Direct Labour.";
+        } else {
+            message = inserted + " Labour Master process(es) synced and included in Direct Labour.";
+        }
+
+        return new LabourSyncResponse(
+                revisionId,
+                masters.size(),
+                matched,
+                inserted,
+                existing,
+                masters.size() - matched,
+                incomplete,
+                matchedProcesses,
+                unmatchedProcesses,
+                message);
+    }
+
     public LabourLineResponse addLabourLine(
             UUID revisionId,
             LabourLineRequest request) {
@@ -818,7 +991,7 @@ public class BomFlowCommercialService {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         RevisionContext context = revisionContext(revisionId);
-        requireEditableRevision(context);
+        requireCommercialEditableRevision(context);
         if (request == null || request.labourRateId() == null) {
             throw badRequest("Labour Master process is required.");
         }
@@ -877,7 +1050,7 @@ public class BomFlowCommercialService {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         requireId(lineId, "Labour line ID");
-        requireEditableRevision(revisionContext(revisionId));
+        requireCommercialEditableRevision(revisionContext(revisionId));
         if (request == null) throw badRequest("Labour line request is required.");
         requireVersion(request.rowVersion(), "Labour line");
 
@@ -938,7 +1111,7 @@ public class BomFlowCommercialService {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         requireId(lineId, "Labour line ID");
-        requireEditableRevision(revisionContext(revisionId));
+        requireCommercialEditableRevision(revisionContext(revisionId));
         requireVersion(rowVersion, "Labour line");
 
         LabourLineResponse old = getLabourLine(lineId, revisionId);
@@ -1537,6 +1710,95 @@ public class BomFlowCommercialService {
         };
     }
 
+    private BomSection findBestLabourSection(
+            LabourRateResponse master,
+            List<BomSection> sections) {
+
+        if (master == null || sections == null || sections.isEmpty()) {
+            return null;
+        }
+
+        return sections.stream()
+                .map(section -> new LabourSectionScore(
+                        section,
+                        labourSectionScore(master, section)))
+                .filter(item -> item.score() > 0)
+                .max(Comparator.comparingInt(LabourSectionScore::score))
+                .map(LabourSectionScore::section)
+                .orElse(null);
+    }
+
+    private int labourSectionScore(
+            LabourRateResponse master,
+            BomSection section) {
+
+        int score = 0;
+
+        if (same(master.processName(), section.section())) score += 12;
+        if (same(master.processName(), section.category())) score += 10;
+        if (same(master.department(), section.section())) score += 9;
+        if (same(master.department(), section.category())) score += 8;
+
+        String process = normalize(master.processName());
+        String department = normalize(master.department());
+        String sectionName = normalize(section.section());
+        String category = normalize(section.category());
+
+        if (!process.isBlank() && !sectionName.isBlank()
+                && (process.contains(sectionName) || sectionName.contains(process))) {
+            score += 4;
+        }
+
+        if (!department.isBlank() && !sectionName.isBlank()
+                && (department.contains(sectionName) || sectionName.contains(department))) {
+            score += 3;
+        }
+
+        if (!department.isBlank() && !category.isBlank()
+                && (department.contains(category) || category.contains(department))) {
+            score += 2;
+        }
+
+        return score;
+    }
+
+    private BigDecimal labourAmountForSync(
+            String basis,
+            BigDecimal labourCount,
+            BigDecimal workingHours,
+            BigDecimal quantity,
+            BigDecimal rate) {
+
+        String value = labourBasis(basis);
+
+        return switch (value) {
+            case "PER_HOUR" -> labourCount.compareTo(ZERO) > 0
+                    && workingHours.compareTo(ZERO) > 0
+                    ? money(labourCount.multiply(workingHours).multiply(rate))
+                    : money(ZERO);
+            case "FIXED" -> money(rate);
+            default -> quantity.compareTo(ZERO) > 0
+                    ? money(quantity.multiply(rate))
+                    : money(ZERO);
+        };
+    }
+
+    private boolean labourInputIncomplete(
+            String basis,
+            BigDecimal labourCount,
+            BigDecimal workingHours,
+            BigDecimal quantity) {
+
+        String value = labourBasis(basis);
+
+        return switch (value) {
+            case "PER_HOUR" -> labourCount.compareTo(ZERO) <= 0
+                    || workingHours.compareTo(ZERO) <= 0;
+            case "FIXED" -> false;
+            default -> quantity.compareTo(ZERO) <= 0;
+        };
+    }
+
     private void validateMaterialRate(MaterialRateRequest request) {
         if (request == null) throw badRequest("Material rate request is required.");
         required(request.category(), "Category");
@@ -1691,10 +1953,16 @@ public class BomFlowCommercialService {
         return cleaned == null ? fallback : cleaned;
     }
 
-    private void requireEditableRevision(RevisionContext context) {
+    private void requireCommercialEditableRevision(RevisionContext context) {
         String status = upper(context == null ? null : context.status());
-        if (!("DRAFT".equals(status) || "RETURNED".equals(status))) {
-            throw badRequest("Only Draft or Returned BOM revisions can change costing settings or labour lines.");
+
+        if (status == null || status.isBlank()) {
+            throw badRequest("BOM revision status is required for commercial costing changes.");
+        }
+
+        if ("CANCELLED".equals(status) || "SUPERSEDED".equals(status)) {
+            throw badRequest(
+                    "Cancelled or Superseded BOM revisions are read-only for commercial costing.");
         }
     }
 
@@ -1955,6 +2223,17 @@ public class BomFlowCommercialService {
             String clientEntity,
             Integer revisionNo,
             String status) {
+    }
+
+    private record BomSection(
+            String section,
+            String category,
+            BigDecimal quantity) {
+    }
+
+    private record LabourSectionScore(
+            BomSection section,
+            int score) {
     }
 
     private record MaterialBomRow(

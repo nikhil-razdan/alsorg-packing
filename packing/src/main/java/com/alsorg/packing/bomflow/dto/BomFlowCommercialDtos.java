@@ -125,6 +125,19 @@ public final class BomFlowCommercialDtos {
             Long rowVersion) {
     }
 
+    public record LabourSyncResponse(
+            UUID revisionId,
+            int activeMasterRates,
+            int matchedMasterRates,
+            int insertedLines,
+            int existingLines,
+            int unmatchedMasterRates,
+            int incompleteLines,
+            List<String> matchedProcesses,
+            List<String> unmatchedProcesses,
+            String message) {
+    }
+
     public record CostingSettingsRequest(
             BigDecimal markupPercent,
             BigDecimal factoryFixedOverheadPercent,

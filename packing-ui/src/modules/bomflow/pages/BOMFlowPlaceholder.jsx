@@ -816,7 +816,7 @@ function CostingEngine() {
 	const [working, setWorking] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
-	const [labourDialog, setLabourDialog] = useState({ open: false, form: { ...LABOUR_LINE_EMPTY } });
+	const [labourDialog, setLabourDialog] = useState({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } });
 
 	useEffect(() => {
 		const start = async () => {
@@ -975,7 +975,43 @@ function CostingEngine() {
 		}));
 	};
 
-	const addLabour = async () => {
+	const syncLabourMaster = async () => {
+		if (!revisionId) return;
+		setWorking(true);
+		setError("");
+		setMessage("");
+		try {
+			const result = await bomFlowApi.syncCostingLabourMaster(revisionId);
+			setMessage(result?.message || "Labour Master synchronized.");
+			await loadCosting(revisionId);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to sync Labour Master."));
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const openNewLabour = () => {
+		setLabourDialog({ open: true, editing: null, form: { ...LABOUR_LINE_EMPTY } });
+	};
+
+	const openEditLabour = (line) => {
+		setLabourDialog({
+			open: true,
+			editing: line,
+			form: {
+				labourRateId: line?.labourRateId || "",
+				labourCount: String(line?.labourCount ?? ""),
+				workingHours: String(line?.workingHours ?? ""),
+				quantity: String(line?.quantity ?? ""),
+				rate: String(line?.rate ?? ""),
+				remarks: line?.remarks || "",
+				rowVersion: line?.rowVersion ?? null,
+			},
+		});
+	};
+
+	const saveLabour = async () => {
 		const form = labourDialog.form;
 		if (!revisionId || !form.labourRateId) {
 			setError("Select a Labour Master process.");
@@ -983,20 +1019,34 @@ function CostingEngine() {
 		}
 		setWorking(true);
 		setError("");
+		setMessage("");
 		try {
-			await bomFlowApi.addCostingLabourLine(revisionId, {
+			const payload = {
 				labourRateId: form.labourRateId,
 				labourCount: Number(form.labourCount || 0),
 				workingHours: Number(form.workingHours || 0),
 				quantity: Number(form.quantity || 0),
 				rate: form.rate === "" ? null : Number(form.rate),
 				remarks: form.remarks.trim() || null,
-			});
-			setLabourDialog({ open: false, form: { ...LABOUR_LINE_EMPTY } });
-			setMessage("Labour process added to costing.");
+				rowVersion: form.rowVersion ?? null,
+			};
+
+			if (labourDialog.editing?.id) {
+				await bomFlowApi.updateCostingLabourLine(
+					revisionId,
+					labourDialog.editing.id,
+					payload
+				);
+				setMessage("Labour process updated and costing recalculated.");
+			} else {
+				await bomFlowApi.addCostingLabourLine(revisionId, payload);
+				setMessage("Labour process added to costing.");
+			}
+
+			setLabourDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } });
 			await loadCosting(revisionId);
 		} catch (requestError) {
-			setError(cleanError(requestError, "Unable to add labour line."));
+			setError(cleanError(requestError, "Unable to save labour line."));
 		} finally {
 			setWorking(false);
 		}
@@ -1017,9 +1067,10 @@ function CostingEngine() {
 
 	if (loading) return <Loading />;
 
-	const revisionEditable = canEdit && ["DRAFT", "RETURNED"].includes(
-		String(costing?.revisionStatus || "").toUpperCase()
-	);
+	const revisionStatus = String(costing?.revisionStatus || "").toUpperCase();
+	const materialEditable = canEdit && ["DRAFT", "RETURNED"].includes(revisionStatus);
+	const commercialEditable = canEdit && !["CANCELLED", "SUPERSEDED"].includes(revisionStatus);
+	const commercialLocked = Boolean(costing) && !commercialEditable;
 
 	return (
 		<Box sx={pageSx}>
@@ -1033,10 +1084,17 @@ function CostingEngine() {
 
 			<Feedback error={error} message={message} />
 
-			{costing && canEdit && !revisionEditable && (
+			{costing && canEdit && ["SUBMITTED", "VERIFIED", "APPROVED", "RELEASED"].includes(revisionStatus) && (
+				<Box sx={infoSx}>
+					<CheckCircleOutlineIcon fontSize="small" />
+					BOM revision {costing.revisionStatus}: material structure/rates stay workflow-controlled, while Labour and Costing Settings remain editable here and every change is audited.
+				</Box>
+			)}
+
+			{costing && commercialLocked && (
 				<Box sx={warningSx}>
 					<WarningAmberOutlinedIcon fontSize="small" />
-					This revision is {costing.revisionStatus}. Costing is read-only; create/return a Draft revision to change rates, labour or overhead settings.
+					This {costing.revisionStatus} revision is fully read-only for commercial costing.
 				</Box>
 			)}
 
@@ -1050,7 +1108,7 @@ function CostingEngine() {
 					{revisions.map((revision) => <MenuItem key={revision.id} value={revision.id}>R{revision.revisionNo || revision.revisionNumber} • {revision.status}</MenuItem>)}
 				</TextField>
 				{revisionId && <Button startIcon={<RuleOutlinedIcon />} onClick={() => navigate(`/bomflow/revisions/${revisionId}`)} sx={secondaryBtnSx}>Open BOM</Button>}
-				{revisionId && revisionEditable && <Button startIcon={<SyncOutlinedIcon />} disabled={working} onClick={applyRates} sx={primaryBtnSx}>Sync Rates</Button>}
+				{revisionId && materialEditable && <Button startIcon={<SyncOutlinedIcon />} disabled={working} onClick={applyRates} sx={primaryBtnSx}>Sync Rates</Button>}
 			</Card>
 
 			{!costing ? (
@@ -1075,8 +1133,8 @@ function CostingEngine() {
 						</Card>
 
 						<Card sx={panelSx}>
-							<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Costing Settings</Typography><Typography sx={panelSubSx}>Editable percentages per BOM revision.</Typography></Box>{revisionEditable && <Button disabled={working} onClick={saveSettings} sx={primaryBtnSx}>Save</Button>}</Box>
-							{settings && <CostingSettingsForm settings={settings} setSettings={setSettings} disabled={!revisionEditable || working} />}
+							<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Costing Settings</Typography><Typography sx={panelSubSx}>Commercial percentages are revision-specific and audit-tracked, including on approved BOMs.</Typography></Box>{commercialEditable && <Button disabled={working} onClick={saveSettings} sx={primaryBtnSx}>Save Settings</Button>}</Box>
+							{settings && <CostingSettingsForm settings={settings} setSettings={setSettings} disabled={!commercialEditable || working} />}
 						</Card>
 					</Box>
 
@@ -1089,17 +1147,63 @@ function CostingEngine() {
 					</Card>
 
 					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Direct Labour</Typography><Typography sx={panelSubSx}>Revision-specific processes pulled from Labour Master.</Typography></Box>{revisionEditable && <Button startIcon={<AddIcon />} onClick={() => setLabourDialog({ open: true, form: { ...LABOUR_LINE_EMPTY } })} sx={primaryBtnSx}>Add Process</Button>}</Box>
+						<Box sx={panelHeaderSx}>
+							<Box>
+								<Typography sx={panelTitleSx}>Direct Labour</Typography>
+								<Typography sx={panelSubSx}>Labour Master rates are mapped to BOM sections; enter missing hours/quantity where the master time standard is zero.</Typography>
+							</Box>
+							{commercialEditable && (
+								<Box sx={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+									<Button startIcon={<SyncOutlinedIcon />} disabled={working || labourRates.length === 0} onClick={syncLabourMaster} sx={secondaryBtnSx}>Sync Labour Master</Button>
+									<Button startIcon={<AddIcon />} disabled={working} onClick={openNewLabour} sx={primaryBtnSx}>Add Process</Button>
+								</Box>
+							)}
+						</Box>
+
+						{commercialEditable && labourRates.length > 0 && costing.labourLines.length === 0 && (
+							<Box sx={labourHintSx}>
+								<EngineeringOutlinedIcon fontSize="small" />
+								{labourRates.length} active Labour Master rate(s) are available. Sync will import applicable processes by BOM section/category.
+							</Box>
+						)}
+
 						<Box sx={tableScrollSx}>
 							<Box sx={costLabourHeadSx}><div>Process</div><div>Basis</div><div>Labour</div><div>Hours</div><div>Qty</div><div>Rate</div><div>Amount</div><div /></Box>
-							{costing.labourLines.map((row) => <Box key={row.id} sx={costLabourRowSx}><Box><Typography sx={cellStrongSx}>{row.processName}</Typography><Typography sx={mutedTextSx}>{row.department}</Typography></Box><Typography sx={cellTextSx}>{row.basis?.replaceAll("_", " ")}</Typography><Typography sx={monoTextSx}>{decimal(row.labourCount)}</Typography><Typography sx={monoTextSx}>{decimal(row.workingHours)}</Typography><Typography sx={monoTextSx}>{decimal(row.quantity)}</Typography><Typography sx={moneyTextSx}>{money(row.rate)}</Typography><Typography sx={moneyTextSx}>{money(row.amount)}</Typography>{revisionEditable ? <IconButton disabled={working} onClick={() => deleteLabour(row)} sx={deleteBtnSx}><DeleteOutlineIcon fontSize="small" /></IconButton> : <Box />}</Box>)}
-							{costing.labourLines.length === 0 && <EmptyTable text="No labour processes added to this revision." />}
+							{costing.labourLines.map((row) => {
+								const incomplete = row.basis === "PER_HOUR"
+									? Number(row.workingHours || 0) <= 0 || Number(row.labourCount || 0) <= 0
+									: row.basis === "FIXED"
+										? false
+										: Number(row.quantity || 0) <= 0;
+
+								return (
+									<Box key={row.id} sx={costLabourRowSx}>
+										<Box>
+											<Typography sx={cellStrongSx}>{row.processName}</Typography>
+											<Typography sx={mutedTextSx}>{row.department}{incomplete ? " • Input required" : ""}</Typography>
+										</Box>
+										<Typography sx={cellTextSx}>{row.basis?.replaceAll("_", " ")}</Typography>
+										<Typography sx={monoTextSx}>{decimal(row.labourCount)}</Typography>
+										<Typography sx={monoTextSx}>{decimal(row.workingHours)}</Typography>
+										<Typography sx={monoTextSx}>{decimal(row.quantity)}</Typography>
+										<Typography sx={moneyTextSx}>{money(row.rate)}</Typography>
+										<Typography sx={{ ...moneyTextSx, color: incomplete ? "#fbbf24" : "#4ade80" }}>{money(row.amount)}</Typography>
+										{commercialEditable ? (
+											<Box sx={{ display: "flex", gap: "4px" }}>
+												<IconButton disabled={working} onClick={() => openEditLabour(row)} sx={editBtnSx}><EditOutlinedIcon fontSize="small" /></IconButton>
+												<IconButton disabled={working} onClick={() => deleteLabour(row)} sx={deleteBtnSx}><DeleteOutlineIcon fontSize="small" /></IconButton>
+											</Box>
+										) : <Box />}
+									</Box>
+								);
+							})}
+							{costing.labourLines.length === 0 && <EmptyTable text="No labour processes are linked yet. Use Sync Labour Master or Add Process." />}
 						</Box>
 					</Card>
 				</>
 			)}
 
-			<LabourLineDialog open={labourDialog.open} form={labourDialog.form} setDialog={setLabourDialog} labourRates={labourRates} onSelectMaster={selectLabourMaster} onSave={addLabour} working={working} />
+			<LabourLineDialog open={labourDialog.open} editing={labourDialog.editing} form={labourDialog.form} setDialog={setLabourDialog} labourRates={labourRates} onSelectMaster={selectLabourMaster} onSave={saveLabour} working={working} />
 		</Box>
 	);
 }
@@ -1124,12 +1228,12 @@ function CostingSettingsForm({ settings, setSettings, disabled }) {
 	);
 }
 
-function LabourLineDialog({ open, form, setDialog, labourRates, onSelectMaster, onSave, working }) {
+function LabourLineDialog({ open, editing, form, setDialog, labourRates, onSelectMaster, onSave, working }) {
 	const master = labourRates.find((item) => item.id === form.labourRateId);
 	const update = (key, value) => setDialog((prev) => ({ ...prev, form: { ...prev.form, [key]: value } }));
 	return (
-		<Dialog open={open} onClose={() => !working && setDialog({ open: false, form: { ...LABOUR_LINE_EMPTY } })} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-			<DialogTitle sx={dialogTitleSx}>Add Labour Process</DialogTitle>
+		<Dialog open={open} onClose={() => !working && setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+			<DialogTitle sx={dialogTitleSx}>{editing ? "Edit Labour Process" : "Add Labour Process"}</DialogTitle>
 			<DialogContent sx={dialogContentSx}>
 				<Box sx={formGrid2Sx}>
 					<TextField select label="Labour Master Process *" value={form.labourRateId} onChange={(e) => onSelectMaster(e.target.value)} sx={fieldSx}>
@@ -1144,7 +1248,7 @@ function LabourLineDialog({ open, form, setDialog, labourRates, onSelectMaster, 
 				</Box>
 				<TextField fullWidth multiline minRows={2} label="Remarks" value={form.remarks} onChange={(e) => update("remarks", e.target.value)} sx={{ ...fieldSx, mt: 2 }} />
 			</DialogContent>
-			<DialogActions sx={dialogActionsSx}><Button disabled={working} onClick={() => setDialog({ open: false, form: { ...LABOUR_LINE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || !form.labourRateId} onClick={onSave} sx={primaryBtnSx}>{working ? "Adding..." : "Add Process"}</Button></DialogActions>
+			<DialogActions sx={dialogActionsSx}><Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || !form.labourRateId} onClick={onSave} sx={primaryBtnSx}>{working ? "Saving..." : editing ? "Save Labour" : "Add Process"}</Button></DialogActions>
 		</Dialog>
 	);
 }
@@ -1408,6 +1512,9 @@ const switchLabelSx = { color: "rgba(255,255,255,.72)", m: 0, "& .MuiFormControl
 const errorSx = { p: "11px 13px", borderRadius: "9px", color: "#fca5a5", background: "rgba(239,68,68,.12)", border: "1px solid rgba(239,68,68,.24)", fontSize: 12, fontWeight: 750 };
 const successSx = { ...errorSx, color: "#86efac", background: "rgba(34,197,94,.10)", border: "1px solid rgba(34,197,94,.22)" };
 const warningSx = { ...errorSx, display: "flex", alignItems: "center", gap: "8px", color: "#fbbf24", background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.22)" };
+const infoSx = { display: "flex", alignItems: "center", gap: "8px", p: "10px 12px", borderRadius: "9px", color: "#93c5fd", background: "rgba(59,130,246,.10)", border: "1px solid rgba(59,130,246,.24)", fontSize: 11.5, fontWeight: 750 };
+const labourHintSx = { display: "flex", alignItems: "center", gap: "8px", mb: "10px", p: "9px 10px", borderRadius: "8px", color: "#c4b5fd", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.20)", fontSize: 10.5, fontWeight: 700 };
+const editBtnSx = { width: 30, height: 30, borderRadius: "8px", color: "#93c5fd", background: "rgba(59,130,246,.10)", border: "1px solid rgba(59,130,246,.20)" };
 const summaryGridSx = { display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "10px", "@media (max-width: 1000px)": { gridTemplateColumns: "repeat(2,minmax(0,1fr))" }, "@media (max-width: 560px)": { gridTemplateColumns: "1fr" } };
 const summaryCardSx = { p: "13px", borderRadius: "10px", background: "rgba(15,23,42,.78)", border: "1px solid rgba(255,255,255,.07)" };
 const summaryTitleSx = { color: "rgba(255,255,255,.55)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".07em" };

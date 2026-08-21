@@ -413,6 +413,14 @@ export const bomFlowApi = {
 		return unwrap(response);
 	},
 
+	async syncCostingLabourMaster(revisionId) {
+		requireId(revisionId, "Revision ID");
+		const response = await API.post(
+			`${ENDPOINTS.commercial}/costing/${revisionId}/labour-lines/sync`
+		);
+		return unwrap(response);
+	},
+
 	async addCostingLabourLine(revisionId, payload) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.post(
