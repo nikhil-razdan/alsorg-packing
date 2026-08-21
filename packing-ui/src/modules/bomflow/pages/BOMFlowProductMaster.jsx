@@ -134,6 +134,7 @@ export default function BOMFlowProductMaster() {
 				if (active) {
 					setError(
 						requestError?.response?.data?.message ||
+						requestError?.response?.data?.detail ||
 						requestError?.message ||
 						"Unable to load product."
 					);
@@ -300,6 +301,7 @@ export default function BOMFlowProductMaster() {
 		} catch (requestError) {
 			setError(
 				requestError?.response?.data?.message ||
+				requestError?.response?.data?.detail ||
 				requestError?.message ||
 				"Unable to save product."
 			);
@@ -343,7 +345,9 @@ export default function BOMFlowProductMaster() {
 
 			let revision = revisions.find(
 				(item) =>
-					item?.status === "DRAFT"
+					["DRAFT", "RETURNED"].includes(
+						item?.status
+					)
 			);
 
 			if (!revision) {
@@ -369,6 +373,7 @@ export default function BOMFlowProductMaster() {
 		} catch (requestError) {
 			setError(
 				requestError?.response?.data?.message ||
+				requestError?.response?.data?.detail ||
 				requestError?.message ||
 				"Unable to start BOM revision."
 			);

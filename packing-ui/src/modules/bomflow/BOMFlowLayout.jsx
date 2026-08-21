@@ -199,7 +199,13 @@ function BOMFlowSidebar() {
 			{navItems.map((link) => {
 				const active =
 					location.pathname === link.path ||
-					location.pathname.startsWith(`${link.path}/`);
+					location.pathname.startsWith(`${link.path}/`) ||
+					(
+						link.path === "/bomflow/bom-builder" &&
+						location.pathname.startsWith(
+							"/bomflow/revisions/"
+						)
+					);
 
 				return (
 					<Link

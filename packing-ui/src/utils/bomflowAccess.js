@@ -1,189 +1,149 @@
-import { normalizeRole } from "./permissions";
+const BOMFLOW_ROLES = Object.freeze([
+	"ADMIN",
+	"BOMFLOW_MANAGER",
+	"BOMFLOW_EDITOR",
+	"BOMFLOW_REVIEWER",
+	"BOMFLOW_APPROVER",
+]);
 
-const readStoredRole = () => {
-    try {
-        const currentUser = JSON.parse(
-            localStorage.getItem("currentUser") || "{}"
-        );
-
-        return (
-            currentUser?.role ||
-            localStorage.getItem("role") ||
-            ""
-        );
-    } catch {
-        return localStorage.getItem("role") || "";
-    }
+const normalizeRole = (value) => {
+	return String(value || "")
+		.replace(/^ROLE_/i, "")
+		.trim()
+		.toUpperCase();
 };
 
-export const BOMFLOW_ROLES = Object.freeze({
-    ADMIN: "ADMIN",
-    MANAGER: "BOMFLOW_MANAGER",
-    EDITOR: "BOMFLOW_EDITOR",
-    REVIEWER: "BOMFLOW_REVIEWER",
-    APPROVER: "BOMFLOW_APPROVER",
-});
+const safeParse = (value) => {
+	if (!value) {
+		return null;
+	}
 
-export const getBomFlowRole = (role) => {
-    return normalizeRole(role || readStoredRole());
+	try {
+		return JSON.parse(value);
+	} catch {
+		return null;
+	}
 };
 
-export const isRecognizedBomFlowRole = (role) => {
-    const cleanRole = getBomFlowRole(role);
+export const getBomFlowRole = () => {
+	if (typeof window === "undefined") {
+		return "";
+	}
 
-    return Object.values(BOMFLOW_ROLES).includes(cleanRole);
+	const directCandidates = [
+		localStorage.getItem("role"),
+		localStorage.getItem("userRole"),
+		localStorage.getItem("currentRole"),
+	];
+
+	for (const candidate of directCandidates) {
+		const role = normalizeRole(candidate);
+
+		if (role) {
+			return role;
+		}
+	}
+
+	const storedUser =
+		safeParse(localStorage.getItem("user")) ||
+		safeParse(localStorage.getItem("authUser")) ||
+		safeParse(localStorage.getItem("currentUser"));
+
+	const nestedRole = normalizeRole(
+		storedUser?.role ||
+			storedUser?.primaryRole ||
+			storedUser?.roles?.[0]
+	);
+
+	return nestedRole;
 };
 
-export const isBomFlowAdmin = (role) => {
-    return getBomFlowRole(role) === BOMFLOW_ROLES.ADMIN;
+export const hasBomFlowAccess = (role = getBomFlowRole()) => {
+	return BOMFLOW_ROLES.includes(normalizeRole(role));
 };
 
-export const isBomFlowManager = (role) => {
-    return getBomFlowRole(role) === BOMFLOW_ROLES.MANAGER;
+export const canEditBomFlowRevision = (
+	role = getBomFlowRole()
+) => {
+	const normalized = normalizeRole(role);
+
+	return [
+		"ADMIN",
+		"BOMFLOW_MANAGER",
+		"BOMFLOW_EDITOR",
+	].includes(normalized);
 };
 
-export const isBomFlowEditor = (role) => {
-    return getBomFlowRole(role) === BOMFLOW_ROLES.EDITOR;
+export const canSubmitBomFlowRevision =
+	canEditBomFlowRevision;
+
+export const canReviewBomFlowRevision = (
+	role = getBomFlowRole()
+) => {
+	const normalized = normalizeRole(role);
+
+	return [
+		"ADMIN",
+		"BOMFLOW_MANAGER",
+		"BOMFLOW_REVIEWER",
+		"BOMFLOW_APPROVER",
+	].includes(normalized);
 };
 
-export const isBomFlowReviewer = (role) => {
-    return getBomFlowRole(role) === BOMFLOW_ROLES.REVIEWER;
+export const canApproveBomFlowRevision = (
+	role = getBomFlowRole()
+) => {
+	const normalized = normalizeRole(role);
+
+	return [
+		"ADMIN",
+		"BOMFLOW_MANAGER",
+		"BOMFLOW_APPROVER",
+	].includes(normalized);
 };
 
-export const isBomFlowApprover = (role) => {
-    return getBomFlowRole(role) === BOMFLOW_ROLES.APPROVER;
+export const canAccessBomFlowScreen = (
+	screen,
+	role = getBomFlowRole()
+) => {
+	if (!hasBomFlowAccess(role)) {
+		return false;
+	}
+
+	const normalizedScreen = String(screen || "")
+		.trim()
+		.toLowerCase();
+
+	if (!normalizedScreen) {
+		return true;
+	}
+
+	if (
+		[
+			"home",
+			"dashboard",
+			"products",
+			"product-master",
+			"bom-builder",
+			"builder",
+			"rate-master",
+			"labour-master",
+			"costing",
+			"reports",
+		].includes(normalizedScreen)
+	) {
+		return true;
+	}
+
+	return false;
 };
 
-export const canViewBomFlow = (role) => {
-    return isRecognizedBomFlowRole(role);
+export const defaultBomFlowPathForRole = (
+	role = getBomFlowRole()
+) => {
+	return hasBomFlowAccess(role)
+		? "/bomflow/dashboard"
+		: "/modules";
 };
 
-export const canCreateBomFlowProduct = (role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    return [
-        BOMFLOW_ROLES.ADMIN,
-        BOMFLOW_ROLES.MANAGER,
-        BOMFLOW_ROLES.EDITOR,
-    ].includes(cleanRole);
-};
-
-export const canEditBomFlowRevision = (role) => {
-    return canCreateBomFlowProduct(role);
-};
-
-export const canSubmitBomFlowRevision = (role) => {
-    return canEditBomFlowRevision(role);
-};
-
-export const canReviewBomFlowRevision = (role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    return [
-        BOMFLOW_ROLES.ADMIN,
-        BOMFLOW_ROLES.MANAGER,
-        BOMFLOW_ROLES.REVIEWER,
-    ].includes(cleanRole);
-};
-
-export const canApproveBomFlowRevision = (role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    return [
-        BOMFLOW_ROLES.ADMIN,
-        BOMFLOW_ROLES.MANAGER,
-        BOMFLOW_ROLES.APPROVER,
-    ].includes(cleanRole);
-};
-
-export const canReleaseBomToMatFlow = (role) => {
-    return canApproveBomFlowRevision(role);
-};
-
-export const canAccessBomFlowScreen = (screen, role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    if (!isRecognizedBomFlowRole(cleanRole)) {
-        return false;
-    }
-
-    if (
-        [
-            "home",
-            "dashboard",
-            "products",
-            "product-detail",
-            "bom-detail",
-            "reports",
-        ].includes(screen)
-    ) {
-        return true;
-    }
-
-    if (
-        [
-            "create-product",
-            "edit-product",
-            "bom-builder",
-        ].includes(screen)
-    ) {
-        return canEditBomFlowRevision(cleanRole);
-    }
-
-    if (screen === "review") {
-        return canReviewBomFlowRevision(cleanRole);
-    }
-
-    if (
-        screen === "approval" ||
-        screen === "release"
-    ) {
-        return canApproveBomFlowRevision(cleanRole);
-    }
-
-    return false;
-};
-
-export const defaultBomFlowPathForRole = (role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    if (
-        cleanRole === BOMFLOW_ROLES.ADMIN ||
-        cleanRole === BOMFLOW_ROLES.MANAGER
-    ) {
-        return "/bomflow/dashboard";
-    }
-
-    if (cleanRole === BOMFLOW_ROLES.EDITOR) {
-        return "/bomflow/products";
-    }
-
-    if (cleanRole === BOMFLOW_ROLES.REVIEWER) {
-        return "/bomflow/review";
-    }
-
-    if (cleanRole === BOMFLOW_ROLES.APPROVER) {
-        return "/bomflow/approval";
-    }
-
-    return "/modules";
-};
-
-export const bomFlowRoleLabel = (role) => {
-    const cleanRole = getBomFlowRole(role);
-
-    switch (cleanRole) {
-        case BOMFLOW_ROLES.ADMIN:
-            return "Admin Access";
-        case BOMFLOW_ROLES.MANAGER:
-            return "BOMFlow Manager";
-        case BOMFLOW_ROLES.EDITOR:
-            return "BOM Editor";
-        case BOMFLOW_ROLES.REVIEWER:
-            return "BOM Reviewer";
-        case BOMFLOW_ROLES.APPROVER:
-            return "Engineering Approver";
-        default:
-            return "BOMFlow User";
-    }
-};
+export { BOMFLOW_ROLES };

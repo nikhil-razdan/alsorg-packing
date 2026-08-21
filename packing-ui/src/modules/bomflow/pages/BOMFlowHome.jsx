@@ -46,11 +46,11 @@ const modules = [
 	{
 		title: "BOM Builder",
 		subtitle:
-			"Select a product and open one of its BOM revisions for material planning.",
+			"Select a product, open a BOM revision and manage section-wise material rows.",
 		icon: <RuleOutlinedIcon />,
-		status: "Via Product",
-		action: "Select Product",
-		path: "/bomflow/products",
+		status: "Available",
+		action: "Open BOM Builder",
+		path: "/bomflow/bom-builder",
 		enabled: true,
 	},
 	{

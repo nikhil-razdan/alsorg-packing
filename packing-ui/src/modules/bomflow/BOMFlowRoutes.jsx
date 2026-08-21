@@ -12,25 +12,23 @@ import BOMFlowHome from "./pages/BOMFlowHome";
 import BOMFlowDashboard from "./pages/BOMFlowDashboard";
 import BOMFlowProductMaster from "./pages/BOMFlowProductMaster";
 import BOMFlowBOMBuilder from "./pages/BOMFlowBOMBuilder";
+import BOMFlowBOMBuilderLanding from "./pages/BOMFlowBOMBuilderLanding";
 import BOMFlowPlaceholder from "./pages/BOMFlowPlaceholder";
 
 export default function BOMFlowRoutes() {
 	return (
 		<Routes>
 			<Route element={<BOMFlowLayout />}>
-				{/* BOMFlow portal */}
 				<Route
 					index
 					element={<BOMFlowHome />}
 				/>
 
-				{/* Management dashboard */}
 				<Route
 					path="dashboard"
 					element={<BOMFlowDashboard />}
 				/>
 
-				{/* Product Master */}
 				<Route
 					path="products"
 					element={<BOMFlowProductMaster />}
@@ -46,26 +44,25 @@ export default function BOMFlowRoutes() {
 					element={<BOMFlowProductMaster />}
 				/>
 
-				{/* Revision-specific BOM Builder */}
-				<Route
-					path="revisions/:revisionId"
-					element={<BOMFlowBOMBuilder />}
-				/>
-
 				{/*
-				 * Legacy route.
+				 * FIX:
+				 * The sidebar and quick links point to /bomflow/bom-builder.
+				 * Previously this route immediately redirected to Product Master,
+				 * so BOM Builder looked broken.
 				 *
-				 * A BOM cannot safely open without knowing which
-				 * revision is being edited.
+				 * It now opens a real product/revision selector.
 				 */}
 				<Route
 					path="bom-builder"
-					element={
-						<Navigate
-							to="/bomflow/products"
-							replace
-						/>
-					}
+					element={<BOMFlowBOMBuilderLanding />}
+				/>
+
+				{/*
+				 * A concrete revision opens the actual editable BOM Builder.
+				 */}
+				<Route
+					path="revisions/:revisionId"
+					element={<BOMFlowBOMBuilder />}
 				/>
 
 				<Route

@@ -27,8 +27,14 @@ import {
 	Chip,
 	CircularProgress,
 	Collapse,
+	Dialog,
+	DialogActions,
+	DialogContent,
+	DialogTitle,
 	IconButton,
 	LinearProgress,
+	MenuItem,
+	TextField,
 	Typography,
 } from "@mui/material";
 
@@ -98,7 +104,21 @@ const quickActions = [
 		icon: <AssessmentOutlinedIcon />,
 		path: "/bomflow/reports",
 	},
+
 ];
+
+const EMPTY_LINE = {
+	section: "Metal",
+	category: "Metal",
+	itemName: "",
+	brand: "",
+	vendorName: "",
+	unit: "NOS",
+	requiredQty: "",
+	rate: "",
+	gstPercent: "0",
+	remarks: "",
+};
 
 export default function BOMFlowBOMBuilder() {
 	const navigate = useNavigate();
@@ -120,6 +140,12 @@ export default function BOMFlowBOMBuilder() {
 
 	const [openSections, setOpenSections] =
 		useState({});
+
+	const [lineDialog, setLineDialog] =
+		useState({
+			open: false,
+			form: { ...EMPTY_LINE },
+		});
 
 	const loadRevision = async () => {
 		if (!revisionId) {
@@ -305,8 +331,163 @@ export default function BOMFlowBOMBuilder() {
 			: 0;
 
 	const editable =
-		revision?.status === "DRAFT" &&
+		["DRAFT", "RETURNED"].includes(
+			revision?.status
+		) &&
 		canEditBomFlowRevision(role);
+
+
+	const openAddLine = (sectionName = "Metal") => {
+		if (!editable || working) {
+			return;
+		}
+
+		const section =
+			String(sectionName || "Metal").trim() ||
+			"Metal";
+
+		setLineDialog({
+			open: true,
+			form: {
+				...EMPTY_LINE,
+				section,
+				category: section,
+			},
+		});
+	};
+
+	const closeLineDialog = () => {
+		if (working) {
+			return;
+		}
+
+		setLineDialog({
+			open: false,
+			form: { ...EMPTY_LINE },
+		});
+	};
+
+	const updateLineField = (key, value) => {
+		setLineDialog((prev) => ({
+			...prev,
+			form: {
+				...prev.form,
+				[key]: value,
+				...(key === "section" &&
+				(!prev.form.category ||
+					prev.form.category === prev.form.section)
+					? { category: value }
+					: {}),
+			},
+		}));
+	};
+
+	const handleAddLine = async () => {
+		if (!editable || !revision?.id) {
+			return;
+		}
+
+		const form = lineDialog.form;
+
+		if (!String(form.section || "").trim()) {
+			setError("Section is required.");
+			return;
+		}
+
+		if (!String(form.itemName || "").trim()) {
+			setError("Item name is required.");
+			return;
+		}
+
+		if (!String(form.unit || "").trim()) {
+			setError("Unit is required.");
+			return;
+		}
+
+		const quantity = Number(form.requiredQty);
+		const rate = Number(form.rate || 0);
+		const gst = Number(form.gstPercent || 0);
+
+		if (!Number.isFinite(quantity) || quantity <= 0) {
+			setError("Quantity must be greater than zero.");
+			return;
+		}
+
+		if (!Number.isFinite(rate) || rate < 0) {
+			setError("Rate cannot be negative.");
+			return;
+		}
+
+		if (!Number.isFinite(gst) || gst < 0) {
+			setError("GST cannot be negative.");
+			return;
+		}
+
+		setWorking(true);
+		setError("");
+
+		try {
+			const updated =
+				await bomFlowApi.addRevisionLine(
+					revision.id,
+					{
+						section:
+							String(form.section).trim(),
+						category:
+							String(
+								form.category ||
+									form.section
+							).trim(),
+						itemName:
+							String(form.itemName).trim(),
+						brand:
+							String(form.brand || "").trim() ||
+							null,
+						vendorName:
+							String(
+								form.vendorName || ""
+							).trim() || null,
+						unit:
+							String(form.unit)
+								.trim()
+								.toUpperCase(),
+						requiredQty: quantity,
+						rate,
+						gstPercent: gst,
+						remarks:
+							String(
+								form.remarks || ""
+							).trim() || null,
+					}
+				);
+
+			setRevision(updated);
+
+			const key = String(form.section)
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-");
+
+			setOpenSections((prev) => ({
+				...prev,
+				[key]: true,
+			}));
+
+			setLineDialog({
+				open: false,
+				form: { ...EMPTY_LINE },
+			});
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+					requestError?.response?.data?.detail ||
+					requestError?.message ||
+					"Unable to add BOM row."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
 
 	const toggleSection = (key) => {
 		setOpenSections((prev) => ({
@@ -637,6 +818,8 @@ export default function BOMFlowBOMBuilder() {
 							<Box sx={toolbarActionsSx}>
 								<Button
 									startIcon={<AddIcon />}
+									disabled={!editable || working}
+									onClick={() => openAddLine()}
 									sx={secondaryBtnSx}
 								>
 									Add Section
@@ -718,12 +901,19 @@ export default function BOMFlowBOMBuilder() {
 												rows={section.rows}
 												editable={editable && !working}
 												onDelete={handleDeleteRow}
+												onAdd={() =>
+													openAddLine(section.title)
+												}
 												validRates={section.validRates}
 											/>
 										) : (
 											<EmptySection
 												accent={section.accent}
 												title={section.title}
+												onAdd={() =>
+													openAddLine(section.title)
+												}
+												editable={editable && !working}
 											/>
 										)}
 									</Collapse>
@@ -761,15 +951,39 @@ export default function BOMFlowBOMBuilder() {
 							/>
 
 							<AssistantItem
-								done={false}
-								label="Missing rate detected"
-								subtitle="Brass Handles Custom needs approved rate"
+								done={missingRates === 0}
+								label={
+									missingRates === 0
+										? "All material rates available"
+										: "Missing rate detected"
+								}
+								subtitle={
+									missingRates === 0
+										? "No material rate is blocking review"
+										: `${missingRates} row(s) still need a valid rate`
+								}
 							/>
 
 							<AssistantItem
-								done={false}
-								label="Review not submitted"
-								subtitle="Send to reviewer after rate correction"
+								done={
+									!["DRAFT", "RETURNED"].includes(
+										revision?.status
+									)
+								}
+								label={
+									["DRAFT", "RETURNED"].includes(
+										revision?.status
+									)
+										? "Review not submitted"
+										: "Revision moved forward"
+								}
+								subtitle={
+									["DRAFT", "RETURNED"].includes(
+										revision?.status
+									)
+										? "Send to reviewer after BOM completion"
+										: `Current status: ${revision?.status}`
+								}
 							/>
 						</Card>
 
@@ -957,6 +1171,225 @@ export default function BOMFlowBOMBuilder() {
 					</Box>
 				</Box>
 			</Box>
+
+			<Dialog
+				open={lineDialog.open}
+				onClose={closeLineDialog}
+				fullWidth
+				maxWidth="sm"
+				PaperProps={{
+					sx: {
+						borderRadius: "12px",
+						background:
+							"linear-gradient(180deg,#0f172a,#111827)",
+						color: "#fff",
+						border:
+							"1px solid rgba(255,255,255,.10)",
+					},
+				}}
+			>
+				<DialogTitle
+					sx={{
+						fontWeight: 950,
+						borderBottom:
+							"1px solid rgba(255,255,255,.08)",
+					}}
+				>
+					Add BOM Material Row
+				</DialogTitle>
+
+				<DialogContent sx={{ pt: "18px !important" }}>
+					<Box sx={dialogGridSx}>
+						<TextField
+							select
+							label="Section *"
+							value={lineDialog.form.section}
+							onChange={(event) =>
+								updateLineField(
+									"section",
+									event.target.value
+								)
+							}
+							sx={dialogFieldSx}
+						>
+							{[
+								"Metal",
+								"Wood",
+								"Hardware",
+								"Stone",
+								"Glass",
+								"Upholstery",
+								"Paint",
+								"Packaging",
+								"Miscellaneous",
+							].map((section) => (
+								<MenuItem
+									key={section}
+									value={section}
+								>
+									{section}
+								</MenuItem>
+							))}
+						</TextField>
+
+						<TextField
+							label="Category"
+							value={lineDialog.form.category}
+							onChange={(event) =>
+								updateLineField(
+									"category",
+									event.target.value
+								)
+							}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							label="Item Name *"
+							value={lineDialog.form.itemName}
+							onChange={(event) =>
+								updateLineField(
+									"itemName",
+									event.target.value
+								)
+							}
+							sx={{
+								...dialogFieldSx,
+								gridColumn: "1 / -1",
+							}}
+						/>
+
+						<TextField
+							label="Brand"
+							value={lineDialog.form.brand}
+							onChange={(event) =>
+								updateLineField(
+									"brand",
+									event.target.value
+								)
+							}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							label="Vendor"
+							value={lineDialog.form.vendorName}
+							onChange={(event) =>
+								updateLineField(
+									"vendorName",
+									event.target.value
+								)
+							}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							label="Unit *"
+							value={lineDialog.form.unit}
+							onChange={(event) =>
+								updateLineField(
+									"unit",
+									event.target.value
+								)
+							}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							type="number"
+							label="Quantity *"
+							value={lineDialog.form.requiredQty}
+							onChange={(event) =>
+								updateLineField(
+									"requiredQty",
+									event.target.value
+								)
+							}
+							inputProps={{
+								min: 0,
+								step: "0.001",
+							}}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							type="number"
+							label="Rate"
+							value={lineDialog.form.rate}
+							onChange={(event) =>
+								updateLineField(
+									"rate",
+									event.target.value
+								)
+							}
+							inputProps={{
+								min: 0,
+								step: "0.01",
+							}}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							type="number"
+							label="GST %"
+							value={lineDialog.form.gstPercent}
+							onChange={(event) =>
+								updateLineField(
+									"gstPercent",
+									event.target.value
+								)
+							}
+							inputProps={{
+								min: 0,
+								step: "0.01",
+							}}
+							sx={dialogFieldSx}
+						/>
+
+						<TextField
+							label="Remarks"
+							multiline
+							minRows={2}
+							value={lineDialog.form.remarks}
+							onChange={(event) =>
+								updateLineField(
+									"remarks",
+									event.target.value
+								)
+							}
+							sx={{
+								...dialogFieldSx,
+								gridColumn: "1 / -1",
+							}}
+						/>
+					</Box>
+				</DialogContent>
+
+				<DialogActions
+					sx={{
+						p: 2,
+						borderTop:
+							"1px solid rgba(255,255,255,.08)",
+					}}
+				>
+					<Button
+						disabled={working}
+						onClick={closeLineDialog}
+						sx={secondaryBtnSx}
+					>
+						Cancel
+					</Button>
+
+					<Button
+						disabled={working}
+						onClick={handleAddLine}
+						startIcon={<AddIcon />}
+						sx={primaryBtnSx}
+					>
+						{working ? "Adding..." : "Add Row"}
+					</Button>
+				</DialogActions>
+			</Dialog>
 		</Box>
 	);
 }
@@ -965,6 +1398,7 @@ function SectionTable({
 	rows,
 	editable,
 	onDelete,
+	onAdd,
 	validRates,
 }) {
 	return (
@@ -1067,7 +1501,12 @@ function SectionTable({
 			})}
 
 			<Box sx={tableFooterSx}>
-				<Button startIcon={<AddIcon />} sx={addRowBtnSx}>
+				<Button
+					startIcon={<AddIcon />}
+					disabled={!editable}
+					onClick={onAdd}
+					sx={addRowBtnSx}
+				>
 					Add Row
 				</Button>
 
@@ -1079,7 +1518,12 @@ function SectionTable({
 	);
 }
 
-function EmptySection({ accent, title }) {
+function EmptySection({
+	accent,
+	title,
+	onAdd,
+	editable,
+}) {
 	return (
 		<Box sx={emptySectionSx}>
 			<Box sx={emptyIconSx(accent)}>
@@ -1097,7 +1541,12 @@ function EmptySection({ accent, title }) {
 				</Typography>
 			</Box>
 
-			<Button startIcon={<AddIcon />} sx={addRowBtnSx}>
+			<Button
+				startIcon={<AddIcon />}
+				disabled={!editable}
+				onClick={onAdd}
+				sx={addRowBtnSx}
+			>
 				Add Row
 			</Button>
 		</Box>
@@ -2026,4 +2475,51 @@ const quickActionSubStyle = {
 	fontSize: 10.5,
 	fontWeight: 650,
 	lineHeight: 1.3,
+};
+
+const dialogGridSx = {
+	display: "grid",
+	gridTemplateColumns: "1fr 1fr",
+	gap: "12px",
+
+	"@media (max-width: 650px)": {
+		gridTemplateColumns: "1fr",
+	},
+};
+
+const dialogFieldSx = {
+	"& .MuiInputLabel-root": {
+		color: "rgba(255,255,255,.58)",
+		fontWeight: 750,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "#60a5fa",
+	},
+
+	"& .MuiOutlinedInput-root": {
+		color: "#fff",
+		background: "rgba(255,255,255,.04)",
+		borderRadius: "9px",
+
+		"& fieldset": {
+			borderColor: "rgba(255,255,255,.10)",
+		},
+
+		"&:hover fieldset": {
+			borderColor: "rgba(59,130,246,.34)",
+		},
+
+		"&.Mui-focused fieldset": {
+			borderColor: "#3b82f6",
+		},
+	},
+
+	"& .MuiInputBase-input": {
+		color: "#fff",
+	},
+
+	"& .MuiSvgIcon-root": {
+		color: "#94a3b8",
+	},
 };
