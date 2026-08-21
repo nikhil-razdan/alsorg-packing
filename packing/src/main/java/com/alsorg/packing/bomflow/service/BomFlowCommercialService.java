@@ -9,6 +9,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -1117,13 +1118,15 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                rs -> csvRow(out,
-                        "BOM",
-                        rs.getString("action"),
-                        rs.getString("old_value"),
-                        rs.getString("new_value"),
-                        rs.getString("changed_by"),
-                        localDateTime(rs, "changed_at")),
+                (RowCallbackHandler) rs -> {
+                    csvRow(out,
+                            "BOM",
+                            rs.getString("action"),
+                            rs.getString("old_value"),
+                            rs.getString("new_value"),
+                            rs.getString("changed_by"),
+                            localDateTime(rs, "changed_at"));
+                },
                 revisionId);
 
         jdbc.query("""
@@ -1132,13 +1135,15 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                rs -> csvRow(out,
-                        "COMMERCIAL",
-                        rs.getString("action"),
-                        rs.getString("old_value"),
-                        rs.getString("new_value"),
-                        rs.getString("changed_by"),
-                        localDateTime(rs, "changed_at")),
+                (RowCallbackHandler) rs -> {
+                    csvRow(out,
+                            "COMMERCIAL",
+                            rs.getString("action"),
+                            rs.getString("old_value"),
+                            rs.getString("new_value"),
+                            rs.getString("changed_by"),
+                            localDateTime(rs, "changed_at"));
+                },
                 revisionId);
 
         return excelUtf8(out.toString());
@@ -1201,13 +1206,15 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                rs -> auditRows.add(List.of(
-                        "BOM",
-                        safeObject(rs.getString("action")),
-                        safeObject(rs.getString("old_value")),
-                        safeObject(rs.getString("new_value")),
-                        safeObject(rs.getString("changed_by")),
-                        safeObject(localDateTime(rs, "changed_at")))),
+                (RowCallbackHandler) rs -> {
+                    auditRows.add(List.of(
+                            "BOM",
+                            safeObject(rs.getString("action")),
+                            safeObject(rs.getString("old_value")),
+                            safeObject(rs.getString("new_value")),
+                            safeObject(rs.getString("changed_by")),
+                            safeObject(localDateTime(rs, "changed_at"))));
+                },
                 revisionId);
         jdbc.query("""
                 SELECT action, old_value, new_value, changed_by, changed_at
@@ -1215,13 +1222,15 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                rs -> auditRows.add(List.of(
-                        "COMMERCIAL",
-                        safeObject(rs.getString("action")),
-                        safeObject(rs.getString("old_value")),
-                        safeObject(rs.getString("new_value")),
-                        safeObject(rs.getString("changed_by")),
-                        safeObject(localDateTime(rs, "changed_at")))),
+                (RowCallbackHandler) rs -> {
+                    auditRows.add(List.of(
+                            "COMMERCIAL",
+                            safeObject(rs.getString("action")),
+                            safeObject(rs.getString("old_value")),
+                            safeObject(rs.getString("new_value")),
+                            safeObject(rs.getString("changed_by")),
+                            safeObject(localDateTime(rs, "changed_at"))));
+                },
                 revisionId);
 
         try {
