@@ -51,6 +51,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import SyncOutlinedIcon from "@mui/icons-material/SyncOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CurrencyRupeeOutlinedIcon from "@mui/icons-material/CurrencyRupeeOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -592,6 +593,29 @@ export default function BOMFlowBOMBuilder() {
 		);
 	}
 
+	const handleSyncRates = async () => {
+		if (!editable || !revision?.id) {
+			return;
+		}
+
+		setWorking(true);
+		setError("");
+
+		try {
+			await bomFlowApi.applyMaterialRates(revision.id);
+			await loadRevision();
+		} catch (requestError) {
+			setError(
+				requestError?.response?.data?.message ||
+				requestError?.response?.data?.detail ||
+				requestError?.message ||
+				"Unable to sync Rate Master."
+			);
+		} finally {
+			setWorking(false);
+		}
+	};
+
 	const handleDeleteRow = async (row) => {
 		if (
 			!editable ||
@@ -826,8 +850,17 @@ export default function BOMFlowBOMBuilder() {
 								</Button>
 
 								<Button
+									startIcon={<SyncOutlinedIcon />}
+									disabled={!editable || working}
+									onClick={handleSyncRates}
+									sx={secondaryBtnSx}
+								>
+									Sync Rate Master
+								</Button>
+
+								<Button
 									startIcon={<DownloadOutlinedIcon />}
-									onClick={() => navigate("/bomflow/reports")}
+									onClick={() => navigate(`/bomflow/reports?productId=${revision?.productId || ""}&revisionId=${revision?.id || ""}`)}
 									sx={secondaryBtnSx}
 								>
 									Export BOM

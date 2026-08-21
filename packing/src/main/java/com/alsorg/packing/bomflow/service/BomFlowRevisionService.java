@@ -466,6 +466,10 @@ public class BomFlowRevisionService {
         item.processingAmount = BigDecimal.ZERO.setScale(2);
         item.amount = amount;
         item.gstPercent = gst;
+        // A manual BOM rate overrides any previous Rate Master linkage.
+        item.rateMasterId = null;
+        item.rateAppliedBy = null;
+        item.rateAppliedAt = null;
         item.storeIssueRequired = true;
         item.active = true;
         item.remarks = clean(

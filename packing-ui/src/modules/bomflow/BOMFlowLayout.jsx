@@ -78,13 +78,13 @@ const navItems = [
 
 export default function BOMFlowLayout() {
 	return (
-		<div style={shell}>
+		<div style={shell} className="bomflow-shell">
 			<BOMFlowSidebar />
 
-			<div style={main}>
+			<div style={main} className="bomflow-main">
 				<BOMFlowHeader />
 
-				<div style={contentShell}>
+				<div style={contentShell} className="bomflow-content-shell">
 					<div style={contentInner}>
 						<Outlet />
 					</div>
@@ -129,6 +129,7 @@ function BOMFlowSidebar() {
 
 	return (
 		<div
+			className="bomflow-sidebar"
 			style={{
 				...sidebar,
 				width: collapsed ? 64 : 230,
@@ -307,6 +308,16 @@ function BOMFlowHeader() {
 				icon: <PriceChangeOutlinedIcon />,
 			},
 			{
+				label: "Labour Master",
+				path: "/bomflow/labour-master",
+				icon: <EngineeringOutlinedIcon />,
+			},
+			{
+				label: "Costing Engine",
+				path: "/bomflow/costing",
+				icon: <CalculateOutlinedIcon />,
+			},
+			{
 				label: "Reports",
 				path: "/bomflow/reports",
 				icon: <AssessmentOutlinedIcon />,
@@ -339,7 +350,7 @@ function BOMFlowHeader() {
 
 	return (
 		<>
-			<div style={header}>
+			<div style={header} className="bomflow-main-header">
 				<div style={headerLeft}>
 					<div style={brandWrap}>
 						<div style={brandMark}>

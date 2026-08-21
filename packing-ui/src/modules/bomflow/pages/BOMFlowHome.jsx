@@ -17,6 +17,7 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import PriceChangeOutlinedIcon from "@mui/icons-material/PriceChangeOutlined";
 import CalculateOutlinedIcon from "@mui/icons-material/CalculateOutlined";
+import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AppsIcon from "@mui/icons-material/Apps";
@@ -25,8 +26,7 @@ import LogoutIcon from "@mui/icons-material/Logout";
 const modules = [
 	{
 		title: "Dashboard",
-		subtitle:
-			"View live products, revisions, approvals and missing rates",
+		subtitle: "View products, BOM revisions, approvals, missing rates and costing activity.",
 		icon: <AssessmentOutlinedIcon />,
 		status: "Available",
 		action: "Open Dashboard",
@@ -35,8 +35,7 @@ const modules = [
 	},
 	{
 		title: "Product Master",
-		subtitle:
-			"Create products, dimensions, drawing references, categories and project allocation.",
+		subtitle: "Create products, dimensions, drawings, images, categories and project allocation.",
 		icon: <Inventory2OutlinedIcon />,
 		status: "Available",
 		action: "View Products",
@@ -45,8 +44,7 @@ const modules = [
 	},
 	{
 		title: "BOM Builder",
-		subtitle:
-			"Select a product, open a BOM revision and manage section-wise material rows.",
+		subtitle: "Select a product, open a BOM revision and manage section-wise material rows.",
 		icon: <RuleOutlinedIcon />,
 		status: "Available",
 		action: "Open BOM Builder",
@@ -55,23 +53,39 @@ const modules = [
 	},
 	{
 		title: "Rate Master",
-		subtitle:
-			"Maintain material rates, purchase rates, effective dates and rate evidence.",
+		subtitle: "Maintain item-wise material rates, GST, vendor context and effective dates.",
 		icon: <PriceChangeOutlinedIcon />,
-		status: "Next Phase",
+		status: "Available",
 		action: "Open Rate Master",
 		path: "/bomflow/rate-master",
-		enabled: false,
+		enabled: true,
+	},
+	{
+		title: "Labour Master",
+		subtitle: "Maintain department and process labour rates with hourly, quantity and fixed bases.",
+		icon: <EngineeringOutlinedIcon />,
+		status: "Available",
+		action: "Open Labour Master",
+		path: "/bomflow/labour-master",
+		enabled: true,
 	},
 	{
 		title: "Costing Engine",
-		subtitle:
-			"Calculate material, labour, overheads, product cost and selling-price logic.",
+		subtitle: "Combine material, labour, overhead, margin, GST and final MRP calculations.",
 		icon: <CalculateOutlinedIcon />,
-		status: "Next Phase",
-		action: "View Costing",
+		status: "Available",
+		action: "Open Costing",
 		path: "/bomflow/costing",
-		enabled: false,
+		enabled: true,
+	},
+	{
+		title: "Reports",
+		subtitle: "Preview and export Direct Material, Direct Labour, Costing Summary and Change Log.",
+		icon: <AssessmentOutlinedIcon />,
+		status: "Available",
+		action: "Open Reports",
+		path: "/bomflow/reports",
+		enabled: true,
 	},
 ];
 
@@ -162,6 +176,7 @@ export default function BOMFlowHome() {
 						<Chip label="Product Master" sx={styles.BOM_heroChipSx} />
 						<Chip label="BOM Builder" sx={styles.BOM_heroChipSx} />
 						<Chip label="Rate Master" sx={styles.BOM_heroChipSx} />
+						<Chip label="Labour Master" sx={styles.BOM_heroChipSx} />
 						<Chip label="Costing Engine" sx={styles.BOM_heroChipSx} />
 						<Chip label="Reports" sx={styles.BOM_heroChipSx} />
 					</Box>

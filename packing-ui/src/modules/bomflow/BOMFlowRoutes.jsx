@@ -60,8 +60,9 @@ export default function BOMFlowRoutes() {
 					path="rate-master"
 					element={
 						<BOMFlowPlaceholder
+							mode="rate-master"
 							title="Rate Master"
-							subtitle="Maintain material rates, vendor rates, GST status, effective dates and bill copies."
+							subtitle="Maintain material rates, vendor rates, GST status, effective dates and source references."
 						/>
 					}
 				/>
@@ -70,8 +71,9 @@ export default function BOMFlowRoutes() {
 					path="labour-master"
 					element={
 						<BOMFlowPlaceholder
+							mode="labour-master"
 							title="Labour Master"
-							subtitle="Maintain process-wise labour rates, departments, time standards and approval status."
+							subtitle="Maintain process-wise labour rates, departments, time standards and basis."
 						/>
 					}
 				/>
@@ -80,6 +82,7 @@ export default function BOMFlowRoutes() {
 					path="costing"
 					element={
 						<BOMFlowPlaceholder
+							mode="costing"
 							title="Costing Engine"
 							subtitle="Calculate material cost, labour cost, overheads, prime cost and final costing scenarios."
 						/>
@@ -90,8 +93,9 @@ export default function BOMFlowRoutes() {
 					path="reports"
 					element={
 						<BOMFlowPlaceholder
+							mode="reports"
 							title="Reports"
-							subtitle="Export Price Sheet, Direct Material, Direct Labour, Change Log, PDF approval and summaries."
+							subtitle="Export Direct Material, Direct Labour, Costing Summary, Change Log and printable PDF views."
 						/>
 					}
 				/>

@@ -76,6 +76,15 @@ public class BomFlowRevisionItem {
     @Column(name = "gst_percent", nullable = false, precision = 9, scale = 4)
     public BigDecimal gstPercent;
 
+    @Column(name = "rate_master_id")
+    public UUID rateMasterId;
+
+    @Column(name = "rate_applied_by", length = 150)
+    public String rateAppliedBy;
+
+    @Column(name = "rate_applied_at")
+    public LocalDateTime rateAppliedAt;
+
     @Column(name = "store_issue_required", nullable = false)
     public Boolean storeIssueRequired;
 

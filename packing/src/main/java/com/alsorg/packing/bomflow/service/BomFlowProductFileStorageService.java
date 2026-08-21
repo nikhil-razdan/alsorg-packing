@@ -19,7 +19,8 @@ public class BomFlowProductFileStorageService {
 
     public enum FileSlot {
         PRODUCT_IMAGE("product-image"),
-        DRAWING("drawing");
+        DRAWING("drawing"),
+        RATE_EVIDENCE("rate-evidence");
 
         private final String folder;
 
