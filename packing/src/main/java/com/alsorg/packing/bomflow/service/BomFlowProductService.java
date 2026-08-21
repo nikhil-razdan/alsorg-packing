@@ -108,6 +108,7 @@ public class BomFlowProductService {
                 product,
                 request);
 
+        product.currentRevisionNo = 0;
         product.status = BomFlowProductStatus.DRAFT;
         product.createdBy = actor;
         product.createdAt = now;
@@ -127,7 +128,10 @@ public class BomFlowProductService {
         access.requireEditor();
         validateProductRequest(request);
 
-        BomFlowProduct product = requireProduct(productId);
+        BomFlowProduct product = productRepository
+                .findByIdForUpdate(productId)
+                .orElseThrow(() -> notFound(
+                        "Product not found: " + productId));
 
         requireVersion(
                 product.rowVersion,
@@ -220,6 +224,11 @@ public class BomFlowProductService {
 
         revision = revisionRepository
                 .saveAndFlush(revision);
+
+        product.currentRevisionNo = nextRevisionNo;
+        product.updatedBy = actor;
+        product.updatedAt = now;
+        productRepository.saveAndFlush(product);
 
         return mapper.toRevisionSummary(revision);
     }

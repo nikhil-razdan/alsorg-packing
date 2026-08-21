@@ -227,7 +227,7 @@ function BOMFlowSidebar() {
 			{!collapsed && (
 				<button
 					type="button"
-					onClick={() => navigate("/bomflow/products")}
+					onClick={() => navigate("/bomflow/products/new")}
 					style={newCostingBtn}
 				>
 					<AddIcon fontSize="small" />
@@ -719,7 +719,7 @@ function BOMFlowHeader() {
 
 					<button
 						style={settingsAction}
-						onClick={() => navigate("/bomflow/products")}
+						onClick={() => navigate("/bomflow/products/new")}
 					>
 						Create New Costing
 					</button>

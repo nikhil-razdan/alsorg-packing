@@ -450,16 +450,24 @@ public class BomFlowRevisionService {
                         request.unit(),
                         "Unit"));
 
-        item.requiredQty = quantity;
-        item.rate = rate;
-
-        item.amount = quantity
+        BigDecimal amount = quantity
                 .multiply(rate)
                 .setScale(
                         4,
                         RoundingMode.HALF_UP);
 
+        item.baseQty = quantity;
+        item.wastagePercent = BigDecimal.ZERO;
+        item.requiredQty = quantity;
+        item.rate = rate;
+        item.materialAmount = amount.setScale(
+                2,
+                RoundingMode.HALF_UP);
+        item.processingAmount = BigDecimal.ZERO.setScale(2);
+        item.amount = amount;
         item.gstPercent = gst;
+        item.storeIssueRequired = true;
+        item.active = true;
         item.remarks = clean(
                 request.remarks());
     }

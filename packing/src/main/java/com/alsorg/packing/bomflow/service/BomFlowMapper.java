@@ -41,6 +41,9 @@ public class BomFlowMapper {
         long revisionCount = revisionRepository
                 .countByProductId(product.id);
 
+        boolean hasProductImage = hasText(product.productImageStorageKey);
+        boolean hasDrawingFile = hasText(product.drawingFileStorageKey);
+
         return new ProductResponse(
                 product.id,
                 product.productName,
@@ -54,12 +57,25 @@ public class BomFlowMapper {
                 product.projectReference,
                 product.clientEntity,
                 product.status,
+                product.currentRevisionNo,
                 revisionCount,
                 latest == null ? null : latest.id,
                 latest == null ? null : latest.revisionNo,
                 latest == null || latest.status == null
                         ? null
                         : latest.status.name(),
+                hasProductImage,
+                product.productImageOriginalName,
+                product.productImageContentType,
+                product.productImageSize,
+                product.productImageUploadedBy,
+                product.productImageUploadedAt,
+                hasDrawingFile,
+                product.drawingFileOriginalName,
+                product.drawingFileContentType,
+                product.drawingFileSize,
+                product.drawingFileUploadedBy,
+                product.drawingFileUploadedAt,
                 product.createdBy,
                 product.createdAt,
                 product.updatedBy,
@@ -173,5 +189,12 @@ public class BomFlowMapper {
         return value == null
                 ? BigDecimal.ZERO
                 : value;
+    }
+
+    private boolean hasText(
+            String value) {
+
+        return value != null
+                && !value.trim().isEmpty();
     }
 }

@@ -74,7 +74,7 @@ const quickActions = [
 	{
 		title: "Create Product",
 		subtitle: "Start a new product costing file.",
-		path: "/bomflow/products",
+		path: "/bomflow/products/new",
 		icon: <Inventory2OutlinedIcon />,
 	},
 	{
@@ -234,7 +234,7 @@ export default function BOMFlowDashboard() {
 
 					<Button
 						startIcon={<AddIcon />}
-						onClick={() => navigate("/bomflow/products")}
+						onClick={() => navigate("/bomflow/products/new")}
 						sx={primaryBtnSx}
 					>
 						New Costing

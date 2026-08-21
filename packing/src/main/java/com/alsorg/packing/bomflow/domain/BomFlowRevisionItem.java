@@ -8,18 +8,13 @@ import java.util.UUID;
 
 @Entity
 @Table(
-        name = "bomflow_revision_items",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_bomflow_revision_line_no",
-                        columnNames = {"revision_id", "line_no"})
-        },
+        name = "bom_flow_items",
         indexes = {
                 @Index(
-                        name = "idx_bomflow_item_revision",
+                        name = "idx_bom_flow_item_revision",
                         columnList = "revision_id"),
                 @Index(
-                        name = "idx_bomflow_item_section",
+                        name = "idx_bom_flow_item_section",
                         columnList = "section_name")
         })
 public class BomFlowRevisionItem {
@@ -33,7 +28,7 @@ public class BomFlowRevisionItem {
             name = "revision_id",
             nullable = false,
             foreignKey = @ForeignKey(
-                    name = "fk_bomflow_item_revision"))
+                    name = "fk_bom_flow_item_revision_v2"))
     public BomFlowRevision revision;
 
     @Column(name = "line_no", nullable = false)
@@ -42,13 +37,13 @@ public class BomFlowRevisionItem {
     @Column(name = "section_name", nullable = false, length = 120)
     public String section;
 
-    @Column(name = "category_name", length = 120)
+    @Column(name = "category", nullable = false, length = 100)
     public String category;
 
-    @Column(name = "item_name", nullable = false, length = 300)
+    @Column(name = "item_name", nullable = false, length = 500)
     public String itemName;
 
-    @Column(name = "brand", length = 160)
+    @Column(name = "brand", length = 255)
     public String brand;
 
     @Column(name = "vendor_name", length = 220)
@@ -57,28 +52,46 @@ public class BomFlowRevisionItem {
     @Column(name = "unit", nullable = false, length = 60)
     public String unit;
 
+    @Column(name = "base_qty", nullable = false, precision = 14, scale = 3)
+    public BigDecimal baseQty;
+
+    @Column(name = "wastage_percent", nullable = false, precision = 8, scale = 3)
+    public BigDecimal wastagePercent;
+
     @Column(name = "required_qty", nullable = false, precision = 18, scale = 4)
     public BigDecimal requiredQty;
 
-    @Column(name = "rate", nullable = false, precision = 18, scale = 4)
+    @Column(name = "unit_rate", nullable = false, precision = 18, scale = 4)
     public BigDecimal rate;
 
-    @Column(name = "amount", nullable = false, precision = 18, scale = 4)
+    @Column(name = "material_amount", nullable = false, precision = 18, scale = 2)
+    public BigDecimal materialAmount;
+
+    @Column(name = "processing_amount", nullable = false, precision = 18, scale = 2)
+    public BigDecimal processingAmount;
+
+    @Column(name = "total_amount", nullable = false, precision = 18, scale = 4)
     public BigDecimal amount;
 
     @Column(name = "gst_percent", nullable = false, precision = 9, scale = 4)
     public BigDecimal gstPercent;
 
-    @Column(name = "remarks", length = 2000)
+    @Column(name = "store_issue_required", nullable = false)
+    public Boolean storeIssueRequired;
+
+    @Column(name = "active", nullable = false)
+    public Boolean active;
+
+    @Column(name = "remarks", length = 3000)
     public String remarks;
 
-    @Column(name = "created_by", nullable = false, length = 120)
+    @Column(name = "created_by", nullable = false, length = 150)
     public String createdBy;
 
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt;
 
-    @Column(name = "updated_by", nullable = false, length = 120)
+    @Column(name = "updated_by", nullable = false, length = 150)
     public String updatedBy;
 
     @Column(name = "updated_at", nullable = false)
@@ -104,6 +117,14 @@ public class BomFlowRevisionItem {
             updatedAt = now;
         }
 
+        if (baseQty == null) {
+            baseQty = BigDecimal.ZERO;
+        }
+
+        if (wastagePercent == null) {
+            wastagePercent = BigDecimal.ZERO;
+        }
+
         if (requiredQty == null) {
             requiredQty = BigDecimal.ZERO;
         }
@@ -112,12 +133,28 @@ public class BomFlowRevisionItem {
             rate = BigDecimal.ZERO;
         }
 
+        if (materialAmount == null) {
+            materialAmount = BigDecimal.ZERO;
+        }
+
+        if (processingAmount == null) {
+            processingAmount = BigDecimal.ZERO;
+        }
+
         if (amount == null) {
             amount = BigDecimal.ZERO;
         }
 
         if (gstPercent == null) {
             gstPercent = BigDecimal.ZERO;
+        }
+
+        if (storeIssueRequired == null) {
+            storeIssueRequired = true;
+        }
+
+        if (active == null) {
+            active = true;
         }
     }
 

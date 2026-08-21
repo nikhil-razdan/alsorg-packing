@@ -10,6 +10,7 @@ import BOMFlowLayout from "./BOMFlowLayout";
 
 import BOMFlowHome from "./pages/BOMFlowHome";
 import BOMFlowDashboard from "./pages/BOMFlowDashboard";
+import BOMFlowProductList from "./pages/BOMFlowProductList";
 import BOMFlowProductMaster from "./pages/BOMFlowProductMaster";
 import BOMFlowBOMBuilder from "./pages/BOMFlowBOMBuilder";
 import BOMFlowBOMBuilderLanding from "./pages/BOMFlowBOMBuilderLanding";
@@ -19,19 +20,20 @@ export default function BOMFlowRoutes() {
 	return (
 		<Routes>
 			<Route element={<BOMFlowLayout />}>
-				<Route
-					index
-					element={<BOMFlowHome />}
-				/>
+				<Route index element={<BOMFlowHome />} />
 
 				<Route
 					path="dashboard"
 					element={<BOMFlowDashboard />}
 				/>
 
+				{/*
+				 * Product Master now opens the PRODUCT LIST first.
+				 * The builder/editor is only opened through New or Edit.
+				 */}
 				<Route
 					path="products"
-					element={<BOMFlowProductMaster />}
+					element={<BOMFlowProductList />}
 				/>
 
 				<Route
@@ -44,22 +46,11 @@ export default function BOMFlowRoutes() {
 					element={<BOMFlowProductMaster />}
 				/>
 
-				{/*
-				 * FIX:
-				 * The sidebar and quick links point to /bomflow/bom-builder.
-				 * Previously this route immediately redirected to Product Master,
-				 * so BOM Builder looked broken.
-				 *
-				 * It now opens a real product/revision selector.
-				 */}
 				<Route
 					path="bom-builder"
 					element={<BOMFlowBOMBuilderLanding />}
 				/>
 
-				{/*
-				 * A concrete revision opens the actual editable BOM Builder.
-				 */}
 				<Route
 					path="revisions/:revisionId"
 					element={<BOMFlowBOMBuilder />}
@@ -107,12 +98,7 @@ export default function BOMFlowRoutes() {
 
 				<Route
 					path="*"
-					element={
-						<Navigate
-							to="/bomflow"
-							replace
-						/>
-					}
+					element={<Navigate to="/bomflow" replace />}
 				/>
 			</Route>
 		</Routes>

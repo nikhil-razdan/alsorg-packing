@@ -13,6 +13,22 @@ const ENDPOINTS = Object.freeze({
 	revisions: "/bomflow/revisions",
 });
 
+const requireId = (value, label) => {
+	if (!value) {
+		throw new Error(`${label} is required.`);
+	}
+};
+
+const fileForm = (file) => {
+	if (!file) {
+		throw new Error("File is required.");
+	}
+
+	const form = new FormData();
+	form.append("file", file);
+	return form;
+};
+
 export const bomFlowApi = {
 	async listProducts(params = {}) {
 		const response = await API.get(
@@ -24,9 +40,7 @@ export const bomFlowApi = {
 	},
 
 	async getProduct(productId) {
-		if (!productId) {
-			throw new Error("Product ID is required.");
-		}
+		requireId(productId, "Product ID");
 
 		const response = await API.get(
 			`${ENDPOINTS.products}/${productId}`
@@ -49,9 +63,7 @@ export const bomFlowApi = {
 		payload,
 		rowVersion
 	) {
-		if (!productId) {
-			throw new Error("Product ID is required.");
-		}
+		requireId(productId, "Product ID");
 
 		const response = await API.put(
 			`${ENDPOINTS.products}/${productId}`,
@@ -64,7 +76,77 @@ export const bomFlowApi = {
 		return unwrap(response);
 	},
 
+	async uploadProductImage(productId, file) {
+		requireId(productId, "Product ID");
+
+		const response = await API.post(
+			`${ENDPOINTS.products}/${productId}/image`,
+			fileForm(file)
+		);
+
+		return unwrap(response);
+	},
+
+	async getProductImageBlob(productId) {
+		requireId(productId, "Product ID");
+
+		const response = await API.get(
+			`${ENDPOINTS.products}/${productId}/image`,
+			{
+				responseType: "blob",
+			}
+		);
+
+		return response?.data || null;
+	},
+
+	async deleteProductImage(productId) {
+		requireId(productId, "Product ID");
+
+		const response = await API.delete(
+			`${ENDPOINTS.products}/${productId}/image`
+		);
+
+		return unwrap(response);
+	},
+
+	async uploadProductDrawing(productId, file) {
+		requireId(productId, "Product ID");
+
+		const response = await API.post(
+			`${ENDPOINTS.products}/${productId}/drawing`,
+			fileForm(file)
+		);
+
+		return unwrap(response);
+	},
+
+	async getProductDrawingBlob(productId) {
+		requireId(productId, "Product ID");
+
+		const response = await API.get(
+			`${ENDPOINTS.products}/${productId}/drawing`,
+			{
+				responseType: "blob",
+			}
+		);
+
+		return response?.data || null;
+	},
+
+	async deleteProductDrawing(productId) {
+		requireId(productId, "Product ID");
+
+		const response = await API.delete(
+			`${ENDPOINTS.products}/${productId}/drawing`
+		);
+
+		return unwrap(response);
+	},
+
 	async listProductRevisions(productId) {
+		requireId(productId, "Product ID");
+
 		const response = await API.get(
 			`${ENDPOINTS.products}/${productId}/revisions`
 		);
@@ -73,6 +155,8 @@ export const bomFlowApi = {
 	},
 
 	async createRevision(productId, payload = {}) {
+		requireId(productId, "Product ID");
+
 		const response = await API.post(
 			`${ENDPOINTS.products}/${productId}/revisions`,
 			payload
@@ -82,6 +166,8 @@ export const bomFlowApi = {
 	},
 
 	async getRevision(revisionId) {
+		requireId(revisionId, "Revision ID");
+
 		const response = await API.get(
 			`${ENDPOINTS.revisions}/${revisionId}`
 		);
@@ -90,6 +176,8 @@ export const bomFlowApi = {
 	},
 
 	async addRevisionLine(revisionId, payload) {
+		requireId(revisionId, "Revision ID");
+
 		const response = await API.post(
 			`${ENDPOINTS.revisions}/${revisionId}/items`,
 			payload
@@ -104,6 +192,9 @@ export const bomFlowApi = {
 		payload,
 		rowVersion
 	) {
+		requireId(revisionId, "Revision ID");
+		requireId(itemId, "Item ID");
+
 		const response = await API.put(
 			`${ENDPOINTS.revisions}/${revisionId}/items/${itemId}`,
 			{
@@ -120,6 +211,9 @@ export const bomFlowApi = {
 		itemId,
 		rowVersion
 	) {
+		requireId(revisionId, "Revision ID");
+		requireId(itemId, "Item ID");
+
 		const response = await API.delete(
 			`${ENDPOINTS.revisions}/${revisionId}/items/${itemId}`,
 			{

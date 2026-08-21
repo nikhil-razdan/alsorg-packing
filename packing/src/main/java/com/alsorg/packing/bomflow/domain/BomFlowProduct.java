@@ -8,19 +8,20 @@ import java.util.UUID;
 
 @Entity
 @Table(
-        name = "bomflow_products",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_bomflow_product_code",
-                        columnNames = "product_code")
-        },
+        name = "bom_flow_boms",
         indexes = {
                 @Index(
-                        name = "idx_bomflow_product_name",
+                        name = "idx_bom_flow_product_name",
                         columnList = "product_name"),
                 @Index(
-                        name = "idx_bomflow_product_project",
-                        columnList = "project_reference")
+                        name = "idx_bom_flow_product_project",
+                        columnList = "project_code"),
+                @Index(
+                        name = "idx_bom_flow_product_category",
+                        columnList = "product_category"),
+                @Index(
+                        name = "idx_bom_flow_status",
+                        columnList = "status")
         })
 public class BomFlowProduct {
 
@@ -28,16 +29,16 @@ public class BomFlowProduct {
     @Column(nullable = false, updatable = false)
     public UUID id;
 
-    @Column(name = "product_name", nullable = false, length = 250)
+    @Column(name = "product_name", nullable = false, length = 500)
     public String productName;
 
-    @Column(name = "product_code", nullable = false, length = 120)
+    @Column(name = "product_code", length = 150)
     public String productCode;
 
-    @Column(name = "drawing_number", length = 160)
+    @Column(name = "drawing_no", length = 160)
     public String drawingNumber;
 
-    @Column(name = "category", nullable = false, length = 120)
+    @Column(name = "product_category", nullable = false, length = 120)
     public String category;
 
     @Column(name = "collection_name", length = 160)
@@ -52,23 +53,72 @@ public class BomFlowProduct {
     @Column(name = "height_mm", nullable = false, precision = 18, scale = 3)
     public BigDecimal height;
 
-    @Column(name = "project_reference", length = 180)
+    @Column(name = "project_code", length = 180)
     public String projectReference;
 
-    @Column(name = "client_entity", length = 240)
+    @Column(name = "client_name", length = 240)
     public String clientEntity;
 
+    @Column(name = "current_revision_no", nullable = false)
+    public Integer currentRevisionNo = 0;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 30)
+    @Column(name = "status", nullable = false, length = 50)
     public BomFlowProductStatus status = BomFlowProductStatus.DRAFT;
 
-    @Column(name = "created_by", nullable = false, length = 120)
+    /* ================= PRODUCT IMAGE ================= */
+
+    @Column(name = "product_image_original_name", length = 500)
+    public String productImageOriginalName;
+
+    @Column(name = "product_image_stored_name", length = 500)
+    public String productImageStoredName;
+
+    @Column(name = "product_image_storage_key", length = 1200)
+    public String productImageStorageKey;
+
+    @Column(name = "product_image_content_type", length = 255)
+    public String productImageContentType;
+
+    @Column(name = "product_image_size")
+    public Long productImageSize;
+
+    @Column(name = "product_image_uploaded_by", length = 150)
+    public String productImageUploadedBy;
+
+    @Column(name = "product_image_uploaded_at")
+    public LocalDateTime productImageUploadedAt;
+
+    /* ================= DRAWING FILE ================= */
+
+    @Column(name = "drawing_file_original_name", length = 500)
+    public String drawingFileOriginalName;
+
+    @Column(name = "drawing_file_stored_name", length = 500)
+    public String drawingFileStoredName;
+
+    @Column(name = "drawing_file_storage_key", length = 1200)
+    public String drawingFileStorageKey;
+
+    @Column(name = "drawing_file_content_type", length = 255)
+    public String drawingFileContentType;
+
+    @Column(name = "drawing_file_size")
+    public Long drawingFileSize;
+
+    @Column(name = "drawing_file_uploaded_by", length = 150)
+    public String drawingFileUploadedBy;
+
+    @Column(name = "drawing_file_uploaded_at")
+    public LocalDateTime drawingFileUploadedAt;
+
+    @Column(name = "created_by", nullable = false, length = 150)
     public String createdBy;
 
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt;
 
-    @Column(name = "updated_by", nullable = false, length = 120)
+    @Column(name = "updated_by", nullable = false, length = 150)
     public String updatedBy;
 
     @Column(name = "updated_at", nullable = false)
@@ -96,6 +146,26 @@ public class BomFlowProduct {
 
         if (status == null) {
             status = BomFlowProductStatus.DRAFT;
+        }
+
+        if (currentRevisionNo == null) {
+            currentRevisionNo = 0;
+        }
+
+        if (category == null || category.isBlank()) {
+            category = "MISCELLANEOUS";
+        }
+
+        if (length == null) {
+            length = BigDecimal.ZERO;
+        }
+
+        if (width == null) {
+            width = BigDecimal.ZERO;
+        }
+
+        if (height == null) {
+            height = BigDecimal.ZERO;
         }
     }
 

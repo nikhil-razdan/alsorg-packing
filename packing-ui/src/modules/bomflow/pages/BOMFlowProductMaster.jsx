@@ -1,49 +1,88 @@
 import {
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
-
-import {
-	useNavigate,
-	useParams,
-} from "react-router-dom";
-
-import bomFlowApi
-	from "../api/bomFlowApi";
 
 import {
 	Box,
 	Button,
 	Card,
 	Chip,
+	CircularProgress,
 	LinearProgress,
 	MenuItem,
 	TextField,
 	Typography,
 } from "@mui/material";
 
+import {
+	useNavigate,
+	useParams,
+} from "react-router-dom";
 
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import StraightenOutlinedIcon from "@mui/icons-material/StraightenOutlined";
 import BusinessCenterOutlinedIcon from "@mui/icons-material/BusinessCenterOutlined";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CameraAltOutlinedIcon from "@mui/icons-material/CameraAltOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
-import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
+
+import bomFlowApi from "../api/bomFlowApi.js";
+import * as styles from "../styles/bomStyles.js";
+
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const DRAWING_EXTENSIONS = ["pdf", "dwg", "dxf", "png", "jpg", "jpeg", "webp"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_DRAWING_BYTES = 25 * 1024 * 1024;
+
+const cleanError = (requestError, fallback) => {
+	return (
+		requestError?.response?.data?.message ||
+		requestError?.response?.data?.detail ||
+		requestError?.message ||
+		fallback
+	);
+};
+
+const formatBytes = (value) => {
+	const bytes = Number(value || 0);
+	if (!bytes) return "";
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatDate = (value) => {
+	if (!value) return "-";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "-";
+	return date.toLocaleString("en-IN", {
+		day: "2-digit",
+		month: "short",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+};
 
 export default function BOMFlowProductMaster() {
 	const navigate = useNavigate();
 	const { productId } = useParams();
+
+	const imageInputRef = useRef(null);
+	const drawingInputRef = useRef(null);
 
 	const [form, setForm] = useState({
 		productName: "",
@@ -58,34 +97,74 @@ export default function BOMFlowProductMaster() {
 		clientEntity: "",
 	});
 
-	const [savedProduct, setSavedProduct] =
-		useState(null);
-
-	const [loading, setLoading] =
-		useState(Boolean(productId));
-
-	const [saving, setSaving] =
-		useState(false);
-
-	const [error, setError] =
-		useState("");
+	const [savedProduct, setSavedProduct] = useState(null);
+	const [revisions, setRevisions] = useState([]);
+	const [loading, setLoading] = useState(Boolean(productId));
+	const [saving, setSaving] = useState(false);
+	const [fileWorking, setFileWorking] = useState("");
+	const [error, setError] = useState("");
+	const [pendingImage, setPendingImage] = useState(null);
+	const [pendingDrawing, setPendingDrawing] = useState(null);
+	const [imagePreviewUrl, setImagePreviewUrl] = useState("");
 
 	const updateField = (key, value) => {
-		setForm((prev) => ({
-			...prev,
-			[key]: value,
-		}));
+		setForm((prev) => ({ ...prev, [key]: value }));
+		if (error) setError("");
+	};
 
-		if (error) {
-			setError("");
+	const applyProductToForm = (product) => {
+		setForm({
+			productName: product?.productName || "",
+			productCode: product?.productCode || "",
+			drawingNumber: product?.drawingNumber || "",
+			category: product?.category || "",
+			collection: product?.collection || "",
+			length: product?.length != null ? String(product.length) : "",
+			width: product?.width != null ? String(product.width) : "",
+			height: product?.height != null ? String(product.height) : "",
+			projectReference: product?.projectReference || "",
+			clientEntity: product?.clientEntity || "",
+		});
+	};
+
+	const loadServerImage = async (product) => {
+		if (!product?.id || !product?.hasProductImage) {
+			setImagePreviewUrl((old) => {
+				if (old?.startsWith("blob:")) URL.revokeObjectURL(old);
+				return "";
+			});
+			return;
+		}
+
+		try {
+			const blob = await bomFlowApi.getProductImageBlob(product.id);
+			if (!blob) return;
+			const next = URL.createObjectURL(blob);
+			setImagePreviewUrl((old) => {
+				if (old?.startsWith("blob:")) URL.revokeObjectURL(old);
+				return next;
+			});
+		} catch {
+			setImagePreviewUrl("");
+		}
+	};
+
+	const loadRevisions = async (id) => {
+		if (!id) {
+			setRevisions([]);
+			return;
+		}
+
+		try {
+			const data = await bomFlowApi.listProductRevisions(id);
+			setRevisions(Array.isArray(data) ? data : data?.content || []);
+		} catch {
+			setRevisions([]);
 		}
 	};
 
 	useEffect(() => {
-		if (!productId) {
-			return;
-		}
-
+		if (!productId) return;
 		let active = true;
 
 		const loadProduct = async () => {
@@ -93,56 +172,21 @@ export default function BOMFlowProductMaster() {
 			setError("");
 
 			try {
-				const product =
-					await bomFlowApi.getProduct(productId);
-
-				if (!active) {
-					return;
-				}
+				const product = await bomFlowApi.getProduct(productId);
+				if (!active) return;
 
 				setSavedProduct(product);
-
-				setForm({
-					productName:
-						product?.productName || "",
-					productCode:
-						product?.productCode || "",
-					drawingNumber:
-						product?.drawingNumber || "",
-					category:
-						product?.category || "",
-					collection:
-						product?.collection || "",
-					length:
-						product?.length != null
-							? String(product.length)
-							: "",
-					width:
-						product?.width != null
-							? String(product.width)
-							: "",
-					height:
-						product?.height != null
-							? String(product.height)
-							: "",
-					projectReference:
-						product?.projectReference || "",
-					clientEntity:
-						product?.clientEntity || "",
-				});
+				applyProductToForm(product);
+				await Promise.all([
+					loadRevisions(product.id),
+					loadServerImage(product),
+				]);
 			} catch (requestError) {
 				if (active) {
-					setError(
-						requestError?.response?.data?.message ||
-						requestError?.response?.data?.detail ||
-						requestError?.message ||
-						"Unable to load product."
-					);
+					setError(cleanError(requestError, "Unable to load product."));
 				}
 			} finally {
-				if (active) {
-					setLoading(false);
-				}
+				if (active) setLoading(false);
 			}
 		};
 
@@ -153,18 +197,16 @@ export default function BOMFlowProductMaster() {
 		};
 	}, [productId]);
 
-	const hasText = (value) => {
-		return String(value ?? "").trim().length > 0;
-	};
+	useEffect(() => {
+		return () => {
+			if (imagePreviewUrl?.startsWith("blob:")) {
+				URL.revokeObjectURL(imagePreviewUrl);
+			}
+		};
+	}, [imagePreviewUrl]);
 
-	const hasPositiveNumber = (value) => {
-		const numericValue = Number(value);
-
-		return (
-			Number.isFinite(numericValue) &&
-			numericValue > 0
-		);
-	};
+	const hasText = (value) => String(value ?? "").trim().length > 0;
+	const hasPositiveNumber = (value) => Number.isFinite(Number(value)) && Number(value) > 0;
 
 	const completion = useMemo(() => {
 		const checks = [
@@ -175,104 +217,56 @@ export default function BOMFlowProductMaster() {
 			hasPositiveNumber(form.width),
 			hasPositiveNumber(form.height),
 		];
-
-		const completed =
-			checks.filter(Boolean).length;
-
-		return Math.round(
-			(completed / checks.length) * 100
-		);
+		return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 	}, [form]);
 
-	const productTitle = useMemo(() => {
-		const name = String(
-			form.productName || ""
-		).trim();
-
-		if (name) {
-			return name;
-		}
-
-		return productId
-			? "Edit Product"
-			: "Create New Product";
-	}, [
-		form.productName,
-		productId,
-	]);
-
-	const productCode = useMemo(() => {
-		const code = String(
-			form.productCode || ""
-		).trim();
-
-		return code
-			? code.toUpperCase()
-			: "CODE PENDING";
-	}, [form.productCode]);
-
-	const productStatus =
-		String(
-			savedProduct?.status || "DRAFT"
-		).toUpperCase();
-
-	const dimensionsReady = [
-		form.length,
-		form.width,
-		form.height,
-	].every(hasPositiveNumber);
+	const dimensionsReady = [form.length, form.width, form.height].every(hasPositiveNumber);
+	const hasImage = Boolean(pendingImage || savedProduct?.hasProductImage);
+	const hasDrawing = Boolean(pendingDrawing || savedProduct?.hasDrawingFile);
 
 	const validateForm = () => {
-		if (!hasText(form.productName)) {
-			return "Product name is required.";
-		}
-
-		if (!hasText(form.productCode)) {
-			return "Product code is required.";
-		}
-
-		if (!hasText(form.category)) {
-			return "Product category is required.";
-		}
-
-		if (!hasPositiveNumber(form.length)) {
-			return "Length must be greater than zero.";
-		}
-
-		if (!hasPositiveNumber(form.width)) {
-			return "Width must be greater than zero.";
-		}
-
-		if (!hasPositiveNumber(form.height)) {
-			return "Height must be greater than zero.";
-		}
-
+		if (!hasText(form.productName)) return "Product name is required.";
+		if (!hasText(form.productCode)) return "Product code is required.";
+		if (!hasText(form.category)) return "Product category is required.";
+		if (!hasPositiveNumber(form.length)) return "Length must be greater than zero.";
+		if (!hasPositiveNumber(form.width)) return "Width must be greater than zero.";
+		if (!hasPositiveNumber(form.height)) return "Height must be greater than zero.";
 		return "";
 	};
 
-	const buildPayload = () => {
-		return {
-			productName: form.productName.trim(),
-			productCode:
-				form.productCode.trim().toUpperCase(),
-			drawingNumber:
-				form.drawingNumber.trim() || null,
-			category: form.category,
-			collection:
-				form.collection.trim() || null,
-			length: Number(form.length),
-			width: Number(form.width),
-			height: Number(form.height),
-			projectReference:
-				form.projectReference.trim() || null,
-			clientEntity:
-				form.clientEntity.trim() || null,
-		};
+	const buildPayload = () => ({
+		productName: form.productName.trim(),
+		productCode: form.productCode.trim().toUpperCase(),
+		drawingNumber: form.drawingNumber.trim() || null,
+		category: form.category,
+		collection: form.collection.trim() || null,
+		length: Number(form.length),
+		width: Number(form.width),
+		height: Number(form.height),
+		projectReference: form.projectReference.trim() || null,
+		clientEntity: form.clientEntity.trim() || null,
+	});
+
+	const uploadPendingFiles = async (product) => {
+		let current = product;
+
+		if (pendingImage) {
+			current = await bomFlowApi.uploadProductImage(current.id, pendingImage);
+			setPendingImage(null);
+		}
+
+		if (pendingDrawing) {
+			current = await bomFlowApi.uploadProductDrawing(current.id, pendingDrawing);
+			setPendingDrawing(null);
+		}
+
+		setSavedProduct(current);
+		await loadServerImage(current);
+		return current;
 	};
 
 	const saveProduct = async () => {
 		const validationError = validateForm();
-
 		if (validationError) {
 			setError(validationError);
 			return null;
@@ -283,29 +277,20 @@ export default function BOMFlowProductMaster() {
 
 		try {
 			const payload = buildPayload();
-
-			const product =
-				savedProduct?.id || productId
-					? await bomFlowApi.updateProduct(
-						savedProduct?.id || productId,
-						payload,
-						savedProduct?.rowVersion
-					)
-					: await bomFlowApi.createProduct(
-						payload
-					);
+			let product = savedProduct?.id || productId
+				? await bomFlowApi.updateProduct(
+					savedProduct?.id || productId,
+					payload,
+					savedProduct?.rowVersion
+				)
+				: await bomFlowApi.createProduct(payload);
 
 			setSavedProduct(product);
-
+			product = await uploadPendingFiles(product);
+			await loadRevisions(product.id);
 			return product;
 		} catch (requestError) {
-			setError(
-				requestError?.response?.data?.message ||
-				requestError?.response?.data?.detail ||
-				requestError?.message ||
-				"Unable to save product."
-			);
-
+			setError(cleanError(requestError, "Unable to save product."));
 			return null;
 		} finally {
 			setSaving(false);
@@ -314,285 +299,250 @@ export default function BOMFlowProductMaster() {
 
 	const handleSaveDraft = async () => {
 		const product = await saveProduct();
-
-		if (
-			product?.id &&
-			!productId
-		) {
-			navigate(
-				`/bomflow/products/${product.id}/edit`,
-				{ replace: true }
-			);
+		if (product?.id && !productId) {
+			navigate(`/bomflow/products/${product.id}/edit`, { replace: true });
 		}
 	};
 
 	const handleStartBom = async () => {
 		const product = await saveProduct();
+		if (!product?.id) return;
 
-		if (!product?.id) {
+		try {
+			const existing = await bomFlowApi.listProductRevisions(product.id);
+			const list = Array.isArray(existing) ? existing : existing?.content || [];
+			let revision = list.find((item) => ["DRAFT", "RETURNED"].includes(String(item?.status).toUpperCase()));
+
+			if (!revision) {
+				revision = await bomFlowApi.createRevision(product.id, {
+					remarks: list.length ? "New BOM revision" : "Initial BOM revision",
+				});
+			}
+
+			if (!revision?.id) throw new Error("BOM revision ID was not returned.");
+			navigate(`/bomflow/revisions/${revision.id}`);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to start BOM revision."));
+		}
+	};
+
+	const validateImage = (file) => {
+		if (!file) return "No image selected.";
+		if (file.size > MAX_IMAGE_BYTES) return "Product image must be 5 MB or smaller.";
+		if (!IMAGE_TYPES.includes(file.type)) return "Product image must be PNG, JPG/JPEG or WEBP.";
+		return "";
+	};
+
+	const validateDrawing = (file) => {
+		if (!file) return "No drawing selected.";
+		if (file.size > MAX_DRAWING_BYTES) return "Drawing must be 25 MB or smaller.";
+		const ext = String(file.name || "").split(".").pop().toLowerCase();
+		if (!DRAWING_EXTENSIONS.includes(ext)) return "Drawing must be PDF, DWG, DXF, PNG, JPG/JPEG or WEBP.";
+		return "";
+	};
+
+	const handleImageSelected = async (file) => {
+		const issue = validateImage(file);
+		if (issue) {
+			setError(issue);
 			return;
 		}
 
+		if (!savedProduct?.id) {
+			setPendingImage(file);
+			const url = URL.createObjectURL(file);
+			setImagePreviewUrl((old) => {
+				if (old?.startsWith("blob:")) URL.revokeObjectURL(old);
+				return url;
+			});
+			return;
+		}
+
+		setFileWorking("image");
+		setError("");
 		try {
-			const existing =
-				await bomFlowApi.listProductRevisions(
-					product.id
-				);
-
-			const revisions = Array.isArray(existing)
-				? existing
-				: existing?.content || [];
-
-			let revision = revisions.find(
-				(item) =>
-					["DRAFT", "RETURNED"].includes(
-						item?.status
-					)
-			);
-
-			if (!revision) {
-				revision =
-					await bomFlowApi.createRevision(
-						product.id,
-						{
-							remarks:
-								"Initial BOM revision",
-						}
-					);
-			}
-
-			if (!revision?.id) {
-				throw new Error(
-					"BOM revision ID was not returned."
-				);
-			}
-
-			navigate(
-				`/bomflow/revisions/${revision.id}`
-			);
+			const updated = await bomFlowApi.uploadProductImage(savedProduct.id, file);
+			setSavedProduct(updated);
+			setPendingImage(null);
+			await loadServerImage(updated);
 		} catch (requestError) {
-			setError(
-				requestError?.response?.data?.message ||
-				requestError?.response?.data?.detail ||
-				requestError?.message ||
-				"Unable to start BOM revision."
-			);
+			setError(cleanError(requestError, "Unable to upload product image."));
+		} finally {
+			setFileWorking("");
+		}
+	};
+
+	const handleDrawingSelected = async (file) => {
+		const issue = validateDrawing(file);
+		if (issue) {
+			setError(issue);
+			return;
+		}
+
+		if (!savedProduct?.id) {
+			setPendingDrawing(file);
+			return;
+		}
+
+		setFileWorking("drawing");
+		setError("");
+		try {
+			const updated = await bomFlowApi.uploadProductDrawing(savedProduct.id, file);
+			setSavedProduct(updated);
+			setPendingDrawing(null);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to upload drawing."));
+		} finally {
+			setFileWorking("");
+		}
+	};
+
+	const removeImage = async () => {
+		if (pendingImage && !savedProduct?.hasProductImage) {
+			setPendingImage(null);
+			setImagePreviewUrl("");
+			return;
+		}
+		if (!savedProduct?.id || !savedProduct?.hasProductImage) return;
+
+		setFileWorking("image");
+		try {
+			const updated = await bomFlowApi.deleteProductImage(savedProduct.id);
+			setSavedProduct(updated);
+			setPendingImage(null);
+			setImagePreviewUrl("");
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to remove product image."));
+		} finally {
+			setFileWorking("");
+		}
+	};
+
+	const removeDrawing = async () => {
+		if (pendingDrawing && !savedProduct?.hasDrawingFile) {
+			setPendingDrawing(null);
+			return;
+		}
+		if (!savedProduct?.id || !savedProduct?.hasDrawingFile) return;
+
+		setFileWorking("drawing");
+		try {
+			const updated = await bomFlowApi.deleteProductDrawing(savedProduct.id);
+			setSavedProduct(updated);
+			setPendingDrawing(null);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to remove drawing."));
+		} finally {
+			setFileWorking("");
+		}
+	};
+
+	const downloadDrawing = async (open = false) => {
+		if (!savedProduct?.id || !savedProduct?.hasDrawingFile) return;
+		setFileWorking("drawing-download");
+		try {
+			const blob = await bomFlowApi.getProductDrawingBlob(savedProduct.id);
+			if (!blob) return;
+			const url = URL.createObjectURL(blob);
+
+			if (open && String(savedProduct.drawingFileContentType || "").includes("pdf")) {
+				window.open(url, "_blank", "noopener,noreferrer");
+				setTimeout(() => URL.revokeObjectURL(url), 60000);
+				return;
+			}
+
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = savedProduct.drawingFileName || "drawing";
+			document.body.appendChild(anchor);
+			anchor.click();
+			anchor.remove();
+			URL.revokeObjectURL(url);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to download drawing."));
+		} finally {
+			setFileWorking("");
 		}
 	};
 
 	if (loading) {
 		return (
-			<Box
-				sx={{
-					minHeight: "320px",
-					display: "grid",
-					placeItems: "center",
-					color: "#fff",
-				}}
-			>
-				<Typography
-					sx={{
-						color:
-							"rgba(255,255,255,.68)",
-						fontWeight: 800,
-					}}
-				>
-					Loading product...
-				</Typography>
+			<Box sx={{ minHeight: 320, display: "grid", placeItems: "center" }}>
+				<CircularProgress />
 			</Box>
 		);
 	}
 
+	const title = hasText(form.productName)
+		? form.productName
+		: productId
+		? "Edit Product"
+		: "Create New Product";
+
 	return (
 		<Box sx={pageSx}>
 			<Box sx={heroSx}>
-				<Box sx={heroLeftSx}>
-					<Chip label="PRODUCT MASTER" sx={labelChipSx} />
-
-					<Typography sx={pageTitleSx}>
-						{productTitle}
-					</Typography>
-
-					<Typography sx={pageSubSx}>
-						Create a clean product profile with identification, dimensions,
-						project allocation, visual files, drawings and costing version
-						history before building the BOM.
-					</Typography>
-
-					<Box sx={heroMetaRowSx}>
-						<Chip label={productCode} sx={metaChipSx} />
-						<Chip
-							label={`● ${productStatus}`}
-							sx={draftChipSx}
-						/>
-						<Chip label={`${completion}% Complete`} sx={completeChipSx} />
+				<Box sx={{ minWidth: 280, flex: 1 }}>
+					<Box sx={{ display: "flex", gap: "8px", flexWrap: "wrap", mb: "10px" }}>
+						<Chip label="PRODUCT BUILDER" sx={labelChipSx} />
+						<Chip label={String(savedProduct?.status || "DRAFT")} sx={statusChipSx} />
 					</Box>
+
+					<Typography sx={pageTitleSx}>{title}</Typography>
+					<Typography sx={pageSubSx}>
+						Maintain product identity, dimensions, project/client allocation,
+						product image, technical drawing and BOM revision history.
+					</Typography>
 				</Box>
 
 				<Box sx={heroRightSx}>
 					<Box sx={completionCardSx}>
-						<Box sx={completionTopSx}>
+						<Box sx={{ display: "flex", justifyContent: "space-between", gap: "12px", mb: "10px" }}>
 							<Box>
-								<Typography sx={completionLabelSx}>
-									Profile Completion
-								</Typography>
-
-								<Typography sx={completionValueSx}>
-									{completion}%
-								</Typography>
+								<Typography sx={completionLabelSx}>Profile Completion</Typography>
+								<Typography sx={completionValueSx}>{completion}%</Typography>
 							</Box>
-
-							<Box sx={completionIconSx}>
-								<CheckCircleOutlineIcon />
-							</Box>
+							<CheckCircleOutlineIcon sx={{ color: completion === 100 ? "#4ade80" : "#fbbf24" }} />
 						</Box>
-
-						<LinearProgress
-							variant="determinate"
-							value={completion}
-							sx={completionProgressSx}
-						/>
-
-						<Typography sx={completionHintSx}>
-							Fill required fields to activate BOM creation.
-						</Typography>
+						<LinearProgress variant="determinate" value={completion} sx={completionProgressSx} />
 					</Box>
 
-					<Box sx={heroActionRowSx}>
-						<Button
-							disabled={saving || loading}
-							onClick={handleSaveDraft}
-							startIcon={<SaveOutlinedIcon />}
-							sx={secondaryBtnSx}
-						>
+					<Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+						<Button startIcon={<SaveOutlinedIcon />} disabled={saving || Boolean(fileWorking)} onClick={handleSaveDraft} sx={secondaryBtnSx}>
 							{saving ? "Saving..." : "Save Draft"}
 						</Button>
-
-						<Button
-							disabled={
-								saving ||
-								loading ||
-								completion < 100
-							}
-							onClick={handleStartBom}
-							endIcon={<ArrowForwardIcon />}
-							sx={primaryBtnSx}
-						>
+						<Button endIcon={<ArrowForwardIcon />} disabled={saving || completion < 100 || Boolean(fileWorking)} onClick={handleStartBom} sx={primaryBtnSx}>
 							Start BOM
 						</Button>
 					</Box>
+
+					<Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/bomflow/products")} sx={{ ...secondaryBtnSx, width: "100%" }}>
+						Back to Product List
+					</Button>
 				</Box>
 			</Box>
-			{error && (
-				<Box
-					sx={{
-						p: "11px 13px",
-						borderRadius: "9px",
-						color: "#fca5a5",
-						background: "rgba(239,68,68,.12)",
-						border:
-							"1px solid rgba(239,68,68,.24)",
-						fontSize: "12px",
-						fontWeight: 750,
-					}}
-				>
-					{error}
-				</Box>
-			)}
+
+			{error && <Box sx={errorSx}>{error}</Box>}
+
 			<Box sx={summaryGridSx}>
-				<MiniStat
-					icon={<InfoOutlinedIcon />}
-					title="Product Identity"
-					value={form.productCode ? "Ready" : "Pending"}
-					subtitle="Code, drawing and category"
-					accent="#60a5fa"
-				/>
-
-				<MiniStat
-					icon={<StraightenOutlinedIcon />}
-					title="Dimensions"
-					value={
-						dimensionsReady
-							? "Ready"
-							: "Pending"
-					}
-					subtitle="Length, width and height"
-					accent="#22c55e"
-				/>
-
-				<MiniStat
-					icon={<ImageOutlinedIcon />}
-					title="Product Visual"
-					value="Not Added"
-					subtitle="Photo upload required"
-					accent="#f59e0b"
-				/>
-
-				<MiniStat
-					icon={<DescriptionOutlinedIcon />}
-					title="Drawing File"
-					value="Pending"
-					subtitle="CAD / PDF attachment"
-					accent="#a855f7"
-				/>
+				<MiniStat icon={<InfoOutlinedIcon />} title="Identity" value={hasText(form.productCode) ? "Ready" : "Pending"} subtitle="Code, drawing no. and category" accent="#60a5fa" />
+				<MiniStat icon={<StraightenOutlinedIcon />} title="Dimensions" value={dimensionsReady ? "Ready" : "Pending"} subtitle="Length × width × height" accent="#22c55e" />
+				<MiniStat icon={<ImageOutlinedIcon />} title="Product Image" value={hasImage ? "Added" : "Optional"} subtitle={pendingImage?.name || savedProduct?.productImageFileName || "PNG, JPG, WEBP"} accent="#f59e0b" />
+				<MiniStat icon={<DescriptionOutlinedIcon />} title="Drawing" value={hasDrawing ? "Added" : "Optional"} subtitle={pendingDrawing?.name || savedProduct?.drawingFileName || "PDF, DWG, DXF"} accent="#a855f7" />
 			</Box>
 
-			<Box sx={mainGridSx}>
-				<Box sx={leftColumnSx}>
+			<Box sx={styles.BOM_productMasterGridSx}>
+				<Box sx={styles.BOM_productMainColumnSx}>
 					<Card sx={panelSx}>
-						<SectionTitle
-							icon={<InfoOutlinedIcon />}
-							title="Identification & Taxonomy"
-							subtitle="Define the core product identity used across BOM, costing and reports."
-						/>
-
-						<Box sx={fieldStackSx}>
-							<TextField
-								fullWidth
-								label="Product Name *"
-								placeholder="e.g. Executive Office Desk - Series X"
-								value={form.productName}
-								onChange={(e) =>
-									updateField("productName", e.target.value)
-								}
-								sx={fieldSx}
-							/>
-
-							<Box sx={twoColumnGridSx}>
-								<TextField
-									fullWidth
-									label="Product Code *"
-									placeholder="e.g. DESK-EX-001"
-									value={form.productCode}
-									onChange={(e) =>
-										updateField("productCode", e.target.value)
-									}
-									sx={fieldSx}
-								/>
-
-								<TextField
-									fullWidth
-									label="Drawing Number"
-									placeholder="e.g. DRW-2023-45B"
-									value={form.drawingNumber}
-									onChange={(e) =>
-										updateField("drawingNumber", e.target.value)
-									}
-									sx={fieldSx}
-								/>
+						<SectionTitle icon={<InfoOutlinedIcon />} title="Identification & Taxonomy" subtitle="Core identity used across BOM, costing and reports." />
+						<Box sx={styles.BOM_fieldStackSx}>
+							<TextField fullWidth label="Product Name *" value={form.productName} onChange={(e) => updateField("productName", e.target.value)} sx={styles.BOM_fieldSx} />
+							<Box sx={styles.BOM_twoColumnFieldGridSx}>
+								<TextField fullWidth label="Product Code *" value={form.productCode} onChange={(e) => updateField("productCode", e.target.value)} sx={styles.BOM_fieldSx} />
+								<TextField fullWidth label="Drawing Number" value={form.drawingNumber} onChange={(e) => updateField("drawingNumber", e.target.value)} sx={styles.BOM_fieldSx} />
 							</Box>
-
-							<Box sx={twoColumnGridSx}>
-								<TextField
-									select
-									fullWidth
-									label="Category *"
-									value={form.category}
-									onChange={(e) =>
-										updateField("category", e.target.value)
-									}
-									sx={fieldSx}
-								>
+							<Box sx={styles.BOM_twoColumnFieldGridSx}>
+								<TextField select fullWidth label="Category *" value={form.category} onChange={(e) => updateField("category", e.target.value)} sx={styles.BOM_fieldSx}>
 									<MenuItem value="">Select Category</MenuItem>
 									<MenuItem value="desk">Desk</MenuItem>
 									<MenuItem value="chair">Chair</MenuItem>
@@ -600,291 +550,146 @@ export default function BOMFlowProductMaster() {
 									<MenuItem value="wardrobe">Wardrobe</MenuItem>
 									<MenuItem value="kitchen">Kitchen</MenuItem>
 									<MenuItem value="millwork">Millwork</MenuItem>
+									<MenuItem value="other">Other</MenuItem>
 								</TextField>
-
-								<TextField
-									fullWidth
-									label="Collection / Series"
-									placeholder="e.g. Aether Collection"
-									value={form.collection}
-									onChange={(e) =>
-										updateField("collection", e.target.value)
-									}
-									sx={fieldSx}
-								/>
+								<TextField fullWidth label="Collection / Series" value={form.collection} onChange={(e) => updateField("collection", e.target.value)} sx={styles.BOM_fieldSx} />
 							</Box>
 						</Box>
 					</Card>
 
 					<Card sx={panelSx}>
-						<SectionTitle
-							icon={<StraightenOutlinedIcon />}
-							title="Physical Specifications"
-							subtitle="These values support downstream volume, packaging and logistics calculations."
-							color="#22c55e"
-						/>
-
-						<Box sx={threeColumnGridSx}>
-							<TextField
-								fullWidth
-								type="number"
-								label="Length (mm) *"
-								value={form.length}
-								onChange={(e) =>
-									updateField("length", e.target.value)
-								}
-								inputProps={{
-									min: 0,
-									step: "0.01",
-								}}
-								sx={fieldSx}
-							/>
-
-							<TextField
-								fullWidth
-								type="number"
-								label="Width (mm) *"
-								value={form.width}
-								onChange={(e) =>
-									updateField("width", e.target.value)
-								}
-								inputProps={{
-									min: 0,
-									step: "0.01",
-								}}
-								sx={fieldSx}
-							/>
-
-							<TextField
-								fullWidth
-								type="number"
-								label="Height (mm) *"
-								value={form.height}
-								onChange={(e) =>
-									updateField("height", e.target.value)
-								}
-								inputProps={{
-									min: 0,
-									step: "0.01",
-								}}
-								sx={fieldSx}
-							/>
+						<SectionTitle icon={<StraightenOutlinedIcon />} title="Physical Specifications" subtitle="Used downstream for costing, packing volume and logistics." color="#22c55e" />
+						<Box sx={styles.BOM_threeColumnFieldGridSx}>
+							<TextField fullWidth type="number" label="Length (mm) *" value={form.length} onChange={(e) => updateField("length", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
+							<TextField fullWidth type="number" label="Width (mm) *" value={form.width} onChange={(e) => updateField("width", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
+							<TextField fullWidth type="number" label="Height (mm) *" value={form.height} onChange={(e) => updateField("height", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
 						</Box>
-
 						<Box sx={dimensionPreviewSx}>
-							<Box>
-								<Typography sx={previewLabelSx}>
-									Dimension Preview
-								</Typography>
-
-								<Typography sx={previewValueSx}>
-									{form.length || "0.00"} × {form.width || "0.00"} ×{" "}
-									{form.height || "0.00"} mm
-								</Typography>
-							</Box>
-
-							<Box sx={previewBadgeSx}>
-								Used for packing volume
-							</Box>
+							<Typography sx={dimensionValueSx}>
+								{form.length || "0"} × {form.width || "0"} × {form.height || "0"} mm
+							</Typography>
 						</Box>
 					</Card>
 
 					<Card sx={panelSx}>
-						<SectionTitle
-							icon={<BusinessCenterOutlinedIcon />}
-							title="Project Allocation"
-							subtitle="Link the product to project and client records for costing traceability."
-							color="#a855f7"
-						/>
-
-						<Box sx={twoColumnGridSx}>
-							<TextField
-								fullWidth
-								label="Project Reference"
-								placeholder="Search or create project..."
-								value={form.projectReference}
-								onChange={(e) =>
-									updateField("projectReference", e.target.value)
-								}
-								sx={fieldSx}
-							/>
-
-							<TextField
-								fullWidth
-								label="Client Entity"
-								placeholder="Search client database..."
-								value={form.clientEntity}
-								onChange={(e) =>
-									updateField("clientEntity", e.target.value)
-								}
-								sx={fieldSx}
-							/>
+						<SectionTitle icon={<BusinessCenterOutlinedIcon />} title="Project Allocation" subtitle="Link this product to the project and client." color="#a855f7" />
+						<Box sx={styles.BOM_twoColumnFieldGridSx}>
+							<TextField fullWidth label="Project Reference" value={form.projectReference} onChange={(e) => updateField("projectReference", e.target.value)} sx={styles.BOM_fieldSx} />
+							<TextField fullWidth label="Client Entity" value={form.clientEntity} onChange={(e) => updateField("clientEntity", e.target.value)} sx={styles.BOM_fieldSx} />
 						</Box>
 					</Card>
 				</Box>
 
-				<Box sx={rightColumnSx}>
+				<Box sx={styles.BOM_productSideColumnSx}>
 					<Card sx={sidePanelSx}>
-						<Box sx={sideTitleRowSx}>
+						<Box sx={sideHeaderSx}>
 							<Box>
-								<Typography sx={sideTitleSx}>
-									Product Visual
-								</Typography>
-
-								<Typography sx={sideSubSx}>
-									Add a reference image for quick product identification.
-								</Typography>
+								<Typography sx={sideTitleSx}>Product Image</Typography>
+								<Typography sx={sideSubSx}>Optional product reference image.</Typography>
 							</Box>
-
-							<AutoAwesomeOutlinedIcon sx={{ color: "#93c5fd" }} />
+							<CameraAltOutlinedIcon sx={{ color: "#93c5fd" }} />
 						</Box>
 
-						<Box sx={uploadBoxSx}>
-							<Box sx={uploadIconSx}>
-								<CameraAltOutlinedIcon />
-							</Box>
+						<input ref={imageInputRef} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleImageSelected(file); }} />
 
-							<Typography sx={uploadTitleSx}>
-								Upload Product Photo
-							</Typography>
+						<Box sx={imageBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) handleImageSelected(file); }}>
+							{imagePreviewUrl ? (
+								<img src={imagePreviewUrl} alt="Product" style={imageStyle} />
+							) : (
+								<>
+									<ImageOutlinedIcon sx={{ fontSize: 38, color: "#64748b" }} />
+									<Typography sx={uploadTitleSx}>Drop product image here</Typography>
+									<Typography sx={uploadSubSx}>PNG, JPG/JPEG, WEBP • Max 5 MB</Typography>
+								</>
+							)}
+						</Box>
 
-							<Typography sx={uploadSubSx}>
-								PNG, JPG or WEBP • Max 5MB
-							</Typography>
-
-							<Button sx={browseBtnSx}>
-								Choose Image
+						<Box sx={fileActionRowSx}>
+							<Button disabled={fileWorking === "image"} onClick={() => imageInputRef.current?.click()} sx={browseBtnSx}>
+								{fileWorking === "image" ? "Uploading..." : hasImage ? "Replace Image" : "Choose Image"}
 							</Button>
+							{hasImage && (
+								<Button startIcon={<DeleteOutlineIcon />} disabled={fileWorking === "image"} onClick={removeImage} sx={dangerBtnSx}>Remove</Button>
+							)}
 						</Box>
+
+						{pendingImage && !savedProduct?.id && <Typography sx={pendingHintSx}>Selected: {pendingImage.name}. It will upload when the product is saved.</Typography>}
+						{savedProduct?.hasProductImage && <Typography sx={fileMetaSx}>{savedProduct.productImageFileName} {formatBytes(savedProduct.productImageSize) ? `• ${formatBytes(savedProduct.productImageSize)}` : ""} • {formatDate(savedProduct.productImageUploadedAt)}</Typography>}
 					</Card>
 
 					<Card sx={sidePanelSx}>
-						<Box sx={sideTitleRowSx}>
+						<Box sx={sideHeaderSx}>
 							<Box>
-								<Typography sx={sideTitleSx}>
-									Technical CAD / PDF
-								</Typography>
-
-								<Typography sx={sideSubSx}>
-									Attach drawings required for BOM validation.
-								</Typography>
+								<Typography sx={sideTitleSx}>Technical Drawing</Typography>
+								<Typography sx={sideSubSx}>Optional PDF / CAD drawing attachment.</Typography>
 							</Box>
-
-							<Chip
-								label="Required"
-								size="small"
-								sx={requiredChipSx}
-							/>
+							<UploadFileOutlinedIcon sx={{ color: "#93c5fd" }} />
 						</Box>
 
-						<Box sx={drawingBoxSx}>
-							<UploadFileOutlinedIcon
-								sx={{
-									color: "#93c5fd",
-									mb: 1,
-								}}
-							/>
+						<input ref={drawingInputRef} type="file" hidden accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleDrawingSelected(file); }} />
 
+						<Box sx={drawingBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) handleDrawingSelected(file); }}>
+							<DescriptionOutlinedIcon sx={{ fontSize: 34, color: hasDrawing ? "#4ade80" : "#64748b" }} />
 							<Typography sx={uploadTitleSx}>
-								Drag & Drop Drawing Files
+								{pendingDrawing?.name || savedProduct?.drawingFileName || "Drop drawing file here"}
 							</Typography>
-
 							<Typography sx={uploadSubSx}>
-								Supports PDF, DWG and DXF files
+								{hasDrawing ? formatBytes(pendingDrawing?.size || savedProduct?.drawingFileSize) || "File attached" : "PDF, DWG, DXF, PNG, JPG • Max 25 MB"}
 							</Typography>
-
-							<Button sx={browseBtnSx}>
-								Browse Files
-							</Button>
 						</Box>
 
-						<Typography sx={noFileSx}>
-							ⓘ No drawings attached yet.
-						</Typography>
+						<Box sx={fileActionRowSx}>
+							<Button disabled={fileWorking === "drawing"} onClick={() => drawingInputRef.current?.click()} sx={browseBtnSx}>
+								{fileWorking === "drawing" ? "Uploading..." : hasDrawing ? "Replace Drawing" : "Browse Files"}
+							</Button>
+							{savedProduct?.hasDrawingFile && (
+								<>
+									{String(savedProduct.drawingFileContentType || "").includes("pdf") && <Button startIcon={<OpenInNewOutlinedIcon />} disabled={fileWorking === "drawing-download"} onClick={() => downloadDrawing(true)} sx={smallBtnSx}>Open</Button>}
+									<Button startIcon={<DownloadOutlinedIcon />} disabled={fileWorking === "drawing-download"} onClick={() => downloadDrawing(false)} sx={smallBtnSx}>Download</Button>
+								</>
+							)}
+							{hasDrawing && <Button startIcon={<DeleteOutlineIcon />} disabled={fileWorking === "drawing"} onClick={removeDrawing} sx={dangerBtnSx}>Remove</Button>}
+						</Box>
+
+						{pendingDrawing && !savedProduct?.id && <Typography sx={pendingHintSx}>Selected: {pendingDrawing.name}. It will upload when the product is saved.</Typography>}
 					</Card>
 
 					<Card sx={sidePanelSx}>
-						<Box sx={sideTitleRowSx}>
+						<Box sx={sideHeaderSx}>
 							<Box>
-								<Typography sx={sideTitleSx}>
-									Costing Versions
-								</Typography>
-
-								<Typography sx={sideSubSx}>
-									Track revisions and approved costing history.
-								</Typography>
+								<Typography sx={sideTitleSx}>BOM Revisions</Typography>
+								<Typography sx={sideSubSx}>Real revision history for this product.</Typography>
 							</Box>
-
 							<HistoryOutlinedIcon sx={{ color: "#93c5fd" }} />
 						</Box>
 
-						<VersionRow
-							title="V3 - Final Approval"
-							date="2023-10-24"
-							status="APPROVED"
-							icon={<VisibilityOutlinedIcon />}
-						/>
-
-						<VersionRow
-							title="V2 - Revised Metal Rates"
-							date="2023-10-20"
-							status="DRAFT"
-							icon={<OpenInNewOutlinedIcon />}
-						/>
-
-						<Button
-							fullWidth
-							startIcon={<AddCircleOutlineOutlinedIcon />}
-							sx={newVersionBtnSx}
-						>
-							Create New Version
-						</Button>
+						{revisions.length === 0 ? (
+							<Typography sx={emptyRevisionSx}>No BOM revision created yet.</Typography>
+						) : revisions.map((revision) => (
+							<Box key={revision.id} sx={revisionRowSx}>
+								<Box>
+									<Typography sx={revisionTitleSx}>Revision {revision.revisionNo || revision.revisionNumber}</Typography>
+									<Typography sx={fileMetaSx}>{revision.itemCount || 0} item(s) • {String(revision.status || "DRAFT")}</Typography>
+								</Box>
+								<Button onClick={() => navigate(`/bomflow/revisions/${revision.id}`)} sx={smallBtnSx}>Open</Button>
+							</Box>
+						))}
 					</Card>
 
 					<Card sx={checklistPanelSx}>
-						<Box sx={sideTitleRowSx}>
+						<Box sx={sideHeaderSx}>
 							<Box>
-								<Typography sx={sideTitleSx}>
-									Readiness Checklist
-								</Typography>
-
-								<Typography sx={sideSubSx}>
-									Before starting BOM builder
-								</Typography>
+								<Typography sx={sideTitleSx}>Readiness Checklist</Typography>
+								<Typography sx={sideSubSx}>Core fields are required; files are optional.</Typography>
 							</Box>
-
 							<WarningAmberOutlinedIcon sx={{ color: "#fbbf24" }} />
 						</Box>
-
-						<ChecklistItem
-							done={hasText(form.productName)}
-							label="Product name added"
-						/>
-
-						<ChecklistItem
-							done={hasText(form.productCode)}
-							label="Product code assigned"
-						/>
-
-						<ChecklistItem
-							done={hasText(form.category)}
-							label="Category selected"
-						/>
-
-						<ChecklistItem
-							done={dimensionsReady}
-							label="Dimensions completed"
-						/>
-
-						<ChecklistItem
-							done={false}
-							label="Product image uploaded"
-						/>
-
-						<ChecklistItem
-							done={false}
-							label="Drawing attached"
-						/>
+						<ChecklistItem done={hasText(form.productName)} label="Product name added" />
+						<ChecklistItem done={hasText(form.productCode)} label="Product code assigned" />
+						<ChecklistItem done={hasText(form.category)} label="Category selected" />
+						<ChecklistItem done={dimensionsReady} label="Dimensions completed" />
+						<ChecklistItem done={hasImage} label="Product image (optional)" />
+						<ChecklistItem done={hasDrawing} label="Drawing attachment (optional)" />
 					</Card>
 				</Box>
 			</Box>
@@ -892,810 +697,86 @@ export default function BOMFlowProductMaster() {
 	);
 }
 
-function SectionTitle({
-	icon,
-	title,
-	subtitle,
-	color = "#38bdf8",
-}) {
+function SectionTitle({ icon, title, subtitle, color = "#38bdf8" }) {
 	return (
 		<Box sx={sectionHeadSx}>
-			<Box sx={sectionIconSx(color)}>
-				{icon}
-			</Box>
-
+			<Box sx={{ ...sectionIconSx, color, background: `${color}18`, border: `1px solid ${color}33` }}>{icon}</Box>
 			<Box>
-				<Typography sx={sectionTitleSx}>
-					{title}
-				</Typography>
-
-				{subtitle && (
-					<Typography sx={sectionSubSx}>
-						{subtitle}
-					</Typography>
-				)}
+				<Typography sx={sectionTitleSx}>{title}</Typography>
+				<Typography sx={sectionSubSx}>{subtitle}</Typography>
 			</Box>
 		</Box>
 	);
 }
 
-function MiniStat({
-	icon,
-	title,
-	value,
-	subtitle,
-	accent,
-}) {
+function MiniStat({ icon, title, value, subtitle, accent }) {
 	return (
 		<Card sx={miniStatSx(accent)}>
-			<Box sx={miniIconSx(accent)}>
-				{icon}
-			</Box>
-
-			<Box>
-				<Typography sx={miniTitleSx}>
-					{title}
-				</Typography>
-
-				<Typography sx={miniValueSx}>
-					{value}
-				</Typography>
-
-				<Typography sx={miniSubSx}>
-					{subtitle}
-				</Typography>
+			<Box sx={{ ...miniIconSx, color: accent, background: `${accent}18`, border: `1px solid ${accent}33` }}>{icon}</Box>
+			<Box sx={{ minWidth: 0 }}>
+				<Typography sx={miniTitleSx}>{title}</Typography>
+				<Typography sx={miniValueSx}>{value}</Typography>
+				<Typography sx={miniSubSx} noWrap>{subtitle}</Typography>
 			</Box>
 		</Card>
 	);
 }
 
-function VersionRow({
-	title,
-	date,
-	status,
-	icon,
-}) {
-	const approved = status === "APPROVED";
-
-	return (
-		<Box sx={versionRowSx}>
-			<Box sx={{ minWidth: 0 }}>
-				<Typography sx={versionTitleSx}>
-					{title}
-				</Typography>
-
-				<Box sx={versionMetaSx}>
-					<Typography sx={versionDateSx}>
-						{date}
-					</Typography>
-
-					<Chip
-						label={status}
-						size="small"
-						sx={approved ? approvedChipSx : draftMiniChipSx}
-					/>
-				</Box>
-			</Box>
-
-			<Box sx={versionIconSx}>
-				{icon}
-			</Box>
-		</Box>
-	);
-}
-
-function ChecklistItem({
-	done,
-	label,
-}) {
+function ChecklistItem({ done, label }) {
 	return (
 		<Box sx={checkItemSx}>
-			<Box sx={checkDotSx(done)}>
-				{done ? "✓" : "!"}
-			</Box>
-
-			<Typography sx={checkTextSx(done)}>
-				{label}
-			</Typography>
+			<Box sx={checkDotSx(done)}>{done ? "✓" : "•"}</Box>
+			<Typography sx={checkTextSx}>{label}</Typography>
 		</Box>
 	);
 }
 
-/* ===================== STYLES ===================== */
-
-const pageSx = {
-	width: "100%",
-	display: "flex",
-	flexDirection: "column",
-	gap: "14px",
-};
-
-const heroSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "stretch",
-	gap: "16px",
-	flexWrap: "wrap",
-	p: "16px",
-	borderRadius: "10px",
-	background:
-		"radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.72))",
-	border: "1px solid rgba(255,255,255,.08)",
-	boxShadow: "0 16px 32px rgba(2,6,23,.28)",
-	backdropFilter: "blur(18px)",
-};
-
-const heroLeftSx = {
-	minWidth: "280px",
-	flex: 1,
-};
-
-const heroRightSx = {
-	width: {
-		xs: "100%",
-		md: "360px",
-	},
-	display: "flex",
-	flexDirection: "column",
-	gap: "10px",
-};
-
-const labelChipSx = {
-	height: "26px",
-	borderRadius: 999,
-	background: "rgba(59,130,246,.14)",
-	color: "#60a5fa",
-	border: "1px solid rgba(59,130,246,.24)",
-	fontWeight: 900,
-	fontSize: "11px",
-	letterSpacing: ".07em",
-	mb: "10px",
-};
-
-const pageTitleSx = {
-	color: "#fff",
-	fontSize: {
-		xs: "24px",
-		md: "32px",
-	},
-	fontWeight: 950,
-	lineHeight: 1.05,
-	letterSpacing: "-0.04em",
-};
-
-const pageSubSx = {
-	mt: "8px",
-	color: "rgba(255,255,255,.68)",
-	fontSize: "13px",
-	fontWeight: 650,
-	lineHeight: 1.5,
-	maxWidth: "760px",
-};
-
-const heroMetaRowSx = {
-	display: "flex",
-	alignItems: "center",
-	gap: "8px",
-	flexWrap: "wrap",
-	mt: "14px",
-};
-
-const metaChipSx = {
-	height: "26px",
-	borderRadius: 999,
-	background: "rgba(255,255,255,.06)",
-	color: "#cbd5e1",
-	border: "1px solid rgba(255,255,255,.10)",
-	fontWeight: 850,
-	fontSize: "11px",
-};
-
-const draftChipSx = {
-	...metaChipSx,
-	color: "#fbbf24",
-	background: "rgba(245,158,11,.13)",
-	border: "1px solid rgba(245,158,11,.24)",
-};
-
-const completeChipSx = {
-	...metaChipSx,
-	color: "#4ade80",
-	background: "rgba(34,197,94,.13)",
-	border: "1px solid rgba(34,197,94,.24)",
-};
-
-const completionCardSx = {
-	p: "14px",
-	borderRadius: "10px",
-	background: "rgba(2,6,23,.42)",
-	border: "1px solid rgba(255,255,255,.08)",
-};
-
-const completionTopSx = {
-	display: "flex",
-	alignItems: "flex-start",
-	justifyContent: "space-between",
-	gap: "14px",
-	mb: "10px",
-};
-
-const completionLabelSx = {
-	color: "rgba(255,255,255,.62)",
-	fontSize: "10px",
-	fontWeight: 900,
-	textTransform: "uppercase",
-	letterSpacing: ".07em",
-};
-
-const completionValueSx = {
-	mt: "5px",
-	color: "#fff",
-	fontSize: "28px",
-	fontWeight: 950,
-	lineHeight: 1,
-};
-
-const completionIconSx = {
-	width: "38px",
-	height: "38px",
-	borderRadius: "9px",
-	display: "grid",
-	placeItems: "center",
-	background: "rgba(34,197,94,.13)",
-	color: "#4ade80",
-	border: "1px solid rgba(34,197,94,.24)",
-};
-
-const completionProgressSx = {
-	height: "7px",
-	borderRadius: 999,
-	background: "rgba(255,255,255,.07)",
-
-	"& .MuiLinearProgress-bar": {
-		borderRadius: 999,
-		background: "linear-gradient(135deg,#22c55e,#4ade80)",
-	},
-};
-
-const completionHintSx = {
-	mt: "8px",
-	color: "rgba(255,255,255,.55)",
-	fontSize: "11px",
-	fontWeight: 650,
-};
-
-const heroActionRowSx = {
-	display: "grid",
-	gridTemplateColumns: "1fr 1fr",
-	gap: "8px",
-};
-
-const primaryBtnSx = {
-	height: "38px",
-	borderRadius: "9px",
-	textTransform: "none",
-	fontWeight: 850,
-	color: "#fff",
-	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
-	boxShadow: "0 10px 22px rgba(37,99,235,.30)",
-
-	"&:hover": {
-		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
-	},
-};
-
-const secondaryBtnSx = {
-	height: "38px",
-	borderRadius: "9px",
-	textTransform: "none",
-	fontWeight: 850,
-	color: "#fff",
-	background: "rgba(255,255,255,.04)",
-	border: "1px solid rgba(255,255,255,.08)",
-
-	"&:hover": {
-		background: "rgba(59,130,246,.14)",
-		borderColor: "rgba(59,130,246,.30)",
-	},
-};
-
-const summaryGridSx = {
-	display: "grid",
-	gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-	gap: "10px",
-};
-
-const miniStatSx = (accent) => ({
-	p: "13px",
-	borderRadius: "10px",
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
-	backdropFilter: "blur(18px)",
-	display: "flex",
-	alignItems: "center",
-	gap: "12px",
-	position: "relative",
-	overflow: "hidden",
-	minHeight: "72px",
-
-	"&:before": {
-		content: '""',
-		position: "absolute",
-		top: 0,
-		left: 0,
-		right: 0,
-		height: "3px",
-		background: accent,
-	},
-});
-
-const miniIconSx = (accent) => ({
-	width: "38px",
-	height: "38px",
-	borderRadius: "9px",
-	display: "grid",
-	placeItems: "center",
-	color: accent,
-	background: `${accent}18`,
-	border: `1px solid ${accent}33`,
-	flexShrink: 0,
-});
-
-const miniTitleSx = {
-	color: "rgba(255,255,255,.58)",
-	fontSize: "10px",
-	fontWeight: 900,
-	textTransform: "uppercase",
-	letterSpacing: ".07em",
-};
-
-const miniValueSx = {
-	mt: "3px",
-	color: "#fff",
-	fontSize: "17px",
-	fontWeight: 950,
-};
-
-const miniSubSx = {
-	mt: "2px",
-	color: "rgba(255,255,255,.52)",
-	fontSize: "11px",
-	fontWeight: 650,
-};
-
-const mainGridSx = {
-	display: "grid",
-	gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, .75fr)",
-	gap: "14px",
-	alignItems: "start",
-
-	"@media (max-width: 1180px)": {
-		gridTemplateColumns: "1fr",
-	},
-};
-
-const leftColumnSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: "10px",
-	minWidth: 0,
-};
-
-const rightColumnSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: "10px",
-	minWidth: 0,
-};
-
-const panelSx = {
-	p: "15px",
-	borderRadius: "10px",
-	background: "rgba(15,23,42,.78)",
-	border: "1px solid rgba(255,255,255,.07)",
-	boxShadow: "0 14px 28px rgba(2,6,23,.26)",
-	backdropFilter: "blur(18px)",
-	overflow: "hidden",
-};
-
-const sidePanelSx = {
-	...panelSx,
-	p: "15px",
-};
-
-const checklistPanelSx = {
-	...sidePanelSx,
-	background:
-		"linear-gradient(180deg, rgba(245,158,11,.10), rgba(15,23,42,.78))",
-	border: "1px solid rgba(245,158,11,.20)",
-};
-
-const sectionHeadSx = {
-	display: "flex",
-	alignItems: "flex-start",
-	gap: "12px",
-	pb: "12px",
-	mb: "14px",
-	borderBottom: "1px solid rgba(255,255,255,.08)",
-};
-
-const sectionIconSx = (color) => ({
-	width: "38px",
-	height: "38px",
-	borderRadius: "9px",
-	display: "grid",
-	placeItems: "center",
-	color,
-	background: `${color}18`,
-	border: `1px solid ${color}33`,
-	flexShrink: 0,
-});
-
-const sectionTitleSx = {
-	color: "#fff",
-	fontSize: "18px",
-	fontWeight: 950,
-	lineHeight: 1.1,
-	letterSpacing: "-0.02em",
-};
-
-const sectionSubSx = {
-	mt: "3px",
-	color: "rgba(255,255,255,.55)",
-	fontSize: "11px",
-	fontWeight: 650,
-	lineHeight: 1.4,
-};
-
-const fieldStackSx = {
-	display: "flex",
-	flexDirection: "column",
-	gap: "12px",
-};
-
-const twoColumnGridSx = {
-	display: "grid",
-	gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-	gap: "12px",
-
-	"@media (max-width: 760px)": {
-		gridTemplateColumns: "1fr",
-	},
-};
-
-const threeColumnGridSx = {
-	display: "grid",
-	gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-	gap: "12px",
-
-	"@media (max-width: 900px)": {
-		gridTemplateColumns: "1fr",
-	},
-};
-
-const fieldSx = {
-	"& .MuiInputLabel-root": {
-		color: "rgba(255,255,255,.58)",
-		fontSize: "12px",
-		fontWeight: 750,
-	},
-
-	"& .MuiInputLabel-root.Mui-focused": {
-		color: "#60a5fa",
-	},
-
-	"& .MuiOutlinedInput-root": {
-		minHeight: "48px",
-		color: "#fff",
-		background: "rgba(255,255,255,.04)",
-		borderRadius: "9px",
-		fontSize: "13px",
-		fontWeight: 700,
-		transition: "all .22s ease",
-
-		"& fieldset": {
-			borderColor: "rgba(255,255,255,.08)",
-		},
-
-		"&:hover fieldset": {
-			borderColor: "rgba(59,130,246,.35)",
-		},
-
-		"&.Mui-focused fieldset": {
-			borderColor: "#3b82f6",
-			boxShadow: "0 0 0 3px rgba(59,130,246,.12)",
-		},
-	},
-
-	"& .MuiInputBase-input": {
-		color: "#fff",
-		fontWeight: 650,
-	},
-
-	"& .MuiInputBase-input::placeholder": {
-		color: "rgba(255,255,255,.34)",
-		opacity: 1,
-	},
-
-	"& .MuiSvgIcon-root": {
-		color: "#94a3b8",
-	},
-};
-
-const dimensionPreviewSx = {
-	mt: "12px",
-	p: "13px",
-	borderRadius: "9px",
-	background: "rgba(2,6,23,.42)",
-	border: "1px solid rgba(255,255,255,.07)",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "space-between",
-	gap: "12px",
-	flexWrap: "wrap",
-};
-
-const previewLabelSx = {
-	color: "rgba(255,255,255,.58)",
-	fontSize: "10px",
-	fontWeight: 900,
-	textTransform: "uppercase",
-	letterSpacing: ".07em",
-};
-
-const previewValueSx = {
-	mt: "3px",
-	color: "#fff",
-	fontSize: "16px",
-	fontWeight: 950,
-	fontFamily: "monospace",
-};
-
-const previewBadgeSx = {
-	height: "26px",
-	display: "flex",
-	alignItems: "center",
-	px: "11px",
-	borderRadius: 999,
-	color: "#4ade80",
-	background: "rgba(34,197,94,.12)",
-	border: "1px solid rgba(34,197,94,.22)",
-	fontSize: "11px",
-	fontWeight: 850,
-};
-
-const sideTitleRowSx = {
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "flex-start",
-	gap: "12px",
-	mb: "12px",
-};
-
-const sideTitleSx = {
-	color: "#fff",
-	fontSize: "17px",
-	fontWeight: 950,
-	lineHeight: 1.1,
-	letterSpacing: "-0.02em",
-};
-
-const sideSubSx = {
-	mt: "3px",
-	color: "rgba(255,255,255,.52)",
-	fontSize: "11px",
-	fontWeight: 650,
-	lineHeight: 1.4,
-};
-
-const uploadBoxSx = {
-	minHeight: "185px",
-	border: "1.5px dashed rgba(255,255,255,.12)",
-	background:
-		"linear-gradient(180deg, rgba(2,6,23,.50), rgba(2,6,23,.36))",
-	borderRadius: "9px",
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "center",
-	justifyContent: "center",
-	textAlign: "center",
-	p: "16px",
-	transition: "all .25s ease",
-
-	"&:hover": {
-		borderColor: "rgba(59,130,246,.50)",
-		background: "rgba(59,130,246,.08)",
-	},
-};
-
-const uploadIconSx = {
-	width: "42px",
-	height: "42px",
-	borderRadius: "9px",
-	background: "rgba(59,130,246,.14)",
-	border: "1px solid rgba(59,130,246,.24)",
-	display: "grid",
-	placeItems: "center",
-	color: "#93c5fd",
-	mb: "10px",
-};
-
-const uploadTitleSx = {
-	color: "#fff",
-	fontWeight: 950,
-	fontSize: "13px",
-	lineHeight: 1.35,
-};
-
-const uploadSubSx = {
-	color: "rgba(255,255,255,.52)",
-	fontSize: "11px",
-	fontWeight: 650,
-	mt: "4px",
-};
-
-const browseBtnSx = {
-	mt: "12px",
-	height: "32px",
-	borderRadius: "999px",
-	color: "#93c5fd",
-	border: "1px solid rgba(59,130,246,.32)",
-	background: "rgba(59,130,246,.10)",
-	textTransform: "none",
-	fontSize: "12px",
-	fontWeight: 900,
-	px: "14px",
-
-	"&:hover": {
-		background: "rgba(59,130,246,.18)",
-		borderColor: "rgba(59,130,246,.55)",
-	},
-};
-
-const requiredChipSx = {
-	height: "22px",
-	borderRadius: 999,
-	color: "#fbbf24",
-	background: "rgba(245,158,11,.13)",
-	border: "1px solid rgba(245,158,11,.24)",
-	fontWeight: 850,
-	fontSize: "10px",
-};
-
-const drawingBoxSx = {
-	minHeight: "132px",
-	border: "1px solid rgba(255,255,255,.08)",
-	background:
-		"linear-gradient(180deg, rgba(2,6,23,.50), rgba(2,6,23,.36))",
-	borderRadius: "9px",
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "center",
-	justifyContent: "center",
-	textAlign: "center",
-	p: "14px",
-	mb: "10px",
-};
-
-const noFileSx = {
-	color: "#94a3b8",
-	fontStyle: "italic",
-	fontSize: "11px",
-	fontWeight: 650,
-};
-
-const versionRowSx = {
-	background:
-		"linear-gradient(180deg, rgba(2,6,23,.48), rgba(2,6,23,.34))",
-	border: "1px solid rgba(255,255,255,.06)",
-	p: "12px",
-	borderRadius: "9px",
-	mb: "8px",
-	display: "flex",
-	justifyContent: "space-between",
-	alignItems: "center",
-	gap: "12px",
-};
-
-const versionTitleSx = {
-	color: "#fff",
-	fontWeight: 850,
-	fontSize: "12px",
-	mb: "3px",
-	overflow: "hidden",
-	textOverflow: "ellipsis",
-	whiteSpace: "nowrap",
-};
-
-const versionMetaSx = {
-	display: "flex",
-	gap: "8px",
-	alignItems: "center",
-	flexWrap: "wrap",
-};
-
-const versionDateSx = {
-	color: "#94a3b8",
-	fontSize: "10.5px",
-	fontWeight: 700,
-};
-
-const approvedChipSx = {
-	height: "20px",
-	borderRadius: "999px",
-	background: "rgba(34,197,94,.12)",
-	color: "#4ade80",
-	border: "1px solid rgba(34,197,94,.20)",
-	fontSize: "10px",
-	fontWeight: 850,
-};
-
-const draftMiniChipSx = {
-	height: "20px",
-	borderRadius: "999px",
-	background: "rgba(255,255,255,.06)",
-	color: "#94a3b8",
-	border: "1px solid rgba(255,255,255,.08)",
-	fontSize: "10px",
-	fontWeight: 850,
-};
-
-const versionIconSx = {
-	color: "#38bdf8",
-	display: "flex",
-	cursor: "pointer",
-	flexShrink: 0,
-};
-
-const newVersionBtnSx = {
-	height: "38px",
-	borderRadius: "9px",
-	border: "1px dashed rgba(255,255,255,.14)",
-	color: "#93c5fd",
-	background: "rgba(255,255,255,.03)",
-	textTransform: "none",
-	fontSize: "12px",
-	fontWeight: 850,
-
-	"&:hover": {
-		background: "rgba(59,130,246,.10)",
-		borderColor: "rgba(59,130,246,.35)",
-	},
-};
-
-const checkItemSx = {
-	display: "flex",
-	alignItems: "center",
-	gap: "9px",
-	py: "8px",
-	borderBottom: "1px solid rgba(255,255,255,.06)",
-
-	"&:last-of-type": {
-		borderBottom: "none",
-	},
-};
-
-const checkDotSx = (done) => ({
-	width: "22px",
-	height: "22px",
-	borderRadius: 999,
-	display: "grid",
-	placeItems: "center",
-	fontSize: "11px",
-	fontWeight: 950,
-	color: done ? "#4ade80" : "#fbbf24",
-	background: done
-		? "rgba(34,197,94,.12)"
-		: "rgba(245,158,11,.12)",
-	border: done
-		? "1px solid rgba(34,197,94,.22)"
-		: "1px solid rgba(245,158,11,.22)",
-	flexShrink: 0,
-});
-
-const checkTextSx = (done) => ({
-	color: done ? "#fff" : "rgba(255,255,255,.62)",
-	fontSize: "12px",
-	fontWeight: 750,
-});
+const pageSx = { width: "100%", display: "flex", flexDirection: "column", gap: "14px" };
+const heroSx = { display: "flex", justifyContent: "space-between", alignItems: "stretch", gap: "16px", flexWrap: "wrap", p: "16px", borderRadius: "10px", background: "radial-gradient(circle at top left, rgba(37,99,235,.22), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.86), rgba(15,23,42,.72))", border: "1px solid rgba(255,255,255,.08)" };
+const heroRightSx = { width: { xs: "100%", md: 380 }, display: "flex", flexDirection: "column", gap: "8px" };
+const labelChipSx = { height: 26, borderRadius: 999, background: "rgba(59,130,246,.14)", color: "#60a5fa", border: "1px solid rgba(59,130,246,.24)", fontWeight: 900, fontSize: 11 };
+const statusChipSx = { ...labelChipSx, color: "#fbbf24", background: "rgba(245,158,11,.13)", border: "1px solid rgba(245,158,11,.24)" };
+const pageTitleSx = { color: "#fff", fontSize: { xs: 24, md: 32 }, fontWeight: 950, lineHeight: 1.05, letterSpacing: "-0.04em" };
+const pageSubSx = { mt: "8px", color: "rgba(255,255,255,.68)", fontSize: 13, fontWeight: 650, lineHeight: 1.5, maxWidth: 760 };
+const completionCardSx = { p: "12px", borderRadius: "10px", background: "rgba(2,6,23,.42)", border: "1px solid rgba(255,255,255,.08)" };
+const completionLabelSx = { color: "rgba(255,255,255,.62)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".07em" };
+const completionValueSx = { mt: "4px", color: "#fff", fontSize: 24, fontWeight: 950 };
+const completionProgressSx = { height: 7, borderRadius: 999, background: "rgba(255,255,255,.07)", "& .MuiLinearProgress-bar": { borderRadius: 999, background: "linear-gradient(135deg,#22c55e,#4ade80)" } };
+const primaryBtnSx = { height: 38, borderRadius: "9px", textTransform: "none", fontWeight: 850, color: "#fff", background: "linear-gradient(135deg,#2563eb,#3b82f6)" };
+const secondaryBtnSx = { height: 38, borderRadius: "9px", textTransform: "none", fontWeight: 850, color: "#fff", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" };
+const errorSx = { p: "11px 13px", borderRadius: "9px", color: "#fca5a5", background: "rgba(239,68,68,.12)", border: "1px solid rgba(239,68,68,.24)", fontSize: 12, fontWeight: 750 };
+const summaryGridSx = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "10px" };
+const miniStatSx = (accent) => ({ p: "13px", borderRadius: "10px", background: "rgba(15,23,42,.78)", border: `1px solid ${accent}25`, display: "flex", alignItems: "center", gap: "12px", minHeight: 72 });
+const miniIconSx = { width: 38, height: 38, borderRadius: "9px", display: "grid", placeItems: "center", flexShrink: 0 };
+const miniTitleSx = { color: "rgba(255,255,255,.58)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".07em" };
+const miniValueSx = { mt: "3px", color: "#fff", fontSize: 17, fontWeight: 950 };
+const miniSubSx = { mt: "2px", color: "rgba(255,255,255,.52)", fontSize: 11, fontWeight: 650 };
+const panelSx = { p: "15px", borderRadius: "10px", background: "rgba(15,23,42,.78)", border: "1px solid rgba(255,255,255,.07)" };
+const sidePanelSx = { ...panelSx };
+const checklistPanelSx = { ...sidePanelSx, background: "linear-gradient(180deg, rgba(245,158,11,.08), rgba(15,23,42,.78))", border: "1px solid rgba(245,158,11,.18)" };
+const sectionHeadSx = { display: "flex", alignItems: "flex-start", gap: "12px", pb: "12px", mb: "14px", borderBottom: "1px solid rgba(255,255,255,.08)" };
+const sectionIconSx = { width: 38, height: 38, borderRadius: "9px", display: "grid", placeItems: "center", flexShrink: 0 };
+const sectionTitleSx = { color: "#fff", fontSize: 18, fontWeight: 950 };
+const sectionSubSx = { mt: "3px", color: "rgba(255,255,255,.55)", fontSize: 11, fontWeight: 650 };
+const dimensionPreviewSx = { mt: "12px", p: "12px", borderRadius: "9px", background: "rgba(2,6,23,.42)", border: "1px solid rgba(255,255,255,.07)" };
+const dimensionValueSx = { color: "#fff", fontSize: 16, fontWeight: 950, fontFamily: "monospace" };
+const sideHeaderSx = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", mb: "12px" };
+const sideTitleSx = { color: "#fff", fontSize: 17, fontWeight: 950 };
+const sideSubSx = { mt: "3px", color: "rgba(255,255,255,.52)", fontSize: 11, fontWeight: 650 };
+const imageBoxSx = { height: 190, borderRadius: "10px", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "7px", background: "rgba(2,6,23,.45)", border: "1.5px dashed rgba(255,255,255,.12)" };
+const imageStyle = { width: "100%", height: "100%", objectFit: "contain", display: "block" };
+const drawingBoxSx = { minHeight: 125, borderRadius: "10px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: "7px", p: "12px", background: "rgba(2,6,23,.45)", border: "1.5px dashed rgba(255,255,255,.12)" };
+const uploadTitleSx = { color: "#fff", fontWeight: 900, fontSize: 12, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const uploadSubSx = { color: "rgba(255,255,255,.48)", fontSize: 10.5, fontWeight: 650 };
+const fileActionRowSx = { display: "flex", gap: "7px", flexWrap: "wrap", mt: "10px" };
+const browseBtnSx = { height: 34, borderRadius: "9px", textTransform: "none", color: "#93c5fd", border: "1px solid rgba(59,130,246,.28)", background: "rgba(59,130,246,.10)", fontWeight: 850, fontSize: 11 };
+const smallBtnSx = { ...browseBtnSx, color: "#cbd5e1", border: "1px solid rgba(255,255,255,.09)", background: "rgba(255,255,255,.04)" };
+const dangerBtnSx = { ...browseBtnSx, color: "#fca5a5", border: "1px solid rgba(239,68,68,.24)", background: "rgba(239,68,68,.10)" };
+const pendingHintSx = { mt: "8px", color: "#fbbf24", fontSize: 10.5, fontWeight: 700 };
+const fileMetaSx = { mt: "8px", color: "rgba(255,255,255,.48)", fontSize: 10.5, fontWeight: 650 };
+const emptyRevisionSx = { p: "12px", borderRadius: "9px", color: "rgba(255,255,255,.5)", fontSize: 11, background: "rgba(2,6,23,.38)", border: "1px solid rgba(255,255,255,.06)" };
+const revisionRowSx = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", p: "10px", mb: "7px", borderRadius: "9px", background: "rgba(2,6,23,.38)", border: "1px solid rgba(255,255,255,.06)" };
+const revisionTitleSx = { color: "#fff", fontSize: 12, fontWeight: 850 };
+const checkItemSx = { display: "flex", alignItems: "center", gap: "9px", py: "7px", borderBottom: "1px solid rgba(255,255,255,.06)" };
+const checkDotSx = (done) => ({ width: 22, height: 22, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 950, color: done ? "#4ade80" : "#94a3b8", background: done ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: done ? "1px solid rgba(34,197,94,.22)" : "1px solid rgba(255,255,255,.08)" });
+const checkTextSx = { color: "rgba(255,255,255,.68)", fontSize: 12, fontWeight: 750 };
