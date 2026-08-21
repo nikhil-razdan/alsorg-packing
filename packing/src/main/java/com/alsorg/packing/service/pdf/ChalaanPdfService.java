@@ -344,7 +344,7 @@ public class ChalaanPdfService {
                                 bold,
                                 20,
                                 760,
-                                "External Movement Challan");
+                                "Packing Details");
 
                 drawLine(cs, LEFT, 740, RIGHT, 740);
 
@@ -967,7 +967,7 @@ public class ChalaanPdfService {
                         int pageNo,
                         int totalPages) throws IOException {
 
-                String title = "REQUIREMENT CHALLAN";
+                String title = "REQUIREMENT MATERIAL DETAILS";
 
                 String subTitle = customChallanTypeLabel(request == null ? null : request.challanType());
 
