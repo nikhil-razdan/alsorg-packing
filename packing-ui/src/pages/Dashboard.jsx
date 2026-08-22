@@ -875,6 +875,53 @@ const DASHBOARD_DRILLDOWN_PAGE_SIZES = [10, 20, 50];
 const dashboardPad = (value) =>
   String(value).padStart(2, "0");
 
+const dashboardTodayYmd = () => {
+  const now = new Date();
+
+  try {
+    const parts =
+      new Intl.DateTimeFormat(
+        "en-US",
+        {
+          timeZone:
+            "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }
+      ).formatToParts(now);
+
+    const value = (type) =>
+      parts.find(
+        (part) =>
+          part.type === type
+      )?.value || "";
+
+    const year =
+      value("year");
+    const month =
+      value("month");
+    const day =
+      value("day");
+
+    if (
+      year &&
+      month &&
+      day
+    ) {
+      return `${year}-${month}-${day}`;
+    }
+  } catch {
+    // Fall back to the browser's local calendar below.
+  }
+
+  return `${now.getFullYear()}-${dashboardPad(
+    now.getMonth() + 1
+  )}-${dashboardPad(
+    now.getDate()
+  )}`;
+};
+
 const dashboardToDateTime = (
   date,
   time,
@@ -1204,16 +1251,41 @@ function StatDrilldownModal({
         config?.search || ""
       )
     );
-    setFromDate("");
-    setToDate("");
-    setFromTime("");
-    setToTime("");
+
+    setFromDate(
+      String(
+        config?.fromDate || ""
+      )
+    );
+
+    setToDate(
+      String(
+        config?.toDate || ""
+      )
+    );
+
+    setFromTime(
+      String(
+        config?.fromTime || ""
+      )
+    );
+
+    setToTime(
+      String(
+        config?.toTime || ""
+      )
+    );
+
     setPage(0);
     setSelectedRow(null);
   }, [
     open,
     config?.key,
     config?.search,
+    config?.fromDate,
+    config?.toDate,
+    config?.fromTime,
+    config?.toTime,
   ]);
 
   const loadRows = useCallback(
@@ -1228,37 +1300,70 @@ function StatDrilldownModal({
           ? overrides.search
           : search;
 
+      const configuredFromDate =
+        String(
+          config?.fromDate || ""
+        );
+
+      const configuredToDate =
+        String(
+          config?.toDate || ""
+        );
+
+      const configuredFromTime =
+        String(
+          config?.fromTime || ""
+        );
+
+      const configuredToTime =
+        String(
+          config?.toTime || ""
+        );
+
+      const lockDateRange =
+        Boolean(
+          config?.lockDateRange
+        );
+
       const effectiveFromDate =
-        Object.prototype.hasOwnProperty.call(
-          overrides,
-          "fromDate"
-        )
-          ? overrides.fromDate
-          : fromDate;
+        lockDateRange
+          ? configuredFromDate
+          : Object.prototype.hasOwnProperty.call(
+            overrides,
+            "fromDate"
+          )
+            ? overrides.fromDate
+            : fromDate;
 
       const effectiveFromTime =
-        Object.prototype.hasOwnProperty.call(
-          overrides,
-          "fromTime"
-        )
-          ? overrides.fromTime
-          : fromTime;
+        lockDateRange
+          ? configuredFromTime
+          : Object.prototype.hasOwnProperty.call(
+            overrides,
+            "fromTime"
+          )
+            ? overrides.fromTime
+            : fromTime;
 
       const effectiveToDate =
-        Object.prototype.hasOwnProperty.call(
-          overrides,
-          "toDate"
-        )
-          ? overrides.toDate
-          : toDate;
+        lockDateRange
+          ? configuredToDate
+          : Object.prototype.hasOwnProperty.call(
+            overrides,
+            "toDate"
+          )
+            ? overrides.toDate
+            : toDate;
 
       const effectiveToTime =
-        Object.prototype.hasOwnProperty.call(
-          overrides,
-          "toTime"
-        )
-          ? overrides.toTime
-          : toTime;
+        lockDateRange
+          ? configuredToTime
+          : Object.prototype.hasOwnProperty.call(
+            overrides,
+            "toTime"
+          )
+            ? overrides.toTime
+            : toTime;
 
       try {
         setLoading(true);
@@ -1406,6 +1511,11 @@ function StatDrilldownModal({
       open,
       config?.type,
       config?.statuses,
+      config?.fromDate,
+      config?.toDate,
+      config?.fromTime,
+      config?.toTime,
+      config?.lockDateRange,
       fromDate,
       fromTime,
       toDate,
@@ -1425,10 +1535,22 @@ function StatDrilldownModal({
           config?.search ||
           ""
         ),
-      fromDate: "",
-      fromTime: "",
-      toDate: "",
-      toTime: "",
+      fromDate:
+        String(
+          config?.fromDate || ""
+        ),
+      fromTime:
+        String(
+          config?.fromTime || ""
+        ),
+      toDate:
+        String(
+          config?.toDate || ""
+        ),
+      toTime:
+        String(
+          config?.toTime || ""
+        ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1576,7 +1698,18 @@ function StatDrilldownModal({
                   event.target.value
                 )
               }
-              style={dashboardDrillInput}
+              disabled={
+                Boolean(
+                  config?.lockDateRange
+                )
+              }
+              style={{
+                ...dashboardDrillInput,
+                opacity:
+                  config?.lockDateRange
+                    ? 0.72
+                    : 1,
+              }}
             />
           </label>
 
@@ -1590,7 +1723,18 @@ function StatDrilldownModal({
                   event.target.value
                 )
               }
-              style={dashboardDrillInput}
+              disabled={
+                Boolean(
+                  config?.lockDateRange
+                )
+              }
+              style={{
+                ...dashboardDrillInput,
+                opacity:
+                  config?.lockDateRange
+                    ? 0.72
+                    : 1,
+              }}
             />
           </label>
 
@@ -1604,7 +1748,18 @@ function StatDrilldownModal({
                   event.target.value
                 )
               }
-              style={dashboardDrillInput}
+              disabled={
+                Boolean(
+                  config?.lockDateRange
+                )
+              }
+              style={{
+                ...dashboardDrillInput,
+                opacity:
+                  config?.lockDateRange
+                    ? 0.72
+                    : 1,
+              }}
             />
           </label>
 
@@ -1618,7 +1773,18 @@ function StatDrilldownModal({
                   event.target.value
                 )
               }
-              style={dashboardDrillInput}
+              disabled={
+                Boolean(
+                  config?.lockDateRange
+                )
+              }
+              style={{
+                ...dashboardDrillInput,
+                opacity:
+                  config?.lockDateRange
+                    ? 0.72
+                    : 1,
+              }}
             />
           </label>
 
@@ -2153,6 +2319,11 @@ function DashboardPage() {
       statuses: [],
       search: "",
       accent: "#60a5fa",
+      fromDate: "",
+      toDate: "",
+      fromTime: "",
+      toTime: "",
+      lockDateRange: false,
     });
 
   const [throughputModal, setThroughputModal] = useState({
@@ -2603,6 +2774,22 @@ function DashboardPage() {
       accent:
         config.accent ||
         "#60a5fa",
+      fromDate:
+        config.fromDate ||
+        "",
+      toDate:
+        config.toDate ||
+        "",
+      fromTime:
+        config.fromTime ||
+        "",
+      toTime:
+        config.toTime ||
+        "",
+      lockDateRange:
+        Boolean(
+          config.lockDateRange
+        ),
       searchPlaceholder:
         config.searchPlaceholder ||
         "Item, packet, PD, sticker, challan, client, user...",
@@ -3003,8 +3190,18 @@ function DashboardPage() {
                               openStatDrilldown({
                                 key: "dailyThroughput",
                                 title: "Today’s Throughput Records",
-                                subtitle: "Exact packing and dispatch activity behind today’s throughput.",
+                                subtitle: "Exact packing and dispatch activity for today only.",
                                 type: "all",
+                                fromDate:
+                                  dashboardTodayYmd(),
+                                toDate:
+                                  dashboardTodayYmd(),
+                                fromTime:
+                                  "",
+                                toTime:
+                                  "",
+                                lockDateRange:
+                                  true,
                                 accent: "#06b6d4",
                               })
                             }

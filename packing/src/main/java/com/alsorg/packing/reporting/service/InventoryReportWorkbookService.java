@@ -112,6 +112,381 @@ public class InventoryReportWorkbookService {
                         String reportType,
                         LocalDateTime from,
                         LocalDateTime to) {
+                return exportSelectedReportWorkbook(
+                                reportType,
+                                from,
+                                to);
+        }
+
+        /*
+         * =============================================================
+         * MEMORY-SAFE SELECTED REPORT EXPORT
+         * =============================================================
+         *
+         * The previous public export generated the complete BI workbook for
+         * every "inventory" request. That meant Packing + Dispatch + Aging +
+         * Volume + Master rows and many derived sheets lived in heap together.
+         *
+         * The public entry point now exports ONLY the requested report family.
+         * This also keeps scheduled packing/dispatch/inventory exports bounded
+         * to their own data instead of silently constructing unrelated sheets.
+         */
+        private byte[] exportSelectedReportWorkbook(
+                        String reportType,
+                        LocalDateTime from,
+                        LocalDateTime to) {
+
+                String type = normalizeSelectedExportType(
+                                reportType);
+
+                try (
+                                Workbook workbook = new XSSFWorkbook();
+                                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+                        CellStyle titleStyle = titleStyle(workbook);
+                        CellStyle headerStyle = headerStyle(workbook);
+                        CellStyle dataStyle = dataStyle(workbook);
+                        CellStyle warningStyle = warningStyle(workbook);
+
+                        switch (type) {
+                                case "packing" -> {
+                                        List<PackingReportRow> rows =
+                                                        packingService.getPackingReport(
+                                                                        from,
+                                                                        to);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Packing",
+                                                        "Packing Report",
+                                                        new String[] {
+                                                                        "Zoho Item ID",
+                                                                        "Item Name",
+                                                                        "Client",
+                                                                        "Plant",
+                                                                        "Packet No",
+                                                                        "Dimensions",
+                                                                        "Volume (m³)",
+                                                                        "Packed At",
+                                                                        "Packed By"
+                                                        },
+                                                        buildRawPackingRows(
+                                                                        rows,
+                                                                        Map.of()),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "dispatch" -> {
+                                        List<DispatchReportRow> rows =
+                                                        dispatchService.getDispatchReport(
+                                                                        from,
+                                                                        to);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Dispatch",
+                                                        "Dispatch Report",
+                                                        new String[] {
+                                                                        "Zoho Item ID",
+                                                                        "PD No.",
+                                                                        "Dwg No.",
+                                                                        "Item Name",
+                                                                        "Client",
+                                                                        "Area",
+                                                                        "Pkt No.",
+                                                                        "Dimensions",
+                                                                        "Packed Volume (m³)",
+                                                                        "Packing Date",
+                                                                        "Dispatch Date",
+                                                                        "Dispatched By",
+                                                                        "Challan No."
+                                                        },
+                                                        buildRawDispatchRows(
+                                                                        rows,
+                                                                        Map.of()),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "date" -> {
+                                        List<PackingReportRow> packingRows =
+                                                        packingService.getPackingReport(
+                                                                        from,
+                                                                        to);
+
+                                        List<DispatchReportRow> dispatchRows =
+                                                        dispatchService.getDispatchReport(
+                                                                        from,
+                                                                        to);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Date Wise",
+                                                        "Date-wise Throughput",
+                                                        new String[] {
+                                                                        "Date",
+                                                                        "Packed",
+                                                                        "Packed Volume (m³)",
+                                                                        "Avg m³ / Packed Packet",
+                                                                        "Dispatched",
+                                                                        "Total Movements"
+                                                        },
+                                                        buildDateWiseRows(
+                                                                        packingRows,
+                                                                        dispatchRows,
+                                                                        List.of()),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "volume" -> {
+                                        List<PackingVolumeRow> rows =
+                                                        packingVolumeService.getPackingVolumeReport(
+                                                                        from,
+                                                                        to);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Packing Volume",
+                                                        "Packing Volume Packet Register",
+                                                        new String[] {
+                                                                        "S.No.",
+                                                                        "Packing Date",
+                                                                        "Packed By",
+                                                                        "Plant",
+                                                                        "Client",
+                                                                        "PD No.",
+                                                                        "Dwg No.",
+                                                                        "Item Name",
+                                                                        "Pkt No.",
+                                                                        "Dimensions (inches)",
+                                                                        "Volume (m³)",
+                                                                        "Status"
+                                                        },
+                                                        buildPackingVolumeDetailRows(
+                                                                        rows),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "master" -> {
+                                        List<MasterItemReportRow> rows =
+                                                        masterItemReportService.getMasterItems(
+                                                                        "ALL",
+                                                                        null,
+                                                                        null,
+                                                                        null,
+                                                                        from,
+                                                                        to,
+                                                                        5000,
+                                                                        0);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Master Items",
+                                                        "Master Item Register",
+                                                        new String[] {
+                                                                        "Master Item",
+                                                                        "PD No",
+                                                                        "Drawing",
+                                                                        "Client",
+                                                                        "Plant",
+                                                                        "Floor",
+                                                                        "Expected Packets",
+                                                                        "Actual Packets",
+                                                                        "Packet Items",
+                                                                        "Packed",
+                                                                        "Pending",
+                                                                        "Dispatched",
+                                                                        "Progress %",
+                                                                        "Packing Status",
+                                                                        "Latest Status",
+                                                                        "Stickers",
+                                                                        "Challans",
+                                                                        "Last Packed By",
+                                                                        "Last Dispatched By",
+                                                                        "Exception"
+                                                        },
+                                                        buildMasterItemRows(
+                                                                        rows),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "combined" -> {
+                                        List<PackingReportRow> packingRows =
+                                                        packingService.getPackingReport(
+                                                                        from,
+                                                                        to);
+
+                                        List<DispatchReportRow> dispatchRows =
+                                                        dispatchService.getDispatchReport(
+                                                                        from,
+                                                                        to);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Packing",
+                                                        "Packing Report",
+                                                        new String[] {
+                                                                        "Zoho Item ID",
+                                                                        "Item Name",
+                                                                        "Client",
+                                                                        "Plant",
+                                                                        "Packet No",
+                                                                        "Dimensions",
+                                                                        "Volume (m³)",
+                                                                        "Packed At",
+                                                                        "Packed By"
+                                                        },
+                                                        buildRawPackingRows(
+                                                                        packingRows,
+                                                                        Map.of()),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Dispatch",
+                                                        "Dispatch Report",
+                                                        new String[] {
+                                                                        "Zoho Item ID",
+                                                                        "PD No.",
+                                                                        "Dwg No.",
+                                                                        "Item Name",
+                                                                        "Client",
+                                                                        "Area",
+                                                                        "Pkt No.",
+                                                                        "Dimensions",
+                                                                        "Packed Volume (m³)",
+                                                                        "Packing Date",
+                                                                        "Dispatch Date",
+                                                                        "Dispatched By",
+                                                                        "Challan No."
+                                                        },
+                                                        buildRawDispatchRows(
+                                                                        dispatchRows,
+                                                                        Map.of()),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        -1);
+                                }
+
+                                case "inventory" -> {
+                                        List<InventoryAgingRow> rows =
+                                                        agingService.getInventoryAgingReport();
+
+                                        addRowsSheet(
+                                                        workbook,
+                                                        "Inventory",
+                                                        "Current Inventory Report",
+                                                        new String[] {
+                                                                        "Zoho Item ID",
+                                                                        "Item Name",
+                                                                        "Client",
+                                                                        "Status",
+                                                                        "Created / Received At",
+                                                                        "Age Days",
+                                                                        "Bucket"
+                                                        },
+                                                        buildRawAgingRows(
+                                                                        rows),
+                                                        titleStyle,
+                                                        headerStyle,
+                                                        dataStyle,
+                                                        warningStyle,
+                                                        6);
+                                }
+
+                                default -> throw new IllegalArgumentException(
+                                                "Unsupported report type: "
+                                                                + reportType);
+                        }
+
+                        workbook.write(out);
+
+                        return out.toByteArray();
+
+                } catch (Exception e) {
+                        throw new RuntimeException(
+                                        "Selected inventory Excel export failed",
+                                        e);
+                }
+        }
+
+        private String normalizeSelectedExportType(
+                        String reportType) {
+
+                if (reportType == null
+                                || reportType.isBlank()) {
+                        return "inventory";
+                }
+
+                String value =
+                                reportType.trim()
+                                                .toLowerCase(Locale.ROOT);
+
+                if (value.contains("volume")) {
+                        return "volume";
+                }
+
+                if (value.contains("master")) {
+                        return "master";
+                }
+
+                if (value.contains("date")
+                                || value.contains("throughput")) {
+                        return "date";
+                }
+
+                if (value.contains("packing")
+                                && !value.contains("dispatch")) {
+                        return "packing";
+                }
+
+                if (value.contains("dispatch")
+                                && !value.contains("packing")) {
+                        return "dispatch";
+                }
+
+                if ("combined".equals(value)
+                                || value.contains("all_items")
+                                || value.contains("all-items")) {
+                        return "combined";
+                }
+
+                return "inventory";
+        }
+
+        /*
+         * Previous all-in-one BI workbook kept private for compatibility
+         * reference. It is no longer called by the public export path.
+         */
+        private byte[] exportLegacyInventoryReport(
+                        String reportType,
+                        LocalDateTime from,
+                        LocalDateTime to) {
                 String type = normalizeType(reportType);
 
                 boolean includePacking = "inventory".equals(type)
@@ -3545,8 +3920,16 @@ public class InventoryReportWorkbookService {
                 sheet.setRepeatingRows(
                                 CellRangeAddress.valueOf("3:3"));
 
+                /*
+                 * Auto-sizing scans every populated cell and becomes expensive on
+                 * large exports. For big selected reports use predictable fixed
+                 * widths instead; small reports keep the polished auto-size.
+                 */
+                boolean largeDataset =
+                                rows != null
+                                                && rows.size() > 2500;
+
                 for (int i = 0; i < headers.length; i++) {
-                        sheet.autoSizeColumn(i);
                         String header = headers[i] == null
                                         ? ""
                                         : headers[i].toLowerCase();
@@ -3561,11 +3944,25 @@ public class InventoryReportWorkbookService {
                                         ? 16000
                                         : 9000;
 
-                        sheet.setColumnWidth(
-                                        i,
-                                        Math.min(
-                                                        sheet.getColumnWidth(i) + 1000,
-                                                        maximumWidth));
+                        if (largeDataset) {
+                                int fixedWidth = longTextColumn
+                                                ? 9000
+                                                : 5200;
+
+                                sheet.setColumnWidth(
+                                                i,
+                                                Math.min(
+                                                                fixedWidth,
+                                                                maximumWidth));
+                        } else {
+                                sheet.autoSizeColumn(i);
+
+                                sheet.setColumnWidth(
+                                                i,
+                                                Math.min(
+                                                                sheet.getColumnWidth(i) + 1000,
+                                                                maximumWidth));
+                        }
                 }
         }
 

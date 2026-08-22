@@ -17,7 +17,6 @@ import {
 import {
   fetchPackingVolumeReport,
 } from "../../api/packingReportApi";
-import { API_BASE_URL } from "../../../config";
 
 const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
 const reportSnapshotCache = new Map();
@@ -5529,6 +5528,244 @@ function InventoryReports() {
       );
     };
 
+  const buildSelectedDirectorExport = () => {
+    const rows = [];
+
+    rows.push({
+      section: "Report",
+      metric: "Selected Range",
+      value: `${fromDate} to ${toDate}`,
+      detail:
+        directorData?.snapshotLabel ||
+        "Current Director dashboard snapshot",
+      owner: "",
+      timeframe: "",
+    });
+
+    (directorData?.kpiCards || []).forEach(
+      (card) => {
+        rows.push({
+          section: "KPI",
+          metric: card?.title || card?.key || "KPI",
+          value: card?.value ?? "-",
+          detail: card?.detail || "",
+          owner: "",
+          timeframe: "",
+        });
+      }
+    );
+
+    (directorData?.readouts || []).forEach(
+      (readout) => {
+        const lines =
+          Array.isArray(readout?.lines)
+            ? readout.lines
+            : [];
+
+        if (lines.length === 0) {
+          rows.push({
+            section: "Executive Readout",
+            metric:
+              readout?.title ||
+              readout?.key ||
+              "Readout",
+            value: "",
+            detail: "",
+            owner: "",
+            timeframe: "",
+          });
+
+          return;
+        }
+
+        lines.forEach((line, index) => {
+          rows.push({
+            section: "Executive Readout",
+            metric:
+              index === 0
+                ? readout?.title ||
+                  readout?.key ||
+                  "Readout"
+                : "",
+            value: "",
+            detail: line || "",
+            owner: "",
+            timeframe: "",
+          });
+        });
+      }
+    );
+
+    (directorData?.actions || []).forEach(
+      (action) => {
+        rows.push({
+          section: "Action Priority",
+          metric: action?.action || "-",
+          value: action?.priority || "-",
+          detail: action?.why || "",
+          owner: action?.owner || "",
+          timeframe:
+            action?.timeframe || "",
+        });
+      }
+    );
+
+    return {
+      title:
+        "Director Inventory & Dispatch Dashboard",
+      columns: [
+        ["section", "Section"],
+        ["metric", "Metric / Action"],
+        ["value", "Value / Priority"],
+        ["detail", "Detail / Why"],
+        ["owner", "Owner"],
+        ["timeframe", "Timeframe"],
+      ],
+      rows,
+    };
+  };
+
+  const buildSelectedExportConfig =
+    async () => {
+      if (
+        reportMode ===
+        "DIRECTOR_DASHBOARD"
+      ) {
+        return buildSelectedDirectorExport();
+      }
+
+      if (
+        reportMode ===
+        "MASTER_ITEMS"
+      ) {
+        /*
+         * Master Items is already a paged report. Fetch all master pages
+         * only because the user explicitly selected this report for export.
+         * No unrelated Packing / Dispatch / Aging datasets are exported.
+         */
+        const allMasterRows =
+          await loadAllMasterItemRows();
+
+        let rows =
+          formatMasterReportRows(
+            allMasterRows,
+            "master-selected-export"
+          );
+
+        if (deferredSearchTerm) {
+          rows = rows.filter((row) =>
+            makeSearchText(row).includes(
+              deferredSearchTerm
+            )
+          );
+        }
+
+        return {
+          title:
+            tableConfigs.MASTER_ITEMS.title,
+          columns:
+            tableConfigs.MASTER_ITEMS.columns,
+          rows,
+        };
+      }
+
+      return {
+        title:
+          activeConfig?.title ||
+          "Selected Inventory Report",
+        columns:
+          activeConfig?.columns || [],
+        /*
+         * Export the complete selected report after the current search filter,
+         * never only the visible pagination slice.
+         */
+        rows: visibleRows,
+      };
+    };
+
+  const excelExportValue = (
+    key,
+    value
+  ) => {
+    const formatted =
+      formatReportCell(key, value);
+
+    if (
+      formatted === null ||
+      formatted === undefined
+    ) {
+      return "";
+    }
+
+    if (
+      typeof formatted === "number" ||
+      typeof formatted === "boolean"
+    ) {
+      return formatted;
+    }
+
+    if (
+      typeof formatted === "object"
+    ) {
+      try {
+        return JSON.stringify(
+          formatted
+        );
+      } catch {
+        return String(formatted);
+      }
+    }
+
+    return String(formatted);
+  };
+
+  const selectedExportColumnWidth = (
+    label,
+    key
+  ) => {
+    const text =
+      `${label || ""} ${key || ""}`
+        .toLowerCase();
+
+    if (
+      text.includes("description") ||
+      text.includes("detail") ||
+      text.includes("why") ||
+      text.includes("address") ||
+      text.includes("action")
+    ) {
+      return 42;
+    }
+
+    if (
+      text.includes("item") ||
+      text.includes("client") ||
+      text.includes("user") ||
+      text.includes("owner")
+    ) {
+      return 26;
+    }
+
+    if (
+      text.includes("date") ||
+      text.includes("time") ||
+      text.includes("challan") ||
+      text.includes("vehicle") ||
+      text.includes("dimension")
+    ) {
+      return 22;
+    }
+
+    return Math.max(
+      12,
+      Math.min(
+        20,
+        String(label || key || "")
+          .length + 4
+      )
+    );
+  };
+
   const downloadExcelReport =
     async () => {
       if (
@@ -5543,121 +5780,245 @@ function InventoryReports() {
         setError("");
 
         /*
-         * IMPORTANT:
-         * Use the backend Apache-POI workbook as the single Excel source.
-         * That workbook contains REAL native Excel chart objects for the
-         * Director Dashboard (not screenshots/canvas images).
+         * SELECTED REPORT ONLY
          *
-         * Keeping the download on the server also avoids rebuilding a very
-         * large workbook in the browser and guarantees that manual downloads
-         * and scheduled reports have the same Director BI dashboard.
+         * The old implementation always called the backend's complete
+         * inventory workbook endpoint. That forced Apache POI to materialize
+         * Packing + Dispatch + Aging + Volume + Master datasets together even
+         * when the user had selected one report tab.
+         *
+         * Manual export now happens in the browser from exactly the selected
+         * UI report. The selected date range and current search filter are
+         * preserved, and the backend no longer allocates the giant workbook.
          */
-        const from =
-          toStartDateTime(fromDate);
+        const selected =
+          await buildSelectedExportConfig();
 
-        const to =
-          toEndDateTime(toDate);
+        const columns =
+          Array.isArray(
+            selected?.columns
+          )
+            ? selected.columns
+            : [];
 
-        const token =
-          window.localStorage.getItem("token");
+        const rows =
+          Array.isArray(
+            selected?.rows
+          )
+            ? selected.rows
+            : [];
 
-        const headers = {};
+        if (columns.length === 0) {
+          throw new Error(
+            "Selected report has no exportable columns"
+          );
+        }
+
+        const [
+          excelModule,
+          fileSaverModule,
+        ] = await Promise.all([
+          import("exceljs"),
+          import("file-saver"),
+        ]);
+
+        const ExcelJS =
+          excelModule.default ||
+          excelModule;
+
+        const saveAs =
+          fileSaverModule.saveAs ||
+          fileSaverModule.default
+            ?.saveAs ||
+          fileSaverModule.default;
 
         if (
-          token &&
-          token !== "null" &&
-          token !== "undefined"
+          !ExcelJS?.Workbook ||
+          typeof saveAs !==
+          "function"
         ) {
-          headers.Authorization =
-            `Bearer ${token}`;
-        }
-
-        const response =
-          await fetch(
-            `${API_BASE_URL}/api/reports/export/inventory/excel?from=${encodeURIComponent(
-              from
-            )}&to=${encodeURIComponent(to)}`,
-            {
-              method: "GET",
-              credentials: "include",
-              headers,
-            }
-          );
-
-        if (!response.ok) {
-          const responseText =
-            await response.text();
-
           throw new Error(
-            responseText ||
-            `Excel export failed (${response.status})`
+            "Excel export dependencies are unavailable"
           );
         }
 
-        const blob =
-          await response.blob();
+        const workbook =
+          new ExcelJS.Workbook();
 
-        const disposition =
-          response.headers.get(
-            "content-disposition"
-          ) || "";
+        workbook.creator =
+          "ALSORG Inventory Reports";
 
-        const utf8Match =
-          disposition.match(
-            /filename\*=UTF-8''([^;]+)/i
+        workbook.created =
+          new Date();
+
+        const safeMode =
+          String(reportMode || "REPORT")
+            .replace(
+              /[^A-Za-z0-9_-]+/g,
+              "_"
+            )
+            .replace(
+              /^_+|_+$/g,
+              ""
+            ) || "REPORT";
+
+        const sheetName =
+          String(
+            selected?.title ||
+            safeMode
+          )
+            .replace(
+              /[\\/*?:[\]]/g,
+              " "
+            )
+            .trim()
+            .slice(0, 31) ||
+          "Report";
+
+        const sheet =
+          workbook.addWorksheet(
+            sheetName
           );
 
-        const normalMatch =
-          disposition.match(
-            /filename=\"?([^\";]+)\"?/i
-          );
+        const title =
+          selected?.title ||
+          "Selected Inventory Report";
 
-        let fileName =
-          `Inventory_Director_BI_Report_${fromDate}_to_${toDate}.xlsx`;
-
-        try {
-          if (utf8Match?.[1]) {
-            fileName = decodeURIComponent(
-              utf8Match[1]
-            );
-          } else if (normalMatch?.[1]) {
-            fileName =
-              normalMatch[1].trim();
-          }
-        } catch {
-          // Keep the safe default file name.
-        }
-
-        const objectUrl =
-          window.URL.createObjectURL(
-            blob
-          );
-
-        const anchor =
-          document.createElement("a");
-
-        anchor.href = objectUrl;
-        anchor.download = fileName;
-        anchor.style.display = "none";
-
-        document.body.appendChild(
-          anchor
+        sheet.mergeCells(
+          1,
+          1,
+          1,
+          columns.length
         );
-        anchor.click();
-        anchor.remove();
 
-        window.URL.revokeObjectURL(
-          objectUrl
+        const titleCell =
+          sheet.getCell(1, 1);
+
+        titleCell.value =
+          `ALSORG — ${title}`;
+
+        titleCell.font = {
+          bold: true,
+          size: 16,
+        };
+
+        titleCell.alignment = {
+          vertical: "middle",
+          horizontal: "left",
+        };
+
+        sheet.getRow(1).height = 26;
+
+        sheet.mergeCells(
+          2,
+          1,
+          2,
+          columns.length
+        );
+
+        const rangeCell =
+          sheet.getCell(2, 1);
+
+        rangeCell.value =
+          `Selected range: ${fromDate} to ${toDate}` +
+          (deferredSearchTerm
+            ? ` | Search: ${search.trim()}`
+            : "") +
+          ` | Rows: ${rows.length}`;
+
+        rangeCell.font = {
+          italic: true,
+          size: 10,
+        };
+
+        const headerRow =
+          sheet.getRow(3);
+
+        columns.forEach(
+          ([key, label], index) => {
+            const cell =
+              headerRow.getCell(
+                index + 1
+              );
+
+            cell.value =
+              label || key;
+
+            cell.font = {
+              bold: true,
+            };
+
+            cell.alignment = {
+              vertical: "middle",
+              horizontal: "left",
+            };
+
+            sheet.getColumn(
+              index + 1
+            ).width =
+              selectedExportColumnWidth(
+                label,
+                key
+              );
+          }
+        );
+
+        headerRow.height = 22;
+
+        rows.forEach((row) => {
+          const values =
+            columns.map(
+              ([key]) =>
+                excelExportValue(
+                  key,
+                  row?.[key]
+                )
+            );
+
+          sheet.addRow(values);
+        });
+
+        sheet.views = [
+          {
+            state: "frozen",
+            ySplit: 3,
+          },
+        ];
+
+        sheet.autoFilter = {
+          from: {
+            row: 3,
+            column: 1,
+          },
+          to: {
+            row: 3,
+            column:
+              columns.length,
+          },
+        };
+
+        const buffer =
+          await workbook.xlsx.writeBuffer();
+
+        const fileName =
+          `ALSORG_${safeMode}_${fromDate}_to_${toDate}.xlsx`;
+
+        saveAs(
+          new Blob([buffer], {
+            type:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          }),
+          fileName
         );
       } catch (error) {
         console.error(
-          "Inventory Excel export failed:",
+          "Selected Inventory Excel export failed:",
           error
         );
 
         const message =
           error?.message ||
-          "Failed to generate Inventory Excel report";
+          "Failed to export the selected Inventory report";
 
         setError(message);
 
@@ -5707,7 +6068,7 @@ function InventoryReports() {
         >
           {exporting
             ? "Generating Excel..."
-            : "Download Excel Report"}
+            : "Export Selected Excel"}
         </button>
       </div>
 
