@@ -27,6 +27,7 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
 import bomFlowApi from "../api/bomFlowApi.js";
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 
 import {
 	canEditBomFlowRevision,
@@ -160,6 +161,11 @@ export default function BOMFlowProductList() {
 			return haystack.includes(query);
 		});
 	}, [products, search]);
+
+	const productPager = useBomFlowPagination(filtered, {
+		initialPageSize: 10,
+		resetKey: search,
+	});
 
 	const totals = useMemo(() => {
 		return {
@@ -310,7 +316,7 @@ export default function BOMFlowProductList() {
 							<div>Actions</div>
 						</Box>
 
-						{filtered.map((product) => (
+						{productPager.pageItems.map((product) => (
 							<Box key={product.id} sx={tableRowSx}>
 								<Box sx={productCellSx}>
 									<ProductThumbnail product={product} />
@@ -404,6 +410,18 @@ export default function BOMFlowProductList() {
 							</Box>
 						))}
 					</Box>
+					<BOMFlowPagination
+						page={productPager.page}
+						pageCount={productPager.pageCount}
+						pageSize={productPager.pageSize}
+						total={productPager.total}
+						from={productPager.from}
+						to={productPager.to}
+						onPageChange={productPager.setPage}
+						onPageSizeChange={productPager.setPageSize}
+						label="products"
+						pageSizeOptions={[5, 10, 20, 50]}
+					/>
 				</Card>
 			)}
 		</Box>
@@ -489,7 +507,13 @@ const emptyIconSx = { width: 48, height: 48, borderRadius: "12px", display: "gri
 const emptyTitleSx = { color: "#fff", fontSize: 18, fontWeight: 950 };
 const emptySubSx = { color: "rgba(255,255,255,.58)", fontSize: 12, fontWeight: 650, mb: "6px" };
 const tableCardSx = { borderRadius: "10px", background: "rgba(15,23,42,.78)", border: "1px solid rgba(255,255,255,.07)", overflow: "hidden" };
-const tableScrollSx = { overflowX: "auto" };
+const tableScrollSx = {
+	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	pb: "3px",
+};
 const tableHeadSx = { minWidth: 1500, display: "grid", gridTemplateColumns: "minmax(330px,1.7fr) 140px 220px minmax(230px,1.2fr) 170px 150px 180px 210px", background: "rgba(2,6,23,.38)", color: "rgba(255,255,255,.52)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", "& > div": { padding: "12px 13px" } };
 const tableRowSx = { minWidth: 1500, display: "grid", gridTemplateColumns: "minmax(330px,1.7fr) 140px 220px minmax(230px,1.2fr) 170px 150px 180px 210px", alignItems: "center", borderTop: "1px solid rgba(255,255,255,.06)", background: "rgba(255,255,255,.018)", "& > p, & > div": { padding: "10px 13px" } };
 const productCellSx = { display: "flex", alignItems: "center", gap: "11px", minWidth: 0 };

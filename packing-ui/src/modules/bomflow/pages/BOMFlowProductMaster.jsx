@@ -40,6 +40,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 
 import bomFlowApi from "../api/bomFlowApi.js";
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 import * as styles from "../styles/bomStyles.js";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -106,6 +107,11 @@ export default function BOMFlowProductMaster() {
 	const [pendingImage, setPendingImage] = useState(null);
 	const [pendingDrawing, setPendingDrawing] = useState(null);
 	const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+
+	const revisionPager = useBomFlowPagination(revisions, {
+		initialPageSize: 5,
+		resetKey: savedProduct?.id || productId || "",
+	});
 
 	const updateField = (key, value) => {
 		setForm((prev) => ({ ...prev, [key]: value }));
@@ -665,7 +671,7 @@ export default function BOMFlowProductMaster() {
 
 						{revisions.length === 0 ? (
 							<Typography sx={emptyRevisionSx}>No BOM revision created yet.</Typography>
-						) : revisions.map((revision) => (
+						) : revisionPager.pageItems.map((revision) => (
 							<Box key={revision.id} sx={revisionRowSx}>
 								<Box>
 									<Typography sx={revisionTitleSx}>Revision {revision.revisionNo || revision.revisionNumber}</Typography>
@@ -674,6 +680,23 @@ export default function BOMFlowProductMaster() {
 								<Button onClick={() => navigate(`/bomflow/revisions/${revision.id}`)} sx={smallBtnSx}>Open</Button>
 							</Box>
 						))}
+						{revisions.length > 0 && (
+							<Box sx={revisionPagerWrapSx}>
+								<BOMFlowPagination
+									page={revisionPager.page}
+									pageCount={revisionPager.pageCount}
+									pageSize={revisionPager.pageSize}
+									total={revisionPager.total}
+									from={revisionPager.from}
+									to={revisionPager.to}
+									onPageChange={revisionPager.setPage}
+									onPageSizeChange={revisionPager.setPageSize}
+									label="revisions"
+									pageSizeOptions={[5, 10, 20]}
+									compact
+								/>
+							</Box>
+						)}
 					</Card>
 
 					<Card sx={checklistPanelSx}>
@@ -780,3 +803,5 @@ const revisionTitleSx = { color: "#fff", fontSize: 12, fontWeight: 850 };
 const checkItemSx = { display: "flex", alignItems: "center", gap: "9px", py: "7px", borderBottom: "1px solid rgba(255,255,255,.06)" };
 const checkDotSx = (done) => ({ width: 22, height: 22, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 950, color: done ? "#4ade80" : "#94a3b8", background: done ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.05)", border: done ? "1px solid rgba(34,197,94,.22)" : "1px solid rgba(255,255,255,.08)" });
 const checkTextSx = { color: "rgba(255,255,255,.68)", fontSize: 12, fontWeight: 750 };
+
+const revisionPagerWrapSx = { mt: "8px", mx: "-15px", mb: "-15px" };

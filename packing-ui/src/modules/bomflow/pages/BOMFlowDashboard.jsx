@@ -37,6 +37,7 @@ import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
 import bomFlowApi from "../api/bomFlowApi.js";
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 
 const number = (value) => {
 	const parsed = Number(value ?? 0);
@@ -174,6 +175,10 @@ export default function BOMFlowDashboard() {
 		() => safeRows(data?.recentCostings),
 		[data]
 	);
+
+	const recentPager = useBomFlowPagination(recentCostings, {
+		initialPageSize: 5,
+	});
 
 	const stats = useMemo(
 		() => [
@@ -689,7 +694,7 @@ export default function BOMFlowDashboard() {
 							<div>Actions</div>
 						</Box>
 
-						{recentCostings.map((row) => {
+						{recentPager.pageItems.map((row) => {
 							const current = number(row?.currentCost);
 							const progress = Math.round((current / maxRecentCost) * 100);
 
@@ -758,6 +763,20 @@ export default function BOMFlowDashboard() {
 							);
 						})}
 					</Box>
+				)}
+				{recentCostings.length > 0 && (
+					<BOMFlowPagination
+						page={recentPager.page}
+						pageCount={recentPager.pageCount}
+						pageSize={recentPager.pageSize}
+						total={recentPager.total}
+						from={recentPager.from}
+						to={recentPager.to}
+						onPageChange={recentPager.setPage}
+						onPageSizeChange={recentPager.setPageSize}
+						label="costing revisions"
+						pageSizeOptions={[5, 10, 20]}
+					/>
 				)}
 			</Card>
 		</Box>
@@ -1474,6 +1493,11 @@ const recentPanelHeadSx = {
 
 const tableWrapSx = {
 	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	WebkitOverflowScrolling: "touch",
+	pb: "3px",
 	borderTop: "1px solid rgba(255,255,255,.06)",
 };
 

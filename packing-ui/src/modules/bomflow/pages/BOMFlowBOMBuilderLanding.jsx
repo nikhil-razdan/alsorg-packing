@@ -26,6 +26,7 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 import bomFlowApi from "../api/bomFlowApi.js";
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 
 import {
 	canEditBomFlowRevision,
@@ -138,6 +139,11 @@ export default function BOMFlowBOMBuilderLanding() {
 			return haystack.includes(query);
 		});
 	}, [products, search]);
+
+	const productPager = useBomFlowPagination(filtered, {
+		initialPageSize: 9,
+		resetKey: search,
+	});
 
 	const openLatest = (product) => {
 		if (product?.latestRevisionId) {
@@ -295,8 +301,9 @@ export default function BOMFlowBOMBuilderLanding() {
 					)}
 				</Card>
 			) : (
-				<Box sx={gridSx}>
-					{filtered.map((product) => {
+				<>
+					<Box sx={gridSx}>
+					{productPager.pageItems.map((product) => {
 						const hasRevision =
 							Boolean(product?.latestRevisionId);
 
@@ -415,7 +422,22 @@ export default function BOMFlowBOMBuilderLanding() {
 							</Card>
 						);
 					})}
-				</Box>
+					</Box>
+					<Card sx={paginationCardSx}>
+						<BOMFlowPagination
+							page={productPager.page}
+							pageCount={productPager.pageCount}
+							pageSize={productPager.pageSize}
+							total={productPager.total}
+							from={productPager.from}
+							to={productPager.to}
+							onPageChange={productPager.setPage}
+							onPageSizeChange={productPager.setPageSize}
+							label="products"
+							pageSizeOptions={[6, 9, 12, 24]}
+						/>
+					</Card>
+				</>
 			)}
 		</Box>
 	);
@@ -682,4 +704,12 @@ const emptySubSx = {
 	fontSize: 12,
 	fontWeight: 650,
 	lineHeight: 1.5,
+};
+
+
+const paginationCardSx = {
+	borderRadius: "10px",
+	background: "rgba(15,23,42,.78)",
+	border: "1px solid rgba(255,255,255,.07)",
+	overflow: "hidden",
 };

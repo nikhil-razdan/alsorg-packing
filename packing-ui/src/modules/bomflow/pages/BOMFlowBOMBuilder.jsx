@@ -12,6 +12,8 @@ import {
 import bomFlowApi
 	from "../api/bomFlowApi.js";
 
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
+
 import {
 	canApproveBomFlowRevision,
 	canEditBomFlowRevision,
@@ -930,7 +932,7 @@ export default function BOMFlowBOMBuilder() {
 
 									<Collapse in={isOpen}>
 										{section.rows.length > 0 ? (
-											<SectionTable
+											<PaginatedSectionTable
 												rows={section.rows}
 												editable={editable && !working}
 												onDelete={handleDeleteRow}
@@ -1424,6 +1426,46 @@ export default function BOMFlowBOMBuilder() {
 				</DialogActions>
 			</Dialog>
 		</Box>
+	);
+}
+
+function PaginatedSectionTable({
+	rows,
+	editable,
+	onDelete,
+	onAdd,
+	validRates,
+}) {
+	const pager = useBomFlowPagination(rows, {
+		initialPageSize: 8,
+		resetKey: rows.map((row) => `${row?.id || ""}:${row?.rowVersion ?? ""}`).join("|"),
+	});
+
+	return (
+		<>
+			<SectionTable
+				rows={pager.pageItems}
+				editable={editable}
+				onDelete={onDelete}
+				onAdd={onAdd}
+				validRates={validRates}
+			/>
+			<Box sx={sectionPagerWrapSx}>
+				<BOMFlowPagination
+					page={pager.page}
+					pageCount={pager.pageCount}
+					pageSize={pager.pageSize}
+					total={pager.total}
+					from={pager.from}
+					to={pager.to}
+					onPageChange={pager.setPage}
+					onPageSizeChange={pager.setPageSize}
+					label="BOM rows"
+					pageSizeOptions={[5, 8, 15, 25]}
+					compact
+				/>
+			</Box>
+		</>
 	);
 }
 
@@ -2100,6 +2142,11 @@ const sectionTotalValueSx = {
 const tableShellSx = {
 	background: "rgba(2,6,23,.18)",
 	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	WebkitOverflowScrolling: "touch",
+	pb: "3px",
 };
 
 const tableHeadSx = {
@@ -2556,3 +2603,5 @@ const dialogFieldSx = {
 		color: "#94a3b8",
 	},
 };
+
+const sectionPagerWrapSx = { borderTop: "1px solid rgba(255,255,255,.04)" };

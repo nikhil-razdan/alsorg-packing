@@ -1,3 +1,38 @@
+export const BOM_professionalScrollbarSx = {
+	scrollbarWidth: "thin",
+	scrollbarColor: "rgba(96,165,250,.52) rgba(2,6,23,.28)",
+	"&::-webkit-scrollbar": {
+		width: "9px",
+		height: "9px",
+	},
+	"&::-webkit-scrollbar-track": {
+		background: "rgba(2,6,23,.28)",
+		borderRadius: "999px",
+	},
+	"&::-webkit-scrollbar-thumb": {
+		background:
+			"linear-gradient(180deg,rgba(96,165,250,.62),rgba(59,130,246,.42))",
+		borderRadius: "999px",
+		border: "2px solid rgba(2,6,23,.36)",
+		backgroundClip: "padding-box",
+	},
+	"&::-webkit-scrollbar-thumb:hover": {
+		background:
+			"linear-gradient(180deg,rgba(125,211,252,.78),rgba(59,130,246,.62))",
+		backgroundClip: "padding-box",
+	},
+};
+
+export const BOM_horizontalScrollSx = {
+	...BOM_professionalScrollbarSx,
+	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	WebkitOverflowScrolling: "touch",
+	pb: "3px",
+};
+
 export const BOM_modulePageSx = {
 	minHeight: "100vh",
 	position: "relative",
@@ -871,8 +906,8 @@ export const BOM_sectionTotalValueSx = {
 };
 
 export const BOM_tableSx = {
+	...BOM_horizontalScrollSx,
 	background: "rgba(2,6,23,.20)",
-	overflowX: "auto",
 };
 
 export const BOM_tableHeadSx = {

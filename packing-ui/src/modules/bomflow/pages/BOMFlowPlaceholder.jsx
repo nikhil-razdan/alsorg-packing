@@ -51,6 +51,7 @@ import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 
 import bomFlowApi from "../api/bomFlowApi.js";
+import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 
 import {
 	canEditBomFlowRevision,
@@ -285,6 +286,11 @@ function RateMaster() {
 			row.evidenceFileName,
 		].filter(Boolean).join(" ").toLowerCase().includes(query));
 	}, [rates, search]);
+
+	const ratePager = useBomFlowPagination(filtered, {
+		initialPageSize: 10,
+		resetKey: `${search}|${activeOnly}`,
+	});
 
 	const stats = useMemo(() => ({
 		total: rates.length,
@@ -553,7 +559,7 @@ function RateMaster() {
 							<div>Material</div><div>Category</div><div>Brand / Vendor</div><div>Unit</div>
 							<div>Rate</div><div>GST</div><div>Effective</div><div>Status</div><div>Action</div>
 						</Box>
-						{filtered.map((row) => (
+						{ratePager.pageItems.map((row) => (
 							<Box key={row.id} sx={rateRowSx}>
 								<Box>
 									<Typography sx={cellStrongSx}>{row.itemName}</Typography>
@@ -583,6 +589,18 @@ function RateMaster() {
 						))}
 						{filtered.length === 0 && <EmptyTable text="No material rates found." />}
 					</Box>
+					<BOMFlowPagination
+						page={ratePager.page}
+						pageCount={ratePager.pageCount}
+						pageSize={ratePager.pageSize}
+						total={ratePager.total}
+						from={ratePager.from}
+						to={ratePager.to}
+						onPageChange={ratePager.setPage}
+						onPageSizeChange={ratePager.setPageSize}
+						label="material rates"
+						pageSizeOptions={[5, 10, 20, 50]}
+					/>
 				</Card>
 			)}
 
@@ -667,6 +685,11 @@ function LabourMaster() {
 		return rates.filter((row) => [row.department, row.processCode, row.processName, row.basis, row.unit]
 			.filter(Boolean).join(" ").toLowerCase().includes(query));
 	}, [rates, search]);
+
+	const labourRatePager = useBomFlowPagination(filtered, {
+		initialPageSize: 10,
+		resetKey: `${search}|${activeOnly}`,
+	});
 
 	const openEdit = (row) => setDialog({
 		open: true,
@@ -771,7 +794,7 @@ function LabourMaster() {
 						<Box sx={labourHeadSx}>
 							<div>Department / Process</div><div>Code</div><div>Basis</div><div>Unit</div><div>Rate</div><div>Standard</div><div>Effective</div><div>Status</div><div>Action</div>
 						</Box>
-						{filtered.map((row) => (
+						{labourRatePager.pageItems.map((row) => (
 							<Box key={row.id} sx={labourRowSx}>
 								<Box><Typography sx={cellStrongSx}>{row.processName}</Typography><Typography sx={mutedTextSx}>{row.department}</Typography></Box>
 								<Typography sx={monoTextSx}>{row.processCode || "-"}</Typography>
@@ -789,6 +812,18 @@ function LabourMaster() {
 						))}
 						{filtered.length === 0 && <EmptyTable text="No labour rates found." />}
 					</Box>
+					<BOMFlowPagination
+						page={labourRatePager.page}
+						pageCount={labourRatePager.pageCount}
+						pageSize={labourRatePager.pageSize}
+						total={labourRatePager.total}
+						from={labourRatePager.from}
+						to={labourRatePager.to}
+						onPageChange={labourRatePager.setPage}
+						onPageSizeChange={labourRatePager.setPageSize}
+						label="labour rates"
+						pageSizeOptions={[5, 10, 20, 50]}
+					/>
 				</Card>
 			)}
 
@@ -852,6 +887,16 @@ function CostingEngine() {
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
 	const [labourDialog, setLabourDialog] = useState({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } });
+
+	const materialPager = useBomFlowPagination(costing?.materialLines || [], {
+		initialPageSize: 8,
+		resetKey: revisionId,
+	});
+
+	const costingLabourPager = useBomFlowPagination(costing?.labourLines || [], {
+		initialPageSize: 8,
+		resetKey: revisionId,
+	});
 
 	useEffect(() => {
 		const start = async () => {
@@ -1214,7 +1259,7 @@ function CostingEngine() {
 				<Card sx={emptyPanelSx}><CalculateOutlinedIcon sx={{ fontSize: 42, color: "#64748b" }} /><Typography sx={emptyTitleSx}>Select a product and BOM revision</Typography><Typography sx={emptySubSx}>Costing and revision intelligence will load from the selected product version.</Typography></Card>
 			) : (
 				<>
-					<Box sx={summary4Sx}>
+					<Box sx={summaryGridSx}>
 						<SummaryCard title="Direct Material" value={money(costing.directMaterial)} accent="#60a5fa" />
 						<SummaryCard title="Direct Labour" value={money(costing.directLabour)} accent="#a855f7" />
 						<SummaryCard title="Cost / Product" value={money(costing.costPerProduct)} accent="#f59e0b" />
@@ -1250,8 +1295,21 @@ function CostingEngine() {
 						<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Direct Material</Typography><Typography sx={panelSubSx}>Snapshot of material quantity, rate and processing cost for this revision.</Typography></Box><Chip label={`${costing.materialItemCount} items`} sx={countChipSx} /></Box>
 						<Box sx={tableScrollSx}>
 							<Box sx={materialHeadSx}><div>Item</div><div>Section</div><div>Qty</div><div>Rate</div><div>Material</div><div>Processing</div><div>Total</div></Box>
-							{costing.materialLines.map((row) => <Box key={row.id} sx={materialRowSx}><Box><Typography sx={cellStrongSx}>{row.itemName}</Typography><Typography sx={mutedTextSx}>{row.brand || row.vendorName || "-"}</Typography></Box><Typography sx={cellTextSx}>{row.section}</Typography><Typography sx={monoTextSx}>{decimal(row.quantity)} {row.unit}</Typography><Typography sx={moneyTextSx}>{money(row.rate)}</Typography><Typography sx={cellTextSx}>{money(row.materialAmount)}</Typography><Typography sx={cellTextSx}>{money(row.processingAmount)}</Typography><Typography sx={moneyTextSx}>{money(row.totalAmount)}</Typography></Box>)}
+							{materialPager.pageItems.map((row) => <Box key={row.id} sx={materialRowSx}><Box><Typography sx={cellStrongSx}>{row.itemName}</Typography><Typography sx={mutedTextSx}>{row.brand || row.vendorName || "-"}</Typography></Box><Typography sx={cellTextSx}>{row.section}</Typography><Typography sx={monoTextSx}>{decimal(row.quantity)} {row.unit}</Typography><Typography sx={moneyTextSx}>{money(row.rate)}</Typography><Typography sx={cellTextSx}>{money(row.materialAmount)}</Typography><Typography sx={cellTextSx}>{money(row.processingAmount)}</Typography><Typography sx={moneyTextSx}>{money(row.totalAmount)}</Typography></Box>)}
 						</Box>
+						<BOMFlowPagination
+							page={materialPager.page}
+							pageCount={materialPager.pageCount}
+							pageSize={materialPager.pageSize}
+							total={materialPager.total}
+							from={materialPager.from}
+							to={materialPager.to}
+							onPageChange={materialPager.setPage}
+							onPageSizeChange={materialPager.setPageSize}
+							label="material lines"
+							pageSizeOptions={[5, 8, 15, 25]}
+							compact
+						/>
 					</Card>
 
 					<Card sx={panelSx}>
@@ -1274,7 +1332,7 @@ function CostingEngine() {
 
 						<Box sx={tableScrollSx}>
 							<Box sx={costLabourHeadSx}><div>Process</div><div>Basis</div><div>Labour</div><div>Hours</div><div>Qty</div><div>Rate</div><div>Amount</div><div /></Box>
-							{costing.labourLines.map((row) => {
+							{costingLabourPager.pageItems.map((row) => {
 								const incomplete = row.basis === "PER_HOUR"
 									? Number(row.workingHours || 0) <= 0 || Number(row.labourCount || 0) <= 0
 									: row.basis === "FIXED"
@@ -1296,6 +1354,19 @@ function CostingEngine() {
 							})}
 							{costing.labourLines.length === 0 && <EmptyTable text="No labour processes are linked yet. Use Sync Labour Master or Add Process." />}
 						</Box>
+						<BOMFlowPagination
+							page={costingLabourPager.page}
+							pageCount={costingLabourPager.pageCount}
+							pageSize={costingLabourPager.pageSize}
+							total={costingLabourPager.total}
+							from={costingLabourPager.from}
+							to={costingLabourPager.to}
+							onPageChange={costingLabourPager.setPage}
+							onPageSizeChange={costingLabourPager.setPageSize}
+							label="labour lines"
+							pageSizeOptions={[5, 8, 15, 25]}
+							compact
+						/>
 					</Card>
 				</>
 			)}
@@ -1306,9 +1377,14 @@ function CostingEngine() {
 }
 
 function RevisionIntelligencePanel({ intelligence, revisions, currentRevisionId, compareRevisionId, onCompare, working }) {
+	const history = intelligence?.history || [];
+	const historyPager = useBomFlowPagination(history, {
+		initialPageSize: 5,
+		resetKey: `${currentRevisionId || ""}|${compareRevisionId || ""}`,
+	});
+
 	if (!intelligence) return null;
 
-	const history = intelligence.history || [];
 	const materialChanges = intelligence.materialChanges || [];
 	const labourChanges = intelligence.labourChanges || [];
 	const hasPrevious = Boolean(intelligence.hasPreviousRevision);
@@ -1365,8 +1441,21 @@ function RevisionIntelligencePanel({ intelligence, revisions, currentRevisionId,
 					<Typography sx={varianceTitleSx}>Product Cost History</Typography>
 					<Box sx={historyScrollSx}>
 						<Box sx={historyHeadSx}><div>Revision</div><div>Status</div><div>Material</div><div>Labour</div><div>Cost / Product</div><div>Profit</div><div>Ex-Factory</div><div>MRP</div></Box>
-						{history.map((row) => <Box key={row.revisionId} sx={{ ...historyRowSx, ...(row.revisionId === currentRevisionId ? historyCurrentRowSx : {}) }}><div>R{row.revisionNo}</div><div>{row.status}</div><div>{money(row.directMaterial)}</div><div>{money(row.directLabour)}</div><div>{money(row.costPerProduct)}</div><div>{money(row.profitAmount)}</div><div>{money(row.exFactory)}</div><div>{money(row.mrp)}</div></Box>)}
+						{historyPager.pageItems.map((row) => <Box key={row.revisionId} sx={{ ...historyRowSx, ...(row.revisionId === currentRevisionId ? historyCurrentRowSx : {}) }}><div>R{row.revisionNo}</div><div>{row.status}</div><div>{money(row.directMaterial)}</div><div>{money(row.directLabour)}</div><div>{money(row.costPerProduct)}</div><div>{money(row.profitAmount)}</div><div>{money(row.exFactory)}</div><div>{money(row.mrp)}</div></Box>)}
 					</Box>
+					<BOMFlowPagination
+						page={historyPager.page}
+						pageCount={historyPager.pageCount}
+						pageSize={historyPager.pageSize}
+						total={historyPager.total}
+						from={historyPager.from}
+						to={historyPager.to}
+						onPageChange={historyPager.setPage}
+						onPageSizeChange={historyPager.setPageSize}
+						label="cost revisions"
+						pageSizeOptions={[5, 10, 20]}
+						compact
+					/>
 				</Box>
 			)}
 		</Card>
@@ -1720,7 +1809,15 @@ const variancePanelSx = { p: "11px", borderRadius: "9px", background: "rgba(2,6,
 const varianceTitleSx = { color: "#fff", fontSize: 12, fontWeight: 900, mb: "7px" };
 const varianceEmptySx = { color: "rgba(255,255,255,.46)", fontSize: 10.5, fontWeight: 650, py: "8px" };
 const varianceDriverSx = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", py: "8px", borderTop: "1px solid rgba(255,255,255,.05)", "&:first-of-type": { borderTop: 0 } };
-const historyScrollSx = { overflowX: "auto", borderRadius: "8px", border: "1px solid rgba(255,255,255,.06)" };
+const historyScrollSx = {
+	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	borderRadius: "8px",
+	border: "1px solid rgba(255,255,255,.06)",
+	pb: "3px",
+};
 const historyHeadSx = { minWidth: 920, display: "grid", gridTemplateColumns: "80px 130px repeat(6,minmax(120px,1fr))", px: "10px", py: "8px", background: "rgba(2,6,23,.45)", color: "rgba(255,255,255,.48)", fontSize: 9, fontWeight: 900, textTransform: "uppercase" };
 const historyRowSx = { minWidth: 920, display: "grid", gridTemplateColumns: "80px 130px repeat(6,minmax(120px,1fr))", px: "10px", py: "9px", color: "rgba(255,255,255,.72)", fontSize: 10.5, fontWeight: 750, borderTop: "1px solid rgba(255,255,255,.05)", "& > div:nth-of-type(n+3)": { fontFamily: "monospace" } };
 const historyCurrentRowSx = { background: "rgba(59,130,246,.10)", color: "#fff" };
@@ -1736,7 +1833,14 @@ const toolbarGridSx = { display: "grid", gridTemplateColumns: "minmax(260px,1fr)
 const applyCardSx = { ...panelSx, display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" };
 const selectorCardSx = { ...panelSx, display: "grid", gridTemplateColumns: "minmax(240px,1fr) minmax(220px,.75fr) auto auto", gap: "10px", alignItems: "center", "@media (max-width: 1050px)": { gridTemplateColumns: "1fr 1fr" }, "@media (max-width: 650px)": { gridTemplateColumns: "1fr" } };
 const tableCardSx = { borderRadius: "10px", background: "rgba(15,23,42,.78)", border: "1px solid rgba(255,255,255,.07)", overflow: "hidden" };
-const tableScrollSx = { overflowX: "auto" };
+const tableScrollSx = {
+	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehaviorX: "contain",
+	WebkitOverflowScrolling: "touch",
+	pb: "3px",
+};
 const rateHeadSx = { minWidth: 1350, display: "grid", gridTemplateColumns: "minmax(250px,1.5fr) 130px 200px 80px 120px 80px 170px 95px 180px", background: "rgba(2,6,23,.38)", color: "rgba(255,255,255,.50)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", "& > div": { padding: "12px 13px" } };
 const rateRowSx = { minWidth: 1350, display: "grid", gridTemplateColumns: "minmax(250px,1.5fr) 130px 200px 80px 120px 80px 170px 95px 180px", alignItems: "center", borderTop: "1px solid rgba(255,255,255,.06)", "& > p, & > div": { padding: "10px 13px" } };
 const labourHeadSx = { minWidth: 1300, display: "grid", gridTemplateColumns: "minmax(260px,1.5fr) 110px 130px 80px 120px 90px 170px 95px 180px", background: "rgba(2,6,23,.38)", color: "rgba(255,255,255,.50)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", "& > div": { padding: "12px 13px" } };
@@ -1790,7 +1894,13 @@ const reportCostGridSx = { display: "grid", gridTemplateColumns: "repeat(4,minma
 const reportCostCellSx = { p: "8px", border: "1px solid #e2e8f0", borderRadius: "5px" };
 const reportCostLabelSx = { color: "#64748b", fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".05em" };
 const reportCostValueSx = { color: "#0f172a", fontSize: 11, fontWeight: 900, mt: "3px" };
-const reportTableSx = { border: "1px solid #cbd5e1", borderRadius: "5px", overflow: "hidden" };
+const reportTableSx = {
+	border: "1px solid #cbd5e1",
+	borderRadius: "5px",
+	overflowX: "auto",
+	overflowY: "hidden",
+	scrollbarGutter: "stable",
+};
 const reportMaterialHeadSx = { display: "grid", gridTemplateColumns: "2fr .8fr .8fr .8fr .9fr", background: "#e2e8f0", fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", "& > div": { padding: "7px" } };
 const reportMaterialRowSx = { display: "grid", gridTemplateColumns: "2fr .8fr .8fr .8fr .9fr", fontSize: 9.5, borderTop: "1px solid #e2e8f0", "& > div": { padding: "7px" } };
 const reportLabourHeadSx = { display: "grid", gridTemplateColumns: ".8fr 1.6fr 1fr .8fr .9fr", background: "#e2e8f0", fontSize: 8.5, fontWeight: 900, textTransform: "uppercase", "& > div": { padding: "7px" } };

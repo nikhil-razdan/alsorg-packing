@@ -8,6 +8,7 @@ import {
 
 import {
 	Badge,
+	GlobalStyles,
 	Box,
 	Button,
 	Divider,
@@ -78,8 +79,10 @@ const navItems = [
 
 export default function BOMFlowLayout() {
 	return (
-		<div style={shell} className="bomflow-shell">
-			<BOMFlowSidebar />
+		<>
+			<GlobalStyles styles={bomFlowGlobalStyles} />
+			<div style={shell} className="bomflow-shell">
+				<BOMFlowSidebar />
 
 			<div style={main} className="bomflow-main">
 				<BOMFlowHeader />
@@ -89,8 +92,9 @@ export default function BOMFlowLayout() {
 						<Outlet />
 					</div>
 				</div>
+				</div>
 			</div>
-		</div>
+		</>
 	);
 }
 
@@ -756,6 +760,43 @@ function BOMFlowHeader() {
 	);
 }
 
+const bomFlowGlobalStyles = {
+	".bomflow-shell, .bomflow-shell *": {
+		scrollbarWidth: "thin",
+		scrollbarColor: "rgba(96,165,250,.52) rgba(2,6,23,.30)",
+	},
+	".bomflow-shell *::-webkit-scrollbar": {
+		width: "9px",
+		height: "9px",
+	},
+	".bomflow-shell *::-webkit-scrollbar-track": {
+		background: "rgba(2,6,23,.28)",
+		borderRadius: "999px",
+	},
+	".bomflow-shell *::-webkit-scrollbar-thumb": {
+		background:
+			"linear-gradient(180deg,rgba(96,165,250,.62),rgba(59,130,246,.42))",
+		borderRadius: "999px",
+		border: "2px solid rgba(2,6,23,.36)",
+		backgroundClip: "padding-box",
+	},
+	".bomflow-shell *::-webkit-scrollbar-thumb:hover": {
+		background:
+			"linear-gradient(180deg,rgba(125,211,252,.78),rgba(59,130,246,.62))",
+		backgroundClip: "padding-box",
+	},
+	".bomflow-shell *::-webkit-scrollbar-corner": {
+		background: "transparent",
+	},
+	".bomflow-content-shell": {
+		scrollBehavior: "smooth",
+	},
+	".bomflow-content-shell :focus-visible": {
+		outline: "2px solid rgba(96,165,250,.85)",
+		outlineOffset: "2px",
+	},
+};
+
 /* ===================== MAIN LAYOUT ===================== */
 
 const shell = {
@@ -777,6 +818,9 @@ const main = {
 const contentShell = {
 	flex: 1,
 	overflow: "auto",
+	overflowX: "hidden",
+	scrollbarGutter: "stable",
+	overscrollBehavior: "contain",
 	padding: 24,
 	background: `
 		radial-gradient(
