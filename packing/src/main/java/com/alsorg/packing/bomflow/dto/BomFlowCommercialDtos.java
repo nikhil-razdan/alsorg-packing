@@ -95,6 +95,8 @@ public final class BomFlowCommercialDtos {
 
     public record LabourLineRequest(
             UUID labourRateId,
+            String basis,
+            String unit,
             BigDecimal labourCount,
             BigDecimal workingHours,
             BigDecimal quantity,
@@ -221,6 +223,85 @@ public final class BomFlowCommercialDtos {
             CostingSettingsResponse settings,
             List<MaterialCostLineResponse> materialLines,
             List<LabourLineResponse> labourLines) {
+    }
+
+
+    public record RevisionCostPointResponse(
+            UUID revisionId,
+            Integer revisionNo,
+            String status,
+            BigDecimal directMaterial,
+            BigDecimal directLabour,
+            BigDecimal costPerProduct,
+            BigDecimal profitAmount,
+            BigDecimal exFactory,
+            BigDecimal mrp,
+            LocalDateTime updatedAt) {
+    }
+
+    public record MaterialVarianceResponse(
+            String key,
+            String itemName,
+            String section,
+            String unit,
+            BigDecimal previousQuantity,
+            BigDecimal currentQuantity,
+            BigDecimal previousRate,
+            BigDecimal currentRate,
+            BigDecimal previousAmount,
+            BigDecimal currentAmount,
+            BigDecimal deltaAmount,
+            BigDecimal deltaPercent,
+            String changeType) {
+    }
+
+    public record LabourVarianceResponse(
+            String key,
+            String department,
+            String processName,
+            String previousBasis,
+            String currentBasis,
+            BigDecimal previousLabourCount,
+            BigDecimal currentLabourCount,
+            BigDecimal previousWorkingHours,
+            BigDecimal currentWorkingHours,
+            BigDecimal previousQuantity,
+            BigDecimal currentQuantity,
+            BigDecimal previousRate,
+            BigDecimal currentRate,
+            BigDecimal previousAmount,
+            BigDecimal currentAmount,
+            BigDecimal deltaAmount,
+            BigDecimal deltaPercent,
+            String changeType) {
+    }
+
+    public record RevisionComparisonResponse(
+            UUID productId,
+            UUID currentRevisionId,
+            Integer currentRevisionNo,
+            String currentStatus,
+            UUID previousRevisionId,
+            Integer previousRevisionNo,
+            String previousStatus,
+            boolean hasPreviousRevision,
+            BigDecimal directMaterialDelta,
+            BigDecimal directLabourDelta,
+            BigDecimal directCostDelta,
+            BigDecimal costPerProductDelta,
+            BigDecimal costPerProductDeltaPercent,
+            BigDecimal configuredProfitDelta,
+            BigDecimal exFactoryDelta,
+            BigDecimal mrpDelta,
+            BigDecimal mrpDeltaPercent,
+            BigDecimal profitAtPreviousExFactory,
+            BigDecimal profitImpactAtPreviousPrice,
+            BigDecimal marginAtPreviousPricePercent,
+            BigDecimal requiredExFactoryIncrease,
+            String overallDirection,
+            List<MaterialVarianceResponse> materialChanges,
+            List<LabourVarianceResponse> labourChanges,
+            List<RevisionCostPointResponse> history) {
     }
 
     public record RateApplyResponse(

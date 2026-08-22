@@ -29,7 +29,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -721,6 +723,125 @@ public class BomFlowCommercialService {
                 labour);
     }
 
+    @Transactional(readOnly = true)
+    public RevisionComparisonResponse getRevisionComparison(
+            UUID revisionId,
+            UUID compareToRevisionId) {
+
+        access.requireBomFlowAccess();
+        requireId(revisionId, "Revision ID");
+
+        RevisionContext currentContext = revisionContext(revisionId);
+        CostingSummaryResponse current = getCosting(revisionId);
+
+        UUID previousRevisionId = compareToRevisionId;
+
+        if (previousRevisionId != null) {
+            if (previousRevisionId.equals(revisionId)) {
+                throw badRequest("Choose a different revision to compare.");
+            }
+
+            RevisionContext selectedPrevious = revisionContext(previousRevisionId);
+
+            if (!Objects.equals(
+                    currentContext.productId(),
+                    selectedPrevious.productId())) {
+                throw badRequest("Revisions can only be compared within the same product.");
+            }
+        } else {
+            previousRevisionId = findPreviousRevisionId(currentContext);
+        }
+
+        List<RevisionCostPointResponse> history = revisionHistory(
+                currentContext.productId());
+
+        if (previousRevisionId == null) {
+            return new RevisionComparisonResponse(
+                    currentContext.productId(),
+                    current.revisionId(),
+                    current.revisionNo(),
+                    current.revisionStatus(),
+                    null,
+                    null,
+                    null,
+                    false,
+                    money(ZERO),
+                    money(ZERO),
+                    money(ZERO),
+                    money(ZERO),
+                    null,
+                    money(ZERO),
+                    money(ZERO),
+                    money(ZERO),
+                    null,
+                    money(ZERO),
+                    money(ZERO),
+                    null,
+                    money(ZERO),
+                    "BASELINE",
+                    List.of(),
+                    List.of(),
+                    history);
+        }
+
+        CostingSummaryResponse previous = getCosting(previousRevisionId);
+
+        BigDecimal materialDelta = money(
+                current.directMaterial().subtract(previous.directMaterial()));
+        BigDecimal labourDelta = money(
+                current.directLabour().subtract(previous.directLabour()));
+        BigDecimal directCostDelta = money(
+                current.directCost().subtract(previous.directCost()));
+        BigDecimal costPerProductDelta = money(
+                current.costPerProduct().subtract(previous.costPerProduct()));
+        BigDecimal configuredProfitDelta = money(
+                current.profitAmount().subtract(previous.profitAmount()));
+        BigDecimal exFactoryDelta = money(
+                current.exFactory().subtract(previous.exFactory()));
+        BigDecimal mrpDelta = money(
+                current.mrp().subtract(previous.mrp()));
+
+        BigDecimal profitAtPreviousExFactory = money(
+                previous.exFactory().subtract(current.costPerProduct()));
+        BigDecimal profitImpactAtPreviousPrice = money(
+                profitAtPreviousExFactory.subtract(previous.profitAmount()));
+        BigDecimal requiredExFactoryIncrease = money(
+                current.exFactory().subtract(previous.exFactory()));
+
+        String direction = costPerProductDelta.compareTo(ZERO) > 0
+                ? "INCREASE"
+                : costPerProductDelta.compareTo(ZERO) < 0
+                        ? "DECREASE"
+                        : "UNCHANGED";
+
+        return new RevisionComparisonResponse(
+                currentContext.productId(),
+                current.revisionId(),
+                current.revisionNo(),
+                current.revisionStatus(),
+                previous.revisionId(),
+                previous.revisionNo(),
+                previous.revisionStatus(),
+                true,
+                materialDelta,
+                labourDelta,
+                directCostDelta,
+                costPerProductDelta,
+                percentChange(costPerProductDelta, previous.costPerProduct()),
+                configuredProfitDelta,
+                exFactoryDelta,
+                mrpDelta,
+                percentChange(mrpDelta, previous.mrp()),
+                profitAtPreviousExFactory,
+                profitImpactAtPreviousPrice,
+                marginPercent(profitAtPreviousExFactory, previous.exFactory()),
+                requiredExFactoryIncrease,
+                direction,
+                compareMaterials(previous.materialLines(), current.materialLines()),
+                compareLabour(previous.labourLines(), current.labourLines()),
+                history);
+    }
+
     public CostingSettingsResponse saveCostingSettings(
             UUID revisionId,
             CostingSettingsRequest request) {
@@ -1001,11 +1122,13 @@ public class BomFlowCommercialService {
             throw badRequest("Selected Labour Master process is inactive.");
         }
 
+        String basis = labourBasis(firstText(request.basis(), master.basis()));
+        String unit = upper(firstText(request.unit(), defaultUnitForBasis(basis, master.unit())));
         BigDecimal labourCount = nonNegative(defaultValue(request.labourCount(), master.defaultLabourCount()), "Labour count");
         BigDecimal hours = nonNegative(defaultValue(request.workingHours(), master.defaultWorkingHours()), "Working hours");
         BigDecimal quantity = nonNegative(defaultZero(request.quantity()), "Quantity");
         BigDecimal rate = nonNegative(request.rate() == null ? master.rate() : request.rate(), "Labour rate");
-        BigDecimal amount = labourAmount(master.basis(), labourCount, hours, quantity, rate);
+        BigDecimal amount = labourAmount(basis, labourCount, hours, quantity, rate);
 
         UUID id = UUID.randomUUID();
         String actor = access.currentUsername();
@@ -1024,8 +1147,8 @@ public class BomFlowCommercialService {
                 master.department(),
                 master.processCode(),
                 master.processName(),
-                master.basis(),
-                master.unit(),
+                basis,
+                unit,
                 labourCount,
                 hours,
                 quantity,
@@ -1059,11 +1182,19 @@ public class BomFlowCommercialService {
                 ? getLabourRate(old.labourRateId())
                 : getLabourRate(request.labourRateId());
 
+        String basis = labourBasis(firstText(
+                request.basis(),
+                request.labourRateId() != null ? master.basis() : old.basis()));
+        String unit = upper(firstText(
+                request.unit(),
+                request.labourRateId() != null
+                        ? defaultUnitForBasis(basis, master.unit())
+                        : defaultUnitForBasis(basis, old.unit())));
         BigDecimal labourCount = nonNegative(defaultValue(request.labourCount(), old.labourCount()), "Labour count");
         BigDecimal hours = nonNegative(defaultValue(request.workingHours(), old.workingHours()), "Working hours");
         BigDecimal quantity = nonNegative(defaultValue(request.quantity(), old.quantity()), "Quantity");
         BigDecimal rate = nonNegative(defaultValue(request.rate(), old.rate()), "Labour rate");
-        BigDecimal amount = labourAmount(master.basis(), labourCount, hours, quantity, rate);
+        BigDecimal amount = labourAmount(basis, labourCount, hours, quantity, rate);
         String actor = access.currentUsername();
 
         int changed = jdbc.update("""
@@ -1078,8 +1209,8 @@ public class BomFlowCommercialService {
                 master.department(),
                 master.processCode(),
                 master.processName(),
-                master.basis(),
-                master.unit(),
+                basis,
+                unit,
                 labourCount,
                 hours,
                 quantity,
@@ -1096,8 +1227,8 @@ public class BomFlowCommercialService {
         }
 
         audit("REVISION_LABOUR", lineId, revisionId, "UPDATE",
-                old.processName() + "=" + old.amount(),
-                master.processName() + "=" + amount,
+                old.processName() + "|basis=" + old.basis() + "|amount=" + old.amount(),
+                master.processName() + "|basis=" + basis + "|amount=" + amount,
                 actor);
 
         return getLabourLine(lineId, revisionId);
@@ -1799,6 +1930,320 @@ public class BomFlowCommercialService {
         };
     }
 
+    private UUID findPreviousRevisionId(
+            RevisionContext current) {
+
+        try {
+            return jdbc.queryForObject("""
+                    SELECT id
+                    FROM bom_flow_revisions
+                    WHERE bom_id = ?
+                      AND revision_no < ?
+                    ORDER BY revision_no DESC
+                    LIMIT 1
+                    """,
+                    UUID.class,
+                    current.productId(),
+                    current.revisionNo());
+        } catch (EmptyResultDataAccessException ex) {
+            return null;
+        }
+    }
+
+    private List<RevisionCostPointResponse> revisionHistory(
+            UUID productId) {
+
+        List<RevisionHistorySeed> seeds = jdbc.query("""
+                SELECT id, revision_no, status, updated_at
+                FROM bom_flow_revisions
+                WHERE bom_id = ?
+                ORDER BY revision_no ASC
+                """,
+                (rs, rowNum) -> new RevisionHistorySeed(
+                        uuid(rs, "id"),
+                        rs.getInt("revision_no"),
+                        rs.getString("status"),
+                        localDateTime(rs, "updated_at")),
+                productId);
+
+        List<RevisionCostPointResponse> result = new ArrayList<>();
+
+        for (RevisionHistorySeed seed : seeds) {
+            CostingSummaryResponse costing = getCosting(seed.revisionId());
+            result.add(new RevisionCostPointResponse(
+                    seed.revisionId(),
+                    seed.revisionNo(),
+                    seed.status(),
+                    costing.directMaterial(),
+                    costing.directLabour(),
+                    costing.costPerProduct(),
+                    costing.profitAmount(),
+                    costing.exFactory(),
+                    costing.mrp(),
+                    seed.updatedAt()));
+        }
+
+        return result;
+    }
+
+    private List<MaterialVarianceResponse> compareMaterials(
+            List<MaterialCostLineResponse> previous,
+            List<MaterialCostLineResponse> current) {
+
+        Map<String, MaterialAggregate> oldMap = aggregateMaterials(previous);
+        Map<String, MaterialAggregate> newMap = aggregateMaterials(current);
+        Map<String, Boolean> keys = new LinkedHashMap<>();
+        oldMap.keySet().forEach(key -> keys.put(key, true));
+        newMap.keySet().forEach(key -> keys.put(key, true));
+
+        List<MaterialVarianceResponse> result = new ArrayList<>();
+
+        for (String key : keys.keySet()) {
+            MaterialAggregate oldValue = oldMap.get(key);
+            MaterialAggregate newValue = newMap.get(key);
+
+            BigDecimal oldQty = oldValue == null ? ZERO : oldValue.quantity();
+            BigDecimal newQty = newValue == null ? ZERO : newValue.quantity();
+            BigDecimal oldRate = oldValue == null ? ZERO : oldValue.rate();
+            BigDecimal newRate = newValue == null ? ZERO : newValue.rate();
+            BigDecimal oldAmount = oldValue == null ? ZERO : oldValue.amount();
+            BigDecimal newAmount = newValue == null ? ZERO : newValue.amount();
+            BigDecimal delta = money(newAmount.subtract(oldAmount));
+
+            String changeType = oldValue == null
+                    ? "ADDED"
+                    : newValue == null
+                            ? "REMOVED"
+                            : delta.compareTo(ZERO) != 0
+                                    || oldQty.compareTo(newQty) != 0
+                                    || oldRate.compareTo(newRate) != 0
+                                            ? "CHANGED"
+                                            : "UNCHANGED";
+
+            if ("UNCHANGED".equals(changeType)) {
+                continue;
+            }
+
+            MaterialAggregate display = newValue != null ? newValue : oldValue;
+
+            result.add(new MaterialVarianceResponse(
+                    key,
+                    display.itemName(),
+                    display.section(),
+                    display.unit(),
+                    amount4(oldQty),
+                    amount4(newQty),
+                    amount4(oldRate),
+                    amount4(newRate),
+                    money(oldAmount),
+                    money(newAmount),
+                    delta,
+                    percentChange(delta, oldAmount),
+                    changeType));
+        }
+
+        result.sort((a, b) -> b.deltaAmount().abs().compareTo(a.deltaAmount().abs()));
+        return result;
+    }
+
+    private Map<String, MaterialAggregate> aggregateMaterials(
+            List<MaterialCostLineResponse> lines) {
+
+        Map<String, MaterialAggregate> result = new LinkedHashMap<>();
+
+        if (lines == null) {
+            return result;
+        }
+
+        for (MaterialCostLineResponse line : lines) {
+            String key = normalize(line.section()) + "|"
+                    + normalize(line.itemName()) + "|"
+                    + normalize(line.unit());
+
+            MaterialAggregate current = result.get(key);
+            BigDecimal qty = defaultZero(line.quantity());
+            BigDecimal material = defaultZero(line.materialAmount());
+            BigDecimal amount = defaultZero(line.totalAmount());
+
+            if (current == null) {
+                result.put(key, new MaterialAggregate(
+                        line.itemName(),
+                        line.section(),
+                        line.unit(),
+                        qty,
+                        material,
+                        amount));
+            } else {
+                result.put(key, new MaterialAggregate(
+                        current.itemName(),
+                        current.section(),
+                        current.unit(),
+                        current.quantity().add(qty),
+                        current.materialAmount().add(material),
+                        current.amount().add(amount)));
+            }
+        }
+
+        return result;
+    }
+
+    private List<LabourVarianceResponse> compareLabour(
+            List<LabourLineResponse> previous,
+            List<LabourLineResponse> current) {
+
+        Map<String, LabourAggregate> oldMap = aggregateLabour(previous);
+        Map<String, LabourAggregate> newMap = aggregateLabour(current);
+        Map<String, Boolean> keys = new LinkedHashMap<>();
+        oldMap.keySet().forEach(key -> keys.put(key, true));
+        newMap.keySet().forEach(key -> keys.put(key, true));
+
+        List<LabourVarianceResponse> result = new ArrayList<>();
+
+        for (String key : keys.keySet()) {
+            LabourAggregate oldValue = oldMap.get(key);
+            LabourAggregate newValue = newMap.get(key);
+            LabourAggregate display = newValue != null ? newValue : oldValue;
+
+            BigDecimal oldAmount = oldValue == null ? ZERO : oldValue.amount();
+            BigDecimal newAmount = newValue == null ? ZERO : newValue.amount();
+            BigDecimal delta = money(newAmount.subtract(oldAmount));
+
+            String changeType = oldValue == null
+                    ? "ADDED"
+                    : newValue == null
+                            ? "REMOVED"
+                            : delta.compareTo(ZERO) != 0
+                                    || !Objects.equals(oldValue.basis(), newValue.basis())
+                                    || oldValue.quantity().compareTo(newValue.quantity()) != 0
+                                    || oldValue.workingHours().compareTo(newValue.workingHours()) != 0
+                                    || oldValue.rate().compareTo(newValue.rate()) != 0
+                                            ? "CHANGED"
+                                            : "UNCHANGED";
+
+            if ("UNCHANGED".equals(changeType)) {
+                continue;
+            }
+
+            result.add(new LabourVarianceResponse(
+                    key,
+                    display.department(),
+                    display.processName(),
+                    oldValue == null ? null : oldValue.basis(),
+                    newValue == null ? null : newValue.basis(),
+                    oldValue == null ? ZERO : amount4(oldValue.labourCount()),
+                    newValue == null ? ZERO : amount4(newValue.labourCount()),
+                    oldValue == null ? ZERO : amount4(oldValue.workingHours()),
+                    newValue == null ? ZERO : amount4(newValue.workingHours()),
+                    oldValue == null ? ZERO : amount4(oldValue.quantity()),
+                    newValue == null ? ZERO : amount4(newValue.quantity()),
+                    oldValue == null ? ZERO : amount4(oldValue.rate()),
+                    newValue == null ? ZERO : amount4(newValue.rate()),
+                    money(oldAmount),
+                    money(newAmount),
+                    delta,
+                    percentChange(delta, oldAmount),
+                    changeType));
+        }
+
+        result.sort((a, b) -> b.deltaAmount().abs().compareTo(a.deltaAmount().abs()));
+        return result;
+    }
+
+    private Map<String, LabourAggregate> aggregateLabour(
+            List<LabourLineResponse> lines) {
+
+        Map<String, LabourAggregate> result = new LinkedHashMap<>();
+
+        if (lines == null) {
+            return result;
+        }
+
+        for (LabourLineResponse line : lines) {
+            String key = normalize(line.department()) + "|" + normalize(line.processName());
+            LabourAggregate current = result.get(key);
+
+            if (current == null) {
+                result.put(key, new LabourAggregate(
+                        line.department(),
+                        line.processName(),
+                        line.basis(),
+                        defaultZero(line.labourCount()),
+                        defaultZero(line.workingHours()),
+                        defaultZero(line.quantity()),
+                        defaultZero(line.rate()),
+                        defaultZero(line.amount())));
+            } else {
+                result.put(key, new LabourAggregate(
+                        current.department(),
+                        current.processName(),
+                        line.basis(),
+                        current.labourCount().add(defaultZero(line.labourCount())),
+                        current.workingHours().add(defaultZero(line.workingHours())),
+                        current.quantity().add(defaultZero(line.quantity())),
+                        defaultZero(line.rate()),
+                        current.amount().add(defaultZero(line.amount()))));
+            }
+        }
+
+        return result;
+    }
+
+    private BigDecimal percentChange(
+            BigDecimal delta,
+            BigDecimal previousValue) {
+
+        BigDecimal previous = defaultZero(previousValue);
+
+        if (previous.compareTo(ZERO) == 0) {
+            return defaultZero(delta).compareTo(ZERO) == 0
+                    ? BigDecimal.ZERO.setScale(2)
+                    : null;
+        }
+
+        return defaultZero(delta)
+                .multiply(ONE_HUNDRED)
+                .divide(previous.abs(), 4, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal marginPercent(
+            BigDecimal profit,
+            BigDecimal sellingPrice) {
+
+        BigDecimal price = defaultZero(sellingPrice);
+
+        if (price.compareTo(ZERO) == 0) {
+            return null;
+        }
+
+        return defaultZero(profit)
+                .multiply(ONE_HUNDRED)
+                .divide(price, 4, RoundingMode.HALF_UP)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String firstText(
+            String first,
+            String second) {
+        String value = clean(first);
+        return value == null ? clean(second) : value;
+    }
+
+    private String defaultUnitForBasis(
+            String basis,
+            String fallback) {
+        return switch (labourBasis(basis)) {
+            case "PER_HOUR" -> "HOUR";
+            case "PER_ITEM" -> "NOS";
+            case "PER_SQFT" -> "SQFT";
+            case "PER_SQIN" -> "SQIN";
+            case "PER_METER" -> "METER";
+            case "PER_KG" -> "KG";
+            case "FIXED" -> defaultText(fallback, "JOB");
+            default -> defaultText(fallback, "UNIT");
+        };
+    }
+
     private void validateMaterialRate(MaterialRateRequest request) {
         if (request == null) throw badRequest("Material rate request is required.");
         required(request.category(), "Category");
@@ -2246,5 +2691,38 @@ public class BomFlowCommercialService {
             String unit,
             BigDecimal quantity,
             BigDecimal processingAmount) {
+    }
+
+    private record RevisionHistorySeed(
+            UUID revisionId,
+            Integer revisionNo,
+            String status,
+            LocalDateTime updatedAt) {
+    }
+
+    private record MaterialAggregate(
+            String itemName,
+            String section,
+            String unit,
+            BigDecimal quantity,
+            BigDecimal materialAmount,
+            BigDecimal amount) {
+
+        BigDecimal rate() {
+            return quantity == null || quantity.compareTo(ZERO) == 0
+                    ? ZERO
+                    : materialAmount.divide(quantity, 4, RoundingMode.HALF_UP);
+        }
+    }
+
+    private record LabourAggregate(
+            String department,
+            String processName,
+            String basis,
+            BigDecimal labourCount,
+            BigDecimal workingHours,
+            BigDecimal quantity,
+            BigDecimal rate,
+            BigDecimal amount) {
     }
 }

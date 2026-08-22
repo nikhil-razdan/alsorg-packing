@@ -144,6 +144,13 @@ public class BomFlowCommercialController {
         return service.saveCostingSettings(revisionId, request);
     }
 
+    @GetMapping("/costing/{revisionId}/revision-intelligence")
+    public RevisionComparisonResponse revisionIntelligence(
+            @PathVariable UUID revisionId,
+            @RequestParam(required = false) UUID compareToRevisionId) {
+        return service.getRevisionComparison(revisionId, compareToRevisionId);
+    }
+
     @PostMapping("/costing/{revisionId}/labour-lines/sync")
     public LabourSyncResponse syncLabourMaster(
             @PathVariable UUID revisionId) {

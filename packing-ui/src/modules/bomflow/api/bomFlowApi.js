@@ -413,6 +413,19 @@ export const bomFlowApi = {
 		return unwrap(response);
 	},
 
+	async getRevisionIntelligence(revisionId, compareToRevisionId = null) {
+		requireId(revisionId, "Revision ID");
+		const response = await API.get(
+			`${ENDPOINTS.commercial}/costing/${revisionId}/revision-intelligence`,
+			{
+				params: compareToRevisionId
+					? { compareToRevisionId }
+					: {},
+			}
+		);
+		return unwrap(response);
+	},
+
 	async syncCostingLabourMaster(revisionId) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.post(

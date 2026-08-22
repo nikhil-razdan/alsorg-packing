@@ -17,6 +17,7 @@ import com.alsorg.packing.bomflow.repository.BomFlowRevisionRepository;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,17 +42,20 @@ public class BomFlowProductService {
     private final BomFlowRevisionRepository revisionRepository;
     private final BomFlowAccessService access;
     private final BomFlowMapper mapper;
+    private final JdbcTemplate jdbc;
 
     public BomFlowProductService(
             BomFlowProductRepository productRepository,
             BomFlowRevisionRepository revisionRepository,
             BomFlowAccessService access,
-            BomFlowMapper mapper) {
+            BomFlowMapper mapper,
+            JdbcTemplate jdbc) {
 
         this.productRepository = productRepository;
         this.revisionRepository = revisionRepository;
         this.access = access;
         this.mapper = mapper;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -200,10 +204,13 @@ public class BomFlowProductService {
             return mapper.toRevisionSummary(existingOpen);
         }
 
-        int nextRevisionNo = revisionRepository
+        BomFlowRevision sourceRevision = revisionRepository
                 .findTopByProductIdOrderByRevisionNoDesc(productId)
-                .map(item -> item.revisionNo + 1)
-                .orElse(1);
+                .orElse(null);
+
+        int nextRevisionNo = sourceRevision == null
+                ? 1
+                : sourceRevision.revisionNo + 1;
 
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
@@ -225,12 +232,127 @@ public class BomFlowProductService {
         revision = revisionRepository
                 .saveAndFlush(revision);
 
+        if (sourceRevision != null) {
+            cloneRevisionSnapshot(
+                    sourceRevision.id,
+                    revision.id,
+                    actor,
+                    now);
+        }
+
         product.currentRevisionNo = nextRevisionNo;
         product.updatedBy = actor;
         product.updatedAt = now;
         productRepository.saveAndFlush(product);
 
         return mapper.toRevisionSummary(revision);
+    }
+
+    /**
+     * A new BOM revision is a cost snapshot/version, not an empty costing file.
+     * Copy the previous revision's material structure, labour inputs and costing
+     * settings so the user changes only what actually changed. The older
+     * revision remains untouched and becomes the comparison baseline.
+     */
+    private void cloneRevisionSnapshot(
+            UUID sourceRevisionId,
+            UUID targetRevisionId,
+            String actor,
+            LocalDateTime now) {
+
+        jdbc.update("""
+                INSERT INTO bom_flow_items (
+                    id, revision_id, line_no, section_name, category, sub_category,
+                    inventory_item_id, item_code, item_name, item_description,
+                    specification, grade, brand, vendor_name, finish, colour,
+                    thickness, material_size, length_value, width_value, height_value,
+                    base_qty, wastage_percent, required_qty, unit, unit_rate,
+                    material_amount, processing_amount, total_amount, gst_percent,
+                    store_issue_required, active, remarks,
+                    rate_master_id, rate_applied_by, rate_applied_at,
+                    created_by, created_at, updated_by, updated_at, row_version
+                )
+                SELECT
+                    gen_random_uuid(), ?, line_no, section_name, category, sub_category,
+                    inventory_item_id, item_code, item_name, item_description,
+                    specification, grade, brand, vendor_name, finish, colour,
+                    thickness, material_size, length_value, width_value, height_value,
+                    base_qty, wastage_percent, required_qty, unit, unit_rate,
+                    material_amount, processing_amount, total_amount, gst_percent,
+                    store_issue_required, active, remarks,
+                    rate_master_id, rate_applied_by, rate_applied_at,
+                    ?, ?, ?, ?, 0
+                FROM bom_flow_items
+                WHERE revision_id = ?
+                ORDER BY line_no
+                """,
+                targetRevisionId,
+                actor,
+                now,
+                actor,
+                now,
+                sourceRevisionId);
+
+        jdbc.update("""
+                INSERT INTO bom_flow_revision_labour (
+                    id, revision_id, labour_rate_id, department, process_code,
+                    process_name, basis, unit, labour_count, working_hours, quantity,
+                    rate, amount, remarks, created_by, created_at, updated_by,
+                    updated_at, row_version
+                )
+                SELECT
+                    gen_random_uuid(), ?, labour_rate_id, department, process_code,
+                    process_name, basis, unit, labour_count, working_hours, quantity,
+                    rate, amount, remarks, ?, ?, ?, ?, 0
+                FROM bom_flow_revision_labour
+                WHERE revision_id = ?
+                ORDER BY created_at, process_name
+                """,
+                targetRevisionId,
+                actor,
+                now,
+                actor,
+                now,
+                sourceRevisionId);
+
+        jdbc.update("""
+                INSERT INTO bom_flow_costing_settings (
+                    id, revision_id, markup_percent, factory_fixed_overhead_percent,
+                    factory_variable_overhead_percent, admin_overhead_percent,
+                    selling_overhead_percent, profit_percent, franchise_percent,
+                    gst_percent, round_off, created_by, created_at, updated_by,
+                    updated_at, row_version
+                )
+                SELECT
+                    gen_random_uuid(), ?, markup_percent, factory_fixed_overhead_percent,
+                    factory_variable_overhead_percent, admin_overhead_percent,
+                    selling_overhead_percent, profit_percent, franchise_percent,
+                    gst_percent, round_off, ?, ?, ?, ?, 0
+                FROM bom_flow_costing_settings
+                WHERE revision_id = ?
+                """,
+                targetRevisionId,
+                actor,
+                now,
+                actor,
+                now,
+                sourceRevisionId);
+
+        jdbc.update("""
+                INSERT INTO bom_flow_master_audit_logs (
+                    id, entity_type, entity_id, revision_id, action,
+                    old_value, new_value, changed_by, changed_at
+                ) VALUES (?,?,?,?,?,?,?,?,?)
+                """,
+                UUID.randomUUID(),
+                "REVISION",
+                targetRevisionId,
+                targetRevisionId,
+                "REVISION_SNAPSHOT_CLONED",
+                "sourceRevisionId=" + sourceRevisionId,
+                "targetRevisionId=" + targetRevisionId,
+                actor,
+                now);
     }
 
     private void applyProductRequest(

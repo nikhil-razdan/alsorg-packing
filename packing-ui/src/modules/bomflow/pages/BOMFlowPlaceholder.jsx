@@ -44,6 +44,11 @@ import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import CompareArrowsOutlinedIcon from "@mui/icons-material/CompareArrowsOutlined";
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
+import TrendingDownOutlinedIcon from "@mui/icons-material/TrendingDownOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 
 import bomFlowApi from "../api/bomFlowApi.js";
 
@@ -85,6 +90,8 @@ const LABOUR_RATE_EMPTY = {
 
 const LABOUR_LINE_EMPTY = {
 	labourRateId: "",
+	basis: "PER_HOUR",
+	unit: "HOUR",
 	labourCount: "1",
 	workingHours: "",
 	quantity: "",
@@ -152,6 +159,32 @@ const decimal = (value, digits = 3) =>
 	Number(value || 0).toLocaleString("en-IN", {
 		maximumFractionDigits: digits,
 	});
+
+const signedMoney = (value) => {
+	const number = Number(value || 0);
+	const prefix = number > 0 ? "+" : number < 0 ? "−" : "";
+	return `${prefix}${money(Math.abs(number))}`;
+};
+
+const signedPercent = (value) => {
+	if (value === null || value === undefined) return "New baseline";
+	const number = Number(value || 0);
+	const prefix = number > 0 ? "+" : number < 0 ? "−" : "";
+	return `${prefix}${Math.abs(number).toFixed(2)}%`;
+};
+
+const labourBasisUnit = (basis, fallback = "UNIT") => {
+	const map = {
+		PER_HOUR: "HOUR",
+		PER_ITEM: "NOS",
+		PER_SQFT: "SQFT",
+		PER_SQIN: "SQIN",
+		PER_METER: "METER",
+		PER_KG: "KG",
+		FIXED: fallback || "JOB",
+	};
+	return map[String(basis || "").toUpperCase()] || fallback || "UNIT";
+};
 
 const formatDate = (value) => {
 	if (!value) return "-";
@@ -810,6 +843,8 @@ function CostingEngine() {
 	const [productId, setProductId] = useState(searchParams.get("productId") || "");
 	const [revisionId, setRevisionId] = useState(searchParams.get("revisionId") || "");
 	const [costing, setCosting] = useState(null);
+	const [intelligence, setIntelligence] = useState(null);
+	const [compareRevisionId, setCompareRevisionId] = useState("");
 	const [labourRates, setLabourRates] = useState([]);
 	const [settings, setSettings] = useState(null);
 	const [loading, setLoading] = useState(true);
@@ -860,14 +895,23 @@ function CostingEngine() {
 		}
 	};
 
-	const loadCosting = async (id) => {
+	const loadCosting = async (id, compareId = null) => {
 		if (!id) {
 			setCosting(null);
 			setSettings(null);
+			setIntelligence(null);
+			setCompareRevisionId("");
 			return;
 		}
-		const data = await bomFlowApi.getCosting(id);
+
+		const [data, revisionIntel] = await Promise.all([
+			bomFlowApi.getCosting(id),
+			bomFlowApi.getRevisionIntelligence(id, compareId),
+		]);
+
 		setCosting(data);
+		setIntelligence(revisionIntel);
+		setCompareRevisionId(revisionIntel?.previousRevisionId || "");
 		setSettings({
 			markupPercent: String(data?.settings?.markupPercent ?? 5),
 			factoryFixedOverheadPercent: String(data?.settings?.factoryFixedOverheadPercent ?? 40),
@@ -886,6 +930,8 @@ function CostingEngine() {
 		setProductId(id);
 		setRevisionId("");
 		setCosting(null);
+		setIntelligence(null);
+		setCompareRevisionId("");
 		setError("");
 		if (!id) {
 			setRevisions([]);
@@ -904,8 +950,10 @@ function CostingEngine() {
 
 	const selectRevision = async (id) => {
 		setRevisionId(id);
+		setCompareRevisionId("");
 		if (!id) {
 			setCosting(null);
+			setIntelligence(null);
 			return;
 		}
 		setSearchParams({ productId, revisionId: id });
@@ -915,6 +963,49 @@ function CostingEngine() {
 			await loadCosting(id);
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to load costing."));
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const selectComparison = async (id) => {
+		if (!revisionId) return;
+		setCompareRevisionId(id);
+		setWorking(true);
+		setError("");
+		try {
+			const data = await bomFlowApi.getRevisionIntelligence(revisionId, id || null);
+			setIntelligence(data);
+			setCompareRevisionId(data?.previousRevisionId || "");
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to compare revisions."));
+		} finally {
+			setWorking(false);
+		}
+	};
+
+	const refreshCurrent = async () => {
+		if (!revisionId) return;
+		await loadCosting(revisionId, compareRevisionId || null);
+	};
+
+	const createCostRevision = async () => {
+		if (!productId || !costing?.revisionId || !canEdit) return;
+		setWorking(true);
+		setError("");
+		setMessage("");
+		try {
+			const revision = await bomFlowApi.createRevision(productId, {
+				remarks: "Cost revision created from the latest product cost snapshot",
+			});
+			if (!revision?.id) throw new Error("New revision ID was not returned.");
+			await loadRevisions(productId, revision.id);
+			setRevisionId(revision.id);
+			setSearchParams({ productId, revisionId: revision.id });
+			await loadCosting(revision.id);
+			setMessage(`R${revision.revisionNo || revision.revisionNumber || "new"} created from the latest product cost snapshot. Change only the material, labour or commercial assumptions that actually changed.`);
+		} catch (requestError) {
+			setError(cleanError(requestError, "Unable to create cost revision."));
 		} finally {
 			setWorking(false);
 		}
@@ -936,8 +1027,8 @@ function CostingEngine() {
 				franchisePercent: Number(settings.franchisePercent || 0),
 				gstPercent: Number(settings.gstPercent || 0),
 			});
-			setMessage("Costing settings saved and recalculated.");
-			await loadCosting(revisionId);
+			setMessage("Costing settings saved. Revision variance has been recalculated.");
+			await refreshCurrent();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to save costing settings."));
 		} finally {
@@ -952,7 +1043,7 @@ function CostingEngine() {
 		try {
 			const result = await bomFlowApi.applyMaterialRates(revisionId);
 			setMessage(result?.message || "Rate Master applied.");
-			await loadCosting(revisionId);
+			await refreshCurrent();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to apply material rates."));
 		} finally {
@@ -962,15 +1053,18 @@ function CostingEngine() {
 
 	const selectLabourMaster = (rateId) => {
 		const master = labourRates.find((item) => item.id === rateId);
+		const basis = master?.basis || "PER_HOUR";
 		setLabourDialog((prev) => ({
 			...prev,
 			form: {
 				...prev.form,
 				labourRateId: rateId,
+				basis,
+				unit: master?.unit || labourBasisUnit(basis),
 				labourCount: String(master?.defaultLabourCount ?? 1),
 				rate: String(master?.rate ?? ""),
-				workingHours: master?.basis === "PER_HOUR" ? String(master?.defaultWorkingHours ?? prev.form.workingHours ?? "") : "",
-				quantity: master?.basis === "PER_HOUR" || master?.basis === "FIXED" ? "" : prev.form.quantity,
+				workingHours: String(master?.defaultWorkingHours ?? ""),
+				quantity: prev.form.quantity || (basis === "PER_ITEM" ? "1" : ""),
 			},
 		}));
 	};
@@ -983,7 +1077,7 @@ function CostingEngine() {
 		try {
 			const result = await bomFlowApi.syncCostingLabourMaster(revisionId);
 			setMessage(result?.message || "Labour Master synchronized.");
-			await loadCosting(revisionId);
+			await refreshCurrent();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to sync Labour Master."));
 		} finally {
@@ -1001,6 +1095,8 @@ function CostingEngine() {
 			editing: line,
 			form: {
 				labourRateId: line?.labourRateId || "",
+				basis: line?.basis || "PER_HOUR",
+				unit: line?.unit || labourBasisUnit(line?.basis),
 				labourCount: String(line?.labourCount ?? ""),
 				workingHours: String(line?.workingHours ?? ""),
 				quantity: String(line?.quantity ?? ""),
@@ -1017,12 +1113,18 @@ function CostingEngine() {
 			setError("Select a Labour Master process.");
 			return;
 		}
+		if (!form.basis) {
+			setError("Select a labour costing basis.");
+			return;
+		}
 		setWorking(true);
 		setError("");
 		setMessage("");
 		try {
 			const payload = {
 				labourRateId: form.labourRateId,
+				basis: form.basis,
+				unit: String(form.unit || labourBasisUnit(form.basis)).trim().toUpperCase(),
 				labourCount: Number(form.labourCount || 0),
 				workingHours: Number(form.workingHours || 0),
 				quantity: Number(form.quantity || 0),
@@ -1032,19 +1134,15 @@ function CostingEngine() {
 			};
 
 			if (labourDialog.editing?.id) {
-				await bomFlowApi.updateCostingLabourLine(
-					revisionId,
-					labourDialog.editing.id,
-					payload
-				);
-				setMessage("Labour process updated and costing recalculated.");
+				await bomFlowApi.updateCostingLabourLine(revisionId, labourDialog.editing.id, payload);
+				setMessage("Labour process updated. Cost and revision variance recalculated.");
 			} else {
 				await bomFlowApi.addCostingLabourLine(revisionId, payload);
-				setMessage("Labour process added to costing.");
+				setMessage("Labour process added to this revision.");
 			}
 
 			setLabourDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } });
-			await loadCosting(revisionId);
+			await refreshCurrent();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to save labour line."));
 		} finally {
@@ -1057,7 +1155,7 @@ function CostingEngine() {
 		setError("");
 		try {
 			await bomFlowApi.deleteCostingLabourLine(revisionId, line.id, line.rowVersion);
-			await loadCosting(revisionId);
+			await refreshCurrent();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to remove labour line."));
 		} finally {
@@ -1076,8 +1174,8 @@ function CostingEngine() {
 		<Box sx={pageSx}>
 			<ModuleHero
 				chip="COSTING ENGINE"
-				title="Product Costing Workspace"
-				subtitle="Combine BOM material cost, revision-specific labour and configurable overhead/margin logic into one live costing view."
+				title="Product Costing & Revision Intelligence"
+				subtitle="Calculate live material, labour, overhead and selling economics, then measure exactly what changed between product cost revisions and how that change affects profit and price."
 				icon={<CalculateOutlinedIcon />}
 				actions={revisionId ? <Button startIcon={<AssessmentOutlinedIcon />} onClick={() => navigate(`/bomflow/reports?productId=${productId}&revisionId=${revisionId}`)} sx={secondaryBtnSx}>Reports</Button> : null}
 			/>
@@ -1087,7 +1185,7 @@ function CostingEngine() {
 			{costing && canEdit && ["SUBMITTED", "VERIFIED", "APPROVED", "RELEASED"].includes(revisionStatus) && (
 				<Box sx={infoSx}>
 					<CheckCircleOutlineIcon fontSize="small" />
-					BOM revision {costing.revisionStatus}: material structure/rates stay workflow-controlled, while Labour and Costing Settings remain editable here and every change is audited.
+					BOM revision {costing.revisionStatus}: material structure/rates remain workflow-controlled; revision-specific labour and commercial settings stay audit-tracked so costing can be analysed without altering the approved BOM structure.
 				</Box>
 			)}
 
@@ -1108,22 +1206,32 @@ function CostingEngine() {
 					{revisions.map((revision) => <MenuItem key={revision.id} value={revision.id}>R{revision.revisionNo || revision.revisionNumber} • {revision.status}</MenuItem>)}
 				</TextField>
 				{revisionId && <Button startIcon={<RuleOutlinedIcon />} onClick={() => navigate(`/bomflow/revisions/${revisionId}`)} sx={secondaryBtnSx}>Open BOM</Button>}
+				{costing && canEdit && !["DRAFT", "RETURNED"].includes(revisionStatus) && <Button startIcon={<AddIcon />} disabled={working} onClick={createCostRevision} sx={secondaryBtnSx}>New Cost Revision</Button>}
 				{revisionId && materialEditable && <Button startIcon={<SyncOutlinedIcon />} disabled={working} onClick={applyRates} sx={primaryBtnSx}>Sync Rates</Button>}
 			</Card>
 
 			{!costing ? (
-				<Card sx={emptyPanelSx}><CalculateOutlinedIcon sx={{ fontSize: 42, color: "#64748b" }} /><Typography sx={emptyTitleSx}>Select a product and BOM revision</Typography><Typography sx={emptySubSx}>Costing will load from the live BOM and Labour Master assignments.</Typography></Card>
+				<Card sx={emptyPanelSx}><CalculateOutlinedIcon sx={{ fontSize: 42, color: "#64748b" }} /><Typography sx={emptyTitleSx}>Select a product and BOM revision</Typography><Typography sx={emptySubSx}>Costing and revision intelligence will load from the selected product version.</Typography></Card>
 			) : (
 				<>
-					<Box sx={summaryGridSx}>
-						<SummaryCard title="Direct Material" value={money(costing.directMaterial)} />
+					<Box sx={summary4Sx}>
+						<SummaryCard title="Direct Material" value={money(costing.directMaterial)} accent="#60a5fa" />
 						<SummaryCard title="Direct Labour" value={money(costing.directLabour)} accent="#a855f7" />
 						<SummaryCard title="Cost / Product" value={money(costing.costPerProduct)} accent="#f59e0b" />
 						<SummaryCard title="MRP" value={money(costing.mrp)} accent="#22c55e" />
 					</Box>
 
+					<RevisionIntelligencePanel
+						intelligence={intelligence}
+						revisions={revisions}
+						currentRevisionId={revisionId}
+						compareRevisionId={compareRevisionId}
+						onCompare={selectComparison}
+						working={working}
+					/>
+
 					{costing.missingMaterialRates > 0 && (
-						<Box sx={warningSx}><WarningAmberOutlinedIcon fontSize="small" /> {costing.missingMaterialRates} material row(s) still have zero/missing rates.</Box>
+						<Box sx={warningSx}><WarningAmberOutlinedIcon fontSize="small" />{costing.missingMaterialRates} BOM material row(s) still have missing rates.</Box>
 					)}
 
 					<Box sx={costingGridSx}>
@@ -1133,13 +1241,13 @@ function CostingEngine() {
 						</Card>
 
 						<Card sx={panelSx}>
-							<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Costing Settings</Typography><Typography sx={panelSubSx}>Commercial percentages are revision-specific and audit-tracked, including on approved BOMs.</Typography></Box>{commercialEditable && <Button disabled={working} onClick={saveSettings} sx={primaryBtnSx}>Save Settings</Button>}</Box>
+							<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Costing Settings</Typography><Typography sx={panelSubSx}>Revision-specific commercial assumptions. Changes immediately flow into revision variance and profit impact.</Typography></Box>{commercialEditable && <Button disabled={working} onClick={saveSettings} sx={primaryBtnSx}>Save Settings</Button>}</Box>
 							{settings && <CostingSettingsForm settings={settings} setSettings={setSettings} disabled={!commercialEditable || working} />}
 						</Card>
 					</Box>
 
 					<Card sx={panelSx}>
-						<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Direct Material</Typography><Typography sx={panelSubSx}>Live BOM material + processing amount.</Typography></Box><Chip label={`${costing.materialItemCount} items`} sx={countChipSx} /></Box>
+						<Box sx={panelHeaderSx}><Box><Typography sx={panelTitleSx}>Direct Material</Typography><Typography sx={panelSubSx}>Snapshot of material quantity, rate and processing cost for this revision.</Typography></Box><Chip label={`${costing.materialItemCount} items`} sx={countChipSx} /></Box>
 						<Box sx={tableScrollSx}>
 							<Box sx={materialHeadSx}><div>Item</div><div>Section</div><div>Qty</div><div>Rate</div><div>Material</div><div>Processing</div><div>Total</div></Box>
 							{costing.materialLines.map((row) => <Box key={row.id} sx={materialRowSx}><Box><Typography sx={cellStrongSx}>{row.itemName}</Typography><Typography sx={mutedTextSx}>{row.brand || row.vendorName || "-"}</Typography></Box><Typography sx={cellTextSx}>{row.section}</Typography><Typography sx={monoTextSx}>{decimal(row.quantity)} {row.unit}</Typography><Typography sx={moneyTextSx}>{money(row.rate)}</Typography><Typography sx={cellTextSx}>{money(row.materialAmount)}</Typography><Typography sx={cellTextSx}>{money(row.processingAmount)}</Typography><Typography sx={moneyTextSx}>{money(row.totalAmount)}</Typography></Box>)}
@@ -1150,7 +1258,7 @@ function CostingEngine() {
 						<Box sx={panelHeaderSx}>
 							<Box>
 								<Typography sx={panelTitleSx}>Direct Labour</Typography>
-								<Typography sx={panelSubSx}>Labour Master rates are mapped to BOM sections; enter missing hours/quantity where the master time standard is zero.</Typography>
+								<Typography sx={panelSubSx}>Revision-specific process costing. Basis, quantity, labour count, hours, unit and rate can all be overridden for the selected product version.</Typography>
 							</Box>
 							{commercialEditable && (
 								<Box sx={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -1161,10 +1269,7 @@ function CostingEngine() {
 						</Box>
 
 						{commercialEditable && labourRates.length > 0 && costing.labourLines.length === 0 && (
-							<Box sx={labourHintSx}>
-								<EngineeringOutlinedIcon fontSize="small" />
-								{labourRates.length} active Labour Master rate(s) are available. Sync will import applicable processes by BOM section/category.
-							</Box>
+							<Box sx={labourHintSx}><EngineeringOutlinedIcon fontSize="small" />{labourRates.length} active Labour Master rate(s) are available. Sync imports applicable processes, after which basis/quantity/time can be adjusted for this revision.</Box>
 						)}
 
 						<Box sx={tableScrollSx}>
@@ -1178,22 +1283,14 @@ function CostingEngine() {
 
 								return (
 									<Box key={row.id} sx={costLabourRowSx}>
-										<Box>
-											<Typography sx={cellStrongSx}>{row.processName}</Typography>
-											<Typography sx={mutedTextSx}>{row.department}{incomplete ? " • Input required" : ""}</Typography>
-										</Box>
+										<Box><Typography sx={cellStrongSx}>{row.processName}</Typography><Typography sx={mutedTextSx}>{row.department}{incomplete ? " • Input required" : ""}</Typography></Box>
 										<Typography sx={cellTextSx}>{row.basis?.replaceAll("_", " ")}</Typography>
 										<Typography sx={monoTextSx}>{decimal(row.labourCount)}</Typography>
 										<Typography sx={monoTextSx}>{decimal(row.workingHours)}</Typography>
 										<Typography sx={monoTextSx}>{decimal(row.quantity)}</Typography>
 										<Typography sx={moneyTextSx}>{money(row.rate)}</Typography>
 										<Typography sx={{ ...moneyTextSx, color: incomplete ? "#fbbf24" : "#4ade80" }}>{money(row.amount)}</Typography>
-										{commercialEditable ? (
-											<Box sx={{ display: "flex", gap: "4px" }}>
-												<IconButton disabled={working} onClick={() => openEditLabour(row)} sx={editBtnSx}><EditOutlinedIcon fontSize="small" /></IconButton>
-												<IconButton disabled={working} onClick={() => deleteLabour(row)} sx={deleteBtnSx}><DeleteOutlineIcon fontSize="small" /></IconButton>
-											</Box>
-										) : <Box />}
+										{commercialEditable ? <Box sx={{ display: "flex", gap: "4px" }}><IconButton disabled={working} onClick={() => openEditLabour(row)} sx={editBtnSx}><EditOutlinedIcon fontSize="small" /></IconButton><IconButton disabled={working} onClick={() => deleteLabour(row)} sx={deleteBtnSx}><DeleteOutlineIcon fontSize="small" /></IconButton></Box> : <Box />}
 									</Box>
 								);
 							})}
@@ -1206,6 +1303,88 @@ function CostingEngine() {
 			<LabourLineDialog open={labourDialog.open} editing={labourDialog.editing} form={labourDialog.form} setDialog={setLabourDialog} labourRates={labourRates} onSelectMaster={selectLabourMaster} onSave={saveLabour} working={working} />
 		</Box>
 	);
+}
+
+function RevisionIntelligencePanel({ intelligence, revisions, currentRevisionId, compareRevisionId, onCompare, working }) {
+	if (!intelligence) return null;
+
+	const history = intelligence.history || [];
+	const materialChanges = intelligence.materialChanges || [];
+	const labourChanges = intelligence.labourChanges || [];
+	const hasPrevious = Boolean(intelligence.hasPreviousRevision);
+	const costDelta = Number(intelligence.costPerProductDelta || 0);
+	const directionColor = costDelta > 0 ? "#f87171" : costDelta < 0 ? "#4ade80" : "#93c5fd";
+
+	return (
+		<Card sx={{ ...panelSx, border: `1px solid ${directionColor}33`, background: `linear-gradient(180deg, ${directionColor}0D, rgba(15,23,42,.82))` }}>
+			<Box sx={panelHeaderSx}>
+				<Box>
+					<Box sx={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+						<InsightsOutlinedIcon sx={{ color: directionColor }} />
+						<Typography sx={panelTitleSx}>Revision Intelligence</Typography>
+						<Chip label={hasPrevious ? `${intelligence.overallDirection} VS R${intelligence.previousRevisionNo}` : "BASELINE REVISION"} size="small" sx={{ ...countChipSx, color: directionColor, borderColor: `${directionColor}55`, background: `${directionColor}16` }} />
+					</Box>
+					<Typography sx={panelSubSx}>Track material, labour, product-cost, selling-price and margin movement across BOM versions. Positive cost variance means the product became more expensive to manufacture.</Typography>
+				</Box>
+				{revisions.length > 1 && (
+					<TextField select label="Compare R" value={compareRevisionId || ""} onChange={(e) => onCompare(e.target.value)} disabled={working} sx={{ ...fieldSx, minWidth: 210 }}>
+						<MenuItem value="">Auto previous revision</MenuItem>
+						{revisions.filter((item) => item.id !== currentRevisionId).map((revision) => <MenuItem key={revision.id} value={revision.id}>R{revision.revisionNo || revision.revisionNumber} • {revision.status}</MenuItem>)}
+					</TextField>
+				)}
+			</Box>
+
+			{!hasPrevious ? (
+				<Box sx={labourHintSx}><TimelineOutlinedIcon fontSize="small" />This is the product cost baseline. Create the next revision to measure material, labour, overhead, price and profit movement against it.</Box>
+			) : (
+				<>
+					<Box sx={revisionKpiGridSx}>
+						<VarianceKpi label="Cost / Product Δ" value={signedMoney(intelligence.costPerProductDelta)} rawValue={intelligence.costPerProductDelta} hint={signedPercent(intelligence.costPerProductDeltaPercent)} badWhenPositive accent={directionColor} />
+						<VarianceKpi label="Material Δ" value={signedMoney(intelligence.directMaterialDelta)} rawValue={intelligence.directMaterialDelta} hint="Material + processing movement" badWhenPositive />
+						<VarianceKpi label="Labour Δ" value={signedMoney(intelligence.directLabourDelta)} rawValue={intelligence.directLabourDelta} hint="Revision-specific labour movement" badWhenPositive />
+						<VarianceKpi label="Profit Impact @ Old Price" value={signedMoney(intelligence.profitImpactAtPreviousPrice)} rawValue={intelligence.profitImpactAtPreviousPrice} hint={intelligence.marginAtPreviousPricePercent == null ? "No previous price baseline" : `${Number(intelligence.marginAtPreviousPricePercent).toFixed(2)}% margin at previous ex-factory`} badWhenPositive={false} />
+						<VarianceKpi label="Required Ex-Factory Δ" value={signedMoney(intelligence.requiredExFactoryIncrease)} rawValue={intelligence.requiredExFactoryIncrease} hint="Price movement to retain configured economics" badWhenPositive />
+						<VarianceKpi label="MRP Δ" value={signedMoney(intelligence.mrpDelta)} rawValue={intelligence.mrpDelta} hint={signedPercent(intelligence.mrpDeltaPercent)} badWhenPositive />
+					</Box>
+
+					<Box sx={revisionDetailGridSx}>
+						<Box sx={variancePanelSx}>
+							<Typography sx={varianceTitleSx}>Material Change Drivers</Typography>
+							{materialChanges.length === 0 ? <Typography sx={varianceEmptySx}>No material cost/quantity/rate change versus the comparison revision.</Typography> : materialChanges.slice(0, 8).map((row) => <VarianceDriver key={row.key} title={row.itemName} subtitle={`${row.section} • ${row.changeType} • Qty ${decimal(row.previousQuantity)} → ${decimal(row.currentQuantity)} • Rate ${money(row.previousRate)} → ${money(row.currentRate)}`} delta={row.deltaAmount} />)}
+						</Box>
+						<Box sx={variancePanelSx}>
+							<Typography sx={varianceTitleSx}>Labour Change Drivers</Typography>
+							{labourChanges.length === 0 ? <Typography sx={varianceEmptySx}>No labour cost/basis/time/quantity change versus the comparison revision.</Typography> : labourChanges.slice(0, 8).map((row) => <VarianceDriver key={row.key} title={`${row.department} • ${row.processName}`} subtitle={`${row.changeType} • ${(row.previousBasis || "-").replaceAll("_", " ")} → ${(row.currentBasis || "-").replaceAll("_", " ")} • Hrs ${decimal(row.previousWorkingHours)} → ${decimal(row.currentWorkingHours)} • Qty ${decimal(row.previousQuantity)} → ${decimal(row.currentQuantity)}`} delta={row.deltaAmount} />)}
+						</Box>
+					</Box>
+				</>
+			)}
+
+			{history.length > 0 && (
+				<Box sx={{ mt: "14px" }}>
+					<Typography sx={varianceTitleSx}>Product Cost History</Typography>
+					<Box sx={historyScrollSx}>
+						<Box sx={historyHeadSx}><div>Revision</div><div>Status</div><div>Material</div><div>Labour</div><div>Cost / Product</div><div>Profit</div><div>Ex-Factory</div><div>MRP</div></Box>
+						{history.map((row) => <Box key={row.revisionId} sx={{ ...historyRowSx, ...(row.revisionId === currentRevisionId ? historyCurrentRowSx : {}) }}><div>R{row.revisionNo}</div><div>{row.status}</div><div>{money(row.directMaterial)}</div><div>{money(row.directLabour)}</div><div>{money(row.costPerProduct)}</div><div>{money(row.profitAmount)}</div><div>{money(row.exFactory)}</div><div>{money(row.mrp)}</div></Box>)}
+					</Box>
+				</Box>
+			)}
+		</Card>
+	);
+}
+
+function VarianceKpi({ label, value, rawValue = 0, hint, badWhenPositive = true, accent }) {
+	const numeric = Number(rawValue || 0);
+	const positive = numeric > 0;
+	const negative = numeric < 0;
+	const tone = accent || (positive ? (badWhenPositive ? "#f87171" : "#4ade80") : negative ? (badWhenPositive ? "#4ade80" : "#f87171") : "#93c5fd");
+	return <Box sx={{ ...varianceKpiSx, borderColor: `${tone}33` }}><Typography sx={varianceKpiLabelSx}>{label}</Typography><Typography sx={{ ...varianceKpiValueSx, color: tone }}>{value}</Typography><Typography sx={varianceKpiHintSx}>{hint}</Typography></Box>;
+}
+
+function VarianceDriver({ title, subtitle, delta }) {
+	const number = Number(delta || 0);
+	const tone = number > 0 ? "#f87171" : number < 0 ? "#4ade80" : "#93c5fd";
+	return <Box sx={varianceDriverSx}><Box sx={{ minWidth: 0 }}><Typography sx={cellStrongSx}>{title}</Typography><Typography sx={mutedTextSx}>{subtitle}</Typography></Box><Typography sx={{ ...moneyTextSx, color: tone, whiteSpace: "nowrap" }}>{signedMoney(delta)}</Typography></Box>;
 }
 
 function CostingSettingsForm({ settings, setSettings, disabled }) {
@@ -1231,24 +1410,42 @@ function CostingSettingsForm({ settings, setSettings, disabled }) {
 function LabourLineDialog({ open, editing, form, setDialog, labourRates, onSelectMaster, onSave, working }) {
 	const master = labourRates.find((item) => item.id === form.labourRateId);
 	const update = (key, value) => setDialog((prev) => ({ ...prev, form: { ...prev.form, [key]: value } }));
+	const changeBasis = (value) => setDialog((prev) => ({
+		...prev,
+		form: {
+			...prev.form,
+			basis: value,
+			unit: labourBasisUnit(value, prev.form.unit),
+		},
+	}));
+	const basis = form.basis || master?.basis || "PER_HOUR";
+	const formula = basis === "PER_HOUR"
+		? "Amount = Labour Count × Working Hours × Rate. Quantity is available for productivity/reference tracking."
+		: basis === "FIXED"
+			? "Amount = Fixed Rate. Quantity can still be recorded for reference."
+			: "Amount = Quantity × Rate.";
+
 	return (
-		<Dialog open={open} onClose={() => !working && setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
-			<DialogTitle sx={dialogTitleSx}>{editing ? "Edit Labour Process" : "Add Labour Process"}</DialogTitle>
+		<Dialog open={open} onClose={() => !working && setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+			<DialogTitle sx={dialogTitleSx}>{editing ? "Edit Revision Labour Process" : "Add Revision Labour Process"}</DialogTitle>
 			<DialogContent sx={dialogContentSx}>
-				<Box sx={formGrid2Sx}>
+				<Box sx={labourHintSx}><CalculateOutlinedIcon fontSize="small" />Labour Master provides the default process/rate. Basis, unit, labour count, hours, quantity and rate below are revision-specific and intentionally editable.</Box>
+				<Box sx={{ ...formGrid2Sx, mt: 2 }}>
 					<TextField select label="Labour Master Process *" value={form.labourRateId} onChange={(e) => onSelectMaster(e.target.value)} sx={fieldSx}>
 						<MenuItem value="">Select process</MenuItem>
 						{labourRates.map((row) => <MenuItem key={row.id} value={row.id}>{row.department} • {row.processName} • {money(row.rate)} / {row.unit}</MenuItem>)}
 					</TextField>
+					<TextField select label="Costing Basis *" value={basis} onChange={(e) => changeBasis(e.target.value)} sx={fieldSx}>{BASIS_OPTIONS.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}</TextField>
+					<TextField label="Unit *" value={form.unit || labourBasisUnit(basis, master?.unit)} onChange={(e) => update("unit", e.target.value)} sx={fieldSx} />
 					<TextField type="number" label="Rate" value={form.rate} onChange={(e) => update("rate", e.target.value)} sx={fieldSx} />
-					<TextField type="number" label="Labour Count" value={form.labourCount} onChange={(e) => update("labourCount", e.target.value)} disabled={master?.basis !== "PER_HOUR"} sx={fieldSx} />
-					<TextField type="number" label="Working Hours" value={form.workingHours} onChange={(e) => update("workingHours", e.target.value)} disabled={master?.basis !== "PER_HOUR"} sx={fieldSx} />
-					<TextField type="number" label="Quantity" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} disabled={!master || ["PER_HOUR", "FIXED"].includes(master?.basis)} sx={fieldSx} />
-					<TextField label="Basis" value={master?.basis?.replaceAll("_", " ") || "-"} disabled sx={fieldSx} />
+					<TextField type="number" label="Labour Count" value={form.labourCount} onChange={(e) => update("labourCount", e.target.value)} inputProps={{ min: 0, step: "0.001" }} sx={fieldSx} />
+					<TextField type="number" label="Working Hours" value={form.workingHours} onChange={(e) => update("workingHours", e.target.value)} inputProps={{ min: 0, step: "0.001" }} sx={fieldSx} />
+					<TextField type="number" label="Quantity" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} inputProps={{ min: 0, step: "0.001" }} sx={fieldSx} />
 				</Box>
-				<TextField fullWidth multiline minRows={2} label="Remarks" value={form.remarks} onChange={(e) => update("remarks", e.target.value)} sx={{ ...fieldSx, mt: 2 }} />
+				<Typography sx={{ ...panelSubSx, mt: 1.2, color: "#93c5fd" }}>{formula}</Typography>
+				<TextField fullWidth multiline minRows={2} label="Remarks / reason for revision labour change" value={form.remarks} onChange={(e) => update("remarks", e.target.value)} sx={{ ...fieldSx, mt: 2 }} />
 			</DialogContent>
-			<DialogActions sx={dialogActionsSx}><Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || !form.labourRateId} onClick={onSave} sx={primaryBtnSx}>{working ? "Saving..." : editing ? "Save Labour" : "Add Process"}</Button></DialogActions>
+			<DialogActions sx={dialogActionsSx}><Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: { ...LABOUR_LINE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || !form.labourRateId || !basis} onClick={onSave} sx={primaryBtnSx}>{working ? "Saving..." : editing ? "Save Labour" : "Add Process"}</Button></DialogActions>
 		</Dialog>
 	);
 }
@@ -1513,6 +1710,21 @@ const errorSx = { p: "11px 13px", borderRadius: "9px", color: "#fca5a5", backgro
 const successSx = { ...errorSx, color: "#86efac", background: "rgba(34,197,94,.10)", border: "1px solid rgba(34,197,94,.22)" };
 const warningSx = { ...errorSx, display: "flex", alignItems: "center", gap: "8px", color: "#fbbf24", background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.22)" };
 const infoSx = { display: "flex", alignItems: "center", gap: "8px", p: "10px 12px", borderRadius: "9px", color: "#93c5fd", background: "rgba(59,130,246,.10)", border: "1px solid rgba(59,130,246,.24)", fontSize: 11.5, fontWeight: 750 };
+const revisionKpiGridSx = { display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: "8px", mt: "14px", "@media (max-width: 1450px)": { gridTemplateColumns: "repeat(3,minmax(0,1fr))" }, "@media (max-width: 780px)": { gridTemplateColumns: "1fr" } };
+const varianceKpiSx = { p: "11px", borderRadius: "9px", background: "rgba(2,6,23,.34)", border: "1px solid rgba(255,255,255,.07)", minWidth: 0 };
+const varianceKpiLabelSx = { color: "rgba(255,255,255,.48)", fontSize: 9.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".05em" };
+const varianceKpiValueSx = { mt: "5px", fontSize: 17, fontWeight: 950, fontFamily: "monospace" };
+const varianceKpiHintSx = { mt: "4px", color: "rgba(255,255,255,.48)", fontSize: 9.5, fontWeight: 650, lineHeight: 1.35 };
+const revisionDetailGridSx = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", mt: "12px", "@media (max-width: 950px)": { gridTemplateColumns: "1fr" } };
+const variancePanelSx = { p: "11px", borderRadius: "9px", background: "rgba(2,6,23,.30)", border: "1px solid rgba(255,255,255,.06)" };
+const varianceTitleSx = { color: "#fff", fontSize: 12, fontWeight: 900, mb: "7px" };
+const varianceEmptySx = { color: "rgba(255,255,255,.46)", fontSize: 10.5, fontWeight: 650, py: "8px" };
+const varianceDriverSx = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", py: "8px", borderTop: "1px solid rgba(255,255,255,.05)", "&:first-of-type": { borderTop: 0 } };
+const historyScrollSx = { overflowX: "auto", borderRadius: "8px", border: "1px solid rgba(255,255,255,.06)" };
+const historyHeadSx = { minWidth: 920, display: "grid", gridTemplateColumns: "80px 130px repeat(6,minmax(120px,1fr))", px: "10px", py: "8px", background: "rgba(2,6,23,.45)", color: "rgba(255,255,255,.48)", fontSize: 9, fontWeight: 900, textTransform: "uppercase" };
+const historyRowSx = { minWidth: 920, display: "grid", gridTemplateColumns: "80px 130px repeat(6,minmax(120px,1fr))", px: "10px", py: "9px", color: "rgba(255,255,255,.72)", fontSize: 10.5, fontWeight: 750, borderTop: "1px solid rgba(255,255,255,.05)", "& > div:nth-of-type(n+3)": { fontFamily: "monospace" } };
+const historyCurrentRowSx = { background: "rgba(59,130,246,.10)", color: "#fff" };
+
 const labourHintSx = { display: "flex", alignItems: "center", gap: "8px", mb: "10px", p: "9px 10px", borderRadius: "8px", color: "#c4b5fd", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.20)", fontSize: 10.5, fontWeight: 700 };
 const editBtnSx = { width: 30, height: 30, borderRadius: "8px", color: "#93c5fd", background: "rgba(59,130,246,.10)", border: "1px solid rgba(59,130,246,.20)" };
 const summaryGridSx = { display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "10px", "@media (max-width: 1000px)": { gridTemplateColumns: "repeat(2,minmax(0,1fr))" }, "@media (max-width: 560px)": { gridTemplateColumns: "1fr" } };
