@@ -28,16 +28,16 @@ export const BOM_horizontalScrollSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	WebkitOverflowScrolling: "touch",
 	pb: "3px",
 };
 
 export const BOM_modulePageSx = {
-	minHeight: "100vh",
+	minHeight: "100%",
 	position: "relative",
 	overflowX: "hidden",
-	overflowY: "auto",
+	overflowY: "visible",
 	color: "#fff",
 	background: `
 		radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 22%),

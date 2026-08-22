@@ -789,7 +789,9 @@ const bomFlowGlobalStyles = {
 		background: "transparent",
 	},
 	".bomflow-content-shell": {
-		scrollBehavior: "smooth",
+		scrollBehavior: "auto",
+		overscrollBehaviorY: "auto",
+		overscrollBehaviorX: "none",
 	},
 	".bomflow-content-shell :focus-visible": {
 		outline: "2px solid rgba(96,165,250,.85)",
@@ -802,7 +804,8 @@ const bomFlowGlobalStyles = {
 const shell = {
 	display: "flex",
 	width: "100%",
-	minHeight: "100vh",
+	height: "100vh",
+	minHeight: 0,
 	background:
 		"linear-gradient(135deg,#020617 0%,#0f172a 45%,#111827 100%)",
 	overflow: "hidden",
@@ -811,16 +814,23 @@ const shell = {
 const main = {
 	flex: 1,
 	minWidth: 0,
+	minHeight: 0,
+	height: "100vh",
 	display: "flex",
 	flexDirection: "column",
 };
 
 const contentShell = {
 	flex: 1,
-	overflow: "auto",
+	minHeight: 0,
+	minWidth: 0,
+	overflowY: "auto",
 	overflowX: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehavior: "contain",
+	overscrollBehaviorY: "auto",
+	overscrollBehaviorX: "none",
+	WebkitOverflowScrolling: "touch",
+	touchAction: "pan-x pan-y",
 	padding: 24,
 	background: `
 		radial-gradient(
@@ -991,6 +1001,7 @@ const newCostingBtn = {
 
 const header = {
 	height: 76,
+	flexShrink: 0,
 	padding: "0 28px",
 	display: "flex",
 	alignItems: "center",

@@ -511,7 +511,7 @@ const tableScrollSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	pb: "3px",
 };
 const tableHeadSx = { minWidth: 1500, display: "grid", gridTemplateColumns: "minmax(330px,1.7fr) 140px 220px minmax(230px,1.2fr) 170px 150px 180px 210px", background: "rgba(2,6,23,.38)", color: "rgba(255,255,255,.52)", fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", "& > div": { padding: "12px 13px" } };

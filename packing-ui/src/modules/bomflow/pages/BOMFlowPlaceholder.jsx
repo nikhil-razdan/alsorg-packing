@@ -1813,7 +1813,7 @@ const historyScrollSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	borderRadius: "8px",
 	border: "1px solid rgba(255,255,255,.06)",
 	pb: "3px",
@@ -1837,7 +1837,7 @@ const tableScrollSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	WebkitOverflowScrolling: "touch",
 	pb: "3px",
 };

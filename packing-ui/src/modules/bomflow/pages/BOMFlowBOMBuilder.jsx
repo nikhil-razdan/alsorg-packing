@@ -2144,7 +2144,7 @@ const tableShellSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	WebkitOverflowScrolling: "touch",
 	pb: "3px",
 };

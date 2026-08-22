@@ -1495,7 +1495,7 @@ const tableWrapSx = {
 	overflowX: "auto",
 	overflowY: "hidden",
 	scrollbarGutter: "stable",
-	overscrollBehaviorX: "contain",
+	overscrollBehaviorX: "auto",
 	WebkitOverflowScrolling: "touch",
 	pb: "3px",
 	borderTop: "1px solid rgba(255,255,255,.06)",
