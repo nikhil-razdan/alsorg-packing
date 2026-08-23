@@ -72,6 +72,12 @@ import hrflowApi
 import MachFlowWorkspace
 	from "../modules/machflow/MachFlowWorkspace";
 
+import MachFlowRequestPortal
+	from "../modules/machflow/MachFlowRequestPortal";
+
+import machFlowApi
+	from "../modules/machflow/machFlowApi";
+
 import {
 	MODULE_KEYS,
 	hasModuleAccessFromUser,
@@ -129,6 +135,9 @@ function ModuleHubContent() {
 	const [hrFlowAllowed, setHrFlowAllowed] =
 		React.useState(() => Boolean(hasRole("ADMIN")));
 
+	const [machFlowRequestAllowed, setMachFlowRequestAllowed] =
+		React.useState(false);
+
 	React.useEffect(() => {
 		let active = true;
 
@@ -157,6 +166,22 @@ function ModuleHubContent() {
 			active = false;
 		};
 	}, [user?.username, role, roles, hasRole]);
+
+	React.useEffect(() => {
+		let active = true;
+
+		machFlowApi.requesterContext()
+			.then((payload) => {
+				if (!active) return;
+				setMachFlowRequestAllowed(payload?.allowed === true);
+			})
+			.catch(() => {
+				if (!active) return;
+				setMachFlowRequestAllowed(false);
+			});
+
+		return () => { active = false; };
+	}, [user?.username, role, roles]);
 
 	/*
 	 * Shared FlowSuite module hosting.
@@ -189,30 +214,10 @@ function ModuleHubContent() {
 		requestedSharedModule === "machflow" ||
 		requestedSharedModule === "maintenance";
 
-	const sharedAccessUser = {
-		...(user || {}),
-		role: role || user?.role || "",
-		roles: Array.isArray(roles)
-			? roles
-			: Array.isArray(user?.roles)
-				? user.roles
-				: [],
-		modules: Array.isArray(modules)
-			? modules
-			: Array.isArray(user?.modules)
-				? user.modules
-				: [],
-	};
-
-	const machFlowAllowed =
-		hasModuleAccessFromUser(
-			sharedAccessUser,
-			MODULE_KEYS.MACHFLOW
-		);
-
-	if (machFlowView && machFlowAllowed) {
-		return <MachFlowWorkspace />;
-	}
+	const machFlowRequestView =
+		requestedSharedModule === "machflow-request" ||
+		requestedSharedModule === "service-request" ||
+		requestedSharedModule === "maintenance-request";
 
 	if (clientMasterView) {
 		return (
@@ -226,11 +231,46 @@ function ModuleHubContent() {
 		return <HrFlowWorkspace />;
 	}
 
+	if (machFlowRequestView) {
+		return <MachFlowRequestPortal />;
+	}
+
 	/*
 	 * AuthContext may keep role/modules separately from user.
 	 * Build one reliable object for module-access checks.
 	 */
-	const accessUser = sharedAccessUser;
+	const accessUser = {
+		...(user || {}),
+
+		role:
+			role ||
+			user?.role ||
+			"",
+
+		roles:
+			Array.isArray(roles)
+				? roles
+				: Array.isArray(user?.roles)
+					? user.roles
+					: [],
+
+		modules:
+			Array.isArray(modules)
+				? modules
+				: Array.isArray(user?.modules)
+					? user.modules
+					: [],
+	};
+
+	const machFlowAllowed =
+		hasModuleAccessFromUser(
+			accessUser,
+			MODULE_KEYS.MACHFLOW
+		);
+
+	if (machFlowView && machFlowAllowed) {
+		return <MachFlowWorkspace />;
+	}
 
 	const isHardwareOnly =
 		hasRole("HARDWARE_PACKING") &&
@@ -320,10 +360,30 @@ function ModuleHubContent() {
 			accent: "Material Control",
 		},
 		{
+			key: "MACHFLOW_REQUEST",
+			title: "Maintenance Request",
+			subtitle:
+				"Raise a controlled Machine Maintenance or IT Support request through an approved linked Reporter profile.",
+			icon: (
+				<EngineeringOutlinedIcon
+					fontSize="large"
+				/>
+			),
+			path: "/modules?module=machflow-request",
+			tags: [
+				"Machine Maintenance",
+				"IT Support",
+				"Asset QR",
+				"My Requests",
+			],
+			visible: machFlowRequestAllowed,
+			accent: "Approved Request Portal",
+		},
+		{
 			key: MODULE_KEYS.MACHFLOW,
 			title: "MachFlow",
 			subtitle:
-				"Machine maintenance, breakdown response, preventive scheduling and reliability intelligence.",
+				"Department-separated Machine Maintenance and IT Support with controlled request intake, asset QR, preventive planning and management intelligence.",
 			icon: (
 				<EngineeringOutlinedIcon
 					fontSize="large"
@@ -331,10 +391,10 @@ function ModuleHubContent() {
 			),
 			path: "/modules?module=machflow",
 			tags: [
-				"Work Orders",
-				"Equipment",
-				"Preventive PM",
-				"Reliability",
+				"Service Requests",
+				"Machine Master",
+				"IT Asset Master",
+				"Department Reports",
 			],
 			visible: canAccess(
 				MODULE_KEYS.MACHFLOW

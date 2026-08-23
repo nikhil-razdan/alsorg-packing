@@ -24,6 +24,7 @@ import { normalizeRole } from "../utils/permissions";
 import HrCandidateApplicationPage from "../modules/hrflow/HrCandidateApplicationPage";
 import HrOnboardingPortalPage from "../modules/hrflow/HrOnboardingPortalPage";
 import { HrFlowThemeProvider } from "../modules/hrflow/HrFlowCommon";
+import MachFlowRequestPortal from "../modules/machflow/MachFlowRequestPortal";
 
 const AuthContext = createContext(null);
 
@@ -73,6 +74,7 @@ const modulesForRoles = (roles) => {
 			"PACKFLOW",
 			"BOMFLOW",
 			"MATFLOW",
+			"MACHFLOW",
 			"MATERIALS",
 			"CLIENTS",
 			"HRFLOW",
@@ -111,6 +113,22 @@ const modulesForRoles = (roles) => {
 		) {
 			modules.add("MATFLOW");
 			modules.add("MATERIALS");
+		}
+
+		if (
+			[
+				"MACHFLOW_DIRECTOR",
+				"MACHFLOW_MACHINE_HEAD",
+				"MACHFLOW_MACHINE_TECHNICIAN",
+				"MACHFLOW_IT_HEAD",
+				"MACHFLOW_IT_TECHNICIAN",
+				"MACHFLOW_MANAGER",
+				"MACHFLOW_PLANNER",
+				"MACHFLOW_HEAD_TECHNICIAN",
+				"MACHFLOW_TECHNICIAN",
+			].includes(role)
+		) {
+			modules.add("MACHFLOW");
 		}
 
 		/*
@@ -307,6 +325,33 @@ const resolveHrPublicPortal = () => {
 	return null;
 };
 
+/*
+ * Standalone MachFlow request center.
+ *
+ * This route is intentionally available before the authenticated FlowSuite
+ * router because approved non-FlowSuite employees may use Reporter Passes.
+ * The backend still requires Reporter Code + PIN before it accepts a post.
+ */
+const resolveMachFlowPublicPortal = () => {
+	if (typeof window === "undefined") {
+		return false;
+	}
+
+	const sources = [
+		String(window.location.pathname || ""),
+		String(window.location.hash || "").replace(/^#/, ""),
+	];
+
+	return sources.some((source) => {
+		const path = source
+			.split("?")[0]
+			.replace(/\/+/g, "/")
+			.toLowerCase();
+
+		return path === "/machflow/request" || path.endsWith("/machflow/request");
+	});
+};
+
 export function AuthProvider({
 	children,
 }) {
@@ -324,6 +369,11 @@ export function AuthProvider({
 	 */
 	const publicHrPortal = useMemo(
 		() => resolveHrPublicPortal(),
+		[]
+	);
+
+	const publicMachFlowPortal = useMemo(
+		() => resolveMachFlowPublicPortal(),
 		[]
 	);
 
@@ -516,7 +566,7 @@ export function AuthProvider({
 		 * by /auth/me. Do not initialise the ordinary FlowSuite session on
 		 * those two standalone public pages.
 		 */
-		if (publicHrPortal) {
+		if (publicHrPortal || publicMachFlowPortal) {
 			setAuthLoading(false);
 		} else {
 			loadMe();
@@ -528,7 +578,7 @@ export function AuthProvider({
 			 * inside the public portal. It must not turn into a FlowSuite login
 			 * redirect or clear a user's stored FlowSuite session.
 			 */
-			if (resolveHrPublicPortal()) {
+			if (resolveHrPublicPortal() || resolveMachFlowPublicPortal()) {
 				return;
 			}
 
@@ -550,6 +600,7 @@ export function AuthProvider({
 		clearSession,
 		loadMe,
 		publicHrPortal,
+		publicMachFlowPortal,
 	]);
 
 	const logout = useCallback(
@@ -663,6 +714,21 @@ export function AuthProvider({
 			logout,
 		]
 	);
+
+	/*
+	 * PRIMARY MACHFLOW REQUEST GATE
+	 *
+	 * This page can be opened by a QR without creating a FlowSuite account.
+	 * Identity enforcement happens through either an existing FlowSuite session
+	 * or a controlled Reporter Pass. Other FlowSuite routes are unchanged.
+	 */
+	if (publicMachFlowPortal) {
+		return (
+			<AuthContext.Provider value={value}>
+				<MachFlowRequestPortal />
+			</AuthContext.Provider>
+		);
+	}
 
 	/*
 	 * PRIMARY PUBLIC-HR GATE

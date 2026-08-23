@@ -248,37 +248,49 @@ const ACCESS_GROUPS = [
 		label: "MachFlow",
 		shortLabel: "MachFlow",
 		description:
-			"Machine maintenance, preventive planning, breakdown response and reliability control.",
+			"Strictly separated Machine Maintenance and IT Support operations with director oversight, QR assets and controlled Reporter Pass intake.",
 		accent: "#0ea5e9",
 		icon: <EngineeringOutlinedIcon />,
-		defaultRole: "MACHFLOW_REQUESTER",
+		defaultRole: "MACHFLOW_MACHINE_TECHNICIAN",
 		roles: [
 			{
-				value: "MACHFLOW_MANAGER",
-				label: "MachFlow Manager",
+				value: "MACHFLOW_DIRECTOR",
+				label: "Director · Maintenance Oversight",
 				description:
-					"Full maintenance control, reliability reporting, equipment masters and preventive strategy.",
+					"Read-only overall dashboard and reports across Machine Maintenance and IT Support without operational editing rights.",
 			},
 			{
-				value: "MACHFLOW_PLANNER",
-				label: "Maintenance Planner",
+				value: "MACHFLOW_MACHINE_HEAD",
+				label: "Machine Maintenance Head",
 				description:
-					"Plan and schedule work, maintain equipment masters, teams and preventive maintenance plans.",
+					"Own Machine Maintenance across authorised plants: machine master, teams, preventive plans, work orders and machine-maintenance reporting.",
 			},
 			{
-				value: "MACHFLOW_TECHNICIAN",
-				label: "Maintenance Technician",
+				value: "MACHFLOW_MACHINE_TECHNICIAN",
+				label: "Machine Maintenance Technician",
 				description:
-					"Execute assigned maintenance work and record repair, downtime and root-cause information.",
+					"Execute only Machine Maintenance jobs assigned within authorised plants. IT assets and IT requests remain hidden.",
+			},
+			{
+				value: "MACHFLOW_IT_HEAD",
+				label: "IT Head",
+				description:
+					"Own IT Support: IT Asset Master, IT support teams, IT work orders, preventive tasks and IT-only reporting.",
+			},
+			{
+				value: "MACHFLOW_IT_TECHNICIAN",
+				label: "IT Technician",
+				description:
+					"Execute assigned IT support work only. Machine Maintenance master, work orders and reports remain hidden.",
 			},
 			{
 				value: "MACHFLOW_REQUESTER",
-				label: "Maintenance Requester",
+				label: "Legacy / Dedicated Requester",
 				description:
-					"Raise and track maintenance requests for assigned plants without configuration privileges.",
+					"Optional request-only FlowSuite identity. Prefer linking ordinary employees to a Reporter Pass instead of creating a full FlowSuite account.",
 			},
 		],
-	},
+	}
 ];
 
 const ROLE_META = ACCESS_GROUPS.reduce(
@@ -440,12 +452,32 @@ const modulesForRoles = (roles) => {
 	return Array.from(
 		new Set(
 			cleanRoles
-				.map((role) =>
-					roleMeta(role).moduleKey
-				)
+				.filter((role) => role !== "MACHFLOW_REQUESTER")
+				.map((role) => roleMeta(role).moduleKey)
 				.filter(Boolean)
 		)
 	);
+};
+
+const isAllowedRoleCombination = (roles) => {
+	const cleanRoles = normalizeArray(roles);
+
+	if (cleanRoles.length <= 1) return true;
+	if (cleanRoles.includes("ADMIN")) return false;
+
+	const packRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW);
+	const machRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW);
+	const bomRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.BOMFLOW);
+	const matRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.MATFLOW);
+
+	if (machRoles.length === 0) {
+		return packRoles.length === cleanRoles.length;
+	}
+
+	if (machRoles.length !== 1 || bomRoles.length > 1 || matRoles.length > 1) return false;
+	if (bomRoles.length && matRoles.length) return false;
+
+	return packRoles.length + machRoles.length + bomRoles.length + matRoles.length === cleanRoles.length;
 };
 
 const rolesRequireDriver = (roles) => {
@@ -1670,22 +1702,11 @@ function UsersPageContent() {
 		}
 
 		/*
-		 * Multiple selections are allowed only inside PackFlow.
+		 * Keep the old PackFlow multi-role behaviour and allow one MachFlow
+		 * role to coexist with an existing operational profile. Invalid
+		 * combinations remain visible temporarily so validation can explain
+		 * exactly what must be changed instead of silently deleting a role.
 		 */
-		if (cleanRoles.length > 1) {
-			const invalidCombination =
-				cleanRoles.some(
-					(role) =>
-						roleMeta(role).groupKey !==
-						MODULE_KEYS.PACKFLOW
-				);
-
-			if (invalidCombination) {
-				cleanRoles = [
-					cleanRoles[0],
-				];
-			}
-		}
 
 		setForm((previous) => {
 			const nextPrimaryRole =
@@ -1767,15 +1788,8 @@ function UsersPageContent() {
 			return "Administrator cannot be combined with another role.";
 		}
 
-		if (
-			roles.length > 1 &&
-			roles.some(
-				(role) =>
-					roleMeta(role).groupKey !==
-					MODULE_KEYS.PACKFLOW
-			)
-		) {
-			return "Multiple roles can currently be selected only inside PackFlow.";
+		if (!isAllowedRoleCombination(roles)) {
+			return "Invalid role combination. PackFlow roles can be combined as before; add only one MachFlow role alongside PackFlow or one BOMFlow/MatFlow role.";
 		}
 
 		if (
@@ -4009,6 +4023,36 @@ function UserEditorDrawer({
 							onRolesChange
 						}
 					/>
+
+					{selectedMeta.groupKey !== "ADMIN" &&
+						selectedMeta.groupKey !== MODULE_KEYS.MACHFLOW && (
+						<Box sx={{ mt: 1.5 }}>
+							<TextField
+								select
+								fullWidth
+								size="small"
+								label="Additional MachFlow Access"
+								value={selectedRoles.find((role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW) || ""}
+								onChange={(event) => {
+									const baseRoles = selectedRoles.filter((role) => roleMeta(role).groupKey !== MODULE_KEYS.MACHFLOW);
+									const machRole = event.target.value;
+									onRolesChange(machRole ? [...baseRoles, machRole] : baseRoles);
+								}}
+								helperText="Keep the user's existing FlowSuite responsibility and add one MachFlow responsibility. This avoids duplicate complainant accounts."
+								sx={fieldSx}
+							>
+								<MenuItem value="">No additional MachFlow access</MenuItem>
+								{ACCESS_GROUPS.find((group) => group.key === MODULE_KEYS.MACHFLOW)?.roles.map((roleOption) => (
+									<MenuItem key={roleOption.value} value={roleOption.value}>
+										<Box>
+											<Typography sx={{ fontWeight: 850, fontSize: 13 }}>{roleOption.label}</Typography>
+											<Typography sx={{ color: "var(--pf-text-dim)", fontSize: 11 }}>{roleOption.description}</Typography>
+										</Box>
+									</MenuItem>
+								))}
+							</TextField>
+						</Box>
+					)}
 				</Box>
 
 				<Box sx={accessSummarySx}>
@@ -4026,13 +4070,13 @@ function UserEditorDrawer({
 						<Typography sx={summaryTitleSx}>
 							{selectedRoles.length === 1
 								? selectedMeta.label
-								: `${selectedRoles.length} PackFlow Roles`}
+								: `${selectedRoles.length} Assigned Roles`}
 						</Typography>
 
 						<Typography sx={summaryDescriptionSx}>
 							{selectedRoles.length === 1
 								? selectedMeta.description
-								: "This user receives the combined permissions of every selected PackFlow role."}
+								: "Combined access keeps the existing operational role profile and adds only the selected MachFlow responsibility."}
 						</Typography>
 
 						<Box sx={chipWrapSx}>
@@ -4310,16 +4354,34 @@ function AccessProfileSelector({
 	const selectedGroupKey =
 		roleMeta(primaryRole).groupKey;
 
+	const selectedMachRoles = selectedRoles.filter(
+		(role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW
+	);
+
+	const selectedPackRoles = selectedRoles.filter(
+		(role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW
+	);
+
+	const switchPrimaryGroup = (group) => {
+		if (group.key === "ADMIN" || group.key === MODULE_KEYS.MACHFLOW) {
+			onRolesChange([group.defaultRole]);
+			return;
+		}
+
+		/* Preserve optional MachFlow responsibility while changing the user's
+		 * ordinary operational profile. Other cross-module combinations stay
+		 * intentionally blocked by validation. */
+		onRolesChange([group.defaultRole, ...selectedMachRoles]);
+	};
+
 	return (
 		<Box sx={accessGridSx}>
 			{ACCESS_GROUPS.map((group) => {
-				const selected =
-					selectedGroupKey ===
-					group.key;
-
-				const isPackFlow =
-					group.key ===
-					MODULE_KEYS.PACKFLOW;
+				const selected = selectedGroupKey === group.key;
+				const isPackFlow = group.key === MODULE_KEYS.PACKFLOW;
+				const groupRole = selectedRoles.find(
+					(role) => roleMeta(role).groupKey === group.key
+				) || group.defaultRole;
 
 				return (
 					<Box
@@ -4327,60 +4389,24 @@ function AccessProfileSelector({
 						role="button"
 						tabIndex={0}
 						onClick={() => {
-							if (!selected) {
-								onRolesChange([
-									group.defaultRole,
-								]);
-							}
+							if (!selected) switchPrimaryGroup(group);
 						}}
 						onKeyDown={(event) => {
-							if (
-								event.key === "Enter" ||
-								event.key === " "
-							) {
-								if (!selected) {
-									onRolesChange([
-										group.defaultRole,
-									]);
-								}
+							if ((event.key === "Enter" || event.key === " ") && !selected) {
+								switchPrimaryGroup(group);
 							}
 						}}
-						sx={accessCardSx(
-							group.accent,
-							selected
-						)}
+						sx={accessCardSx(group.accent, selected)}
 					>
 						<Box sx={accessCardHeaderSx}>
-							<Box
-								sx={accessCardIconSx(
-									group.accent
-								)}
-							>
-								{group.icon}
-							</Box>
+							<Box sx={accessCardIconSx(group.accent)}>{group.icon}</Box>
 
 							<Box sx={{ minWidth: 0 }}>
-								<Typography
-									sx={accessCardTitleSx}
-								>
-									{group.label}
-								</Typography>
-
-								<Typography
-									sx={accessCardSubSx}
-								>
-									{group.description}
-								</Typography>
+								<Typography sx={accessCardTitleSx}>{group.label}</Typography>
+								<Typography sx={accessCardSubSx}>{group.description}</Typography>
 							</Box>
 
-							<Box
-								sx={selectionDotSx(
-									group.accent,
-									selected
-								)}
-							>
-								{selected ? "✓" : ""}
-							</Box>
+							<Box sx={selectionDotSx(group.accent, selected)}>{selected ? "✓" : ""}</Box>
 						</Box>
 
 						{selected && isPackFlow && (
@@ -4389,75 +4415,29 @@ function AccessProfileSelector({
 								fullWidth
 								size="small"
 								label="PackFlow Roles"
-								value={selectedRoles}
-								onClick={(event) =>
-									event.stopPropagation()
-								}
+								value={selectedPackRoles}
+								onClick={(event) => event.stopPropagation()}
 								onChange={(event) => {
-									const value =
-										event.target.value;
-
-									onRolesChange(
-										typeof value ===
-											"string"
-											? value.split(",")
-											: value
-									);
+									const value = event.target.value;
+									const nextPackRoles = typeof value === "string" ? value.split(",") : value;
+									onRolesChange([...nextPackRoles, ...selectedMachRoles]);
 								}}
 								SelectProps={{
 									multiple: true,
-
-									renderValue: (
-										selectedValues
-									) =>
-										selectedValues
-											.map(
-												(value) =>
-													roleMeta(
-														value
-													).label
-											)
-											.join(", "),
+									renderValue: (selectedValues) =>
+										selectedValues.map((value) => roleMeta(value).label).join(", "),
 								}}
-								sx={{
-									...fieldSx,
-									mt: 1.5,
-								}}
+								sx={{ ...fieldSx, mt: 1.5 }}
 							>
-								{group.roles.map(
-									(roleOption) => {
-										const checked =
-											selectedRoles.includes(
-												roleOption.value
-											);
-
-										return (
-											<MenuItem
-												key={
-													roleOption.value
-												}
-												value={
-													roleOption.value
-												}
-											>
-												<Checkbox
-													checked={
-														checked
-													}
-												/>
-
-												<ListItemText
-													primary={
-														roleOption.label
-													}
-													secondary={
-														roleOption.description
-													}
-												/>
-											</MenuItem>
-										);
-									}
-								)}
+								{group.roles.map((roleOption) => {
+									const checked = selectedPackRoles.includes(roleOption.value);
+									return (
+										<MenuItem key={roleOption.value} value={roleOption.value}>
+											<Checkbox checked={checked} />
+											<ListItemText primary={roleOption.label} secondary={roleOption.description} />
+										</MenuItem>
+									);
+								})}
 							</TextField>
 						)}
 
@@ -4467,56 +4447,26 @@ function AccessProfileSelector({
 								fullWidth
 								size="small"
 								label="Role"
-								value={primaryRole}
-								onClick={(event) =>
-									event.stopPropagation()
-								}
-								onChange={(event) =>
-									onRolesChange([
-										event.target.value,
-									])
-								}
-								sx={{
-									...fieldSx,
-									mt: 1.5,
+								value={groupRole}
+								onClick={(event) => event.stopPropagation()}
+								onChange={(event) => {
+									const nextRole = event.target.value;
+									onRolesChange(
+										group.key === MODULE_KEYS.MACHFLOW
+											? [nextRole]
+											: [nextRole, ...selectedMachRoles]
+									);
 								}}
+								sx={{ ...fieldSx, mt: 1.5 }}
 							>
-								{group.roles.map(
-									(roleOption) => (
-										<MenuItem
-											key={
-												roleOption.value
-											}
-											value={
-												roleOption.value
-											}
-										>
-											<Box>
-												<Typography
-													sx={{
-														fontWeight: 850,
-														fontSize: 13,
-													}}
-												>
-													{
-														roleOption.label
-													}
-												</Typography>
-
-												<Typography
-													sx={{
-														color: "var(--pf-text-dim)",
-														fontSize: 11,
-													}}
-												>
-													{
-														roleOption.description
-													}
-												</Typography>
-											</Box>
-										</MenuItem>
-									)
-								)}
+								{group.roles.map((roleOption) => (
+									<MenuItem key={roleOption.value} value={roleOption.value}>
+										<Box>
+											<Typography sx={{ fontWeight: 850, fontSize: 13 }}>{roleOption.label}</Typography>
+											<Typography sx={{ color: "var(--pf-text-dim)", fontSize: 11 }}>{roleOption.description}</Typography>
+										</Box>
+									</MenuItem>
+								))}
 							</TextField>
 						)}
 					</Box>

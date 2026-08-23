@@ -134,6 +134,18 @@ public class SecurityConfig {
                                                 .permitAll()
 
                                                 /*
+                                                 * MachFlow public request gateway.
+                                                 *
+                                                 * These endpoints do NOT allow anonymous posting.
+                                                 * MachFlowService validates a controlled Reporter Code
+                                                 * + PIN before accepting a request. The permitAll rule
+                                                 * only allows the QR/reporter page to reach that gate.
+                                                 */
+                                                .requestMatchers(
+                                                                "/api/machflow/public/**")
+                                                .permitAll()
+
+                                                /*
                                                  * Public authentication endpoints.
                                                  */
                                                 .requestMatchers(

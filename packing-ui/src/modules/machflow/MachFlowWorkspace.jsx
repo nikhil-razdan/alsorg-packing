@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import machFlowApi from "./machFlowApi";
+import { createQrMatrix } from "./machQr";
 import "./machflow.css";
 
 const TABS = [
@@ -16,29 +17,43 @@ const TABS = [
 const KANBAN = [
   ["NEW", "New Request"],
   ["PLANNED", "Planned"],
+  ["ASSIGNED", "Assigned"],
+  ["ACCEPTED", "Accepted"],
   ["IN_PROGRESS", "In Progress"],
   ["WAITING_PARTS", "Waiting Parts"],
   ["REPAIRED", "Repaired"],
-  ["CLOSED", "Closed"],
 ];
 
 const PRIORITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"];
 const WORK_TYPES = ["CORRECTIVE", "PREVENTIVE", "INSPECTION", "CALIBRATION", "IMPROVEMENT"];
 const EQUIPMENT_STATUSES = ["ACTIVE", "UNDER_MAINTENANCE", "DOWN", "RETIRED"];
 const CRITICALITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const SERVICE_DOMAINS = ["MACHINE", "IT"];
+const ASSET_KINDS = ["PRODUCTION_MACHINE", "IT_ASSET", "ELECTRICAL_ASSET", "FACILITY_ASSET", "UTILITY_ASSET", "OTHER"];
+const REPORTER_TYPES = ["EMPLOYEE", "OPERATOR", "SUPERVISOR", "STAFF", "CONTRACTOR", "OTHER"];
+
+const SERVICE_DOMAIN_LABELS = {
+  MACHINE: "Machine Maintenance",
+  IT: "IT Support",
+};
 
 const EMPTY_WORK = {
   title: "",
   description: "",
   instructions: "",
   equipmentId: "",
+  serviceDomain: "MACHINE",
+  requestCategory: "",
   plantCode: "",
   location: "",
   requestedBy: "",
+  operatorName: "",
+  operatorContact: "",
   teamName: "",
   responsible: "",
   workType: "CORRECTIVE",
   priority: "NORMAL",
+  requestedForAt: "",
   scheduledAt: "",
   estimatedMinutes: 60,
   downtimeMinutes: 0,
@@ -58,8 +73,11 @@ const EMPTY_EQUIPMENT = {
   assetCode: "",
   name: "",
   category: "",
+  serviceDomain: "MACHINE",
+  assetKind: "PRODUCTION_MACHINE",
   plantCode: "",
   location: "",
+  workCenter: "",
   manufacturer: "",
   model: "",
   serialNumber: "",
@@ -68,24 +86,63 @@ const EMPTY_EQUIPMENT = {
   maintenanceTeam: "",
   primaryTechnician: "",
   owner: "",
+  assignedToCode: "",
+  assignedToName: "",
+  assignedDepartment: "",
+  hostname: "",
+  ipAddress: "",
+  macAddress: "",
+  operatingSystem: "",
   purchaseDate: "",
   commissionedDate: "",
   warrantyExpiry: "",
   description: "",
+  qrEnabled: true,
   safetyNotes: "",
 };
 
-const EMPTY_TEAM = { name: "", plantCode: "", lead: "", membersText: "", active: true };
+const EMPTY_TEAM = {
+  name: "",
+  plantCode: "",
+  serviceDomain: "MACHINE",
+  lead: "",
+  membersText: "",
+  defaultForPlant: false,
+  publicReportingEnabled: true,
+  defaultCategories: "",
+  active: true,
+};
+
+const EMPTY_REPORTER = {
+  reporterCode: "",
+  displayName: "",
+  reporterType: "EMPLOYEE",
+  plantCode: "",
+  plantCodes: [],
+  linkedUsername: "",
+  department: "",
+  designation: "",
+  phone: "",
+  email: "",
+  allowedDomains: ["MACHINE"],
+  accessPin: "",
+  active: true,
+  validUntil: "",
+};
 const EMPTY_PLAN = {
   equipmentId: "",
   title: "",
   intervalDays: 30,
   leadDays: 3,
   nextDueDate: dateInput(new Date()),
+  scheduledTime: "09:00",
+  estimatedMinutes: 60,
   defaultPriority: "NORMAL",
   teamName: "",
   responsible: "",
+  requiresShutdown: false,
   instructions: "",
+  checklistText: "",
   active: true,
 };
 
@@ -134,6 +191,39 @@ function human(value) {
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
+}
+
+function MachineQr({ value, size = 184 }) {
+  const matrix = useMemo(() => {
+    try {
+      return createQrMatrix(value, "M");
+    } catch {
+      return [];
+    }
+  }, [value]);
+
+  if (!matrix.length) return <div className="mf-qr-unavailable">QR unavailable</div>;
+  const quiet = 4;
+  const dimension = matrix.length + quiet * 2;
+
+  return (
+    <svg
+      className="mf-machine-qr"
+      width={size}
+      height={size}
+      viewBox={`0 0 ${dimension} ${dimension}`}
+      role="img"
+      aria-label="Machine maintenance QR code"
+      shapeRendering="crispEdges"
+    >
+      <rect x="0" y="0" width={dimension} height={dimension} fill="#fff" />
+      <g fill="#000">
+        {matrix.flatMap((row, r) => row.map((dark, c) => dark ? (
+          <rect key={`${r}-${c}`} x={c + quiet} y={r + quiet} width="1" height="1" />
+        ) : null))}
+      </g>
+    </svg>
+  );
 }
 
 function errorText(error) {
@@ -186,6 +276,8 @@ function StatusBadge({ status }) {
   const tone = {
     NEW: "blue",
     PLANNED: "violet",
+    ASSIGNED: "blue",
+    ACCEPTED: "teal",
     IN_PROGRESS: "amber",
     WAITING_PARTS: "orange",
     REPAIRED: "teal",
@@ -260,8 +352,13 @@ function ErrorBox({ error, onRetry }) {
 export default function MachFlowWorkspace() {
   const navigate = useNavigate();
   const { roles = [], username = "" } = useAuth();
+  const query = useMemo(() => new URLSearchParams(window.location.search), []);
+  const qrToken = query.get("asset") || query.get("qr") || "";
+  const qrMode = String(query.get("mode") || "").toLowerCase() === "report" && Boolean(qrToken);
+
   const [tab, setTab] = useState("dashboard");
   const [plantCode, setPlantCode] = useState("");
+  const [serviceDomain, setServiceDomain] = useState("");
   const [toast, setToast] = useState(null);
   const plants = useAsync(() => machFlowApi.plants(), []);
 
@@ -269,16 +366,79 @@ export default function MachFlowWorkspace() {
     () => (roles || []).map((role) => String(role || "").replace(/^ROLE_/i, "").toUpperCase()),
     [roles]
   );
+
   const isAdmin = normalizedRoles.includes("ADMIN");
-  const canPlan = isAdmin || normalizedRoles.some((role) => ["MACHFLOW_MANAGER", "MACHFLOW_PLANNER"].includes(role));
-  const canExecute = canPlan || normalizedRoles.includes("MACHFLOW_TECHNICIAN");
+  const isDirector = normalizedRoles.includes("MACHFLOW_DIRECTOR");
+  const isLegacyManager = normalizedRoles.includes("MACHFLOW_MANAGER");
+  const isLegacyPlanner = normalizedRoles.includes("MACHFLOW_PLANNER");
+
+  const isMachineHead =
+    normalizedRoles.includes("MACHFLOW_MACHINE_HEAD") ||
+    normalizedRoles.includes("MACHFLOW_HEAD_TECHNICIAN");
+  const isMachineTechnician =
+    normalizedRoles.includes("MACHFLOW_MACHINE_TECHNICIAN") ||
+    normalizedRoles.includes("MACHFLOW_TECHNICIAN");
+  const isItHead = normalizedRoles.includes("MACHFLOW_IT_HEAD");
+  const isItTechnician = normalizedRoles.includes("MACHFLOW_IT_TECHNICIAN");
+
+  const crossDomain = isAdmin || isDirector;
+  const allowedDomains = useMemo(() => {
+    if (crossDomain) return ["MACHINE", "IT"];
+    if (isMachineHead || isMachineTechnician || isLegacyManager || isLegacyPlanner) return ["MACHINE"];
+    if (isItHead || isItTechnician) return ["IT"];
+    return [];
+  }, [crossDomain, isMachineHead, isMachineTechnician, isLegacyManager, isLegacyPlanner, isItHead, isItTechnician]);
+
+  useEffect(() => {
+    if (!crossDomain && allowedDomains.length === 1 && serviceDomain !== allowedDomains[0]) {
+      setServiceDomain(allowedDomains[0]);
+    }
+    if (crossDomain && serviceDomain && !allowedDomains.includes(serviceDomain)) {
+      setServiceDomain("");
+    }
+  }, [crossDomain, allowedDomains, serviceDomain]);
+
+  const selectedDomain = serviceDomain || "";
+  const domainIsMachine = selectedDomain === "MACHINE";
+  const domainIsIt = selectedDomain === "IT";
+
+  const canCoordinate =
+    !isDirector &&
+    (
+      isAdmin ||
+      (domainIsMachine && (isMachineHead || isLegacyManager || isLegacyPlanner)) ||
+      (domainIsIt && isItHead)
+    );
+
+  const canManageMasters = canCoordinate;
+
+  const canExecute =
+    !isDirector &&
+    (
+      canCoordinate ||
+      (domainIsMachine && isMachineTechnician) ||
+      (domainIsIt && isItTechnician)
+    );
+
+  const canViewReports =
+    isAdmin ||
+    isDirector ||
+    isLegacyManager ||
+    isLegacyPlanner ||
+    isMachineHead ||
+    isItHead;
+
   const visibleTabs = useMemo(
-    () => TABS.filter(([key]) => canPlan || !["reports", "config"].includes(key)),
-    [canPlan]
+    () => TABS.filter(([key]) => {
+      if (key === "reports") return canViewReports;
+      if (key === "config") return canManageMasters || isAdmin;
+      return true;
+    }),
+    [canManageMasters, canViewReports, isAdmin]
   );
 
   useEffect(() => {
-    if (!visibleTabs.some(([key]) => key === tab)) setTab("dashboard");
+    if (!visibleTabs.some(([key]) => key === tab)) setTab(visibleTabs[0]?.[0] || "dashboard");
   }, [tab, visibleTabs]);
 
   useEffect(() => {
@@ -288,6 +448,40 @@ export default function MachFlowWorkspace() {
 
   const notify = useCallback((message, type = "success") => setToast({ message, type }), []);
 
+  if (qrMode) {
+    return (
+      <div className="mf-shell mf-mobile-shell">
+        <QrComplaintPortal
+          token={qrToken}
+          username={username}
+          onOpenMachFlow={() => navigate("/modules?module=machflow", { replace: true })}
+        />
+      </div>
+    );
+  }
+
+  const roleLabel = isAdmin
+    ? "Administrator"
+    : isDirector
+      ? "Director · Overall Maintenance"
+      : isItHead
+        ? "IT Head"
+        : isItTechnician
+          ? "IT Technician"
+          : isMachineHead
+            ? "Machine Maintenance Head"
+            : isMachineTechnician
+              ? "Machine Maintenance Technician"
+              : isLegacyManager
+                ? "Maintenance Manager · Legacy"
+                : isLegacyPlanner
+                  ? "Maintenance Planner · Legacy"
+                  : "MachFlow User";
+
+  const domainLabel = selectedDomain
+    ? SERVICE_DOMAIN_LABELS[selectedDomain]
+    : "Overall · Machine + IT";
+
   return (
     <div className="mf-shell">
       <header className="mf-topbar">
@@ -296,16 +490,32 @@ export default function MachFlowWorkspace() {
           <div className="mf-mark">M</div>
           <div>
             <strong>MachFlow</strong>
-            <span>Machine Maintenance & Reliability</span>
+            <span>{domainLabel}</span>
           </div>
         </div>
+
         <nav className="mf-nav" aria-label="MachFlow sections">
           {visibleTabs.map(([key, label]) => (
             <button key={key} className={cx(tab === key && "is-active")} onClick={() => setTab(key)}>{label}</button>
           ))}
         </nav>
+
         <div className="mf-top-actions">
-          <span className="mf-user-pill">{username || "MachFlow User"}</span>
+          <span className="mf-user-pill">{username || "MachFlow User"} · {roleLabel}</span>
+
+          {crossDomain && (
+            <select
+              value={serviceDomain}
+              onChange={(e) => setServiceDomain(e.target.value)}
+              aria-label="Maintenance department filter"
+              title="Maintenance department"
+            >
+              <option value="">Overall · Machine + IT</option>
+              <option value="MACHINE">Machine Maintenance</option>
+              <option value="IT">IT Support</option>
+            </select>
+          )}
+
           <select value={plantCode} onChange={(e) => setPlantCode(e.target.value)} aria-label="Plant filter">
             {(plants.data || []).length > 1 && <option value="">All authorised plants</option>}
             {(plants.data || []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
@@ -314,22 +524,169 @@ export default function MachFlowWorkspace() {
       </header>
 
       <main className="mf-main">
-        {tab === "dashboard" && <Dashboard plantCode={plantCode} onNavigate={setTab} />}
-        {tab === "work" && <WorkOrders plantCode={plantCode} notify={notify} plants={plants.data || []} canPlan={canPlan} canExecute={canExecute} />}
-        {tab === "calendar" && <MaintenanceCalendar plantCode={plantCode} />}
-        {tab === "equipment" && <Equipment plantCode={plantCode} notify={notify} plants={plants.data || []} canPlan={canPlan} />}
-        {tab === "reports" && canPlan && <Reports plantCode={plantCode} />}
-        {tab === "config" && canPlan && <Configuration plantCode={plantCode} notify={notify} plants={plants.data || []} isAdmin={isAdmin} />}
+        {tab === "dashboard" && (
+          <Dashboard
+            plantCode={plantCode}
+            serviceDomain={selectedDomain}
+            onNavigate={setTab}
+            showDepartmentComparison={crossDomain && !selectedDomain}
+          />
+        )}
+
+        {tab === "work" && (
+          <WorkOrders
+            plantCode={plantCode}
+            serviceDomain={selectedDomain}
+            notify={notify}
+            plants={plants.data || []}
+            canCoordinate={canCoordinate}
+            canManageMasters={canManageMasters}
+            canExecute={canExecute}
+            readOnly={isDirector}
+            username={username}
+          />
+        )}
+
+        {tab === "calendar" && (
+          <MaintenanceCalendar plantCode={plantCode} serviceDomain={selectedDomain} />
+        )}
+
+        {tab === "equipment" && (
+          <Equipment
+            plantCode={plantCode}
+            serviceDomain={selectedDomain}
+            notify={notify}
+            plants={plants.data || []}
+            canManageMasters={canManageMasters}
+            readOnly={isDirector}
+          />
+        )}
+
+        {tab === "reports" && canViewReports && (
+          <Reports
+            plantCode={plantCode}
+            serviceDomain={selectedDomain}
+            showDepartmentComparison={crossDomain && !selectedDomain}
+          />
+        )}
+
+        {tab === "config" && (canManageMasters || isAdmin) && (
+          <Configuration
+            plantCode={plantCode}
+            serviceDomain={selectedDomain}
+            notify={notify}
+            plants={plants.data || []}
+            isAdmin={isAdmin}
+          />
+        )}
       </main>
+
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
 
+function QrComplaintPortal({ token, username, onOpenMachFlow }) {
+  const equipment = useAsync(() => machFlowApi.qrEquipment(token), [token]);
+  const [submitted, setSubmitted] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    operatorName: "",
+    operatorContact: "",
+    priority: "NORMAL",
+    scheduledAt: dateTimeInput(new Date()),
+    productionStopped: false,
+    safetyRisk: false,
+    breakdown: true,
+    workType: "CORRECTIVE",
+  });
+
+  if (equipment.loading) return <Loading />;
+  if (equipment.error) return <ErrorBox error={equipment.error} onRetry={equipment.reload} />;
+  const machine = equipment.data || {};
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const result = await machFlowApi.createQrComplaint(token, form);
+      setSubmitted(result);
+    } catch (error) {
+      setSubmitted({ error: errorText(error) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (submitted && !submitted.error) {
+    return (
+      <main className="mf-qr-page">
+        <section className="mf-mobile-card mf-success-card">
+          <div className="mf-mobile-icon">✓</div>
+          <p className="mf-eyebrow">Complaint registered</p>
+          <h1>{submitted.workNumber}</h1>
+          <p>{submitted.title}</p>
+          <div className="mf-mobile-status-grid">
+            <Detail label="Machine" value={submitted.equipmentName} />
+            <Detail label="Status" value={human(submitted.status)} />
+            <Detail label="Assigned to" value={submitted.responsible || "Maintenance queue"} />
+            <Detail label="Scheduled" value={fmtDate(submitted.scheduledAt, true)} />
+          </div>
+          <Button variant="primary" onClick={onOpenMachFlow}>Open MachFlow</Button>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mf-qr-page">
+      <section className="mf-mobile-card mf-machine-passport">
+        <div className="mf-mobile-card-head">
+          <div>
+            <p className="mf-eyebrow">Machine QR Passport</p>
+            <h1>{machine.name}</h1>
+            <p>{machine.assetCode} · {machine.plantCode}{machine.location ? ` · ${machine.location}` : ""}</p>
+          </div>
+          <StatusBadge status={machine.status} />
+        </div>
+        <div className="mf-mobile-status-grid">
+          <Detail label="Work center" value={machine.workCenter || "—"} />
+          <Detail label="Category" value={machine.category || "—"} />
+          <Detail label="Maintenance team" value={machine.maintenanceTeam || "—"} />
+          <Detail label="Head technician" value={machine.headTechnician || "Unassigned"} />
+        </div>
+        {machine.safetyNotes && <div className="mf-safety-callout"><strong>Safety note</strong><span>{machine.safetyNotes}</span></div>}
+      </section>
+
+      <section className="mf-mobile-card">
+        <div className="mf-mobile-card-head">
+          <div><p className="mf-eyebrow">Raise corrective complaint</p><h2>What is wrong?</h2><p>Signed in as {username || "FlowSuite user"}. Your identity is recorded automatically.</p></div>
+        </div>
+        {submitted?.error && <div className="mf-inline-error">{submitted.error}</div>}
+        <form onSubmit={submit} className="mf-mobile-form">
+          <Field label="Problem title"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Spindle vibration / machine not starting" /></Field>
+          <Field label="Problem description"><textarea required rows="5" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What happened, error code, sound, smell, visible issue…" /></Field>
+          <Field label="Machine operator (optional)"><input value={form.operatorName} onChange={(e) => setForm({ ...form, operatorName: e.target.value })} placeholder="If you are reporting for another operator" /></Field>
+          <Field label="Operator contact (optional)"><input value={form.operatorContact} onChange={(e) => setForm({ ...form, operatorContact: e.target.value })} placeholder="Mobile / extension" /></Field>
+          <Field label="Required attendance time"><input required type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} /></Field>
+          <Field label="Priority"><select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option value={p} key={p}>{human(p)}</option>)}</select></Field>
+          <div className="mf-mobile-switches">
+            <label><input type="checkbox" checked={form.productionStopped} onChange={(e) => setForm({ ...form, productionStopped: e.target.checked })} /> Production stopped</label>
+            <label><input type="checkbox" checked={form.safetyRisk} onChange={(e) => setForm({ ...form, safetyRisk: e.target.checked })} /> Safety risk</label>
+          </div>
+          <Button variant="primary" disabled={saving}>{saving ? "Submitting…" : "Submit maintenance complaint"}</Button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
 /* ================================= DASHBOARD ================================= */
 
-function Dashboard({ plantCode, onNavigate }) {
-  const state = useAsync(() => machFlowApi.dashboard(plantCode), [plantCode]);
+function Dashboard({ plantCode, serviceDomain, onNavigate, showDepartmentComparison }) {
+  const state = useAsync(() => machFlowApi.dashboard(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
   if (state.loading) return <Loading />;
   if (state.error) return <ErrorBox error={state.error} onRetry={state.reload} />;
 
@@ -341,9 +698,9 @@ function Dashboard({ plantCode, onNavigate }) {
     <section className="mf-page">
       <div className="mf-page-head">
         <div>
-          <p className="mf-eyebrow">Reliability command center</p>
-          <h1>Maintenance Dashboard</h1>
-          <p>Actionable machine health, downtime, preventive compliance and technician queue in one view.</p>
+          <p className="mf-eyebrow">{showDepartmentComparison ? "Director command center" : serviceDomain === "IT" ? "IT service command center" : "Machine reliability command center"}</p>
+          <h1>{showDepartmentComparison ? "Overall Maintenance Dashboard" : serviceDomain === "IT" ? "IT Support Dashboard" : "Machine Maintenance Dashboard"}</h1>
+          <p>{showDepartmentComparison ? "Executive comparison of Machine Maintenance and IT Support without mixing their operational queues." : serviceDomain === "IT" ? "IT requests, asset health, response time, preventive tasks and technician workload for the IT team only." : "Machine breakdowns, downtime, preventive compliance, reliability and technician workload for Machine Maintenance only."}</p>
         </div>
         <Button variant="primary" onClick={() => onNavigate("work")}>Open work board</Button>
       </div>
@@ -352,10 +709,28 @@ function Dashboard({ plantCode, onNavigate }) {
         <Kpi title="Open work orders" value={fmtNumber(m.open)} detail={`${fmtNumber(m.critical)} critical`} tone="blue" />
         <Kpi title="Overdue" value={fmtNumber(m.overdue)} detail={`${fmtNumber(m.waitingParts)} waiting parts`} tone={m.overdue ? "red" : "green"} />
         <Kpi title="PM compliance · 30d" value={`${fmtNumber(m.pmCompliance30, 1)}%`} detail={`${fmtNumber(m.pmDue7)} due in 7 days`} tone={m.pmCompliance30 >= 90 ? "green" : "amber"} />
-        <Kpi title="MTTR · 90d" value={`${fmtNumber(m.mttrHours90, 1)}h`} detail={`${fmtNumber(m.breakdowns30)} breakdowns / 30d`} tone="violet" />
-        <Kpi title="Downtime · 30d" value={`${fmtNumber(m.downtimeHours30, 1)}h`} detail={`${fmtNumber(m.assetsDown)} assets down`} tone={m.assetsDown ? "red" : "teal"} />
-        <Kpi title="Equipment register" value={fmtNumber(m.equipmentCount)} detail={`${fmtNumber(m.warrantyRisk60)} warranties ≤ 60d`} tone="neutral" />
+        <Kpi title={serviceDomain === "IT" ? "Avg resolution · 90d" : "MTTR · 90d"} value={`${fmtNumber(m.mttrHours90, 1)}h`} detail={`${fmtNumber(m.breakdowns30)} corrective / 30d`} tone="violet" />
+        <Kpi title={serviceDomain === "IT" ? "Service interruption · 30d" : "Downtime · 30d"} value={`${fmtNumber(m.downtimeHours30, 1)}h`} detail={`${fmtNumber(m.assetsDown)} assets affected`} tone={m.assetsDown ? "red" : "teal"} />
+        <Kpi title={serviceDomain === "IT" ? "IT Asset Master" : serviceDomain === "MACHINE" ? "Machine Master" : "Total assets"} value={fmtNumber(m.equipmentCount)} detail={`${fmtNumber(m.warrantyRisk60)} warranties ≤ 60d`} tone="neutral" />
       </div>
+
+      {showDepartmentComparison && (data.departmentComparison || []).length > 0 && (
+        <div className="mf-department-comparison">
+          {(data.departmentComparison || []).map((row) => (
+            <div className="mf-department-card" key={row.serviceDomain}>
+              <div className="mf-panel-head"><div><h2>{row.label}</h2><p>Department-isolated operational summary</p></div><Badge tone={row.serviceDomain === "IT" ? "violet" : "blue"}>{row.open} open</Badge></div>
+              <div className="mf-department-metrics">
+                <span><small>Overdue</small><strong>{fmtNumber(row.overdue)}</strong></span>
+                <span><small>Critical</small><strong>{fmtNumber(row.critical)}</strong></span>
+                <span><small>Completed · 30d</small><strong>{fmtNumber(row.completed30)}</strong></span>
+                <span><small>Avg response</small><strong>{fmtNumber(row.avgResponseMinutes30, 1)} min</strong></span>
+                <span><small>Avg resolution</small><strong>{fmtNumber(row.avgResolutionHours30, 1)}h</strong></span>
+                <span><small>Assets / affected</small><strong>{fmtNumber(row.assets)} / {fmtNumber(row.assetsDown)}</strong></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mf-dashboard-grid">
         <div className="mf-panel mf-span-2">
@@ -369,6 +744,14 @@ function Dashboard({ plantCode, onNavigate }) {
                 <div><i style={{ width: `${(Number(value) / statusMax) * 100}%` }} /></div>
                 <strong>{fmtNumber(value)}</strong>
               </div>
+            ))}
+          </div>
+          <div className="mf-section-title"><h3>Open requests by service</h3><span>Unified maintenance intake</span></div>
+          <div className="mf-chip-row">
+            {Object.entries(data.byServiceDomain || {}).filter(([, value]) => Number(value) > 0).map(([domain, value]) => (
+              <Badge key={domain} tone={domain === "MACHINE" ? "blue" : domain === "IT" ? "violet" : "teal"}>
+                {SERVICE_DOMAIN_LABELS[domain] || human(domain)} · {fmtNumber(value)}
+              </Badge>
             ))}
           </div>
         </div>
@@ -391,7 +774,7 @@ function Dashboard({ plantCode, onNavigate }) {
                 {(data.priorityQueue || []).map((w) => (
                   <tr key={w.id}>
                     <td><strong>{w.workNumber}</strong><small>{w.title}</small></td>
-                    <td>{w.equipmentName || "General maintenance"}</td>
+                    <td><strong>{SERVICE_DOMAIN_LABELS[w.serviceDomain] || human(w.serviceDomain)}</strong><small>{w.equipmentName || w.requestCategory || "General request"}</small></td>
                     <td>{w.plantCode}</td>
                     <td>{w.responsible || "Unassigned"}</td>
                     <td className={cx(w.overdue && "mf-danger-text")}>{fmtDate(w.scheduledAt, true)}</td>
@@ -420,7 +803,7 @@ function Kpi({ title, value, detail, tone }) {
 
 /* ================================= WORK ORDERS ================================= */
 
-function WorkOrders({ plantCode, notify, plants, canPlan, canExecute }) {
+function WorkOrders({ plantCode, serviceDomain, notify, plants, canCoordinate, canManageMasters, canExecute, readOnly, username }) {
   const [search, setSearch] = useState("");
   const [view, setView] = useState("kanban");
   const [priority, setPriority] = useState("");
@@ -430,12 +813,12 @@ function WorkOrders({ plantCode, notify, plants, canPlan, canExecute }) {
   const [selectedId, setSelectedId] = useState(null);
 
   const state = useAsync(
-    () => machFlowApi.workOrders({ plantCode, search, priority, type, status, size: 1000 }),
-    [plantCode, search, priority, type, status]
+    () => machFlowApi.workOrders({ plantCode, serviceDomain: serviceDomain || undefined, search, priority, type, status, size: 1000 }),
+    [plantCode, serviceDomain, search, priority, type, status]
   );
-  const equipment = useAsync(() => machFlowApi.equipment({ plantCode }), [plantCode]);
-  const teams = useAsync(() => machFlowApi.teams(plantCode), [plantCode]);
-  const users = useAsync(() => machFlowApi.users(plantCode), [plantCode]);
+  const equipment = useAsync(() => machFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined }), [plantCode, serviceDomain]);
+  const teams = useAsync(() => machFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+  const users = useAsync(() => machFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
 
   const items = state.data?.items || [];
   const byStatus = useMemo(() => {
@@ -449,8 +832,8 @@ function WorkOrders({ plantCode, notify, plants, canPlan, canExecute }) {
 
   const saveWork = async (payload) => {
     try {
-      await machFlowApi.createWorkOrder(payload);
-      notify(canPlan && payload.scheduledAt ? "Maintenance work order planned" : "Maintenance request created");
+      const created = await machFlowApi.createWorkOrder(payload);
+      notify(created?.responsible ? `Request ${created.workNumber} routed to ${created.responsible}` : `Request ${created.workNumber} created in maintenance queue`);
       setCreateOpen(false);
       state.reload();
     } catch (error) {
@@ -458,59 +841,42 @@ function WorkOrders({ plantCode, notify, plants, canPlan, canExecute }) {
     }
   };
 
-  const move = async (id, target, version) => {
-    if (!canExecute) return;
-    if (["REPAIRED", "CLOSED"].includes(target)) {
-      notify("Open the work order to capture repair and verification details before completing it.");
-      setSelectedId(id);
-      return;
-    }
-    try {
-      await machFlowApi.changeStatus(id, { status: target, note: `Moved to ${human(target)}`, version });
-      notify(`Moved to ${human(target)}`);
-      state.reload();
-      if (selectedId === id) setSelectedId(null);
-    } catch (error) {
-      notify(errorText(error), "error");
-    }
-  };
-
   if (state.error) return <ErrorBox error={state.error} onRetry={state.reload} />;
+
+  const pageTitle = readOnly
+    ? "Overall Maintenance Work Orders"
+    : canExecute && !canCoordinate
+      ? `${SERVICE_DOMAIN_LABELS[serviceDomain] || "Maintenance"} Technician Queue`
+      : `${SERVICE_DOMAIN_LABELS[serviceDomain] || "Maintenance & IT"} Work Orders`;
+  const pageText = readOnly
+    ? "Read-only cross-department operational view for management oversight."
+    : canExecute && !canCoordinate
+      ? "Jobs assigned to you. Accept, start, hold for parts and record the completed repair from desktop or mobile."
+      : "Department-scoped intake, routing, delegation, execution and verified closure.";
 
   return (
     <section className="mf-page">
       <div className="mf-page-head compact">
-        <div><p className="mf-eyebrow">Maintenance execution</p><h1>Work Orders</h1><p>Corrective, preventive, inspection and calibration work with plant-secured ownership and traceable status history.</p></div>
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>+ {canPlan ? "New work order" : "Raise maintenance request"}</Button>
+        <div><p className="mf-eyebrow">Real-time maintenance execution</p><h1>{pageTitle}</h1><p>{pageText}</p></div>
+        {!readOnly && <Button variant="primary" onClick={() => setCreateOpen(true)}>+ New work order</Button>}
       </div>
 
       <div className="mf-toolbar">
-        <div className="mf-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number, issue, equipment or requester…" /></div>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All stages</option>{[...KANBAN.map(([x]) => x), "SCRAPPED", "CANCELLED"].map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
-        <select value={priority} onChange={(e) => setPriority(e.target.value)}><option value="">All priorities</option>{PRIORITIES.map((x) => <option key={x}>{human(x)}</option>)}</select>
-        <select value={type} onChange={(e) => setType(e.target.value)}><option value="">All work types</option>{WORK_TYPES.map((x) => <option key={x}>{human(x)}</option>)}</select>
+        <div className="mf-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search request, asset, IT issue, requester or technician…" /></div>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All stages</option>{[...KANBAN.map(([x]) => x), "CLOSED", "SCRAPPED", "CANCELLED"].map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
+        <select value={priority} onChange={(e) => setPriority(e.target.value)}><option value="">All priorities</option>{PRIORITIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
+        <select value={type} onChange={(e) => setType(e.target.value)}><option value="">All work types</option>{WORK_TYPES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
         <div className="mf-segment"><button className={cx(view === "kanban" && "is-active")} onClick={() => setView("kanban")}>Board</button><button className={cx(view === "list" && "is-active")} onClick={() => setView("list")}>List</button></div>
       </div>
 
       {state.loading ? <Loading /> : view === "kanban" ? (
-        <div className="mf-kanban">
+        <div className="mf-kanban mf-kanban-realflow">
           {KANBAN.map(([key, label]) => (
-            <div
-              className="mf-kanban-col"
-              key={key}
-              onDragOver={(e) => { if (canExecute) e.preventDefault(); }}
-              onDrop={(e) => {
-                if (!canExecute) return;
-                try {
-                  const data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}");
-                  if (data.id && data.status !== key) move(data.id, key, data.version);
-                } catch { /* ignore malformed drag payload */ }
-              }}
-            >
+            <div className="mf-kanban-col" key={key}>
               <div className="mf-kanban-head"><div><strong>{label}</strong><span>{byStatus[key]?.length || 0}</span></div><i /></div>
               <div className="mf-kanban-cards">
-                {(byStatus[key] || []).map((w) => <WorkCard key={w.id} w={w} canExecute={canExecute} onOpen={() => setSelectedId(w.id)} />)}
-                {!byStatus[key]?.length && <div className="mf-kanban-empty">{canExecute ? "No work in this stage" : "No requests"}</div>}
+                {(byStatus[key] || []).map((w) => <WorkCard key={w.id} w={w} onOpen={() => setSelectedId(w.id)} />)}
+                {!byStatus[key]?.length && <div className="mf-kanban-empty">No requests</div>}
               </div>
             </div>
           ))}
@@ -518,60 +884,82 @@ function WorkOrders({ plantCode, notify, plants, canPlan, canExecute }) {
       ) : (
         <div className="mf-panel mf-table-wrap">
           <table className="mf-table">
-            <thead><tr><th>Work order</th><th>Equipment</th><th>Type</th><th>Requested by</th><th>Responsible</th><th>Scheduled</th><th>Priority</th><th>Status</th><th /></tr></thead>
-            <tbody>{items.map((w) => <tr key={w.id}><td><strong>{w.workNumber}</strong><small>{w.title}</small></td><td>{w.equipmentName || "—"}</td><td>{human(w.workType)}</td><td>{w.requestedBy || "—"}</td><td>{w.responsible || "Unassigned"}</td><td className={cx(w.overdue && "mf-danger-text")}>{fmtDate(w.scheduledAt, true)}</td><td><PriorityBadge value={w.priority} /></td><td><StatusBadge status={w.status} /></td><td><Button onClick={() => setSelectedId(w.id)}>Open</Button></td></tr>)}</tbody>
+            <thead><tr><th>Work order</th><th>Service / Asset</th><th>Source</th><th>Requested by</th><th>Responsible</th><th>Scheduled</th><th>Response</th><th>Priority</th><th>Status</th><th /></tr></thead>
+            <tbody>{items.map((w) => <tr key={w.id}><td><strong>{w.workNumber}</strong><small>{w.title}</small></td><td><strong>{SERVICE_DOMAIN_LABELS[w.serviceDomain] || human(w.serviceDomain)}</strong><small>{w.equipmentName || w.requestCategory || "General request"} · {w.plantCode}{w.workCenter ? ` · ${w.workCenter}` : ""}</small></td><td>{human(w.complaintSource || "WEB")}</td><td>{w.requestedBy || "—"}<small>{w.reporterCode || w.reporterDepartment || ""}</small></td><td>{w.responsible || "Unassigned"}</td><td className={cx(w.overdue && "mf-danger-text")}>{fmtDate(w.scheduledAt, true)}</td><td>{w.responseMinutes != null ? `${w.responseMinutes} min` : "—"}</td><td><PriorityBadge value={w.priority} /></td><td><StatusBadge status={w.status} /></td><td><Button onClick={() => setSelectedId(w.id)}>Open</Button></td></tr>)}</tbody>
           </table>
         </div>
       )}
 
-      {createOpen && <WorkOrderForm onClose={() => setCreateOpen(false)} onSave={saveWork} equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} plants={plants} canPlan={canPlan} defaultPlant={plantCode} />}
-      {selectedId && <WorkOrderDrawer id={selectedId} onClose={() => setSelectedId(null)} onChanged={() => state.reload()} notify={notify} canExecute={canExecute} canPlan={canPlan} equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} plants={plants} defaultPlant={plantCode} />}
+      {createOpen && <WorkOrderForm onClose={() => setCreateOpen(false)} onSave={saveWork} equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} plants={plants} canCoordinate={canCoordinate} defaultPlant={plantCode} defaultDomain={serviceDomain} />}
+      {selectedId && <WorkOrderDrawer id={selectedId} onClose={() => setSelectedId(null)} onChanged={() => state.reload()} notify={notify} canExecute={canExecute && !readOnly} canCoordinate={canCoordinate && !readOnly} canManageMasters={canManageMasters && !readOnly} equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} plants={plants} defaultPlant={plantCode} username={username} />}
     </section>
   );
 }
 
-function WorkCard({ w, onOpen, canExecute }) {
+function WorkCard({ w, onOpen }) {
   return (
-    <article
-      className={cx("mf-work-card", w.overdue && "is-overdue", w.safetyRisk && "is-risk", canExecute && "is-draggable")}
-      draggable={canExecute}
-      onDragStart={(e) => { if (canExecute) e.dataTransfer.setData("text/plain", JSON.stringify({ id: w.id, status: w.status, version: w.version })); }}
-      onClick={onOpen}
-    >
+    <article className={cx("mf-work-card", w.overdue && "is-overdue", w.safetyRisk && "is-risk")} onClick={onOpen}>
       <div className="mf-work-card-top"><span>{w.workNumber}</span><PriorityBadge value={w.priority} /></div>
       <h3>{w.title}</h3>
-      <p>{w.equipmentName || "General maintenance"}</p>
-      <div className="mf-work-meta"><span>{w.plantCode}</span><span>{w.responsible || "Unassigned"}</span></div>
-      <div className="mf-work-foot"><span className={cx(w.overdue && "mf-danger-text")}>{w.scheduledAt ? fmtDate(w.scheduledAt, true) : "Unscheduled"}</span><span>{w.productionStopped ? "Production stopped" : human(w.workType)}</span></div>
+      <p>{w.equipmentName || SERVICE_DOMAIN_LABELS[w.serviceDomain] || "General maintenance"}</p>
+      <div className="mf-work-meta"><span>{w.plantCode}{w.workCenter ? ` · ${w.workCenter}` : ""}</span><span>{w.responsible || "Maintenance queue"}</span></div>
+      <div className="mf-work-foot"><span className={cx(w.overdue && "mf-danger-text")}>{fmtDate(w.scheduledAt, true)}</span><span>{w.productionStopped ? "Production stopped" : human(w.complaintSource || w.workType)}</span></div>
     </article>
   );
 }
 
-function WorkOrderForm({ onClose, onSave, equipment, teams, users, plants, canPlan, defaultPlant, initial }) {
-  const [form, setForm] = useState(() => ({ ...EMPTY_WORK, plantCode: defaultPlant || "", ...(initial || {}), scheduledAt: dateTimeInput(initial?.scheduledAt) }));
+function WorkOrderForm({ onClose, onSave, equipment, teams, users, plants, canCoordinate, defaultPlant, defaultDomain = "", initial }) {
+  const [form, setForm] = useState(() => ({
+    ...EMPTY_WORK,
+    serviceDomain: defaultDomain || "MACHINE",
+    plantCode: defaultPlant || "",
+    requestedForAt: dateTimeInput(initial?.requestedForAt || initial?.scheduledAt || new Date()),
+    scheduledAt: dateTimeInput(initial?.scheduledAt || initial?.requestedForAt || new Date()),
+    ...(initial || {}),
+    requestedForAt: dateTimeInput(initial?.requestedForAt || initial?.scheduledAt || new Date()),
+    scheduledAt: dateTimeInput(initial?.scheduledAt || initial?.requestedForAt || new Date()),
+  }));
   const [saving, setSaving] = useState(false);
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-  const activeTeams = teams.filter((team) => team.active && (!form.plantCode || !team.plantCode || team.plantCode === form.plantCode));
-  const assignableUsers = users.filter((user) => (user.roles || []).some((role) => ["MACHFLOW_MANAGER", "MACHFLOW_PLANNER", "MACHFLOW_TECHNICIAN"].includes(String(role).replace(/^ROLE_/i, "").toUpperCase())));
+  const selectedAsset = equipment.find((item) => item.id === form.equipmentId);
+  const domain = selectedAsset?.serviceDomain || form.serviceDomain || defaultDomain || "MACHINE";
+  const activeTeams = teams.filter((team) =>
+    team.active &&
+    (!form.plantCode || !team.plantCode || team.plantCode === form.plantCode) &&
+    (!team.serviceDomain || team.serviceDomain === domain)
+  );
+  const domainAssignableRoles = domain === "IT"
+    ? ["ADMIN", "MACHFLOW_IT_HEAD", "MACHFLOW_IT_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"]
+    : ["ADMIN", "MACHFLOW_MACHINE_HEAD", "MACHFLOW_MACHINE_TECHNICIAN", "MACHFLOW_HEAD_TECHNICIAN", "MACHFLOW_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"];
+  const assignableUsers = users.filter((user) =>
+    (user.roles || []).some((role) => domainAssignableRoles.includes(String(role).replace(/^ROLE_/i, "").toUpperCase()))
+  );
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!form.equipmentId && !form.plantCode) return;
     setSaving(true);
     try {
       await onSave({
         ...form,
-        requestedBy: null,
         equipmentId: form.equipmentId || null,
-        scheduledAt: canPlan && form.scheduledAt ? form.scheduledAt : null,
-        estimatedMinutes: canPlan && form.estimatedMinutes !== "" ? Number(form.estimatedMinutes) : null,
+        serviceDomain: domain,
+        requestCategory: form.requestCategory || null,
+        workType: form.workType,
+        requestedForAt: form.requestedForAt || null,
+        scheduledAt: canCoordinate ? form.scheduledAt || form.requestedForAt || null : form.requestedForAt || null,
+        estimatedMinutes: canCoordinate && form.estimatedMinutes !== "" ? Number(form.estimatedMinutes) : null,
+        teamName: canCoordinate ? form.teamName || null : null,
+        responsible: canCoordinate ? form.responsible || null : null,
         downtimeMinutes: null,
         rootCause: null,
         actionTaken: null,
         partsUsed: null,
-        partsCost: initial ? null : 0,
-        laborCost: initial ? null : 0,
-        externalCost: initial ? null : 0,
+        partsCost: null,
+        laborCost: null,
+        externalCost: null,
         verificationNote: null,
+        version: initial?.version ?? null,
       });
     } finally {
       setSaving(false);
@@ -579,47 +967,103 @@ function WorkOrderForm({ onClose, onSave, equipment, teams, users, plants, canPl
   };
 
   return (
-    <Modal title={initial ? "Edit / plan work order" : canPlan ? "New maintenance work order" : "Raise maintenance request"} subtitle={initial ? "Update planning, ownership, priority and schedule without changing the repair record." : canPlan ? "Create, route and schedule the job with a controlled maintenance owner." : "Report the machine problem clearly. Maintenance planning and assignment are handled by the maintenance team."} onClose={onClose} wide>
+    <Modal
+      title={initial ? "Edit maintenance / service planning" : "Raise maintenance / service request"}
+      subtitle={initial
+        ? "Update routing, service domain, schedule and ownership without altering execution history."
+        : "Use an asset when the request belongs to a machine/device, or raise a general Machine Maintenance or IT request without creating a fake equipment record."}
+      onClose={onClose}
+      wide
+    >
       <form onSubmit={submit}>
         <div className="mf-modal-body mf-form-grid">
-          <Field label="Issue / Request title"><input required value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Panel saw spindle vibration" /></Field>
-          <Field label="Equipment"><select value={form.equipmentId} onChange={(e) => {
-            const item = equipment.find((x) => x.id === e.target.value);
-            setForm((f) => ({ ...f, equipmentId: e.target.value, plantCode: item?.plantCode || f.plantCode, location: item?.location || f.location, teamName: item?.maintenanceTeam || f.teamName, responsible: item?.primaryTechnician || f.responsible }));
-          }}><option value="">General / no equipment</option>{equipment.map((item) => <option key={item.id} value={item.id}>{item.assetCode} · {item.name}</option>)}</select></Field>
+          <Field label="Asset / equipment" hint="Optional for general non-asset-specific Machine Maintenance or IT requests.">
+            <select value={form.equipmentId} onChange={(e) => {
+              const item = equipment.find((x) => x.id === e.target.value);
+              setForm((f) => ({
+                ...f,
+                equipmentId: e.target.value,
+                serviceDomain: item?.serviceDomain || f.serviceDomain,
+                plantCode: item?.plantCode || f.plantCode,
+                location: item?.location || f.location,
+                teamName: item?.maintenanceTeam || "",
+                responsible: "",
+              }));
+            }}>
+              <option value="">General request / no specific asset</option>
+              {equipment.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.assetCode} · {item.name} · {item.plantCode} · {SERVICE_DOMAIN_LABELS[item.serviceDomain] || human(item.serviceDomain)}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Service domain">
+            <select
+              value={domain}
+              disabled={Boolean(selectedAsset) || Boolean(defaultDomain)}
+              onChange={(e) => setForm((f) => ({ ...f, serviceDomain: e.target.value, teamName: "", responsible: "" }))}
+            >
+              {SERVICE_DOMAINS.map((value) => <option key={value} value={value}>{SERVICE_DOMAIN_LABELS[value]}</option>)}
+            </select>
+          </Field>
+
+          <Field label="Issue / request title"><input required value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. LAN down / CNC spindle alarm / AC not cooling" /></Field>
+          <Field label="Request category"><input value={form.requestCategory} onChange={(e) => set("requestCategory", e.target.value)} placeholder="Breakdown / Internet / Light / AC / Wiring…" /></Field>
+
           <Field label="Work type"><select value={form.workType} onChange={(e) => setForm((f) => ({ ...f, workType: e.target.value, breakdown: e.target.value === "CORRECTIVE" }))}>{WORK_TYPES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
           <Field label="Priority"><select value={form.priority} onChange={(e) => set("priority", e.target.value)}>{PRIORITIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
-          <Field label="Plant"><select required value={form.plantCode} onChange={(e) => set("plantCode", e.target.value)}><option value="">Select plant</option>{plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}</select></Field>
-          <Field label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
-          {canPlan && <Field label="Maintenance team"><select value={form.teamName} onChange={(e) => set("teamName", e.target.value)}><option value="">Unassigned</option>{activeTeams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}</select></Field>}
-          {canPlan && <Field label="Responsible technician"><select value={form.responsible} onChange={(e) => set("responsible", e.target.value)}><option value="">Unassigned</option>{assignableUsers.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field>}
-          {canPlan && <Field label="Scheduled date & time"><input type="datetime-local" value={form.scheduledAt} onChange={(e) => set("scheduledAt", e.target.value)} /></Field>}
-          {canPlan && <Field label="Estimated minutes"><input type="number" min="0" value={form.estimatedMinutes} onChange={(e) => set("estimatedMinutes", e.target.value)} /></Field>}
-          <Field label="Problem description"><textarea required rows="4" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Symptoms, observations, error code, operating condition…" /></Field>
-          <Field label="Safety / work instructions"><textarea rows="4" value={form.instructions} onChange={(e) => set("instructions", e.target.value)} placeholder="Known hazard, LOTO need, access restriction or specific observation…" /></Field>
+
+          <Field label="Plant / site">
+            {selectedAsset ? (
+              <input value={form.plantCode} readOnly />
+            ) : (
+              <select required value={form.plantCode} onChange={(e) => setForm((f) => ({ ...f, plantCode: e.target.value, teamName: "", responsible: "" }))}>
+                <option value="">Select plant</option>
+                {plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}
+              </select>
+            )}
+          </Field>
+          <Field label="Exact location"><input value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="Machine bay, department, cabin, workstation…" /></Field>
+
+          <Field label="Requested / preferred attendance"><input required type="datetime-local" value={form.requestedForAt} onChange={(e) => set("requestedForAt", e.target.value)} /></Field>
+          {canCoordinate && <Field label="Maintenance scheduled time"><input type="datetime-local" value={form.scheduledAt} onChange={(e) => set("scheduledAt", e.target.value)} /></Field>}
+
+          <Field label="Person / operator at location (optional)"><input value={form.operatorName} onChange={(e) => set("operatorName", e.target.value)} placeholder="If raised for another person or machine operator" /></Field>
+          <Field label="Contact / extension (optional)"><input value={form.operatorContact} onChange={(e) => set("operatorContact", e.target.value)} /></Field>
+
+          {canCoordinate && <Field label="Service team override"><select value={form.teamName} onChange={(e) => set("teamName", e.target.value)}><option value="">Use automatic {SERVICE_DOMAIN_LABELS[domain]} route</option>{activeTeams.map((t) => <option key={t.id} value={t.name}>{t.name}{t.defaultForPlant ? " · Default" : ""}</option>)}</select></Field>}
+          {canCoordinate && <Field label="Responsible technician"><select value={form.responsible} onChange={(e) => set("responsible", e.target.value)}><option value="">Use team head / automatic route</option>{assignableUsers.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field>}
+          {canCoordinate && <Field label="Estimated minutes"><input type="number" min="0" value={form.estimatedMinutes} onChange={(e) => set("estimatedMinutes", e.target.value)} /></Field>}
+
+          <Field label="Problem / request description"><textarea required rows="5" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Symptoms, error, affected area, network point, light/socket, machine condition or any useful observation…" /></Field>
+          <Field label="Instructions / safety note"><textarea rows="5" value={form.instructions} onChange={(e) => set("instructions", e.target.value)} placeholder="Known hazard, access restriction, LOTO need or useful service instruction…" /></Field>
+
           <div className="mf-checks mf-full">
             <label><input type="checkbox" checked={form.breakdown} onChange={(e) => set("breakdown", e.target.checked)} /> Breakdown / failure</label>
-            <label><input type="checkbox" checked={form.productionStopped} onChange={(e) => set("productionStopped", e.target.checked)} /> Production stopped</label>
+            <label><input type="checkbox" checked={form.productionStopped} onChange={(e) => set("productionStopped", e.target.checked)} /> Work / production stopped</label>
             <label><input type="checkbox" checked={form.safetyRisk} onChange={(e) => set("safetyRisk", e.target.checked)} /> Safety risk</label>
           </div>
         </div>
-        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : canPlan ? "Create work order" : "Submit request"}</Button></div>
+        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save planning" : "Submit request"}</Button></div>
       </form>
     </Modal>
   );
 }
 
-function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, equipment, teams, users, plants, defaultPlant }) {
+function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canCoordinate, canManageMasters, equipment, teams, users, plants, defaultPlant }) {
   const state = useAsync(() => machFlowApi.workOrder(id), [id]);
   const [actionOpen, setActionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   if (state.loading) return <div className="mf-drawer"><Loading /></div>;
   if (state.error) return <div className="mf-drawer"><ErrorBox error={state.error} onRetry={state.reload} /></div>;
   const w = state.data;
 
   const move = async (target, details = {}) => {
     try {
-      await machFlowApi.changeStatus(id, { status: target, note: `Status moved to ${human(target)}`, version: w.version, ...details });
+      await machFlowApi.changeStatus(id, { status: target, note: details.note || `Status moved to ${human(target)}`, version: w.version, ...details });
       notify(`Work order moved to ${human(target)}`);
       await state.reload();
       onChanged();
@@ -632,8 +1076,20 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, 
   const saveEdit = async (payload) => {
     try {
       await machFlowApi.updateWorkOrder(id, { ...payload, version: w.version });
-      notify("Work order planning updated");
+      notify("Maintenance planning updated");
       setEditOpen(false);
+      await state.reload();
+      onChanged();
+    } catch (error) {
+      notify(errorText(error), "error");
+    }
+  };
+
+  const assign = async (payload) => {
+    try {
+      await machFlowApi.assignWorkOrder(id, payload);
+      notify(`Assigned to ${payload.responsible}`);
+      setAssignOpen(false);
       await state.reload();
       onChanged();
     } catch (error) {
@@ -645,21 +1101,32 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, 
     <div className="mf-drawer-backdrop" onMouseDown={onClose}>
       <aside className="mf-drawer" onMouseDown={(e) => e.stopPropagation()}>
         <div className="mf-drawer-head"><div><span>{w.workNumber}</span><h2>{w.title}</h2></div><button className="mf-icon-btn" onClick={onClose}>×</button></div>
-        <div className="mf-drawer-status"><StatusBadge status={w.status} /><PriorityBadge value={w.priority} />{w.overdue && <Badge tone="red">Overdue</Badge>}{w.productionStopped && <Badge tone="red">Production stopped</Badge>}</div>
-        <div className="mf-stage-strip">{KANBAN.map(([key, label]) => <div key={key} className={cx(key === w.status && "is-current", ["CLOSED"].includes(w.status) && key !== "CLOSED" && "is-done")}>{label}</div>)}</div>
+        <div className="mf-drawer-status"><StatusBadge status={w.status} /><PriorityBadge value={w.priority} /><Badge tone="neutral">{human(w.complaintSource || "WEB")}</Badge>{w.overdue && <Badge tone="red">Overdue</Badge>}{w.productionStopped && <Badge tone="red">Production stopped</Badge>}{w.safetyRisk && <Badge tone="red">Safety risk</Badge>}</div>
+        <div className="mf-stage-strip mf-stage-strip-real">{KANBAN.map(([key, label]) => <div key={key} className={cx(key === w.status && "is-current")}>{label}</div>)}</div>
         <div className="mf-drawer-body">
           <div className="mf-detail-grid">
-            <Detail label="Equipment" value={w.equipmentName || "General maintenance"} />
+            <Detail label="Service domain" value={SERVICE_DOMAIN_LABELS[w.serviceDomain] || human(w.serviceDomain)} />
+            <Detail label="Request category" value={w.requestCategory || "—"} />
+            <Detail label="Asset / equipment" value={w.equipmentName || "General / no fixed asset"} />
             <Detail label="Plant / Location" value={[w.plantCode, w.location].filter(Boolean).join(" · ")} />
+            <Detail label="Work center" value={w.workCenter || "—"} />
             <Detail label="Requested by" value={w.requestedBy} />
+            <Detail label="Reporter Code" value={w.reporterCode || "FlowSuite user"} />
+            <Detail label="Reporter department/contact" value={[w.reporterDepartment, w.reporterContact].filter(Boolean).join(" · ") || "—"} />
+            <Detail label="Machine operator" value={w.operatorName || "Same as requester / not specified"} />
+            <Detail label="Operator contact" value={w.operatorContact || "—"} />
+            <Detail label="Team" value={w.teamName || "Plant maintenance queue"} />
             <Detail label="Responsible" value={w.responsible || "Unassigned"} />
-            <Detail label="Team" value={w.teamName || "—"} />
-            <Detail label="Work type" value={human(w.workType)} />
-            <Detail label="Requested" value={fmtDate(w.requestedAt, true)} />
+            <Detail label="Assigned" value={fmtDate(w.assignedAt, true)} />
+            <Detail label="Accepted by" value={w.acceptedBy || "—"} />
+            <Detail label="Accepted" value={fmtDate(w.acceptedAt, true)} />
+            <Detail label="Response time" value={w.responseMinutes != null ? `${w.responseMinutes} min` : "—"} />
+            <Detail label="Requested / preferred" value={fmtDate(w.requestedForAt, true)} />
             <Detail label="Scheduled" value={fmtDate(w.scheduledAt, true)} danger={w.overdue} />
             <Detail label="Started" value={fmtDate(w.startedAt, true)} />
+            <Detail label="Attendance after accept" value={w.attendanceMinutes != null ? `${w.attendanceMinutes} min` : "—"} />
             <Detail label="Repaired" value={fmtDate(w.repairedAt, true)} />
-            <Detail label="Actual duration" value={w.actualMinutes != null ? `${fmtNumber(w.actualMinutes)} min` : "—"} />
+            <Detail label="Repair duration" value={w.actualMinutes != null ? `${fmtNumber(w.actualMinutes)} min` : "—"} />
             <Detail label="Downtime" value={w.downtimeMinutes != null ? `${fmtNumber(w.downtimeMinutes)} min` : "—"} />
           </div>
 
@@ -668,7 +1135,7 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, 
           <DetailBlock title="Root cause" text={w.rootCause} />
           <DetailBlock title="Action taken" text={w.actionTaken} />
           <DetailBlock title="Parts used" text={w.partsUsed} />
-          <DetailBlock title="Verification" text={w.verificationNote} />
+          <DetailBlock title="Verification / handover" text={w.verificationNote} />
 
           <div className="mf-cost-row"><span>Parts <strong>{fmtMoney(w.partsCost)}</strong></span><span>Labour <strong>{fmtMoney(w.laborCost)}</strong></span><span>External <strong>{fmtMoney(w.externalCost)}</strong></span><span>Total <strong>{fmtMoney(w.totalCost)}</strong></span></div>
 
@@ -677,12 +1144,18 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, 
             {(w.audit || []).map((a) => <div key={a.id} className="mf-timeline-item"><i /><div><strong>{human(a.action)}</strong><span>{a.actor || "System"} · {fmtDate(a.createdAt, true)}</span>{a.fromStatus && a.toStatus && <p>{human(a.fromStatus)} → {human(a.toStatus)}</p>}{a.note && <p>{a.note}</p>}</div></div>)}
           </div>
         </div>
-        {(canPlan || canExecute) && <div className="mf-drawer-actions">
-          {canPlan && <Button onClick={() => setEditOpen(true)}>Edit / Plan</Button>}
-          {canExecute && w.allowedTransitions?.slice(0, 4).map((s) => <Button key={s} variant={s === "REPAIRED" || s === "CLOSED" ? "primary" : "default"} onClick={() => s === "REPAIRED" || s === "CLOSED" ? setActionOpen(s) : move(s)}>{human(s)}</Button>)}
-        </div>}
-        {canPlan && editOpen && <WorkOrderForm initial={w} onClose={() => setEditOpen(false)} onSave={saveEdit} equipment={equipment} teams={teams} users={users} plants={plants} canPlan={true} defaultPlant={defaultPlant} />}
-        {canExecute && actionOpen && <StatusCompletionModal status={actionOpen} w={w} onClose={() => setActionOpen(false)} onSubmit={(details) => move(actionOpen, details)} />}
+        <div className="mf-drawer-actions">
+          {canCoordinate && <Button onClick={() => setAssignOpen(true)}>Assign / Delegate</Button>}
+          {canManageMasters && <Button onClick={() => setEditOpen(true)}>Edit Planning</Button>}
+          {(w.allowedTransitions || []).map((target) => {
+            const completion = target === "REPAIRED" || target === "CLOSED" || target === "WAITING_PARTS" || target === "CANCELLED" || target === "SCRAPPED";
+            const primary = target === "ACCEPTED" || target === "IN_PROGRESS" || target === "REPAIRED" || target === "CLOSED";
+            return <Button key={target} variant={primary ? "primary" : "default"} onClick={() => completion ? setActionOpen(target) : move(target)}>{target === "ACCEPTED" ? "Accept Job" : target === "IN_PROGRESS" ? "Start Work" : human(target)}</Button>;
+          })}
+        </div>
+        {canManageMasters && editOpen && <WorkOrderForm initial={w} onClose={() => setEditOpen(false)} onSave={saveEdit} equipment={equipment} teams={teams} users={users} plants={plants} canCoordinate={true} defaultPlant={defaultPlant} defaultDomain={w.serviceDomain || ""} />}
+        {canCoordinate && assignOpen && <AssignmentModal w={w} teams={teams} users={users} onClose={() => setAssignOpen(false)} onSubmit={assign} />}
+        {actionOpen && <StatusCompletionModal status={actionOpen} w={w} onClose={() => setActionOpen(false)} onSubmit={(details) => move(actionOpen, details)} />}
       </aside>
     </div>
   );
@@ -690,6 +1163,7 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canPlan, 
 
 function StatusCompletionModal({ status, w, onClose, onSubmit }) {
   const [form, setForm] = useState({
+    note: "",
     actualMinutes: w.actualMinutes ?? "",
     downtimeMinutes: w.downtimeMinutes ?? "",
     rootCause: w.rootCause || "",
@@ -701,21 +1175,42 @@ function StatusCompletionModal({ status, w, onClose, onSubmit }) {
     verificationNote: w.verificationNote || "",
   });
   const numericOrNull = (value) => value === "" || value == null ? null : Number(value);
+  const isRepair = status === "REPAIRED";
+  const isClose = status === "CLOSED";
+  const needsReason = ["WAITING_PARTS", "CANCELLED", "SCRAPPED"].includes(status);
+  const title = isRepair ? "Record repair completion" : isClose ? "Verify & close work" : status === "WAITING_PARTS" ? "Put job on hold for parts" : `${human(status)} request`;
+  const subtitle = isRepair
+    ? "Capture diagnosis, work done, parts, cost and downtime. This drives MTTR and reliability analysis."
+    : isClose
+      ? "Head technician / maintenance management verifies test run and handover before closure."
+      : "Record a clear reason so the maintenance timeline remains auditable.";
+
   return (
-    <Modal title={status === "REPAIRED" ? "Mark repaired" : "Close & verify work"} subtitle={status === "REPAIRED" ? "Record the repair result, downtime, parts and cost so reliability reporting stays accurate." : "Verify the repair result before final closure."} onClose={onClose} wide={status === "REPAIRED"}>
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, actualMinutes: numericOrNull(form.actualMinutes), downtimeMinutes: numericOrNull(form.downtimeMinutes), partsCost: numericOrNull(form.partsCost), laborCost: numericOrNull(form.laborCost), externalCost: numericOrNull(form.externalCost) }); }}>
+    <Modal title={title} subtitle={subtitle} onClose={onClose} wide={isRepair}>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({
+          ...form,
+          actualMinutes: numericOrNull(form.actualMinutes),
+          downtimeMinutes: numericOrNull(form.downtimeMinutes),
+          partsCost: numericOrNull(form.partsCost),
+          laborCost: numericOrNull(form.laborCost),
+          externalCost: numericOrNull(form.externalCost),
+        });
+      }}>
         <div className="mf-modal-body mf-form-grid">
-          {status === "REPAIRED" && <>
+          {isRepair && <>
             <Field label="Actual repair minutes"><input type="number" min="0" value={form.actualMinutes} onChange={(e) => setForm({ ...form, actualMinutes: e.target.value })} /></Field>
             <Field label="Downtime minutes"><input type="number" min="0" value={form.downtimeMinutes} onChange={(e) => setForm({ ...form, downtimeMinutes: e.target.value })} /></Field>
-            <Field label="Root cause"><textarea required={w.workType === "CORRECTIVE" || w.breakdown} rows="3" value={form.rootCause} onChange={(e) => setForm({ ...form, rootCause: e.target.value })} placeholder="Failure mechanism / reason found during diagnosis" /></Field>
-            <Field label="Action taken"><textarea required={w.workType === "CORRECTIVE" || w.breakdown} rows="3" value={form.actionTaken} onChange={(e) => setForm({ ...form, actionTaken: e.target.value })} placeholder="Repair, replacement, adjustment or corrective action performed" /></Field>
-            <Field label="Parts / material used"><textarea rows="3" value={form.partsUsed} onChange={(e) => setForm({ ...form, partsUsed: e.target.value })} placeholder="Bearing 6205 × 2, V-belt B52 × 1…" /></Field>
+            <Field label="Root cause / best-known cause"><textarea required={w.workType === "CORRECTIVE" || w.breakdown} rows="3" value={form.rootCause} onChange={(e) => setForm({ ...form, rootCause: e.target.value })} placeholder="Electrical failure, bearing seizure, loose terminal, operator misuse…" /></Field>
+            <Field label="Work done / action taken"><textarea required rows="3" value={form.actionTaken} onChange={(e) => setForm({ ...form, actionTaken: e.target.value })} placeholder="Diagnosis, repair, replacement, adjustment and test performed" /></Field>
+            <Field label="Parts / consumables used"><textarea rows="3" value={form.partsUsed} onChange={(e) => setForm({ ...form, partsUsed: e.target.value })} placeholder="Bearing 6205 × 2, V-belt B52 × 1…" /></Field>
             <Field label="Parts cost"><input type="number" min="0" step="0.01" value={form.partsCost} onChange={(e) => setForm({ ...form, partsCost: e.target.value })} /></Field>
             <Field label="Labour cost"><input type="number" min="0" step="0.01" value={form.laborCost} onChange={(e) => setForm({ ...form, laborCost: e.target.value })} /></Field>
             <Field label="External / vendor cost"><input type="number" min="0" step="0.01" value={form.externalCost} onChange={(e) => setForm({ ...form, externalCost: e.target.value })} /></Field>
           </>}
-          {status === "CLOSED" && <Field label="Verification note"><textarea required rows="4" value={form.verificationNote} onChange={(e) => setForm({ ...form, verificationNote: e.target.value })} placeholder="Test run completed, output checked, safety guard restored and machine handed back to production…" /></Field>}
+          {isClose && <Field label="Machine test / handover verification"><textarea required rows="4" value={form.verificationNote} onChange={(e) => setForm({ ...form, verificationNote: e.target.value })} placeholder="Test run completed, output verified, guards restored and machine handed back to production…" /></Field>}
+          {needsReason && <Field label={status === "WAITING_PARTS" ? "Required part / hold reason" : "Reason"}><textarea required rows="4" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={status === "WAITING_PARTS" ? "Part name, quantity, expected source / ETA…" : "Enter clear reason"} /></Field>}
         </div>
         <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary">Confirm {human(status)}</Button></div>
       </form>
@@ -734,11 +1229,11 @@ function DetailBlock({ title, text }) {
 
 /* ================================= CALENDAR ================================= */
 
-function MaintenanceCalendar({ plantCode }) {
+function MaintenanceCalendar({ plantCode, serviceDomain }) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const from = dateInput(weekStart);
   const to = dateInput(addDays(weekStart, 6));
-  const state = useAsync(() => machFlowApi.calendar({ plantCode, from, to }), [plantCode, from, to]);
+  const state = useAsync(() => machFlowApi.calendar({ plantCode, serviceDomain: serviceDomain || undefined, from, to }), [plantCode, serviceDomain, from, to]);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const grouped = useMemo(() => {
     const g = {};
@@ -774,19 +1269,19 @@ function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() +
 
 /* ================================= EQUIPMENT ================================= */
 
-function Equipment({ plantCode, notify, plants, canPlan }) {
+function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters, readOnly }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-  const state = useAsync(() => machFlowApi.equipment({ plantCode, status, search }), [plantCode, status, search]);
-  const teams = useAsync(() => machFlowApi.teams(plantCode), [plantCode]);
-  const users = useAsync(() => machFlowApi.users(plantCode), [plantCode]);
+  const state = useAsync(() => machFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined, status, search }), [plantCode, serviceDomain, status, search]);
+  const teams = useAsync(() => machFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+  const users = useAsync(() => machFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
 
   const save = async (payload) => {
     try {
       await machFlowApi.createEquipment(payload);
-      notify("Equipment added to MachFlow");
+      notify("Asset added to MachFlow and its controlled QR request link is ready");
       setCreateOpen(false);
       state.reload();
     } catch (error) {
@@ -796,122 +1291,593 @@ function Equipment({ plantCode, notify, plants, canPlan }) {
 
   return (
     <section className="mf-page">
-      <div className="mf-page-head compact"><div><p className="mf-eyebrow">Asset reliability register</p><h1>Equipment</h1><p>Every machine with asset identity, criticality, ownership, PM due date and maintenance history.</p></div>{canPlan && <Button variant="primary" onClick={() => setCreateOpen(true)}>+ Add equipment</Button>}</div>
-      <div className="mf-toolbar"><div className="mf-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset code, machine, model, serial or category…" /></div><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All equipment states</option>{EQUIPMENT_STATUSES.map((x) => <option key={x}>{x}</option>)}</select></div>
+      <div className="mf-page-head compact">
+        <div>
+          <p className="mf-eyebrow">Asset reliability register</p>
+          <h1>{serviceDomain === "IT" ? "IT Asset Master" : serviceDomain === "MACHINE" ? "Machine Master" : "Machine & IT Asset Masters"}</h1>
+          <p>{serviceDomain === "IT" ? "IT devices with assignment, network identity, QR reporting and support history." : serviceDomain === "MACHINE" ? "Production machines plus electrical, lighting, AC/HVAC, facility and utility assets under Machine Maintenance." : "Director/admin view of both isolated asset registers."}</p>
+        </div>
+        {canManageMasters && !readOnly && <Button variant="primary" onClick={() => setCreateOpen(true)}>+ Add asset</Button>}
+      </div>
+
+      <div className="mf-toolbar">
+        <div className="mf-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset code, machine/device, work center, model, serial or category…" /></div>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All equipment states</option>{EQUIPMENT_STATUSES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
+      </div>
+
       {state.error ? <ErrorBox error={state.error} onRetry={state.reload} /> : state.loading ? <Loading /> : (
         <div className="mf-equipment-grid">
-          {(state.data?.items || []).map((e) => <article className={cx("mf-equipment-card", e.status === "DOWN" && "is-down")} key={e.id} onClick={() => setSelectedId(e.id)}><div className="mf-equipment-top"><span>{e.assetCode}</span><StatusBadge status={e.status} /></div><h3>{e.name}</h3><p>{[e.category, e.manufacturer, e.model].filter(Boolean).join(" · ") || "Uncategorized equipment"}</p><div className="mf-equipment-meta"><span><small>Plant</small><strong>{e.plantCode}</strong></span><span><small>Location</small><strong>{e.location || "—"}</strong></span><span><small>Criticality</small><strong>{human(e.criticality)}</strong></span></div><div className="mf-equipment-foot"><span>{e.openWorkOrders ? `${e.openWorkOrders} open work orders` : "No open work"}</span><span>Next PM: {fmtDate(e.nextMaintenanceAt)}</span></div></article>)}
+          {(state.data?.items || []).map((e) => (
+            <article className={cx("mf-equipment-card", e.status === "DOWN" && "is-down")} key={e.id} onClick={() => setSelectedId(e.id)}>
+              <div className="mf-equipment-top"><span>{e.assetCode}</span><div className="mf-inline-actions"><span className="mf-service-domain-tag">{SERVICE_DOMAIN_LABELS[e.serviceDomain] || human(e.serviceDomain)}</span><StatusBadge status={e.status} /></div></div>
+              <h3>{e.name}</h3>
+              <p>{[human(e.assetKind), e.category, e.manufacturer, e.model].filter(Boolean).join(" · ") || "Uncategorized asset"}</p>
+              <div className="mf-equipment-meta">
+                <span><small>Plant</small><strong>{e.plantCode}</strong></span>
+                <span><small>{e.serviceDomain === "IT" ? "Assigned to" : "Work center"}</small><strong>{e.serviceDomain === "IT" ? (e.assignedToName || e.assignedDepartment || e.location || "—") : (e.workCenter || e.location || "—")}</strong></span>
+                <span><small>Criticality</small><strong>{human(e.criticality)}</strong></span>
+              </div>
+              <div className="mf-equipment-foot">
+                <span>{e.openWorkOrders ? `${e.openWorkOrders} open work orders` : "No open work"}</span>
+                <span>{e.qrEnabled ? "QR reporting active" : "QR disabled"}</span>
+              </div>
+            </article>
+          ))}
           {!state.data?.items?.length && <EmptyState title="No equipment found" text="Add the first machine or change the current filters." />}
         </div>
       )}
-      {canPlan && createOpen && <EquipmentForm onClose={() => setCreateOpen(false)} onSave={save} teams={teams.data || []} users={users.data || []} plants={plants} defaultPlant={plantCode} />}
-      {selectedId && <EquipmentDrawer id={selectedId} onClose={() => setSelectedId(null)} />}
+
+      {canManageMasters && createOpen && <EquipmentForm onClose={() => setCreateOpen(false)} onSave={save} teams={teams.data || []} users={users.data || []} plants={plants} defaultPlant={plantCode} defaultDomain={serviceDomain} />}
+      {selectedId && <EquipmentDrawer id={selectedId} onClose={() => setSelectedId(null)} notify={notify} canManageMasters={canManageMasters && !readOnly} />}
     </section>
   );
 }
 
-function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant }) {
-  const [form, setForm] = useState({ ...EMPTY_EQUIPMENT, plantCode: defaultPlant || "" });
+function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant, defaultDomain = "" }) {
+  const [form, setForm] = useState({ ...EMPTY_EQUIPMENT, serviceDomain: defaultDomain || "MACHINE", assetKind: defaultDomain === "IT" ? "IT_ASSET" : "PRODUCTION_MACHINE", plantCode: defaultPlant || "" });
   const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const serviceTeams = teams.filter((team) =>
+    team.active &&
+    (!form.plantCode || !team.plantCode || team.plantCode === form.plantCode) &&
+    (!team.serviceDomain || team.serviceDomain === form.serviceDomain)
+  );
+  const equipmentRoles = form.serviceDomain === "IT"
+    ? ["ADMIN", "MACHFLOW_IT_HEAD", "MACHFLOW_IT_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"]
+    : ["ADMIN", "MACHFLOW_MACHINE_HEAD", "MACHFLOW_MACHINE_TECHNICIAN", "MACHFLOW_HEAD_TECHNICIAN", "MACHFLOW_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"];
+  const maintenanceUsers = users.filter((u) => (u.roles || []).some((r) =>
+    equipmentRoles.includes(String(r).replace(/^ROLE_/i, "").toUpperCase())
+  ));
+
+  const defaultKindForDomain = (domain) => domain === "IT" ? "IT_ASSET" : "PRODUCTION_MACHINE";
+
   return (
-    <Modal title="Add equipment" subtitle="Use a permanent asset code. It becomes the machine's maintenance identity." onClose={onClose} wide>
-      <form onSubmit={async (e) => { e.preventDefault(); setSaving(true); try { await onSave({ ...form, purchaseDate: form.purchaseDate || null, commissionedDate: form.commissionedDate || null, warrantyExpiry: form.warrantyExpiry || null }); } finally { setSaving(false); } }}>
+    <Modal title="Add maintainable asset" subtitle="Create the permanent identity used by preventive plans, repair history, service routing and controlled QR requests." onClose={onClose} wide>
+      <form onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await onSave({
+            ...form,
+            purchaseDate: form.purchaseDate || null,
+            commissionedDate: form.commissionedDate || null,
+            warrantyExpiry: form.warrantyExpiry || null,
+          });
+        } finally { setSaving(false); }
+      }}>
         <div className="mf-modal-body mf-form-grid">
-          <Field label="Asset code"><input required value={form.assetCode} onChange={(e) => set("assetCode", e.target.value)} placeholder="AKG-CNC-001" /></Field>
-          <Field label="Equipment name"><input required value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
-          <Field label="Category"><input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="CNC Router / Panel Saw / Compressor…" /></Field>
-          <Field label="Criticality"><select value={form.criticality} onChange={(e) => set("criticality", e.target.value)}>{CRITICALITIES.map((x) => <option key={x}>{x}</option>)}</select></Field>
-          <Field label="Plant"><select required value={form.plantCode} onChange={(e) => set("plantCode", e.target.value)}><option value="">Select plant</option>{plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}</select></Field>
-          <Field label="Location"><input value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
+          <Field label="Asset code"><input required value={form.assetCode} onChange={(e) => set("assetCode", e.target.value)} placeholder="AKG-CNC-001 / IT-LAP-021" /></Field>
+          <Field label="Asset / equipment name"><input required value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="HOMAG NMC-112 / Design Laptop 21" /></Field>
+
+          <Field label="Service domain">
+            <select disabled={Boolean(defaultDomain)} value={form.serviceDomain} onChange={(e) => {
+              const nextDomain = e.target.value;
+              setForm((current) => ({
+                ...current,
+                serviceDomain: nextDomain,
+                assetKind: defaultKindForDomain(nextDomain),
+                maintenanceTeam: "",
+                primaryTechnician: "",
+              }));
+            }}>
+              {SERVICE_DOMAINS.map((value) => <option key={value} value={value}>{SERVICE_DOMAIN_LABELS[value]}</option>)}
+            </select>
+          </Field>
+          <Field label="Asset kind"><select value={form.assetKind} onChange={(e) => set("assetKind", e.target.value)}>{ASSET_KINDS.filter((value) => form.serviceDomain === "IT" ? ["IT_ASSET", "OTHER"].includes(value) : value !== "IT_ASSET").map((value) => <option key={value} value={value}>{human(value)}</option>)}</select></Field>
+
+          <Field label="Category"><input value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="CNC Router / Laptop / AC / Compressor…" /></Field>
+          <Field label="Criticality"><select value={form.criticality} onChange={(e) => set("criticality", e.target.value)}>{CRITICALITIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+
+          <Field label="Plant"><select required value={form.plantCode} onChange={(e) => setForm((current) => ({ ...current, plantCode: e.target.value, maintenanceTeam: "", primaryTechnician: "" }))}><option value="">Select plant</option>{plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}</select></Field>
+          <Field label="Work center / department"><input value={form.workCenter} onChange={(e) => set("workCenter", e.target.value)} placeholder="CNC Bay / Design / Accounts / Utility Room…" /></Field>
+          <Field label="Physical location"><input value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="Line 2 · Bay 4 / First floor cabin…" /></Field>
+          <Field label="Owner / using department"><input value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="K&W Production / Design / Accounts" /></Field>
+
+          {form.serviceDomain === "IT" && <>
+            <Field label="Assigned employee code"><input value={form.assignedToCode} onChange={(e) => set("assignedToCode", e.target.value)} placeholder="EMP-0142" /></Field>
+            <Field label="Assigned employee / user"><input value={form.assignedToName} onChange={(e) => set("assignedToName", e.target.value)} /></Field>
+            <Field label="Assigned department"><input value={form.assignedDepartment} onChange={(e) => set("assignedDepartment", e.target.value)} /></Field>
+            <Field label="Hostname"><input value={form.hostname} onChange={(e) => set("hostname", e.target.value)} placeholder="ALS-DESIGN-021" /></Field>
+            <Field label="IP address"><input value={form.ipAddress} onChange={(e) => set("ipAddress", e.target.value)} /></Field>
+            <Field label="MAC address"><input value={form.macAddress} onChange={(e) => set("macAddress", e.target.value)} /></Field>
+            <Field label="Operating system"><input value={form.operatingSystem} onChange={(e) => set("operatingSystem", e.target.value)} placeholder="Windows 11 Pro" /></Field>
+          </>}
+
+          <Field label="Service / maintenance team" hint={`Only teams configured for ${SERVICE_DOMAIN_LABELS[form.serviceDomain]} are shown.`}><select value={form.maintenanceTeam} onChange={(e) => set("maintenanceTeam", e.target.value)}><option value="">Use plant/domain default team</option>{serviceTeams.map((t) => <option key={t.id} value={t.name}>{t.name}{t.defaultForPlant ? " · Default" : ""}</option>)}</select></Field>
+          <Field label="Default technician / head" hint="Optional asset-level override. Normal routing goes to the service team's head."><select value={form.primaryTechnician} onChange={(e) => set("primaryTechnician", e.target.value)}><option value="">Use service team head</option>{maintenanceUsers.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field>
+
           <Field label="Manufacturer"><input value={form.manufacturer} onChange={(e) => set("manufacturer", e.target.value)} /></Field>
           <Field label="Model"><input value={form.model} onChange={(e) => set("model", e.target.value)} /></Field>
           <Field label="Serial number"><input value={form.serialNumber} onChange={(e) => set("serialNumber", e.target.value)} /></Field>
-          <Field label="Owner / department"><input value={form.owner} onChange={(e) => set("owner", e.target.value)} /></Field>
-          <Field label="Maintenance team"><select value={form.maintenanceTeam} onChange={(e) => set("maintenanceTeam", e.target.value)}><option value="">Unassigned</option>{teams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}</select></Field>
-          <Field label="Primary technician"><select value={form.primaryTechnician} onChange={(e) => set("primaryTechnician", e.target.value)}><option value="">Unassigned</option>{users.filter((u) => (u.roles || []).some((r) => ["MACHFLOW_MANAGER", "MACHFLOW_PLANNER", "MACHFLOW_TECHNICIAN"].includes(String(r).replace(/^ROLE_/i, "").toUpperCase()))).map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field>
+          <Field label="Asset state"><select value={form.status} onChange={(e) => set("status", e.target.value)}>{EQUIPMENT_STATUSES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+
           <Field label="Purchase date"><input type="date" value={form.purchaseDate} onChange={(e) => set("purchaseDate", e.target.value)} /></Field>
           <Field label="Commissioned date"><input type="date" value={form.commissionedDate} onChange={(e) => set("commissionedDate", e.target.value)} /></Field>
           <Field label="Warranty expiry"><input type="date" value={form.warrantyExpiry} onChange={(e) => set("warrantyExpiry", e.target.value)} /></Field>
-          <Field label="Equipment state"><select value={form.status} onChange={(e) => set("status", e.target.value)}>{EQUIPMENT_STATUSES.map((x) => <option key={x}>{x}</option>)}</select></Field>
+
+          <div className="mf-checks"><label><input type="checkbox" checked={form.qrEnabled} onChange={(e) => set("qrEnabled", e.target.checked)} /> Enable controlled asset QR request link</label></div>
           <Field label="Description"><textarea rows="3" value={form.description} onChange={(e) => set("description", e.target.value)} /></Field>
-          <Field label="Safety notes"><textarea rows="3" value={form.safetyNotes} onChange={(e) => set("safetyNotes", e.target.value)} /></Field>
+          <Field label="Safety / isolation / support notes"><textarea rows="3" value={form.safetyNotes} onChange={(e) => set("safetyNotes", e.target.value)} placeholder="LOTO point, electrical isolation, admin credentials owner, network point, access note…" /></Field>
         </div>
-        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : "Add equipment"}</Button></div>
+        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : "Add asset"}</Button></div>
       </form>
     </Modal>
   );
 }
 
-function EquipmentDrawer({ id, onClose }) {
+function EquipmentDrawer({ id, onClose, notify, canManageMasters }) {
   const state = useAsync(() => machFlowApi.equipmentOne(id), [id]);
   if (state.loading) return <div className="mf-drawer"><Loading /></div>;
   if (state.error) return <div className="mf-drawer"><ErrorBox error={state.error} onRetry={state.reload} /></div>;
   const e = state.data;
   const h = e.health || {};
+  const qrUrl = e.qrPath && typeof window !== "undefined" ? `${window.location.origin}${e.qrPath}` : "";
+
+  const copyQrLink = async () => {
+    if (!qrUrl) return;
+    try {
+      await navigator.clipboard.writeText(qrUrl);
+      notify("Asset request link copied. Encode this URL in the QR label pasted on the asset.");
+    } catch {
+      notify("Clipboard is unavailable. Select and copy the QR URL manually.", "error");
+    }
+  };
+
+  const rotateQr = async () => {
+    if (!window.confirm("Rotate this asset QR token? The old QR label/link will immediately stop working.")) return;
+    try {
+      await machFlowApi.rotateEquipmentQr(e.id, { version: e.version });
+      notify("Asset QR token rotated. Print a replacement QR label.");
+      state.reload();
+    } catch (error) { notify(errorText(error), "error"); }
+  };
+
   return (
-    <div className="mf-drawer-backdrop" onMouseDown={onClose}><aside className="mf-drawer" onMouseDown={(x) => x.stopPropagation()}><div className="mf-drawer-head"><div><span>{e.assetCode}</span><h2>{e.name}</h2></div><button className="mf-icon-btn" onClick={onClose}>×</button></div><div className="mf-drawer-status"><StatusBadge status={e.status} /><Badge tone={h.score >= 85 ? "green" : h.score >= 65 ? "amber" : "red"}>Health {h.score}/100 · {h.label}</Badge></div><div className="mf-drawer-body"><div className="mf-health-grid"><Kpi title="MTTR" value={`${fmtNumber(h.mttrHours, 1)}h`} detail="90-day average" tone="violet" /><Kpi title="MTBF" value={`${fmtNumber(h.mtbfDays, 1)}d`} detail="between failures" tone="teal" /><Kpi title="Open work" value={fmtNumber(h.openWorkOrders)} detail={`${fmtNumber(h.failures30)} failures / 30d`} tone={h.openWorkOrders ? "amber" : "green"} /></div><div className="mf-detail-grid"><Detail label="Category" value={e.category} /><Detail label="Plant / location" value={[e.plantCode, e.location].filter(Boolean).join(" · ")} /><Detail label="Manufacturer / model" value={[e.manufacturer, e.model].filter(Boolean).join(" · ")} /><Detail label="Serial number" value={e.serialNumber} /><Detail label="Criticality" value={human(e.criticality)} /><Detail label="Owner" value={e.owner} /><Detail label="Maintenance team" value={e.maintenanceTeam} /><Detail label="Primary technician" value={e.primaryTechnician} /><Detail label="Last maintenance" value={fmtDate(e.lastMaintenanceAt, true)} /><Detail label="Next PM" value={fmtDate(e.nextMaintenanceAt, true)} danger={h.pmOverdue} /><Detail label="Warranty expiry" value={fmtDate(e.warrantyExpiry)} /><Detail label="Lifetime downtime" value={`${fmtNumber(h.lifetimeDowntimeHours, 1)}h`} /></div><DetailBlock title="Description" text={e.description} /><DetailBlock title="Safety notes" text={e.safetyNotes} /><div className="mf-section-title"><h3>Preventive plans</h3></div><div className="mf-mini-list">{(e.plans || []).map((p) => <div key={p.id}><strong>{p.title}</strong><span>Every {p.intervalDays} days · next {fmtDate(p.nextDueDate)}</span></div>)}</div><div className="mf-section-title"><h3>Recent maintenance</h3></div><div className="mf-mini-list">{(e.recentWorkOrders || []).map((w) => <div key={w.id}><strong>{w.workNumber} · {w.title}</strong><span>{fmtDate(w.requestedAt)} · {human(w.status)} · {w.responsible || "Unassigned"}</span></div>)}</div></div></aside></div>
+    <div className="mf-drawer-backdrop" onMouseDown={onClose}>
+      <aside className="mf-drawer" onMouseDown={(x) => x.stopPropagation()}>
+        <div className="mf-drawer-head"><div><span>{e.assetCode}</span><h2>{e.name}</h2></div><button className="mf-icon-btn" onClick={onClose}>×</button></div>
+        <div className="mf-drawer-status"><StatusBadge status={e.status} /><Badge tone={h.score >= 85 ? "green" : h.score >= 65 ? "amber" : "red"}>Health {h.score ?? 0}/100 · {h.label || "No history"}</Badge>{e.qrEnabled && <Badge tone="teal">QR active</Badge>}</div>
+        <div className="mf-drawer-body">
+          <div className="mf-health-grid"><Kpi title="MTTR" value={`${fmtNumber(h.mttrHours, 1)}h`} detail="90-day average" tone="violet" /><Kpi title="MTBF" value={`${fmtNumber(h.mtbfDays, 1)}d`} detail="between failures" tone="teal" /><Kpi title="Open work" value={fmtNumber(h.openWorkOrders)} detail={`${fmtNumber(h.failures30)} failures / 30d`} tone={h.openWorkOrders ? "amber" : "green"} /></div>
+          <div className="mf-detail-grid">
+            <Detail label="Category" value={e.category} /><Detail label="Plant" value={e.plantCode} />
+            <Detail label="Work center" value={e.workCenter} /><Detail label="Location" value={e.location} />
+            <Detail label="Maintenance team" value={e.maintenanceTeam || "Plant default"} /><Detail label="Default technician" value={e.primaryTechnician || "Team head"} />
+            <Detail label="Manufacturer / Model" value={[e.manufacturer, e.model].filter(Boolean).join(" · ")} /><Detail label="Serial number" value={e.serialNumber} />
+            <Detail label="Owner / Department" value={e.owner} /><Detail label="Warranty expiry" value={fmtDate(e.warrantyExpiry)} />
+            {e.serviceDomain === "IT" && <>
+              <Detail label="Assigned employee" value={[e.assignedToCode, e.assignedToName].filter(Boolean).join(" · ")} />
+              <Detail label="Assigned department" value={e.assignedDepartment} />
+              <Detail label="Hostname" value={e.hostname} />
+              <Detail label="IP / MAC" value={[e.ipAddress, e.macAddress].filter(Boolean).join(" · ")} />
+              <Detail label="Operating system" value={e.operatingSystem} />
+            </>}
+            <Detail label="Last maintenance" value={fmtDate(e.lastMaintenanceAt, true)} /><Detail label="Next PM" value={fmtDate(e.nextMaintenanceAt, true)} />
+          </div>
+
+          {e.qrEnabled && <div className="mf-qr-control-card">
+            <div><span>{e.serviceDomain === "IT" ? "IT Asset QR request route" : "Machine QR complaint route"}</span><strong>Scan asset → identify exact record → authenticate requester → auto-route to the correct department</strong></div>
+            <div className="mf-qr-label-print">
+              <MachineQr value={qrUrl} />
+              <div className="mf-qr-label-copy">
+                <strong>{e.assetCode}</strong>
+                <span>{e.name}</span>
+                <small>{e.plantCode}{e.workCenter ? ` · ${e.workCenter}` : ""}</small>
+                <b>{e.serviceDomain === "IT" ? "SCAN TO REQUEST IT SUPPORT" : "SCAN TO REPORT MACHINE MAINTENANCE"}</b>
+              </div>
+            </div>
+            <input readOnly value={qrUrl} aria-label="Asset QR URL" />
+            <div className="mf-inline-actions">
+              <Button onClick={copyQrLink}>Copy QR link</Button>
+              <Button onClick={() => window.print()}>Print QR label</Button>
+              {qrUrl && <Button onClick={() => window.open(qrUrl, "_blank", "noopener,noreferrer")}>Test complaint view</Button>}
+              {canManageMasters && <Button onClick={rotateQr}>Rotate token</Button>}
+            </div>
+            <small>QR is generated locally inside the browser; no machine token is sent to an external QR service. Rotating the token invalidates every previously printed label for this asset.</small>
+          </div>}
+
+          <DetailBlock title="Description" text={e.description} />
+          <DetailBlock title="Safety / isolation notes" text={e.safetyNotes} />
+
+          <div className="mf-section-title"><h3>Recent maintenance</h3><span>{e.recentWorkOrders?.length || 0} shown</span></div>
+          <div className="mf-mini-list">{(e.recentWorkOrders || []).map((w) => <div key={w.id}><strong>{w.workNumber} · {w.title}</strong><span>{human(w.status)} · {fmtDate(w.scheduledAt, true)} · {w.responsible || "Unassigned"}</span></div>)}</div>
+
+          <div className="mf-section-title"><h3>Preventive plans</h3><span>{e.plans?.length || 0} linked</span></div>
+          <div className="mf-mini-list">{(e.plans || []).map((p) => <div key={p.id}><strong>{p.title}</strong><span>Every {p.intervalDays} days · Next {fmtDate(p.nextDueDate)} {p.scheduledTime ? `at ${String(p.scheduledTime).slice(0, 5)}` : ""}</span></div>)}</div>
+        </div>
+      </aside>
+    </div>
   );
 }
 
-/* ================================= REPORTS ================================= */
 
-function Reports({ plantCode }) {
+function Reports({ plantCode, serviceDomain, showDepartmentComparison }) {
   const [from, setFrom] = useState(() => dateInput(addDays(new Date(), -180)));
   const [to, setTo] = useState(() => dateInput(new Date()));
-  const state = useAsync(() => machFlowApi.reports({ plantCode, from, to }), [plantCode, from, to]);
+  const state = useAsync(() => machFlowApi.reports({ plantCode, serviceDomain: serviceDomain || undefined, from, to }), [plantCode, serviceDomain, from, to]);
   if (state.error) return <ErrorBox error={state.error} onRetry={state.reload} />;
   const data = state.data || {};
   const summary = data.summary || {};
   const maxMonthly = Math.max(1, ...(data.monthly || []).map((m) => Number(m.opened || 0)));
   return (
     <section className="mf-page">
-      <div className="mf-page-head compact"><div><p className="mf-eyebrow">Maintenance intelligence</p><h1>Reliability Reports</h1><p>Use trends, failure concentration and technician workload to improve maintenance decisions—not just count tickets.</p></div><div className="mf-date-range"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><span>to</span><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div></div>
-      {state.loading ? <Loading /> : <><div className="mf-kpi-grid four"><Kpi title="Work orders" value={fmtNumber(summary.orders)} detail={`${fmtNumber(summary.completed)} completed`} tone="blue" /><Kpi title="Planned maintenance mix" value={`${fmtNumber(summary.plannedRatio, 1)}%`} detail={`${fmtNumber(summary.preventive)} preventive`} tone="green" /><Kpi title="Corrective work" value={fmtNumber(summary.corrective)} detail="failure-driven jobs" tone="amber" /><Kpi title="Maintenance cost" value={fmtMoney(summary.totalCost)} detail="parts + labour + external" tone="violet" /></div><div className="mf-dashboard-grid"><div className="mf-panel mf-span-2"><div className="mf-panel-head"><div><h2>Monthly work trend</h2><p>Opened vs closed maintenance</p></div></div><div className="mf-month-chart">{(data.monthly || []).map((m) => <div className="mf-month-bar" key={m.month}><div><i style={{ height: `${Math.max(4, (m.opened / maxMonthly) * 100)}%` }} /><b style={{ height: `${Math.max(4, (m.closed / maxMonthly) * 100)}%` }} /></div><span>{m.month.slice(2)}</span></div>)}</div></div><div className="mf-panel"><div className="mf-panel-head"><div><h2>Top failure assets</h2><p>Where reliability action is needed</p></div></div><div className="mf-rank-list">{(data.byEquipment || []).slice(0, 8).map((a, i) => <div className="mf-rank-row" key={a.name}><span>{i + 1}</span><strong>{a.name}</strong><Badge tone={a.failures >= 3 ? "red" : "amber"}>{a.failures}</Badge></div>)}</div></div><div className="mf-panel mf-span-3 mf-table-wrap"><div className="mf-panel-head"><div><h2>Technician performance</h2><p>Completion, repair time and downtime exposure</p></div></div><table className="mf-table"><thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>Avg repair</th><th>Downtime handled</th></tr></thead><tbody>{(data.byTechnician || []).map((t) => <tr key={t.name}><td><strong>{t.name}</strong></td><td>{t.orders}</td><td>{t.closed}</td><td>{t.avgRepairHours}h</td><td>{t.downtimeHours}h</td></tr>)}</tbody></table></div></div></>}
+      <div className="mf-page-head compact"><div><p className="mf-eyebrow">Maintenance intelligence</p><h1>{showDepartmentComparison ? "Director · Overall Maintenance Reports" : serviceDomain === "IT" ? "IT Support Reports" : "Machine Maintenance Reports"}</h1><p>{showDepartmentComparison ? "Cross-department executive analytics. Operational records remain isolated by department." : serviceDomain === "IT" ? "IT-only response, asset, technician, workload and cost analytics." : "Machine-only reliability, downtime, PM, technician and maintenance-cost analytics."}</p></div><div className="mf-date-range"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /><span>to</span><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div></div>
+      {state.loading ? <Loading /> : <><div className="mf-kpi-grid four"><Kpi title="Work orders" value={fmtNumber(summary.orders)} detail={`${fmtNumber(summary.completed)} completed`} tone="blue" /><Kpi title="Planned maintenance mix" value={`${fmtNumber(summary.plannedRatio, 1)}%`} detail={`${fmtNumber(summary.preventive)} preventive`} tone="green" /><Kpi title="Corrective work" value={fmtNumber(summary.corrective)} detail="failure-driven jobs" tone="amber" /><Kpi title="Maintenance cost" value={fmtMoney(summary.totalCost)} detail="parts + labour + external" tone="violet" /></div><div className="mf-dashboard-grid"><div className="mf-panel mf-span-2"><div className="mf-panel-head"><div><h2>Monthly work trend</h2><p>Opened vs closed maintenance</p></div></div><div className="mf-month-chart">{(data.monthly || []).map((m) => <div className="mf-month-bar" key={m.month}><div><i style={{ height: `${Math.max(4, (m.opened / maxMonthly) * 100)}%` }} /><b style={{ height: `${Math.max(4, (m.closed / maxMonthly) * 100)}%` }} /></div><span>{m.month.slice(2)}</span></div>)}</div></div><div className="mf-panel"><div className="mf-panel-head"><div><h2>Top failure assets</h2><p>Where reliability action is needed</p></div></div><div className="mf-rank-list">{(data.byEquipment || []).slice(0, 8).map((a, i) => <div className="mf-rank-row" key={a.name}><span>{i + 1}</span><strong>{a.name}</strong><Badge tone={a.failures >= 3 ? "red" : "amber"}>{a.failures}</Badge></div>)}</div></div><div className="mf-panel mf-span-3 mf-table-wrap"><div className="mf-panel-head"><div><h2>Service-domain workload</h2><p>Machine Maintenance vs IT Support request mix</p></div></div><table className="mf-table"><thead><tr><th>Service</th><th>Requests</th><th>Completed</th><th>Open</th><th>Downtime</th><th>Cost</th></tr></thead><tbody>{(data.byServiceDomain || []).map((row) => <tr key={row.serviceDomain}><td><strong>{SERVICE_DOMAIN_LABELS[row.serviceDomain] || human(row.serviceDomain)}</strong></td><td>{row.orders}</td><td>{row.completed}</td><td>{row.open}</td><td>{row.downtimeHours}h</td><td>{fmtMoney(row.cost)}</td></tr>)}</tbody></table></div><div className="mf-panel mf-span-3 mf-table-wrap"><div className="mf-panel-head"><div><h2>Technician performance</h2><p>Completion, repair time and downtime exposure</p></div></div><table className="mf-table"><thead><tr><th>Technician</th><th>Assigned</th><th>Completed</th><th>Avg repair</th><th>Downtime handled</th></tr></thead><tbody>{(data.byTechnician || []).map((t) => <tr key={t.name}><td><strong>{t.name}</strong></td><td>{t.orders}</td><td>{t.closed}</td><td>{t.avgRepairHours}h</td><td>{t.downtimeHours}h</td></tr>)}</tbody></table></div></div></>}
     </section>
   );
 }
 
 /* ================================= CONFIGURATION ================================= */
 
-function Configuration({ plantCode, notify, plants, isAdmin }) {
+function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
   const [section, setSection] = useState("teams");
   const [teamOpen, setTeamOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const teams = useAsync(() => machFlowApi.teams(plantCode), [plantCode]);
-  const plans = useAsync(() => machFlowApi.plans(plantCode, false), [plantCode]);
-  const equipment = useAsync(() => machFlowApi.equipment({ plantCode }), [plantCode]);
-  const users = useAsync(() => machFlowApi.users(plantCode), [plantCode]);
+  const [reporterOpen, setReporterOpen] = useState(null);
+
+  const teams = useAsync(() => machFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+  const reporters = useAsync(
+    () => isAdmin ? machFlowApi.reporters(plantCode, false) : Promise.resolve([]),
+    [plantCode, isAdmin]
+  );
+  const plans = useAsync(() => machFlowApi.plans(plantCode, serviceDomain || undefined, false), [plantCode, serviceDomain]);
+  const equipment = useAsync(() => machFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined }), [plantCode, serviceDomain]);
+  const users = useAsync(() => machFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
 
   const generate = async () => {
-    try { const result = await machFlowApi.generateDuePlans(); notify(`${result.created || 0} preventive work orders generated`); plans.reload(); }
-    catch (error) { notify(errorText(error), "error"); }
+    try {
+      const result = await machFlowApi.generateDuePlans(serviceDomain || undefined);
+      notify(`${result.created || 0} preventive work orders generated`);
+      plans.reload();
+    } catch (error) { notify(errorText(error), "error"); }
+  };
+
+  const copyDeskLink = async (team) => {
+    if (!team?.requestPath || typeof window === "undefined") return;
+    const value = `${window.location.origin}${team.requestPath}`;
+    try {
+      await navigator.clipboard.writeText(value);
+      notify(`${SERVICE_DOMAIN_LABELS[team.serviceDomain] || "Service"} request link copied`);
+    } catch {
+      notify(value, "error");
+    }
   };
 
   return (
     <section className="mf-page">
-      <div className="mf-page-head compact"><div><p className="mf-eyebrow">Master data & automation</p><h1>Configuration</h1><p>Keep maintenance teams and preventive schedules controlled while reusing your existing FlowSuite user accounts and plant access.</p></div></div>
-      <div className="mf-config-tabs"><button className={cx(section === "teams" && "is-active")} onClick={() => setSection("teams")}>Maintenance Teams</button><button className={cx(section === "plans" && "is-active")} onClick={() => setSection("plans")}>Preventive Plans</button></div>
-      {section === "teams" ? <div className="mf-panel"><div className="mf-panel-head"><div><h2>Maintenance teams</h2><p>Teams stay inside MachFlow. People are selected from the existing FlowSuite user master.</p></div><Button variant="primary" onClick={() => setTeamOpen(true)}>+ New team</Button></div><div className="mf-team-grid">{(teams.data || []).map((t) => <div className="mf-team-card" key={t.id}><div><strong>{t.name}</strong><StatusBadge status={t.active ? "ACTIVE" : "RETIRED"} /></div><p>{t.plantCode || "Company-wide"}</p><span>Lead: {t.lead || "—"}</span><div className="mf-chip-row">{(t.members || []).slice(0, 8).map((m) => <Badge key={m}>{m}</Badge>)}</div></div>)}</div></div> : <div className="mf-panel"><div className="mf-panel-head"><div><h2>Preventive maintenance plans</h2><p>Recurring plans automatically generate planned work orders before the due date.</p></div><div className="mf-inline-actions"><Button onClick={generate}>Generate due now</Button><Button variant="primary" onClick={() => setPlanOpen(true)}>+ New PM plan</Button></div></div><div className="mf-table-wrap"><table className="mf-table"><thead><tr><th>Equipment</th><th>Plan</th><th>Interval</th><th>Lead time</th><th>Next due</th><th>Responsible</th><th>Status</th></tr></thead><tbody>{(plans.data || []).map((p) => <tr key={p.id}><td>{p.equipmentName}</td><td><strong>{p.title}</strong></td><td>{p.intervalDays} days</td><td>{p.leadDays} days</td><td className={cx(new Date(p.nextDueDate) < new Date() && "mf-danger-text")}>{fmtDate(p.nextDueDate)}</td><td>{p.responsible || "—"}</td><td>{p.active ? <Badge tone="green">Active</Badge> : <Badge>Paused</Badge>}</td></tr>)}</tbody></table></div></div>}
-      {teamOpen && <TeamForm defaultPlant={plantCode} plants={plants} users={users.data || []} isAdmin={isAdmin} onClose={() => setTeamOpen(false)} onSave={async (payload) => { try { await machFlowApi.createTeam(payload); notify("Maintenance team created"); setTeamOpen(false); teams.reload(); } catch (error) { notify(errorText(error), "error"); } }} />}
-      {planOpen && <PlanForm equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} onClose={() => setPlanOpen(false)} onSave={async (payload) => { try { await machFlowApi.createPlan(payload); notify("Preventive plan created"); setPlanOpen(false); plans.reload(); } catch (error) { notify(errorText(error), "error"); } }} />}
+      <div className="mf-page-head compact">
+        <div>
+          <p className="mf-eyebrow">Master data, access & automation</p>
+          <h1>Maintenance Configuration</h1>
+          <p>
+            Full FlowSuite users are reserved for maintenance staff who need the application. Occasional workers, operators, supervisors and back-office staff can use controlled Reporter Passes instead of creating dozens of application accounts.
+          </p>
+        </div>
+      </div>
+
+      <div className="mf-config-tabs">
+        <button className={cx(section === "teams" && "is-active")} onClick={() => setSection("teams")}>Service Teams & Routing</button>
+        {isAdmin && <button className={cx(section === "reporters" && "is-active")} onClick={() => setSection("reporters")}>Reporter Passes</button>}
+        <button className={cx(section === "plans" && "is-active")} onClick={() => setSection("plans")}>Preventive Plans</button>
+      </div>
+
+      {section === "teams" && (
+        <div className="mf-panel">
+          <div className="mf-panel-head">
+            <div>
+              <h2>Plant + service routing</h2>
+              <p>Configure strictly separated Machine Maintenance and IT Support routes. Machine teams are plant-specific; IT may be plant-specific or centrally managed company-wide.</p>
+            </div>
+            <Button variant="primary" onClick={() => setTeamOpen(true)}>+ New service team</Button>
+          </div>
+          <div className="mf-team-grid">
+            {(teams.data || []).map((team) => (
+              <div className="mf-team-card" key={team.id}>
+                <div>
+                  <strong>{team.name}</strong>
+                  <div className="mf-inline-actions">
+                    <span className="mf-service-domain-tag">{SERVICE_DOMAIN_LABELS[team.serviceDomain] || human(team.serviceDomain)}</span>
+                    {team.defaultForPlant && <Badge tone="blue">Default route</Badge>}
+                    <StatusBadge status={team.active ? "ACTIVE" : "RETIRED"} />
+                  </div>
+                </div>
+                <p>{team.plantCode || "Company-wide"}</p>
+                <span>Head / Lead: {team.lead || "Not assigned"}</span>
+                <div className="mf-chip-row">{(team.members || []).slice(0, 10).map((member) => <Badge key={member}>{member}</Badge>)}</div>
+                {team.publicReportingEnabled && team.requestPath && (
+                  <div className="mf-service-desk-mini">
+                    <MachineQr value={`${window.location.origin}${team.requestPath}`} size={82} />
+                    <div>
+                      <strong>Service Desk QR enabled</strong>
+                      <span>Approved Reporter Pass holders can raise {SERVICE_DOMAIN_LABELS[team.serviceDomain] || human(team.serviceDomain)} requests without a FlowSuite account.</span>
+                    </div>
+                    <Button onClick={() => copyDeskLink(team)}>Copy request link</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {!teams.data?.length && <EmptyState title="No service team configured" text="Create plant/domain routes and nominate the Head Technician or service lead before going live." />}
+          </div>
+        </div>
+      )}
+
+      {section === "reporters" && isAdmin && (
+        <div className="mf-panel">
+          <div className="mf-panel-head">
+            <div>
+              <h2>Controlled Reporter Pass directory</h2>
+              <p>These are not FlowSuite users. They have no module access, no password and no permission beyond submitting requests for their assigned plant/service domains with a PIN.</p>
+            </div>
+            <Button variant="primary" onClick={() => setReporterOpen(EMPTY_REPORTER)}>+ New Reporter Pass</Button>
+          </div>
+          <div className="mf-table-wrap">
+            <table className="mf-reporter-table">
+              <thead><tr><th>Reporter</th><th>Type</th><th>Plant / Department</th><th>Allowed services</th><th>Valid until</th><th>Status</th><th>Last request</th><th /></tr></thead>
+              <tbody>
+                {(reporters.data || []).map((reporter) => (
+                  <tr key={reporter.id}>
+                    <td><strong>{reporter.displayName}</strong><small>{reporter.reporterCode}</small></td>
+                    <td>{human(reporter.reporterType)}</td>
+                    <td>{(reporter.plantCodes || [reporter.plantCode]).filter(Boolean).join(", ")}<small>{[reporter.department, reporter.designation, reporter.linkedUsername && `FlowSuite: ${reporter.linkedUsername}`].filter(Boolean).join(" · ") || "—"}</small></td>
+                    <td><div className="mf-chip-row">{(reporter.allowedDomains || []).map((domain) => <span className="mf-service-domain-tag" key={domain}>{SERVICE_DOMAIN_LABELS[domain] || human(domain)}</span>)}</div></td>
+                    <td>{fmtDate(reporter.validUntil)}</td>
+                    <td>{reporter.active ? <Badge tone="green">Active</Badge> : <Badge>Disabled</Badge>}</td>
+                    <td>{fmtDate(reporter.lastRequestAt, true)}</td>
+                    <td><Button onClick={() => setReporterOpen(reporter)}>Edit</Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!reporters.data?.length && <EmptyState title="No Reporter Passes" text="Add only employees/operators who are approved to raise support requests but do not need a FlowSuite application account." />}
+          </div>
+        </div>
+      )}
+
+      {section === "plans" && (
+        <div className="mf-panel">
+          <div className="mf-panel-head">
+            <div><h2>Preventive maintenance plans</h2><p>Recurring PMs are generated before due date, scheduled to the defined time and routed by the asset's plant/service domain.</p></div>
+            <div className="mf-inline-actions"><Button onClick={generate}>Generate due now</Button><Button variant="primary" onClick={() => setPlanOpen(true)}>+ New PM plan</Button></div>
+          </div>
+          <div className="mf-table-wrap">
+            <table className="mf-table">
+              <thead><tr><th>Asset</th><th>Plan</th><th>Cycle</th><th>Schedule</th><th>Est.</th><th>Route</th><th>Shutdown</th><th>Status</th></tr></thead>
+              <tbody>{(plans.data || []).map((plan) => (
+                <tr key={plan.id}>
+                  <td>{plan.equipmentName}</td>
+                  <td><strong>{plan.title}</strong><small>{plan.checklistText ? "Checklist configured" : "No checklist"}</small></td>
+                  <td>Every {plan.intervalDays}d<small>Generate {plan.leadDays}d before</small></td>
+                  <td className={cx(new Date(plan.nextDueDate) < new Date() && "mf-danger-text")}>{fmtDate(plan.nextDueDate)}<small>{plan.scheduledTime ? String(plan.scheduledTime).slice(0, 5) : "Time not set"}</small></td>
+                  <td>{fmtNumber(plan.estimatedMinutes)} min</td>
+                  <td>{plan.responsible || plan.teamName || "Asset/domain default"}</td>
+                  <td>{plan.requiresShutdown ? <Badge tone="amber">Planned shutdown</Badge> : <Badge>Running access</Badge>}</td>
+                  <td>{plan.active ? <Badge tone="green">Active</Badge> : <Badge>Paused</Badge>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {teamOpen && <TeamForm defaultPlant={plantCode} defaultDomain={serviceDomain} allowCompanyWide={isAdmin} plants={plants} users={users.data || []} onClose={() => setTeamOpen(false)} onSave={async (payload) => {
+        try {
+          await machFlowApi.createTeam(payload);
+          notify("Service team created");
+          setTeamOpen(false);
+          teams.reload();
+        } catch (error) { notify(errorText(error), "error"); }
+      }} />}
+
+      {reporterOpen && <ReporterForm initial={reporterOpen?.id ? reporterOpen : null} defaultPlant={plantCode} plants={plants} onClose={() => setReporterOpen(null)} onSave={async (payload) => {
+        try {
+          if (reporterOpen?.id) await machFlowApi.updateReporter(reporterOpen.id, payload);
+          else await machFlowApi.createReporter(payload);
+          notify(reporterOpen?.id ? "Reporter Pass updated" : "Reporter Pass created");
+          setReporterOpen(null);
+          reporters.reload();
+        } catch (error) { notify(errorText(error), "error"); }
+      }} />}
+
+      {planOpen && <PlanForm equipment={equipment.data?.items || []} teams={teams.data || []} users={users.data || []} onClose={() => setPlanOpen(false)} onSave={async (payload) => {
+        try {
+          await machFlowApi.createPlan(payload);
+          notify("Preventive maintenance plan created");
+          setPlanOpen(false);
+          plans.reload();
+        } catch (error) { notify(errorText(error), "error"); }
+      }} />}
     </section>
   );
 }
 
-function TeamForm({ defaultPlant, plants, users, isAdmin, onClose, onSave }) {
-  const [form, setForm] = useState({ ...EMPTY_TEAM, plantCode: defaultPlant || "" });
-  const selectable = users.filter((u) => (u.roles || []).some((r) => ["MACHFLOW_MANAGER", "MACHFLOW_PLANNER", "MACHFLOW_TECHNICIAN"].includes(String(r).replace(/^ROLE_/i, "").toUpperCase())));
+function TeamForm({ defaultPlant, defaultDomain = "", allowCompanyWide = false, plants, users, onClose, onSave }) {
+  const [form, setForm] = useState({ ...EMPTY_TEAM, plantCode: defaultPlant || "", serviceDomain: defaultDomain || "MACHINE" });
+  const normalizeUserRoles = (user) => (user.roles || []).map((role) => String(role || "").replace(/^ROLE_/i, "").toUpperCase());
+  const headRoles = form.serviceDomain === "IT"
+    ? ["ADMIN", "MACHFLOW_IT_HEAD", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"]
+    : ["ADMIN", "MACHFLOW_MACHINE_HEAD", "MACHFLOW_HEAD_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"];
+  const memberRoles = form.serviceDomain === "IT"
+    ? ["ADMIN", "MACHFLOW_IT_HEAD", "MACHFLOW_IT_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"]
+    : ["ADMIN", "MACHFLOW_MACHINE_HEAD", "MACHFLOW_MACHINE_TECHNICIAN", "MACHFLOW_HEAD_TECHNICIAN", "MACHFLOW_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"];
+  const heads = users.filter((user) => normalizeUserRoles(user).some((role) => headRoles.includes(role)));
+  const members = users.filter((user) => normalizeUserRoles(user).some((role) => memberRoles.includes(role)));
   const selectedMembers = String(form.membersText || "").split(",").map((x) => x.trim()).filter(Boolean);
   const toggleMember = (username) => {
-    const next = selectedMembers.includes(username) ? selectedMembers.filter((x) => x !== username) : [...selectedMembers, username];
+    const next = selectedMembers.includes(username)
+      ? selectedMembers.filter((value) => value !== username)
+      : [...selectedMembers, username];
     setForm({ ...form, membersText: next.join(", ") });
   };
-  return <Modal title="New maintenance team" subtitle="Build the team from existing MachFlow-enabled FlowSuite users." onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave(form); }}><div className="mf-modal-body mf-form-grid"><Field label="Team name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Plant"><select required={!isAdmin} value={form.plantCode} onChange={(e) => setForm({ ...form, plantCode: e.target.value })}>{isAdmin && <option value="">Company-wide</option>} {!isAdmin && <option value="">Select plant</option>}{plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}</select></Field><Field label="Team lead"><select value={form.lead} onChange={(e) => setForm({ ...form, lead: e.target.value })}><option value="">Unassigned</option>{selectable.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field><Field label="Members" hint="Select one or more MachFlow users"><div className="mf-user-select-list">{selectable.map((u) => <label key={u.username}><input type="checkbox" checked={selectedMembers.includes(u.username)} onChange={() => toggleMember(u.username)} /> {u.displayName || u.username}</label>)}</div></Field></div><div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary">Create team</Button></div></form></Modal>;
+
+  return (
+    <Modal title="New maintenance / service team" subtitle="Create a plant/domain route. The team lead receives auto-routed requests and may delegate to eligible technicians." onClose={onClose} wide>
+      <form onSubmit={(event) => { event.preventDefault(); onSave(form); }}>
+        <div className="mf-modal-body mf-form-grid">
+          <Field label="Team name"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="AKG Machine Maintenance / Central IT Support" /></Field>
+          <Field label="Service domain"><select disabled={Boolean(defaultDomain)} value={form.serviceDomain} onChange={(e) => setForm({ ...form, serviceDomain: e.target.value, defaultForPlant: false })}>{SERVICE_DOMAINS.map((value) => <option key={value} value={value}>{SERVICE_DOMAIN_LABELS[value]}</option>)}</select></Field>
+
+          <Field label="Plant" hint="Leave company-wide only for a centrally managed service such as IT if your role allows it.">
+            <select required={form.serviceDomain === "MACHINE" || !allowCompanyWide} value={form.plantCode} onChange={(e) => setForm({ ...form, plantCode: e.target.value, lead: "", membersText: "", defaultForPlant: false })}>
+              {form.serviceDomain === "IT" && allowCompanyWide && <option value="">Company-wide / all plants</option>}
+              {form.serviceDomain === "MACHINE" && <option value="">Select plant</option>}
+              {plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Head Technician / Service Lead" hint="Must be a MachFlow Head Technician or Manager with access to the plant."><select required value={form.lead} onChange={(e) => setForm({ ...form, lead: e.target.value })}><option value="">Select lead</option>{heads.map((user) => <option key={user.username} value={user.username}>{user.displayName || user.username}</option>)}</select></Field>
+
+          <Field label="Default request categories" hint="Comma-separated suggestions shown when this Service Desk QR is used."><input value={form.defaultCategories} onChange={(e) => setForm({ ...form, defaultCategories: e.target.value })} placeholder="LAN/Internet, PC/Laptop, Printer, Software" /></Field>
+          <div className="mf-checks">
+            <label><input type="checkbox" disabled={!form.plantCode} checked={form.defaultForPlant} onChange={(e) => setForm({ ...form, defaultForPlant: e.target.checked })} /> Default route for this plant + service</label>
+            <label><input type="checkbox" checked={form.publicReportingEnabled} onChange={(e) => setForm({ ...form, publicReportingEnabled: e.target.checked })} /> Enable Service Desk QR / Reporter Pass requests</label>
+          </div>
+
+          <Field label="Technicians / members" hint="Only full FlowSuite maintenance users belong here. Occasional complainants belong in Reporter Passes, not this list."><div className="mf-user-select-list">{members.map((user) => <label key={user.username}><input type="checkbox" checked={selectedMembers.includes(user.username)} onChange={() => toggleMember(user.username)} /> {user.displayName || user.username}</label>)}</div></Field>
+        </div>
+        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary">Create service team</Button></div>
+      </form>
+    </Modal>
+  );
+}
+
+function ReporterForm({ initial, defaultPlant, plants, onClose, onSave }) {
+  const [form, setForm] = useState(() => ({
+    ...EMPTY_REPORTER,
+    plantCode: defaultPlant || "",
+    ...(initial || {}),
+    plantCodes: Array.isArray(initial?.plantCodes) && initial.plantCodes.length
+      ? initial.plantCodes
+      : (initial?.plantCode ? [initial.plantCode] : (defaultPlant ? [defaultPlant] : [])),
+    allowedDomains: Array.isArray(initial?.allowedDomains) && initial.allowedDomains.length ? initial.allowedDomains : ["MACHINE"],
+    accessPin: "",
+    validUntil: initial?.validUntil ? dateInput(initial.validUntil) : "",
+  }));
+  const [saving, setSaving] = useState(false);
+
+  const toggleDomain = (domain) => {
+    setForm((current) => {
+      const exists = current.allowedDomains.includes(domain);
+      const next = exists
+        ? current.allowedDomains.filter((value) => value !== domain)
+        : [...current.allowedDomains, domain];
+      return { ...current, allowedDomains: next.length ? next : [domain] };
+    });
+  };
+
+  return (
+    <Modal title={initial ? "Edit Reporter Pass" : "New Reporter Pass"} subtitle="A Reporter Pass is not a FlowSuite account. It only authorises controlled request submission for the selected plant and service domains." onClose={onClose} wide>
+      <form onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await onSave({
+            ...form,
+            accessPin: form.accessPin || null,
+            validUntil: form.validUntil || null,
+            version: initial?.version ?? null,
+          });
+        } finally { setSaving(false); }
+      }}>
+        <div className="mf-modal-body mf-form-grid">
+          <Field label="Reporter / Employee Code"><input required value={form.reporterCode} onChange={(e) => setForm({ ...form, reporterCode: e.target.value })} placeholder="EMP-0142 / OP-AKG-32" /></Field>
+          <Field label="Name"><input required value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Field>
+          <Field label="Reporter type"><select value={form.reporterType} onChange={(e) => setForm({ ...form, reporterType: e.target.value })}>{REPORTER_TYPES.map((value) => <option key={value} value={value}>{human(value)}</option>)}</select></Field>
+          <Field label="Primary plant"><select required value={form.plantCode} onChange={(e) => {
+            const value = e.target.value;
+            setForm((current) => ({ ...current, plantCode: value, plantCodes: current.plantCodes.includes(value) ? current.plantCodes : [...current.plantCodes, value] }));
+          }}><option value="">Select plant</option>{plants.map((plant) => <option key={plant.name} value={plant.name}>{plant.name}</option>)}</select></Field>
+          <Field label="Authorised plants" hint="Use multiple plants only for approved supervisors/managers who genuinely work across locations."><div className="mf-user-select-list">{plants.map((plant) => <label key={plant.name}><input type="checkbox" checked={form.plantCodes.includes(plant.name)} onChange={() => setForm((current) => ({ ...current, plantCodes: current.plantCodes.includes(plant.name) ? current.plantCodes.filter((x) => x !== plant.name) : [...current.plantCodes, plant.name] }))} /> {plant.name}</label>)}</div></Field>
+          <Field label="Linked FlowSuite username (optional)" hint="Link an existing FlowSuite employee so the same person can use the authenticated Maintenance Request portal without a second account."><input value={form.linkedUsername || ""} onChange={(e) => setForm({ ...form, linkedUsername: e.target.value })} placeholder="Existing FlowSuite username" /></Field>
+          <Field label="Designation"><input value={form.designation || ""} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="Operator / Supervisor / Manager / Staff" /></Field>
+          <Field label="Department / area"><input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="Production / Design / Accounts / Store…" /></Field>
+          <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+          <Field label="Email"><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+          <Field label={initial ? "New PIN (leave blank to keep current)" : "Reporter PIN"} hint="4–8 digits. Stored hashed; repeated wrong attempts trigger a temporary lock."><input required={!initial} type="password" inputMode="numeric" minLength={4} maxLength={8} value={form.accessPin} onChange={(e) => setForm({ ...form, accessPin: e.target.value.replace(/\D/g, "") })} /></Field>
+          <Field label="Valid until" hint="Optional. Useful for contractors/temporary workers."><input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} /></Field>
+          <div className="mf-checks"><label><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Reporter Pass active</label></div>
+
+          <Field label="Allowed request services" hint="Limit a reporter to only the areas they genuinely need.">
+            <div className="mf-user-select-list">
+              {SERVICE_DOMAINS.map((domain) => (
+                <label key={domain}>
+                  <input type="checkbox" checked={form.allowedDomains.includes(domain)} onChange={() => toggleDomain(domain)} />
+                  {SERVICE_DOMAIN_LABELS[domain]}
+                </label>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save Reporter Pass" : "Create Reporter Pass"}</Button></div>
+      </form>
+    </Modal>
+  );
 }
 
 function PlanForm({ equipment, teams, users, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_PLAN);
-  const selectable = users.filter((u) => (u.roles || []).some((r) => ["MACHFLOW_MANAGER", "MACHFLOW_PLANNER", "MACHFLOW_TECHNICIAN"].includes(String(r).replace(/^ROLE_/i, "").toUpperCase())));
-  return <Modal title="New preventive plan" subtitle="Define when MachFlow should create the next planned maintenance work order." onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave({ ...form, intervalDays: Number(form.intervalDays), leadDays: Number(form.leadDays) }); }}><div className="mf-modal-body mf-form-grid"><Field label="Equipment"><select required value={form.equipmentId} onChange={(e) => { const item = equipment.find((x) => x.id === e.target.value); setForm({ ...form, equipmentId: e.target.value, teamName: item?.maintenanceTeam || form.teamName, responsible: item?.primaryTechnician || form.responsible }); }}><option value="">Select equipment</option>{equipment.map((e) => <option key={e.id} value={e.id}>{e.assetCode} · {e.name}</option>)}</select></Field><Field label="Plan title"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Monthly lubrication & inspection" /></Field><Field label="Interval days"><input required type="number" min="1" value={form.intervalDays} onChange={(e) => setForm({ ...form, intervalDays: e.target.value })} /></Field><Field label="Generate before due (days)"><input type="number" min="0" value={form.leadDays} onChange={(e) => setForm({ ...form, leadDays: e.target.value })} /></Field><Field label="Next due date"><input required type="date" value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} /></Field><Field label="Priority"><select value={form.defaultPriority} onChange={(e) => setForm({ ...form, defaultPriority: e.target.value })}>{PRIORITIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field><Field label="Team"><select value={form.teamName} onChange={(e) => setForm({ ...form, teamName: e.target.value })}><option value="">Unassigned</option>{teams.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}</select></Field><Field label="Responsible"><select value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })}><option value="">Unassigned</option>{selectable.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field><Field label="Instructions"><textarea rows="4" value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></Field></div><div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary">Create PM plan</Button></div></form></Modal>;
+  const selectedEquipment = equipment.find((x) => x.id === form.equipmentId);
+  const selectedDomain = selectedEquipment?.serviceDomain || "MACHINE";
+  const planRoles = selectedDomain === "IT"
+    ? ["ADMIN", "MACHFLOW_IT_HEAD", "MACHFLOW_IT_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"]
+    : ["ADMIN", "MACHFLOW_MACHINE_HEAD", "MACHFLOW_MACHINE_TECHNICIAN", "MACHFLOW_HEAD_TECHNICIAN", "MACHFLOW_TECHNICIAN", "MACHFLOW_MANAGER", "MACHFLOW_PLANNER"];
+  const selectable = users.filter((u) => (u.roles || []).some((r) => planRoles.includes(String(r).replace(/^ROLE_/i, "").toUpperCase())));
+  const availableTeams = teams.filter((t) =>
+    t.active &&
+    (!selectedEquipment?.plantCode || !t.plantCode || t.plantCode === selectedEquipment.plantCode) &&
+    (!selectedEquipment?.serviceDomain || !t.serviceDomain || t.serviceDomain === selectedEquipment.serviceDomain)
+  );
+
+  return (
+    <Modal title="New preventive maintenance plan" subtitle="Define the maintenance cycle once. MachFlow will generate and route future PM work automatically." onClose={onClose} wide>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        onSave({
+          ...form,
+          intervalDays: Number(form.intervalDays),
+          leadDays: Number(form.leadDays),
+          estimatedMinutes: Number(form.estimatedMinutes || 0),
+        });
+      }}>
+        <div className="mf-modal-body mf-form-grid">
+          <Field label="Equipment"><select required value={form.equipmentId} onChange={(e) => {
+            const item = equipment.find((x) => x.id === e.target.value);
+            setForm({ ...form, equipmentId: e.target.value, teamName: item?.maintenanceTeam || "", responsible: item?.primaryTechnician || "" });
+          }}><option value="">Select equipment</option>{equipment.map((e) => <option key={e.id} value={e.id}>{e.assetCode} · {e.name}</option>)}</select></Field>
+          <Field label="Plan title"><input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Monthly lubrication & safety inspection" /></Field>
+          <Field label="Interval days"><input required type="number" min="1" value={form.intervalDays} onChange={(e) => setForm({ ...form, intervalDays: e.target.value })} /></Field>
+          <Field label="Generate before due (days)"><input type="number" min="0" value={form.leadDays} onChange={(e) => setForm({ ...form, leadDays: e.target.value })} /></Field>
+          <Field label="Next due date"><input required type="date" value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} /></Field>
+          <Field label="Scheduled attendance time"><input required type="time" value={form.scheduledTime} onChange={(e) => setForm({ ...form, scheduledTime: e.target.value })} /></Field>
+          <Field label="Estimated maintenance minutes"><input required type="number" min="1" value={form.estimatedMinutes} onChange={(e) => setForm({ ...form, estimatedMinutes: e.target.value })} /></Field>
+          <Field label="Priority"><select value={form.defaultPriority} onChange={(e) => setForm({ ...form, defaultPriority: e.target.value })}>{PRIORITIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+          <Field label="Maintenance team"><select value={form.teamName} onChange={(e) => setForm({ ...form, teamName: e.target.value })}><option value="">Use machine / plant default route</option>{availableTeams.map((t) => <option key={t.id} value={t.name}>{t.name}{t.defaultForPlant ? " · Default" : ""}</option>)}</select></Field>
+          <Field label="Responsible technician"><select value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })}><option value="">Use team head / machine default</option>{selectable.map((u) => <option key={u.username} value={u.username}>{u.displayName || u.username}</option>)}</select></Field>
+          <div className="mf-checks mf-full"><label><input type="checkbox" checked={form.requiresShutdown} onChange={(e) => setForm({ ...form, requiresShutdown: e.target.checked })} /> Preventive maintenance requires planned machine shutdown</label></div>
+          <Field label="Instructions"><textarea rows="4" value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} placeholder="Preparation, isolation, tools, lubrication grade, inspection standard…" /></Field>
+          <Field label="Checklist" hint="One step per line. It is copied into each generated PM work order."><textarea rows="6" value={form.checklistText} onChange={(e) => setForm({ ...form, checklistText: e.target.value })} placeholder={"Isolate machine\nInspect guards\nCheck lubrication\nClean filters\nTrial run and verify"} /></Field>
+        </div>
+        <div className="mf-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary">Create preventive plan</Button></div>
+      </form>
+    </Modal>
+  );
 }
+

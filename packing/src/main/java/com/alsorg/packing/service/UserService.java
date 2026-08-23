@@ -38,12 +38,34 @@ public class UserService {
                         "MATFLOW_PROCESSING",
                         "MATFLOW_PRODUCTION",
                         "MATFLOW_QC",
-                        "MATFLOW_DIRECTOR");
+                        "MATFLOW_DIRECTOR",
+
+                        /*
+                         * Current MachFlow roles.
+                         * DIRECTOR = cross-department oversight/read-only.
+                         * Machine and IT roles are intentionally separate.
+                         */
+                        "MACHFLOW_DIRECTOR",
+                        "MACHFLOW_MACHINE_HEAD",
+                        "MACHFLOW_MACHINE_TECHNICIAN",
+                        "MACHFLOW_IT_HEAD",
+                        "MACHFLOW_IT_TECHNICIAN",
+                        "MACHFLOW_REQUESTER",
+
+                        /*
+                         * Legacy MachFlow authorities are retained so existing
+                         * accounts do not break during migration.
+                         */
+                        "MACHFLOW_MANAGER",
+                        "MACHFLOW_PLANNER",
+                        "MACHFLOW_HEAD_TECHNICIAN",
+                        "MACHFLOW_TECHNICIAN");
 
         private static final Set<String> ALLOWED_MODULES = Set.of(
                         "PACKFLOW",
                         "BOMFLOW",
-                        "MATFLOW");
+                        "MATFLOW",
+                        "MACHFLOW");
 
         private final UserRepository repo;
         private final PasswordEncoder encoder;
@@ -226,6 +248,15 @@ public class UserService {
                                 modules,
                                 roles);
 
+                /*
+                 * MACHFLOW_REQUESTER is a request-portal identity, not full
+                 * operational MachFlow access. Strip MACHFLOW unless the same
+                 * profile also carries a real MachFlow operational role.
+                 */
+                if (!hasOperationalMachFlowRole(roles)) {
+                        cleanModules.remove("MACHFLOW");
+                }
+
                 user.setModules(cleanModules);
 
                 boolean packFlowAssigned = cleanModules.contains("PACKFLOW");
@@ -330,16 +361,19 @@ public class UserService {
                 }
 
                 /*
-                 * Current requested scope:
-                 * multiple-role assignment is supported only inside PackFlow.
+                 * Preserve the existing PackFlow multi-role behaviour, but allow exactly
+                 * one MachFlow role to be added to an existing user profile. This is
+                 * important for real factory complainants: an Engineering/Store/Production
+                 * user can also raise a machine complaint without creating a duplicate user.
                  *
-                 * BOMFlow and MatFlow remain controlled single-role profiles.
+                 * We deliberately do NOT open unrestricted cross-module role mixing.
+                 * BOMFlow + MatFlow still cannot be combined, and a user may have only one
+                 * MachFlow role because Head/Technician/Requester already express the
+                 * complete MachFlow responsibility.
                  */
-                if (cleanRoles.size() > 1 &&
-                                cleanRoles.stream()
-                                                .anyMatch(role -> !isPackFlowRole(role))) {
+                if (!isAllowedRoleCombination(cleanRoles)) {
                         throw new RuntimeException(
-                                        "Multiple roles can currently be assigned only within PackFlow");
+                                        "Invalid role combination. PackFlow roles may be combined as before; one MachFlow role may additionally be combined with PackFlow or one BOMFlow/MatFlow role.");
                 }
 
                 return new RoleAssignment(
@@ -423,6 +457,7 @@ public class UserService {
                         modules.add("PACKFLOW");
                         modules.add("BOMFLOW");
                         modules.add("MATFLOW");
+                        modules.add("MACHFLOW");
 
                         return modules;
                 }
@@ -438,6 +473,16 @@ public class UserService {
 
                         if (role.startsWith("MATFLOW_")) {
                                 modules.add("MATFLOW");
+                        }
+
+                        if (role.startsWith("MACHFLOW_")
+                                        && !"MACHFLOW_REQUESTER".equals(role)) {
+                                /*
+                                 * Request-only identities use the controlled
+                                 * Maintenance Request portal, not the full
+                                 * operational MachFlow workspace.
+                                 */
+                                modules.add("MACHFLOW");
                         }
                 }
 
@@ -472,6 +517,58 @@ public class UserService {
                                                 .stream()
                                                 .anyMatch(role -> requestedRole.equalsIgnoreCase(
                                                                 role));
+        }
+
+
+        private boolean hasOperationalMachFlowRole(
+                        Set<String> roles) {
+                if (roles == null) {
+                        return false;
+                }
+
+                if (containsRole(roles, "ADMIN")) {
+                        return true;
+                }
+
+                return roles.stream()
+                                .anyMatch(role -> role != null
+                                                && role.startsWith("MACHFLOW_")
+                                                && !"MACHFLOW_REQUESTER".equals(role));
+        }
+
+        private boolean isAllowedRoleCombination(
+                        Set<String> roles) {
+                if (roles == null || roles.size() <= 1) {
+                        return true;
+                }
+
+                if (roles.stream().allMatch(this::isPackFlowRole)) {
+                        return true;
+                }
+
+                long machFlowCount = roles.stream()
+                                .filter(role -> role != null && role.startsWith("MACHFLOW_"))
+                                .count();
+
+                if (machFlowCount != 1) {
+                        return false;
+                }
+
+                Set<String> nonMachFlowRoles = roles.stream()
+                                .filter(role -> role != null && !role.startsWith("MACHFLOW_"))
+                                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+                if (nonMachFlowRoles.isEmpty()) {
+                        return true;
+                }
+
+                if (nonMachFlowRoles.stream().allMatch(this::isPackFlowRole)) {
+                        return true;
+                }
+
+                return nonMachFlowRoles.size() == 1
+                                && (nonMachFlowRoles.iterator().next().startsWith("BOMFLOW_")
+                                                || nonMachFlowRoles.iterator().next().startsWith("MATFLOW_"));
         }
 
         private boolean isPackFlowRole(
