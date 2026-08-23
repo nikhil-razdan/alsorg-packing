@@ -77,6 +77,7 @@ const MODULE_KEYS = Object.freeze({
 	PACKFLOW: "PACKFLOW",
 	BOMFLOW: "BOMFLOW",
 	MATFLOW: "MATFLOW",
+	MACHFLOW: "MACHFLOW",
 });
 
 const ACCESS_GROUPS = [
@@ -85,7 +86,7 @@ const ACCESS_GROUPS = [
 		label: "Platform Administrator",
 		shortLabel: "Administrator",
 		description:
-			"Full access to PackFlow, BOMFlow, MatFlow and user administration.",
+			"Full access to PackFlow, BOMFlow, MatFlow, MachFlow and user administration.",
 		accent: "#f59e0b",
 		icon: <AdminPanelSettingsIcon />,
 		defaultRole: "ADMIN",
@@ -239,6 +240,42 @@ const ACCESS_GROUPS = [
 				label: "Director",
 				description:
 					"Approve controlled MatFlow decisions and review reports.",
+			},
+		],
+	},
+	{
+		key: MODULE_KEYS.MACHFLOW,
+		label: "MachFlow",
+		shortLabel: "MachFlow",
+		description:
+			"Machine maintenance, preventive planning, breakdown response and reliability control.",
+		accent: "#0ea5e9",
+		icon: <EngineeringOutlinedIcon />,
+		defaultRole: "MACHFLOW_REQUESTER",
+		roles: [
+			{
+				value: "MACHFLOW_MANAGER",
+				label: "MachFlow Manager",
+				description:
+					"Full maintenance control, reliability reporting, equipment masters and preventive strategy.",
+			},
+			{
+				value: "MACHFLOW_PLANNER",
+				label: "Maintenance Planner",
+				description:
+					"Plan and schedule work, maintain equipment masters, teams and preventive maintenance plans.",
+			},
+			{
+				value: "MACHFLOW_TECHNICIAN",
+				label: "Maintenance Technician",
+				description:
+					"Execute assigned maintenance work and record repair, downtime and root-cause information.",
+			},
+			{
+				value: "MACHFLOW_REQUESTER",
+				label: "Maintenance Requester",
+				description:
+					"Raise and track maintenance requests for assigned plants without configuration privileges.",
 			},
 		],
 	},
@@ -396,6 +433,7 @@ const modulesForRoles = (roles) => {
 			MODULE_KEYS.PACKFLOW,
 			MODULE_KEYS.BOMFLOW,
 			MODULE_KEYS.MATFLOW,
+			MODULE_KEYS.MACHFLOW,
 		];
 	}
 
@@ -551,6 +589,7 @@ const modulesForRole = (role) => {
 			MODULE_KEYS.PACKFLOW,
 			MODULE_KEYS.BOMFLOW,
 			MODULE_KEYS.MATFLOW,
+			MODULE_KEYS.MACHFLOW,
 		];
 	}
 
@@ -1103,6 +1142,12 @@ function UsersPageContent() {
 		isCurrentAdmin ||
 		safeCurrentModules.includes(
 			MODULE_KEYS.MATFLOW
+		);
+
+	const canOpenMachFlow =
+		isCurrentAdmin ||
+		safeCurrentModules.includes(
+			MODULE_KEYS.MACHFLOW
 		);
 
 	const [users, setUsers] =
@@ -2327,6 +2372,9 @@ function UsersPageContent() {
 		const bomFlowUsers = users.filter((user) =>
 			userRoles(user).some((role) => role.startsWith("BOMFLOW_"))
 		).length;
+		const machFlowUsers = users.filter((user) =>
+			userRoles(user).some((role) => role.startsWith("MACHFLOW_"))
+		).length;
 		const multiRoleUsers = users.filter((user) => userRoles(user).length > 1).length;
 
 		let workToday = 0;
@@ -2375,6 +2423,7 @@ function UsersPageContent() {
 			packFlowUsers,
 			matFlowUsers,
 			bomFlowUsers,
+			machFlowUsers,
 			multiRoleUsers,
 			workToday,
 			activeToday,
@@ -2766,6 +2815,9 @@ function UsersPageContent() {
 					canOpenMatFlow={
 						canOpenMatFlow
 					}
+					canOpenMachFlow={
+						canOpenMachFlow
+					}
 					onModules={() =>
 						navigate("/modules")
 					}
@@ -2782,6 +2834,11 @@ function UsersPageContent() {
 					onMatFlow={() =>
 						navigate(
 							"/matflow/dashboard"
+						)
+					}
+					onMachFlow={() =>
+						navigate(
+							"/modules?module=machflow"
 						)
 					}
 					onLogout={logout}
@@ -2830,6 +2887,7 @@ function UsersPageContent() {
 					<StatCard label="Today Pack + Dispatch" value={stats.workToday} accent="#60a5fa" icon={<AssessmentOutlinedIcon />} />
 					<StatCard label="BOMFlow Users" value={stats.bomFlowUsers} accent="#8b5cf6" icon={<AccountTreeOutlinedIcon />} />
 					<StatCard label="MatFlow Users" value={stats.matFlowUsers} accent="#2dd4bf" icon={<LayersOutlinedIcon />} />
+					<StatCard label="MachFlow Users" value={stats.machFlowUsers} accent="#0ea5e9" icon={<EngineeringOutlinedIcon />} />
 					<StatCard label="Disabled Users" value={stats.disabled} accent="#64748b" icon={<BlockOutlinedIcon />} />
 				</Box>
 
@@ -2991,6 +3049,7 @@ function UsersPageContent() {
 								[MODULE_KEYS.PACKFLOW, "PackFlow"],
 								[MODULE_KEYS.BOMFLOW, "BOMFlow"],
 								[MODULE_KEYS.MATFLOW, "MatFlow"],
+								[MODULE_KEYS.MACHFLOW, "MachFlow"],
 							]}
 						/>
 
@@ -3337,10 +3396,12 @@ function PageHeader({
 	canOpenPackFlow,
 	canOpenBOMFlow,
 	canOpenMatFlow,
+	canOpenMachFlow,
 	onModules,
 	onPackFlow,
 	onBOMFlow,
 	onMatFlow,
+	onMachFlow,
 	onLogout,
 	onCreate,
 }) {
@@ -3420,6 +3481,18 @@ function PageHeader({
 						sx={secondaryButtonSx}
 					>
 						MatFlow
+					</Button>
+				)}
+
+				{canOpenMachFlow && (
+					<Button
+						startIcon={
+							<EngineeringOutlinedIcon />
+						}
+						onClick={onMachFlow}
+						sx={secondaryButtonSx}
+					>
+						MachFlow
 					</Button>
 				)}
 
@@ -4981,6 +5054,14 @@ function roleIcon(role) {
 		return (
 			<AccountTreeOutlinedIcon />
 		);
+	}
+
+	if (
+		cleanRole.startsWith(
+			"MACHFLOW_"
+		)
+	) {
+		return <EngineeringOutlinedIcon />;
 	}
 
 	if (

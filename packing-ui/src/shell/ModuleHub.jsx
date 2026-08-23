@@ -25,6 +25,9 @@ import AccountTreeOutlinedIcon
 import LayersOutlinedIcon
 	from "@mui/icons-material/LayersOutlined";
 
+import EngineeringOutlinedIcon
+	from "@mui/icons-material/EngineeringOutlined";
+
 import AdminPanelSettingsOutlinedIcon
 	from "@mui/icons-material/AdminPanelSettingsOutlined";
 
@@ -65,6 +68,9 @@ import HrFlowWorkspace
 
 import hrflowApi
 	from "../modules/hrflow/hrflowApi";
+
+import MachFlowWorkspace
+	from "../modules/machflow/MachFlowWorkspace";
 
 import {
 	MODULE_KEYS,
@@ -179,6 +185,35 @@ function ModuleHubContent() {
 		requestedSharedModule === "hrflow" ||
 		requestedSharedModule === "hr";
 
+	const machFlowView =
+		requestedSharedModule === "machflow" ||
+		requestedSharedModule === "maintenance";
+
+	const sharedAccessUser = {
+		...(user || {}),
+		role: role || user?.role || "",
+		roles: Array.isArray(roles)
+			? roles
+			: Array.isArray(user?.roles)
+				? user.roles
+				: [],
+		modules: Array.isArray(modules)
+			? modules
+			: Array.isArray(user?.modules)
+				? user.modules
+				: [],
+	};
+
+	const machFlowAllowed =
+		hasModuleAccessFromUser(
+			sharedAccessUser,
+			MODULE_KEYS.MACHFLOW
+		);
+
+	if (machFlowView && machFlowAllowed) {
+		return <MachFlowWorkspace />;
+	}
+
 	if (clientMasterView) {
 		return (
 			<RequireRole allowed={["ADMIN"]}>
@@ -195,28 +230,7 @@ function ModuleHubContent() {
 	 * AuthContext may keep role/modules separately from user.
 	 * Build one reliable object for module-access checks.
 	 */
-	const accessUser = {
-		...(user || {}),
-
-		role:
-			role ||
-			user?.role ||
-			"",
-
-		roles:
-			Array.isArray(roles)
-				? roles
-				: Array.isArray(user?.roles)
-					? user.roles
-					: [],
-
-		modules:
-			Array.isArray(modules)
-				? modules
-				: Array.isArray(user?.modules)
-					? user.modules
-					: [],
-	};
+	const accessUser = sharedAccessUser;
 
 	const isHardwareOnly =
 		hasRole("HARDWARE_PACKING") &&
@@ -304,6 +318,28 @@ function ModuleHubContent() {
 				MODULE_KEYS.MATFLOW
 			),
 			accent: "Material Control",
+		},
+		{
+			key: MODULE_KEYS.MACHFLOW,
+			title: "MachFlow",
+			subtitle:
+				"Machine maintenance, breakdown response, preventive scheduling and reliability intelligence.",
+			icon: (
+				<EngineeringOutlinedIcon
+					fontSize="large"
+				/>
+			),
+			path: "/modules?module=machflow",
+			tags: [
+				"Work Orders",
+				"Equipment",
+				"Preventive PM",
+				"Reliability",
+			],
+			visible: canAccess(
+				MODULE_KEYS.MACHFLOW
+			),
+			accent: "Maintenance Control",
 		},
 		{
 			key: MODULE_KEYS.MATERIALS,
