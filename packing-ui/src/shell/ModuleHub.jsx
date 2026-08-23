@@ -263,6 +263,7 @@ function ModuleHubContent() {
 	};
 
 	const machFlowAllowed =
+		hasRole("ADMIN") ||
 		hasModuleAccessFromUser(
 			accessUser,
 			MODULE_KEYS.MACHFLOW
@@ -376,7 +377,13 @@ function ModuleHubContent() {
 				"Asset QR",
 				"My Requests",
 			],
-			visible: machFlowRequestAllowed,
+			/*
+			 * Request-only users get the lightweight request card.
+			 * ADMIN / Director / Machine / IT operational users get the full
+			 * MachFlow card instead, so the hub cannot accidentally funnel them
+			 * into the complainant portal.
+			 */
+			visible: machFlowRequestAllowed && !machFlowAllowed,
 			accent: "Approved Request Portal",
 		},
 		{
