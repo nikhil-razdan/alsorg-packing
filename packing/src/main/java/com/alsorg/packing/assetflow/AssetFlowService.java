@@ -1,31 +1,31 @@
-package com.alsorg.packing.machflow;
+package com.alsorg.packing.assetflow;
 
 import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.machflow.MachFlowData.AssignmentRequest;
-import com.alsorg.packing.machflow.MachFlowData.AssetKind;
-import com.alsorg.packing.machflow.MachFlowData.AuthenticatedRequestCreate;
-import com.alsorg.packing.machflow.MachFlowData.AuditEvent;
-import com.alsorg.packing.machflow.MachFlowData.ComplaintSource;
-import com.alsorg.packing.machflow.MachFlowData.Criticality;
-import com.alsorg.packing.machflow.MachFlowData.Equipment;
-import com.alsorg.packing.machflow.MachFlowData.EquipmentStatus;
-import com.alsorg.packing.machflow.MachFlowData.EquipmentUpsert;
-import com.alsorg.packing.machflow.MachFlowData.PreventivePlan;
-import com.alsorg.packing.machflow.MachFlowData.PreventivePlanUpsert;
-import com.alsorg.packing.machflow.MachFlowData.Priority;
-import com.alsorg.packing.machflow.MachFlowData.PublicRequestCreate;
-import com.alsorg.packing.machflow.MachFlowData.Reporter;
-import com.alsorg.packing.machflow.MachFlowData.ReporterLogin;
-import com.alsorg.packing.machflow.MachFlowData.ReporterType;
-import com.alsorg.packing.machflow.MachFlowData.ReporterUpsert;
-import com.alsorg.packing.machflow.MachFlowData.ServiceDomain;
-import com.alsorg.packing.machflow.MachFlowData.StatusChange;
-import com.alsorg.packing.machflow.MachFlowData.Team;
-import com.alsorg.packing.machflow.MachFlowData.TeamUpsert;
-import com.alsorg.packing.machflow.MachFlowData.WorkOrder;
-import com.alsorg.packing.machflow.MachFlowData.WorkOrderUpsert;
-import com.alsorg.packing.machflow.MachFlowData.WorkStatus;
-import com.alsorg.packing.machflow.MachFlowData.WorkType;
+import com.alsorg.packing.assetflow.AssetFlowData.AssignmentRequest;
+import com.alsorg.packing.assetflow.AssetFlowData.AssetKind;
+import com.alsorg.packing.assetflow.AssetFlowData.AuthenticatedRequestCreate;
+import com.alsorg.packing.assetflow.AssetFlowData.AuditEvent;
+import com.alsorg.packing.assetflow.AssetFlowData.ComplaintSource;
+import com.alsorg.packing.assetflow.AssetFlowData.Criticality;
+import com.alsorg.packing.assetflow.AssetFlowData.Equipment;
+import com.alsorg.packing.assetflow.AssetFlowData.EquipmentStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.EquipmentUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.PreventivePlan;
+import com.alsorg.packing.assetflow.AssetFlowData.PreventivePlanUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.Priority;
+import com.alsorg.packing.assetflow.AssetFlowData.PublicRequestCreate;
+import com.alsorg.packing.assetflow.AssetFlowData.Reporter;
+import com.alsorg.packing.assetflow.AssetFlowData.ReporterLogin;
+import com.alsorg.packing.assetflow.AssetFlowData.ReporterType;
+import com.alsorg.packing.assetflow.AssetFlowData.ReporterUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.ServiceDomain;
+import com.alsorg.packing.assetflow.AssetFlowData.StatusChange;
+import com.alsorg.packing.assetflow.AssetFlowData.Team;
+import com.alsorg.packing.assetflow.AssetFlowData.TeamUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkOrder;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkOrderUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkType;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.PlantLocationService;
@@ -69,7 +69,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-public class MachFlowService {
+public class AssetFlowService {
 
     private static final Set<WorkStatus> TERMINAL = EnumSet.of(
             WorkStatus.CLOSED,
@@ -97,14 +97,14 @@ public class MachFlowService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final PlantLocationService plantLocationService;
-    private final MachFlowReporterAuthStateService reporterAuthStateService;
+    private final AssetFlowReporterAuthStateService reporterAuthStateService;
 
-    public MachFlowService(
+    public AssetFlowService(
             CurrentUserService currentUserService,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             PlantLocationService plantLocationService,
-            MachFlowReporterAuthStateService reporterAuthStateService) {
+            AssetFlowReporterAuthStateService reporterAuthStateService) {
         this.currentUserService = currentUserService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -123,7 +123,7 @@ public class MachFlowService {
         LocalDateTime ninetyDaysAgo = now.minusDays(90);
 
         List<WorkOrder> openOrders = em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.status not in :terminal and w.plantCode in :plants order by w.createdAt desc",
+                        "select w from AssetFlowWorkOrder w where w.status not in :terminal and w.plantCode in :plants order by w.createdAt desc",
                         WorkOrder.class
                 )
                 .setParameter("terminal", TERMINAL)
@@ -342,7 +342,7 @@ public class MachFlowService {
         require(e.qrEnabled, "QR reporting is disabled for this equipment");
         requirePlantReadAccess(e.plantCode);
         requireDomainReadAccess(current, domainOf(e));
-        require(isMachFlowOperationalUser(current) || currentUserService.isAdmin(current), "MachFlow operational access is required");
+        require(isAssetFlowOperationalUser(current) || currentUserService.isAdmin(current), "AssetFlow operational access is required");
 
         Team team = resolveRoutingTeam(e);
         return map(
@@ -521,9 +521,9 @@ public class MachFlowService {
     /**
      * Controlled request context for an authenticated FlowSuite user.
      *
-     * A normal FlowSuite account is NOT automatically a MachFlow complainant.
-     * The employee must either be an operational MachFlow user or have a
-     * MachFlow Reporter record linked to the same FlowSuite username. This is
+     * A normal FlowSuite account is NOT automatically a AssetFlow complainant.
+     * The employee must either be an operational AssetFlow user or have a
+     * AssetFlow Reporter record linked to the same FlowSuite username. This is
      * what prevents every application user from posting arbitrary requests.
      */
     public Map<String, Object> requesterContext() {
@@ -549,7 +549,7 @@ public class MachFlowService {
         TypedQuery<WorkOrder> query;
         if (permission.reporter() != null) {
             query = em.createQuery(
-                            "select w from MachFlowWorkOrder w "
+                            "select w from AssetFlowWorkOrder w "
                                     + "where lower(w.requestedBy)=:user or w.reporterId=:reporterId "
                                     + "order by w.createdAt desc",
                             WorkOrder.class)
@@ -557,7 +557,7 @@ public class MachFlowService {
                     .setParameter("reporterId", permission.reporter().id);
         } else {
             query = em.createQuery(
-                            "select w from MachFlowWorkOrder w where lower(w.requestedBy)=:user order by w.createdAt desc",
+                            "select w from AssetFlowWorkOrder w where lower(w.requestedBy)=:user order by w.createdAt desc",
                             WorkOrder.class)
                     .setParameter("user", current.getUsername().toLowerCase(Locale.ROOT));
         }
@@ -711,7 +711,7 @@ public class MachFlowService {
         require(login != null, "Reporter credentials are required");
         Reporter reporter = authenticateReporter(login.reporterCode(), login.accessPin());
         return em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.reporterId=:reporterId order by w.createdAt desc",
+                        "select w from AssetFlowWorkOrder w where w.reporterId=:reporterId order by w.createdAt desc",
                         WorkOrder.class)
                 .setParameter("reporterId", reporter.id)
                 .setMaxResults(100)
@@ -890,10 +890,10 @@ public class MachFlowService {
 
     public List<Map<String, Object>> listReporters(String plantCode, Boolean activeOnly, String search) {
         User current = currentUserService.requireCurrentUser();
-        require(currentUserService.isAdmin(current), "Only ADMIN can manage the central MachFlow requester directory");
+        require(currentUserService.isAdmin(current), "Only ADMIN can manage the central AssetFlow requester directory");
         Set<String> scope = readPlantScope(plantCode);
 
-        StringBuilder jpql = new StringBuilder("select r from MachFlowReporter r where 1=1");
+        StringBuilder jpql = new StringBuilder("select r from AssetFlowReporter r where 1=1");
         if (Boolean.TRUE.equals(activeOnly)) jpql.append(" and r.active=true");
         if (notBlank(search)) {
             jpql.append(" and (lower(r.reporterCode) like :search or lower(r.displayName) like :search or lower(coalesce(r.department,'')) like :search or lower(coalesce(r.linkedUsername,'')) like :search)");
@@ -910,7 +910,7 @@ public class MachFlowService {
     public Map<String, Object> saveReporter(UUID id, ReporterUpsert request, Authentication auth) {
         require(request != null, "Reporter request is required");
         User current = currentUserService.requireCurrentUser();
-        require(currentUserService.isAdmin(current), "Only ADMIN can manage the central MachFlow requester directory");
+        require(currentUserService.isAdmin(current), "Only ADMIN can manage the central AssetFlow requester directory");
         require(notBlank(request.reporterCode()), "Reporter Code / Employee Code is required");
         require(notBlank(request.displayName()), "Reporter name is required");
 
@@ -935,7 +935,7 @@ public class MachFlowService {
         if (id != null) checkVersion(r.version, request.version());
 
         String code = clean(request.reporterCode()).toUpperCase(Locale.ROOT);
-        String duplicateJpql = "select count(r) from MachFlowReporter r where lower(r.reporterCode)=:code"
+        String duplicateJpql = "select count(r) from AssetFlowReporter r where lower(r.reporterCode)=:code"
                 + (id == null ? "" : " and r.id<>:id");
         TypedQuery<Long> duplicateQuery = em.createQuery(duplicateJpql, Long.class)
                 .setParameter("code", code.toLowerCase(Locale.ROOT));
@@ -948,7 +948,7 @@ public class MachFlowService {
                     .orElseThrow(() -> badRequest("Linked FlowSuite username does not exist"));
             require(linked.isEnabled(), "Linked FlowSuite user is disabled");
             linkedUsername = linked.getUsername();
-            String linkedJpql = "select count(r) from MachFlowReporter r where lower(r.linkedUsername)=:username"
+            String linkedJpql = "select count(r) from AssetFlowReporter r where lower(r.linkedUsername)=:username"
                     + (id == null ? "" : " and r.id<>:id");
             TypedQuery<Long> linkedQuery = em.createQuery(linkedJpql, Long.class)
                     .setParameter("username", linkedUsername.toLowerCase(Locale.ROOT));
@@ -1286,7 +1286,7 @@ public class MachFlowService {
         require(notBlank(request.plantCode()), "Plant code is required");
         ServiceDomain requestedDomain = request.serviceDomain() == null ? ServiceDomain.MACHINE : request.serviceDomain();
 
-        String duplicateJpql = "select count(e) from MachFlowEquipment e where lower(e.assetCode)=:code"
+        String duplicateJpql = "select count(e) from AssetFlowEquipment e where lower(e.assetCode)=:code"
                 + (currentId == null ? "" : " and e.id<>:id");
         TypedQuery<Long> duplicateQuery = em.createQuery(duplicateJpql, Long.class)
                 .setParameter("code", request.assetCode().trim().toLowerCase(Locale.ROOT));
@@ -1373,7 +1373,7 @@ public class MachFlowService {
         Set<String> scope = readPlantScope(plantCode);
         Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
         return em.createQuery(
-                        "select t from MachFlowTeam t where (t.plantCode is null or t.plantCode in :plants) "
+                        "select t from AssetFlowTeam t where (t.plantCode is null or t.plantCode in :plants) "
                                 + "and t.serviceDomain in :domains "
                                 + "order by t.defaultForPlant desc, t.active desc, t.name",
                         Team.class)
@@ -1430,7 +1430,7 @@ public class MachFlowService {
         boolean defaultForPlant = Boolean.TRUE.equals(request.defaultForPlant());
         if (defaultForPlant) {
             require(targetPlant != null, "Only plant-specific teams can be the default plant route");
-            String update = "update MachFlowTeam t set t.defaultForPlant=false "
+            String update = "update AssetFlowTeam t set t.defaultForPlant=false "
                     + "where t.plantCode=:plant and t.serviceDomain=:domain"
                     + (id == null ? "" : " and t.id<>:id");
             var q = em.createQuery(update)
@@ -1547,11 +1547,11 @@ public class MachFlowService {
     private int generateDuePreventiveOrdersForPlants(Set<String> allowedPlants, Set<ServiceDomain> allowedDomains, String actor) {
         LocalDate today = LocalDate.now();
         StringBuilder jpql = new StringBuilder(
-                "select p from MachFlowPreventivePlan p where p.active=true and p.nextDueDate<=:cutoff");
+                "select p from AssetFlowPreventivePlan p where p.active=true and p.nextDueDate<=:cutoff");
         if (allowedPlants != null) {
-            jpql.append(" and p.equipmentId in (select e.id from MachFlowEquipment e where e.plantCode in :plants and e.serviceDomain in :domains)");
+            jpql.append(" and p.equipmentId in (select e.id from AssetFlowEquipment e where e.plantCode in :plants and e.serviceDomain in :domains)");
         } else {
-            jpql.append(" and p.equipmentId in (select e.id from MachFlowEquipment e where e.serviceDomain in :domains)");
+            jpql.append(" and p.equipmentId in (select e.id from AssetFlowEquipment e where e.serviceDomain in :domains)");
         }
         jpql.append(" order by p.nextDueDate");
 
@@ -1584,7 +1584,7 @@ public class MachFlowService {
             w.plantCode = e.plantCode;
             w.location = e.location;
             w.workCenter = e.workCenter;
-            w.requestedBy = "MachFlow PM Scheduler";
+            w.requestedBy = "AssetFlow PM Scheduler";
             w.teamName = firstNonBlank(p.teamName, route == null ? null : route.name);
             w.responsible = firstNonBlank(p.responsible, route == null ? null : route.lead);
             w.workType = WorkType.PREVENTIVE;
@@ -1636,7 +1636,7 @@ public class MachFlowService {
         LocalDateTime endAt = end.plusDays(1).atStartOfDay();
 
         List<WorkOrder> orders = em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.scheduledAt>=:from and w.scheduledAt<:to "
+                        "select w from AssetFlowWorkOrder w where w.scheduledAt>=:from and w.scheduledAt<:to "
                                 + "and w.plantCode in :plants and w.serviceDomain in :domains order by w.scheduledAt",
                         WorkOrder.class)
                 .setParameter("from", startAt)
@@ -1826,7 +1826,7 @@ public class MachFlowService {
         Set<String> scope = readPlantScope(null);
         Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
         List<String> names = em.createQuery(
-                        "select distinct e.category from MachFlowEquipment e where e.plantCode in :plants "
+                        "select distinct e.category from AssetFlowEquipment e where e.plantCode in :plants "
                                 + "and e.serviceDomain in :domains and e.category is not null and e.category<>'' order by e.category",
                         String.class)
                 .setParameter("plants", scope)
@@ -1840,8 +1840,8 @@ public class MachFlowService {
         return currentUserService.allowedPlants(current)
                 .stream()
                 .filter(Objects::nonNull)
-                .map(MachFlowService::normalizePlant)
-                .filter(MachFlowService::notBlank)
+                .map(AssetFlowService::normalizePlant)
+                .filter(AssetFlowService::notBlank)
                 .distinct()
                 .sorted()
                 .map(n -> map("name", n))
@@ -1857,7 +1857,7 @@ public class MachFlowService {
         return userRepository.findAll(Sort.by(Sort.Direction.ASC, "username"))
                 .stream()
                 .filter(User::isEnabled)
-                .filter(this::isMachFlowOperationalUser)
+                .filter(this::isAssetFlowOperationalUser)
                 .filter(user -> domains.stream().anyMatch(d -> hasDomainReadAccess(user, d)))
                 .filter(user -> {
                     if (currentIsAdmin && !notBlank(plantCode)) return true;
@@ -1937,10 +1937,10 @@ public class MachFlowService {
         }
 
         TypedQuery<WorkOrder> query = em.createQuery(
-                "select w from MachFlowWorkOrder w" + where + " order by w.createdAt desc",
+                "select w from AssetFlowWorkOrder w" + where + " order by w.createdAt desc",
                 WorkOrder.class);
         TypedQuery<Long> count = em.createQuery(
-                "select count(w) from MachFlowWorkOrder w" + where,
+                "select count(w) from AssetFlowWorkOrder w" + where,
                 Long.class);
         params.forEach((key, value) -> {
             query.setParameter(key, value);
@@ -1958,7 +1958,7 @@ public class MachFlowService {
             String category,
             String search) {
         StringBuilder jpql = new StringBuilder(
-                "select e from MachFlowEquipment e where e.plantCode in :plants");
+                "select e from AssetFlowEquipment e where e.plantCode in :plants");
         Map<String, Object> params = new HashMap<>();
         params.put("plants", plants);
         if (domains != null && !domains.isEmpty()) {
@@ -1997,8 +1997,8 @@ public class MachFlowService {
 
     private List<PreventivePlan> listPlanEntities(Set<String> plants, boolean activeOnly) {
         StringBuilder jpql = new StringBuilder(
-                "select p from MachFlowPreventivePlan p where p.equipmentId in "
-                        + "(select e.id from MachFlowEquipment e where e.plantCode in :plants)");
+                "select p from AssetFlowPreventivePlan p where p.equipmentId in "
+                        + "(select e.id from AssetFlowEquipment e where e.plantCode in :plants)");
         if (activeOnly) jpql.append(" and p.active=true");
         jpql.append(" order by p.nextDueDate, p.equipmentName");
         return em.createQuery(jpql.toString(), PreventivePlan.class)
@@ -2017,7 +2017,7 @@ public class MachFlowService {
             LocalDateTime from,
             LocalDateTime to) {
         return em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.createdAt>=:from and w.createdAt<:to "
+                        "select w from AssetFlowWorkOrder w where w.createdAt>=:from and w.createdAt<:to "
                                 + "and w.plantCode in :plants order by w.createdAt",
                         WorkOrder.class)
                 .setParameter("from", from)
@@ -2028,7 +2028,7 @@ public class MachFlowService {
 
     private List<WorkOrder> listOrdersForEquipment(UUID equipmentId, int limit) {
         return em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.equipmentId=:id order by w.createdAt desc",
+                        "select w from AssetFlowWorkOrder w where w.equipmentId=:id order by w.createdAt desc",
                         WorkOrder.class)
                 .setParameter("id", equipmentId)
                 .setMaxResults(limit)
@@ -2037,7 +2037,7 @@ public class MachFlowService {
 
     private Map<UUID, Long> openWorkOrderCountsByEquipment(Set<String> plants, Set<ServiceDomain> domains) {
         List<Object[]> rows = em.createQuery(
-                        "select w.equipmentId, count(w) from MachFlowWorkOrder w "
+                        "select w.equipmentId, count(w) from AssetFlowWorkOrder w "
                                 + "where w.equipmentId is not null and w.status not in :terminal "
                                 + "and w.plantCode in :plants and w.serviceDomain in :domains group by w.equipmentId",
                         Object[].class)
@@ -2069,7 +2069,7 @@ public class MachFlowService {
     private Equipment requireEquipmentByQr(UUID qrToken) {
         require(qrToken != null, "Machine QR token is required");
         List<Equipment> rows = em.createQuery(
-                        "select e from MachFlowEquipment e where e.qrToken=:token",
+                        "select e from AssetFlowEquipment e where e.qrToken=:token",
                         Equipment.class)
                 .setParameter("token", qrToken)
                 .setMaxResults(1)
@@ -2081,7 +2081,7 @@ public class MachFlowService {
     private Team findTeamByName(String name) {
         if (!notBlank(name)) return null;
         List<Team> rows = em.createQuery(
-                        "select t from MachFlowTeam t where lower(t.name)=:name",
+                        "select t from AssetFlowTeam t where lower(t.name)=:name",
                         Team.class)
                 .setParameter("name", clean(name).toLowerCase(Locale.ROOT))
                 .setMaxResults(1)
@@ -2104,7 +2104,7 @@ public class MachFlowService {
         }
 
         List<Team> defaults = em.createQuery(
-                        "select t from MachFlowTeam t where t.active=true and t.defaultForPlant=true "
+                        "select t from AssetFlowTeam t where t.active=true and t.defaultForPlant=true "
                                 + "and t.plantCode=:plant and (t.serviceDomain=:domain or (t.serviceDomain is null and :domain=:machineDomain)) "
                                 + "order by t.updatedAt desc",
                         Team.class)
@@ -2116,7 +2116,7 @@ public class MachFlowService {
         if (!defaults.isEmpty()) return defaults.get(0);
 
         List<Team> plantTeams = em.createQuery(
-                        "select t from MachFlowTeam t where t.active=true and (t.plantCode=:plant or t.plantCode is null) "
+                        "select t from AssetFlowTeam t where t.active=true and (t.plantCode=:plant or t.plantCode is null) "
                                 + "and (t.serviceDomain=:domain or (t.serviceDomain is null and :domain=:machineDomain)) "
                                 + "order by case when t.plantCode=:plant then 0 else 1 end, t.name",
                         Team.class)
@@ -2142,7 +2142,7 @@ public class MachFlowService {
         if (!notBlank(text)) return List.of();
         return java.util.Arrays.stream(text.split("\\s*,\\s*|\\s*\\n\\s*"))
                 .map(String::trim)
-                .filter(MachFlowService::notBlank)
+                .filter(AssetFlowService::notBlank)
                 .distinct()
                 .toList();
     }
@@ -2163,11 +2163,11 @@ public class MachFlowService {
         boolean validHead = currentUserService.isAdmin(user)
                 || (target == ServiceDomain.MACHINE && currentUserService.hasAnyRole(
                         user,
-                        "MACHFLOW_MACHINE_HEAD",
-                        "MACHFLOW_HEAD_TECHNICIAN",
-                        "MACHFLOW_MANAGER",
-                        "MACHFLOW_PLANNER"))
-                || (target == ServiceDomain.IT && currentUserService.hasRole(user, "MACHFLOW_IT_HEAD"));
+                        "ASSETFLOW_MACHINE_HEAD",
+                        "ASSETFLOW_HEAD_TECHNICIAN",
+                        "ASSETFLOW_MANAGER",
+                        "ASSETFLOW_PLANNER"))
+                || (target == ServiceDomain.IT && currentUserService.hasRole(user, "ASSETFLOW_IT_HEAD"));
         require(validHead, "Selected team lead is not a " + humanDomain(target) + " head/coordinator");
         if (notBlank(plantCode) && !currentUserService.isAdmin(user)) {
             require(safePlants(user).contains(normalizePlant(plantCode)),
@@ -2186,16 +2186,16 @@ public class MachFlowService {
         boolean valid = currentUserService.isAdmin(user)
                 || (target == ServiceDomain.MACHINE && currentUserService.hasAnyRole(
                         user,
-                        "MACHFLOW_MACHINE_HEAD",
-                        "MACHFLOW_MACHINE_TECHNICIAN",
-                        "MACHFLOW_HEAD_TECHNICIAN",
-                        "MACHFLOW_TECHNICIAN",
-                        "MACHFLOW_MANAGER",
-                        "MACHFLOW_PLANNER"))
+                        "ASSETFLOW_MACHINE_HEAD",
+                        "ASSETFLOW_MACHINE_TECHNICIAN",
+                        "ASSETFLOW_HEAD_TECHNICIAN",
+                        "ASSETFLOW_TECHNICIAN",
+                        "ASSETFLOW_MANAGER",
+                        "ASSETFLOW_PLANNER"))
                 || (target == ServiceDomain.IT && currentUserService.hasAnyRole(
                         user,
-                        "MACHFLOW_IT_HEAD",
-                        "MACHFLOW_IT_TECHNICIAN"));
+                        "ASSETFLOW_IT_HEAD",
+                        "ASSETFLOW_IT_TECHNICIAN"));
         require(valid, "Selected user is not a " + humanDomain(target) + " technician");
 
         if (headPreferred && !currentUserService.isAdmin(user)) {
@@ -2258,7 +2258,7 @@ public class MachFlowService {
         if (e == null || e.status == EquipmentStatus.RETIRED) return;
 
         List<WorkOrder> active = em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.equipmentId=:id and w.status not in :terminal order by w.createdAt desc",
+                        "select w from AssetFlowWorkOrder w where w.equipmentId=:id and w.status not in :terminal order by w.createdAt desc",
                         WorkOrder.class
                 )
                 .setParameter("id", equipmentId)
@@ -2283,7 +2283,7 @@ public class MachFlowService {
         Equipment e = em.find(Equipment.class, equipmentId);
         if (e == null) return;
         List<LocalDate> dates = em.createQuery(
-                        "select p.nextDueDate from MachFlowPreventivePlan p where p.equipmentId=:id and p.active=true order by p.nextDueDate",
+                        "select p.nextDueDate from AssetFlowPreventivePlan p where p.equipmentId=:id and p.active=true order by p.nextDueDate",
                         LocalDate.class
                 )
                 .setParameter("id", equipmentId)
@@ -2294,7 +2294,7 @@ public class MachFlowService {
 
     private Map<String, Object> equipmentHealth(Equipment e) {
         List<WorkOrder> recent = em.createQuery(
-                        "select w from MachFlowWorkOrder w where w.equipmentId=:id and w.createdAt>=:from order by w.createdAt desc",
+                        "select w from AssetFlowWorkOrder w where w.equipmentId=:id and w.createdAt>=:from order by w.createdAt desc",
                         WorkOrder.class
                 )
                 .setParameter("id", e.id)
@@ -2358,7 +2358,7 @@ public class MachFlowService {
 
     private List<Map<String, Object>> listAudit(String entityType, UUID entityId) {
         return em.createQuery(
-                        "select a from MachFlowAuditEvent a where a.entityType=:type and a.entityId=:id order by a.createdAt desc",
+                        "select a from AssetFlowAuditEvent a where a.entityType=:type and a.entityId=:id order by a.createdAt desc",
                         AuditEvent.class
                 )
                 .setParameter("type", entityType)
@@ -2564,7 +2564,7 @@ public class MachFlowService {
     private Team resolveServiceDeskToken(UUID token, boolean requirePublic) {
         if (token == null) return null;
         List<Team> rows = em.createQuery(
-                        "select t from MachFlowTeam t where t.requestToken=:token",
+                        "select t from AssetFlowTeam t where t.requestToken=:token",
                         Team.class)
                 .setParameter("token", token)
                 .setMaxResults(1)
@@ -2607,7 +2607,7 @@ public class MachFlowService {
         require(notBlank(reporterCode), "Reporter Code / Employee Code is required");
         require(notBlank(pin), "Reporter PIN is required");
         List<Reporter> rows = em.createQuery(
-                        "select r from MachFlowReporter r where lower(r.reporterCode)=:code",
+                        "select r from AssetFlowReporter r where lower(r.reporterCode)=:code",
                         Reporter.class)
                 .setParameter("code", clean(reporterCode).toLowerCase(Locale.ROOT))
                 .setMaxResults(1)
@@ -2672,7 +2672,7 @@ public class MachFlowService {
     private Reporter findLinkedReporter(String username) {
         if (!notBlank(username)) return null;
         List<Reporter> rows = em.createQuery(
-                        "select r from MachFlowReporter r where lower(r.linkedUsername)=:username",
+                        "select r from AssetFlowReporter r where lower(r.linkedUsername)=:username",
                         Reporter.class)
                 .setParameter("username", clean(username).toLowerCase(Locale.ROOT))
                 .setMaxResults(1)
@@ -2703,7 +2703,7 @@ public class MachFlowService {
     private List<Map<String, Object>> listPublicServiceDesks(Set<String> plants, Set<ServiceDomain> allowedDomains) {
         if (plants == null || plants.isEmpty()) return List.of();
         List<Team> teams = em.createQuery(
-                        "select t from MachFlowTeam t where t.active=true and t.publicReportingEnabled=true "
+                        "select t from AssetFlowTeam t where t.active=true and t.publicReportingEnabled=true "
                                 + "and (t.plantCode is null or t.plantCode in :plants) order by t.plantCode, t.name",
                         Team.class)
                 .setParameter("plants", plants)
@@ -2760,7 +2760,7 @@ public class MachFlowService {
         if (!notBlank(text)) return List.of();
         return java.util.Arrays.stream(text.split("\\s*,\\s*|\\s*\\n\\s*"))
                 .map(String::trim)
-                .filter(MachFlowService::notBlank)
+                .filter(AssetFlowService::notBlank)
                 .distinct()
                 .toList();
     }
@@ -2797,15 +2797,15 @@ public class MachFlowService {
         Set<String> allowed = currentUserService.allowedPlants(user)
                 .stream()
                 .filter(Objects::nonNull)
-                .map(MachFlowService::normalizePlant)
-                .filter(MachFlowService::notBlank)
+                .map(AssetFlowService::normalizePlant)
+                .filter(AssetFlowService::notBlank)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        if (allowed.isEmpty()) throw forbidden("No plant access assigned for MachFlow");
+        if (allowed.isEmpty()) throw forbidden("No plant access assigned for AssetFlow");
         if (notBlank(requestedPlantCode)) {
             String requested = normalizePlant(requestedPlantCode);
             if (!allowed.contains(requested)) {
-                throw forbidden("You do not have MachFlow access to plant " + requested);
+                throw forbidden("You do not have AssetFlow access to plant " + requested);
             }
             return Set.of(requested);
         }
@@ -2818,7 +2818,7 @@ public class MachFlowService {
         for (ServiceDomain domain : ServiceDomain.values()) {
             if (hasDomainReadAccess(user, domain)) allowed.add(domain);
         }
-        if (allowed.isEmpty()) throw forbidden("No MachFlow department access assigned");
+        if (allowed.isEmpty()) throw forbidden("No AssetFlow department access assigned");
         if (requestedDomain != null) {
             if (!allowed.contains(requestedDomain)) {
                 throw forbidden("You do not have access to " + humanDomain(requestedDomain));
@@ -2831,21 +2831,21 @@ public class MachFlowService {
     private boolean hasDomainReadAccess(User user, ServiceDomain domain) {
         if (user == null || domain == null) return false;
         if (currentUserService.isAdmin(user)
-                || currentUserService.hasRole(user, "MACHFLOW_DIRECTOR")) return true;
+                || currentUserService.hasRole(user, "ASSETFLOW_DIRECTOR")) return true;
         if (domain == ServiceDomain.MACHINE) {
             return currentUserService.hasAnyRole(
                     user,
-                    "MACHFLOW_MACHINE_HEAD",
-                    "MACHFLOW_MACHINE_TECHNICIAN",
-                    "MACHFLOW_HEAD_TECHNICIAN",
-                    "MACHFLOW_TECHNICIAN",
-                    "MACHFLOW_MANAGER",
-                    "MACHFLOW_PLANNER");
+                    "ASSETFLOW_MACHINE_HEAD",
+                    "ASSETFLOW_MACHINE_TECHNICIAN",
+                    "ASSETFLOW_HEAD_TECHNICIAN",
+                    "ASSETFLOW_TECHNICIAN",
+                    "ASSETFLOW_MANAGER",
+                    "ASSETFLOW_PLANNER");
         }
         return currentUserService.hasAnyRole(
                 user,
-                "MACHFLOW_IT_HEAD",
-                "MACHFLOW_IT_TECHNICIAN");
+                "ASSETFLOW_IT_HEAD",
+                "ASSETFLOW_IT_TECHNICIAN");
     }
 
     private void requireDomainReadAccess(User user, ServiceDomain domain) {
@@ -2860,12 +2860,12 @@ public class MachFlowService {
         if (domain == ServiceDomain.MACHINE) {
             return currentUserService.hasAnyRole(
                     user,
-                    "MACHFLOW_MACHINE_HEAD",
-                    "MACHFLOW_HEAD_TECHNICIAN",
-                    "MACHFLOW_MANAGER",
-                    "MACHFLOW_PLANNER");
+                    "ASSETFLOW_MACHINE_HEAD",
+                    "ASSETFLOW_HEAD_TECHNICIAN",
+                    "ASSETFLOW_MANAGER",
+                    "ASSETFLOW_PLANNER");
         }
-        return currentUserService.hasRole(user, "MACHFLOW_IT_HEAD");
+        return currentUserService.hasRole(user, "ASSETFLOW_IT_HEAD");
     }
 
     private boolean canManageAsset(User user, ServiceDomain domain) {
@@ -2880,31 +2880,31 @@ public class MachFlowService {
         return user != null && (currentUserService.isAdmin(user)
                 || currentUserService.hasAnyRole(
                         user,
-                        "MACHFLOW_DIRECTOR",
-                        "MACHFLOW_MANAGER",
-                        "MACHFLOW_PLANNER",
-                        "MACHFLOW_MACHINE_HEAD",
-                        "MACHFLOW_HEAD_TECHNICIAN",
-                        "MACHFLOW_IT_HEAD"));
+                        "ASSETFLOW_DIRECTOR",
+                        "ASSETFLOW_MANAGER",
+                        "ASSETFLOW_PLANNER",
+                        "ASSETFLOW_MACHINE_HEAD",
+                        "ASSETFLOW_HEAD_TECHNICIAN",
+                        "ASSETFLOW_IT_HEAD"));
     }
 
     private boolean isDirector(User user) {
-        return user != null && currentUserService.hasRole(user, "MACHFLOW_DIRECTOR");
+        return user != null && currentUserService.hasRole(user, "ASSETFLOW_DIRECTOR");
     }
 
-    private boolean isMachFlowOperationalUser(User user) {
+    private boolean isAssetFlowOperationalUser(User user) {
         return user != null && (currentUserService.isAdmin(user)
                 || currentUserService.hasAnyRole(
                         user,
-                        "MACHFLOW_DIRECTOR",
-                        "MACHFLOW_MANAGER",
-                        "MACHFLOW_PLANNER",
-                        "MACHFLOW_MACHINE_HEAD",
-                        "MACHFLOW_MACHINE_TECHNICIAN",
-                        "MACHFLOW_IT_HEAD",
-                        "MACHFLOW_IT_TECHNICIAN",
-                        "MACHFLOW_HEAD_TECHNICIAN",
-                        "MACHFLOW_TECHNICIAN"));
+                        "ASSETFLOW_DIRECTOR",
+                        "ASSETFLOW_MANAGER",
+                        "ASSETFLOW_PLANNER",
+                        "ASSETFLOW_MACHINE_HEAD",
+                        "ASSETFLOW_MACHINE_TECHNICIAN",
+                        "ASSETFLOW_IT_HEAD",
+                        "ASSETFLOW_IT_TECHNICIAN",
+                        "ASSETFLOW_HEAD_TECHNICIAN",
+                        "ASSETFLOW_TECHNICIAN"));
     }
 
     private boolean canCreateOperationalOrder(User user, ServiceDomain domain) {
@@ -2916,25 +2916,25 @@ public class MachFlowService {
         if (domain == ServiceDomain.MACHINE) {
             return currentUserService.hasAnyRole(
                     user,
-                    "MACHFLOW_MACHINE_TECHNICIAN",
-                    "MACHFLOW_TECHNICIAN")
+                    "ASSETFLOW_MACHINE_TECHNICIAN",
+                    "ASSETFLOW_TECHNICIAN")
                     && !canCoordinate(user, domain);
         }
-        return currentUserService.hasRole(user, "MACHFLOW_IT_TECHNICIAN")
+        return currentUserService.hasRole(user, "ASSETFLOW_IT_TECHNICIAN")
                 && !canCoordinate(user, domain);
     }
 
     private boolean isRequesterOnly(User user) {
         return user != null
-                && currentUserService.hasRole(user, "MACHFLOW_REQUESTER")
-                && !isMachFlowOperationalUser(user)
+                && currentUserService.hasRole(user, "ASSETFLOW_REQUESTER")
+                && !isAssetFlowOperationalUser(user)
                 && !currentUserService.isAdmin(user);
     }
 
     private RequestPermission authenticatedRequestPermission(User user) {
         require(user != null && user.isEnabled(), "Authenticated FlowSuite user is required");
 
-        if (isMachFlowOperationalUser(user) || currentUserService.isAdmin(user)) {
+        if (isAssetFlowOperationalUser(user) || currentUserService.isAdmin(user)) {
             LinkedHashSet<String> plants = new LinkedHashSet<>(safePlants(user));
             if (plants.isEmpty()) plants.addAll(plantLocationService.getAllPlantCodes());
             LinkedHashSet<ServiceDomain> domains = new LinkedHashSet<>();
@@ -2947,7 +2947,7 @@ public class MachFlowService {
 
         Reporter reporter = findLinkedReporter(user.getUsername());
         if (reporter == null) {
-            throw forbidden("Maintenance request access is not assigned. Ask Admin to link your FlowSuite username to a MachFlow Reporter profile.");
+            throw forbidden("Maintenance request access is not assigned. Ask Admin to link your FlowSuite username to a AssetFlow Reporter profile.");
         }
         return new RequestPermission(reporter, reporterPlants(reporter), reporterDomains(reporter));
     }
@@ -2965,7 +2965,7 @@ public class MachFlowService {
         if (!notBlank(normalized)) throw forbidden("Plant access is required");
         User user = currentUserService.requireCurrentUser();
         if (!currentUserService.canAccessPlant(user, normalized)) {
-            throw forbidden("You do not have MachFlow access to plant " + normalized);
+            throw forbidden("You do not have AssetFlow access to plant " + normalized);
         }
     }
 
@@ -3027,8 +3027,8 @@ public class MachFlowService {
         return user.getEffectivePlantCodes()
                 .stream()
                 .filter(Objects::nonNull)
-                .map(MachFlowService::normalizePlant)
-                .filter(MachFlowService::notBlank)
+                .map(AssetFlowService::normalizePlant)
+                .filter(AssetFlowService::notBlank)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
@@ -3055,11 +3055,11 @@ public class MachFlowService {
     }
 
     private String qrPath(UUID token) {
-        return token == null ? null : "/machflow/request?asset=" + token;
+        return token == null ? null : "/assetflow/request?asset=" + token;
     }
 
     private String serviceDeskPath(UUID token) {
-        return token == null ? null : "/machflow/request?desk=" + token;
+        return token == null ? null : "/assetflow/request?desk=" + token;
     }
 
     private static String humanStatus(WorkStatus status) {

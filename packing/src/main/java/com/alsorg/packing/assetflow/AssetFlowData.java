@@ -1,4 +1,4 @@
-package com.alsorg.packing.machflow;
+package com.alsorg.packing.assetflow;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,20 +18,20 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Compact, isolated MachFlow domain model.
+ * Compact, isolated AssetFlow domain model.
  *
- * MachFlow intentionally stores snapshots instead of JPA relationships into
+ * AssetFlow intentionally stores snapshots instead of JPA relationships into
  * PackFlow/BOMFlow/MatFlow/HRFlow. The only shared identity it consumes is the
  * existing FlowSuite user model for authenticated operational users.
  *
- * A second, intentionally lightweight identity exists inside MachFlow for
+ * A second, intentionally lightweight identity exists inside AssetFlow for
  * employees/operators who only need to report maintenance issues. Reporter
  * records have no FlowSuite password, no module access and no authority outside
  * the controlled request portal.
  */
-public final class MachFlowData {
+public final class AssetFlowData {
 
-    private MachFlowData() {
+    private AssetFlowData() {
     }
 
     public enum WorkType {
@@ -82,7 +82,7 @@ public final class MachFlowData {
 
     /**
      * The maintenance service desk that owns the work. This lets the same
-     * MachFlow engine handle production machines as well as IT, electrical,
+     * AssetFlow engine handle production machines as well as IT, electrical,
      * facilities and utility requests without creating separate applications.
      */
     /**
@@ -126,16 +126,16 @@ public final class MachFlowData {
         OTHER
     }
 
-    @Entity(name = "MachFlowEquipment")
+    @Entity(name = "AssetFlowEquipment")
     @Table(
-            name = "machflow_equipment",
+            name = "assetflow_equipment",
             indexes = {
-                    @Index(name = "idx_mf_equipment_asset_code", columnList = "asset_code", unique = true),
-                    @Index(name = "idx_mf_equipment_qr_token", columnList = "qr_token", unique = true),
-                    @Index(name = "idx_mf_equipment_plant", columnList = "plant_code"),
-                    @Index(name = "idx_mf_equipment_status", columnList = "status"),
-                    @Index(name = "idx_mf_equipment_category", columnList = "category"),
-                    @Index(name = "idx_mf_equipment_domain", columnList = "service_domain")
+                    @Index(name = "idx_af_equipment_asset_code", columnList = "asset_code", unique = true),
+                    @Index(name = "idx_af_equipment_qr_token", columnList = "qr_token", unique = true),
+                    @Index(name = "idx_af_equipment_plant", columnList = "plant_code"),
+                    @Index(name = "idx_af_equipment_status", columnList = "status"),
+                    @Index(name = "idx_af_equipment_category", columnList = "category"),
+                    @Index(name = "idx_af_equipment_domain", columnList = "service_domain")
             }
     )
     public static class Equipment {
@@ -272,19 +272,19 @@ public final class MachFlowData {
         }
     }
 
-    @Entity(name = "MachFlowWorkOrder")
+    @Entity(name = "AssetFlowWorkOrder")
     @Table(
-            name = "machflow_work_order",
+            name = "assetflow_work_order",
             indexes = {
-                    @Index(name = "idx_mf_wo_number", columnList = "work_number", unique = true),
-                    @Index(name = "idx_mf_wo_equipment", columnList = "equipment_id"),
-                    @Index(name = "idx_mf_wo_status", columnList = "status"),
-                    @Index(name = "idx_mf_wo_plant", columnList = "plant_code"),
-                    @Index(name = "idx_mf_wo_domain", columnList = "service_domain"),
-                    @Index(name = "idx_mf_wo_scheduled", columnList = "scheduled_at"),
-                    @Index(name = "idx_mf_wo_responsible", columnList = "responsible"),
-                    @Index(name = "idx_mf_wo_requester", columnList = "requested_by"),
-                    @Index(name = "idx_mf_wo_reporter", columnList = "reporter_id")
+                    @Index(name = "idx_af_wo_number", columnList = "work_number", unique = true),
+                    @Index(name = "idx_af_wo_equipment", columnList = "equipment_id"),
+                    @Index(name = "idx_af_wo_status", columnList = "status"),
+                    @Index(name = "idx_af_wo_plant", columnList = "plant_code"),
+                    @Index(name = "idx_af_wo_domain", columnList = "service_domain"),
+                    @Index(name = "idx_af_wo_scheduled", columnList = "scheduled_at"),
+                    @Index(name = "idx_af_wo_responsible", columnList = "responsible"),
+                    @Index(name = "idx_af_wo_requester", columnList = "requested_by"),
+                    @Index(name = "idx_af_wo_reporter", columnList = "reporter_id")
             }
     )
     public static class WorkOrder {
@@ -332,7 +332,7 @@ public final class MachFlowData {
         @Column(name = "requested_by", length = 180)
         String requestedBy;
 
-        /** Populated only for a lightweight MachFlow Reporter identity. */
+        /** Populated only for a lightweight AssetFlow Reporter identity. */
         @Column(name = "reporter_id")
         UUID reporterId;
 
@@ -474,14 +474,14 @@ public final class MachFlowData {
         }
     }
 
-    @Entity(name = "MachFlowTeam")
+    @Entity(name = "AssetFlowTeam")
     @Table(
-            name = "machflow_team",
+            name = "assetflow_team",
             indexes = {
-                    @Index(name = "idx_mf_team_name", columnList = "name", unique = true),
-                    @Index(name = "idx_mf_team_plant", columnList = "plant_code"),
-                    @Index(name = "idx_mf_team_domain", columnList = "service_domain"),
-                    @Index(name = "idx_mf_team_request_token", columnList = "request_token", unique = true)
+                    @Index(name = "idx_af_team_name", columnList = "name", unique = true),
+                    @Index(name = "idx_af_team_plant", columnList = "plant_code"),
+                    @Index(name = "idx_af_team_domain", columnList = "service_domain"),
+                    @Index(name = "idx_af_team_request_token", columnList = "request_token", unique = true)
             }
     )
     public static class Team {
@@ -540,13 +540,13 @@ public final class MachFlowData {
      * It grants no application/module access. A reporter can only authenticate
      * against the controlled public request endpoints using reporterCode + PIN.
      */
-    @Entity(name = "MachFlowReporter")
+    @Entity(name = "AssetFlowReporter")
     @Table(
-            name = "machflow_reporter",
+            name = "assetflow_reporter",
             indexes = {
-                    @Index(name = "idx_mf_reporter_code", columnList = "reporter_code", unique = true),
-                    @Index(name = "idx_mf_reporter_plant", columnList = "plant_code"),
-                    @Index(name = "idx_mf_reporter_active", columnList = "active")
+                    @Index(name = "idx_af_reporter_code", columnList = "reporter_code", unique = true),
+                    @Index(name = "idx_af_reporter_plant", columnList = "plant_code"),
+                    @Index(name = "idx_af_reporter_active", columnList = "active")
             }
     )
     public static class Reporter {
@@ -627,13 +627,13 @@ public final class MachFlowData {
         }
     }
 
-    @Entity(name = "MachFlowPreventivePlan")
+    @Entity(name = "AssetFlowPreventivePlan")
     @Table(
-            name = "machflow_preventive_plan",
+            name = "assetflow_preventive_plan",
             indexes = {
-                    @Index(name = "idx_mf_pm_equipment", columnList = "equipment_id"),
-                    @Index(name = "idx_mf_pm_next_due", columnList = "next_due_date"),
-                    @Index(name = "idx_mf_pm_active", columnList = "active")
+                    @Index(name = "idx_af_pm_equipment", columnList = "equipment_id"),
+                    @Index(name = "idx_af_pm_next_due", columnList = "next_due_date"),
+                    @Index(name = "idx_af_pm_active", columnList = "active")
             }
     )
     public static class PreventivePlan {
@@ -703,12 +703,12 @@ public final class MachFlowData {
         }
     }
 
-    @Entity(name = "MachFlowAuditEvent")
+    @Entity(name = "AssetFlowAuditEvent")
     @Table(
-            name = "machflow_audit_event",
+            name = "assetflow_audit_event",
             indexes = {
-                    @Index(name = "idx_mf_audit_entity", columnList = "entity_type,entity_id"),
-                    @Index(name = "idx_mf_audit_created", columnList = "created_at")
+                    @Index(name = "idx_af_audit_entity", columnList = "entity_type,entity_id"),
+                    @Index(name = "idx_af_audit_created", columnList = "created_at")
             }
     )
     public static class AuditEvent {
@@ -901,7 +901,7 @@ public final class MachFlowData {
     }
 
     /**
-     * Request shape for an already authenticated FlowSuite user. No MachFlow
+     * Request shape for an already authenticated FlowSuite user. No AssetFlow
      * role is required for this endpoint; normal plant access is still enforced.
      */
     public record AuthenticatedRequestCreate(

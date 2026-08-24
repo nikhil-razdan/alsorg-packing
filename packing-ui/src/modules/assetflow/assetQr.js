@@ -1,5 +1,5 @@
 /*
- * Local QR encoder used by MachFlow machine labels.
+ * Local QR encoder used by AssetFlow machine labels.
  *
  * Based on QRCode for JavaScript by Kazuhiko Arase (MIT License),
  * as distributed with qrcode-terminal. The original copyright and MIT

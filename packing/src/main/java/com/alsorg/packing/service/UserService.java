@@ -41,31 +41,31 @@ public class UserService {
                         "MATFLOW_DIRECTOR",
 
                         /*
-                         * Current MachFlow roles.
+                         * Current AssetFlow roles.
                          * DIRECTOR = cross-department oversight/read-only.
                          * Machine and IT roles are intentionally separate.
                          */
-                        "MACHFLOW_DIRECTOR",
-                        "MACHFLOW_MACHINE_HEAD",
-                        "MACHFLOW_MACHINE_TECHNICIAN",
-                        "MACHFLOW_IT_HEAD",
-                        "MACHFLOW_IT_TECHNICIAN",
-                        "MACHFLOW_REQUESTER",
+                        "ASSETFLOW_DIRECTOR",
+                        "ASSETFLOW_MACHINE_HEAD",
+                        "ASSETFLOW_MACHINE_TECHNICIAN",
+                        "ASSETFLOW_IT_HEAD",
+                        "ASSETFLOW_IT_TECHNICIAN",
+                        "ASSETFLOW_REQUESTER",
 
                         /*
-                         * Legacy MachFlow authorities are retained so existing
+                         * Legacy AssetFlow authorities are retained so existing
                          * accounts do not break during migration.
                          */
-                        "MACHFLOW_MANAGER",
-                        "MACHFLOW_PLANNER",
-                        "MACHFLOW_HEAD_TECHNICIAN",
-                        "MACHFLOW_TECHNICIAN");
+                        "ASSETFLOW_MANAGER",
+                        "ASSETFLOW_PLANNER",
+                        "ASSETFLOW_HEAD_TECHNICIAN",
+                        "ASSETFLOW_TECHNICIAN");
 
         private static final Set<String> ALLOWED_MODULES = Set.of(
                         "PACKFLOW",
                         "BOMFLOW",
                         "MATFLOW",
-                        "MACHFLOW");
+                        "ASSETFLOW");
 
         private final UserRepository repo;
         private final PasswordEncoder encoder;
@@ -249,12 +249,12 @@ public class UserService {
                                 roles);
 
                 /*
-                 * MACHFLOW_REQUESTER is a request-portal identity, not full
-                 * operational MachFlow access. Strip MACHFLOW unless the same
-                 * profile also carries a real MachFlow operational role.
+                 * ASSETFLOW_REQUESTER is a request-portal identity, not full
+                 * operational AssetFlow access. Strip ASSETFLOW unless the same
+                 * profile also carries a real AssetFlow operational role.
                  */
-                if (!hasOperationalMachFlowRole(roles)) {
-                        cleanModules.remove("MACHFLOW");
+                if (!hasOperationalAssetFlowRole(roles)) {
+                        cleanModules.remove("ASSETFLOW");
                 }
 
                 user.setModules(cleanModules);
@@ -362,18 +362,18 @@ public class UserService {
 
                 /*
                  * Preserve the existing PackFlow multi-role behaviour, but allow exactly
-                 * one MachFlow role to be added to an existing user profile. This is
+                 * one AssetFlow role to be added to an existing user profile. This is
                  * important for real factory complainants: an Engineering/Store/Production
                  * user can also raise a machine complaint without creating a duplicate user.
                  *
                  * We deliberately do NOT open unrestricted cross-module role mixing.
                  * BOMFlow + MatFlow still cannot be combined, and a user may have only one
-                 * MachFlow role because Head/Technician/Requester already express the
-                 * complete MachFlow responsibility.
+                 * AssetFlow role because Head/Technician/Requester already express the
+                 * complete AssetFlow responsibility.
                  */
                 if (!isAllowedRoleCombination(cleanRoles)) {
                         throw new RuntimeException(
-                                        "Invalid role combination. PackFlow roles may be combined as before; one MachFlow role may additionally be combined with PackFlow or one BOMFlow/MatFlow role.");
+                                        "Invalid role combination. PackFlow roles may be combined as before; one AssetFlow role may additionally be combined with PackFlow or one BOMFlow/MatFlow role.");
                 }
 
                 return new RoleAssignment(
@@ -457,7 +457,7 @@ public class UserService {
                         modules.add("PACKFLOW");
                         modules.add("BOMFLOW");
                         modules.add("MATFLOW");
-                        modules.add("MACHFLOW");
+                        modules.add("ASSETFLOW");
 
                         return modules;
                 }
@@ -475,14 +475,14 @@ public class UserService {
                                 modules.add("MATFLOW");
                         }
 
-                        if (role.startsWith("MACHFLOW_")
-                                        && !"MACHFLOW_REQUESTER".equals(role)) {
+                        if (role.startsWith("ASSETFLOW_")
+                                        && !"ASSETFLOW_REQUESTER".equals(role)) {
                                 /*
                                  * Request-only identities use the controlled
                                  * Maintenance Request portal, not the full
-                                 * operational MachFlow workspace.
+                                 * operational AssetFlow workspace.
                                  */
-                                modules.add("MACHFLOW");
+                                modules.add("ASSETFLOW");
                         }
                 }
 
@@ -520,7 +520,7 @@ public class UserService {
         }
 
 
-        private boolean hasOperationalMachFlowRole(
+        private boolean hasOperationalAssetFlowRole(
                         Set<String> roles) {
                 if (roles == null) {
                         return false;
@@ -532,8 +532,8 @@ public class UserService {
 
                 return roles.stream()
                                 .anyMatch(role -> role != null
-                                                && role.startsWith("MACHFLOW_")
-                                                && !"MACHFLOW_REQUESTER".equals(role));
+                                                && role.startsWith("ASSETFLOW_")
+                                                && !"ASSETFLOW_REQUESTER".equals(role));
         }
 
         private boolean isAllowedRoleCombination(
@@ -546,29 +546,29 @@ public class UserService {
                         return true;
                 }
 
-                long machFlowCount = roles.stream()
-                                .filter(role -> role != null && role.startsWith("MACHFLOW_"))
+                long assetFlowCount = roles.stream()
+                                .filter(role -> role != null && role.startsWith("ASSETFLOW_"))
                                 .count();
 
-                if (machFlowCount != 1) {
+                if (assetFlowCount != 1) {
                         return false;
                 }
 
-                Set<String> nonMachFlowRoles = roles.stream()
-                                .filter(role -> role != null && !role.startsWith("MACHFLOW_"))
+                Set<String> nonAssetFlowRoles = roles.stream()
+                                .filter(role -> role != null && !role.startsWith("ASSETFLOW_"))
                                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
-                if (nonMachFlowRoles.isEmpty()) {
+                if (nonAssetFlowRoles.isEmpty()) {
                         return true;
                 }
 
-                if (nonMachFlowRoles.stream().allMatch(this::isPackFlowRole)) {
+                if (nonAssetFlowRoles.stream().allMatch(this::isPackFlowRole)) {
                         return true;
                 }
 
-                return nonMachFlowRoles.size() == 1
-                                && (nonMachFlowRoles.iterator().next().startsWith("BOMFLOW_")
-                                                || nonMachFlowRoles.iterator().next().startsWith("MATFLOW_"));
+                return nonAssetFlowRoles.size() == 1
+                                && (nonAssetFlowRoles.iterator().next().startsWith("BOMFLOW_")
+                                                || nonAssetFlowRoles.iterator().next().startsWith("MATFLOW_"));
         }
 
         private boolean isPackFlowRole(

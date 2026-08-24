@@ -1,6 +1,6 @@
-package com.alsorg.packing.machflow;
+package com.alsorg.packing.assetflow;
 
-import com.alsorg.packing.machflow.MachFlowData.Reporter;
+import com.alsorg.packing.assetflow.AssetFlowData.Reporter;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
@@ -13,12 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Persists Reporter Pass failed-login state in its own transaction.
  *
- * This deliberately sits outside MachFlowService's request transaction so a
+ * This deliberately sits outside AssetFlowService's request transaction so a
  * later 403 response cannot roll back the failed-attempt counter. Reporter
  * passes grant request-only access and never create a Spring Security session.
  */
 @Service
-public class MachFlowReporterAuthStateService {
+public class AssetFlowReporterAuthStateService {
 
     @PersistenceContext
     private EntityManager em;

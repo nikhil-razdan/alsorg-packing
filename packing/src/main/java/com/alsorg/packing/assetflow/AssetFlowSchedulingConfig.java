@@ -1,9 +1,9 @@
-package com.alsorg.packing.machflow;
+package com.alsorg.packing.assetflow;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration
 @EnableScheduling
-public class MachFlowSchedulingConfig {
+public class AssetFlowSchedulingConfig {
 }

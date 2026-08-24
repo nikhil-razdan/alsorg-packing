@@ -1,20 +1,20 @@
-package com.alsorg.packing.machflow;
+package com.alsorg.packing.assetflow;
 
-import com.alsorg.packing.machflow.MachFlowData.AssignmentRequest;
-import com.alsorg.packing.machflow.MachFlowData.AuthenticatedRequestCreate;
-import com.alsorg.packing.machflow.MachFlowData.EquipmentStatus;
-import com.alsorg.packing.machflow.MachFlowData.EquipmentUpsert;
-import com.alsorg.packing.machflow.MachFlowData.PreventivePlanUpsert;
-import com.alsorg.packing.machflow.MachFlowData.Priority;
-import com.alsorg.packing.machflow.MachFlowData.PublicRequestCreate;
-import com.alsorg.packing.machflow.MachFlowData.ReporterLogin;
-import com.alsorg.packing.machflow.MachFlowData.ReporterUpsert;
-import com.alsorg.packing.machflow.MachFlowData.ServiceDomain;
-import com.alsorg.packing.machflow.MachFlowData.StatusChange;
-import com.alsorg.packing.machflow.MachFlowData.TeamUpsert;
-import com.alsorg.packing.machflow.MachFlowData.WorkOrderUpsert;
-import com.alsorg.packing.machflow.MachFlowData.WorkStatus;
-import com.alsorg.packing.machflow.MachFlowData.WorkType;
+import com.alsorg.packing.assetflow.AssetFlowData.AssignmentRequest;
+import com.alsorg.packing.assetflow.AssetFlowData.AuthenticatedRequestCreate;
+import com.alsorg.packing.assetflow.AssetFlowData.EquipmentStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.EquipmentUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.PreventivePlanUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.Priority;
+import com.alsorg.packing.assetflow.AssetFlowData.PublicRequestCreate;
+import com.alsorg.packing.assetflow.AssetFlowData.ReporterLogin;
+import com.alsorg.packing.assetflow.AssetFlowData.ReporterUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.ServiceDomain;
+import com.alsorg.packing.assetflow.AssetFlowData.StatusChange;
+import com.alsorg.packing.assetflow.AssetFlowData.TeamUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkOrderUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.WorkType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -27,37 +27,37 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * MachFlow / ServiceFlow API.
+ * AssetFlow / ServiceFlow API.
  *
  * Security is deliberately split into:
- *  - public QR gateway: Reporter Code + PIN is validated inside MachFlowService;
+ *  - public QR gateway: Reporter Code + PIN is validated inside AssetFlowService;
  *  - authenticated request gateway: a FlowSuite user must have a linked Reporter
- *    profile (or be operational MachFlow staff);
+ *    profile (or be operational AssetFlow staff);
  *  - operational endpoints: domain-scoped Machine Maintenance / IT roles.
  *
  * Service-level checks are authoritative. Controller authorities only decide
  * which surface a signed-in user may attempt to call.
  */
 @RestController
-@RequestMapping("/api/machflow")
-public class MachFlowController {
+@RequestMapping("/api/assetflow")
+public class AssetFlowController {
 
     private static final String OPERATIONAL_READ =
-            "hasAnyAuthority('ADMIN','MACHFLOW_DIRECTOR','MACHFLOW_MACHINE_HEAD','MACHFLOW_MACHINE_TECHNICIAN',"
-                    + "'MACHFLOW_IT_HEAD','MACHFLOW_IT_TECHNICIAN','MACHFLOW_MANAGER','MACHFLOW_PLANNER',"
-                    + "'MACHFLOW_HEAD_TECHNICIAN','MACHFLOW_TECHNICIAN')";
+            "hasAnyAuthority('ADMIN','ASSETFLOW_DIRECTOR','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_MACHINE_TECHNICIAN',"
+                    + "'ASSETFLOW_IT_HEAD','ASSETFLOW_IT_TECHNICIAN','ASSETFLOW_MANAGER','ASSETFLOW_PLANNER',"
+                    + "'ASSETFLOW_HEAD_TECHNICIAN','ASSETFLOW_TECHNICIAN')";
 
     private static final String OPERATIONAL_COORDINATE =
-            "hasAnyAuthority('ADMIN','MACHFLOW_MACHINE_HEAD','MACHFLOW_IT_HEAD','MACHFLOW_MANAGER',"
-                    + "'MACHFLOW_PLANNER','MACHFLOW_HEAD_TECHNICIAN')";
+            "hasAnyAuthority('ADMIN','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD','ASSETFLOW_MANAGER',"
+                    + "'ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
 
     private static final String REPORT_READ =
-            "hasAnyAuthority('ADMIN','MACHFLOW_DIRECTOR','MACHFLOW_MACHINE_HEAD','MACHFLOW_IT_HEAD',"
-                    + "'MACHFLOW_MANAGER','MACHFLOW_PLANNER','MACHFLOW_HEAD_TECHNICIAN')";
+            "hasAnyAuthority('ADMIN','ASSETFLOW_DIRECTOR','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD',"
+                    + "'ASSETFLOW_MANAGER','ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
 
-    private final MachFlowService service;
+    private final AssetFlowService service;
 
-    public MachFlowController(MachFlowService service) {
+    public AssetFlowController(AssetFlowService service) {
         this.service = service;
     }
 
@@ -107,7 +107,7 @@ public class MachFlowController {
         return service.createAuthenticatedRequest(request, auth);
     }
 
-    /* =========================== OPERATIONAL MACHFLOW =========================== */
+    /* =========================== OPERATIONAL ASSETFLOW =========================== */
 
     @GetMapping("/dashboard")
     @PreAuthorize(OPERATIONAL_READ)

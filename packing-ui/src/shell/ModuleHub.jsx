@@ -69,14 +69,14 @@ import HrFlowWorkspace
 import hrflowApi
 	from "../modules/hrflow/hrflowApi";
 
-import MachFlowWorkspace
-	from "../modules/machflow/MachFlowWorkspace";
+import AssetFlowWorkspace
+	from "../modules/assetflow/AssetFlowWorkspace";
 
-import MachFlowRequestPortal
-	from "../modules/machflow/MachFlowRequestPortal";
+import AssetFlowRequestPortal
+	from "../modules/assetflow/AssetFlowRequestPortal";
 
-import machFlowApi
-	from "../modules/machflow/machFlowApi";
+import assetFlowApi
+	from "../modules/assetflow/assetFlowApi";
 
 import {
 	MODULE_KEYS,
@@ -135,7 +135,7 @@ function ModuleHubContent() {
 	const [hrFlowAllowed, setHrFlowAllowed] =
 		React.useState(() => Boolean(hasRole("ADMIN")));
 
-	const [machFlowRequestAllowed, setMachFlowRequestAllowed] =
+	const [assetFlowRequestAllowed, setAssetFlowRequestAllowed] =
 		React.useState(false);
 
 	React.useEffect(() => {
@@ -170,14 +170,14 @@ function ModuleHubContent() {
 	React.useEffect(() => {
 		let active = true;
 
-		machFlowApi.requesterContext()
+		assetFlowApi.requesterContext()
 			.then((payload) => {
 				if (!active) return;
-				setMachFlowRequestAllowed(payload?.allowed === true);
+				setAssetFlowRequestAllowed(payload?.allowed === true);
 			})
 			.catch(() => {
 				if (!active) return;
-				setMachFlowRequestAllowed(false);
+				setAssetFlowRequestAllowed(false);
 			});
 
 		return () => { active = false; };
@@ -210,12 +210,12 @@ function ModuleHubContent() {
 		requestedSharedModule === "hrflow" ||
 		requestedSharedModule === "hr";
 
-	const machFlowView =
-		requestedSharedModule === "machflow" ||
+	const assetFlowView =
+		requestedSharedModule === "assetflow" ||
 		requestedSharedModule === "maintenance";
 
-	const machFlowRequestView =
-		requestedSharedModule === "machflow-request" ||
+	const assetFlowRequestView =
+		requestedSharedModule === "assetflow-request" ||
 		requestedSharedModule === "service-request" ||
 		requestedSharedModule === "maintenance-request";
 
@@ -231,8 +231,8 @@ function ModuleHubContent() {
 		return <HrFlowWorkspace />;
 	}
 
-	if (machFlowRequestView) {
-		return <MachFlowRequestPortal />;
+	if (assetFlowRequestView) {
+		return <AssetFlowRequestPortal />;
 	}
 
 	/*
@@ -262,15 +262,15 @@ function ModuleHubContent() {
 					: [],
 	};
 
-	const machFlowAllowed =
+	const assetFlowAllowed =
 		hasRole("ADMIN") ||
 		hasModuleAccessFromUser(
 			accessUser,
-			MODULE_KEYS.MACHFLOW
+			MODULE_KEYS.ASSETFLOW
 		);
 
-	if (machFlowView && machFlowAllowed) {
-		return <MachFlowWorkspace />;
+	if (assetFlowView && assetFlowAllowed) {
+		return <AssetFlowWorkspace />;
 	}
 
 	const isHardwareOnly =
@@ -361,7 +361,7 @@ function ModuleHubContent() {
 			accent: "Material Control",
 		},
 		{
-			key: "MACHFLOW_REQUEST",
+			key: "ASSETFLOW_REQUEST",
 			title: "Maintenance Request",
 			subtitle:
 				"Raise a controlled Machine Maintenance or IT Support request through an approved linked Reporter profile.",
@@ -370,7 +370,7 @@ function ModuleHubContent() {
 					fontSize="large"
 				/>
 			),
-			path: "/modules?module=machflow-request",
+			path: "/modules?module=assetflow-request",
 			tags: [
 				"Machine Maintenance",
 				"IT Support",
@@ -380,15 +380,15 @@ function ModuleHubContent() {
 			/*
 			 * Request-only users get the lightweight request card.
 			 * ADMIN / Director / Machine / IT operational users get the full
-			 * MachFlow card instead, so the hub cannot accidentally funnel them
+			 * AssetFlow card instead, so the hub cannot accidentally funnel them
 			 * into the complainant portal.
 			 */
-			visible: machFlowRequestAllowed && !machFlowAllowed,
+			visible: assetFlowRequestAllowed && !assetFlowAllowed,
 			accent: "Approved Request Portal",
 		},
 		{
-			key: MODULE_KEYS.MACHFLOW,
-			title: "MachFlow",
+			key: MODULE_KEYS.ASSETFLOW,
+			title: "AssetFlow",
 			subtitle:
 				"Department-separated Machine Maintenance and IT Support with controlled request intake, asset QR, preventive planning and management intelligence.",
 			icon: (
@@ -396,7 +396,7 @@ function ModuleHubContent() {
 					fontSize="large"
 				/>
 			),
-			path: "/modules?module=machflow",
+			path: "/modules?module=assetflow",
 			tags: [
 				"Service Requests",
 				"Machine Master",
@@ -404,7 +404,7 @@ function ModuleHubContent() {
 				"Department Reports",
 			],
 			visible: canAccess(
-				MODULE_KEYS.MACHFLOW
+				MODULE_KEYS.ASSETFLOW
 			),
 			accent: "Maintenance Control",
 		},

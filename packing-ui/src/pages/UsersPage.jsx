@@ -77,7 +77,7 @@ const MODULE_KEYS = Object.freeze({
 	PACKFLOW: "PACKFLOW",
 	BOMFLOW: "BOMFLOW",
 	MATFLOW: "MATFLOW",
-	MACHFLOW: "MACHFLOW",
+	ASSETFLOW: "ASSETFLOW",
 });
 
 const ACCESS_GROUPS = [
@@ -86,7 +86,7 @@ const ACCESS_GROUPS = [
 		label: "Platform Administrator",
 		shortLabel: "Administrator",
 		description:
-			"Full access to PackFlow, BOMFlow, MatFlow, MachFlow and user administration.",
+			"Full access to PackFlow, BOMFlow, MatFlow, AssetFlow and user administration.",
 		accent: "#f59e0b",
 		icon: <AdminPanelSettingsIcon />,
 		defaultRole: "ADMIN",
@@ -244,47 +244,47 @@ const ACCESS_GROUPS = [
 		],
 	},
 	{
-		key: MODULE_KEYS.MACHFLOW,
-		label: "MachFlow",
-		shortLabel: "MachFlow",
+		key: MODULE_KEYS.ASSETFLOW,
+		label: "AssetFlow",
+		shortLabel: "AssetFlow",
 		description:
 			"Strictly separated Machine Maintenance and IT Support operations with director oversight, QR assets and controlled Reporter Pass intake.",
 		accent: "#0ea5e9",
 		icon: <EngineeringOutlinedIcon />,
-		defaultRole: "MACHFLOW_MACHINE_TECHNICIAN",
+		defaultRole: "ASSETFLOW_MACHINE_TECHNICIAN",
 		roles: [
 			{
-				value: "MACHFLOW_DIRECTOR",
+				value: "ASSETFLOW_DIRECTOR",
 				label: "Director · Maintenance Oversight",
 				description:
 					"Read-only overall dashboard and reports across Machine Maintenance and IT Support without operational editing rights.",
 			},
 			{
-				value: "MACHFLOW_MACHINE_HEAD",
+				value: "ASSETFLOW_MACHINE_HEAD",
 				label: "Machine Maintenance Head",
 				description:
 					"Own Machine Maintenance across authorised plants: machine master, teams, preventive plans, work orders and machine-maintenance reporting.",
 			},
 			{
-				value: "MACHFLOW_MACHINE_TECHNICIAN",
+				value: "ASSETFLOW_MACHINE_TECHNICIAN",
 				label: "Machine Maintenance Technician",
 				description:
 					"Execute only Machine Maintenance jobs assigned within authorised plants. IT assets and IT requests remain hidden.",
 			},
 			{
-				value: "MACHFLOW_IT_HEAD",
+				value: "ASSETFLOW_IT_HEAD",
 				label: "IT Head",
 				description:
 					"Own IT Support: IT Asset Master, IT support teams, IT work orders, preventive tasks and IT-only reporting.",
 			},
 			{
-				value: "MACHFLOW_IT_TECHNICIAN",
+				value: "ASSETFLOW_IT_TECHNICIAN",
 				label: "IT Technician",
 				description:
 					"Execute assigned IT support work only. Machine Maintenance master, work orders and reports remain hidden.",
 			},
 			{
-				value: "MACHFLOW_REQUESTER",
+				value: "ASSETFLOW_REQUESTER",
 				label: "Legacy / Dedicated Requester",
 				description:
 					"Optional request-only FlowSuite identity. Prefer linking ordinary employees to a Reporter Pass instead of creating a full FlowSuite account.",
@@ -445,14 +445,14 @@ const modulesForRoles = (roles) => {
 			MODULE_KEYS.PACKFLOW,
 			MODULE_KEYS.BOMFLOW,
 			MODULE_KEYS.MATFLOW,
-			MODULE_KEYS.MACHFLOW,
+			MODULE_KEYS.ASSETFLOW,
 		];
 	}
 
 	return Array.from(
 		new Set(
 			cleanRoles
-				.filter((role) => role !== "MACHFLOW_REQUESTER")
+				.filter((role) => role !== "ASSETFLOW_REQUESTER")
 				.map((role) => roleMeta(role).moduleKey)
 				.filter(Boolean)
 		)
@@ -466,18 +466,18 @@ const isAllowedRoleCombination = (roles) => {
 	if (cleanRoles.includes("ADMIN")) return false;
 
 	const packRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW);
-	const machRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW);
+	const assetFlowRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW);
 	const bomRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.BOMFLOW);
 	const matRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.MATFLOW);
 
-	if (machRoles.length === 0) {
+	if (assetFlowRoles.length === 0) {
 		return packRoles.length === cleanRoles.length;
 	}
 
-	if (machRoles.length !== 1 || bomRoles.length > 1 || matRoles.length > 1) return false;
+	if (assetFlowRoles.length !== 1 || bomRoles.length > 1 || matRoles.length > 1) return false;
 	if (bomRoles.length && matRoles.length) return false;
 
-	return packRoles.length + machRoles.length + bomRoles.length + matRoles.length === cleanRoles.length;
+	return packRoles.length + assetFlowRoles.length + bomRoles.length + matRoles.length === cleanRoles.length;
 };
 
 const rolesRequireDriver = (roles) => {
@@ -621,7 +621,7 @@ const modulesForRole = (role) => {
 			MODULE_KEYS.PACKFLOW,
 			MODULE_KEYS.BOMFLOW,
 			MODULE_KEYS.MATFLOW,
-			MODULE_KEYS.MACHFLOW,
+			MODULE_KEYS.ASSETFLOW,
 		];
 	}
 
@@ -1176,10 +1176,10 @@ function UsersPageContent() {
 			MODULE_KEYS.MATFLOW
 		);
 
-	const canOpenMachFlow =
+	const canOpenAssetFlow =
 		isCurrentAdmin ||
 		safeCurrentModules.includes(
-			MODULE_KEYS.MACHFLOW
+			MODULE_KEYS.ASSETFLOW
 		);
 
 	const [users, setUsers] =
@@ -1702,7 +1702,7 @@ function UsersPageContent() {
 		}
 
 		/*
-		 * Keep the old PackFlow multi-role behaviour and allow one MachFlow
+		 * Keep the old PackFlow multi-role behaviour and allow one AssetFlow
 		 * role to coexist with an existing operational profile. Invalid
 		 * combinations remain visible temporarily so validation can explain
 		 * exactly what must be changed instead of silently deleting a role.
@@ -1789,7 +1789,7 @@ function UsersPageContent() {
 		}
 
 		if (!isAllowedRoleCombination(roles)) {
-			return "Invalid role combination. PackFlow roles can be combined as before; add only one MachFlow role alongside PackFlow or one BOMFlow/MatFlow role.";
+			return "Invalid role combination. PackFlow roles can be combined as before; add only one AssetFlow role alongside PackFlow or one BOMFlow/MatFlow role.";
 		}
 
 		if (
@@ -2386,8 +2386,8 @@ function UsersPageContent() {
 		const bomFlowUsers = users.filter((user) =>
 			userRoles(user).some((role) => role.startsWith("BOMFLOW_"))
 		).length;
-		const machFlowUsers = users.filter((user) =>
-			userRoles(user).some((role) => role.startsWith("MACHFLOW_"))
+		const assetFlowUsers = users.filter((user) =>
+			userRoles(user).some((role) => role.startsWith("ASSETFLOW_"))
 		).length;
 		const multiRoleUsers = users.filter((user) => userRoles(user).length > 1).length;
 
@@ -2437,7 +2437,7 @@ function UsersPageContent() {
 			packFlowUsers,
 			matFlowUsers,
 			bomFlowUsers,
-			machFlowUsers,
+			assetFlowUsers,
 			multiRoleUsers,
 			workToday,
 			activeToday,
@@ -2829,8 +2829,8 @@ function UsersPageContent() {
 					canOpenMatFlow={
 						canOpenMatFlow
 					}
-					canOpenMachFlow={
-						canOpenMachFlow
+					canOpenAssetFlow={
+						canOpenAssetFlow
 					}
 					onModules={() =>
 						navigate("/modules")
@@ -2850,9 +2850,9 @@ function UsersPageContent() {
 							"/matflow/dashboard"
 						)
 					}
-					onMachFlow={() =>
+					onAssetFlow={() =>
 						navigate(
-							"/modules?module=machflow"
+							"/modules?module=assetflow"
 						)
 					}
 					onLogout={logout}
@@ -2901,7 +2901,7 @@ function UsersPageContent() {
 					<StatCard label="Today Pack + Dispatch" value={stats.workToday} accent="#60a5fa" icon={<AssessmentOutlinedIcon />} />
 					<StatCard label="BOMFlow Users" value={stats.bomFlowUsers} accent="#8b5cf6" icon={<AccountTreeOutlinedIcon />} />
 					<StatCard label="MatFlow Users" value={stats.matFlowUsers} accent="#2dd4bf" icon={<LayersOutlinedIcon />} />
-					<StatCard label="MachFlow Users" value={stats.machFlowUsers} accent="#0ea5e9" icon={<EngineeringOutlinedIcon />} />
+					<StatCard label="AssetFlow Users" value={stats.assetFlowUsers} accent="#0ea5e9" icon={<EngineeringOutlinedIcon />} />
 					<StatCard label="Disabled Users" value={stats.disabled} accent="#64748b" icon={<BlockOutlinedIcon />} />
 				</Box>
 
@@ -3063,7 +3063,7 @@ function UsersPageContent() {
 								[MODULE_KEYS.PACKFLOW, "PackFlow"],
 								[MODULE_KEYS.BOMFLOW, "BOMFlow"],
 								[MODULE_KEYS.MATFLOW, "MatFlow"],
-								[MODULE_KEYS.MACHFLOW, "MachFlow"],
+								[MODULE_KEYS.ASSETFLOW, "AssetFlow"],
 							]}
 						/>
 
@@ -3410,12 +3410,12 @@ function PageHeader({
 	canOpenPackFlow,
 	canOpenBOMFlow,
 	canOpenMatFlow,
-	canOpenMachFlow,
+	canOpenAssetFlow,
 	onModules,
 	onPackFlow,
 	onBOMFlow,
 	onMatFlow,
-	onMachFlow,
+	onAssetFlow,
 	onLogout,
 	onCreate,
 }) {
@@ -3498,15 +3498,15 @@ function PageHeader({
 					</Button>
 				)}
 
-				{canOpenMachFlow && (
+				{canOpenAssetFlow && (
 					<Button
 						startIcon={
 							<EngineeringOutlinedIcon />
 						}
-						onClick={onMachFlow}
+						onClick={onAssetFlow}
 						sx={secondaryButtonSx}
 					>
-						MachFlow
+						AssetFlow
 					</Button>
 				)}
 
@@ -4025,24 +4025,24 @@ function UserEditorDrawer({
 					/>
 
 					{selectedMeta.groupKey !== "ADMIN" &&
-						selectedMeta.groupKey !== MODULE_KEYS.MACHFLOW && (
+						selectedMeta.groupKey !== MODULE_KEYS.ASSETFLOW && (
 						<Box sx={{ mt: 1.5 }}>
 							<TextField
 								select
 								fullWidth
 								size="small"
-								label="Additional MachFlow Access"
-								value={selectedRoles.find((role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW) || ""}
+								label="Additional AssetFlow Access"
+								value={selectedRoles.find((role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW) || ""}
 								onChange={(event) => {
-									const baseRoles = selectedRoles.filter((role) => roleMeta(role).groupKey !== MODULE_KEYS.MACHFLOW);
-									const machRole = event.target.value;
-									onRolesChange(machRole ? [...baseRoles, machRole] : baseRoles);
+									const baseRoles = selectedRoles.filter((role) => roleMeta(role).groupKey !== MODULE_KEYS.ASSETFLOW);
+									const assetFlowRole = event.target.value;
+									onRolesChange(assetFlowRole ? [...baseRoles, assetFlowRole] : baseRoles);
 								}}
-								helperText="Keep the user's existing FlowSuite responsibility and add one MachFlow responsibility. This avoids duplicate complainant accounts."
+								helperText="Keep the user's existing FlowSuite responsibility and add one AssetFlow responsibility. This avoids duplicate complainant accounts."
 								sx={fieldSx}
 							>
-								<MenuItem value="">No additional MachFlow access</MenuItem>
-								{ACCESS_GROUPS.find((group) => group.key === MODULE_KEYS.MACHFLOW)?.roles.map((roleOption) => (
+								<MenuItem value="">No additional AssetFlow access</MenuItem>
+								{ACCESS_GROUPS.find((group) => group.key === MODULE_KEYS.ASSETFLOW)?.roles.map((roleOption) => (
 									<MenuItem key={roleOption.value} value={roleOption.value}>
 										<Box>
 											<Typography sx={{ fontWeight: 850, fontSize: 13 }}>{roleOption.label}</Typography>
@@ -4076,7 +4076,7 @@ function UserEditorDrawer({
 						<Typography sx={summaryDescriptionSx}>
 							{selectedRoles.length === 1
 								? selectedMeta.description
-								: "Combined access keeps the existing operational role profile and adds only the selected MachFlow responsibility."}
+								: "Combined access keeps the existing operational role profile and adds only the selected AssetFlow responsibility."}
 						</Typography>
 
 						<Box sx={chipWrapSx}>
@@ -4355,7 +4355,7 @@ function AccessProfileSelector({
 		roleMeta(primaryRole).groupKey;
 
 	const selectedMachRoles = selectedRoles.filter(
-		(role) => roleMeta(role).groupKey === MODULE_KEYS.MACHFLOW
+		(role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW
 	);
 
 	const selectedPackRoles = selectedRoles.filter(
@@ -4363,12 +4363,12 @@ function AccessProfileSelector({
 	);
 
 	const switchPrimaryGroup = (group) => {
-		if (group.key === "ADMIN" || group.key === MODULE_KEYS.MACHFLOW) {
+		if (group.key === "ADMIN" || group.key === MODULE_KEYS.ASSETFLOW) {
 			onRolesChange([group.defaultRole]);
 			return;
 		}
 
-		/* Preserve optional MachFlow responsibility while changing the user's
+		/* Preserve optional AssetFlow responsibility while changing the user's
 		 * ordinary operational profile. Other cross-module combinations stay
 		 * intentionally blocked by validation. */
 		onRolesChange([group.defaultRole, ...selectedMachRoles]);
@@ -4452,7 +4452,7 @@ function AccessProfileSelector({
 								onChange={(event) => {
 									const nextRole = event.target.value;
 									onRolesChange(
-										group.key === MODULE_KEYS.MACHFLOW
+										group.key === MODULE_KEYS.ASSETFLOW
 											? [nextRole]
 											: [nextRole, ...selectedMachRoles]
 									);
@@ -5008,7 +5008,7 @@ function roleIcon(role) {
 
 	if (
 		cleanRole.startsWith(
-			"MACHFLOW_"
+			"ASSETFLOW_"
 		)
 	) {
 		return <EngineeringOutlinedIcon />;
