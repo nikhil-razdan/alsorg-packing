@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import machFlowApi from "./machFlowApi";
+import { MachFlowThemeProvider } from "./machflowUi";
 import "./machflow.css";
 
 const SERVICE_DOMAINS = [
@@ -39,6 +40,28 @@ const CATEGORY_OPTIONS = {
     "Peripheral",
     "Other",
   ],
+};
+
+
+const inferRequestDomain = (category) => {
+  const text = String(category || "").trim().toUpperCase();
+  if (!text) return "";
+  if (/(LAN|NETWORK|INTERNET|WI-?FI|PC|LAPTOP|COMPUTER|PRINTER|SCANNER|SOFTWARE|LOGIN|SERVER|UPS|ACCESS POINT|PERIPHERAL)/.test(text)) return "IT";
+  if (/(MACHINE|BREAKDOWN|VIBRATION|ELECTRICAL|LIGHT|LIGHTING|AC|HVAC|PNEUMATIC|HYDRAULIC|UTILITY|FACILITY|COMPRESSOR|GENERATOR|SAFETY)/.test(text)) return "MACHINE";
+  return "";
+};
+
+const categoriesForDomain = (domain, configured = []) => {
+  const defaults = CATEGORY_OPTIONS[domain] || CATEGORY_OPTIONS.MACHINE;
+  const custom = Array.isArray(configured) ? configured : [];
+  if (!custom.length) return defaults;
+
+  const safe = custom.filter((category) => {
+    const inferred = inferRequestDomain(category);
+    return !inferred || inferred === domain;
+  });
+
+  return safe.length ? safe : defaults;
 };
 
 const EMPTY_REQUEST = {
@@ -183,9 +206,10 @@ function RequestForm({
 
   const domainLocked = Boolean(asset || tokenDesk);
   const plantLocked = Boolean(asset?.plantCode || tokenDesk?.plantCode);
-  const categories = selectedDesk?.categories?.length
-    ? selectedDesk.categories
-    : CATEGORY_OPTIONS[form.serviceDomain] || CATEGORY_OPTIONS.MACHINE;
+  const categories = categoriesForDomain(
+    form.serviceDomain,
+    selectedDesk?.categories || tokenDesk?.categories || []
+  );
 
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
@@ -225,11 +249,32 @@ function RequestForm({
 
         <label className="mf-field">
           <span className="mf-label">Request category *</span>
-          <select required value={form.requestCategory} onChange={(e) => set("requestCategory", e.target.value)}>
+          <select
+            required
+            value={form.requestCategory}
+            onChange={(e) => {
+              const nextCategory = e.target.value;
+              const inferred = inferRequestDomain(nextCategory);
+              setForm((current) => ({
+                ...current,
+                requestCategory: nextCategory,
+                serviceDomain: !domainLocked && inferred ? inferred : current.serviceDomain,
+              }));
+            }}
+          >
             <option value="">Select category</option>
             {categories.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
         </label>
+
+        <div className="mf-request-route-banner mf-full">
+          <strong>{form.serviceDomain === "IT" ? "Routes to IT Support" : "Routes to Machine Maintenance"}</strong>
+          <span>
+            {form.serviceDomain === "IT"
+              ? "LAN, internet, PC/laptop, printer, software, server/UPS, Wi-Fi and IT infrastructure stay with IT."
+              : "Machine breakdown, electrical, lighting, AC/HVAC, utilities, facility and factory maintenance stay with Machine Maintenance."}
+          </span>
+        </div>
 
         {!tokenDesk && desks.length > 0 && !asset && (
           <label className="mf-field mf-full">
@@ -343,14 +388,14 @@ function RequestForm({
           <span>{identity === "REPORTER" ? reporterContext?.reporter?.displayName : flowContext?.username}</span>
         </div>
         <button className="mf-btn mf-btn-primary" type="submit" disabled={submitting}>
-          {submitting ? "Submitting…" : "Submit maintenance request"}
+          {submitting ? "Submitting…" : "Submit service request"}
         </button>
       </div>
     </form>
   );
 }
 
-export default function MachFlowRequestPortal() {
+function MachFlowRequestPortalContent() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const assetToken = cleanUuid(params.get("asset"));
   const deskToken = cleanUuid(params.get("desk"));
@@ -632,5 +677,14 @@ export default function MachFlowRequestPortal() {
         </section>
       </main>
     </div>
+  );
+}
+
+
+export default function MachFlowRequestPortal() {
+  return (
+    <MachFlowThemeProvider>
+      <MachFlowRequestPortalContent />
+    </MachFlowThemeProvider>
   );
 }

@@ -3,6 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import machFlowApi from "./machFlowApi";
 import { createQrMatrix } from "./machQr";
+import { MachFlowThemeProvider, useMachFlowTheme } from "./machflowUi";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
+import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import MenuIcon from "@mui/icons-material/Menu";
+import AppsIcon from "@mui/icons-material/Apps";
+import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
+import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
+import AddAlertOutlinedIcon from "@mui/icons-material/AddAlertOutlined";
 import "./machflow.css";
 
 const TABS = [
@@ -349,9 +362,11 @@ function ErrorBox({ error, onRetry }) {
   );
 }
 
-export default function MachFlowWorkspace() {
+function MachFlowWorkspaceContent() {
   const navigate = useNavigate();
-  const { roles = [], username = "" } = useAuth();
+  const { roles = [], username = "", user, logout } = useAuth();
+  const { isDark, toggleMode } = useMachFlowTheme();
+  const [collapsed, setCollapsed] = useState(false);
   const query = useMemo(() => new URLSearchParams(window.location.search), []);
   const qrToken = query.get("asset") || query.get("qr") || "";
   const qrMode = String(query.get("mode") || "").toLowerCase() === "report" && Boolean(qrToken);
@@ -482,107 +497,223 @@ export default function MachFlowWorkspace() {
     ? SERVICE_DOMAIN_LABELS[selectedDomain]
     : "Overall · Machine + IT";
 
+  const tabLabel = (key, fallback) => {
+    if (key !== "equipment") return fallback;
+    if (selectedDomain === "IT") return "IT Asset Master";
+    if (selectedDomain === "MACHINE") return "Machine Master";
+    return "Asset Masters";
+  };
+
+  const navIcon = (key) => ({
+    dashboard: <DashboardOutlinedIcon />,
+    work: <AssignmentOutlinedIcon />,
+    calendar: <CalendarMonthOutlinedIcon />,
+    equipment: <PrecisionManufacturingOutlinedIcon />,
+    reports: <AssessmentOutlinedIcon />,
+    config: <SettingsOutlinedIcon />,
+  })[key] || <AssignmentOutlinedIcon />;
+
+  const navSection = (key) => {
+    if (key === "dashboard") return "HOME";
+    if (["work", "calendar"].includes(key)) return "OPERATIONS";
+    if (key === "equipment") return "ASSETS";
+    return "CONTROL";
+  };
+
+  const navSections = [
+    ["HOME", "Home"],
+    ["OPERATIONS", "My Work"],
+    ["ASSETS", "Assets"],
+    ["CONTROL", "Control & Reports"],
+  ];
+
+  const headerMeta = {
+    dashboard: [
+      selectedDomain === "IT" ? "IT Support Dashboard" : selectedDomain === "MACHINE" ? "Machine Maintenance Dashboard" : "Overall Maintenance Dashboard",
+      selectedDomain === "IT" ? "IT service health, request workload and asset performance." : selectedDomain === "MACHINE" ? "Machine reliability, downtime, PM and maintenance workload." : "Director view across Machine Maintenance and IT Support.",
+    ],
+    work: ["Work Orders", "Requests, planning, assignment, execution and closure."],
+    calendar: ["Maintenance Calendar", "Scheduled corrective and preventive work by date."],
+    equipment: [tabLabel("equipment", "Equipment"), selectedDomain === "IT" ? "IT asset register and QR-linked support history." : selectedDomain === "MACHINE" ? "Machine register, QR-linked history and reliability health." : "Machine and IT asset masters remain department-separated."],
+    reports: [selectedDomain === "IT" ? "IT Support Reports" : selectedDomain === "MACHINE" ? "Machine Maintenance Reports" : "Overall Maintenance Reports", "Performance, reliability, workload and management analytics."],
+    config: ["MachFlow Configuration", "Service routing, Reporter Passes, Service Desk QR and preventive plans."],
+  }[tab] || ["MachFlow", domainLabel];
+
+  const handleLogout = async () => {
+    if (typeof logout === "function") await logout();
+    navigate("/login", { replace: true });
+  };
+
+  const renderContent = () => (
+    <>
+      {tab === "dashboard" && (
+        <Dashboard
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          onNavigate={setTab}
+          showDepartmentComparison={crossDomain && !selectedDomain}
+        />
+      )}
+
+      {tab === "work" && (
+        <WorkOrders
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          notify={notify}
+          plants={plants.data || []}
+          canCoordinate={canCoordinate}
+          canManageMasters={canManageMasters}
+          canExecute={canExecute}
+          readOnly={isDirector}
+          username={username}
+        />
+      )}
+
+      {tab === "calendar" && <MaintenanceCalendar plantCode={plantCode} serviceDomain={selectedDomain} />}
+
+      {tab === "equipment" && (
+        <Equipment
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          notify={notify}
+          plants={plants.data || []}
+          canManageMasters={canManageMasters}
+          readOnly={isDirector}
+        />
+      )}
+
+      {tab === "reports" && canViewReports && (
+        <Reports
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          showDepartmentComparison={crossDomain && !selectedDomain}
+        />
+      )}
+
+      {tab === "config" && (canManageMasters || isAdmin) && (
+        <Configuration
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          notify={notify}
+          plants={plants.data || []}
+          isAdmin={isAdmin}
+        />
+      )}
+    </>
+  );
+
   return (
-    <div className="mf-shell">
-      <header className="mf-topbar">
-        <div className="mf-brand">
-          <button className="mf-icon-btn mf-home-btn" type="button" onClick={() => navigate("/modules")} aria-label="Back to modules">←</button>
-          <div className="mf-mark">M</div>
-          <div>
-            <strong>MachFlow</strong>
-            <span>{domainLabel}</span>
-          </div>
-        </div>
-
-        <nav className="mf-nav" aria-label="MachFlow sections">
-          {visibleTabs.map(([key, label]) => (
-            <button key={key} className={cx(tab === key && "is-active")} onClick={() => setTab(key)}>{label}</button>
-          ))}
-        </nav>
-
-        <div className="mf-top-actions">
-          <span className="mf-user-pill">{username || "MachFlow User"} · {roleLabel}</span>
-
-          {crossDomain && (
-            <select
-              value={serviceDomain}
-              onChange={(e) => setServiceDomain(e.target.value)}
-              aria-label="Maintenance department filter"
-              title="Maintenance department"
-            >
-              <option value="">Overall · Machine + IT</option>
-              <option value="MACHINE">Machine Maintenance</option>
-              <option value="IT">IT Support</option>
-            </select>
+    <div className="mf-shell mf-app-shell">
+      <aside className={cx("mf-app-sidebar", collapsed && "is-collapsed")}>
+        <div className="mf-app-logo">
+          <div className="mf-app-mark">M</div>
+          {!collapsed && (
+            <div className="mf-app-logo-copy">
+              <strong>MachFlow</strong>
+              <span>Maintenance Workflow</span>
+            </div>
           )}
-
-          <select value={plantCode} onChange={(e) => setPlantCode(e.target.value)} aria-label="Plant filter">
-            {(plants.data || []).length > 1 && <option value="">All authorised plants</option>}
-            {(plants.data || []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-          </select>
         </div>
-      </header>
 
-      <main className="mf-main">
-        {tab === "dashboard" && (
-          <Dashboard
-            plantCode={plantCode}
-            serviceDomain={selectedDomain}
-            onNavigate={setTab}
-            showDepartmentComparison={crossDomain && !selectedDomain}
-          />
-        )}
+        <div className={cx("mf-app-identity", collapsed && "is-collapsed")}>
+          <div className="mf-app-avatar">{String(user?.username || username || "U").trim().charAt(0).toUpperCase() || "U"}</div>
+          {!collapsed && (
+            <div className="mf-app-identity-copy">
+              <strong>{user?.username || username || "User"}</strong>
+              <span>{roleLabel}</span>
+            </div>
+          )}
+        </div>
 
-        {tab === "work" && (
-          <WorkOrders
-            plantCode={plantCode}
-            serviceDomain={selectedDomain}
-            notify={notify}
-            plants={plants.data || []}
-            canCoordinate={canCoordinate}
-            canManageMasters={canManageMasters}
-            canExecute={canExecute}
-            readOnly={isDirector}
-            username={username}
-          />
-        )}
+        <div className="mf-app-divider" />
+        <nav className="mf-app-nav mf-sidebar-scroll" aria-label="MachFlow sections">
+          {navSections.map(([sectionKey, sectionName]) => {
+            const sectionItems = visibleTabs.filter(([key]) => navSection(key) === sectionKey);
+            if (!sectionItems.length) return null;
+            return (
+              <div className="mf-app-nav-section" key={sectionKey}>
+                {!collapsed && <div className="mf-app-nav-title">{sectionName}</div>}
+                {sectionItems.map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    title={collapsed ? tabLabel(key, label) : undefined}
+                    className={cx("mf-app-nav-item", tab === key && "is-active")}
+                    onClick={() => setTab(key)}
+                  >
+                    <span className="mf-app-nav-icon">{navIcon(key)}</span>
+                    {!collapsed && <span>{tabLabel(key, label)}</span>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="mf-app-divider" />
+        <button type="button" className="mf-app-collapse" onClick={() => setCollapsed((value) => !value)}>
+          <MenuIcon />{!collapsed && <span>Collapse</span>}
+        </button>
+      </aside>
 
-        {tab === "calendar" && (
-          <MaintenanceCalendar plantCode={plantCode} serviceDomain={selectedDomain} />
-        )}
+      <div className={cx("mf-app-main", collapsed && "is-collapsed")}>
+        <header className="mf-app-header">
+          <div className="mf-app-header-copy">
+            <strong>{headerMeta[0]}</strong>
+            <span>{headerMeta[1]}</span>
+          </div>
 
-        {tab === "equipment" && (
-          <Equipment
-            plantCode={plantCode}
-            serviceDomain={selectedDomain}
-            notify={notify}
-            plants={plants.data || []}
-            canManageMasters={canManageMasters}
-            readOnly={isDirector}
-          />
-        )}
+          <div className="mf-app-header-actions">
+            {crossDomain ? (
+              <label className="mf-app-select-wrap">
+                <span>Department</span>
+                <select value={serviceDomain} onChange={(e) => setServiceDomain(e.target.value)} aria-label="Maintenance department filter">
+                  <option value="">Overall · Machine + IT</option>
+                  <option value="MACHINE">Machine Maintenance</option>
+                  <option value="IT">IT Support</option>
+                </select>
+              </label>
+            ) : (
+              <span className="mf-app-domain-chip">{domainLabel}</span>
+            )}
 
-        {tab === "reports" && canViewReports && (
-          <Reports
-            plantCode={plantCode}
-            serviceDomain={selectedDomain}
-            showDepartmentComparison={crossDomain && !selectedDomain}
-          />
-        )}
+            {((plants.data || []).length > 1 || !plantCode) && (
+              <label className="mf-app-select-wrap mf-app-plant-select">
+                <span>Plant</span>
+                <select value={plantCode} onChange={(e) => setPlantCode(e.target.value)} aria-label="Plant filter">
+                  {(plants.data || []).length > 1 && <option value="">All authorised plants</option>}
+                  {(plants.data || []).map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+                </select>
+              </label>
+            )}
 
-        {tab === "config" && (canManageMasters || isAdmin) && (
-          <Configuration
-            plantCode={plantCode}
-            serviceDomain={selectedDomain}
-            notify={notify}
-            plants={plants.data || []}
-            isAdmin={isAdmin}
-          />
-        )}
-      </main>
+            <button type="button" className="mf-app-header-btn mf-app-header-request" onClick={() => navigate("/modules?module=machflow-request")}>
+              <AddAlertOutlinedIcon /><span>Raise Request</span>
+            </button>
+            <button type="button" className="mf-app-header-btn mf-app-header-icon" onClick={toggleMode} title={isDark ? "Light mode" : "Dark mode"} aria-label={isDark ? "Light mode" : "Dark mode"}>
+              {isDark ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
+            </button>
+            <button type="button" className="mf-app-header-btn mf-app-header-icon" onClick={() => navigate("/modules")} title="Modules" aria-label="Modules">
+              <AppsIcon />
+            </button>
+            <button type="button" className="mf-app-header-btn mf-app-header-icon" onClick={handleLogout} title="Logout" aria-label="Logout">
+              <LogoutIcon />
+            </button>
+          </div>
+        </header>
+
+        <main className="mf-app-content">{renderContent()}</main>
+      </div>
 
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
+  );
+}
+
+export default function MachFlowWorkspace() {
+  return (
+    <MachFlowThemeProvider>
+      <MachFlowWorkspaceContent />
+    </MachFlowThemeProvider>
   );
 }
 
@@ -1586,7 +1717,7 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
           <div className="mf-panel-head">
             <div>
               <h2>Plant + service routing</h2>
-              <p>Configure strictly separated Machine Maintenance and IT Support routes. Machine teams are plant-specific; IT may be plant-specific or centrally managed company-wide.</p>
+              <p>Configure strictly separated Machine Maintenance and IT Support routes. LAN / internet / PC issues route only to IT; lighting / electrical / AC-HVAC / factory utility issues route only to Machine Maintenance. Machine teams are plant-specific; IT may be plant-specific or centrally managed company-wide.</p>
             </div>
             <Button variant="primary" onClick={() => setTeamOpen(true)}>+ New service team</Button>
           </div>
@@ -1608,8 +1739,8 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
                   <div className="mf-service-desk-mini">
                     <MachineQr value={`${window.location.origin}${team.requestPath}`} size={82} />
                     <div>
-                      <strong>Service Desk QR enabled</strong>
-                      <span>Approved Reporter Pass holders can raise {SERVICE_DOMAIN_LABELS[team.serviceDomain] || human(team.serviceDomain)} requests without a FlowSuite account.</span>
+                      <strong>{SERVICE_DOMAIN_LABELS[team.serviceDomain] || human(team.serviceDomain)} Service Desk QR</strong>
+                      <span>{team.serviceDomain === "IT" ? "LAN, internet, PC/laptop, printer, software and IT infrastructure requests route to IT only." : "Machine, electrical, lighting, AC/HVAC, utilities and facility requests route to Machine Maintenance only."}</span>
                     </div>
                     <Button onClick={() => copyDeskLink(team)}>Copy request link</Button>
                   </div>
@@ -1745,7 +1876,7 @@ function TeamForm({ defaultPlant, defaultDomain = "", allowCompanyWide = false, 
           </Field>
           <Field label="Head Technician / Service Lead" hint="Must be a MachFlow Head Technician or Manager with access to the plant."><select required value={form.lead} onChange={(e) => setForm({ ...form, lead: e.target.value })}><option value="">Select lead</option>{heads.map((user) => <option key={user.username} value={user.username}>{user.displayName || user.username}</option>)}</select></Field>
 
-          <Field label="Default request categories" hint="Comma-separated suggestions shown when this Service Desk QR is used."><input value={form.defaultCategories} onChange={(e) => setForm({ ...form, defaultCategories: e.target.value })} placeholder="LAN/Internet, PC/Laptop, Printer, Software" /></Field>
+          <Field label="Default request categories" hint="Comma-separated suggestions shown when this Service Desk QR is used."><input value={form.defaultCategories} onChange={(e) => setForm({ ...form, defaultCategories: e.target.value })} placeholder={form.serviceDomain === "IT" ? "Network / LAN, Internet, PC / Laptop, Printer / Scanner, Software / Login" : "Machine Breakdown, Electrical, Lighting, AC / HVAC, Utility, Facility"} /></Field>
           <div className="mf-checks">
             <label><input type="checkbox" disabled={!form.plantCode} checked={form.defaultForPlant} onChange={(e) => setForm({ ...form, defaultForPlant: e.target.checked })} /> Default route for this plant + service</label>
             <label><input type="checkbox" checked={form.publicReportingEnabled} onChange={(e) => setForm({ ...form, publicReportingEnabled: e.target.checked })} /> Enable Service Desk QR / Reporter Pass requests</label>
