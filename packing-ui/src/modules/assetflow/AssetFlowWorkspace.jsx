@@ -427,6 +427,18 @@ function AssetFlowWorkspaceContent() {
 
   const canManageMasters = canCoordinate;
 
+  // Asset master edits are deliberately stricter than general coordination.
+  // Only ADMIN or the owning department Head can update an existing asset.
+  // Legacy Manager/Planner roles may keep their previous coordination surfaces
+  // but they do not receive the new asset edit/update control.
+  const canEditAssets =
+    !isDirector &&
+    (
+      isAdmin ||
+      (domainIsMachine && isMachineHead) ||
+      (domainIsIt && isItHead)
+    );
+
   const canExecute =
     !isDirector &&
     (
@@ -578,6 +590,7 @@ function AssetFlowWorkspaceContent() {
           notify={notify}
           plants={plants.data || []}
           canManageMasters={canManageMasters}
+          canEditAssets={canEditAssets}
           readOnly={isDirector}
         />
       )}
@@ -1400,21 +1413,52 @@ function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() +
 
 /* ================================= EQUIPMENT ================================= */
 
-function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters, readOnly }) {
+function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters, canEditAssets, readOnly }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editAsset, setEditAsset] = useState(null);
+  const [editLoadingId, setEditLoadingId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const state = useAsync(() => assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined, status, search }), [plantCode, serviceDomain, status, search]);
   const teams = useAsync(() => assetFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
   const users = useAsync(() => assetFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
 
-  const save = async (payload) => {
+  const saveCreate = async (payload) => {
     try {
       await assetFlowApi.createEquipment(payload);
       notify("Asset added to AssetFlow and its controlled QR request link is ready");
       setCreateOpen(false);
-      state.reload();
+      await state.reload();
+    } catch (error) {
+      notify(errorText(error), "error");
+    }
+  };
+
+  const openEdit = async (id) => {
+    if (!canEditAssets || readOnly || !id) return;
+    setEditLoadingId(id);
+    try {
+      const detail = await assetFlowApi.equipmentOne(id);
+      setSelectedId(null);
+      setEditAsset(detail);
+    } catch (error) {
+      notify(errorText(error), "error");
+    } finally {
+      setEditLoadingId(null);
+    }
+  };
+
+  const saveUpdate = async (payload) => {
+    if (!editAsset?.id) return;
+    try {
+      const updated = await assetFlowApi.updateEquipment(editAsset.id, {
+        ...payload,
+        version: editAsset.version,
+      });
+      notify(`${updated?.assetCode || editAsset.assetCode || "Asset"} updated successfully`);
+      setEditAsset(null);
+      await state.reload();
     } catch (error) {
       notify(errorText(error), "error");
     }
@@ -1440,7 +1484,26 @@ function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters,
         <div className="af-equipment-grid">
           {(state.data?.items || []).map((e) => (
             <article className={cx("af-equipment-card", e.status === "DOWN" && "is-down")} key={e.id} onClick={() => setSelectedId(e.id)}>
-              <div className="af-equipment-top"><span>{e.assetCode}</span><div className="af-inline-actions"><span className="af-service-domain-tag">{SERVICE_DOMAIN_LABELS[e.serviceDomain] || human(e.serviceDomain)}</span><StatusBadge status={e.status} /></div></div>
+              <div className="af-equipment-top">
+                <span>{e.assetCode}</span>
+                <div className="af-inline-actions">
+                  <span className="af-service-domain-tag">{SERVICE_DOMAIN_LABELS[e.serviceDomain] || human(e.serviceDomain)}</span>
+                  <StatusBadge status={e.status} />
+                  {canEditAssets && !readOnly && (
+                    <Button
+                      className="af-asset-card-edit"
+                      type="button"
+                      disabled={editLoadingId === e.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openEdit(e.id);
+                      }}
+                    >
+                      {editLoadingId === e.id ? "Loading…" : "Edit"}
+                    </Button>
+                  )}
+                </div>
+              </div>
               <h3>{e.name}</h3>
               <p>{[human(e.assetKind), e.category, e.manufacturer, e.model].filter(Boolean).join(" · ") || "Uncategorized asset"}</p>
               <div className="af-equipment-meta">
@@ -1458,15 +1521,92 @@ function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters,
         </div>
       )}
 
-      {canManageMasters && createOpen && <EquipmentForm onClose={() => setCreateOpen(false)} onSave={save} teams={teams.data || []} users={users.data || []} plants={plants} defaultPlant={plantCode} defaultDomain={serviceDomain} />}
-      {selectedId && <EquipmentDrawer id={selectedId} onClose={() => setSelectedId(null)} notify={notify} canManageMasters={canManageMasters && !readOnly} />}
+      {canManageMasters && createOpen && (
+        <EquipmentForm
+          mode="create"
+          onClose={() => setCreateOpen(false)}
+          onSave={saveCreate}
+          teams={teams.data || []}
+          users={users.data || []}
+          plants={plants}
+          defaultPlant={plantCode}
+          defaultDomain={serviceDomain}
+        />
+      )}
+
+      {canEditAssets && editAsset && (
+        <EquipmentForm
+          mode="edit"
+          equipment={editAsset}
+          onClose={() => setEditAsset(null)}
+          onSave={saveUpdate}
+          teams={teams.data || []}
+          users={users.data || []}
+          plants={plants}
+          defaultPlant={plantCode}
+          defaultDomain={serviceDomain}
+        />
+      )}
+
+      {selectedId && (
+        <EquipmentDrawer
+          id={selectedId}
+          onClose={() => setSelectedId(null)}
+          onEdit={canEditAssets && !readOnly ? openEdit : null}
+          notify={notify}
+          canEditAssets={canEditAssets && !readOnly}
+        />
+      )}
     </section>
   );
 }
 
-function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant, defaultDomain = "" }) {
-  const [form, setForm] = useState({ ...EMPTY_EQUIPMENT, serviceDomain: defaultDomain || "MACHINE", assetKind: defaultDomain === "IT" ? "IT_ASSET" : "PRODUCTION_MACHINE", plantCode: defaultPlant || "" });
+function equipmentToForm(equipment, defaultPlant, defaultDomain) {
+  const source = equipment || {};
+  const domain = source.serviceDomain || defaultDomain || "MACHINE";
+  return {
+    ...EMPTY_EQUIPMENT,
+    assetCode: source.assetCode || "",
+    name: source.name || "",
+    category: source.category || "",
+    serviceDomain: domain,
+    assetKind: source.assetKind || (domain === "IT" ? "IT_ASSET" : "PRODUCTION_MACHINE"),
+    plantCode: source.plantCode || defaultPlant || "",
+    location: source.location || "",
+    workCenter: source.workCenter || "",
+    manufacturer: source.manufacturer || "",
+    model: source.model || "",
+    serialNumber: source.serialNumber || "",
+    criticality: source.criticality || "MEDIUM",
+    status: source.status || "ACTIVE",
+    maintenanceTeam: source.maintenanceTeam || "",
+    primaryTechnician: source.primaryTechnician || "",
+    owner: source.owner || "",
+    assignedToCode: source.assignedToCode || "",
+    assignedToName: source.assignedToName || "",
+    assignedDepartment: source.assignedDepartment || "",
+    hostname: source.hostname || "",
+    ipAddress: source.ipAddress || "",
+    macAddress: source.macAddress || "",
+    operatingSystem: source.operatingSystem || "",
+    purchaseDate: dateInput(source.purchaseDate),
+    commissionedDate: dateInput(source.commissionedDate),
+    warrantyExpiry: dateInput(source.warrantyExpiry),
+    description: source.description || "",
+    qrEnabled: source.qrEnabled !== false,
+    safetyNotes: source.safetyNotes || "",
+  };
+}
+
+function EquipmentForm({ mode = "create", equipment = null, onClose, onSave, teams, users, plants, defaultPlant, defaultDomain = "" }) {
+  const editing = mode === "edit" && Boolean(equipment?.id);
+  const [form, setForm] = useState(() => equipmentToForm(equipment, defaultPlant, defaultDomain));
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(equipmentToForm(equipment, defaultPlant, defaultDomain));
+  }, [equipment?.id, equipment?.version, defaultPlant, defaultDomain]);
+
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const serviceTeams = teams.filter((team) =>
     team.active &&
@@ -1481,9 +1621,17 @@ function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant, de
   ));
 
   const defaultKindForDomain = (domain) => domain === "IT" ? "IT_ASSET" : "PRODUCTION_MACHINE";
+  const domainLocked = Boolean(defaultDomain);
 
   return (
-    <Modal title="Add maintainable asset" subtitle="Create the permanent identity used by preventive plans, repair history, service routing and controlled QR requests." onClose={onClose} wide>
+    <Modal
+      title={editing ? `Edit asset · ${equipment.assetCode || ""}` : "Add maintainable asset"}
+      subtitle={editing
+        ? "Update the asset master. Existing QR identity, repair history and preventive-plan links remain attached to this asset."
+        : "Create the permanent identity used by preventive plans, repair history, service routing and controlled QR requests."}
+      onClose={onClose}
+      wide
+    >
       <form onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
@@ -1494,14 +1642,16 @@ function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant, de
             commissionedDate: form.commissionedDate || null,
             warrantyExpiry: form.warrantyExpiry || null,
           });
-        } finally { setSaving(false); }
+        } finally {
+          setSaving(false);
+        }
       }}>
         <div className="af-modal-body af-form-grid">
           <Field label="Asset code"><input required value={form.assetCode} onChange={(e) => set("assetCode", e.target.value)} placeholder="AKG-CNC-001 / IT-LAP-021" /></Field>
           <Field label="Asset / equipment name"><input required value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="HOMAG NMC-112 / Design Laptop 21" /></Field>
 
-          <Field label="Service domain">
-            <select disabled={Boolean(defaultDomain)} value={form.serviceDomain} onChange={(e) => {
+          <Field label="Service domain" hint={editing && domainLocked ? "Department Heads cannot move an asset between Machine Maintenance and IT. ADMIN may do this from the Overall Asset Masters view." : undefined}>
+            <select disabled={domainLocked} value={form.serviceDomain} onChange={(e) => {
               const nextDomain = e.target.value;
               setForm((current) => ({
                 ...current,
@@ -1550,13 +1700,16 @@ function EquipmentForm({ onClose, onSave, teams, users, plants, defaultPlant, de
           <Field label="Description"><textarea rows="3" value={form.description} onChange={(e) => set("description", e.target.value)} /></Field>
           <Field label="Safety / isolation / support notes"><textarea rows="3" value={form.safetyNotes} onChange={(e) => set("safetyNotes", e.target.value)} placeholder="LOTO point, electrical isolation, admin credentials owner, network point, access note…" /></Field>
         </div>
-        <div className="af-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : "Add asset"}</Button></div>
+        <div className="af-modal-actions">
+          <Button type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={saving}>{saving ? (editing ? "Updating…" : "Saving…") : (editing ? "Update asset" : "Add asset")}</Button>
+        </div>
       </form>
     </Modal>
   );
 }
 
-function EquipmentDrawer({ id, onClose, notify, canManageMasters }) {
+function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
   const state = useAsync(() => assetFlowApi.equipmentOne(id), [id]);
   if (state.loading) return <div className="af-drawer"><Loading /></div>;
   if (state.error) return <div className="af-drawer"><ErrorBox error={state.error} onRetry={state.reload} /></div>;
@@ -1586,7 +1739,13 @@ function EquipmentDrawer({ id, onClose, notify, canManageMasters }) {
   return (
     <div className="af-drawer-backdrop" onMouseDown={onClose}>
       <aside className="af-drawer" onMouseDown={(x) => x.stopPropagation()}>
-        <div className="af-drawer-head"><div><span>{e.assetCode}</span><h2>{e.name}</h2></div><button className="af-icon-btn" onClick={onClose}>×</button></div>
+        <div className="af-drawer-head">
+          <div><span>{e.assetCode}</span><h2>{e.name}</h2></div>
+          <div className="af-drawer-head-actions">
+            {canEditAssets && onEdit && <Button className="af-drawer-edit-btn" onClick={() => onEdit(e.id)}>Edit asset</Button>}
+            <button className="af-icon-btn" onClick={onClose} aria-label="Close">×</button>
+          </div>
+        </div>
         <div className="af-drawer-status"><StatusBadge status={e.status} /><Badge tone={h.score >= 85 ? "green" : h.score >= 65 ? "amber" : "red"}>Health {h.score ?? 0}/100 · {h.label || "No history"}</Badge>{e.qrEnabled && <Badge tone="teal">QR active</Badge>}</div>
         <div className="af-drawer-body">
           <div className="af-health-grid"><Kpi title="MTTR" value={`${fmtNumber(h.mttrHours, 1)}h`} detail="90-day average" tone="violet" /><Kpi title="MTBF" value={`${fmtNumber(h.mtbfDays, 1)}d`} detail="between failures" tone="teal" /><Kpi title="Open work" value={fmtNumber(h.openWorkOrders)} detail={`${fmtNumber(h.failures30)} failures / 30d`} tone={h.openWorkOrders ? "amber" : "green"} /></div>
@@ -1622,9 +1781,9 @@ function EquipmentDrawer({ id, onClose, notify, canManageMasters }) {
               <Button onClick={copyQrLink}>Copy QR link</Button>
               <Button onClick={() => window.print()}>Print QR label</Button>
               {qrUrl && <Button onClick={() => window.open(qrUrl, "_blank", "noopener,noreferrer")}>Test complaint view</Button>}
-              {canManageMasters && <Button onClick={rotateQr}>Rotate token</Button>}
+              {canEditAssets && <Button onClick={rotateQr}>Rotate token</Button>}
             </div>
-            <small>QR is generated locally inside the browser; no machine token is sent to an external QR service. Rotating the token invalidates every previously printed label for this asset.</small>
+            <small>QR is generated locally inside the browser; no asset token is sent to an external QR service. Rotating the token invalidates every previously printed label for this asset.</small>
           </div>}
 
           <DetailBlock title="Description" text={e.description} />

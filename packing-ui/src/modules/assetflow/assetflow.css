@@ -1085,3 +1085,55 @@
 .af-request-route-banner span { display: block; margin-top: 3px; color: var(--af-text-secondary); font-size: 9.5px; line-height: 1.45; }
 .af-service-desk-mini { background: var(--af-soft-surface); border: 1px solid var(--af-border); border-radius: 9px; padding: 9px; margin-top: 10px; }
 .af-service-desk-mini .af-machine-qr { border-color: var(--af-border-strong); }
+
+/* ========================================================================== 
+   Asset Master edit/update controls
+   ADMIN + owning department Head only (visibility is also enforced server-side).
+   ========================================================================== */
+.af-asset-card-edit {
+  min-height: 26px !important;
+  padding: 3px 8px !important;
+  border-radius: 7px !important;
+  font-size: 9.5px !important;
+  line-height: 1 !important;
+  background: var(--af-primary-soft) !important;
+  color: var(--af-primary-text) !important;
+  border-color: var(--af-primary-border) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.af-asset-card-edit:hover {
+  background: var(--af-hover) !important;
+  border-color: var(--af-primary) !important;
+}
+.af-drawer-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.af-drawer-edit-btn {
+  min-height: 32px !important;
+  padding: 6px 10px !important;
+  color: var(--af-primary-text) !important;
+  background: var(--af-primary-soft) !important;
+  border-color: var(--af-primary-border) !important;
+  box-shadow: none !important;
+}
+.af-drawer-edit-btn:hover {
+  border-color: var(--af-primary) !important;
+  background: var(--af-hover) !important;
+}
+
+@media (max-width: 620px) {
+  .af-equipment-top {
+    align-items: flex-start;
+  }
+  .af-equipment-top .af-inline-actions {
+    justify-content: flex-end;
+  }
+  .af-drawer-head-actions {
+    max-width: 48%;
+  }
+}

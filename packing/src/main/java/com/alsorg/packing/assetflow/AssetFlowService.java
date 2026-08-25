@@ -1234,6 +1234,7 @@ public class AssetFlowService {
                 .toList());
         out.put("audit", listAudit("EQUIPMENT", e.id));
         out.put("canManage", canManageAsset(current, domainOf(e)));
+        out.put("canEdit", canEditAssetMaster(current, domainOf(e)));
         return out;
     }
 
@@ -1262,13 +1263,13 @@ public class AssetFlowService {
         User current = currentUserService.requireCurrentUser();
         Equipment e = requireEquipment(id, true);
         requirePlantWriteAccess(e.plantCode);
-        require(canManageAsset(current, domainOf(e)), humanDomain(domainOf(e)) + " head/admin permission is required");
+        require(canEditAssetMaster(current, domainOf(e)), humanDomain(domainOf(e)) + " head/admin permission is required to edit this asset");
         checkVersion(e.version, request.version());
 
         ServiceDomain targetDomain = request.serviceDomain() == null ? domainOf(e) : request.serviceDomain();
         require(targetDomain == domainOf(e) || currentUserService.isAdmin(current),
                 "Moving an asset between Machine Maintenance and IT is ADMIN-only");
-        require(canManageAsset(current, targetDomain), "You cannot manage assets in " + humanDomain(targetDomain));
+        require(canEditAssetMaster(current, targetDomain), "You cannot edit assets in " + humanDomain(targetDomain));
 
         validateEquipment(request, id);
         requirePlantWriteAccess(request.plantCode());
@@ -1356,7 +1357,7 @@ public class AssetFlowService {
         User current = currentUserService.requireCurrentUser();
         Equipment e = requireEquipment(id, true);
         requirePlantWriteAccess(e.plantCode);
-        require(canManageAsset(current, domainOf(e)), humanDomain(domainOf(e)) + " head/admin permission is required");
+        require(canEditAssetMaster(current, domainOf(e)), humanDomain(domainOf(e)) + " head/admin permission is required to rotate this asset QR");
         e.qrToken = UUID.randomUUID();
         e.qrEnabled = true;
         e.updatedBy = actor(auth);
@@ -2870,6 +2871,23 @@ public class AssetFlowService {
 
     private boolean canManageAsset(User user, ServiceDomain domain) {
         return canCoordinate(user, domain);
+    }
+
+    /**
+     * Editing an existing asset master is intentionally narrower than general
+     * maintenance coordination. ADMIN and the owning department Head may edit;
+     * legacy Manager/Planner coordination roles do not receive asset-update rights.
+     */
+    private boolean canEditAssetMaster(User user, ServiceDomain domain) {
+        if (user == null || domain == null) return false;
+        if (currentUserService.isAdmin(user)) return true;
+        if (domain == ServiceDomain.MACHINE) {
+            return currentUserService.hasAnyRole(
+                    user,
+                    "ASSETFLOW_MACHINE_HEAD",
+                    "ASSETFLOW_HEAD_TECHNICIAN");
+        }
+        return currentUserService.hasRole(user, "ASSETFLOW_IT_HEAD");
     }
 
     private boolean canManageAnyRequestedDomain(User user, Set<ServiceDomain> domains) {

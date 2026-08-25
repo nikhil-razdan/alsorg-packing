@@ -51,6 +51,9 @@ public class AssetFlowController {
             "hasAnyAuthority('ADMIN','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD','ASSETFLOW_MANAGER',"
                     + "'ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
 
+    private static final String ASSET_MASTER_UPDATE =
+            "hasAnyAuthority('ADMIN','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD','ASSETFLOW_HEAD_TECHNICIAN')";
+
     private static final String REPORT_READ =
             "hasAnyAuthority('ADMIN','ASSETFLOW_DIRECTOR','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD',"
                     + "'ASSETFLOW_MANAGER','ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
@@ -225,7 +228,7 @@ public class AssetFlowController {
     }
 
     @PutMapping("/equipment/{id}")
-    @PreAuthorize(OPERATIONAL_COORDINATE)
+    @PreAuthorize(ASSET_MASTER_UPDATE)
     public Map<String, Object> updateEquipment(
             @PathVariable UUID id,
             @RequestBody EquipmentUpsert request,
@@ -234,7 +237,7 @@ public class AssetFlowController {
     }
 
     @PostMapping("/equipment/{id}/qr/rotate")
-    @PreAuthorize(OPERATIONAL_COORDINATE)
+    @PreAuthorize(ASSET_MASTER_UPDATE)
     public Map<String, Object> rotateEquipmentQr(
             @PathVariable UUID id,
             Authentication auth) {
