@@ -87,6 +87,29 @@ body.packflow-theme-body,
  * Warehouse registers repaint continuously during every mode change.
  */
 
+/*
+ * Atomic theme switch guard.
+ *
+ * This class is applied synchronously by PackFlowThemeContext before the mode
+ * state is committed and removed after the new theme has painted. It prevents
+ * page-local hover transitions (especially table-row background transitions)
+ * from interpolating dark/light variables through a grey midpoint.
+ *
+ * We intentionally disable transitions only for the tiny switching window;
+ * normal button, hover, drawer and card interaction animations stay intact.
+ */
+html.packflow-theme-switching,
+html.packflow-theme-switching *,
+html.packflow-theme-switching *::before,
+html.packflow-theme-switching *::after,
+body.packflow-theme-switching,
+body.packflow-theme-switching *,
+body.packflow-theme-switching *::before,
+body.packflow-theme-switching *::after {
+  transition: none !important;
+  transition-delay: 0s !important;
+}
+
 .packflow-theme-root input,
 .packflow-theme-root select,
 .packflow-theme-root textarea,

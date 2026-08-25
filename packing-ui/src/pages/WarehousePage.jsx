@@ -2663,7 +2663,7 @@ function WarehousePage() {
 
 	if (!canOpenWarehouse) {
 		return (
-			<div style={page}>
+			<div className="packflow-theme-page packflow-warehouse-page" style={page}>
 				<div style={content}>
 					<Box
 						sx={{
@@ -2734,7 +2734,7 @@ function WarehousePage() {
 	}
 
 	return (
-		<div style={page}>
+		<div className="packflow-theme-page packflow-warehouse-page" style={page}>
 			<div style={content}>
 				<div style={headerRow}>
 					<div>

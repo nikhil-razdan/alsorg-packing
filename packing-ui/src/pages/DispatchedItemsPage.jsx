@@ -19316,7 +19316,7 @@ export default function DispatchedItemsPage() {
 	};
 
 	return (
-		<div style={page}>
+		<div className="packflow-theme-page packflow-dispatch-page" style={page}>
 			<div style={content}>
 				<div style={headerRow}>
 					<div>

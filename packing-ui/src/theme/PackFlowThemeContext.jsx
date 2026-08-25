@@ -5,6 +5,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -21,6 +22,7 @@ import "./packFlowTheme.css";
 
 const STORAGE_KEY = "packflow:theme-mode:v1";
 const BODY_CLASS = "packflow-theme-body";
+const SWITCHING_CLASS = "packflow-theme-switching";
 const PackFlowThemeContext = createContext(null);
 
 /*
@@ -57,15 +59,74 @@ function readInitialMode() {
 export function PackFlowThemeProvider({ children }) {
   const [mode, setModeState] = useState(readInitialMode);
 
-  const setMode = useCallback((nextMode) => {
-    setModeState(normalizeMode(nextMode));
+  const themeSwitchFramesRef = useRef({
+    first: 0,
+    second: 0,
+  });
+
+  const cancelThemeSwitchRelease = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    const { first, second } = themeSwitchFramesRef.current;
+
+    if (first) {
+      window.cancelAnimationFrame(first);
+    }
+
+    if (second) {
+      window.cancelAnimationFrame(second);
+    }
+
+    themeSwitchFramesRef.current = {
+      first: 0,
+      second: 0,
+    };
   }, []);
 
+  /*
+   * Theme-variable values such as --pf-surface and --pf-fg-rgb feed hundreds
+   * of page-local styles. Some of those styles intentionally animate hover
+   * background/border changes. If the mode changes while those transitions
+   * are enabled, the browser interpolates dark -> light through a visible
+   * grey midpoint (most obvious across large table rows).
+   *
+   * Add the guard synchronously BEFORE the React theme commit so the browser
+   * cannot begin those per-element interpolations. Hover/focus animations are
+   * restored immediately after the new theme has painted.
+   */
+  const beginThemeSwitch = useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    cancelThemeSwitchRelease();
+
+    const root = document.documentElement;
+    const body = document.body;
+
+    root.classList.add(SWITCHING_CLASS);
+
+    if (body) {
+      body.classList.add(SWITCHING_CLASS);
+    }
+  }, [cancelThemeSwitchRelease]);
+
+  const setMode = useCallback((nextMode) => {
+    const normalized = normalizeMode(nextMode);
+
+    if (normalized === mode) {
+      return;
+    }
+
+    beginThemeSwitch();
+    setModeState(normalized);
+  }, [beginThemeSwitch, mode]);
+
   const toggleTheme = useCallback(() => {
+    beginThemeSwitch();
+
     setModeState((current) =>
       current === "dark" ? "light" : "dark"
     );
-  }, []);
+  }, [beginThemeSwitch]);
 
   /*
    * Apply the CSS-variable mode before the browser paints the committed React
@@ -77,7 +138,7 @@ export function PackFlowThemeProvider({ children }) {
    * mode, creating an unnecessary intermediate style state.
    */
   useIsomorphicLayoutEffect(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined") return undefined;
 
     const root = document.documentElement;
     const body = document.body;
@@ -89,7 +150,40 @@ export function PackFlowThemeProvider({ children }) {
       body.classList.add(BODY_CLASS);
       body.dataset.packflowTheme = mode;
     }
-  }, [mode]);
+
+    /*
+     * Keep the transition guard through the committed frame and one following
+     * frame. This makes CSS variables, MUI portal surfaces and large PackFlow
+     * registers settle on the same mode before local interaction transitions
+     * are re-enabled.
+     */
+    if (typeof window !== "undefined") {
+      cancelThemeSwitchRelease();
+
+      const first = window.requestAnimationFrame(() => {
+        const second = window.requestAnimationFrame(() => {
+          root.classList.remove(SWITCHING_CLASS);
+
+          if (body) {
+            body.classList.remove(SWITCHING_CLASS);
+          }
+
+          themeSwitchFramesRef.current = {
+            first: 0,
+            second: 0,
+          };
+        });
+
+        themeSwitchFramesRef.current.second = second;
+      });
+
+      themeSwitchFramesRef.current.first = first;
+    }
+
+    return () => {
+      cancelThemeSwitchRelease();
+    };
+  }, [mode, cancelThemeSwitchRelease]);
 
   /* Persist after paint; localStorage does not need to block the visual swap. */
   useEffect(() => {
@@ -110,15 +204,19 @@ export function PackFlowThemeProvider({ children }) {
     const body = document.body;
 
     return () => {
+      cancelThemeSwitchRelease();
+
       delete root.dataset.packflowTheme;
       root.style.removeProperty("color-scheme");
+      root.classList.remove(SWITCHING_CLASS);
 
       if (body) {
         body.classList.remove(BODY_CLASS);
+        body.classList.remove(SWITCHING_CLASS);
         delete body.dataset.packflowTheme;
       }
     };
-  }, []);
+  }, [cancelThemeSwitchRelease]);
 
   const muiTheme = PACKFLOW_MUI_THEMES[mode];
 

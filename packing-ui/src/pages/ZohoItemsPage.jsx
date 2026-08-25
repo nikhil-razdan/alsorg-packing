@@ -8350,6 +8350,7 @@ function ZohoItemsPage() {
   /* ===================== RENDER ===================== */
   return (
     <div
+      className="packflow-theme-page packflow-inventory-page"
       style={{
         ...page,
 

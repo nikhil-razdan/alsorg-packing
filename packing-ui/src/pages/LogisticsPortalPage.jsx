@@ -42,7 +42,7 @@ function LogisticsPortalPage() {
     );
 
   return (
-    <div style={page}>
+    <div className="packflow-theme-page packflow-logistics-page" style={page}>
       <div style={content}>
         <div style={headerRow}>
           <div>
