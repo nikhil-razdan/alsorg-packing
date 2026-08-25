@@ -196,38 +196,46 @@ public class ChalaanPdfController {
                         @RequestHeader(value = "Authorization", required = false) String auth) {
                 User user = currentUserService.getCurrentUserFromAuth(auth);
 
-                List<ItemDispatchStatus> statuses = List.of(
-                                ItemDispatchStatus.DISPATCHED);
+                String cleanChallanNumber = challanNumber == null
+                                ? ""
+                                : challanNumber.trim();
 
-                List<DispatchedItem> sourceItems;
-
-                if (currentUserService.isAdmin(user)) {
-                        sourceItems = dispatchedItemRepository.findByStatusIn(statuses);
-                } else {
-                        sourceItems = dispatchedItemRepository.findVisibleByStatusesAndPlantsIncludingLegacy(
-                                        statuses,
-                                        currentUserService.allowedPlants(user));
+                if (cleanChallanNumber.isBlank()) {
+                        throw new RuntimeException("Challan number is required");
                 }
 
-                String currentUsername = cleanLower(user.getUsername());
+                List<DispatchedItem> items;
 
-                List<DispatchedItem> items = sourceItems
-                                .stream()
-                                .filter(item -> item.getChalaanNumber() != null
-                                                && item.getChalaanNumber().equals(challanNumber))
-                                .filter(item -> {
-                                        if (currentUserService.isAdmin(user)) {
-                                                return true;
-                                        }
+                if (currentUserService.isAdmin(user)) {
+                        items = dispatchedItemRepository.findByStatusAndChalaanNumber(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber);
+                } else {
+                        java.util.Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-                                        return cleanLower(item.getDispatchedBy())
-                                                        .equals(currentUsername);
-                                })
-                                .toList();
+                        if (allowedPlants == null || allowedPlants.isEmpty()) {
+                                items = dispatchedItemRepository.findLegacyByStatusAndChalaanNumber(
+                                                ItemDispatchStatus.DISPATCHED,
+                                                cleanChallanNumber);
+                        } else {
+                                items = dispatchedItemRepository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                                                ItemDispatchStatus.DISPATCHED,
+                                                cleanChallanNumber,
+                                                allowedPlants);
+                        }
+
+                        String currentUsername = cleanLower(user.getUsername());
+
+                        items = items
+                                        .stream()
+                                        .filter(item -> cleanLower(item.getDispatchedBy())
+                                                        .equals(currentUsername))
+                                        .toList();
+                }
 
                 if (items.isEmpty()) {
                         throw new RuntimeException(
-                                        "No dispatched items found for challan: " + challanNumber);
+                                        "No dispatched items found for challan: " + cleanChallanNumber);
                 }
 
                 DispatchedItem first = items.get(0);
@@ -241,7 +249,7 @@ public class ChalaanPdfController {
                                 .min(LocalDateTime::compareTo)
                                 .orElse(null);
 
-                data.setVoucherNo(challanNumber);
+                data.setVoucherNo(cleanChallanNumber);
                 data.setDispatchTime(challanDateTime);
                 data.setDesignerName("-");
                 data.setOt("-");
@@ -259,14 +267,31 @@ public class ChalaanPdfController {
 
                 List<ChalaanItem> challanItems = new ArrayList<>();
 
-                for (DispatchedItem item : items) {
-                        PacketItem packetItem = null;
+                /*
+                 * Batch-load linked PacketItems for this one challan. The previous
+                 * loop issued one SELECT per row (N+1), which becomes noticeable on
+                 * large multi-item challans even after the challan lookup itself is
+                 * indexed.
+                 */
+                java.util.Map<UUID, PacketItem> packetItemsById = packetItemRepository
+                                .findAllById(
+                                                items.stream()
+                                                                .map(DispatchedItem::getPacketItemId)
+                                                                .filter(java.util.Objects::nonNull)
+                                                                .collect(java.util.stream.Collectors.toCollection(
+                                                                                java.util.LinkedHashSet::new)))
+                                .stream()
+                                .filter(packetItem -> packetItem != null && packetItem.getId() != null)
+                                .collect(java.util.stream.Collectors.toMap(
+                                                PacketItem::getId,
+                                                java.util.function.Function.identity(),
+                                                (firstPacketItem, ignoredDuplicate) -> firstPacketItem,
+                                                java.util.LinkedHashMap::new));
 
-                        if (item.getPacketItemId() != null) {
-                                packetItem = packetItemRepository
-                                                .findById(item.getPacketItemId())
-                                                .orElse(null);
-                        }
+                for (DispatchedItem item : items) {
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
 
                         challanItems.add(
                                         buildExistingChallanItem(
@@ -279,7 +304,7 @@ public class ChalaanPdfController {
 
                 byte[] pdf = pdfService.generateChalaan(data);
 
-                String filename = challanNumber
+                String filename = cleanChallanNumber
                                 .replaceAll("[^a-zA-Z0-9._-]", "_")
                                 + ".pdf";
 

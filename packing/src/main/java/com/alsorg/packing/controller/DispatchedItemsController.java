@@ -101,6 +101,15 @@ public class DispatchedItemsController {
 
                         @RequestParam(defaultValue = "NONE") String groupBy,
 
+                        /*
+                         * When false, the caller may reuse an already known total and
+                         * the backend skips the expensive COUNT query for this page.
+                         * Defaults keep every existing client fully backward compatible.
+                         */
+                        @RequestParam(defaultValue = "true") boolean includeTotal,
+
+                        @RequestParam(required = false) Long knownTotalElements,
+
                         @RequestHeader(value = "Authorization", required = false) String auth) {
 
                 User user = currentUserService.getCurrentUserFromAuth(
@@ -136,19 +145,22 @@ public class DispatchedItemsController {
                                 : currentUserService.allowedPlants(
                                                 user);
 
-                Page<DispatchedItem> result = dispatchedItemService.searchDispatchRegister(
-                                pageable,
-                                search,
-                                parseDispatchStatusFilter(
-                                                statuses),
-                                plant,
-                                dateMode,
-                                dateFrom,
-                                dateTo,
-                                timeFrom,
-                                timeTo,
-                                completeRegisterAccess,
-                                allowedPlants);
+                DispatchedItemService.DispatchRegisterWindow result = dispatchedItemService
+                                .searchDispatchRegisterWindow(
+                                                pageable,
+                                                search,
+                                                parseDispatchStatusFilter(
+                                                                statuses),
+                                                plant,
+                                                dateMode,
+                                                dateFrom,
+                                                dateTo,
+                                                timeFrom,
+                                                timeTo,
+                                                completeRegisterAccess,
+                                                allowedPlants,
+                                                includeTotal,
+                                                knownTotalElements);
 
                 return ResponseEntity
                                 .ok()
@@ -160,19 +172,19 @@ public class DispatchedItemsController {
                                 .header(
                                                 "X-Total-Pages",
                                                 String.valueOf(
-                                                                result.getTotalPages()))
+                                                                result.totalPages()))
                                 .header(
                                                 "X-Total-Elements",
                                                 String.valueOf(
-                                                                result.getTotalElements()))
+                                                                result.totalElements()))
                                 .header(
                                                 "X-Page-Number",
                                                 String.valueOf(
-                                                                result.getNumber()))
+                                                                result.pageNumber()))
                                 .header(
                                                 "X-Page-Size",
                                                 String.valueOf(
-                                                                result.getSize()))
+                                                                result.pageSize()))
                                 .header(
                                                 "X-Has-Next",
                                                 String.valueOf(
@@ -180,8 +192,12 @@ public class DispatchedItemsController {
                                 .header(
                                                 "X-Dispatch-Query",
                                                 "server-paged")
+                                .header(
+                                                "X-Dispatch-Count-Reused",
+                                                String.valueOf(
+                                                                result.countReused()))
                                 .body(
-                                                result.getContent());
+                                                result.items());
         }
 
         /*
@@ -481,10 +497,7 @@ public class DispatchedItemsController {
          * restore, challan, QR and Admin Edit endpoints remain unchanged.
          */
 
-        @PostMapping(
-                        value = "/import/verify",
-                        consumes = MediaType.APPLICATION_JSON_VALUE,
-                        produces = MediaType.APPLICATION_JSON_VALUE)
+        @PostMapping(value = "/import/verify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<DispatchImportVerificationResponse> verifyDispatchImport(
                         @RequestBody List<DispatchImportRow> rows,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
@@ -500,10 +513,7 @@ public class DispatchedItemsController {
                                 dispatchedItemService.verifyDispatchImport(rows));
         }
 
-        @PostMapping(
-                        value = "/import/apply",
-                        consumes = MediaType.APPLICATION_JSON_VALUE,
-                        produces = MediaType.APPLICATION_JSON_VALUE)
+        @PostMapping(value = "/import/apply", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<DispatchImportApplyResponse> applyDispatchImport(
                         @RequestBody DispatchImportApplyRequest request,
                         @RequestHeader(value = "Authorization", required = false) String auth) {
@@ -1006,45 +1016,43 @@ public class DispatchedItemsController {
                                                 ? null
                                                 : request.helperLoaderCount());
 
-                List<ItemDispatchStatus> statuses = List.of(
-                                ItemDispatchStatus.DISPATCHED);
-
-                List<DispatchedItem> sourceItems;
+                List<DispatchedItem> challanItems;
 
                 if (currentUserService.isAdmin(user)) {
-                        sourceItems = repository.findByStatusIn(
-                                        statuses);
+                        challanItems = repository.findByStatusAndChalaanNumber(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber);
                 } else {
-                        sourceItems = repository
-                                        .findVisibleByStatusesAndPlantsIncludingLegacy(
-                                                        statuses,
-                                                        currentUserService.allowedPlants(user));
+                        Set<String> allowedPlants = currentUserService.allowedPlants(user);
+
+                        if (allowedPlants == null || allowedPlants.isEmpty()) {
+                                challanItems = repository.findLegacyByStatusAndChalaanNumber(
+                                                ItemDispatchStatus.DISPATCHED,
+                                                cleanChallanNumber);
+                        } else {
+                                challanItems = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                                                ItemDispatchStatus.DISPATCHED,
+                                                cleanChallanNumber,
+                                                allowedPlants);
+                        }
                 }
 
-                String currentUsername = cleanLower(
-                                user.getUsername());
+                /*
+                 * Logistics can maintain any challan visible to its plants.
+                 * Dispatch keeps the existing rule that it may maintain its own
+                 * challans only. Filtering happens after the indexed challan lookup,
+                 * so this no longer scans the complete DISPATCHED register.
+                 */
+                if (!currentUserService.isAdmin(user)
+                                && !currentUserService.isLogistics(user)) {
+                        String currentUsername = cleanLower(user.getUsername());
 
-                List<DispatchedItem> challanItems = sourceItems
-                                .stream()
-                                .filter(item -> item.getChalaanNumber() != null &&
-                                                cleanChallanNumber.equals(
-                                                                item.getChalaanNumber().trim()))
-                                .filter(item -> {
-                                        /*
-                                         * Logistics can maintain plant-visible challans.
-                                         * Dispatch can maintain its own challans.
-                                         */
-                                        if (currentUserService.isAdmin(user) ||
-                                                        currentUserService.isLogistics(user)) {
-                                                return true;
-                                        }
-
-                                        return cleanLower(
-                                                        item.getDispatchedBy())
-                                                        .equals(
-                                                                        currentUsername);
-                                })
-                                .toList();
+                        challanItems = challanItems
+                                        .stream()
+                                        .filter(item -> cleanLower(item.getDispatchedBy())
+                                                        .equals(currentUsername))
+                                        .toList();
+                }
 
                 if (challanItems.isEmpty()) {
                         return ResponseEntity

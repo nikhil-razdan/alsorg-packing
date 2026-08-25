@@ -5682,6 +5682,8 @@ const DISPATCH_BACKEND_MAX_PAGES = 5000;
  */
 const DISPATCH_SERVER_SEARCH_DEBOUNCE_MS = 220;
 const DISPATCH_PAGE_CACHE_LIMIT = 18;
+const DISPATCH_PAGE_CACHE_FRESH_MS = 15_000;
+const DISPATCH_TOTAL_REUSE_FRESH_MS = 30_000;
 
 export default function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
@@ -5836,6 +5838,7 @@ export default function DispatchedItemsPage() {
 			totalPages: 1,
 			pageNumber: 0,
 			pageSize: 25,
+			signature: "",
 		});
 
 	const dispatchPageCacheRef = useRef(new Map());
@@ -5869,6 +5872,7 @@ export default function DispatchedItemsPage() {
 	const scanTimerRef = useRef(null);
 	const dispatchFetchRequestRef = useRef(0);
 	const dispatchFetchAbortRef = useRef(null);
+	const dispatchServerTotalKnownAtRef = useRef(0);
 	const [dispatchTripStep, setDispatchTripStep] =
 		useState("DETAILS");
 
@@ -6451,13 +6455,22 @@ export default function DispatchedItemsPage() {
 		return filteredSelectableRows.map((r) => r.zohoItemId);
 	}, [filteredSelectableRows]);
 
+	/*
+	 * Set membership stays O(1) even after an explicit Select All Matching
+	 * operation selects tens of thousands of dispatch ids.
+	 */
+	const selectionIdSet = useMemo(
+		() => new Set(selectionModel),
+		[selectionModel]
+	);
+
 	const allFilteredSelected =
 		filteredSelectableIds.length > 0 &&
-		filteredSelectableIds.every((id) => selectionModel.includes(id));
+		filteredSelectableIds.every((id) => selectionIdSet.has(id));
 
 	const someFilteredSelected =
 		filteredSelectableIds.length > 0 &&
-		filteredSelectableIds.some((id) => selectionModel.includes(id));
+		filteredSelectableIds.some((id) => selectionIdSet.has(id));
 
 	const toggleSelectAllFiltered = async (checked) => {
 		if (!checked) {
@@ -6566,6 +6579,12 @@ export default function DispatchedItemsPage() {
 			),
 			totalPages
 		);
+
+	useEffect(() => {
+		if (pageNo > totalPages) {
+			setPageNo(totalPages);
+		}
+	}, [pageNo, totalPages]);
 
 	/*
 	 * Server-side pagination means rows is exactly the current UI page.
@@ -10438,10 +10457,12 @@ export default function DispatchedItemsPage() {
 		timeFromValue = dateFilterTimeFrom,
 		timeToValue = dateFilterTimeTo,
 		groupByValue = groupBy,
+		includeTotal = true,
+		knownTotalElements = null,
 	}) => {
 		const statuses = normalizeStatusSelection(statusValue);
 
-		return new URLSearchParams({
+		const params = new URLSearchParams({
 			page: String(Math.max(0, Number(backendPage) || 0)),
 			size: String(Math.max(1, Number(size) || pageSize)),
 			search: String(searchValue || "").trim(),
@@ -10453,7 +10474,30 @@ export default function DispatchedItemsPage() {
 			timeFrom: String(timeFromValue || "").trim(),
 			timeTo: String(timeToValue || "").trim(),
 			groupBy: String(groupByValue || "NONE").trim(),
+			includeTotal: String(includeTotal !== false),
 		});
+
+		const hasKnownTotal =
+			knownTotalElements !== null &&
+			knownTotalElements !== undefined &&
+			String(knownTotalElements).trim() !== "";
+
+		const cleanKnownTotal = hasKnownTotal
+			? Number(knownTotalElements)
+			: Number.NaN;
+
+		if (
+			includeTotal === false &&
+			Number.isSafeInteger(cleanKnownTotal) &&
+			cleanKnownTotal >= 0
+		) {
+			params.set(
+				"knownTotalElements",
+				String(cleanKnownTotal)
+			);
+		}
+
+		return params;
 	};
 
 	const getDispatchPageCacheKey = (
@@ -10472,7 +10516,10 @@ export default function DispatchedItemsPage() {
 			cache.delete(cacheKey);
 		}
 
-		cache.set(cacheKey, value);
+		cache.set(cacheKey, {
+			...value,
+			cachedAt: Date.now(),
+		});
 
 		while (cache.size > DISPATCH_PAGE_CACHE_LIMIT) {
 			const oldestKey = cache.keys().next().value;
@@ -10483,6 +10530,15 @@ export default function DispatchedItemsPage() {
 
 			cache.delete(oldestKey);
 		}
+	};
+
+	const isDispatchPageCacheFresh = (cached) => {
+		const cachedAt = Number(cached?.cachedAt || 0);
+
+		return (
+			cachedAt > 0 &&
+			Date.now() - cachedAt <= DISPATCH_PAGE_CACHE_FRESH_MS
+		);
 	};
 
 	const fetchDispatchServerPage =
@@ -10499,6 +10555,8 @@ export default function DispatchedItemsPage() {
 			timeFromValue = dateFilterTimeFrom,
 			timeToValue = dateFilterTimeTo,
 			groupByValue = groupBy,
+			includeTotal = true,
+			knownTotalElements = null,
 		}) => {
 			const query = buildDispatchServerQuery({
 				backendPage,
@@ -10512,6 +10570,8 @@ export default function DispatchedItemsPage() {
 				timeFromValue,
 				timeToValue,
 				groupByValue,
+				includeTotal,
+				knownTotalElements,
 			});
 
 			const response = await authFetch(
@@ -10563,6 +10623,11 @@ export default function DispatchedItemsPage() {
 					response.headers.get("X-Has-Next")
 				);
 
+			const headerCountReused =
+				toOptionalBoolean(
+					response.headers.get("X-Dispatch-Count-Reused")
+				);
+
 			const cleanRows = normalizeFetchedDispatchRows(
 				parsed.items
 			);
@@ -10588,6 +10653,7 @@ export default function DispatchedItemsPage() {
 						: headerHasNext !== null
 							? !headerHasNext
 							: cleanRows.length < Number(size),
+				countReused: headerCountReused === true,
 			};
 		};
 
@@ -10604,6 +10670,7 @@ export default function DispatchedItemsPage() {
 		timeFromValue = dateFilterTimeFrom,
 		timeToValue = dateFilterTimeTo,
 		groupByValue = groupBy,
+		knownTotalElements = null,
 	}) => {
 		if (backendPage < 0) {
 			return;
@@ -10639,6 +10706,8 @@ export default function DispatchedItemsPage() {
 					timeFromValue,
 					timeToValue,
 					groupByValue,
+					includeTotal: false,
+					knownTotalElements,
 				});
 
 				putDispatchPageCache(
@@ -10702,6 +10771,7 @@ export default function DispatchedItemsPage() {
 				timeFromValue,
 				timeToValue,
 				groupByValue,
+				includeTotal: true,
 			});
 
 			const pageMap = new Map([[0, firstPage.items]]);
@@ -10747,6 +10817,8 @@ export default function DispatchedItemsPage() {
 							timeFromValue,
 							timeToValue,
 							groupByValue,
+							includeTotal: false,
+							knownTotalElements: firstPage.totalElements,
 						});
 
 						pageMap.set(backendPage, result.items);
@@ -10821,16 +10893,28 @@ export default function DispatchedItemsPage() {
 					? rows
 					: [];
 
+			const sameSignature =
+				dispatchServerMeta.signature === signature;
+
+			const rawKnownTotal = Number(
+				dispatchServerMeta.totalElements
+			);
+
+			const knownTotalFresh =
+				sameSignature &&
+				Number.isSafeInteger(rawKnownTotal) &&
+				rawKnownTotal >= 0 &&
+				dispatchServerTotalKnownAtRef.current > 0 &&
+				Date.now() - dispatchServerTotalKnownAtRef.current <=
+					DISPATCH_TOTAL_REUSE_FRESH_MS;
+
+			const knownTotalElements = knownTotalFresh
+				? rawKnownTotal
+				: null;
+
 			dispatchFetchAbortRef.current?.abort();
 			dispatchPrefetchAbortRef.current?.abort();
 
-			const abortController = new AbortController();
-			dispatchFetchAbortRef.current = abortController;
-
-			/*
-			 * Even if cached rows paint instantly, keep the search indicator on
-			 * until the fresh server response has actually completed.
-			 */
 			setDispatchSearchNetworkPending(
 				Boolean(
 					String(
@@ -10839,6 +10923,64 @@ export default function DispatchedItemsPage() {
 				)
 			);
 
+			/*
+			 * A prefetched page that is still fresh is already an authoritative
+			 * server response for the same filter signature. Use it directly
+			 * instead of immediately issuing the exact same SQL query again.
+			 */
+			if (
+				preferCache &&
+				cached &&
+				isDispatchPageCacheFresh(cached)
+			) {
+				const cachedTotalPages = Math.max(
+					1,
+					Number(cached.totalPages || 1)
+				);
+
+				const cachedTotalRows =
+					cached.totalElements ?? cached.items.length;
+
+				setRows(cached.items);
+				setDispatchServerMeta({
+					totalElements: cachedTotalRows,
+					totalPages: cachedTotalPages,
+					pageNumber: cached.page ?? backendPage,
+					pageSize: cached.pageSize ?? pageSize,
+					signature,
+				});
+
+				setDispatchLoadProgress({
+					loadedRows: cached.items.length,
+					totalRows: cachedTotalRows,
+					loadedPages: 1,
+					totalPages: cachedTotalPages,
+				});
+
+				setLoading(false);
+				setDispatchSearchNetworkPending(false);
+
+				if (backendPage + 1 < cachedTotalPages) {
+					prefetchDispatchServerPage({
+						backendPage: backendPage + 1,
+						size: pageSize,
+						signature,
+						knownTotalElements:
+							cached.totalElements ?? knownTotalElements,
+					});
+				}
+
+				return cached.items;
+			}
+
+			const abortController = new AbortController();
+			dispatchFetchAbortRef.current = abortController;
+
+			/*
+			 * A stale cache may still paint immediately while the server refreshes.
+			 * Explicit refreshes/mutations pass preferCache=false and therefore do
+			 * not rely on stale cached data for the authoritative count.
+			 */
 			if (preferCache && cached) {
 				setRows(cached.items);
 				setDispatchServerMeta({
@@ -10848,6 +10990,7 @@ export default function DispatchedItemsPage() {
 						Math.max(1, Number(cached.totalPages || 1)),
 					pageNumber: cached.page ?? backendPage,
 					pageSize: cached.pageSize ?? pageSize,
+					signature,
 				});
 
 				setDispatchLoadProgress({
@@ -10865,10 +11008,21 @@ export default function DispatchedItemsPage() {
 			}
 
 			try {
+				/*
+				 * Page navigation can reuse a very recent total for the exact same
+				 * filter signature. That removes Spring Data's repeated COUNT(*)
+				 * while preserving a fresh count on first load and explicit refresh.
+				 */
+				const reuseKnownTotal =
+					preferCache && knownTotalElements !== null;
+
 				const result = await fetchDispatchServerPage({
 					backendPage,
 					size: pageSize,
 					signal: abortController.signal,
+					includeTotal: !reuseKnownTotal,
+					knownTotalElements:
+						reuseKnownTotal ? knownTotalElements : null,
 				});
 
 				if (
@@ -10889,7 +11043,7 @@ export default function DispatchedItemsPage() {
 
 					if (
 						id &&
-						selectionModel.includes(id)
+						selectionIdSet.has(id)
 					) {
 						dispatchSelectedRowCacheRef.current.set(
 							id,
@@ -10906,12 +11060,17 @@ export default function DispatchedItemsPage() {
 				const totalResultRows =
 					result.totalElements ?? result.items.length;
 
+				if (!result.countReused) {
+					dispatchServerTotalKnownAtRef.current = Date.now();
+				}
+
 				setRows(result.items);
 				setDispatchServerMeta({
 					totalElements: totalResultRows,
 					totalPages: totalResultPages,
 					pageNumber: result.page ?? backendPage,
 					pageSize: result.pageSize ?? pageSize,
+					signature,
 				});
 
 				setDispatchLoadProgress({
@@ -10922,19 +11081,21 @@ export default function DispatchedItemsPage() {
 				});
 
 				/*
-				 * Prefetch only the next visible page.  This keeps Next fast without
-				 * recreating the old all-history download behaviour.
+				 * Prefetch only the next visible page. The prefetched request also
+				 * reuses the known total, so it does one content query rather than a
+				 * content query plus another full count query.
 				 */
 				if (backendPage + 1 < totalResultPages) {
 					prefetchDispatchServerPage({
 						backendPage: backendPage + 1,
 						size: pageSize,
 						signature,
+						knownTotalElements: totalResultRows,
 					});
 				}
 
 				console.info(
-					`Loaded dispatch page ${backendPage + 1}/${totalResultPages}: ${result.items.length} rows of ${totalResultRows}`
+					`Loaded dispatch page ${backendPage + 1}/${totalResultPages}: ${result.items.length} rows of ${totalResultRows}${result.countReused ? " (count reused)" : ""}`
 				);
 
 				return result.items;
@@ -10950,7 +11111,7 @@ export default function DispatchedItemsPage() {
 
 				/*
 				 * Preserve already rendered data if a refresh request temporarily
-				 * fails.  This avoids a blank page during transient network errors.
+				 * fails. This avoids a blank page during transient network errors.
 				 */
 				if (!cached && existingRowsSnapshot.length === 0) {
 					setRows([]);
@@ -13079,7 +13240,7 @@ export default function DispatchedItemsPage() {
 						<input
 							type="checkbox"
 							disabled={!isSelectable}
-							checked={isSelectable && selectionModel.includes(id)}
+							checked={isSelectable && selectionIdSet.has(id)}
 							style={
 								isSelectable
 									? selectCheckboxStyle
@@ -23716,7 +23877,7 @@ export default function DispatchedItemsPage() {
 													},
 													body: JSON.stringify(
 														rows
-															.filter(r => selectionModel.includes(r.zohoItemId))
+															.filter(r => selectionIdSet.has(r.zohoItemId))
 															.map(r => r.zohoItemId)
 													),
 												}
