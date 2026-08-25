@@ -42,11 +42,20 @@ function Sidebar() {
     );
 
   const requestedInventoryView =
-    new URLSearchParams(location.search).get("view");
+    String(
+      new URLSearchParams(location.search).get("view") || ""
+    )
+      .trim()
+      .toLowerCase();
 
   const currentInventoryView =
-    requestedInventoryView ||
-    (canOpenNormalInventory ? "normal" : "hardware");
+    requestedInventoryView === "hardware" && canOpenHardwareInventory
+      ? "hardware"
+      : requestedInventoryView === "normal" && canOpenNormalInventory
+        ? "normal"
+        : canOpenNormalInventory
+          ? "normal"
+          : "hardware";
 
   const links = [
     {
@@ -72,7 +81,7 @@ function Sidebar() {
     {
       path: "/packflow/zoho-items",
       view: "hardware",
-      label: "Hardware Inventory",
+      label: "Hardware Packets",
       roles: [],
       customAccess: canOpenHardwareInventory,
       icon: <Inventory2OutlinedIcon fontSize="small" />,

@@ -19,6 +19,7 @@ import {
   Autocomplete,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+import { useLocation } from "react-router-dom";
 import { API_BASE_URL } from "../config";
 import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
@@ -1814,6 +1815,8 @@ const createDefaultInventoryColumnWidths =
   };
 
 function ZohoItemsPage() {
+  const location = useLocation();
+
   const [rows, setRows] = useState([]);
   const [rowCount, setRowCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1982,7 +1985,6 @@ function ZohoItemsPage() {
     roles: authRoles = [],
     authLoading,
     hasRole,
-    hasAnyRole,
   } = useAuth();
 
   const effectiveRoles =
@@ -2016,24 +2018,58 @@ function ZohoItemsPage() {
   const isHardwarePacking =
     hasRole("HARDWARE_PACKING");
 
-  const isDispatch =
-    hasRole("DISPATCH");
+  /*
+   * Inventory and Hardware are intentionally separate sidebar views.
+   *
+   * Sidebar already navigates to:
+   *   /packflow/zoho-items?view=normal
+   *   /packflow/zoho-items?view=hardware
+   *
+   * The page now honours that route explicitly instead of merging both
+   * datasets for ADMIN/HARDWARE_PACKING users. This is presentation/data
+   * scoping only; all existing create/edit/delete/sticker APIs remain intact.
+   */
+  const canOpenNormalInventory =
+    isAdmin ||
+    isPacking;
 
-  const isWarehouse =
-    hasRole("WAREHOUSE");
+  const canOpenHardwareInventory =
+    isAdmin ||
+    isHardwarePacking;
 
-  const isLogistics =
-    hasRole("LOGISTICS");
+  const requestedInventoryView =
+    useMemo(() => {
+      const value =
+        new URLSearchParams(
+          location.search
+        )
+          .get("view")
+          ?.trim()
+          .toLowerCase();
 
-  const isHardwareOnly =
-    isHardwarePacking &&
-    !hasAnyRole(
-      "ADMIN",
-      "PACKING",
-      "WAREHOUSE",
-      "DISPATCH",
-      "LOGISTICS"
-    );
+      return value === "hardware"
+        ? "hardware"
+        : value === "normal"
+          ? "normal"
+          : "";
+    }, [location.search]);
+
+  const inventoryView =
+    requestedInventoryView === "hardware" &&
+      canOpenHardwareInventory
+      ? "hardware"
+      : requestedInventoryView === "normal" &&
+          canOpenNormalInventory
+        ? "normal"
+        : canOpenNormalInventory
+          ? "normal"
+          : "hardware";
+
+  const isHardwareInventoryView =
+    inventoryView === "hardware";
+
+  const isNormalInventoryView =
+    inventoryView === "normal";
 
   /*
    * Normal inventory write operations:
@@ -3194,40 +3230,6 @@ function ZohoItemsPage() {
     );
   };
 
-  const mergeInventoryRowSources = (
-    ...sources
-  ) => {
-    const rowsById =
-      new Map();
-
-    sources
-      .flat()
-      .filter(Boolean)
-      .forEach((row) => {
-        const key =
-          String(
-            row?.itemId ||
-            row?.packetItemId ||
-            row?.id ||
-            row?.sku ||
-            ""
-          ).trim();
-
-        if (!key) {
-          return;
-        }
-
-        rowsById.set(
-          key,
-          row
-        );
-      });
-
-    return Array.from(
-      rowsById.values()
-    );
-  };
-
   const extractInventoryServerPage =
     (payload) => {
       if (
@@ -3324,6 +3326,7 @@ function ZohoItemsPage() {
       return JSON.stringify([
         currentUser?.id || "",
         effectiveRoleKey,
+        inventoryView,
         String(
           searchValue || ""
         ).trim(),
@@ -3415,7 +3418,7 @@ function ZohoItemsPage() {
       groupBy,
     }) => {
       if (
-        isHardwareOnly
+        isHardwareInventoryView
       ) {
         return {
           items: [],
@@ -3548,7 +3551,7 @@ function ZohoItemsPage() {
       statusFilter,
     }) => {
       if (
-        isHardwareOnly ||
+        isHardwareInventoryView ||
         backendPage < 0
       ) {
         return;
@@ -3630,9 +3633,8 @@ function ZohoItemsPage() {
   const shouldLoadHardwareInventory =
     () => {
       return (
-        isHardwareOnly ||
-        isAdmin ||
-        isHardwarePacking
+        isHardwareInventoryView &&
+        canOpenHardwareInventory
       );
     };
 
@@ -3747,101 +3749,17 @@ function ZohoItemsPage() {
 
   /*
    * Existing complete Inventory loader retained for explicit operations whose
-   * semantics require the complete register (Master Packet Control and global
-   * SKU/Name sort).  It is no longer the normal page-load path.
+   * semantics require the complete current register (Master Packet Control and
+   * SKU/Name sort). Normal and hardware registers remain strictly separated.
    */
   const fetchAllInventoryRowsLegacy =
     async () => {
       if (
-        isHardwareOnly
+        isHardwareInventoryView
       ) {
         return ensureHardwareInventoryRows({
           force: true,
         });
-      }
-
-      if (
-        isAdmin ||
-        isHardwarePacking
-      ) {
-        const [
-          normalResult,
-          hardwareResult,
-        ] =
-          await Promise.allSettled([
-            fetchInventoryRowsFromPath(
-              "/api/packets/items"
-            ),
-            ensureHardwareInventoryRows({
-              force: true,
-            }),
-          ]);
-
-        if (
-          normalResult.status ===
-          "rejected" &&
-          hardwareResult.status ===
-          "rejected"
-        ) {
-          throw (
-            normalResult.reason ||
-            hardwareResult.reason ||
-            new Error(
-              "Failed to load inventory"
-            )
-          );
-        }
-
-        const normalRows =
-          normalResult.status ===
-            "fulfilled"
-            ? (
-              Array.isArray(
-                normalResult.value
-              )
-                ? normalResult.value
-                : []
-            ).map(
-              normalizeNormalInventoryRow
-            )
-            : [];
-
-        const hardwareRows =
-          hardwareResult.status ===
-            "fulfilled"
-            ? (
-              Array.isArray(
-                hardwareResult.value
-              )
-                ? hardwareResult.value
-                : []
-            )
-            : [];
-
-        if (
-          normalResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Normal inventory full fetch failed:",
-            normalResult.reason
-          );
-        }
-
-        if (
-          hardwareResult.status ===
-          "rejected"
-        ) {
-          console.error(
-            "Hardware inventory full fetch failed:",
-            hardwareResult.reason
-          );
-        }
-
-        return mergeInventoryRowSources(
-          normalRows,
-          hardwareRows
-        );
       }
 
       const normalRows =
@@ -3855,16 +3773,20 @@ function ZohoItemsPage() {
         )
           ? normalRows
           : []
-      ).map(
-        normalizeNormalInventoryRow
-      );
+      )
+        .map(
+          normalizeNormalInventoryRow
+        )
+        .filter(
+          row =>
+            !isHardwarePacketRow(row)
+        );
     };
 
   /*
    * Main Inventory refresh entry point used by existing create/edit/delete/
-   * sticker actions.  Default browsing is server-paged; global sort modes
-   * deliberately fall back to the preserved complete loader so their existing
-   * cross-normal/hardware ordering stays exact.
+   * sticker actions. Default browsing is server-paged; sort modes deliberately
+   * fall back to the complete loader for the active sidebar register only.
    */
   const fetchItems =
     async ({
@@ -4043,7 +3965,7 @@ function ZohoItemsPage() {
       }
 
       if (
-        isHardwareOnly
+        isHardwareInventoryView
       ) {
         try {
           setLoading(
@@ -4712,8 +4634,9 @@ function ZohoItemsPage() {
     "NONE";
 
   /*
-   * Existing default ordering is normal Inventory first, then hardware.
-   * Preserve that exact ordering while holding only one normal server page.
+   * Render only the active sidebar register. Normal Inventory uses the
+   * existing server-paged endpoint; Hardware Inventory uses its dedicated
+   * cached hardware endpoint and local pagination.
    */
   const serverCombinedPageRows =
     useMemo(() => {
@@ -4723,87 +4646,39 @@ function ZohoItemsPage() {
         return [];
       }
 
-      const normalRows =
-        isHardwareOnly
-          ? []
-          : (
-            Array.isArray(rows)
-              ? rows
-              : []
-          );
-
-      const normalTotal =
-        isHardwareOnly
-          ? 0
-          : Math.max(
-            0,
-            Number(
-              normalInventoryMeta
-                .totalElements
-            ) || 0
-          );
-
-      const overallOffset =
-        Math.max(
-          0,
-          (
-            Math.max(
-              1,
-              Number(pageNo) ||
-              1
-            ) - 1
-          ) *
-          pageSize
-        );
-
-      let hardwareStart =
-        0;
-
       if (
-        overallOffset >=
-        normalTotal
+        isHardwareInventoryView
       ) {
-        hardwareStart =
-          overallOffset -
-          normalTotal;
-      } else {
-        hardwareStart =
+        const start =
           Math.max(
             0,
-            overallOffset +
-            normalRows.length -
-            normalTotal
+            (
+              Math.max(
+                1,
+                Number(pageNo) || 1
+              ) - 1
+            ) * pageSize
           );
+
+        return filteredHardwareRows.slice(
+          start,
+          start + pageSize
+        );
       }
 
-      const hardwareSlots =
-        Math.max(
-          0,
-          pageSize -
-          normalRows.length
-        );
-
-      const hardwarePageRows =
-        hardwareSlots > 0
-          ? filteredHardwareRows.slice(
-            hardwareStart,
-            hardwareStart +
-            hardwareSlots
-          )
-          : [];
-
-      return [
-        ...normalRows,
-        ...hardwarePageRows,
-      ];
+      return Array.isArray(rows)
+        ? rows.filter(
+          row =>
+            !isHardwarePacketRow(row)
+        )
+        : [];
     }, [
       inventoryUsesServerPaging,
       rows,
-      normalInventoryMeta.totalElements,
       filteredHardwareRows,
       pageNo,
       pageSize,
-      isHardwareOnly,
+      isHardwareInventoryView,
     ]);
 
   const clientFilteredFullModeRows =
@@ -4832,18 +4707,15 @@ function ZohoItemsPage() {
   const inventoryMatchingRowCount =
     inventoryUsesServerPaging
       ? (
-        (
-          isHardwareOnly
-            ? 0
-            : Math.max(
-              0,
-              Number(
-                normalInventoryMeta
-                  .totalElements
-              ) || 0
-            )
-        ) +
-        filteredHardwareRows.length
+        isHardwareInventoryView
+          ? filteredHardwareRows.length
+          : Math.max(
+            0,
+            Number(
+              normalInventoryMeta
+                .totalElements
+            ) || 0
+          )
       )
       : clientFilteredFullModeRows.length;
 
@@ -7965,9 +7837,28 @@ function ZohoItemsPage() {
    * scope.
    */
   useEffect(() => {
+    inventoryAbortControllerRef
+      .current
+      ?.abort();
+
+    inventoryPrefetchAbortRef
+      .current
+      ?.abort();
+
+    inventoryHardwareAbortRef
+      .current
+      ?.abort();
+
+    inventoryHardwarePromiseRef.current =
+      null;
+
     inventoryPageCacheRef
       .current
       .clear();
+
+    setRows(
+      []
+    );
 
     setInventoryHardwareRows(
       []
@@ -7996,20 +7887,65 @@ function ZohoItemsPage() {
       pageSize,
     });
 
+    /*
+     * Treat sidebar view changes like separate pages: do not carry a search,
+     * grouping mode, open modal or selected detail from the other register.
+     */
+    setSearch(
+      ""
+    );
+
+    setInventoryServerSearch(
+      ""
+    );
+
+    setGroupBy(
+      "NONE"
+    );
+
+    setStatusFilter(
+      "ALL"
+    );
+
+    setMasterWorkbenchOpen(
+      false
+    );
+
+    setItemDetailsOpen(
+      false
+    );
+
+    if (
+      isHardwareInventoryView
+    ) {
+      setCreateOpen(false);
+      setDetailsPopup(false);
+      setCustomCreateOpen(false);
+      setAddMoreOpen(false);
+      setCustomAddOpen(false);
+      setEditOpen(false);
+      setGeneratedHistoryOpen(false);
+    } else {
+      setHardwarePacketOpen(false);
+      setHardwareEditingItem(null);
+      setHardwareAddMaster(null);
+    }
+
     setPageNo(
       1
     );
   }, [
     currentUser?.id,
     effectiveRoleKey,
+    inventoryView,
   ]);
 
   /*
    * High-volume register loader.
    *
-   * NONE = server-paged normal Inventory + cached hardware.
-   * SKU / NAME = preserved full-register mode because those options sort
-   * normal + hardware together globally and must keep their old semantics.
+   * NONE = server-paged current sidebar view.
+   * SKU / NAME = preserved complete-register mode for the current view only.
+   * Normal Inventory and Hardware Inventory are never mixed in one page.
    */
   useEffect(() => {
     if (
@@ -8053,6 +7989,7 @@ function ZohoItemsPage() {
     pageSize,
     inventoryServerSearch,
     statusFilter,
+    inventoryView,
   ]);
 
   useEffect(() => {
@@ -8385,19 +8322,15 @@ function ZohoItemsPage() {
 
             <div>
               <div style={logo}>
-                {isHardwareOnly
+                {isHardwareInventoryView
                   ? "Hardware Packet Inventory"
-                  : isHardwarePacking
-                    ? "Inventory & Hardware Packets"
-                    : "Inventory Items"}
+                  : "Inventory Items"}
               </div>
 
               <div style={subtitle}>
-                {isHardwareOnly
-                  ? "Create hardware packets, manage hardware contents and generate stickers"
-                  : isHardwarePacking
-                    ? "Manage normal packed inventory and hardware packets"
-                    : "Manage packed inventory, packets and stickers"}
+                {isHardwareInventoryView
+                  ? "Hardware packets only — manage hardware contents, packet stickers and hardware packet actions"
+                  : "Normal packed inventory only — manage items, packets and stickers"}
               </div>
             </div>
           </Box>
@@ -8425,18 +8358,20 @@ function ZohoItemsPage() {
                   : "visible",
             }}
           >
-            {canUseMasterWorkbench && (
+            {canUseMasterWorkbench && (isHardwareInventoryView ? canOpenHardwareInventory : canOpenNormalInventory) && (
               <Button
                 onClick={
                   openMasterWorkbenchView
                 }
                 sx={historyHeaderButtonSx}
               >
-                🧩 Master Packet Control
+                {isHardwareInventoryView
+                  ? "🔩 Hardware Packet Control"
+                  : "🧩 Master Packet Control"}
               </Button>
             )}
 
-            {canViewGeneratedHistory && (
+            {isNormalInventoryView && canViewGeneratedHistory && (
               <Button
                 onClick={
                   openGeneratedHistory
@@ -8461,7 +8396,7 @@ function ZohoItemsPage() {
               </span>
             </Box>
 
-            {canCreateNormalPackets && (
+            {isNormalInventoryView && canCreateNormalPackets && (
               <>
                 <Button
                   onClick={async () => {
@@ -8515,7 +8450,7 @@ function ZohoItemsPage() {
               </>
             )}
 
-            {canManageHardwarePackets && (
+            {isHardwareInventoryView && canManageHardwarePackets && (
               <Button
                 onClick={
                   openHardwareCreateModal
@@ -8554,7 +8489,9 @@ function ZohoItemsPage() {
 
           <TextField
             variant="standard"
-            placeholder="Search by Item, SKU, Client, PD No..."
+            placeholder={isHardwareInventoryView
+              ? "Search hardware packets by item, SKU, client, PD No..."
+              : "Search inventory by item, SKU, client, PD No..."}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -8898,14 +8835,18 @@ function ZohoItemsPage() {
                     <div style={emptyTableState}>
                       {inventorySearchPending
                         ? "Searching inventory…"
-                        : "Loading inventory items..."}
+                        : isHardwareInventoryView
+                          ? "Loading hardware packets..."
+                          : "Loading inventory items..."}
                     </div>
                   )}
 
                 {!loading &&
                   paginatedRows.length === 0 && (
                     <div style={emptyTableState}>
-                      No inventory items found.
+                      {isHardwareInventoryView
+                        ? "No hardware packets found."
+                        : "No inventory items found."}
                     </div>
                   )}
 
@@ -9028,18 +8969,6 @@ function ZohoItemsPage() {
                         transition:
                           "background .16s ease, border-color .16s ease, box-shadow .16s ease",
 
-                        ...(isHardwarePacketRow(row)
-                          ? {
-                            background:
-                              "linear-gradient(90deg, rgba(139,92,246,.10), rgba(var(--pf-surface-rgb),.72))",
-
-                            borderLeft:
-                              "4px solid #a78bfa",
-
-                            boxShadow:
-                              "inset 0 0 0 1px rgba(167,139,250,.12)",
-                          }
-                          : {}),
                       }}
                     >
                       <div
@@ -9089,13 +9018,8 @@ function ZohoItemsPage() {
                                 )
                               }
                               sx={{
-                                ...actionSecondary,
+                                ...hardwareActionButtonSx,
                                 ...smallActionButton,
-                                color: "#ddd6fe",
-                                background:
-                                  "rgba(139,92,246,.16)",
-                                border:
-                                  "1px solid rgba(167,139,250,.28)",
                               }}
                             >
                               + Add Hardware Packets
@@ -9219,24 +9143,6 @@ function ZohoItemsPage() {
                             minWidth: 0,
                           }}
                         >
-                          {isHardwarePacketRow(row) && (
-                            <Chip
-                              size="small"
-                              label="🔩 HARDWARE"
-                              sx={{
-                                height: 22,
-                                color: "#ddd6fe",
-                                fontSize: 10,
-                                fontWeight: 950,
-                                letterSpacing: ".08em",
-                                background:
-                                  "rgba(139,92,246,.18)",
-                                border:
-                                  "1px solid rgba(167,139,250,.28)",
-                              }}
-                            />
-                          )}
-
                           <span
                             style={{
                               ...simpleCellText,
@@ -9662,8 +9568,12 @@ function ZohoItemsPage() {
           open={masterWorkbenchOpen}
           onClose={() => setMasterWorkbenchOpen(false)}
           icon="🧩"
-          title="Master Item Packet Control"
-          subtitle="Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
+          title={isHardwareInventoryView
+            ? "Hardware Packet Control"
+            : "Master Item Packet Control"}
+          subtitle={isHardwareInventoryView
+            ? "Hardware master-wise packet status, sticker progress, preview, download, reprint and packet expansion"
+            : "Master-wise packet status, sticker progress, preview, download, reprint and packet expansion"}
           width={1560}
           height="92vh"
           footer={
@@ -9707,7 +9617,9 @@ function ZohoItemsPage() {
                     "1px solid rgba(96,165,250,.18)",
                 }}
               >
-                Loading complete visible Inventory for Master Packet Control…
+                {isHardwareInventoryView
+                  ? "Loading complete visible Hardware Inventory for Hardware Packet Control…"
+                  : "Loading complete visible Inventory for Master Packet Control…"}
               </Box>
             )}
 
@@ -14267,16 +14179,65 @@ const actionSuccess = {
 const actionWarning = {
   borderRadius: 12,
   textTransform: "none",
-  fontWeight: 800,
+  fontWeight: 900,
   background:
     "linear-gradient(135deg,#d97706,#f59e0b)",
-  color: "var(--pf-text-strong)",
+  color: "#111827",
+  WebkitTextFillColor: "#111827",
   border:
-    "1px solid rgba(245,158,11,.35)",
+    "1px solid rgba(180,83,9,.34)",
+  boxShadow:
+    "0 8px 18px rgba(217,119,6,.18)",
 
   "&:hover": {
+    color: "#111827",
+    WebkitTextFillColor: "#111827",
     background:
       "linear-gradient(135deg,#b45309,#d97706)",
+  },
+
+  "&.Mui-disabled": {
+    color: "#111827 !important",
+    WebkitTextFillColor: "#111827 !important",
+    background:
+      "linear-gradient(135deg,#f59e0b,#fbbf24) !important",
+    borderColor:
+      "rgba(180,83,9,.26) !important",
+    opacity: "0.78 !important",
+    boxShadow: "none !important",
+  },
+};
+
+const hardwareActionButtonSx = {
+  borderRadius: 12,
+  textTransform: "none",
+  fontWeight: 900,
+  color: "#ffffff",
+  WebkitTextFillColor: "#ffffff",
+  background:
+    "linear-gradient(135deg,#7c3aed,#8b5cf6)",
+  border:
+    "1px solid rgba(109,40,217,.34)",
+  boxShadow:
+    "0 8px 18px rgba(124,58,237,.20)",
+
+  "&:hover": {
+    color: "#ffffff",
+    WebkitTextFillColor: "#ffffff",
+    background:
+      "linear-gradient(135deg,#6d28d9,#7c3aed)",
+    boxShadow:
+      "0 10px 22px rgba(109,40,217,.26)",
+  },
+
+  "&.Mui-disabled": {
+    color: "#ffffff !important",
+    WebkitTextFillColor: "#ffffff !important",
+    background:
+      "linear-gradient(135deg,#7c3aed,#8b5cf6) !important",
+    borderColor:
+      "rgba(109,40,217,.24) !important",
+    opacity: "0.62 !important",
   },
 };
 
