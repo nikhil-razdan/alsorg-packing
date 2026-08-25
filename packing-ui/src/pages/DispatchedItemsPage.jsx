@@ -897,33 +897,36 @@ const modalEmptyStateSx = {
 	fontWeight: 700,
 };
 
-const customChallanAccent = "#8b5cf6";
+const customChallanAccent = "#7c3aed";
 
 const customChallanSectionCardSx = (open) => ({
-	borderRadius: "12px",
+	borderRadius: "14px",
 	background: open
-		? `linear-gradient(180deg,${customChallanAccent}0D,var(--pf-surface))`
+		? "linear-gradient(180deg,color-mix(in srgb,var(--pf-surface) 97%,#8b5cf6 3%),var(--pf-surface))"
 		: "var(--pf-surface)",
 	border: open
-		? `1px solid ${customChallanAccent}30`
-		: "1px solid rgba(var(--pf-fg-rgb),.07)",
+		? "1px solid rgba(124,58,237,.18)"
+		: "1px solid var(--pf-border-soft)",
 	borderLeft: `3px solid ${customChallanAccent}`,
-	boxShadow: "0 9px 22px rgba(var(--pf-surface-deep-rgb),.08)",
+	boxShadow: open
+		? "0 10px 26px rgba(var(--pf-shadow-rgb),.07)"
+		: "0 5px 16px rgba(var(--pf-shadow-rgb),.04)",
 	overflow: "hidden",
-	transition: "all .2s ease",
+	transition:
+		"background .18s ease,border-color .18s ease,box-shadow .18s ease",
 });
 
 const customChallanHeaderSx = {
-	minHeight: 58,
+	minHeight: 60,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 2,
 	px: 1.8,
 	py: 1.1,
-	background: "var(--pf-surface-alt)",
-	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+	background:
+		"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+	borderBottom: "1px solid var(--pf-border-soft)",
 };
 
 const customChallanLeftSx = {
@@ -934,16 +937,19 @@ const customChallanLeftSx = {
 };
 
 const customChallanIconBtnSx = {
-	color: "var(--pf-text-muted)",
-	background: "rgba(var(--pf-fg-rgb),.04)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.06)",
-	width: 32,
-	height: 32,
-	borderRadius: "9px",
+	color: "var(--dispatch-purple-text)",
+	background: "rgba(124,58,237,.08)",
+	border: "1px solid rgba(124,58,237,.16)",
+	width: 34,
+	height: 34,
+	borderRadius: "10px",
+	transition: "all .16s ease",
 
 	"&:hover": {
-		background: "rgba(139,92,246,.16)",
+		background: "linear-gradient(135deg,#6d28d9,#8b5cf6)",
+		borderColor: "#7c3aed",
 		color: "#fff",
+		boxShadow: "0 7px 16px rgba(109,40,217,.20)",
 	},
 };
 
@@ -956,10 +962,11 @@ const customChallanTitleSx = {
 };
 
 const customChallanSubSx = {
-	mt: 0.3,
+	mt: 0.35,
 	color: "var(--pf-text-muted)",
 	fontSize: 11,
-	fontWeight: 650,
+	fontWeight: 700,
+	lineHeight: 1.4,
 };
 
 const customChallanRightSx = {
@@ -967,16 +974,18 @@ const customChallanRightSx = {
 	alignItems: "center",
 	gap: 1,
 	flexShrink: 0,
+	flexWrap: "wrap",
+	justifyContent: "flex-end",
 };
 
 const customChallanCountChipSx = {
-	height: 22,
+	height: 23,
 	borderRadius: 999,
-	background: "rgba(139,92,246,.15)",
+	background: "rgba(124,58,237,.10)",
 	color: "var(--dispatch-purple-text)",
-	border: "1px solid rgba(139,92,246,.28)",
-	fontWeight: 900,
-	fontSize: 10.5,
+	border: "1px solid rgba(124,58,237,.20)",
+	fontWeight: 950,
+	fontSize: 10,
 };
 
 const customChallanBodySx = {
@@ -987,11 +996,11 @@ const customChallanBodySx = {
 const customChallanSearchPanelSx = {
 	mb: 1.35,
 	p: 1.35,
-	borderRadius: "18px",
+	borderRadius: "14px",
 	background:
-		"radial-gradient(circle at 0% 0%,rgba(139,92,246,.16),transparent 34%),linear-gradient(135deg,rgba(var(--pf-surface-rgb),.90),rgba(var(--pf-surface-raised-rgb),.58))",
-	border: "1px solid rgba(167,139,250,.20)",
-	boxShadow: "0 14px 32px rgba(var(--pf-surface-deep-rgb),.24)",
+		"linear-gradient(135deg,color-mix(in srgb,var(--pf-surface-raised) 96%,#8b5cf6 4%),var(--pf-surface))",
+	border: "1px solid rgba(124,58,237,.16)",
+	boxShadow: "0 8px 20px rgba(var(--pf-shadow-rgb),.055)",
 };
 
 const customChallanSearchTopSx = {
@@ -1013,16 +1022,15 @@ const customChallanSearchTitleWrapSx = {
 const customChallanSearchIconSx = {
 	width: 38,
 	height: 38,
-	borderRadius: "13px",
+	borderRadius: "11px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	flexShrink: 0,
 	color: "var(--dispatch-purple-text)",
-	background:
-		"linear-gradient(135deg,rgba(124,58,237,.26),rgba(139,92,246,.10))",
-	border: "1px solid rgba(167,139,250,.24)",
-	boxShadow: "0 10px 22px rgba(109,40,217,.16)",
+	background: "rgba(124,58,237,.09)",
+	border: "1px solid rgba(124,58,237,.18)",
+	boxShadow: "0 7px 16px rgba(109,40,217,.09)",
 };
 
 const customChallanSearchTitleSx = {
@@ -1034,31 +1042,30 @@ const customChallanSearchTitleSx = {
 
 const customChallanSearchSubSx = {
 	mt: 0.25,
-	color: "rgba(var(--pf-fg-rgb),.48)",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.8,
 	fontWeight: 700,
-	lineHeight: 1.35,
+	lineHeight: 1.4,
 };
 
 const customChallanSearchFieldSx = {
 	"& .MuiOutlinedInput-root": {
-		minHeight: 46,
-		borderRadius: "14px",
+		minHeight: 44,
+		borderRadius: "11px",
 		color: "var(--pf-text-strong)",
-		background:
-			"linear-gradient(180deg,rgba(var(--pf-fg-rgb),.055),rgba(var(--pf-fg-rgb),.03))",
+		background: "var(--pf-input)",
 
 		"& fieldset": {
-			borderColor: "rgba(167,139,250,.20)",
+			borderColor: "var(--pf-border)",
 		},
 
 		"&:hover fieldset": {
-			borderColor: "rgba(167,139,250,.46)",
+			borderColor: "rgba(124,58,237,.34)",
 		},
 
 		"&.Mui-focused fieldset": {
-			borderColor: "#a78bfa",
-			boxShadow: "0 0 0 3px rgba(167,139,250,.11)",
+			borderColor: "#7c3aed",
+			boxShadow: "0 0 0 3px rgba(124,58,237,.10)",
 		},
 	},
 
@@ -1069,7 +1076,7 @@ const customChallanSearchFieldSx = {
 	},
 
 	"& input::placeholder": {
-		color: "var(--pf-text-dim)",
+		color: "var(--pf-text-muted)",
 		opacity: 1,
 	},
 };
@@ -1093,11 +1100,11 @@ const customChallanSearchCoverageSx = {
 const customChallanSearchHintChipSx = {
 	height: 22,
 	borderRadius: 999,
-	color: "var(--pf-text-soft)",
+	color: "var(--pf-text)",
 	fontSize: 9,
 	fontWeight: 850,
-	background: "rgba(var(--pf-fg-rgb),.035)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "var(--pf-surface-alt)",
+	border: "1px solid var(--pf-border-soft)",
 };
 
 const customChallanSearchResultChipSx = {
@@ -1106,14 +1113,14 @@ const customChallanSearchResultChipSx = {
 	color: "var(--dispatch-purple-text)",
 	fontSize: 9.5,
 	fontWeight: 950,
-	background: "rgba(139,92,246,.12)",
-	border: "1px solid rgba(167,139,250,.22)",
+	background: "rgba(124,58,237,.10)",
+	border: "1px solid rgba(124,58,237,.20)",
 };
 
 
 const premiumScrollbarSx = (accent = "#60a5fa") => ({
 	scrollbarWidth: "thin",
-	scrollbarColor: `${accent} rgba(var(--pf-surface-rgb),.78)`,
+	scrollbarColor: `${accent} color-mix(in srgb,var(--pf-surface-alt) 90%,transparent)`,
 
 	"&::-webkit-scrollbar": {
 		width: 10,
@@ -1121,30 +1128,29 @@ const premiumScrollbarSx = (accent = "#60a5fa") => ({
 	},
 
 	"&::-webkit-scrollbar-track": {
-		background:
-			"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.95),rgba(var(--pf-surface-deep-rgb),.88))",
+		background: "var(--pf-surface-alt)",
 		borderRadius: 999,
-		border: "1px solid rgba(var(--pf-fg-rgb),.05)",
+		border: "1px solid var(--pf-border-soft)",
 	},
 
 	"&::-webkit-scrollbar-thumb": {
 		background:
-			`linear-gradient(180deg,${accent},rgba(147,197,253,.88))`,
+			`linear-gradient(180deg,${accent},color-mix(in srgb,${accent} 72%,#ffffff))`,
 		borderRadius: 999,
-		border: "2px solid rgba(var(--pf-surface-rgb),.95)",
-		boxShadow: `0 0 18px ${accent}55`,
+		border: "2px solid var(--pf-surface-alt)",
+		boxShadow: `0 0 12px color-mix(in srgb,${accent} 22%,transparent)`,
 	},
 
 	"&::-webkit-scrollbar-thumb:hover": {
 		background:
-			`linear-gradient(180deg,${accent},#bfdbfe)`,
+			`linear-gradient(180deg,${accent},color-mix(in srgb,${accent} 84%,#ffffff))`,
 	},
 });
 
 const customChallanListSx = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 1,
+	gap: 0.8,
 
 	height: 360,
 	maxHeight: 360,
@@ -1160,7 +1166,7 @@ const customChallanListSx = {
 	overscrollBehavior: "contain",
 	scrollbarGutter: "stable both-edges",
 
-	...premiumScrollbarSx("#a78bfa"),
+	...premiumScrollbarSx("#8b5cf6"),
 };
 
 const customChallanPagerWrapSx = {
@@ -1173,16 +1179,14 @@ const customChallanPagerWrapSx = {
 	mb: 1.2,
 	p: 1,
 
-	borderRadius: "16px",
+	borderRadius: "13px",
 
 	background:
-		"linear-gradient(135deg,rgba(139,92,246,.10),rgba(var(--pf-fg-rgb),.025))",
+		"linear-gradient(135deg,color-mix(in srgb,var(--pf-surface-alt) 96%,#8b5cf6 4%),var(--pf-surface-alt))",
 
-	border:
-		"1px solid rgba(139,92,246,.20)",
+	border: "1px solid rgba(124,58,237,.14)",
 
-	boxShadow:
-		"0 12px 28px rgba(var(--pf-surface-deep-rgb),.20)",
+	boxShadow: "0 5px 16px rgba(var(--pf-shadow-rgb),.045)",
 };
 
 const dispatchPageSizeNativeSelectSx = {
@@ -1190,7 +1194,7 @@ const dispatchPageSizeNativeSelectSx = {
 	height: 36,
 
 	px: 1,
-	borderRadius: "12px",
+	borderRadius: "10px",
 
 	outline: "none",
 
@@ -1198,20 +1202,18 @@ const dispatchPageSizeNativeSelectSx = {
 	fontSize: 12,
 	fontWeight: 900,
 
-	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-raised-rgb),.88))",
+	background: "var(--pf-input)",
 
-	border:
-		"1px solid rgba(96,165,250,.25)",
+	border: "1px solid var(--pf-border)",
 
-	boxShadow:
-		"0 8px 18px rgba(var(--pf-surface-deep-rgb),.18)",
+	boxShadow: "0 4px 12px rgba(var(--pf-shadow-rgb),.04)",
 
 	cursor: "pointer",
+	colorScheme: "var(--pf-color-scheme)",
 
 	"&:focus": {
-		borderColor: "#60a5fa",
-		boxShadow: "0 0 0 3px rgba(96,165,250,.16)",
+		borderColor: "#3b82f6",
+		boxShadow: "0 0 0 3px rgba(59,130,246,.10)",
 	},
 
 	"& option": {
@@ -1226,14 +1228,20 @@ const customChallanRowSx = {
 	gridTemplateColumns: "220px 180px minmax(280px,1fr) 110px 250px",
 	alignItems: "center",
 	gap: 1.5,
-	p: 1.4,
-	borderRadius: "12px",
-	background: "rgba(var(--pf-fg-rgb),.035)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	p: 1.35,
+	borderRadius: "11px",
+	background: "var(--pf-surface)",
+	border: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 3px 10px rgba(var(--pf-shadow-rgb),.035)",
+	transition:
+		"background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease",
 
 	"&:hover": {
-		background: "rgba(var(--pf-fg-rgb),.055)",
-		borderColor: "rgba(139,92,246,.26)",
+		background:
+			"color-mix(in srgb,var(--pf-surface) 97%,#8b5cf6 3%)",
+		borderColor: "rgba(124,58,237,.22)",
+		boxShadow: "0 7px 18px rgba(var(--pf-shadow-rgb),.07)",
+		transform: "translateY(-1px)",
 	},
 };
 
@@ -1244,26 +1252,27 @@ const customChallanModalShellSx = {
 	maxHeight: "92vh",
 	display: "flex",
 	flexDirection: "column",
-	borderRadius: "12px",
+	borderRadius: "14px",
 	background: `
-		radial-gradient(circle at 8% 0%, rgba(139,92,246,.24), transparent 30%),
-		radial-gradient(circle at 92% 8%, rgba(59,130,246,.16), transparent 30%),
-		linear-gradient(180deg,var(--pf-surface-deep),var(--pf-surface))
+		radial-gradient(circle at 8% 0%, rgba(124,58,237,.08), transparent 30%),
+		radial-gradient(circle at 92% 8%, rgba(59,130,246,.06), transparent 30%),
+		var(--pf-surface)
 	`,
-	border: "1px solid rgba(167,139,250,.20)",
-	boxShadow: "0 42px 120px rgba(0,0,0,.72)",
+	border: "1px solid rgba(124,58,237,.16)",
+	boxShadow: "0 30px 80px rgba(var(--pf-shadow-rgb),.18)",
 };
 
 const customChallanHeroHeaderSx = {
 	px: 3,
-	py: 2.5,
+	py: 2.25,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 2,
 	flexShrink: 0,
-	background: "linear-gradient(135deg,rgba(139,92,246,.16),rgba(59,130,246,.05))",
-	borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
+	background:
+		"linear-gradient(135deg,color-mix(in srgb,var(--pf-surface-raised) 95%,#8b5cf6 5%),var(--pf-surface-alt))",
+	borderBottom: "1px solid var(--pf-border-soft)",
 };
 
 const customChallanModalBodySx = {
@@ -1271,16 +1280,17 @@ const customChallanModalBodySx = {
 	minHeight: 0,
 	overflowY: "auto",
 	p: 3,
-	...premiumScrollbarSx("#a78bfa"),
+	background: "var(--pf-surface)",
+	...premiumScrollbarSx("#8b5cf6"),
 };
 
 const customFormSectionSx = {
 	p: 2.2,
 	mb: 2,
-	borderRadius: "18px",
-	background: "rgba(var(--pf-fg-rgb),.028)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.075)",
-	boxShadow: "0 14px 34px rgba(var(--pf-surface-deep-rgb),.20)",
+	borderRadius: "13px",
+	background: "var(--pf-surface-alt)",
+	border: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 5px 16px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const customFormSectionTitleSx = {
@@ -1293,25 +1303,27 @@ const customFormSectionTitleSx = {
 const customFormSectionSubSx = {
 	mt: 0.35,
 	mb: 2,
-	color: "rgba(var(--pf-fg-rgb),.48)",
+	color: "var(--pf-text-muted)",
 	fontWeight: 650,
 	fontSize: 11,
+	lineHeight: 1.45,
 };
 
 const customChallanItemCardSx = {
 	p: 2,
-	borderRadius: "17px",
-	background: "linear-gradient(135deg,rgba(139,92,246,.08),rgba(var(--pf-fg-rgb),.025))",
-	border: "1px solid rgba(139,92,246,.16)",
-	boxShadow: "0 12px 28px rgba(var(--pf-surface-deep-rgb),.18)",
+	borderRadius: "12px",
+	background:
+		"linear-gradient(135deg,color-mix(in srgb,var(--pf-surface) 97%,#8b5cf6 3%),var(--pf-surface))",
+	border: "1px solid rgba(124,58,237,.14)",
+	boxShadow: "0 4px 14px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const customItemNumberChipSx = {
 	height: 24,
 	borderRadius: 999,
 	color: "var(--dispatch-purple-text)",
-	background: "rgba(139,92,246,.14)",
-	border: "1px solid rgba(139,92,246,.26)",
+	background: "rgba(124,58,237,.10)",
+	border: "1px solid rgba(124,58,237,.20)",
 	fontWeight: 900,
 	fontSize: 10,
 };
@@ -1320,30 +1332,114 @@ const customChallanStickyFooterSx = {
 	...modalFooterSx,
 	flexShrink: 0,
 	alignItems: "center",
-	background: "color-mix(in srgb,var(--pf-surface) 94%,transparent)",
+	background: "color-mix(in srgb,var(--pf-surface) 97%,transparent)",
 	backdropFilter: "blur(18px)",
-	borderTop: "1px solid rgba(167,139,250,.13)",
+	borderTop: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 -8px 22px rgba(var(--pf-shadow-rgb),.045)",
 };
 
 const customChallanEditButtonSx = {
-	height: 36,
-	px: 1.8,
-	minWidth: 116,
-	borderRadius: "10px",
+	height: 34,
+	px: 1.7,
+	minWidth: 108,
+	borderRadius: "9px",
 	textTransform: "none",
-	fontSize: 11,
+	fontSize: 10.5,
 	fontWeight: 900,
-	color: "#fde68a",
-	background: "linear-gradient(135deg,rgba(245,158,11,.18),rgba(217,119,6,.10))",
-	border: "1px solid rgba(245,158,11,.30)",
+	color: "#fff",
+	background: "linear-gradient(135deg,#d97706,#f59e0b)",
+	border: "1px solid rgba(217,119,6,.30)",
+	boxShadow: "0 6px 14px rgba(217,119,6,.16)",
 
 	"&:hover": {
 		color: "#fff",
-		background: "linear-gradient(135deg,#d97706,#f59e0b)",
-		boxShadow: "0 10px 24px rgba(245,158,11,.22)",
+		background: "linear-gradient(135deg,#b45309,#d97706)",
+		boxShadow: "0 8px 18px rgba(217,119,6,.23)",
+	},
+
+	"&.Mui-disabled": {
+		color: "var(--pf-text-dim)",
+		background: "var(--pf-surface-alt)",
+		borderColor: "var(--pf-border-soft)",
+		boxShadow: "none",
 	},
 };
 
+const customChallanViewPdfButtonSx = {
+	height: 34,
+	px: 1.7,
+	minWidth: 100,
+	borderRadius: "9px",
+	textTransform: "none",
+	fontSize: 10.5,
+	fontWeight: 900,
+	color: "#fff",
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	border: "1px solid rgba(37,99,235,.30)",
+	boxShadow: "0 6px 14px rgba(37,99,235,.16)",
+
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+		boxShadow: "0 8px 18px rgba(37,99,235,.24)",
+	},
+};
+
+const customChallanCreateButtonSx = {
+	height: 34,
+	px: 1.6,
+	borderRadius: "9px",
+	textTransform: "none",
+	fontSize: 10.5,
+	fontWeight: 900,
+	color: "#fff",
+	background: "linear-gradient(135deg,#6d28d9,#8b5cf6)",
+	border: "1px solid rgba(109,40,217,.30)",
+	boxShadow: "0 6px 14px rgba(109,40,217,.16)",
+
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#5b21b6,#7c3aed)",
+		boxShadow: "0 8px 18px rgba(109,40,217,.24)",
+	},
+};
+
+const customChallanSearchClearButtonSx = {
+	minWidth: 0,
+	px: 1.15,
+	height: 28,
+	borderRadius: "8px",
+	textTransform: "none",
+	color: "var(--dispatch-purple-text)",
+	fontSize: 10,
+	fontWeight: 900,
+	background: "rgba(124,58,237,.08)",
+	border: "1px solid rgba(124,58,237,.16)",
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#6d28d9,#8b5cf6)",
+		borderColor: "#7c3aed",
+	},
+};
+
+const customChallanRemoveItemButtonSx = {
+	minWidth: 0,
+	height: 30,
+	px: 1.3,
+	borderRadius: "8px",
+	textTransform: "none",
+	fontWeight: 900,
+	fontSize: 10.5,
+	color: "#fff",
+	background: "linear-gradient(135deg,#dc2626,#ef4444)",
+	border: "1px solid rgba(220,38,38,.28)",
+	boxShadow: "0 5px 12px rgba(220,38,38,.14)",
+	"&:hover": {
+		color: "#fff",
+		background: "linear-gradient(135deg,#b91c1c,#dc2626)",
+		boxShadow: "0 7px 16px rgba(220,38,38,.22)",
+	},
+};
 
 /* =========================================================
  * ADMIN-ONLY CUSTOM CHALLAN INTELLIGENCE / REPORTING
@@ -1351,11 +1447,11 @@ const customChallanEditButtonSx = {
 const customAdminCommandCenterSx = {
 	mb: 1.4,
 	p: 1.4,
-	borderRadius: "18px",
+	borderRadius: "14px",
 	background:
-		"radial-gradient(circle at top left, rgba(139,92,246,.18), transparent 36%), linear-gradient(135deg,rgba(var(--pf-surface-rgb),.92),rgba(var(--pf-surface-raised-rgb),.72))",
-	border: "1px solid rgba(167,139,250,.22)",
-	boxShadow: "0 16px 36px rgba(var(--pf-surface-deep-rgb),.28)",
+		"linear-gradient(135deg,color-mix(in srgb,var(--pf-surface-raised) 96%,#8b5cf6 4%),var(--pf-surface))",
+	border: "1px solid rgba(124,58,237,.16)",
+	boxShadow: "0 8px 20px rgba(var(--pf-shadow-rgb),.055)",
 };
 
 const customAdminCommandTopSx = {
@@ -1375,35 +1471,42 @@ const customAdminCommandTitleSx = {
 
 const customAdminCommandSubSx = {
 	mt: 0.25,
-	color: "rgba(var(--pf-fg-rgb),.50)",
+	color: "var(--pf-text-muted)",
 	fontSize: 10.5,
 	fontWeight: 700,
+	lineHeight: 1.4,
 };
 
 const customAdminActionButtonSx = (accent = "#8b5cf6", active = false) => ({
-	height: 36,
-	px: 1.55,
-	borderRadius: "12px",
+	height: 35,
+	px: 1.5,
+	borderRadius: "9px",
 	textTransform: "none",
-	fontSize: 11,
+	fontSize: 10.5,
 	fontWeight: 950,
 	color: "#fff",
 	background: active
-		? `linear-gradient(135deg,${accent},rgba(79,70,229,.92))`
-		: `linear-gradient(180deg,${accent}22,rgba(var(--pf-fg-rgb),.035))`,
-	border: `1px solid ${accent}${active ? "66" : "3d"}`,
-	boxShadow: active ? `0 10px 22px ${accent}28` : "none",
+		? `linear-gradient(135deg,color-mix(in srgb,${accent} 88%,#0f172a),${accent})`
+		: `linear-gradient(135deg,${accent},color-mix(in srgb,${accent} 78%,#0f172a))`,
+	border: `1px solid color-mix(in srgb,${accent} 74%,var(--pf-border))`,
+	boxShadow: active
+		? `0 8px 18px color-mix(in srgb,${accent} 24%,transparent)`
+		: `0 5px 12px color-mix(in srgb,${accent} 14%,transparent)`,
+	transition: "transform .15s ease,box-shadow .15s ease,filter .15s ease",
 
 	"&:hover": {
 		transform: "translateY(-1px)",
-		background: active
-			? `linear-gradient(135deg,${accent},rgba(67,56,202,.96))`
-			: `linear-gradient(180deg,${accent}33,rgba(var(--pf-fg-rgb),.055))`,
+		filter: "brightness(.96)",
+		boxShadow:
+			`0 9px 20px color-mix(in srgb,${accent} 25%,transparent)`,
 	},
 
 	"&.Mui-disabled": {
-		opacity: 0.45,
-		color: "rgba(var(--pf-fg-rgb),.55)",
+		opacity: 0.48,
+		color: "var(--pf-text-dim)",
+		background: "var(--pf-surface-alt)",
+		borderColor: "var(--pf-border-soft)",
+		boxShadow: "none",
 	},
 });
 
@@ -1420,21 +1523,21 @@ const customAdminFilterGridSx = {
 const customAdminFilterFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		minHeight: 42,
-		borderRadius: "12px",
+		borderRadius: "10px",
 		color: "var(--pf-text-strong)",
-		background: "rgba(var(--pf-fg-rgb),.035)",
+		background: "var(--pf-input)",
 
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.08)",
+			borderColor: "var(--pf-border)",
 		},
 
 		"&:hover fieldset": {
-			borderColor: "rgba(167,139,250,.36)",
+			borderColor: "rgba(124,58,237,.30)",
 		},
 
 		"&.Mui-focused fieldset": {
-			borderColor: "#a78bfa",
-			boxShadow: "0 0 0 3px rgba(167,139,250,.10)",
+			borderColor: "#7c3aed",
+			boxShadow: "0 0 0 3px rgba(124,58,237,.09)",
 		},
 	},
 
@@ -1442,6 +1545,10 @@ const customAdminFilterFieldSx = {
 		color: "var(--pf-text-muted)",
 		fontSize: 11.5,
 		fontWeight: 800,
+	},
+
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "var(--dispatch-purple-text)",
 	},
 
 	"& input, & .MuiSelect-select": {
@@ -1471,15 +1578,17 @@ const customAdminKpiGridSx = {
 
 const customAdminKpiCardSx = (accent = "#8b5cf6") => ({
 	p: 1.3,
-	borderRadius: "15px",
+	borderRadius: "12px",
 	background:
-		`radial-gradient(circle at top right,${accent}26,transparent 46%),rgba(var(--pf-fg-rgb),.03)`,
-	border: `1px solid ${accent}33`,
+		`linear-gradient(135deg,color-mix(in srgb,var(--pf-surface) 97%,${accent} 3%),var(--pf-surface))`,
+	border: "1px solid var(--pf-border-soft)",
+	borderTop: `3px solid ${accent}`,
+	boxShadow: "0 4px 12px rgba(var(--pf-shadow-rgb),.035)",
 	minWidth: 0,
 });
 
 const customAdminKpiLabelSx = {
-	color: "rgba(var(--pf-fg-rgb),.49)",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.5,
 	fontWeight: 950,
 	letterSpacing: ".08em",
@@ -1496,7 +1605,7 @@ const customAdminKpiValueSx = {
 
 const customAdminKpiMetaSx = {
 	mt: 0.55,
-	color: "rgba(var(--pf-fg-rgb),.45)",
+	color: "var(--pf-text-muted)",
 	fontSize: 9.5,
 	fontWeight: 700,
 	whiteSpace: "nowrap",
@@ -1507,9 +1616,10 @@ const customAdminKpiMetaSx = {
 const customAdminInsightPanelSx = {
 	mt: 1.25,
 	p: 1.4,
-	borderRadius: "17px",
-	background: "rgba(var(--pf-surface-deep-rgb),.34)",
-	border: "1px solid rgba(167,139,250,.16)",
+	borderRadius: "13px",
+	background: "var(--pf-surface-alt)",
+	border: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 4px 14px rgba(var(--pf-shadow-rgb),.035)",
 };
 
 const customAdminInsightGridSx = {
@@ -1524,9 +1634,9 @@ const customAdminInsightGridSx = {
 
 const customAdminInsightCardSx = {
 	p: 1.3,
-	borderRadius: "14px",
-	background: "rgba(var(--pf-fg-rgb),.025)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+	borderRadius: "11px",
+	background: "var(--pf-surface)",
+	border: "1px solid var(--pf-border-soft)",
 	minWidth: 0,
 };
 
@@ -1542,7 +1652,7 @@ const customAdminInsightTitleSx = {
 const customAdminBarTrackSx = {
 	height: 7,
 	borderRadius: 999,
-	background: "rgba(var(--pf-fg-rgb),.055)",
+	background: "rgba(var(--pf-fg-rgb),.08)",
 	overflow: "hidden",
 };
 
@@ -1550,7 +1660,8 @@ const customAdminBarFillSx = (percent, accent = "#8b5cf6") => ({
 	height: "100%",
 	width: `${Math.max(0, Math.min(100, Number(percent) || 0))}%`,
 	borderRadius: 999,
-	background: `linear-gradient(90deg,${accent},#c4b5fd)`,
+	background:
+		`linear-gradient(90deg,${accent},color-mix(in srgb,${accent} 68%,#ffffff))`,
 });
 
 const customAdminActivityListSx = {
@@ -1560,7 +1671,7 @@ const customAdminActivityListSx = {
 	maxHeight: 330,
 	overflowY: "auto",
 	pr: 0.6,
-	...premiumScrollbarSx("#a78bfa"),
+	...premiumScrollbarSx("#8b5cf6"),
 };
 
 const customAdminActivityRowSx = {
@@ -1569,21 +1680,22 @@ const customAdminActivityRowSx = {
 	alignItems: "center",
 	gap: 1.1,
 	p: 1.05,
-	borderRadius: "13px",
-	background: "rgba(var(--pf-fg-rgb),.028)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+	borderRadius: "11px",
+	background: "var(--pf-surface)",
+	border: "1px solid var(--pf-border-soft)",
 };
 
 const customAdminActivityIconSx = {
 	width: 38,
 	height: 38,
-	borderRadius: "12px",
+	borderRadius: "10px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	fontSize: 18,
-	background: "rgba(139,92,246,.14)",
-	border: "1px solid rgba(167,139,250,.22)",
+	color: "var(--dispatch-purple-text)",
+	background: "rgba(124,58,237,.09)",
+	border: "1px solid rgba(124,58,237,.18)",
 };
 
 const historyCardSx = {
@@ -2392,22 +2504,35 @@ const moveToFgButtonSx = {
 };
 
 const formFieldSx = {
+	"& .MuiInputLabel-root": {
+		color: "var(--pf-text-muted)",
+		fontWeight: 750,
+	},
+	"& .MuiInputLabel-root.Mui-focused": {
+		color: "var(--dispatch-blue-text)",
+	},
 	"& .MuiOutlinedInput-root": {
 		borderRadius: "10px",
-		background: "var(--pf-surface-alt)",
+		background: "var(--pf-input)",
 		color: "var(--pf-text-strong)",
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.09)",
+			borderColor: "var(--pf-border)",
 		},
 		"&:hover fieldset": {
-			borderColor: "rgba(59,130,246,.40)",
+			borderColor: "rgba(59,130,246,.36)",
 		},
 		"&.Mui-focused fieldset": {
 			borderColor: "#3b82f6",
+			boxShadow: "0 0 0 3px rgba(59,130,246,.08)",
 		},
 	},
-	"& input": {
+	"& input, & textarea": {
 		color: "var(--pf-text-strong)",
+		fontWeight: 750,
+	},
+	"& input::placeholder, & textarea::placeholder": {
+		color: "var(--pf-text-muted)",
+		opacity: 1,
 	},
 };
 
@@ -3271,17 +3396,11 @@ const challanHistoryPagerSx = {
 	justifyContent: "space-between",
 	gap: 1,
 	flexWrap: "wrap",
-
-	p: 0.8,
-	borderRadius: "15px",
-
+	p: 0.75,
+	borderRadius: "11px",
 	maxWidth: "100%",
-
-	background:
-		"linear-gradient(135deg,rgba(var(--pf-fg-rgb),.045),rgba(var(--pf-fg-rgb),.025))",
-
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.075)",
+	background: "var(--pf-surface)",
+	border: "1px solid var(--pf-border-soft)",
 };
 
 const challanHistoryPagerLeftSx = {
@@ -3299,8 +3418,8 @@ const challanHistoryPagerRightSx = {
 };
 
 const challanHistoryRangeSx = {
-	color: "rgba(var(--pf-fg-rgb),.58)",
-	fontSize: 11,
+	color: "var(--pf-text-muted)",
+	fontSize: 10.5,
 	fontWeight: 850,
 	whiteSpace: "nowrap",
 };
@@ -3310,12 +3429,12 @@ const challanHistoryPagePillSx = {
 	px: 1.4,
 	display: "flex",
 	alignItems: "center",
-	borderRadius: "999px",
-	color: "var(--pf-text-strong)",
-	fontSize: 11,
+	borderRadius: "9px",
+	color: "var(--dispatch-blue-text)",
+	fontSize: 10.5,
 	fontWeight: 950,
-	background: "rgba(59,130,246,.07)",
-	border: "1px solid rgba(59,130,246,.18)",
+	background: "rgba(37,99,235,.08)",
+	border: "1px solid rgba(37,99,235,.16)",
 };
 
 const challanHistoryNativePageSizeSelectSx = {
@@ -3325,11 +3444,12 @@ const challanHistoryNativePageSizeSelectSx = {
 	borderRadius: "9px",
 	outline: "none",
 	color: "var(--pf-text-strong)",
-	fontSize: 11,
+	fontSize: 10.5,
 	fontWeight: 950,
-	background: "var(--pf-surface-alt)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.09)",
+	background: "var(--pf-input)",
+	border: "1px solid var(--pf-border)",
 	cursor: "pointer",
+	colorScheme: "var(--pf-color-scheme)",
 	"&:focus": {
 		borderColor: "#3b82f6",
 		boxShadow: "0 0 0 3px rgba(59,130,246,.10)",
@@ -3345,37 +3465,26 @@ const challanHistoryPageButtonSx = {
 	minWidth: 34,
 	height: 32,
 	px: 1.15,
-
-	borderRadius: "11px",
-
+	borderRadius: "9px",
 	textTransform: "none",
-
 	color: "var(--dispatch-blue-text)",
-	fontSize: 11,
+	fontSize: 10.5,
 	fontWeight: 950,
-
-	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-raised-rgb),.92),rgba(var(--pf-surface-rgb),.92))",
-
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
-
-	boxShadow:
-		"0 8px 18px rgba(var(--pf-surface-deep-rgb),.22)",
+	background: "var(--pf-surface-alt)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "none",
 
 	"&:hover": {
 		color: "#fff",
-		background:
-			"linear-gradient(180deg,rgba(37,99,235,.90),rgba(29,78,216,.90))",
-		borderColor:
-			"rgba(96,165,250,.32)",
+		background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+		borderColor: "#2563eb",
 	},
 
 	"&.Mui-disabled": {
-		opacity: 0.38,
-		color: "rgba(203,213,225,.55)",
-		background:
-			"rgba(var(--pf-fg-rgb),.035)",
+		opacity: 0.62,
+		color: "var(--pf-text-dim)",
+		background: "var(--pf-surface-alt)",
+		borderColor: "var(--pf-border-soft)",
 	},
 };
 
@@ -3384,12 +3493,12 @@ const challanHistoryPageSizeFieldSx = {
 	"& .MuiOutlinedInput-root": {
 		height: 32,
 		borderRadius: "9px",
-		background: "var(--pf-surface-alt)",
+		background: "var(--pf-input)",
 		color: "var(--pf-text-strong)",
 		fontSize: 11,
 		fontWeight: 900,
 		"& fieldset": {
-			borderColor: "rgba(var(--pf-fg-rgb),.08)",
+			borderColor: "var(--pf-border)",
 		},
 		"&:hover fieldset": {
 			borderColor: "rgba(59,130,246,.28)",
@@ -20000,7 +20109,7 @@ export default function DispatchedItemsPage() {
 										title={customChallans[0]?.challanNumber}
 									>
 										Latest:{" "}
-										<span style={{ color: "#c4b5fd" }}>
+										<span style={{ color: "var(--dispatch-purple-text)", fontWeight: 900 }}>
 											{customChallans[0]?.challanNumber}
 										</span>
 									</Box>
@@ -20011,20 +20120,7 @@ export default function DispatchedItemsPage() {
 										onClick={
 											openCustomChallanModal
 										}
-										sx={{
-											...modalSecondaryButtonSx,
-											height: 34,
-											color: "var(--dispatch-purple-text)",
-											background:
-												"rgba(139,92,246,.10)",
-											border:
-												"1px solid rgba(139,92,246,.24)",
-
-											"&:hover": {
-												background:
-													"rgba(139,92,246,.22)",
-											},
-										}}
+										sx={customChallanCreateButtonSx}
 									>
 										+ Create
 									</Button>
@@ -20111,18 +20207,7 @@ export default function DispatchedItemsPage() {
 																setCustomChallanSearch("");
 																setCustomChallanPageNo(1);
 															}}
-															sx={{
-																minWidth: 0,
-																px: 1.15,
-																height: 28,
-																borderRadius: "9px",
-																textTransform: "none",
-																color: "#e9d5ff",
-																fontSize: 10,
-																fontWeight: 900,
-																background: "rgba(139,92,246,.11)",
-																border: "1px solid rgba(167,139,250,.18)",
-															}}
+															sx={customChallanSearchClearButtonSx}
 														>
 															Clear
 														</Button>
@@ -20153,7 +20238,7 @@ export default function DispatchedItemsPage() {
 
 												<Box
 													sx={{
-														color: "rgba(var(--pf-fg-rgb),.43)",
+														color: "var(--pf-text-muted)",
 														fontSize: 9.5,
 														fontWeight: 750,
 														whiteSpace: "nowrap",
@@ -20220,7 +20305,7 @@ export default function DispatchedItemsPage() {
 
 														<Button
 															onClick={clearCustomChallanAdminFilters}
-															sx={customAdminActionButtonSx("var(--pf-text-dim)")}
+															sx={customAdminActionButtonSx("#64748b")}
 														>
 															↺ Reset
 														</Button>
@@ -20379,7 +20464,7 @@ export default function DispatchedItemsPage() {
 																			<Box key={entry.type} sx={{ mb: 1 }}>
 																				<Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, mb: 0.45 }}>
 																					<Box sx={{ color: "var(--pf-text)", fontSize: 10.5, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.label}</Box>
-																					<Box sx={{ color: "#c4b5fd", fontSize: 10.5, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans} • {percent.toFixed(0)}%</Box>
+																					<Box sx={{ color: "var(--dispatch-purple-text)", fontSize: 10.5, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans} • {percent.toFixed(0)}%</Box>
 																				</Box>
 																				<Box sx={customAdminBarTrackSx}><Box sx={customAdminBarFillSx(percent, "#8b5cf6")} /></Box>
 																			</Box>
@@ -20395,9 +20480,9 @@ export default function DispatchedItemsPage() {
 																		<Box sx={{ color: "#a78bfa", fontWeight: 950, fontSize: 10.5 }}>#{index + 1}</Box>
 																		<Box sx={{ minWidth: 0 }}>
 																			<Box sx={{ color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.name}</Box>
-																			<Box sx={{ color: "rgba(var(--pf-fg-rgb),.42)", fontSize: 9.5, fontWeight: 700 }}>{entry.items} item(s)</Box>
+																			<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700 }}>{entry.items} item(s)</Box>
 																		</Box>
-																		<Chip size="small" label={`${entry.challans} challan${entry.challans === 1 ? "" : "s"}`} sx={{ height: 22, color: "#bfdbfe", fontSize: 9.5, fontWeight: 900, background: "rgba(59,130,246,.10)", border: "1px solid rgba(96,165,250,.18)" }} />
+																		<Chip size="small" label={`${entry.challans} challan${entry.challans === 1 ? "" : "s"}`} sx={{ height: 22, color: "var(--dispatch-blue-text)", fontSize: 9.5, fontWeight: 900, background: "rgba(59,130,246,.10)", border: "1px solid rgba(96,165,250,.18)" }} />
 																	</Box>
 																))}
 															</Box>
@@ -20408,9 +20493,9 @@ export default function DispatchedItemsPage() {
 																	<Box key={entry.route} sx={{ py: 0.7, borderBottom: index < Math.min(5, customChallanAdminStats.routeBreakdown.length - 1) ? "1px solid rgba(var(--pf-fg-rgb),.05)" : "none" }}>
 																		<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
 																			<Box sx={{ color: "var(--pf-text-strong)", fontSize: 10.2, fontWeight: 850, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={entry.route}>{entry.route}</Box>
-																			<Box sx={{ color: "#6ee7b7", fontSize: 10, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans}</Box>
+																			<Box sx={{ color: "var(--dispatch-green-text)", fontSize: 10, fontWeight: 950, whiteSpace: "nowrap" }}>{entry.challans}</Box>
 																		</Box>
-																		<Box sx={{ mt: 0.25, color: "rgba(var(--pf-fg-rgb),.40)", fontSize: 9.3, fontWeight: 700 }}>{entry.items} item(s) • Last {formatLocalDateTimeDisplay(entry.lastAt)}</Box>
+																		<Box sx={{ mt: 0.25, color: "var(--pf-text-muted)", fontSize: 9.3, fontWeight: 700 }}>{entry.items} item(s) • Last {formatLocalDateTimeDisplay(entry.lastAt)}</Box>
 																	</Box>
 																))}
 															</Box>
@@ -20427,7 +20512,7 @@ export default function DispatchedItemsPage() {
 																					<Box sx={{ width: 24, height, minHeight: 10, borderRadius: "7px 7px 3px 3px", background: "linear-gradient(180deg,#a78bfa,#6d28d9)", boxShadow: "0 8px 20px rgba(139,92,246,.18)" }} />
 																				</Box>
 																				<Box sx={{ mt: 0.45, color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
-																				<Box sx={{ color: "rgba(var(--pf-fg-rgb),.42)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
+																				<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
 																			</Box>
 																		);
 																	})}
@@ -20456,7 +20541,7 @@ export default function DispatchedItemsPage() {
 																		<Box sx={{ minWidth: 0 }}>
 																			<Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap" }}>
 																				<Box sx={{ color: "var(--pf-text-strong)", fontFamily: "monospace", fontSize: 11.5, fontWeight: 950 }}>{challan.challanNumber}</Box>
-																				<Chip size="small" label={challan.challanTypeLabel || getCustomChallanTypeLabel(challan.challanType)} sx={{ height: 20, color: "#ddd6fe", fontSize: 8.8, fontWeight: 900, background: "rgba(139,92,246,.11)", border: "1px solid rgba(167,139,250,.18)" }} />
+																				<Chip size="small" label={challan.challanTypeLabel || getCustomChallanTypeLabel(challan.challanType)} sx={{ height: 20, color: "var(--dispatch-purple-text)", fontSize: 8.8, fontWeight: 900, background: "rgba(139,92,246,.11)", border: "1px solid rgba(167,139,250,.18)" }} />
 																			</Box>
 																			<Box sx={{ mt: 0.3, color: "rgba(var(--pf-fg-rgb),.54)", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
 																				{challan.generatedBy || "Unknown user"} • {challan.fromLocation || "—"} → {challan.toLocation || "—"} • {challan.totalItems || 0} item(s)
@@ -20487,7 +20572,7 @@ export default function DispatchedItemsPage() {
 										<Box sx={customChallanPagerWrapSx}>
 											<Box
 												sx={{
-													color: "#c4b5fd",
+													color: "var(--dispatch-purple-text)",
 													fontSize: 11,
 													fontWeight: 950,
 													letterSpacing: ".12em",
@@ -20550,7 +20635,7 @@ export default function DispatchedItemsPage() {
 														}
 														sx={{
 															width: "fit-content",
-															color: "#c4b5fd",
+															color: "var(--dispatch-purple-text)",
 															fontWeight: 900,
 															background: "rgba(139,92,246,.14)",
 															border: "1px solid rgba(139,92,246,.24)",
@@ -20637,11 +20722,7 @@ export default function DispatchedItemsPage() {
 																	alert(err.message || "Download failed");
 																}
 															}}
-															sx={{
-																...modalSecondaryButtonSx,
-																height: 34,
-																color: "#fff",
-															}}
+															sx={customChallanViewPdfButtonSx}
 														>
 															View PDF
 														</Button>
@@ -22152,8 +22233,8 @@ export default function DispatchedItemsPage() {
 												sx={{
 													height: 23,
 													color: isEditingCustomChallan
-														? "#fde68a"
-														: "#c4b5fd",
+														? "var(--dispatch-amber-text)"
+														: "var(--dispatch-purple-text)",
 													background: isEditingCustomChallan
 														? "rgba(245,158,11,.13)"
 														: "rgba(139,92,246,.14)",
@@ -22176,7 +22257,7 @@ export default function DispatchedItemsPage() {
 											<Box
 												sx={{
 													mt: 0.8,
-													color: "#c4b5fd",
+													color: "var(--dispatch-purple-text)",
 													fontFamily: "monospace",
 													fontWeight: 900,
 													fontSize: 11,
@@ -22533,16 +22614,7 @@ export default function DispatchedItemsPage() {
 													{customChallanForm.items.length > 1 && (
 														<Button
 															onClick={() => removeCustomChallanItem(index)}
-															sx={{
-																minWidth: 0,
-																px: 1.3,
-																textTransform: "none",
-																fontWeight: 850,
-																fontSize: 11,
-																color: "#fca5a5",
-																background: "rgba(239,68,68,.08)",
-																border: "1px solid rgba(239,68,68,.16)",
-															}}
+															sx={customChallanRemoveItemButtonSx}
 														>
 															Remove
 														</Button>
@@ -22651,7 +22723,7 @@ export default function DispatchedItemsPage() {
 									<Box
 										sx={{
 											mt: 0.25,
-											color: "rgba(var(--pf-fg-rgb),.43)",
+											color: "var(--pf-text-muted)",
 											fontSize: 10.5,
 											fontWeight: 650,
 										}}
