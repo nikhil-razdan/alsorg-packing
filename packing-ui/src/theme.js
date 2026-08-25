@@ -62,7 +62,6 @@ export const createPackFlowTheme = (mode = "dark") => {
             margin: 0,
             backgroundColor: backgroundDefault,
             color: textPrimary,
-            transition: "background-color .18s ease,color .18s ease",
           },
           "input,select,textarea": {
             colorScheme: isDark ? "dark" : "light",

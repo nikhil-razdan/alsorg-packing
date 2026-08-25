@@ -25,7 +25,6 @@ import { motion } from "framer-motion";
 import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
 import API from "../services/api";
-import { usePackFlowTheme } from "../theme/PackFlowThemeContext";
 import ExcelJS from "exceljs";
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -1204,7 +1203,6 @@ function ClientNameAutocomplete({
   disabled = false,
   error = false,
   helperText = "",
-  darkMode = true,
   label = "Client Name",
 }) {
   const [inputValue, setInputValue] =
@@ -1457,7 +1455,7 @@ function ClientNameAutocomplete({
               : helperText ||
                 "Search Client Master as you type. Free-text client names are still allowed."
           }
-          sx={formFieldSx(darkMode)}
+          sx={formFieldSx()}
           InputProps={{
             ...params.InputProps,
             endAdornment: (
@@ -1836,7 +1834,6 @@ function ZohoItemsPage() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [detailsPopup, setDetailsPopup] = useState(false);
-  const { isDark: darkMode } = usePackFlowTheme();
 
   const [
     inventoryColumnWidths,
@@ -2812,7 +2809,7 @@ function ZohoItemsPage() {
         "Defaults to today. You can select any previous date; future dates are blocked."
       }
       sx={{
-        ...formFieldSx(darkMode),
+        ...formFieldSx(),
 
         "& input[type='date']::-webkit-calendar-picker-indicator": {
           filter: "invert(1)",
@@ -2948,7 +2945,6 @@ function ZohoItemsPage() {
           }}
           error={!!errors.clientName}
           helperText={errors.clientName}
-          darkMode={darkMode}
           label={label}
         />
       );
@@ -2970,7 +2966,7 @@ function ZohoItemsPage() {
         }
         error={!!errors[key]}
         helperText={errors[key]}
-        sx={formFieldSx(darkMode)}
+        sx={formFieldSx()}
       />
     );
   };
@@ -3002,7 +2998,7 @@ function ZohoItemsPage() {
               ? "No plant access assigned to this user"
               : "Select assigned plant")
           }
-          sx={formFieldSx(darkMode)}
+          sx={formFieldSx()}
           slotProps={selectMenuSlotProps}
           SelectProps={{
             MenuProps: selectMenuSlotProps.select.MenuProps,
@@ -10627,7 +10623,7 @@ function ZohoItemsPage() {
               }
               error={!!errors.numberOfPackets}
               helperText={errors.numberOfPackets}
-              sx={formFieldSx(darkMode)}
+              sx={formFieldSx()}
             />
 
             <Button
@@ -10759,7 +10755,7 @@ function ZohoItemsPage() {
                         copy[i] = e.target.value;
                         setDescriptions(copy);
                       }}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
 
                     <TextField
@@ -10773,7 +10769,7 @@ function ZohoItemsPage() {
                       }}
                       error={!!errors[`weight-${i}`]}
                       helperText={errors[`weight-${i}`]}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
 
                     <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
@@ -10789,7 +10785,7 @@ function ZohoItemsPage() {
                             setDimensionsList(copy);
                           }}
                           sx={{
-                            ...formFieldSx(darkMode),
+                            ...formFieldSx(),
                             width: 90,
                             mb: 0,
                           }}
@@ -10810,7 +10806,7 @@ function ZohoItemsPage() {
                         copy[i] = e.target.value;
                         setRemarksList(copy);
                       }}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
                   </Box>
                 </motion.div>
@@ -10953,7 +10949,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={customPacketNo}
                   onChange={(e) => setCustomPacketNo(e.target.value)}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -10962,7 +10958,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={descriptions[0] || ""}
                   onChange={(e) => setDescriptions([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -10971,7 +10967,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={weights[0] || ""}
                   onChange={(e) => setWeights([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <Box sx={dimensionRowSx}>
@@ -10991,7 +10987,7 @@ function ZohoItemsPage() {
                         setDimensionsList(copy);
                       }}
                       sx={{
-                        ...formFieldSx(darkMode),
+                        ...formFieldSx(),
                         width: 90,
                         mb: 0,
                       }}
@@ -11009,7 +11005,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={remarksList[0] || ""}
                   onChange={(e) => setRemarksList([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
               </Box>
             </Box>
@@ -11109,7 +11105,7 @@ function ZohoItemsPage() {
                   value={addCount}
                   onChange={(e) => setAddCount(Number(e.target.value))}
                   fullWidth
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
               </Box>
 
@@ -11134,7 +11130,7 @@ function ZohoItemsPage() {
                         copy[i] = e.target.value;
                         setDescriptions(copy);
                       }}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
 
                     <TextField
@@ -11146,7 +11142,7 @@ function ZohoItemsPage() {
                         copy[i] = e.target.value;
                         setWeights(copy);
                       }}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
 
                     <Box sx={dimensionRowSx}>
@@ -11168,7 +11164,7 @@ function ZohoItemsPage() {
                             setDimensionsList(copy);
                           }}
                           sx={{
-                            ...formFieldSx(darkMode),
+                            ...formFieldSx(),
                             width: 90,
                             mb: 0,
                           }}
@@ -11189,7 +11185,7 @@ function ZohoItemsPage() {
                         copy[i] = e.target.value;
                         setRemarksList(copy);
                       }}
-                      sx={formFieldSx(darkMode)}
+                      sx={formFieldSx()}
                     />
                   </Box>
                 </motion.div>
@@ -11294,7 +11290,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={customPacketNo}
                   onChange={(e) => setCustomPacketNo(e.target.value)}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -11302,7 +11298,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={descriptions[0] || ""}
                   onChange={(e) => setDescriptions([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -11310,7 +11306,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={weights[0] || ""}
                   onChange={(e) => setWeights([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <Box sx={dimensionRowSx}>
@@ -11326,7 +11322,7 @@ function ZohoItemsPage() {
                         setDimensionsList(copy);
                       }}
                       sx={{
-                        ...formFieldSx(darkMode),
+                        ...formFieldSx(),
                         width: 90,
                         mb: 0,
                       }}
@@ -11343,7 +11339,7 @@ function ZohoItemsPage() {
                   fullWidth
                   value={remarksList[0] || ""}
                   onChange={(e) => setRemarksList([e.target.value])}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
               </Box>
             </Box>
@@ -11447,7 +11443,7 @@ function ZohoItemsPage() {
                         [field]: e.target.value,
                       }))
                     }
-                    sx={formFieldSx(darkMode)}
+                    sx={formFieldSx()}
                   />
                 );
               })}
@@ -12170,7 +12166,7 @@ function ZohoItemsPage() {
                   }
                   error={!!errors.hardwareItemName}
                   helperText={errors.hardwareItemName}
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -12188,7 +12184,7 @@ function ZohoItemsPage() {
                       pdNo: e.target.value,
                     }))
                   }
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -12206,7 +12202,7 @@ function ZohoItemsPage() {
                       drawingNo: e.target.value,
                     }))
                   }
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <ClientNameAutocomplete
@@ -12240,8 +12236,7 @@ function ZohoItemsPage() {
                           : previous.clientAddress,
                     }))
                   }
-                  darkMode={darkMode}
-                />
+                        />
 
                 <TextField
                   label="Client Address"
@@ -12260,7 +12255,7 @@ function ZohoItemsPage() {
                       clientAddress: e.target.value,
                     }))
                   }
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 <TextField
@@ -12278,7 +12273,7 @@ function ZohoItemsPage() {
                       floor: e.target.value,
                     }))
                   }
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                 />
 
                 {!hardwareEditingItem &&
@@ -12335,7 +12330,7 @@ function ZohoItemsPage() {
                         "Defaults to today. You can select any previous date; future dates are blocked."
                       }
                       sx={{
-                        ...formFieldSx(darkMode),
+                        ...formFieldSx(),
 
                         "& input[type='date']::-webkit-calendar-picker-indicator": {
                           filter: "invert(1)",
@@ -12374,7 +12369,7 @@ function ZohoItemsPage() {
                           : "Select an assigned plant"
                     )
                   }
-                  sx={formFieldSx(darkMode)}
+                  sx={formFieldSx()}
                   slotProps={selectMenuSlotProps}
                   SelectProps={{
                     MenuProps:
@@ -12494,9 +12489,7 @@ function ZohoItemsPage() {
                                 event.target.value
                               )
                             }
-                            sx={formFieldSx(
-                              darkMode
-                            )}
+                            sx={formFieldSx()}
                           />
 
                           <TextField
@@ -12516,9 +12509,7 @@ function ZohoItemsPage() {
                               min: 0.001,
                               step: 0.001,
                             }}
-                            sx={formFieldSx(
-                              darkMode
-                            )}
+                            sx={formFieldSx()}
                           />
 
                           <HardwareUomSelect
@@ -12719,9 +12710,7 @@ function ZohoItemsPage() {
                                           .value
                                       )
                                     }
-                                    sx={formFieldSx(
-                                      darkMode
-                                    )}
+                                    sx={formFieldSx()}
                                   />
 
                                   <TextField
@@ -12746,9 +12735,7 @@ function ZohoItemsPage() {
                                       min: 0.001,
                                       step: 0.001,
                                     }}
-                                    sx={formFieldSx(
-                                      darkMode
-                                    )}
+                                    sx={formFieldSx()}
                                   />
 
                                   <HardwareUomSelect

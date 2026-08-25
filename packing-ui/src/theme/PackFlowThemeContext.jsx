@@ -1,7 +1,9 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
@@ -20,6 +22,20 @@ import "./packFlowTheme.css";
 const STORAGE_KEY = "packflow:theme-mode:v1";
 const BODY_CLASS = "packflow-theme-body";
 const PackFlowThemeContext = createContext(null);
+
+/*
+ * Build the two MUI theme objects once. Re-running createTheme on every
+ * light/dark toggle adds avoidable work on PackFlow's largest registers.
+ */
+const PACKFLOW_MUI_THEMES = Object.freeze({
+  dark: createPackFlowTheme("dark"),
+  light: createPackFlowTheme("light"),
+});
+
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined"
+    ? useEffect
+    : useLayoutEffect;
 
 const normalizeMode = (value) =>
   value === "light" ? "light" : "dark";
@@ -41,18 +57,27 @@ function readInitialMode() {
 export function PackFlowThemeProvider({ children }) {
   const [mode, setModeState] = useState(readInitialMode);
 
-  const setMode = (nextMode) => {
+  const setMode = useCallback((nextMode) => {
     setModeState(normalizeMode(nextMode));
-  };
+  }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setModeState((current) =>
       current === "dark" ? "light" : "dark"
     );
-  };
+  }, []);
 
-  useEffect(() => {
-    if (typeof document === "undefined") return undefined;
+  /*
+   * Apply the CSS-variable mode before the browser paints the committed React
+   * update. The old passive useEffect allowed a visible frame where the MUI
+   * theme and PackFlow CSS variables could be out of sync.
+   *
+   * Deliberately return no cleanup here: effect cleanup on every mode change
+   * used to temporarily remove data-packflow-theme before setting the next
+   * mode, creating an unnecessary intermediate style state.
+   */
+  useIsomorphicLayoutEffect(() => {
+    if (typeof document === "undefined") return;
 
     const root = document.documentElement;
     const body = document.body;
@@ -64,18 +89,28 @@ export function PackFlowThemeProvider({ children }) {
       body.classList.add(BODY_CLASS);
       body.dataset.packflowTheme = mode;
     }
+  }, [mode]);
+
+  /* Persist after paint; localStorage does not need to block the visual swap. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     try {
       window.localStorage.setItem(STORAGE_KEY, mode);
     } catch {
       // Theme persistence is optional.
     }
+  }, [mode]);
+
+  /* Only remove global PackFlow markers when this provider actually unmounts. */
+  useIsomorphicLayoutEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const root = document.documentElement;
+    const body = document.body;
 
     return () => {
-      if (root.dataset.packflowTheme === mode) {
-        delete root.dataset.packflowTheme;
-      }
-
+      delete root.dataset.packflowTheme;
       root.style.removeProperty("color-scheme");
 
       if (body) {
@@ -83,12 +118,9 @@ export function PackFlowThemeProvider({ children }) {
         delete body.dataset.packflowTheme;
       }
     };
-  }, [mode]);
+  }, []);
 
-  const muiTheme = useMemo(
-    () => createPackFlowTheme(mode),
-    [mode]
-  );
+  const muiTheme = PACKFLOW_MUI_THEMES[mode];
 
   const value = useMemo(
     () => ({
@@ -98,7 +130,7 @@ export function PackFlowThemeProvider({ children }) {
       setMode,
       toggleTheme,
     }),
-    [mode]
+    [mode, setMode, toggleTheme]
   );
 
   return (

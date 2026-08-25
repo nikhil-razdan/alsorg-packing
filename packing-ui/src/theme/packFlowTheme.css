@@ -79,15 +79,13 @@ body.packflow-theme-body,
   color: var(--pf-text-strong);
 }
 
-.packflow-theme-root,
-.packflow-theme-root *,
-body.packflow-theme-body .MuiPaper-root,
-body.packflow-theme-body .MuiButton-root,
-body.packflow-theme-body .MuiIconButton-root {
-  transition-property: background-color, border-color, color, box-shadow;
-  transition-duration: .18s;
-  transition-timing-function: ease;
-}
+/*
+ * Theme switching must be a single paint, not thousands of simultaneous
+ * 180ms transitions. PackFlow pages already define local hover/focus
+ * transitions where interaction benefits from animation. Keeping a blanket
+ * transition on every descendant makes the high-volume Dispatch/Inventory/
+ * Warehouse registers repaint continuously during every mode change.
+ */
 
 .packflow-theme-root input,
 .packflow-theme-root select,
