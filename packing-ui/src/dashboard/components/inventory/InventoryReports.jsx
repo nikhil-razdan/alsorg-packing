@@ -657,7 +657,7 @@ const createDirectorLineChartPng = ({
 
   ctx.strokeStyle = "#d7dee8";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "var(--pf-text-muted)";
+  ctx.fillStyle = "#64748b";
   ctx.font = "11px Arial";
   ctx.textAlign = "right";
 
@@ -730,7 +730,7 @@ const createDirectorLineChartPng = ({
     Math.ceil(rows.length / 10)
   );
 
-  ctx.fillStyle = "var(--pf-text-muted)";
+  ctx.fillStyle = "#64748b";
   ctx.font = "10px Arial";
   ctx.textAlign = "center";
 
@@ -817,7 +817,7 @@ const createDirectorBarChartPng = ({
 
   ctx.strokeStyle = "#d7dee8";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "var(--pf-text-muted)";
+  ctx.fillStyle = "#64748b";
   ctx.font = "11px Arial";
   ctx.textAlign = "right";
 
@@ -6537,8 +6537,8 @@ function SummaryCard({
           ...summaryValue,
           fontSize: responsiveFontSize,
           color: warning
-            ? "#fbbf24"
-            : "#fff",
+            ? "color-mix(in srgb,#d97706 86%,var(--pf-text-strong))"
+            : "var(--pf-text-strong)",
         }}
       >
         {value}
@@ -6718,7 +6718,7 @@ function DirectorLineChart({ rows = [] }) {
                 x2={width - padding.right}
                 y1={y}
                 y2={y}
-                stroke="rgba(148,163,184,.20)"
+                stroke="rgba(var(--pf-fg-rgb),.12)"
                 strokeDasharray="5 5"
               />
               <text
@@ -6852,7 +6852,7 @@ function DirectorBarChart({
                 x2={width - padding.right}
                 y1={y}
                 y2={y}
-                stroke="rgba(148,163,184,.20)"
+                stroke="rgba(var(--pf-fg-rgb),.12)"
                 strokeDasharray="5 5"
               />
               <text
@@ -7156,12 +7156,13 @@ const wrap = {
   padding: 22,
   colorScheme: "var(--pf-color-scheme)",
   borderRadius: 24,
+  color: "var(--pf-text)",
   background:
-    "rgba(var(--pf-surface-rgb),.78)",
+    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.98),rgba(var(--pf-surface-rgb),.94))",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   boxShadow:
-    "0 12px 28px rgba(var(--pf-shadow-rgb),.08)",
+    "0 12px 30px rgba(var(--pf-shadow-rgb),.08)",
   backdropFilter: "blur(18px)",
 };
 
@@ -7188,27 +7189,29 @@ const subtitle = {
 
 const filters = {
   display: "flex",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
-  marginBottom: 16,
-  padding: 12,
-  borderRadius: 16,
+  marginBottom: 14,
+  padding: 10,
+  borderRadius: 14,
   background:
-    "rgba(var(--pf-fg-rgb),.035)",
+    "linear-gradient(180deg,rgba(var(--pf-fg-rgb),.028),rgba(var(--pf-fg-rgb),.018))",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.075)",
 };
 
 const input = {
   height: 38,
-  borderRadius: 12,
+  borderRadius: 10,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.08)",
-  background: "var(--pf-surface-alt)",
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-input)",
   color: "var(--pf-text-strong)",
   padding: "0 12px",
   outline: "none",
   fontWeight: 700,
+  colorScheme: "var(--pf-color-scheme)",
+  boxSizing: "border-box",
 };
 
 const searchInput = {
@@ -7219,26 +7222,26 @@ const searchInput = {
 
 const primaryBtn = {
   height: 38,
-  borderRadius: 12,
-  border: "none",
+  borderRadius: 10,
+  border: "1px solid rgba(37,99,235,.24)",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
-  color: "var(--pf-text-strong)",
+  color: "#fff",
   padding: "0 14px",
   fontWeight: 900,
   cursor: "pointer",
+  boxShadow: "0 7px 16px rgba(37,99,235,.14)",
 };
 
 const clearBtn = {
   height: 38,
-  borderRadius: 12,
+  borderRadius: 10,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.08)",
-  background:
-    "rgba(var(--pf-fg-rgb),.04)",
+    "1px solid rgba(var(--pf-fg-rgb),.09)",
+  background: "var(--pf-surface-alt)",
   color: "var(--pf-text-strong)",
   padding: "0 14px",
-  fontWeight: 800,
+  fontWeight: 850,
   cursor: "pointer",
 };
 
@@ -7267,15 +7270,18 @@ const errorBox = {
 };
 
 const volumeInsightPanel = {
+  position: "relative",
   marginBottom: 16,
   padding: 16,
-  borderRadius: 20,
+  borderRadius: 18,
+  overflow: "hidden",
+  color: "var(--pf-text)",
   background:
-    "radial-gradient(circle at 0% 0%, rgba(34,197,94,.12), transparent 34%), linear-gradient(135deg, rgba(var(--pf-surface-rgb),.96), rgba(8,15,30,.94))",
+    "radial-gradient(circle at 0% 0%,rgba(16,185,129,.10),transparent 34%),radial-gradient(circle at 100% 0%,rgba(59,130,246,.07),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
-    "1px solid rgba(34,197,94,.18)",
+    "1px solid rgba(16,185,129,.18)",
   boxShadow:
-    "0 16px 34px rgba(var(--pf-surface-rgb),.24)",
+    "0 12px 28px rgba(var(--pf-shadow-rgb),.07)",
 };
 
 const volumeInsightHeader = {
@@ -7312,12 +7318,13 @@ const volumeInsightSubtitle = {
 const volumeDetailBtn = {
   height: 36,
   padding: "0 13px",
-  borderRadius: 12,
+  borderRadius: 10,
   border:
-    "1px solid rgba(34,197,94,.28)",
+    "1px solid rgba(5,150,105,.24)",
   background:
-    "rgba(34,197,94,.10)",
-  color: "#bbf7d0",
+    "linear-gradient(180deg,rgba(16,185,129,.11),rgba(16,185,129,.07))",
+  color:
+    "color-mix(in srgb,#047857 84%,var(--pf-text-strong))",
   fontWeight: 900,
   cursor: "pointer",
 };
@@ -7383,8 +7390,8 @@ const volumeWarningBox = {
 const summaryGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit,minmax(185px,1fr))",
-  gap: 12,
+    "repeat(auto-fit,minmax(170px,1fr))",
+  gap: 10,
   alignItems: "stretch",
   marginBottom: 16,
 };
@@ -7392,17 +7399,20 @@ const summaryGrid = {
 const summaryCard = {
   position: "relative",
   minWidth: 0,
-  minHeight: 104,
+  minHeight: 96,
   display: "flex",
   flexDirection: "column",
   justifyContent: "space-between",
-  overflow: "visible",
-  borderRadius: 18,
-  padding: 16,
+  overflow: "hidden",
+  borderRadius: 14,
+  padding: 14,
+  color: "var(--pf-text)",
   background:
-    "rgba(var(--pf-fg-rgb),.035)",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.075)",
+  boxShadow:
+    "0 7px 18px rgba(var(--pf-shadow-rgb),.045)",
 };
 
 const summaryAccent = (accent) => ({
@@ -7418,8 +7428,9 @@ const summaryAccent = (accent) => ({
 
 const summaryLabel = {
   color: "var(--pf-text-muted)",
-  fontSize: 12,
-  fontWeight: 800,
+  fontSize: 10.5,
+  fontWeight: 850,
+  letterSpacing: ".01em",
 };
 
 const summaryValue = {
@@ -7442,24 +7453,27 @@ const summaryValue = {
 
 const modeTabs = {
   display: "flex",
-  gap: 10,
+  gap: 7,
   flexWrap: "wrap",
-  marginBottom: 16,
+  marginBottom: 14,
 };
 
 const modeTab = (active) => ({
-  height: 36,
-  padding: "0 14px",
+  height: 34,
+  padding: "0 13px",
   borderRadius: 999,
   border: active
-    ? "1px solid rgba(59,130,246,.40)"
-    : "1px solid rgba(var(--pf-fg-rgb),.07)",
+    ? "1px solid rgba(37,99,235,.32)"
+    : "1px solid rgba(var(--pf-fg-rgb),.075)",
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-    : "rgba(var(--pf-fg-rgb),.04)",
+    : "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   color: active ? "#fff" : "var(--pf-text)",
-  fontWeight: 800,
+  fontWeight: 850,
   cursor: "pointer",
+  boxShadow: active
+    ? "0 6px 14px rgba(37,99,235,.14)"
+    : "none",
 });
 
 const tableHeader = {
@@ -7481,9 +7495,12 @@ const tableSubtitle = {
 const tableWrap = {
   maxHeight: "58vh",
   overflow: "auto",
-  borderRadius: 18,
+  borderRadius: 14,
+  background: "var(--pf-surface)",
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.075)",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#60a5fa var(--pf-surface-alt)",
 };
 
 const table = {
@@ -7494,7 +7511,7 @@ const table = {
 
 const th = {
   textAlign: "left",
-  padding: "13px 12px",
+  padding: "12px 11px",
   background: "var(--pf-surface-alt)",
   color: "var(--pf-text-muted)",
   fontWeight: 900,
@@ -7502,16 +7519,17 @@ const th = {
   top: 0,
   zIndex: 1,
   borderBottom:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   minWidth: 110,
   whiteSpace: "nowrap",
 };
 
 const td = {
-  padding: "11px 12px",
-  color: "rgba(var(--pf-fg-rgb),.84)",
+  padding: "10px 11px",
+  color: "var(--pf-text)",
+  background: "var(--pf-surface)",
   borderBottom:
-    "1px solid rgba(var(--pf-fg-rgb),.045)",
+    "1px solid rgba(var(--pf-fg-rgb),.055)",
   verticalAlign: "top",
   minWidth: 110,
   maxWidth: 320,
@@ -7551,11 +7569,12 @@ const tablePageSizeSelect = {
   height: 34,
   padding: "0 10px",
   borderRadius: 10,
-  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-  background: "var(--pf-surface-alt)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.09)",
+  background: "var(--pf-input)",
   color: "var(--pf-text)",
   fontWeight: 800,
   outline: "none",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const tablePageButton = (disabled) => ({
@@ -7564,37 +7583,40 @@ const tablePageButton = (disabled) => ({
   borderRadius: 10,
   border: "1px solid rgba(var(--pf-fg-rgb),.08)",
   background: disabled
-    ? "rgba(var(--pf-fg-rgb),.025)"
-    : "rgba(59,130,246,.13)",
-  color: disabled ? "#475569" : "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
+    ? "var(--pf-surface-alt)"
+    : "rgba(59,130,246,.10)",
+  color: disabled
+    ? "var(--pf-text-dim)"
+    : "color-mix(in srgb,#2563eb 82%,var(--pf-text-strong))",
   cursor: disabled ? "not-allowed" : "pointer",
   fontWeight: 950,
+  opacity: disabled ? .58 : 1,
 });
 
 const directorTone = {
   blue: {
     background:
-      "linear-gradient(180deg,rgba(30,64,90,.54),rgba(var(--pf-surface-rgb),.74))",
-    border: "rgba(56,189,248,.23)",
-    accent: "#38bdf8",
+      "linear-gradient(135deg,rgba(59,130,246,.085),rgba(14,165,233,.035)),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+    border: "rgba(59,130,246,.18)",
+    accent: "#2563eb",
   },
   green: {
     background:
-      "linear-gradient(180deg,rgba(20,83,65,.46),rgba(var(--pf-surface-rgb),.74))",
-    border: "rgba(52,211,153,.22)",
-    accent: "#34d399",
+      "linear-gradient(135deg,rgba(16,185,129,.085),rgba(34,197,94,.025)),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+    border: "rgba(16,185,129,.18)",
+    accent: "#059669",
   },
   red: {
     background:
-      "linear-gradient(180deg,rgba(92,38,48,.45),rgba(var(--pf-surface-rgb),.74))",
-    border: "rgba(248,113,113,.24)",
-    accent: "#fb7185",
+      "linear-gradient(135deg,rgba(239,68,68,.075),rgba(244,63,94,.025)),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+    border: "rgba(239,68,68,.18)",
+    accent: "#dc2626",
   },
   amber: {
     background:
-      "linear-gradient(180deg,rgba(91,64,26,.46),rgba(var(--pf-surface-rgb),.74))",
-    border: "rgba(251,191,36,.24)",
-    accent: "#fbbf24",
+      "linear-gradient(135deg,rgba(245,158,11,.09),rgba(251,191,36,.025)),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+    border: "rgba(245,158,11,.20)",
+    accent: "#d97706",
   },
 };
 
@@ -7619,24 +7641,26 @@ const directorDashboardLoading = {
 };
 
 const directorDashboardHero = {
+  position: "relative",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   gap: 18,
   flexWrap: "wrap",
-  padding: "20px 22px",
-  borderRadius: 20,
+  padding: "18px 20px",
+  borderRadius: 18,
+  overflow: "hidden",
   background:
-    "radial-gradient(circle at 85% 0%,rgba(56,189,248,.16),transparent 35%),linear-gradient(135deg,#081a2b,#0f2940 58%,#10263b)",
+    "radial-gradient(circle at 86% 0%,rgba(56,189,248,.12),transparent 36%),linear-gradient(135deg,rgba(37,99,235,.08),rgba(14,165,233,.025)),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
-    "1px solid rgba(125,211,252,.16)",
+    "1px solid rgba(59,130,246,.16)",
   boxShadow:
-    "0 18px 38px rgba(var(--pf-surface-rgb),.30)",
+    "0 12px 28px rgba(var(--pf-shadow-rgb),.07)",
 };
 
 const directorDashboardEyebrow = {
-  color: "#7dd3fc",
-  fontSize: 10,
+  color: "color-mix(in srgb,#0284c7 88%,var(--pf-text-strong))",
+  fontSize: 9.5,
   fontWeight: 950,
   textTransform: "uppercase",
   letterSpacing: ".13em",
@@ -7645,7 +7669,7 @@ const directorDashboardEyebrow = {
 const directorDashboardTitle = {
   marginTop: 5,
   color: "var(--pf-text-strong)",
-  fontSize: 24,
+  fontSize: 23,
   lineHeight: 1.15,
   fontWeight: 950,
   letterSpacing: "-.02em",
@@ -7653,7 +7677,7 @@ const directorDashboardTitle = {
 
 const directorDashboardMeta = {
   marginTop: 8,
-  color: "#b9c8d8",
+  color: "var(--pf-text-muted)",
   fontSize: 11.5,
   lineHeight: 1.5,
   fontWeight: 650,
@@ -7670,15 +7694,13 @@ const directorHeroActions = {
 const directorHeroVolume = {
   minWidth: 170,
   padding: "10px 13px",
-  borderRadius: 14,
+  borderRadius: 12,
   display: "flex",
   flexDirection: "column",
   gap: 4,
-  background:
-    "rgba(var(--pf-fg-rgb),.055)",
-  border:
-    "1px solid rgba(var(--pf-fg-rgb),.09)",
-  color: "#b8c8d8",
+  background: "rgba(var(--pf-fg-rgb),.035)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.075)",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontWeight: 800,
   textTransform: "uppercase",
@@ -7709,12 +7731,11 @@ const directorHeroButton = {
 
 const directorInlineWarning = {
   padding: "11px 14px",
-  borderRadius: 14,
-  background:
-    "rgba(245,158,11,.10)",
-  border:
-    "1px solid rgba(245,158,11,.23)",
-  color: "#fcd34d",
+  borderRadius: 12,
+  background: "rgba(245,158,11,.09)",
+  border: "1px solid rgba(245,158,11,.22)",
+  color:
+    "color-mix(in srgb,#b45309 82%,var(--pf-text-strong))",
   fontSize: 11.5,
   fontWeight: 750,
 };
@@ -7733,20 +7754,20 @@ const directorKpiCard = (tone) => {
 
   return {
     position: "relative",
-    minHeight: 126,
+    minHeight: 122,
     padding: "14px 15px",
-    borderRadius: 15,
-    overflow: "visible",
+    borderRadius: 14,
+    overflow: "hidden",
+    color: "var(--pf-text)",
     background: palette.background,
-    border:
-      `1px solid ${palette.border}`,
+    border: `1px solid ${palette.border}`,
     boxShadow:
-      "inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
+      "0 7px 18px rgba(var(--pf-shadow-rgb),.04),inset 0 1px 0 rgba(var(--pf-fg-rgb),.02)",
   };
 };
 
 const directorKpiTitle = {
-  color: "#dbe7f2",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -7769,8 +7790,8 @@ const directorKpiValue = {
 };
 
 const directorKpiDetail = {
-  marginTop: 10,
-  color: "#9fb0c2",
+  marginTop: 9,
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   lineHeight: 1.4,
   fontWeight: 650,
@@ -7778,14 +7799,15 @@ const directorKpiDetail = {
 
 const directorSectionBar = {
   padding: "8px 12px",
-  borderRadius: 10,
+  borderRadius: 9,
   background:
-    "linear-gradient(90deg,#164b70,#1d5e85)",
+    "linear-gradient(90deg,#0f6b93,#1683ad)",
   color: "#fff",
   fontSize: 10.5,
   fontWeight: 950,
   textTransform: "uppercase",
   letterSpacing: ".055em",
+  boxShadow: "0 5px 12px rgba(14,116,144,.12)",
 };
 
 const directorReadoutGrid = {
@@ -7801,17 +7823,18 @@ const directorReadoutCard = (tone) => {
     directorTone.blue;
 
   return {
-    minHeight: 142,
+    minHeight: 138,
     padding: 14,
-    borderRadius: 15,
+    borderRadius: 14,
+    color: "var(--pf-text)",
     background: palette.background,
-    border:
-      `1px solid ${palette.border}`,
+    border: `1px solid ${palette.border}`,
+    boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.035)",
   };
 };
 
 const directorReadoutTitle = {
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontSize: 10,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -7829,14 +7852,14 @@ const directorReadoutLine = {
   display: "flex",
   gap: 7,
   alignItems: "flex-start",
-  color: "#cad6e2",
+  color: "var(--pf-text)",
   fontSize: 10.3,
   fontWeight: 650,
   lineHeight: 1.45,
 };
 
 const directorBullet = {
-  color: "#7dd3fc",
+  color: "#0ea5e9",
   fontWeight: 950,
 };
 
@@ -7849,14 +7872,15 @@ const directorChartsGrid = {
 
 const directorChartPanel = {
   minWidth: 0,
-  borderRadius: 17,
+  borderRadius: 15,
   overflow: "hidden",
+  color: "var(--pf-text)",
   background:
-    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.86),rgba(7,15,28,.78))",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
-    "1px solid rgba(148,163,184,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   boxShadow:
-    "0 14px 30px rgba(var(--pf-surface-rgb),.20)",
+    "0 8px 20px rgba(var(--pf-shadow-rgb),.045)",
 };
 
 const directorChartPanelHeader = {
@@ -7871,7 +7895,7 @@ const directorChartPanelTitle = {
 
 const directorChartPanelSubtitle = {
   marginTop: 4,
-  color: "#7f91a5",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontWeight: 650,
 };
@@ -7927,9 +7951,10 @@ const directorLegendLine = (color) => ({
 
 const directorActionTableWrap = {
   overflowX: "auto",
-  borderRadius: 14,
+  borderRadius: 13,
+  background: "var(--pf-surface)",
   border:
-    "1px solid rgba(148,163,184,.10)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const directorActionTable = {
@@ -7942,64 +7967,65 @@ const directorActionTable = {
 const directorActionTh = {
   padding: "10px 12px",
   textAlign: "left",
-  background: "#18344d",
-  color: "#d8e5f0",
+  background:
+    "linear-gradient(180deg,rgba(59,130,246,.085),rgba(59,130,246,.045)),var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   borderBottom:
-    "1px solid rgba(148,163,184,.14)",
+    "1px solid rgba(var(--pf-fg-rgb),.09)",
 };
 
 const directorActionRow = (priority) => {
   const backgrounds = {
-    CRITICAL: "rgba(127,29,29,.22)",
-    HIGH: "rgba(146,64,14,.18)",
-    MEDIUM: "rgba(30,64,175,.12)",
-    LOW: "rgba(22,101,52,.10)",
+    CRITICAL: "rgba(239,68,68,.055)",
+    HIGH: "rgba(249,115,22,.05)",
+    MEDIUM: "rgba(59,130,246,.04)",
+    LOW: "rgba(34,197,94,.035)",
   };
 
   return {
     background:
       backgrounds[priority] ||
-      "rgba(var(--pf-fg-rgb),.025)",
+      "var(--pf-surface)",
   };
 };
 
 const directorActionTd = {
   padding: "11px 12px",
-  color: "#bac8d7",
+  color: "var(--pf-text)",
   verticalAlign: "top",
   borderBottom:
-    "1px solid rgba(148,163,184,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   lineHeight: 1.4,
 };
 
 const directorActionTdStrong = {
   ...directorActionTd,
-  color: "#f1f5f9",
+  color: "var(--pf-text-strong)",
   fontWeight: 800,
 };
 
 const directorPriorityBadge = (priority) => {
   const colors = {
     CRITICAL: {
-      color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
-      background: "rgba(239,68,68,.17)",
-      border: "rgba(239,68,68,.27)",
+      color: "color-mix(in srgb,#b91c1c 86%,var(--pf-text-strong))",
+      background: "rgba(239,68,68,.10)",
+      border: "rgba(239,68,68,.22)",
     },
     HIGH: {
-      color: "#fed7aa",
-      background: "rgba(249,115,22,.14)",
-      border: "rgba(249,115,22,.24)",
+      color: "color-mix(in srgb,#c2410c 86%,var(--pf-text-strong))",
+      background: "rgba(249,115,22,.09)",
+      border: "rgba(249,115,22,.20)",
     },
     MEDIUM: {
-      color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
-      background: "rgba(59,130,246,.14)",
-      border: "rgba(59,130,246,.24)",
+      color: "color-mix(in srgb,#1d4ed8 84%,var(--pf-text-strong))",
+      background: "rgba(59,130,246,.09)",
+      border: "rgba(59,130,246,.20)",
     },
     LOW: {
-      color: "#bbf7d0",
-      background: "rgba(34,197,94,.12)",
-      border: "rgba(34,197,94,.22)",
+      color: "color-mix(in srgb,#047857 86%,var(--pf-text-strong))",
+      background: "rgba(34,197,94,.08)",
+      border: "rgba(34,197,94,.18)",
     },
   };
 
@@ -8015,8 +8041,7 @@ const directorPriorityBadge = (priority) => {
     borderRadius: 999,
     color: palette.color,
     background: palette.background,
-    border:
-      `1px solid ${palette.border}`,
+    border: `1px solid ${palette.border}`,
     fontSize: 8.5,
     fontWeight: 950,
     letterSpacing: ".05em",
@@ -8025,12 +8050,10 @@ const directorPriorityBadge = (priority) => {
 
 const directorManagementNote = {
   padding: "10px 12px",
-  borderRadius: 12,
-  background:
-    "rgba(var(--pf-fg-rgb),.025)",
-  border:
-    "1px solid rgba(148,163,184,.08)",
-  color: "#75879b",
+  borderRadius: 11,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.07)",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontStyle: "italic",
   lineHeight: 1.45,

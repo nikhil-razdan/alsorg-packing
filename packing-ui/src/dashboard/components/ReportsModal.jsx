@@ -50,7 +50,7 @@ const overlay = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "rgba(var(--pf-surface-deep-rgb),.76)",
+  background: "rgba(15,23,42,.42)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
 };
@@ -66,6 +66,7 @@ const modal = {
   padding: 20,
   boxSizing: "border-box",
   color: "var(--pf-text-strong)",
+  colorScheme: "var(--pf-color-scheme)",
   background:
     "radial-gradient(circle at top right,rgba(59,130,246,.07),transparent 32%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border: "1px solid var(--pf-border)",

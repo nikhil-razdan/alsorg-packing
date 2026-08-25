@@ -1723,7 +1723,7 @@ const th = {
 	zIndex: 2,
 	padding: "13px 12px",
 	textAlign: "left",
-	background: "#0b1220",
+	background: "var(--pf-surface-alt)",
 	color: "var(--pf-text-muted)",
 	fontWeight: 950,
 	letterSpacing: ".05em",

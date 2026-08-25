@@ -204,7 +204,7 @@ const overlay = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  background: "rgba(var(--pf-surface-deep-rgb),.76)",
+  background: "rgba(15,23,42,.42)",
   backdropFilter: "blur(12px)",
   WebkitBackdropFilter: "blur(12px)",
 };

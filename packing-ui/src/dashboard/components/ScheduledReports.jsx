@@ -171,6 +171,7 @@ const wrap = {
   padding: 18,
   borderRadius: 16,
   color: "var(--pf-text-strong)",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const header = {

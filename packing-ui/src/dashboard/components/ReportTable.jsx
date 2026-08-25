@@ -70,6 +70,7 @@ const th = {
 };
 
 const td = {
+  background: "var(--pf-surface)",
   padding: "10px 12px",
   borderBottom: "1px solid var(--pf-border-soft)",
   color: "var(--pf-text)",
