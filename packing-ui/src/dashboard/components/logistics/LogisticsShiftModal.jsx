@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -314,6 +315,9 @@ function LogisticsShiftModal({
     useState("ALL");
   const [historySearch, setHistorySearch] =
     useState("");
+
+  const historyTableRef = useRef(null);
+
   const [expandedActivityKey, setExpandedActivityKey] =
     useState("");
   const [downloadingKey, setDownloadingKey] =
@@ -994,6 +998,26 @@ function LogisticsShiftModal({
     }
   }, [historyPageNo, historyTotalPages]);
 
+  useEffect(() => {
+    if (!open || !showDriverHistory) return;
+
+    const tableElement = historyTableRef.current;
+
+    if (tableElement) {
+      tableElement.scrollLeft = 0;
+    }
+  }, [
+    open,
+    showDriverHistory,
+    historyCurrentPage,
+    historyPageSize,
+    historySource,
+    historyStatusFilter,
+    historyFromDate,
+    historyToDate,
+    historySearch,
+  ]);
+
   if (!open) return null;
 
   const update = (key, value) => {
@@ -1650,7 +1674,11 @@ function LogisticsShiftModal({
               </button>
             </div>
 
-            <div className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll" style={historyTable}>
+            <div
+              ref={historyTableRef}
+              className="logistics-scrollbar logistics-scrollbar-x logistics-table-scroll"
+              style={historyTable}
+            >
               <div style={historyHead}>
                 <div>Date / Time</div>
                 <div>Source</div>
@@ -1761,8 +1789,10 @@ function LogisticsShiftModal({
                             }
                           >
                             {expanded
-                              ? "Hide"
-                              : "Details"}
+                              ? "Hide Details"
+                              : activity.source === SOURCE.CHALLAN
+                                ? "View Items"
+                                : "Details"}
                           </button>
 
                           {activity.source ===
@@ -2633,14 +2663,19 @@ const subtitle = {
 };
 
 const closeBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
   background: "var(--pf-surface-alt)",
   border: "1px solid var(--pf-border)",
   color: "var(--pf-text-muted)",
+  WebkitTextFillColor: "var(--pf-text-muted)",
   width: 38,
   height: 38,
-  borderRadius: 12,
+  borderRadius: 11,
   fontSize: 18,
+  lineHeight: 1,
   cursor: "pointer",
+  opacity: 1,
 };
 
 const historySection = {
@@ -2818,35 +2853,48 @@ const clearDateBtn = {
 };
 
 const historyTable = {
-  borderRadius: 16,
+  width: "100%",
+  borderRadius: 14,
   overflowX: "auto",
-  border:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+  overflowY: "hidden",
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  scrollPaddingLeft: 0,
 };
 
+const historyGridColumns =
+  "minmax(122px,1.15fr) minmax(96px,.82fr) minmax(138px,1.08fr) minmax(105px,.82fr) minmax(60px,.52fr) minmax(88px,.7fr) minmax(210px,1.72fr)";
+
 const historyHead = {
-  minWidth: 1260,
+  minWidth: 825,
+  width: "100%",
+  boxSizing: "border-box",
   display: "grid",
-  gridTemplateColumns:
-    "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
-  padding: 13,
+  gridTemplateColumns: historyGridColumns,
+  columnGap: 10,
+  padding: "12px 13px",
   background: "var(--pf-surface-alt)",
   color: "var(--pf-text-muted)",
-  fontWeight: 850,
-  fontSize: 11,
+  fontWeight: 900,
+  fontSize: 10.5,
+  lineHeight: 1.25,
+  borderBottom: "1px solid var(--pf-border-soft)",
 };
 
 const historyRow = {
-  minWidth: 1260,
+  minWidth: 825,
+  width: "100%",
+  boxSizing: "border-box",
   display: "grid",
-  gridTemplateColumns:
-    "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
-  padding: 13,
+  gridTemplateColumns: historyGridColumns,
+  columnGap: 10,
+  padding: "12px 13px",
   color: "var(--pf-text)",
-  borderTop:
-    "1px solid rgba(var(--pf-fg-rgb),.06)",
+  background: "var(--pf-surface)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
-  fontSize: 12,
+  fontSize: 11.5,
+  lineHeight: 1.35,
 };
 
 const historyEmpty = {
@@ -2857,14 +2905,16 @@ const historyEmpty = {
 
 const historyDateText = {
   color: "var(--pf-text-strong)",
-  fontWeight: 850,
-  fontSize: 12,
+  fontWeight: 900,
+  fontSize: 11.5,
+  lineHeight: 1.35,
 };
 
 const historyTimeText = {
-  color: "var(--pf-text-dim)",
-  fontSize: 10,
+  color: "var(--pf-text-muted)",
+  fontSize: 9.5,
   marginTop: 3,
+  lineHeight: 1.35,
 };
 
 const durationText = {
@@ -2881,9 +2931,10 @@ const challanText = {
 };
 
 const miniMeta = {
-  color: "var(--pf-text-dim)",
-  fontSize: 10,
-  marginTop: 4,
+  color: "var(--pf-text-muted)",
+  fontSize: 9.5,
+  marginTop: 3,
+  lineHeight: 1.3,
 };
 
 const sourcePill = (source) => ({
@@ -2955,79 +3006,91 @@ const historyStatus = (value) => {
 const rowActions = {
   display: "flex",
   alignItems: "center",
-  gap: 6,
+  gap: 5,
   flexWrap: "wrap",
+  minWidth: 0,
 };
 
 const detailsBtn = {
-  height: 29,
+  appearance: "none",
+  WebkitAppearance: "none",
+  minHeight: 29,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(96,165,250,.20)",
-  background:
-    "rgba(59,130,246,.10)",
-  color: "#2563eb",
-  fontSize: 10,
-  fontWeight: 850,
+  borderRadius: 8,
+  border: "1px solid rgba(37,99,235,.28)",
+  background: "rgba(37,99,235,.12)",
+  color: "#1d4ed8",
+  WebkitTextFillColor: "#1d4ed8",
+  fontSize: 9.5,
+  fontWeight: 900,
+  lineHeight: 1.15,
   cursor: "pointer",
+  opacity: 1,
 };
 
 const pdfBtn = {
-  height: 29,
+  appearance: "none",
+  WebkitAppearance: "none",
+  minHeight: 29,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(251,191,36,.20)",
-  background:
-    "rgba(251,191,36,.10)",
-  color: "#ca8a04",
-  fontSize: 10,
-  fontWeight: 850,
+  borderRadius: 8,
+  border: "1px solid rgba(202,138,4,.30)",
+  background: "rgba(245,158,11,.12)",
+  color: "#a16207",
+  WebkitTextFillColor: "#a16207",
+  fontSize: 9.5,
+  fontWeight: 900,
   cursor: "pointer",
+  opacity: 1,
 };
 
 
 const previewBtn = {
-  height: 29,
+  appearance: "none",
+  WebkitAppearance: "none",
+  minHeight: 29,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(34,211,238,.20)",
-  background:
-    "rgba(34,211,238,.09)",
-  color: "#0891b2",
-  fontSize: 10,
-  fontWeight: 850,
+  borderRadius: 8,
+  border: "1px solid rgba(8,145,178,.28)",
+  background: "rgba(6,182,212,.11)",
+  color: "#0e7490",
+  WebkitTextFillColor: "#0e7490",
+  fontSize: 9.5,
+  fontWeight: 900,
   cursor: "pointer",
+  opacity: 1,
 };
 
 const endTimeActionBtn = {
-  height: 29,
+  appearance: "none",
+  WebkitAppearance: "none",
+  minHeight: 29,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(239,68,68,.22)",
-  background:
-    "rgba(239,68,68,.10)",
-  color: "#dc2626",
-  fontSize: 10,
-  fontWeight: 850,
+  borderRadius: 8,
+  border: "1px solid rgba(220,38,38,.28)",
+  background: "rgba(239,68,68,.11)",
+  color: "#b91c1c",
+  WebkitTextFillColor: "#b91c1c",
+  fontSize: 9.5,
+  fontWeight: 900,
   cursor: "pointer",
+  opacity: 1,
 };
 
 const helperActionBtn = {
-  height: 29,
+  appearance: "none",
+  WebkitAppearance: "none",
+  minHeight: 29,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(167,139,250,.22)",
-  background:
-    "rgba(139,92,246,.10)",
-  color: "#7c3aed",
-  fontSize: 10,
-  fontWeight: 850,
+  borderRadius: 8,
+  border: "1px solid rgba(124,58,237,.28)",
+  background: "rgba(139,92,246,.11)",
+  color: "#6d28d9",
+  WebkitTextFillColor: "#6d28d9",
+  fontSize: 9.5,
+  fontWeight: 900,
   cursor: "pointer",
+  opacity: 1,
 };
 
 const detailsPanel = {

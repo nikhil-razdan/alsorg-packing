@@ -489,18 +489,34 @@ function DriverManagement({
                 style={row}
               >
                 <div>
-                  <button
-                    type="button"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     style={driverNameBtn}
                     onClick={() =>
                       openShiftForDriver(
                         driver
                       )
                     }
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" ||
+                        event.key === " "
+                      ) {
+                        event.preventDefault();
+                        openShiftForDriver(
+                          driver
+                        );
+                      }
+                    }}
                     title="Open unified driver activity"
                   >
-                    {driver.name}
-                  </button>
+                    <span style={driverNameText}>
+                      {driver.name ||
+                        driver.driverName ||
+                        "Unnamed Driver"}
+                    </span>
+                  </span>
                   <div style={driverHint}>
                     360° trip & challan view
                   </div>
@@ -794,22 +810,54 @@ const row = {
   minWidth: 1050,
   display: "grid",
   gridTemplateColumns: "1.15fr 1.15fr .7fr 1fr .7fr .75fr 1.05fr",
-  padding: "13px 14px",
+  padding: "14px 14px",
   color: "var(--pf-text)",
+  background: "var(--pf-surface)",
   borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
   fontSize: 12,
+  lineHeight: 1.4,
 };
 
 const driverNameBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 22,
+  maxWidth: "100%",
   border: "none",
   background: "transparent",
-  color: "#2563eb",
+  color: "#1d4ed8",
+  WebkitTextFillColor: "#1d4ed8",
+  opacity: 1,
+  visibility: "visible",
   cursor: "pointer",
   fontWeight: 900,
   fontSize: 13,
+  lineHeight: 1.25,
   padding: 0,
+  margin: 0,
   textAlign: "left",
+  textIndent: 0,
+  overflow: "visible",
+  textDecoration: "none",
+  textShadow: "none",
+};
+
+const driverNameText = {
+  display: "inline-block",
+  maxWidth: "100%",
+  color: "#1d4ed8",
+  WebkitTextFillColor: "#1d4ed8",
+  opacity: 1,
+  visibility: "visible",
+  fontSize: 13,
+  lineHeight: 1.25,
+  fontWeight: 950,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const driverHint = {
@@ -871,27 +919,35 @@ const actions = {
 };
 
 const viewBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
   height: 30,
-  padding: "0 9px",
+  padding: "0 10px",
   borderRadius: 8,
-  border: "1px solid rgba(37,99,235,.20)",
-  background: "rgba(59,130,246,.09)",
-  color: "#2563eb",
+  border: "1px solid rgba(37,99,235,.28)",
+  background: "rgba(37,99,235,.11)",
+  color: "#1d4ed8",
+  WebkitTextFillColor: "#1d4ed8",
   cursor: "pointer",
-  fontWeight: 850,
+  fontWeight: 900,
   fontSize: 10,
+  opacity: 1,
 };
 
 const deleteBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
   height: 30,
-  padding: "0 9px",
+  padding: "0 10px",
   borderRadius: 8,
-  border: "1px solid rgba(239,68,68,.20)",
-  background: "rgba(239,68,68,.09)",
-  color: "#dc2626",
+  border: "1px solid rgba(220,38,38,.26)",
+  background: "rgba(239,68,68,.10)",
+  color: "#b91c1c",
+  WebkitTextFillColor: "#b91c1c",
   cursor: "pointer",
-  fontWeight: 850,
+  fontWeight: 900,
   fontSize: 10,
+  opacity: 1,
 };
 
 const emptyRow = {

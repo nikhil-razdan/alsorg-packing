@@ -518,72 +518,85 @@ function formatDateTime(value) {
 }
 
 const dialogPaperSx = {
-  borderRadius: "26px",
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: "18px",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  border: "1px solid var(--pf-border)",
   boxShadow:
-    "0 26px 70px rgba(0,0,0,.45)",
+    "0 28px 70px rgba(var(--pf-shadow-rgb),.20)",
+  overflow: "hidden",
 };
 
 const dialogTitleSx = {
-  px: 3,
-  pt: 3,
+  px: { xs: 2, sm: 2.5 },
+  pt: { xs: 2, sm: 2.5 },
   pb: 1,
+  borderBottom: "1px solid var(--pf-border-soft)",
+  background:
+    "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
 };
 
 const dialogMainTitleSx = {
-  fontSize: 24,
-  fontWeight: 900,
+  color: "var(--pf-text-strong)",
+  fontSize: { xs: 20, sm: 23 },
+  fontWeight: 950,
+  letterSpacing: "-.015em",
 };
 
 const dialogSubTitleSx = {
-  mt: 0.6,
-  color: "#94a3b8",
-  fontSize: 13,
-  fontWeight: 600,
+  mt: 0.55,
+  color: "var(--pf-text-muted)",
+  fontSize: 12.5,
+  lineHeight: 1.5,
+  fontWeight: 650,
 };
 
 const dialogContentSx = {
-  px: 3,
+  px: { xs: 2, sm: 2.5 },
   py: 2,
+  background: "var(--pf-surface)",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const sectionCardSx = {
-  p: 2,
-  mb: 2,
-  borderRadius: "20px",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.08)",
+  p: { xs: 1.5, sm: 1.8 },
+  mb: 1.5,
+  borderRadius: "14px",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const sectionTitleSx = {
-  mb: 1.6,
-  color: "#93c5fd",
-  fontSize: 12,
-  fontWeight: 900,
+  mb: 1.4,
+  color: "#2563eb",
+  fontSize: 10.5,
+  fontWeight: 950,
   textTransform: "uppercase",
-  letterSpacing: ".1em",
+  letterSpacing: ".09em",
 };
 
 const topGridSx = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 1.4,
+  gridTemplateColumns: {
+    xs: "1fr",
+    sm: "1fr 1fr",
+  },
+  gap: 1.25,
   mb: 1.5,
 };
 
 const expenseFieldWrapSx = {
   display: "flex",
   flexDirection: "column",
-  gap: 1.2,
+  gap: 1.1,
 };
 
 const expenseFieldRowSx = {
   display: "grid",
-  gridTemplateColumns:
-    "1.3fr .75fr 1fr 42px",
+  gridTemplateColumns: {
+    xs: "1fr",
+    sm: "1.3fr .75fr 1fr 42px",
+  },
   gap: 1,
   alignItems: "center",
 };
@@ -591,23 +604,22 @@ const expenseFieldRowSx = {
 const totalCardSx = {
   minHeight: 54,
   px: 1.5,
-  borderRadius: "14px",
+  borderRadius: "11px",
   background:
-    "linear-gradient(135deg, rgba(34,197,94,.14), rgba(15,23,42,.62))",
-  border:
-    "1px solid rgba(34,197,94,.22)",
+    "linear-gradient(135deg,rgba(34,197,94,.11),var(--pf-surface-raised))",
+  border: "1px solid rgba(22,163,74,.22)",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
 
   "& span": {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 11,
     fontWeight: 800,
   },
 
   "& b": {
-    color: "#bbf7d0",
+    color: "#15803d",
     fontSize: 18,
     fontWeight: 950,
     marginTop: 2,
@@ -616,69 +628,93 @@ const totalCardSx = {
 
 const inputSx = {
   "& .MuiInputBase-root": {
-    borderRadius: "14px",
-    background: "rgba(15,23,42,.72)",
-    color: "#fff",
+    borderRadius: "11px",
+    background: "var(--pf-input)",
+    color: "var(--pf-text-strong)",
+    colorScheme: "var(--pf-color-scheme)",
+  },
+
+  "& .MuiInputBase-input, & textarea": {
+    color: "var(--pf-text-strong)",
+    WebkitTextFillColor: "var(--pf-text-strong)",
+    fontSize: 13,
+    fontWeight: 650,
+  },
+
+  "& .MuiInputBase-input::placeholder, & textarea::placeholder": {
+    color: "var(--pf-text-dim)",
+    WebkitTextFillColor: "var(--pf-text-dim)",
+    opacity: 1,
   },
 
   "& .MuiInputLabel-root": {
-    color: "#94a3b8",
-    fontWeight: 700,
+    color: "var(--pf-text-muted)",
+    fontWeight: 750,
   },
 
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#60a5fa",
+    color: "#2563eb",
   },
 
   "& .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(255,255,255,.10)",
+    borderColor: "var(--pf-border)",
   },
 
-  "&:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(96,165,250,.35)",
+  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(37,99,235,.38)",
   },
 
   "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
-    borderColor: "#60a5fa",
+    borderColor: "#2563eb",
+    borderWidth: "1.5px",
   },
 
-  "& input, & textarea": {
-    color: "#fff",
+  "& .MuiSelect-select": {
+    color: "var(--pf-text-strong)",
+    WebkitTextFillColor: "var(--pf-text-strong)",
+  },
+
+  "& .MuiSelect-icon": {
+    color: "var(--pf-text-muted)",
   },
 };
 
 const removeButtonSx = {
   width: 38,
   height: 38,
-  color: "#fecaca",
-  background: "rgba(239,68,68,.14)",
-  border: "1px solid rgba(239,68,68,.22)",
+  justifySelf: { xs: "end", sm: "stretch" },
+  color: "#b91c1c",
+  background: "rgba(239,68,68,.10)",
+  border: "1px solid rgba(220,38,38,.24)",
 
   "&:hover": {
-    background: "rgba(239,68,68,.24)",
+    color: "#991b1b",
+    background: "rgba(239,68,68,.16)",
   },
 };
 
 const addFieldButtonSx = {
-  mt: 1.4,
-  borderRadius: "14px",
+  mt: 1.3,
+  borderRadius: "10px",
   textTransform: "none",
   fontWeight: 900,
-  color: "#93c5fd",
-  background: "rgba(59,130,246,.10)",
-  border: "1px solid rgba(59,130,246,.20)",
+  color: "#1d4ed8",
+  background: "rgba(37,99,235,.09)",
+  border: "1px solid rgba(37,99,235,.20)",
 
   "&:hover": {
-    background: "rgba(59,130,246,.18)",
+    background: "rgba(37,99,235,.14)",
+    borderColor: "rgba(37,99,235,.30)",
   },
 };
 
 const historyCardSx = {
-  p: 1.5,
-  mb: 1.2,
-  borderRadius: "16px",
-  background: "rgba(15,23,42,.62)",
-  border: "1px solid rgba(255,255,255,.07)",
+  p: 1.4,
+  mb: 1.1,
+  borderRadius: "12px",
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 5px 14px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const historyHeaderSx = {
@@ -686,24 +722,24 @@ const historyHeaderSx = {
   alignItems: "flex-start",
   justifyContent: "space-between",
   gap: 2,
-  mb: 1.2,
+  mb: 1.1,
 };
 
 const historyMonthSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 950,
 };
 
 const historyCreatedSx = {
   mt: 0.3,
-  color: "#94a3b8",
-  fontSize: 11,
+  color: "var(--pf-text-muted)",
+  fontSize: 10.5,
   fontWeight: 700,
 };
 
 const historyTotalSx = {
-  color: "#bbf7d0",
+  color: "#15803d",
   fontSize: 15,
   fontWeight: 950,
   whiteSpace: "nowrap",
@@ -712,7 +748,7 @@ const historyTotalSx = {
 const historyFieldsSx = {
   display: "flex",
   flexWrap: "wrap",
-  gap: 0.8,
+  gap: 0.7,
 };
 
 const historyFieldChipSx = {
@@ -722,65 +758,72 @@ const historyFieldChipSx = {
   px: 1,
   py: 0.6,
   borderRadius: "999px",
-  background: "rgba(255,255,255,.05)",
-  border: "1px solid rgba(255,255,255,.07)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 
   "& span": {
-    color: "#93c5fd",
-    fontSize: 11,
+    color: "#2563eb",
+    fontSize: 10.5,
     fontWeight: 900,
   },
 
   "& b": {
-    color: "#fff",
-    fontSize: 11,
+    color: "var(--pf-text-strong)",
+    fontSize: 10.5,
     fontWeight: 900,
   },
 };
 
 const historyNotesSx = {
   mt: 1,
-  color: "#cbd5e1",
-  fontSize: 12,
+  color: "var(--pf-text)",
+  fontSize: 11.5,
   lineHeight: 1.5,
 };
 
 const emptyStateSx = {
   py: 2,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
-  fontSize: 13,
+  fontSize: 12.5,
 };
 
 const dialogActionsSx = {
-  px: 3,
-  pb: 3,
-  pt: 1,
+  px: { xs: 2, sm: 2.5 },
+  pb: { xs: 2, sm: 2.5 },
+  pt: 1.2,
+  gap: 0.75,
+  borderTop: "1px solid var(--pf-border-soft)",
+  background: "var(--pf-surface)",
 };
 
 const cancelButtonSx = {
-  borderRadius: "14px",
+  minHeight: 39,
+  px: 2,
+  borderRadius: "10px",
   textTransform: "none",
-  fontWeight: 800,
-  color: "#fff",
-  background: "rgba(255,255,255,.05)",
-  border: "1px solid rgba(255,255,255,.08)",
+  fontWeight: 850,
+  color: "var(--pf-text)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border)",
 
   "&:hover": {
-    background: "rgba(255,255,255,.10)",
+    color: "var(--pf-text-strong)",
+    background: "var(--pf-surface-hover)",
   },
 };
 
 const saveButtonSx = {
-  px: 2.4,
-  borderRadius: "14px",
+  minHeight: 39,
+  px: 2.2,
+  borderRadius: "10px",
   textTransform: "none",
   fontWeight: 900,
   color: "#fff",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   boxShadow:
-    "0 12px 28px rgba(37,99,235,.32)",
+    "0 8px 20px rgba(37,99,235,.24)",
 
   "&:hover": {
     background:
@@ -788,8 +831,9 @@ const saveButtonSx = {
   },
 
   "&.Mui-disabled": {
-    color: "rgba(255,255,255,.5)",
-    background: "rgba(148,163,184,.16)",
+    color: "var(--pf-text-dim)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
     boxShadow: "none",
   },
 };

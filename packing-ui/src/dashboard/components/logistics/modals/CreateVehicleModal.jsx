@@ -507,133 +507,179 @@ function toBackendDate(value) {
 }
 
 const dialogPaperSx = {
-  borderRadius: "26px",
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: "18px",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  border: "1px solid var(--pf-border)",
   boxShadow:
-    "0 26px 70px rgba(0,0,0,.45)",
+    "0 28px 70px rgba(var(--pf-shadow-rgb),.20)",
+  overflow: "hidden",
 };
 
 const dialogTitleSx = {
-  px: 3,
-  pt: 3,
+  px: { xs: 2, sm: 2.5 },
+  pt: { xs: 2, sm: 2.5 },
   pb: 1,
+  borderBottom: "1px solid var(--pf-border-soft)",
+  background:
+    "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
 };
 
 const dialogMainTitleSx = {
-  fontSize: 24,
-  fontWeight: 900,
+  color: "var(--pf-text-strong)",
+  fontSize: { xs: 20, sm: 23 },
+  fontWeight: 950,
+  letterSpacing: "-.015em",
 };
 
 const dialogSubTitleSx = {
-  mt: 0.6,
-  color: "#94a3b8",
-  fontSize: 13,
-  fontWeight: 600,
+  mt: 0.55,
+  color: "var(--pf-text-muted)",
+  fontSize: 12.5,
+  lineHeight: 1.5,
+  fontWeight: 650,
 };
 
 const dialogContentSx = {
-  px: 3,
+  px: { xs: 2, sm: 2.5 },
   py: 2,
+  background: "var(--pf-surface)",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const sectionCardSx = {
-  p: 2,
-  mb: 2,
-  borderRadius: "20px",
-  background: "rgba(255,255,255,.04)",
-  border: "1px solid rgba(255,255,255,.08)",
+  p: { xs: 1.5, sm: 1.8 },
+  mb: 1.5,
+  borderRadius: "14px",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const sectionTitleSx = {
-  mb: 1.6,
-  color: "#93c5fd",
-  fontSize: 12,
-  fontWeight: 900,
+  mb: 1.4,
+  color: "#2563eb",
+  fontSize: 10.5,
+  fontWeight: 950,
   textTransform: "uppercase",
-  letterSpacing: ".1em",
+  letterSpacing: ".09em",
 };
 
 const fieldGridSx = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(2, minmax(0, 1fr))",
-  gap: 1.4,
+  gridTemplateColumns: {
+    xs: "1fr",
+    sm: "repeat(2, minmax(0, 1fr))",
+  },
+  gap: 1.25,
 };
 
 const inputSx = {
   "& .MuiInputBase-root": {
-    borderRadius: "14px",
-    background: "rgba(15,23,42,.72)",
-    color: "#fff",
+    borderRadius: "11px",
+    background: "var(--pf-input)",
+    color: "var(--pf-text-strong)",
+    colorScheme: "var(--pf-color-scheme)",
+  },
+
+  "& .MuiInputBase-input": {
+    color: "var(--pf-text-strong)",
+    WebkitTextFillColor: "var(--pf-text-strong)",
+    fontSize: 13,
+    fontWeight: 650,
+  },
+
+  "& .MuiInputBase-input::placeholder": {
+    color: "var(--pf-text-dim)",
+    opacity: 1,
   },
 
   "& .MuiInputLabel-root": {
-    color: "#94a3b8",
-    fontWeight: 700,
+    color: "var(--pf-text-muted)",
+    fontWeight: 750,
   },
 
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#60a5fa",
+    color: "#2563eb",
   },
 
   "& .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(255,255,255,.10)",
+    borderColor: "var(--pf-border)",
   },
 
-  "&:hover .MuiOutlinedInput-notchedOutline": {
-    borderColor: "rgba(96,165,250,.35)",
+  "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+    borderColor: "rgba(37,99,235,.38)",
   },
 
   "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
-    borderColor: "#60a5fa",
+    borderColor: "#2563eb",
+    borderWidth: "1.5px",
   },
 
-  "& input": {
-    color: "#fff",
+  "& .MuiSelect-select": {
+    color: "var(--pf-text-strong)",
+    WebkitTextFillColor: "var(--pf-text-strong)",
+  },
+
+  "& .MuiSelect-icon": {
+    color: "var(--pf-text-muted)",
+  },
+
+  "& .MuiFormHelperText-root": {
+    color: "var(--pf-text-dim)",
+    marginLeft: 0.5,
+    fontSize: 10,
   },
 };
 
 const dialogActionsSx = {
-  px: 3,
-  pb: 3,
-  pt: 1,
+  px: { xs: 2, sm: 2.5 },
+  pb: { xs: 2, sm: 2.5 },
+  pt: 1.2,
+  gap: 0.75,
+  borderTop: "1px solid var(--pf-border-soft)",
+  background: "var(--pf-surface)",
 };
 
 const cancelButtonSx = {
-  borderRadius: "14px",
+  minHeight: 39,
+  px: 2,
+  borderRadius: "10px",
   textTransform: "none",
-  fontWeight: 800,
-  color: "#fff",
-  background: "rgba(255,255,255,.05)",
-  border: "1px solid rgba(255,255,255,.08)",
+  fontWeight: 850,
+  color: "var(--pf-text)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border)",
 
   "&:hover": {
-    background: "rgba(255,255,255,.10)",
+    color: "var(--pf-text-strong)",
+    background: "var(--pf-surface-hover)",
+    borderColor: "rgba(37,99,235,.24)",
   },
 };
 
 const saveButtonSx = {
-  px: 2.4,
-  borderRadius: "14px",
+  minHeight: 39,
+  px: 2.2,
+  borderRadius: "10px",
   textTransform: "none",
   fontWeight: 900,
   color: "#fff",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   boxShadow:
-    "0 12px 28px rgba(37,99,235,.32)",
+    "0 8px 20px rgba(37,99,235,.24)",
 
   "&:hover": {
     background:
       "linear-gradient(135deg,#1d4ed8,#2563eb)",
+    boxShadow:
+      "0 10px 24px rgba(37,99,235,.30)",
   },
 
   "&.Mui-disabled": {
-    color: "rgba(255,255,255,.5)",
-    background: "rgba(148,163,184,.16)",
+    color: "var(--pf-text-dim)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
     boxShadow: "none",
   },
 };
