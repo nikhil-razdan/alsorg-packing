@@ -3,81 +3,111 @@ import ReportToolbar from "./ReportToolbar";
 
 function ReportsModal({ title, rows, columns, onClose, onExport }) {
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <div
+      style={overlay}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose?.();
+        }
+      }}
+    >
+      <div
+        style={modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || "Report"}
+      >
         <div style={header}>
-          <h3 style={titleStyle}>{title}</h3>
-          <button style={closeBtn} onClick={onClose}>✕</button>
+          <div>
+            <div style={eyebrow}>PACKFLOW REPORT</div>
+            <h3 style={titleStyle}>{title}</h3>
+          </div>
+
+          <button
+            type="button"
+            style={closeBtn}
+            onClick={onClose}
+            aria-label="Close report"
+          >
+            ✕
+          </button>
         </div>
 
         <ReportToolbar onExport={onExport} />
-
         <ReportTable rows={rows} columns={columns} />
       </div>
     </div>
   );
 }
 
-/* ===================== STYLES ===================== */
-
 const overlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.55)",
-  backdropFilter: "blur(6px)",
-  zIndex: 999,
+  zIndex: 15000,
+  padding: 18,
+  boxSizing: "border-box",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(var(--pf-surface-deep-rgb),.76)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
 };
 
 const modal = {
-  maxWidth: 1000,
-
-  margin: "6vh auto",
-
-  borderRadius: 24,
-
-  padding: 24,
-
-  color: "#fff",
-
+  width: "min(1120px, calc(100vw - 36px))",
+  maxHeight: "min(88vh, 860px)",
+  minHeight: 320,
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+  borderRadius: 16,
+  padding: 20,
+  boxSizing: "border-box",
+  color: "var(--pf-text-strong)",
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92))",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 35px 90px rgba(0,0,0,.45)",
-
-  backdropFilter: "blur(20px)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.07),transparent 32%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 28px 80px rgba(var(--pf-shadow-rgb),.24)",
 };
 
 const header = {
+  flexShrink: 0,
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
+  alignItems: "flex-start",
+  gap: 16,
   marginBottom: 14,
 };
 
+const eyebrow = {
+  color: "#2563eb",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".10em",
+};
+
 const titleStyle = {
+  margin: "4px 0 0",
+  color: "var(--pf-text-strong)",
   fontSize: 22,
-  fontWeight: 700,
+  lineHeight: 1.15,
+  fontWeight: 950,
 };
 
 const closeBtn = {
-  background:
-    "rgba(255,255,255,.06)",
-
-  border: "none",
-
-  color: "#fff",
-
-  fontSize: 18,
-
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  display: "grid",
+  placeItems: "center",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border)",
+  color: "var(--pf-text)",
+  fontSize: 16,
   cursor: "pointer",
-
   borderRadius: 10,
-
-  padding: "6px 10px",
 };
 
 export default ReportsModal;

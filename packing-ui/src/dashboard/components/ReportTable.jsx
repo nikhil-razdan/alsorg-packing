@@ -37,61 +37,50 @@ function ReportTable({ rows = [], columns = [] }) {
 }
 
 const wrap = {
-  maxHeight: "55vh",
-
+  flex: 1,
+  minHeight: 0,
+  maxHeight: "62vh",
   overflow: "auto",
-
-  marginTop: 12,
-
-  borderRadius: 18,
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  background:
-    "rgba(255,255,255,.03)",
+  marginTop: 10,
+  borderRadius: 14,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface)",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 var(--pf-surface-alt)",
 };
 
 const table = {
   width: "100%",
+  minWidth: 720,
   borderCollapse: "collapse",
-  fontSize: 13,
+  fontSize: 12.5,
 };
 
 const th = {
-  textAlign: "left",
-
-  padding: "12px 12px",
-
-  borderBottom:
-    "1px solid rgba(255,255,255,.06)",
-
-  fontWeight: 800,
-
-  background:
-    "rgba(255,255,255,.04)",
-
-  color: "#fff",
-
   position: "sticky",
-
   top: 0,
+  zIndex: 2,
+  textAlign: "left",
+  padding: "11px 12px",
+  borderBottom: "1px solid var(--pf-border)",
+  fontWeight: 950,
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
+  whiteSpace: "nowrap",
 };
 
 const td = {
   padding: "10px 12px",
-
-  borderBottom:
-    "1px solid rgba(255,255,255,.04)",
-
-  color: "rgba(255,255,255,.82)",
+  borderBottom: "1px solid var(--pf-border-soft)",
+  color: "var(--pf-text)",
+  verticalAlign: "top",
 };
 
 const empty = {
   textAlign: "center",
-  padding: 20,
-  opacity: 0.75,
-  color: "#64748b",
+  padding: 26,
+  color: "var(--pf-text-muted)",
+  fontWeight: 750,
 };
 
 export default ReportTable;

@@ -2016,7 +2016,7 @@ const overlay = {
     position: "fixed",
     inset: 0,
     zIndex: 9999,
-    background: "rgba(2,6,23,.78)",
+    background: "rgba(var(--pf-surface-rgb),.78)",
     backdropFilter: "blur(16px)",
     padding: 20,
     display: "flex",
@@ -2025,15 +2025,16 @@ const overlay = {
 };
 
 const modal = {
+    colorScheme: "var(--pf-color-scheme)",
     width: "min(1760px, 100%)",
     height: "min(94vh, 980px)",
     overflow: "hidden",
     borderRadius: 32,
     background:
-        "radial-gradient(circle at top left, rgba(59,130,246,.16), transparent 34%), linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,17,31,.96))",
-    border: "1px solid rgba(255,255,255,.10)",
-    boxShadow: "0 34px 90px rgba(0,0,0,.58)",
-    color: "#fff",
+        "radial-gradient(circle at top left, rgba(59,130,246,.16), transparent 34%), linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+    boxShadow: "0 30px 84px rgba(var(--pf-shadow-rgb),.24)",
+    color: "var(--pf-text-strong)",
     padding: 22,
     display: "flex",
     flexDirection: "column",
@@ -2047,7 +2048,7 @@ const header = {
 };
 
 const eyebrow = {
-    color: "#93c5fd",
+    color: "#2563eb",
     fontSize: 11,
     fontWeight: 950,
     letterSpacing: ".16em",
@@ -2055,7 +2056,7 @@ const eyebrow = {
 
 const title = {
     marginTop: 6,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 28,
     fontWeight: 950,
     letterSpacing: "-.03em",
@@ -2063,7 +2064,7 @@ const title = {
 
 const subtitle = {
     marginTop: 6,
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
     fontSize: 13,
     fontWeight: 650,
     maxWidth: 920,
@@ -2074,9 +2075,9 @@ const closeBtn = {
     width: 40,
     height: 40,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.06)",
-    color: "#fff",
+    border: "1px solid rgba(var(--pf-fg-rgb),.12)",
+    background: "rgba(var(--pf-fg-rgb),.06)",
+    color: "var(--pf-text-strong)",
     fontSize: 25,
     cursor: "pointer",
 };
@@ -2093,12 +2094,12 @@ const summaryBox = (accent) => ({
     padding: 14,
     borderRadius: 18,
     background:
-        `radial-gradient(circle at top right, ${accent}22, transparent 44%), rgba(255,255,255,.035)`,
+        `radial-gradient(circle at top right, ${accent}22, transparent 44%), rgba(var(--pf-fg-rgb),.035)`,
     border: `1px solid ${accent}33`,
 });
 
 const summaryLabel = {
-    color: "rgba(255,255,255,.55)",
+    color: "rgba(var(--pf-fg-rgb),.55)",
     fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
@@ -2107,7 +2108,7 @@ const summaryLabel = {
 
 const summaryValue = {
     marginTop: 7,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 26,
     fontWeight: 950,
 };
@@ -2118,21 +2119,21 @@ const filters = {
     flexWrap: "wrap",
     padding: 12,
     borderRadius: 20,
-    background: "rgba(255,255,255,.035)",
-    border: "1px solid rgba(255,255,255,.07)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
     marginBottom: 14,
 };
 
 const input = {
     height: 40,
     borderRadius: 13,
-    border: "1px solid rgba(255,255,255,.10)",
-    background: "#0f172a",
-    color: "#fff",
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+    background: "var(--pf-input)",
+    color: "var(--pf-text-strong)",
     padding: "0 12px",
     outline: "none",
     fontWeight: 800,
-    colorScheme: "dark",
+    colorScheme: "var(--pf-color-scheme)",
 };
 
 const smallInput = {
@@ -2159,8 +2160,8 @@ const primaryBtn = {
 
 const ghostBtn = {
     ...primaryBtn,
-    background: "rgba(255,255,255,.06)",
-    border: "1px solid rgba(255,255,255,.10)",
+    background: "rgba(var(--pf-fg-rgb),.06)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
 };
 
 const errorBox = {
@@ -2168,7 +2169,7 @@ const errorBox = {
     borderRadius: 14,
     background: "rgba(239,68,68,.12)",
     border: "1px solid rgba(239,68,68,.25)",
-    color: "#fecaca",
+    color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
     fontWeight: 800,
     marginBottom: 12,
 };
@@ -2186,8 +2187,8 @@ const registerPanel = {
     display: "flex",
     flexDirection: "column",
     borderRadius: 24,
-    background: "rgba(15,23,42,.70)",
-    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(var(--pf-surface-rgb),.70)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     overflow: "hidden",
 };
 
@@ -2196,8 +2197,8 @@ const detailPanel = {
     overflow: "auto",
     borderRadius: 24,
     background:
-        "linear-gradient(180deg, rgba(255,255,255,.050), rgba(255,255,255,.025))",
-    border: "1px solid rgba(255,255,255,.08)",
+        "linear-gradient(180deg, rgba(var(--pf-fg-rgb),.050), rgba(var(--pf-fg-rgb),.025))",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     padding: 16,
 };
 
@@ -2206,7 +2207,7 @@ const panelHead = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottom: "1px solid rgba(255,255,255,.07)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const panelTitle = {
@@ -2217,7 +2218,7 @@ const panelTitle = {
 const panelSub = {
     marginTop: 4,
     fontSize: 11,
-    color: "rgba(255,255,255,.50)",
+    color: "rgba(var(--pf-fg-rgb),.50)",
     fontWeight: 750,
 };
 
@@ -2226,7 +2227,7 @@ const hintPill = {
     borderRadius: 999,
     background: "rgba(96,165,250,.12)",
     border: "1px solid rgba(96,165,250,.25)",
-    color: "#bfdbfe",
+    color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
     fontSize: 11,
     fontWeight: 950,
 };
@@ -2251,30 +2252,30 @@ const th = {
     padding: "13px 12px",
     textAlign: "left",
     background: "#0b1220",
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontWeight: 950,
     textTransform: "uppercase",
     letterSpacing: ".05em",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const tableRow = (active) => ({
     cursor: "pointer",
     background: active
-        ? "linear-gradient(90deg, rgba(37,99,235,.18), rgba(255,255,255,.025))"
+        ? "linear-gradient(90deg, rgba(37,99,235,.18), rgba(var(--pf-fg-rgb),.025))"
         : "transparent",
 });
 
 const td = {
     padding: "13px 12px",
-    color: "rgba(255,255,255,.82)",
-    borderBottom: "1px solid rgba(255,255,255,.045)",
+    color: "rgba(var(--pf-fg-rgb),.82)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.045)",
     verticalAlign: "top",
 };
 
 const tdStrong = {
     ...td,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 850,
 };
 
@@ -2287,7 +2288,7 @@ const itemNameText = {
 
 const muted = {
     marginTop: 4,
-    color: "rgba(255,255,255,.45)",
+    color: "rgba(var(--pf-fg-rgb),.45)",
     fontSize: 11,
     fontWeight: 650,
     maxWidth: 230,
@@ -2329,7 +2330,7 @@ const progressTrack = {
     width: 100,
     height: 7,
     borderRadius: 999,
-    background: "rgba(255,255,255,.08)",
+    background: "rgba(var(--pf-fg-rgb),.08)",
     overflow: "hidden",
 };
 
@@ -2343,18 +2344,18 @@ const progressFill = (accent, value) => ({
 const empty = {
     padding: 28,
     textAlign: "center",
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontWeight: 800,
 };
 
 const emptyDetail = {
     padding: 28,
     textAlign: "center",
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontWeight: 800,
     borderRadius: 20,
-    background: "rgba(255,255,255,.035)",
-    border: "1px dashed rgba(255,255,255,.12)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px dashed rgba(var(--pf-fg-rgb),.12)",
 };
 
 const detailHero = {
@@ -2365,13 +2366,13 @@ const detailHero = {
     padding: 16,
     borderRadius: 22,
     background:
-        "radial-gradient(circle at top right, rgba(59,130,246,.16), transparent 38%), rgba(15,23,42,.72)",
-    border: "1px solid rgba(255,255,255,.08)",
+        "radial-gradient(circle at top right, rgba(59,130,246,.16), transparent 38%), rgba(var(--pf-surface-rgb),.72)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     marginBottom: 14,
 };
 
 const detailEyebrow = {
-    color: "#93c5fd",
+    color: "#2563eb",
     fontSize: 10,
     fontWeight: 950,
     letterSpacing: ".14em",
@@ -2387,7 +2388,7 @@ const detailTitle = {
 const detailMeta = {
     marginTop: 7,
     fontSize: 12,
-    color: "rgba(255,255,255,.60)",
+    color: "rgba(var(--pf-fg-rgb),.60)",
     fontWeight: 700,
 };
 
@@ -2417,11 +2418,11 @@ const tabBtn = (active) => ({
     borderRadius: 999,
     border: active
         ? "1px solid rgba(96,165,250,.44)"
-        : "1px solid rgba(255,255,255,.08)",
+        : "1px solid rgba(var(--pf-fg-rgb),.08)",
     background: active
         ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-        : "rgba(255,255,255,.045)",
-    color: "#fff",
+        : "rgba(var(--pf-fg-rgb),.045)",
+    color: active ? "#fff" : "var(--pf-text)",
     fontWeight: 900,
     cursor: "pointer",
 });
@@ -2438,12 +2439,12 @@ const metricBox = (accent) => ({
     padding: 13,
     borderRadius: 17,
     background:
-        `radial-gradient(circle at top right, ${accent}20, transparent 42%), rgba(255,255,255,.035)`,
+        `radial-gradient(circle at top right, ${accent}20, transparent 42%), rgba(var(--pf-fg-rgb),.035)`,
     border: `1px solid ${accent}30`,
 });
 
 const metricLabel = {
-    color: "rgba(255,255,255,.50)",
+    color: "rgba(var(--pf-fg-rgb),.50)",
     fontSize: 10,
     fontWeight: 900,
     textTransform: "uppercase",
@@ -2452,7 +2453,7 @@ const metricLabel = {
 
 const metricValue = {
     marginTop: 7,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 23,
     fontWeight: 950,
 };
@@ -2467,7 +2468,7 @@ const timelineGrid = {
 const premiumModalCss = `
     .premium-scroll {
         scrollbar-width: thin;
-        scrollbar-color: rgba(96,165,250,.55) rgba(15,23,42,.35);
+        scrollbar-color: rgba(96,165,250,.55) rgba(var(--pf-surface-rgb),.35);
     }
 
     .premium-scroll::-webkit-scrollbar {
@@ -2476,14 +2477,14 @@ const premiumModalCss = `
     }
 
     .premium-scroll::-webkit-scrollbar-track {
-        background: rgba(15,23,42,.42);
+        background: rgba(var(--pf-surface-rgb),.42);
         border-radius: 999px;
     }
 
     .premium-scroll::-webkit-scrollbar-thumb {
         background: linear-gradient(180deg, rgba(96,165,250,.85), rgba(59,130,246,.45));
         border-radius: 999px;
-        border: 2px solid rgba(15,23,42,.72);
+        border: 2px solid rgba(var(--pf-surface-rgb),.72);
     }
 
     .premium-scroll::-webkit-scrollbar-thumb:hover {
@@ -2499,9 +2500,9 @@ const masterPager = {
     flexShrink: 0,
     minHeight: 54,
     padding: "10px 12px",
-    borderTop: "1px solid rgba(255,255,255,.075)",
+    borderTop: "1px solid rgba(var(--pf-fg-rgb),.075)",
     background:
-        "linear-gradient(180deg, rgba(15,23,42,.96), rgba(8,17,31,.92))",
+        "linear-gradient(180deg, rgba(var(--pf-surface-rgb),.96), rgba(8,17,31,.92))",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2510,7 +2511,7 @@ const masterPager = {
 };
 
 const pagerInfo = {
-    color: "rgba(255,255,255,.62)",
+    color: "rgba(var(--pf-fg-rgb),.62)",
     fontSize: 11,
     fontWeight: 850,
 };
@@ -2519,13 +2520,13 @@ const pageSizeSelect = {
     height: 32,
     borderRadius: 999,
     border: "1px solid rgba(96,165,250,.22)",
-    background: "rgba(15,23,42,.92)",
-    color: "#bfdbfe",
+    background: "rgba(var(--pf-surface-rgb),.92)",
+    color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
     padding: "0 10px",
     outline: "none",
     fontSize: 11,
     fontWeight: 900,
-    colorScheme: "dark",
+    colorScheme: "var(--pf-color-scheme)",
 };
 
 const pagerBtns = {
@@ -2540,13 +2541,13 @@ const pagerBtn = (disabled) => ({
     padding: "0 11px",
     borderRadius: 999,
     border: disabled
-        ? "1px solid rgba(255,255,255,.06)"
+        ? "1px solid rgba(var(--pf-fg-rgb),.06)"
         : "1px solid rgba(96,165,250,.25)",
     background: disabled
-        ? "rgba(255,255,255,.035)"
+        ? "rgba(var(--pf-fg-rgb),.035)"
         : "linear-gradient(135deg, rgba(37,99,235,.30), rgba(59,130,246,.16))",
     color: disabled
-        ? "rgba(255,255,255,.34)"
+        ? "rgba(var(--pf-fg-rgb),.34)"
         : "#dbeafe",
     fontSize: 10,
     fontWeight: 950,
@@ -2556,13 +2557,13 @@ const pagerBtn = (disabled) => ({
 const infoLine = {
     padding: 12,
     borderRadius: 15,
-    background: "rgba(255,255,255,.035)",
-    border: "1px solid rgba(255,255,255,.06)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.06)",
     display: "flex",
     flexDirection: "column",
     gap: 5,
     fontSize: 11,
-    color: "rgba(255,255,255,.50)",
+    color: "rgba(var(--pf-fg-rgb),.50)",
     fontWeight: 800,
 };
 
@@ -2579,8 +2580,8 @@ const exceptionBanner = {
 const packetCard = {
     marginBottom: 12,
     borderRadius: 20,
-    background: "rgba(255,255,255,.035)",
-    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     overflow: "hidden",
 };
 
@@ -2593,7 +2594,7 @@ const packetHeader = {
     padding: 14,
     border: "none",
     background: "transparent",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     textAlign: "left",
     cursor: "pointer",
 };
@@ -2606,7 +2607,7 @@ const packetTitle = {
 const packetMeta = {
     marginTop: 6,
     fontSize: 11,
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
     fontWeight: 750,
 };
 
@@ -2616,13 +2617,13 @@ const packetStats = {
     flexWrap: "wrap",
     justifyContent: "flex-end",
     fontSize: 11,
-    color: "rgba(255,255,255,.62)",
+    color: "rgba(var(--pf-fg-rgb),.62)",
     fontWeight: 850,
 };
 
 const packetTableWrap = {
     overflow: "auto",
-    borderTop: "1px solid rgba(255,255,255,.08)",
+    borderTop: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const packetTable = {
@@ -2635,28 +2636,28 @@ const packetTable = {
 const packetTh = {
     textAlign: "left",
     padding: "11px 12px",
-    background: "rgba(2,6,23,.55)",
-    color: "#94a3b8",
+    background: "rgba(var(--pf-surface-rgb),.55)",
+    color: "var(--pf-text-muted)",
     fontWeight: 950,
-    borderBottom: "1px solid rgba(255,255,255,.07)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const packetTd = {
     padding: "11px 12px",
-    borderBottom: "1px solid rgba(255,255,255,.05)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.05)",
     verticalAlign: "top",
-    color: "rgba(255,255,255,.82)",
+    color: "rgba(var(--pf-fg-rgb),.82)",
 };
 
 const cellMain = {
     fontWeight: 900,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
 };
 
 const cellSub = {
     marginTop: 4,
     fontSize: 10,
-    color: "rgba(255,255,255,.48)",
+    color: "rgba(var(--pf-fg-rgb),.48)",
     fontWeight: 700,
 };
 
@@ -2684,7 +2685,7 @@ const challanNo = {
 const challanMeta = {
     marginTop: 7,
     fontSize: 11,
-    color: "rgba(255,255,255,.62)",
+    color: "rgba(var(--pf-fg-rgb),.62)",
     fontWeight: 700,
 };
 
@@ -2734,8 +2735,8 @@ const overviewDocRow = {
     gap: 12,
     padding: 12,
     borderRadius: 15,
-    background: "rgba(255,255,255,.04)",
-    border: "1px solid rgba(255,255,255,.07)",
+    background: "rgba(var(--pf-fg-rgb),.04)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const overviewDocsGrid = {
@@ -2751,7 +2752,7 @@ const overviewDocsGrid = {
 const overviewDocTitle = {
     fontSize: 14,
     fontWeight: 950,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     marginBottom: 10,
 };
 
@@ -2781,7 +2782,7 @@ const overviewDocNo = {
 const overviewDocMeta = {
     marginTop: 4,
     fontSize: 11,
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
     fontWeight: 750,
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -2800,7 +2801,7 @@ const pdfPreviewOverlay = {
     position: "fixed",
     inset: 0,
     zIndex: 2147483000,
-    background: "rgba(2,6,23,.88)",
+    background: "rgba(var(--pf-surface-rgb),.88)",
     backdropFilter: "blur(16px)",
     display: "flex",
     alignItems: "center",
@@ -2813,13 +2814,13 @@ const pdfPreviewCard = {
     height: "min(90vh, 880px)",
     borderRadius: 28,
     background:
-        "radial-gradient(circle at top left, rgba(59,130,246,.20), transparent 32%), linear-gradient(180deg, rgba(15,23,42,.99), rgba(8,17,31,.97))",
+        "radial-gradient(circle at top left, rgba(59,130,246,.20), transparent 32%), linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
     border: "1px solid rgba(147,197,253,.16)",
-    boxShadow: "0 40px 120px rgba(0,0,0,.78)",
+    boxShadow: "0 32px 92px rgba(var(--pf-shadow-rgb),.28)",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
 };
 
 const pdfPreviewHeader = {
@@ -2829,13 +2830,13 @@ const pdfPreviewHeader = {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
-    borderBottom: "1px solid rgba(255,255,255,.08)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
     background:
-        "radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 36%), rgba(15,23,42,.92)",
+        "radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 36%), rgba(var(--pf-surface-rgb),.92)",
 };
 
 const pdfPreviewEyebrow = {
-    color: "#93c5fd",
+    color: "#2563eb",
     fontSize: 10,
     fontWeight: 950,
     letterSpacing: ".16em",
@@ -2845,16 +2846,16 @@ const pdfPreviewTitle = {
     marginTop: 5,
     fontSize: 18,
     fontWeight: 950,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
 };
 
 const pdfPreviewCloseBtn = {
     width: 38,
     height: 38,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,.14)",
-    background: "rgba(255,255,255,.07)",
-    color: "#fff",
+    border: "1px solid rgba(var(--pf-fg-rgb),.14)",
+    background: "rgba(var(--pf-fg-rgb),.07)",
+    color: "var(--pf-text-strong)",
     fontSize: 24,
     lineHeight: 1,
     cursor: "pointer",
@@ -2864,7 +2865,7 @@ const pdfPreviewBody = {
     flex: 1,
     minHeight: 0,
     padding: 14,
-    background: "rgba(2,6,23,.50)",
+    background: "rgba(var(--pf-surface-rgb),.50)",
 };
 
 const pdfFrame = {
@@ -2881,9 +2882,9 @@ const pdfPreviewMessage = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(255,255,255,.04)",
-    border: "1px dashed rgba(255,255,255,.14)",
-    color: "#bfdbfe",
+    background: "rgba(var(--pf-fg-rgb),.04)",
+    border: "1px dashed rgba(var(--pf-fg-rgb),.14)",
+    color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
     fontWeight: 900,
 };
 
@@ -2896,7 +2897,7 @@ const pdfPreviewError = {
     padding: 24,
     background: "rgba(239,68,68,.10)",
     border: "1px solid rgba(239,68,68,.22)",
-    color: "#fecaca",
+    color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
     fontWeight: 900,
     textAlign: "center",
 };

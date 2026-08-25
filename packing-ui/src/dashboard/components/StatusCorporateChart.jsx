@@ -334,7 +334,7 @@ const connector = {
   position: "absolute",
   left: 10,
   bottom: -7,
-  color: "#334155",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
 };
@@ -359,8 +359,7 @@ const footerMetric = {
   alignItems: "center",
   gap: 5,
   color: "var(--pf-text-muted)",
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.20)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.045)",
   fontSize: 10,

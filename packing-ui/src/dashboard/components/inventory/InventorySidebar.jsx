@@ -62,75 +62,51 @@ const items = [
 }
 
 const sidebar = {
-  width: 240,
-
-  padding: 20,
-
-  borderRadius: 28,
-
-  background:
-    "rgba(15,23,42,.78)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
+  width: 220,
+  minWidth: 0,
+  padding: 14,
+  borderRadius: 16,
+  background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border)",
   height: "fit-content",
-
   position: "sticky",
-
   top: 16,
-
-  backdropFilter: "blur(18px)",
+  boxShadow: "0 8px 22px rgba(var(--pf-shadow-rgb),.06)",
+  color: "var(--pf-text-strong)",
 };
 
 const logo = {
-  color: "#fff",
-
-  fontSize: 20,
-
-  fontWeight: 900,
-
-  marginBottom: 24,
-
-  letterSpacing: 1,
+  color: "var(--pf-text-strong)",
+  fontSize: 16,
+  fontWeight: 950,
+  marginBottom: 16,
+  letterSpacing: ".08em",
 };
 
 const nav = {
   display: "flex",
-
   flexDirection: "column",
-
-  gap: 10,
+  gap: 7,
 };
 
 const navBtn = (active) => ({
-  height: 52,
-
-  borderRadius: 18,
-
+  minHeight: 44,
+  borderRadius: 11,
   border: active
-    ? "1px solid rgba(59,130,246,.35)"
+    ? "1px solid rgba(37,99,235,.28)"
     : "1px solid transparent",
-
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
     : "transparent",
-
-  color: "#fff",
-
+  color: active ? "#fff" : "var(--pf-text)",
   display: "flex",
-
   alignItems: "center",
-
-  gap: 12,
-
-  padding: "0 16px",
-
+  gap: 10,
+  padding: "0 12px",
   cursor: "pointer",
-
-  fontWeight: 700,
-
-  transition: "all .25s ease",
+  fontFamily: "inherit",
+  fontWeight: 800,
+  transition: "all .18s ease",
 });
 
 export default InventorySidebar;

@@ -897,13 +897,13 @@ function ActivityFeed({
           height: 9px;
         }
         .packflow-activity-scroll::-webkit-scrollbar-track {
-          background: rgba(15,23,42,.72);
+          background: var(--pf-surface-alt);
           border-radius: 999px;
         }
         .packflow-activity-scroll::-webkit-scrollbar-thumb {
           background: linear-gradient(180deg,#2563eb,#60a5fa);
           border-radius: 999px;
-          border: 2px solid rgba(15,23,42,.9);
+          border: 2px solid var(--pf-surface-alt);
         }
         .packflow-activity-scroll::-webkit-scrollbar-thumb:hover {
           background: linear-gradient(180deg,#3b82f6,#93c5fd);
@@ -1384,25 +1384,25 @@ const wrapper = {
   minHeight: "100%",
   display: "flex",
   flexDirection: "column",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const filterToolbar = {
-  display: "grid",
-  gridTemplateColumns:
-    "minmax(0,1fr) auto auto",
+  display: "flex",
+  flexWrap: "wrap",
   gap: 7,
   alignItems: "center",
   padding: 8,
   borderRadius: 12,
-  background:
-    "rgba(15,23,42,.48)",
+  background: "var(--pf-surface)",
   border:
     "1px solid rgba(148,163,184,.065)",
 };
 
 const searchWrap = {
-  minWidth: 0,
+  minWidth: 220,
+  flex: "1 1 420px",
   position: "relative",
 };
 
@@ -1411,7 +1411,7 @@ const searchIcon = {
   left: 9,
   top: "50%",
   transform: "translateY(-50%)",
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 13,
   pointerEvents: "none",
 };
@@ -1424,9 +1424,8 @@ const searchInput = {
   outline: "none",
   border:
     "1px solid rgba(148,163,184,.08)",
-  background:
-    "rgba(2,6,23,.42)",
-  color: "#e2e8f0",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   fontFamily: "inherit",
   fontSize: 9.5,
   fontWeight: 750,
@@ -1441,11 +1440,11 @@ const filterButton = (active) => ({
     ? "1px solid rgba(96,165,250,.32)"
     : "1px solid rgba(148,163,184,.08)",
   background: active
-    ? "rgba(59,130,246,.13)"
-    : "rgba(255,255,255,.035)",
+    ? "rgba(59,130,246,.12)"
+    : "var(--pf-surface-alt)",
   color: active
-    ? "#bfdbfe"
-    : "#94a3b8",
+    ? "#2563eb"
+    : "var(--pf-text-muted)",
   fontFamily: "inherit",
   fontSize: 8.5,
   fontWeight: 900,
@@ -1470,14 +1469,12 @@ const clearButton = {
 
 const filterPanel = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(5,minmax(110px,1fr))",
+  gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))",
   gap: 7,
   marginTop: 7,
   padding: 8,
   borderRadius: 12,
-  background:
-    "rgba(2,6,23,.30)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.055)",
 };
@@ -1487,7 +1484,7 @@ const filterLabel = {
   display: "flex",
   flexDirection: "column",
   gap: 4,
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 7.6,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -1503,9 +1500,9 @@ const filterInput = {
   outline: "none",
   border:
     "1px solid rgba(148,163,184,.08)",
-  background: "#0f172a",
-  color: "#e2e8f0",
-  colorScheme: "dark",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
+  colorScheme: "var(--pf-color-scheme)",
   fontFamily: "inherit",
   fontSize: 8.5,
   fontWeight: 750,
@@ -1517,7 +1514,7 @@ const feedMeta = {
   justifyContent: "space-between",
   gap: 8,
   margin: "6px 2px",
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 8,
   fontWeight: 750,
 };
@@ -1533,8 +1530,7 @@ const feedArea = {
   gap: 7,
   paddingRight: 3,
   scrollbarWidth: "thin",
-  scrollbarColor:
-    "#3b82f6 rgba(15,23,42,.72)",
+  scrollbarColor: "#3b82f6 var(--pf-surface-alt)",
 };
 
 const activityCard = {
@@ -1548,14 +1544,12 @@ const activityCard = {
   alignItems: "center",
   padding: "9px 10px 9px 12px",
   borderRadius: 13,
-  background:
-    "linear-gradient(180deg,rgba(30,41,59,.44),rgba(15,23,42,.36))",
+  background: "var(--pf-surface)",
   border:
     "1px solid rgba(148,163,184,.07)",
-  boxShadow:
-    "0 7px 18px rgba(2,6,23,.12)",
+  boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.06)",
   overflow: "hidden",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   textAlign: "left",
   fontFamily: "inherit",
   cursor: "pointer",
@@ -1601,7 +1595,7 @@ const actionRow = {
 
 const actionText = {
   minWidth: 0,
-  color: "#e2e8f0",
+  color: "var(--pf-text-strong)",
   fontSize: 10.3,
   fontWeight: 950,
   lineHeight: 1.35,
@@ -1629,7 +1623,7 @@ const typeChip = (meta) => ({
 
 const itemName = {
   marginTop: 3,
-  color: "#c6d1df",
+  color: "var(--pf-text)",
   fontSize: 9.1,
   fontWeight: 750,
   whiteSpace: "nowrap",
@@ -1649,7 +1643,7 @@ const statusMini = {
   maxWidth: 106,
   padding: "2px 5px",
   borderRadius: 999,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   background:
     "rgba(148,163,184,.04)",
   border:
@@ -1670,14 +1664,14 @@ const statusMiniActive = (meta) => ({
 });
 
 const arrow = {
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 8,
   fontWeight: 900,
 };
 
 const remarks = {
   marginTop: 5,
-  color: "#aebdd0",
+  color: "var(--pf-text-soft)",
   fontSize: 8.2,
   fontWeight: 650,
   lineHeight: 1.35,
@@ -1709,7 +1703,7 @@ const relativeTime = (meta) => ({
 });
 
 const absoluteTime = {
-  color: "#8797ad",
+  color: "var(--pf-text-muted)",
   fontSize: 9.2,
   fontWeight: 750,
 };
@@ -1728,7 +1722,7 @@ const userAvatar = {
   borderRadius: 8,
   display: "grid",
   placeItems: "center",
-  color: "#bfdbfe",
+  color: "#2563eb",
   background:
     "rgba(59,130,246,.09)",
   border:
@@ -1739,7 +1733,7 @@ const userAvatar = {
 
 const userName = {
   maxWidth: 76,
-  color: "#e2e8f0",
+  color: "var(--pf-text-strong)",
   fontSize: 8,
   fontWeight: 850,
   whiteSpace: "nowrap",
@@ -1751,9 +1745,8 @@ const roleChip = {
   maxWidth: 76,
   padding: "1px 5px",
   borderRadius: 999,
-  color: "#93a4ba",
-  background:
-    "rgba(148,163,184,.035)",
+  color: "var(--pf-text-muted)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.055)",
   fontSize: 6.4,
@@ -1783,7 +1776,7 @@ const pagination = {
 };
 
 const paginationMeta = {
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 8.2,
   fontWeight: 750,
 };
@@ -1800,9 +1793,9 @@ const pageSizeSelect = {
   borderRadius: 8,
   border:
     "1px solid rgba(96,165,250,.10)",
-  background: "#0f172a",
-  color: "#93c5fd",
-  colorScheme: "dark",
+  background: "var(--pf-input)",
+  color: "#2563eb",
+  colorScheme: "var(--pf-color-scheme)",
   fontFamily: "inherit",
   fontSize: 7.6,
   fontWeight: 850,
@@ -1817,7 +1810,7 @@ const pageButton = (disabled) => ({
     "1px solid rgba(96,165,250,.10)",
   background:
     "rgba(59,130,246,.05)",
-  color: "#93c5fd",
+  color: "#2563eb",
   cursor: disabled
     ? "not-allowed"
     : "pointer",
@@ -1836,9 +1829,8 @@ const pageIndicator = {
   borderRadius: 8,
   display: "grid",
   placeItems: "center",
-  color: "#aebdd0",
-  background:
-    "rgba(148,163,184,.035)",
+  color: "var(--pf-text-soft)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.055)",
   fontSize: 8,
@@ -1855,8 +1847,7 @@ const empty = {
   justifyContent: "center",
   textAlign: "center",
   padding: 18,
-  background:
-    "radial-gradient(circle at top,rgba(59,130,246,.07),transparent 38%),rgba(2,6,23,.19)",
+  background: "radial-gradient(circle at top,rgba(59,130,246,.06),transparent 38%),var(--pf-surface-alt)",
   border:
     "1px dashed rgba(148,163,184,.09)",
 };
@@ -1868,7 +1859,7 @@ const emptyIcon = {
 
 const emptyTitle = {
   marginTop: 6,
-  color: "#dbeafe",
+  color: "var(--pf-text-strong)",
   fontSize: 10,
   fontWeight: 900,
 };
@@ -1876,7 +1867,7 @@ const emptyTitle = {
 const emptyText = {
   maxWidth: 300,
   marginTop: 4,
-  color: "#93a4ba",
+  color: "var(--pf-text-muted)",
   fontSize: 9.4,
   fontWeight: 700,
   lineHeight: 1.45,
@@ -1892,8 +1883,7 @@ const detailOverlay = {
   alignItems: "center",
   justifyContent: "center",
   overflow: "hidden",
-  background:
-    "radial-gradient(circle at 18% 12%,rgba(59,130,246,.16),transparent 30%),radial-gradient(circle at 82% 88%,rgba(34,197,94,.08),transparent 28%),rgba(2,6,23,.88)",
+  background: "rgba(var(--pf-surface-deep-rgb),.78)",
   backdropFilter: "blur(16px)",
   WebkitBackdropFilter: "blur(16px)",
 };
@@ -1903,18 +1893,17 @@ const detailModal = {
   height: "min(820px,calc(100vh - 36px))",
   maxWidth: "1040px",
   maxHeight: "calc(100vh - 36px)",
-  minHeight: 560,
+  minHeight: 0,
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
   borderRadius: 24,
-  background:
-    "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 32%),linear-gradient(180deg,#0f172a,#08101d)",
+  background: "radial-gradient(circle at top right,rgba(59,130,246,.08),transparent 32%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
     "1px solid rgba(96,165,250,.18)",
   boxShadow:
     "0 44px 120px rgba(0,0,0,.72)",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const detailModalHeader = {
@@ -1925,8 +1914,7 @@ const detailModalHeader = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 16,
-  background:
-    "linear-gradient(135deg,rgba(59,130,246,.08),rgba(255,255,255,.015))",
+  background: "linear-gradient(135deg,rgba(59,130,246,.06),var(--pf-surface-alt))",
   borderBottom:
     "1px solid rgba(148,163,184,.08)",
 };
@@ -1960,7 +1948,7 @@ const detailIcon = (meta) => ({
 });
 
 const detailEyebrow = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 8.5,
   fontWeight: 950,
   letterSpacing: ".10em",
@@ -1968,14 +1956,14 @@ const detailEyebrow = {
 
 const detailTitle = {
   marginTop: 3,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 20,
   fontWeight: 950,
 };
 
 const detailSubtitle = {
   marginTop: 4,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   fontWeight: 700,
 };
@@ -1986,9 +1974,8 @@ const detailCloseButton = {
   borderRadius: 10,
   border:
     "1px solid rgba(148,163,184,.10)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#cbd5e1",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   cursor: "pointer",
   fontSize: 20,
 };
@@ -2007,8 +1994,7 @@ const summaryTile = {
   minHeight: 64,
   padding: "11px 12px",
   borderRadius: 13,
-  background:
-    "linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.025))",
+  background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border:
     "1px solid rgba(148,163,184,.075)",
   display: "flex",
@@ -2018,7 +2004,7 @@ const summaryTile = {
 };
 
 const summaryTileLabel = {
-  color: "#7f8ea3",
+  color: "var(--pf-text-muted)",
   fontSize: 8.5,
   fontWeight: 950,
   letterSpacing: ".055em",
@@ -2026,7 +2012,7 @@ const summaryTileLabel = {
 };
 
 const summaryTileValue = {
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 11.5,
   fontWeight: 900,
   lineHeight: 1.35,
@@ -2043,7 +2029,7 @@ const detailPayloadHeader = {
 };
 
 const detailSectionTitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 8.5,
   fontWeight: 950,
   letterSpacing: ".09em",
@@ -2052,7 +2038,7 @@ const detailSectionTitle = {
 
 const detailSectionSubtitle = {
   marginTop: 3,
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 9,
   fontWeight: 700,
 };
@@ -2064,7 +2050,7 @@ const detailFieldCount = {
   borderRadius: 999,
   display: "inline-flex",
   alignItems: "center",
-  color: "#bfdbfe",
+  color: "#2563eb",
   background: "rgba(59,130,246,.08)",
   border: "1px solid rgba(96,165,250,.14)",
   fontSize: 8,
@@ -2083,8 +2069,7 @@ const detailFields = {
   gap: 9,
   padding: "0 20px 18px",
   scrollbarWidth: "thin",
-  scrollbarColor:
-    "#3b82f6 rgba(15,23,42,.72)",
+  scrollbarColor: "#3b82f6 var(--pf-surface-alt)",
   scrollbarGutter: "stable",
 };
 
@@ -2093,8 +2078,7 @@ const detailField = {
   minHeight: 58,
   padding: "10px 11px",
   borderRadius: 12,
-  background:
-    "linear-gradient(180deg,rgba(2,6,23,.40),rgba(2,6,23,.30))",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.06)",
   display: "flex",
@@ -2103,7 +2087,7 @@ const detailField = {
 };
 
 const detailFieldLabel = {
-  color: "#718096",
+  color: "var(--pf-text-dim)",
   fontSize: 8,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -2113,7 +2097,7 @@ const detailFieldLabel = {
 
 const detailFieldValue = {
   marginTop: 6,
-  color: "#f1f5f9",
+  color: "var(--pf-text)",
   fontSize: 11,
   fontWeight: 800,
   whiteSpace: "pre-wrap",
@@ -2131,13 +2115,13 @@ const detailFooter = {
   alignItems: "center",
   gap: 12,
   flexWrap: "wrap",
-  background: "rgba(2,6,23,.24)",
+  background: "var(--pf-surface-alt)",
   borderTop:
     "1px solid rgba(148,163,184,.08)",
 };
 
 const detailHint = {
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 9,
   fontWeight: 700,
 };
@@ -2150,7 +2134,7 @@ const inspectButton = (accent) => ({
     `1px solid ${accent}42`,
   background:
     `${accent}18`,
-  color: "#fff",
+  color: `color-mix(in srgb,${accent} 72%,var(--pf-text-strong))`,
   fontFamily: "inherit",
   fontSize: 9,
   fontWeight: 900,

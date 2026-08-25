@@ -309,8 +309,7 @@ const legendPanel = {
   minWidth: 0,
   padding: 11,
   borderRadius: 14,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.23)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.055)",
 };
@@ -416,7 +415,7 @@ const emptyIcon = {
 
 const emptyTitle = {
   marginTop: 6,
-  color: "#dbeafe",
+  color: "var(--pf-text-strong)",
   fontSize: 10,
   fontWeight: 900,
 };

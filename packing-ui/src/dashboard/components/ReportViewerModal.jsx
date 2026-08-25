@@ -198,45 +198,33 @@ function ReportViewerModal({
 const overlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(15,23,42,0.55)",
-  backdropFilter: "blur(8px)",
-  WebkitBackdropFilter: "blur(8px)",
+  zIndex: 16000,
+  padding: 18,
+  boxSizing: "border-box",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  zIndex: 9999,
-  padding: 16,
+  background: "rgba(var(--pf-surface-deep-rgb),.76)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
 };
 
 const modal = {
-  width: "min(1180px, 94vw)",
-
-  maxHeight: "88vh",
-
+  width: "min(1180px, calc(100vw - 36px))",
+  height: "min(88vh, 860px)",
+  maxHeight: "calc(100vh - 36px)",
   position: "relative",
-
   overflow: "hidden",
-
   display: "flex",
-
   flexDirection: "column",
-
-  borderRadius: 28,
-
-  padding: 24,
-
-  color: "#fff",
-
+  borderRadius: 16,
+  padding: 20,
+  boxSizing: "border-box",
+  color: "var(--pf-text-strong)",
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.98), rgba(15,23,42,.92))",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  boxShadow:
-    "0 35px 90px rgba(0,0,0,.45)",
-
-  backdropFilter: "blur(22px)",
+    "radial-gradient(circle at top right,rgba(59,130,246,.07),transparent 34%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 30px 90px rgba(var(--pf-shadow-rgb),.24)",
 };
 
 const modalGlow = {
@@ -244,17 +232,18 @@ const modalGlow = {
   top: 0,
   left: 0,
   right: 0,
-  height: 120,
+  height: 96,
   background:
-    "linear-gradient(180deg, rgba(255,255,255,0.60), rgba(255,255,255,0.14), transparent)",
+    "linear-gradient(180deg,rgba(59,130,246,.05),transparent)",
   pointerEvents: "none",
 };
 
 const header = {
+  flexShrink: 0,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  marginBottom: 18,
+  marginBottom: 14,
   gap: 12,
   position: "relative",
   zIndex: 1,
@@ -262,136 +251,117 @@ const header = {
 
 const titleStyle = {
   margin: 0,
-  fontSize: 24,
-  fontWeight: 900,
-  color: "#fff",
+  fontSize: 23,
+  lineHeight: 1.15,
+  fontWeight: 950,
+  color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
   marginTop: 6,
-  fontSize: 13,
-  color: "rgba(255,255,255,.58)",
+  fontSize: 12,
+  color: "var(--pf-text-muted)",
+  fontWeight: 650,
 };
 
 const closeBtn = {
-  background:
-    "rgba(255,255,255,.06)",
-
-  border: "none",
-
-  color: "#fff",
-
-  fontSize: 18,
-
-  fontWeight: 800,
-
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border)",
+  color: "var(--pf-text)",
+  fontSize: 16,
+  fontWeight: 850,
   cursor: "pointer",
-
-  width: 38,
-  height: 38,
-
-  borderRadius: 999,
+  width: 36,
+  height: 36,
+  borderRadius: 10,
 };
 
 const controls = {
+  flexShrink: 0,
   display: "flex",
-  gap: 12,
-  marginBottom: 18,
   flexWrap: "wrap",
+  gap: 9,
+  marginBottom: 14,
   position: "relative",
   zIndex: 1,
+  alignItems: "center",
 };
 
 const input = {
-  padding: "10px 12px",
-
-  borderRadius: 14,
-
-  border:
-    "1px solid rgba(255,255,255,.08)",
-
-  background:
-    "rgba(255,255,255,.04)",
-
-  color: "#fff",
-
+  flex: "1 1 210px",
+  minWidth: 180,
+  height: 38,
+  padding: "0 11px",
+  boxSizing: "border-box",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   outline: "none",
+  fontFamily: "inherit",
+  fontWeight: 750,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const actionBtn = {
-  padding: "10px 16px",
-
-  borderRadius: 14,
-
-  border: "none",
-
+  height: 38,
+  padding: "0 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(37,99,235,.28)",
   cursor: "pointer",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-
-  fontWeight: 800,
-
-  boxShadow:
-    "0 10px 24px rgba(37,99,235,.35)",
+  fontWeight: 900,
+  fontFamily: "inherit",
+  boxShadow: "0 7px 16px rgba(37,99,235,.15)",
+  whiteSpace: "nowrap",
 };
 
 const tableWrapper = {
+  minHeight: 0,
   overflow: "auto",
-
   flex: 1,
-
-  borderRadius: 18,
-
-  background:
-    "rgba(255,255,255,.03)",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  borderRadius: 14,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  scrollbarWidth: "thin",
+  scrollbarColor: "#3b82f6 var(--pf-surface-alt)",
 };
 
 const table = {
   width: "100%",
+  minWidth: 760,
   borderCollapse: "collapse",
-  fontSize: 13,
+  fontSize: 12.5,
 };
 
 const th = {
   position: "sticky",
   top: 0,
-  zIndex: 1,
-  background:
-    "rgba(255,255,255,.05)",
-
-  color: "#fff",
-  borderBottom: "1px solid rgba(148,163,184,0.18)",
-  padding: "12px 10px",
+  zIndex: 2,
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
+  borderBottom: "1px solid var(--pf-border)",
+  padding: "11px 10px",
   textAlign: "left",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  fontSize: 11,
-  fontWeight: 800,
+  fontSize: 10,
+  fontWeight: 950,
+  whiteSpace: "nowrap",
 };
 
 const td = {
   padding: "10px 10px",
-
-  borderBottom:
-    "1px solid rgba(255,255,255,.05)",
-
-  color: "rgba(255,255,255,.82)",
-
+  borderBottom: "1px solid var(--pf-border-soft)",
+  color: "var(--pf-text)",
   whiteSpace: "nowrap",
 };
 
 const statusText = {
-  padding: 18,
-
-  color: "rgba(255,255,255,.72)",
-
-  fontWeight: 600,
+  padding: 20,
+  color: "var(--pf-text-muted)",
+  fontWeight: 700,
 };
 
 export default ReportViewerModal;

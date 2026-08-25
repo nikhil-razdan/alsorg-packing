@@ -82,25 +82,22 @@ function StatsCards({
 
 const statsRow = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(200px,1fr))",
+  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
   gap: 12,
 };
 
 const statCard = (accent) => ({
   position: "relative",
   minWidth: 0,
-  minHeight: 138,
+  minHeight: 132,
   overflow: "hidden",
   padding: 14,
-  borderRadius: 17,
-  color: "#fff",
+  borderRadius: 15,
+  color: "var(--pf-text-strong)",
   background:
-    `radial-gradient(circle at 100% 0%,${accent}12,transparent 42%),linear-gradient(160deg,rgba(30,41,59,.72),rgba(15,23,42,.92))`,
-  border:
-    "1px solid rgba(148,163,184,.09)",
-  boxShadow:
-    "0 12px 28px rgba(2,6,23,.20), inset 0 1px 0 rgba(255,255,255,.02)",
+    `radial-gradient(circle at 100% 0%,${accent}0F,transparent 42%),linear-gradient(160deg,var(--pf-surface),var(--pf-surface-alt))`,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 8px 20px rgba(var(--pf-shadow-rgb),.06)",
 });
 
 const topAccent = (accent) => ({
@@ -109,10 +106,8 @@ const topAccent = (accent) => ({
   left: 18,
   right: 18,
   height: 2,
-  borderRadius:
-    "0 0 999px 999px",
-  background:
-    `linear-gradient(90deg,transparent,${accent},transparent)`,
+  borderRadius: "0 0 999px 999px",
+  background: `linear-gradient(90deg,transparent,${accent},transparent)`,
 });
 
 const cardHeader = {
@@ -124,7 +119,7 @@ const cardHeader = {
 const iconBox = (accent) => ({
   width: 31,
   height: 31,
-  borderRadius: 10,
+  borderRadius: 9,
   display: "grid",
   placeItems: "center",
   color: accent,
@@ -138,8 +133,8 @@ const liveBadge = {
   display: "inline-flex",
   alignItems: "center",
   gap: 4,
-  color: "#536177",
-  fontSize: 6.7,
+  color: "var(--pf-text-muted)",
+  fontSize: 7,
   fontWeight: 950,
   letterSpacing: ".05em",
 };
@@ -149,14 +144,13 @@ const liveDot = (accent) => ({
   height: 5,
   borderRadius: "50%",
   background: accent,
-  boxShadow:
-    `0 0 7px ${accent}55`,
+  boxShadow: `0 0 7px ${accent}55`,
 });
 
 const statTitle = {
   marginTop: 12,
-  color: "#8b9aaf",
-  fontSize: 8.4,
+  color: "var(--pf-text-muted)",
+  fontSize: 8.8,
   fontWeight: 950,
   textTransform: "uppercase",
   letterSpacing: ".05em",
@@ -164,7 +158,7 @@ const statTitle = {
 
 const statValue = {
   marginTop: 6,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 27,
   lineHeight: 1,
   fontWeight: 950,
@@ -173,8 +167,8 @@ const statValue = {
 
 const statSubtitle = {
   marginTop: 7,
-  color: "#536177",
-  fontSize: 8,
+  color: "var(--pf-text-muted)",
+  fontSize: 8.5,
   fontWeight: 700,
   lineHeight: 1.4,
 };

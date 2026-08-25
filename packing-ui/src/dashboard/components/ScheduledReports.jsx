@@ -165,19 +165,12 @@ const formatReportType = (value) => {
 
 const wrap = {
   background:
-    "linear-gradient(180deg, rgba(15,23,42,.82), rgba(15,23,42,.68))",
-
-  border:
-    "1px solid rgba(255,255,255,.07)",
-
-  boxShadow:
-    "0 18px 35px rgba(2,6,23,.32)",
-
-  padding: 20,
-
-  borderRadius: 24,
-
-  backdropFilter: "blur(18px)",
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 10px 26px rgba(var(--pf-shadow-rgb),.07)",
+  padding: 18,
+  borderRadius: 16,
+  color: "var(--pf-text-strong)",
 };
 
 const header = {
@@ -185,293 +178,212 @@ const header = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 14,
-  marginBottom: 18,
+  marginBottom: 16,
 };
 
 const title = {
   margin: 0,
   fontSize: 18,
-  fontWeight: 900,
-  color: "#fff",
+  fontWeight: 950,
+  color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
   marginTop: 5,
   fontSize: 12,
-  color: "rgba(255,255,255,.56)",
+  color: "var(--pf-text-muted)",
+  fontWeight: 650,
 };
 
 const countBadge = {
-  minWidth: 36,
-  height: 36,
-
+  minWidth: 34,
+  height: 34,
   borderRadius: 999,
-
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-
-  fontSize: 13,
-  fontWeight: 900,
-
-  boxShadow:
-    "0 10px 24px rgba(37,99,235,.28)",
+  fontSize: 12,
+  fontWeight: 950,
+  boxShadow: "0 7px 16px rgba(37,99,235,.16)",
 };
 
 const form = {
   display: "grid",
-  gridTemplateColumns:
-    "minmax(240px,1.4fr) minmax(210px,.9fr) minmax(150px,.55fr) auto",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))",
+  gap: 10,
   marginBottom: 16,
   alignItems: "end",
 };
 
 const fieldGroup = {
+  minWidth: 0,
   display: "flex",
   flexDirection: "column",
-  gap: 7,
+  gap: 6,
 };
 
 const label = {
-  fontSize: 11,
-  fontWeight: 800,
-  color: "rgba(255,255,255,.58)",
+  fontSize: 10,
+  fontWeight: 900,
+  color: "var(--pf-text-muted)",
   textTransform: "uppercase",
-  letterSpacing: ".08em",
+  letterSpacing: ".07em",
 };
 
 const input = {
-  height: 44,
-
-  padding: "0 14px",
-
-  borderRadius: 15,
-
-  border:
-    "1px solid rgba(255,255,255,.08)",
-
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.035))",
-
-  color: "#fff",
-
+  width: "100%",
+  minWidth: 0,
+  height: 42,
+  padding: "0 12px",
+  boxSizing: "border-box",
+  borderRadius: 11,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   outline: "none",
-
-  fontSize: 13,
-
-  fontWeight: 700,
-
-  boxShadow:
-    "inset 0 1px 0 rgba(255,255,255,.06)",
+  fontSize: 12.5,
+  fontWeight: 750,
+  fontFamily: "inherit",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const selectWrap = {
   position: "relative",
-  height: 44,
+  height: 42,
 };
 
 const select = {
   width: "100%",
-  height: 44,
-
-  padding: "0 42px 0 14px",
-
-  borderRadius: 15,
-
-  border:
-    "1px solid rgba(59,130,246,.22)",
-
-  background:
-    "linear-gradient(180deg, rgba(30,41,59,.96), rgba(15,23,42,.96))",
-
-  color: "#fff",
-
+  height: 42,
+  padding: "0 38px 0 12px",
+  borderRadius: 11,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   outline: "none",
-
-  fontSize: 13,
-
+  fontSize: 12.5,
   fontWeight: 800,
-
   cursor: "pointer",
-
   appearance: "none",
   WebkitAppearance: "none",
   MozAppearance: "none",
-
-  boxShadow:
-    "0 12px 28px rgba(2,6,23,.28), inset 0 1px 0 rgba(255,255,255,.07)",
+  boxShadow: "none",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const option = {
-  background: "#0f172a",
-  color: "#fff",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
   fontWeight: 700,
 };
 
 const selectArrow = {
   position: "absolute",
-  right: 14,
+  right: 12,
   top: "50%",
-  transform: "translateY(-56%)",
-
-  color: "#93c5fd",
-
-  fontSize: 20,
+  transform: "translateY(-54%)",
+  color: "var(--pf-text-muted)",
+  fontSize: 18,
   fontWeight: 900,
-
   pointerEvents: "none",
 };
 
 const btn = {
-  height: 44,
-
-  padding: "0 16px",
-
-  borderRadius: 15,
-
-  border: "none",
-
+  height: 42,
+  padding: "0 15px",
+  borderRadius: 11,
+  border: "1px solid rgba(37,99,235,.28)",
   cursor: "pointer",
-
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-
   fontWeight: 900,
-
+  fontFamily: "inherit",
   whiteSpace: "nowrap",
-
-  boxShadow:
-    "0 12px 28px rgba(37,99,235,.32)",
-
-  transition: "all .25s ease",
+  width: "100%",
+  boxShadow: "0 7px 16px rgba(37,99,235,.16)",
 };
 
 const list = {
   display: "flex",
   flexDirection: "column",
-  gap: 10,
+  gap: 8,
 };
 
 const row = {
   display: "flex",
-
   justifyContent: "space-between",
-
   gap: 14,
-
   alignItems: "center",
-
-  padding: "14px 14px",
-
-  borderRadius: 18,
-
-  background:
-    "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.025))",
-
-  border:
-    "1px solid rgba(255,255,255,.06)",
-
-  color: "#e2e8f0",
-
+  padding: "12px 13px",
+  borderRadius: 13,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
+  color: "var(--pf-text)",
   flexWrap: "wrap",
 };
 
 const rowInfo = {
+  minWidth: 0,
   display: "flex",
   flexDirection: "column",
-  gap: 8,
+  gap: 7,
 };
 
 const emailText = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#fff",
+  fontSize: 12.5,
+  fontWeight: 850,
+  color: "var(--pf-text-strong)",
+  overflowWrap: "anywhere",
 };
 
 const metaRow = {
   display: "flex",
-  gap: 8,
+  gap: 7,
   flexWrap: "wrap",
 };
 
 const typeChip = {
-  padding: "5px 10px",
-
+  padding: "4px 9px",
   borderRadius: 999,
-
-  background:
-    "rgba(59,130,246,.16)",
-
-  border:
-    "1px solid rgba(59,130,246,.22)",
-
-  color: "#93c5fd",
-
-  fontSize: 11,
-  fontWeight: 800,
+  background: "rgba(59,130,246,.09)",
+  border: "1px solid rgba(59,130,246,.18)",
+  color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
+  fontSize: 10.5,
+  fontWeight: 850,
 };
 
 const timeChip = {
-  padding: "5px 10px",
-
+  padding: "4px 9px",
   borderRadius: 999,
-
-  background:
-    "rgba(255,255,255,.05)",
-
-  border:
-    "1px solid rgba(255,255,255,.07)",
-
-  color: "rgba(255,255,255,.74)",
-
-  fontSize: 11,
-  fontWeight: 800,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border-soft)",
+  color: "var(--pf-text-muted)",
+  fontSize: 10.5,
+  fontWeight: 850,
 };
 
 const deleteBtn = {
-  border: "none",
-
-  background:
-    "linear-gradient(135deg,#dc2626,#ef4444)",
-
+  border: "1px solid rgba(220,38,38,.24)",
+  background: "linear-gradient(135deg,#dc2626,#ef4444)",
   color: "#fff",
-
-  padding: "8px 12px",
-
-  borderRadius: 12,
-
+  padding: "7px 11px",
+  borderRadius: 9,
   cursor: "pointer",
-
-  fontSize: 12,
-
+  fontSize: 11,
   fontWeight: 900,
-
-  boxShadow:
-    "0 10px 22px rgba(239,68,68,.24)",
+  fontFamily: "inherit",
+  boxShadow: "0 5px 12px rgba(220,38,38,.14)",
 };
 
 const emptyState = {
   padding: "16px 14px",
-
-  borderRadius: 18,
-
-  background: "rgba(255,255,255,.035)",
-
-  border:
-    "1px dashed rgba(255,255,255,.12)",
-
-  color: "rgba(255,255,255,.55)",
-
-  fontSize: 13,
-
+  borderRadius: 13,
+  background: "var(--pf-surface-alt)",
+  border: "1px dashed var(--pf-border)",
+  color: "var(--pf-text-muted)",
+  fontSize: 12,
   fontWeight: 700,
 };
 

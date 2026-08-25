@@ -3,7 +3,7 @@ function StickerTrendChart({ data = [] }) {
     return (
       <div style={card}>
         <h3 style={title}>Sticker Generation Trend</h3>
-        <p style={{ opacity: 0.8 }}>No data available</p>
+        <p style={emptyText}>No data available</p>
       </div>
     );
   }
@@ -78,15 +78,21 @@ const bar = {
   width: "100%",
   borderRadius: 6,
   background:
-    "linear-gradient(180deg, rgba(191,219,254,0.95), rgba(147,197,253,0.95))",
+    "linear-gradient(180deg,#3b82f6,#2563eb)",
 };
 
 const label = {
   marginTop: 8,
-
   fontSize: 11,
+  color: "var(--pf-text-muted)",
+  fontWeight: 750,
+};
 
-  color: "rgba(var(--pf-fg-rgb),.65)",
+const emptyText = {
+  margin: 0,
+  color: "var(--pf-text-muted)",
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 export default StickerTrendChart;

@@ -657,7 +657,7 @@ const createDirectorLineChartPng = ({
 
   ctx.strokeStyle = "#d7dee8";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "#64748b";
+  ctx.fillStyle = "var(--pf-text-muted)";
   ctx.font = "11px Arial";
   ctx.textAlign = "right";
 
@@ -730,7 +730,7 @@ const createDirectorLineChartPng = ({
     Math.ceil(rows.length / 10)
   );
 
-  ctx.fillStyle = "#64748b";
+  ctx.fillStyle = "var(--pf-text-muted)";
   ctx.font = "10px Arial";
   ctx.textAlign = "center";
 
@@ -817,7 +817,7 @@ const createDirectorBarChartPng = ({
 
   ctx.strokeStyle = "#d7dee8";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "#64748b";
+  ctx.fillStyle = "var(--pf-text-muted)";
   ctx.font = "11px Arial";
   ctx.textAlign = "right";
 
@@ -6725,7 +6725,7 @@ function DirectorLineChart({ rows = [] }) {
                 x={padding.left - 10}
                 y={y + 4}
                 textAnchor="end"
-                fill="#94a3b8"
+                fill="var(--pf-text-muted)"
                 fontSize="11"
               >
                 {value}
@@ -6766,7 +6766,7 @@ function DirectorLineChart({ rows = [] }) {
               x={getX(index)}
               y={height - 24}
               textAnchor="middle"
-              fill="#94a3b8"
+              fill="var(--pf-text-muted)"
               fontSize="10"
             >
               {row.shortLabel || row.label}
@@ -6859,7 +6859,7 @@ function DirectorBarChart({
                 x={padding.left - 10}
                 y={y + 4}
                 textAnchor="end"
-                fill="#94a3b8"
+                fill="var(--pf-text-muted)"
                 fontSize="11"
               >
                 {value}
@@ -6895,7 +6895,7 @@ function DirectorBarChart({
                 x={x + barWidth / 2}
                 y={Math.max(y - 7, 12)}
                 textAnchor="middle"
-                fill="#cbd5e1"
+                fill="var(--pf-text)"
                 fontSize="10"
                 fontWeight="700"
               >
@@ -6905,7 +6905,7 @@ function DirectorBarChart({
                 x={x + barWidth / 2}
                 y={height - 30}
                 textAnchor="middle"
-                fill="#94a3b8"
+                fill="var(--pf-text-muted)"
                 fontSize="9.5"
               >
                 {String(row.label || "-")
@@ -7154,13 +7154,14 @@ function DirectorDashboardView({
 
 const wrap = {
   padding: 22,
+  colorScheme: "var(--pf-color-scheme)",
   borderRadius: 24,
   background:
-    "rgba(15,23,42,.78)",
+    "rgba(var(--pf-surface-rgb),.78)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   boxShadow:
-    "0 18px 35px rgba(2,6,23,.32)",
+    "0 12px 28px rgba(var(--pf-shadow-rgb),.08)",
   backdropFilter: "blur(18px)",
 };
 
@@ -7176,12 +7177,12 @@ const header = {
 const title = {
   fontSize: 24,
   fontWeight: 900,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
   marginTop: 5,
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 13,
 };
 
@@ -7193,18 +7194,18 @@ const filters = {
   padding: 12,
   borderRadius: 16,
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const input = {
   height: 38,
   borderRadius: 12,
   border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
   padding: "0 12px",
   outline: "none",
   fontWeight: 700,
@@ -7222,7 +7223,7 @@ const primaryBtn = {
   border: "none",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   padding: "0 14px",
   fontWeight: 900,
   cursor: "pointer",
@@ -7232,10 +7233,10 @@ const clearBtn = {
   height: 38,
   borderRadius: 12,
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
+    "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text-strong)",
   padding: "0 14px",
   fontWeight: 800,
   cursor: "pointer",
@@ -7258,7 +7259,7 @@ const errorBox = {
   borderRadius: 16,
   background:
     "rgba(239,68,68,.10)",
-  color: "#fca5a5",
+  color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
   border:
     "1px solid rgba(239,68,68,.22)",
   marginBottom: 16,
@@ -7270,11 +7271,11 @@ const volumeInsightPanel = {
   padding: 16,
   borderRadius: 20,
   background:
-    "radial-gradient(circle at 0% 0%, rgba(34,197,94,.12), transparent 34%), linear-gradient(135deg, rgba(15,23,42,.96), rgba(8,15,30,.94))",
+    "radial-gradient(circle at 0% 0%, rgba(34,197,94,.12), transparent 34%), linear-gradient(135deg, rgba(var(--pf-surface-rgb),.96), rgba(8,15,30,.94))",
   border:
     "1px solid rgba(34,197,94,.18)",
   boxShadow:
-    "0 16px 34px rgba(2,6,23,.24)",
+    "0 16px 34px rgba(var(--pf-surface-rgb),.24)",
 };
 
 const volumeInsightHeader = {
@@ -7287,7 +7288,7 @@ const volumeInsightHeader = {
 };
 
 const volumeInsightEyebrow = {
-  color: "#86efac",
+  color: "color-mix(in srgb,#059669 78%,var(--pf-text-strong))",
   fontSize: 10,
   fontWeight: 950,
   letterSpacing: ".11em",
@@ -7295,7 +7296,7 @@ const volumeInsightEyebrow = {
 
 const volumeInsightTitle = {
   marginTop: 4,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 19,
   fontWeight: 950,
 };
@@ -7303,7 +7304,7 @@ const volumeInsightTitle = {
 const volumeInsightSubtitle = {
   marginTop: 5,
   maxWidth: 760,
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 12,
   lineHeight: 1.5,
 };
@@ -7334,14 +7335,14 @@ const volumeInsightCard = (warning) => ({
   borderRadius: 16,
   background: warning
     ? "rgba(245,158,11,.08)"
-    : "rgba(255,255,255,.035)",
+    : "rgba(var(--pf-fg-rgb),.035)",
   border: warning
     ? "1px solid rgba(245,158,11,.20)"
-    : "1px solid rgba(255,255,255,.06)",
+    : "1px solid rgba(var(--pf-fg-rgb),.06)",
 });
 
 const volumeInsightCardLabel = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -7350,7 +7351,7 @@ const volumeInsightCardLabel = {
 
 const volumeInsightCardValue = {
   marginTop: 7,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 20,
   fontWeight: 950,
   overflow: "hidden",
@@ -7360,7 +7361,7 @@ const volumeInsightCardValue = {
 
 const volumeInsightCardDetail = {
   marginTop: 5,
-  color: "rgba(255,255,255,.58)",
+  color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 10.5,
   lineHeight: 1.45,
 };
@@ -7370,7 +7371,7 @@ const volumeWarningBox = {
   borderRadius: 14,
   background:
     "rgba(245,158,11,.09)",
-  color: "#fde68a",
+  color: "color-mix(in srgb,#d97706 78%,var(--pf-text-strong))",
   border:
     "1px solid rgba(245,158,11,.20)",
   marginBottom: 16,
@@ -7399,9 +7400,9 @@ const summaryCard = {
   borderRadius: 18,
   padding: 16,
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const summaryAccent = (accent) => ({
@@ -7416,7 +7417,7 @@ const summaryAccent = (accent) => ({
 });
 
 const summaryLabel = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 12,
   fontWeight: 800,
 };
@@ -7428,7 +7429,7 @@ const summaryValue = {
   marginTop: 8,
   display: "flex",
   alignItems: "flex-end",
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 26,
   fontWeight: 900,
   lineHeight: 1.08,
@@ -7452,11 +7453,11 @@ const modeTab = (active) => ({
   borderRadius: 999,
   border: active
     ? "1px solid rgba(59,130,246,.40)"
-    : "1px solid rgba(255,255,255,.07)",
+    : "1px solid rgba(var(--pf-fg-rgb),.07)",
   background: active
     ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-    : "rgba(255,255,255,.04)",
-  color: "#fff",
+    : "rgba(var(--pf-fg-rgb),.04)",
+  color: active ? "#fff" : "var(--pf-text)",
   fontWeight: 800,
   cursor: "pointer",
 });
@@ -7466,14 +7467,14 @@ const tableHeader = {
 };
 
 const tableTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 18,
 };
 
 const tableSubtitle = {
   marginTop: 4,
-  color: "rgba(255,255,255,.55)",
+  color: "rgba(var(--pf-fg-rgb),.55)",
   fontSize: 12,
 };
 
@@ -7482,7 +7483,7 @@ const tableWrap = {
   overflow: "auto",
   borderRadius: 18,
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const table = {
@@ -7494,23 +7495,23 @@ const table = {
 const th = {
   textAlign: "left",
   padding: "13px 12px",
-  background: "#111827",
-  color: "#94a3b8",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   fontWeight: 900,
   position: "sticky",
   top: 0,
   zIndex: 1,
   borderBottom:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   minWidth: 110,
   whiteSpace: "nowrap",
 };
 
 const td = {
   padding: "11px 12px",
-  color: "rgba(255,255,255,.84)",
+  color: "rgba(var(--pf-fg-rgb),.84)",
   borderBottom:
-    "1px solid rgba(255,255,255,.045)",
+    "1px solid rgba(var(--pf-fg-rgb),.045)",
   verticalAlign: "top",
   minWidth: 110,
   maxWidth: 320,
@@ -7521,7 +7522,7 @@ const td = {
 const empty = {
   padding: 24,
   textAlign: "center",
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontWeight: 700,
 };
 
@@ -7535,7 +7536,7 @@ const tablePager = {
 };
 
 const tablePagerMeta = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 800,
 };
@@ -7550,9 +7551,9 @@ const tablePageSizeSelect = {
   height: 34,
   padding: "0 10px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#e2e8f0",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   fontWeight: 800,
   outline: "none",
 };
@@ -7561,11 +7562,11 @@ const tablePageButton = (disabled) => ({
   width: 34,
   height: 34,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,.08)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
   background: disabled
-    ? "rgba(255,255,255,.025)"
+    ? "rgba(var(--pf-fg-rgb),.025)"
     : "rgba(59,130,246,.13)",
-  color: disabled ? "#475569" : "#bfdbfe",
+  color: disabled ? "#475569" : "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
   cursor: disabled ? "not-allowed" : "pointer",
   fontWeight: 950,
 });
@@ -7573,25 +7574,25 @@ const tablePageButton = (disabled) => ({
 const directorTone = {
   blue: {
     background:
-      "linear-gradient(180deg,rgba(30,64,90,.54),rgba(15,23,42,.74))",
+      "linear-gradient(180deg,rgba(30,64,90,.54),rgba(var(--pf-surface-rgb),.74))",
     border: "rgba(56,189,248,.23)",
     accent: "#38bdf8",
   },
   green: {
     background:
-      "linear-gradient(180deg,rgba(20,83,65,.46),rgba(15,23,42,.74))",
+      "linear-gradient(180deg,rgba(20,83,65,.46),rgba(var(--pf-surface-rgb),.74))",
     border: "rgba(52,211,153,.22)",
     accent: "#34d399",
   },
   red: {
     background:
-      "linear-gradient(180deg,rgba(92,38,48,.45),rgba(15,23,42,.74))",
+      "linear-gradient(180deg,rgba(92,38,48,.45),rgba(var(--pf-surface-rgb),.74))",
     border: "rgba(248,113,113,.24)",
     accent: "#fb7185",
   },
   amber: {
     background:
-      "linear-gradient(180deg,rgba(91,64,26,.46),rgba(15,23,42,.74))",
+      "linear-gradient(180deg,rgba(91,64,26,.46),rgba(var(--pf-surface-rgb),.74))",
     border: "rgba(251,191,36,.24)",
     accent: "#fbbf24",
   },
@@ -7609,10 +7610,10 @@ const directorDashboardLoading = {
   padding: 34,
   borderRadius: 20,
   background:
-    "rgba(255,255,255,.035)",
+    "rgba(var(--pf-fg-rgb),.035)",
   border:
-    "1px solid rgba(255,255,255,.07)",
-  color: "#cbd5e1",
+    "1px solid rgba(var(--pf-fg-rgb),.07)",
+  color: "var(--pf-text)",
   textAlign: "center",
   fontWeight: 800,
 };
@@ -7630,7 +7631,7 @@ const directorDashboardHero = {
   border:
     "1px solid rgba(125,211,252,.16)",
   boxShadow:
-    "0 18px 38px rgba(2,6,23,.30)",
+    "0 18px 38px rgba(var(--pf-surface-rgb),.30)",
 };
 
 const directorDashboardEyebrow = {
@@ -7643,7 +7644,7 @@ const directorDashboardEyebrow = {
 
 const directorDashboardTitle = {
   marginTop: 5,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   lineHeight: 1.15,
   fontWeight: 950,
@@ -7674,9 +7675,9 @@ const directorHeroVolume = {
   flexDirection: "column",
   gap: 4,
   background:
-    "rgba(255,255,255,.055)",
+    "rgba(var(--pf-fg-rgb),.055)",
   border:
-    "1px solid rgba(255,255,255,.09)",
+    "1px solid rgba(var(--pf-fg-rgb),.09)",
   color: "#b8c8d8",
   fontSize: 9.5,
   fontWeight: 800,
@@ -7685,7 +7686,7 @@ const directorHeroVolume = {
 };
 
 const directorHeroVolumeValue = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 18,
   fontWeight: 950,
   letterSpacing: "-.02em",
@@ -7740,7 +7741,7 @@ const directorKpiCard = (tone) => {
     border:
       `1px solid ${palette.border}`,
     boxShadow:
-      "inset 0 1px 0 rgba(255,255,255,.025)",
+      "inset 0 1px 0 rgba(var(--pf-fg-rgb),.025)",
   };
 };
 
@@ -7756,7 +7757,7 @@ const directorKpiValue = {
   width: "100%",
   minWidth: 0,
   marginTop: 10,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 29,
   fontWeight: 950,
   lineHeight: 1.05,
@@ -7851,11 +7852,11 @@ const directorChartPanel = {
   borderRadius: 17,
   overflow: "hidden",
   background:
-    "linear-gradient(180deg,rgba(15,23,42,.86),rgba(7,15,28,.78))",
+    "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.86),rgba(7,15,28,.78))",
   border:
     "1px solid rgba(148,163,184,.10)",
   boxShadow:
-    "0 14px 30px rgba(2,6,23,.20)",
+    "0 14px 30px rgba(var(--pf-surface-rgb),.20)",
 };
 
 const directorChartPanelHeader = {
@@ -7863,7 +7864,7 @@ const directorChartPanelHeader = {
 };
 
 const directorChartPanelTitle = {
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 900,
 };
@@ -7895,7 +7896,7 @@ const directorChartEmpty = {
   minHeight: 260,
   display: "grid",
   placeItems: "center",
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 750,
 };
@@ -7912,7 +7913,7 @@ const directorLegendItem = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontWeight: 750,
 };
@@ -7959,7 +7960,7 @@ const directorActionRow = (priority) => {
   return {
     background:
       backgrounds[priority] ||
-      "rgba(255,255,255,.025)",
+      "rgba(var(--pf-fg-rgb),.025)",
   };
 };
 
@@ -7981,7 +7982,7 @@ const directorActionTdStrong = {
 const directorPriorityBadge = (priority) => {
   const colors = {
     CRITICAL: {
-      color: "#fecaca",
+      color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
       background: "rgba(239,68,68,.17)",
       border: "rgba(239,68,68,.27)",
     },
@@ -7991,7 +7992,7 @@ const directorPriorityBadge = (priority) => {
       border: "rgba(249,115,22,.24)",
     },
     MEDIUM: {
-      color: "#bfdbfe",
+      color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
       background: "rgba(59,130,246,.14)",
       border: "rgba(59,130,246,.24)",
     },
@@ -8026,7 +8027,7 @@ const directorManagementNote = {
   padding: "10px 12px",
   borderRadius: 12,
   background:
-    "rgba(255,255,255,.025)",
+    "rgba(var(--pf-fg-rgb),.025)",
   border:
     "1px solid rgba(148,163,184,.08)",
   color: "#75879b",

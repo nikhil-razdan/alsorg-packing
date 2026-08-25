@@ -744,13 +744,13 @@ function InventoryCommandCenter({
 					height: 10px;
 				}
 				.packflow-trace-scroll::-webkit-scrollbar-track {
-					background: rgba(15,23,42,.92);
+					background: rgba(var(--pf-surface-rgb),.92);
 					border-radius: 999px;
 				}
 				.packflow-trace-scroll::-webkit-scrollbar-thumb {
 					background: linear-gradient(90deg,#2563eb,#60a5fa);
 					border-radius: 999px;
-					border: 2px solid rgba(15,23,42,.95);
+					border: 2px solid rgba(var(--pf-surface-rgb),.95);
 				}
 				.packflow-trace-scroll::-webkit-scrollbar-thumb:hover {
 					background: linear-gradient(90deg,#3b82f6,#93c5fd);
@@ -1454,13 +1454,14 @@ function InventoryCommandCenter({
 
 const wrap = {
 	padding: 22,
+	colorScheme: "var(--pf-color-scheme)",
 	borderRadius: 28,
 	background:
-		"linear-gradient(180deg, rgba(15,23,42,.90), rgba(15,23,42,.76))",
+		"linear-gradient(180deg, rgba(var(--pf-surface-rgb),.90), rgba(var(--pf-surface-rgb),.76))",
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	boxShadow:
-		"0 24px 60px rgba(2,6,23,.40)",
+		"0 14px 34px rgba(var(--pf-shadow-rgb),.10)",
 	backdropFilter:
 		"blur(20px)",
 };
@@ -1477,7 +1478,7 @@ const top = {
 };
 
 const eyebrow = {
-	color: "#93c5fd",
+	color: "#2563eb",
 	fontSize: 11,
 	fontWeight: 900,
 	letterSpacing: ".14em",
@@ -1485,7 +1486,7 @@ const eyebrow = {
 
 const title = {
 	marginTop: 6,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 26,
 	fontWeight: 950,
 };
@@ -1494,7 +1495,7 @@ const subtitle = {
 	marginTop: 7,
 	maxWidth: 920,
 	color:
-		"rgba(255,255,255,.62)",
+		"rgba(var(--pf-fg-rgb),.62)",
 	fontSize: 13,
 	lineHeight: 1.6,
 	fontWeight: 650,
@@ -1512,7 +1513,7 @@ const healthBox = {
 	flexDirection: "column",
 	gap: 5,
 	color:
-		"rgba(255,255,255,.68)",
+		"rgba(var(--pf-fg-rgb),.68)",
 	fontSize: 12,
 	fontWeight: 800,
 };
@@ -1529,14 +1530,14 @@ const insightCard = (accent) => ({
 	padding: 16,
 	borderRadius: 20,
 	background:
-		`radial-gradient(circle at top right, ${accent}22, transparent 42%), rgba(255,255,255,.035)`,
+		`radial-gradient(circle at top right, ${accent}22, transparent 42%), rgba(var(--pf-fg-rgb),.035)`,
 	border:
 		`1px solid ${accent}33`,
 });
 
 const insightLabel = {
 	color:
-		"rgba(255,255,255,.58)",
+		"rgba(var(--pf-fg-rgb),.58)",
 	fontSize: 11,
 	fontWeight: 900,
 	letterSpacing: ".08em",
@@ -1545,7 +1546,7 @@ const insightLabel = {
 
 const insightValue = {
 	marginTop: 8,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 30,
 	fontWeight: 950,
 };
@@ -1553,7 +1554,7 @@ const insightValue = {
 const insightSubtle = {
 	marginTop: 5,
 	color:
-		"rgba(255,255,255,.52)",
+		"rgba(var(--pf-fg-rgb),.52)",
 	fontSize: 12,
 	fontWeight: 650,
 };
@@ -1571,11 +1572,11 @@ const chipButton = (active) => ({
 	borderRadius: 999,
 	border: active
 		? "1px solid rgba(96,165,250,.48)"
-		: "1px solid rgba(255,255,255,.08)",
+		: "1px solid rgba(var(--pf-fg-rgb),.08)",
 	background: active
 		? "linear-gradient(135deg,#2563eb,#3b82f6)"
-		: "rgba(255,255,255,.035)",
-	color: "#fff",
+		: "rgba(var(--pf-fg-rgb),.035)",
+	color: active ? "#fff" : "var(--pf-text)",
 	display: "inline-flex",
 	alignItems: "center",
 	gap: 10,
@@ -1589,15 +1590,15 @@ const chipButton = (active) => ({
 const filterPanel = {
 	display: "grid",
 	gridTemplateColumns:
-		"repeat(4,minmax(130px,.55fr)) minmax(300px,1.7fr) auto",
+		"repeat(4,minmax(118px,.55fr)) minmax(240px,1.7fr) auto",
 	gap: 10,
 	alignItems: "end",
 	padding: 12,
 	borderRadius: 18,
 	background:
-		"rgba(255,255,255,.035)",
+		"rgba(var(--pf-fg-rgb),.035)",
 	border:
-		"1px solid rgba(255,255,255,.07)",
+		"1px solid rgba(var(--pf-fg-rgb),.07)",
 	marginBottom: 16,
 };
 
@@ -1606,7 +1607,7 @@ const fieldWrap = {
 	display: "flex",
 	flexDirection: "column",
 	gap: 5,
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: 9,
 	fontWeight: 900,
 	textTransform: "uppercase",
@@ -1623,13 +1624,13 @@ const input = {
 	height: 40,
 	borderRadius: 12,
 	border:
-		"1px solid rgba(255,255,255,.10)",
-	background: "#0f172a",
-	color: "#fff",
+		"1px solid rgba(var(--pf-fg-rgb),.10)",
+	background: "var(--pf-input)",
+	color: "var(--pf-text-strong)",
 	padding: "0 12px",
 	outline: "none",
 	fontWeight: 800,
-	colorScheme: "dark",
+	colorScheme: "var(--pf-color-scheme)",
 	boxSizing: "border-box",
 };
 
@@ -1657,7 +1658,7 @@ const errorBox = {
 		"rgba(239,68,68,.10)",
 	border:
 		"1px solid rgba(239,68,68,.24)",
-	color: "#fecaca",
+	color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
 	fontWeight: 800,
 	marginBottom: 16,
 };
@@ -1673,7 +1674,7 @@ const tableTop = {
 };
 
 const tableTitle = {
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontSize: 18,
 	fontWeight: 950,
 };
@@ -1681,7 +1682,7 @@ const tableTitle = {
 const tableSubtitle = {
 	marginTop: 4,
 	color:
-		"rgba(255,255,255,.52)",
+		"rgba(var(--pf-fg-rgb),.52)",
 	fontSize: 12,
 	fontWeight: 650,
 };
@@ -1691,7 +1692,7 @@ const tableCount = {
 	borderRadius: 999,
 	background:
 		"rgba(96,165,250,.12)",
-	color: "#93c5fd",
+	color: "#2563eb",
 	border:
 		"1px solid rgba(96,165,250,.22)",
 	fontSize: 12,
@@ -1703,10 +1704,10 @@ const tableWrap = {
 	overflow: "auto",
 	borderRadius: 20,
 	border:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 	scrollbarWidth: "thin",
 	scrollbarColor:
-		"#3b82f6 rgba(15,23,42,.92)",
+		"#3b82f6 rgba(var(--pf-surface-rgb),.92)",
 };
 
 const table = {
@@ -1723,26 +1724,26 @@ const th = {
 	padding: "13px 12px",
 	textAlign: "left",
 	background: "#0b1220",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontWeight: 950,
 	letterSpacing: ".05em",
 	textTransform: "uppercase",
 	borderBottom:
-		"1px solid rgba(255,255,255,.08)",
+		"1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const td = {
 	padding: "13px 12px",
 	color:
-		"rgba(255,255,255,.82)",
+		"rgba(var(--pf-fg-rgb),.82)",
 	borderBottom:
-		"1px solid rgba(255,255,255,.045)",
+		"1px solid rgba(var(--pf-fg-rgb),.045)",
 	verticalAlign: "top",
 };
 
 const tdStrong = {
 	...td,
-	color: "#fff",
+	color: "var(--pf-text-strong)",
 	fontWeight: 850,
 };
 
@@ -1765,7 +1766,7 @@ const flowBadge = (accent) => ({
 const smallMuted = {
 	marginTop: 4,
 	color:
-		"rgba(255,255,255,.48)",
+		"rgba(var(--pf-fg-rgb),.48)",
 	fontSize: 10,
 	fontWeight: 650,
 	maxWidth: 240,
@@ -1778,7 +1779,7 @@ const mono = {
 	fontFamily:
 		"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
 	fontWeight: 850,
-	color: "#bfdbfe",
+	color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
 };
 
 const actorLine = {
@@ -1813,7 +1814,7 @@ const rowHint = {
 const empty = {
 	padding: 28,
 	textAlign: "center",
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontWeight: 800,
 };
 
@@ -1828,13 +1829,13 @@ const pager = {
 	gap: 10,
 	flexWrap: "wrap",
 	background:
-		"rgba(255,255,255,.025)",
+		"rgba(var(--pf-fg-rgb),.025)",
 	border:
-		"1px solid rgba(255,255,255,.06)",
+		"1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const pagerMeta = {
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11,
 	fontWeight: 800,
 };
@@ -1851,9 +1852,9 @@ const pageSizeSelect = {
 	borderRadius: 10,
 	border:
 		"1px solid rgba(96,165,250,.16)",
-	background: "#0f172a",
-	color: "#bfdbfe",
-	colorScheme: "dark",
+	background: "var(--pf-input)",
+	color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
+	colorScheme: "var(--pf-color-scheme)",
 	fontWeight: 850,
 	outline: "none",
 };
@@ -1867,7 +1868,7 @@ const pagerButton = (disabled) => ({
 		"1px solid rgba(96,165,250,.14)",
 	background:
 		"rgba(59,130,246,.07)",
-	color: "#bfdbfe",
+	color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
 	opacity: disabled ? 0.35 : 1,
 	cursor: disabled
 		? "not-allowed"
@@ -1885,7 +1886,7 @@ const pageIndicator = {
 		"rgba(148,163,184,.045)",
 	border:
 		"1px solid rgba(148,163,184,.08)",
-	color: "#e2e8f0",
+	color: "var(--pf-text)",
 	fontSize: 11,
 	fontWeight: 900,
 };
@@ -1898,7 +1899,7 @@ const detailOverlay = {
 	display: "grid",
 	placeItems: "center",
 	background:
-		"rgba(2,6,23,.84)",
+		"rgba(var(--pf-surface-rgb),.84)",
 	backdropFilter:
 		"blur(14px)",
 };
@@ -1912,12 +1913,12 @@ const detailModal = {
 	overflow: "hidden",
 	borderRadius: 26,
 	background:
-		"radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,#0f172a,#08101d)",
+		"radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
 	border:
 		"1px solid rgba(96,165,250,.18)",
 	boxShadow:
-		"0 40px 110px rgba(0,0,0,.70)",
-	color: "#fff",
+		"0 30px 84px rgba(var(--pf-shadow-rgb),.24)",
+	color: "var(--pf-text-strong)",
 };
 
 const detailHeader = {
@@ -1953,7 +1954,7 @@ const detailIcon = (accent) => ({
 });
 
 const detailEyebrow = {
-	color: "#93c5fd",
+	color: "#2563eb",
 	fontSize: 9,
 	fontWeight: 950,
 	letterSpacing: ".09em",
@@ -1967,7 +1968,7 @@ const detailTitle = {
 
 const detailSubtitle = {
 	marginTop: 4,
-	color: "#94a3b8",
+	color: "var(--pf-text-muted)",
 	fontSize: 11,
 	fontWeight: 700,
 };
@@ -1979,8 +1980,8 @@ const closeButton = {
 	border:
 		"1px solid rgba(148,163,184,.10)",
 	background:
-		"rgba(255,255,255,.04)",
-	color: "#fff",
+		"rgba(var(--pf-fg-rgb),.04)",
+	color: "var(--pf-text-strong)",
 	fontSize: 20,
 	cursor: "pointer",
 };
@@ -1999,13 +2000,13 @@ const summaryTile = {
 	padding: 11,
 	borderRadius: 13,
 	background:
-		"rgba(255,255,255,.035)",
+		"rgba(var(--pf-fg-rgb),.035)",
 	border:
 		"1px solid rgba(148,163,184,.065)",
 	display: "flex",
 	flexDirection: "column",
 	gap: 5,
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: 9,
 	fontWeight: 850,
 };
@@ -2020,7 +2021,7 @@ const detailFields = {
 	padding: "0 20px 20px",
 	scrollbarWidth: "thin",
 	scrollbarColor:
-		"#3b82f6 rgba(15,23,42,.72)",
+		"#3b82f6 rgba(var(--pf-surface-rgb),.72)",
 };
 
 const detailField = {
@@ -2028,13 +2029,13 @@ const detailField = {
 	padding: 11,
 	borderRadius: 12,
 	background:
-		"rgba(2,6,23,.34)",
+		"rgba(var(--pf-surface-rgb),.34)",
 	border:
 		"1px solid rgba(148,163,184,.055)",
 };
 
 const detailFieldLabel = {
-	color: "#64748b",
+	color: "var(--pf-text-muted)",
 	fontSize: 8,
 	fontWeight: 950,
 	textTransform: "uppercase",
@@ -2043,7 +2044,7 @@ const detailFieldLabel = {
 
 const detailFieldValue = {
 	marginTop: 5,
-	color: "#e2e8f0",
+	color: "var(--pf-text)",
 	fontSize: 10.5,
 	fontWeight: 750,
 	whiteSpace: "pre-wrap",

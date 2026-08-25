@@ -4121,6 +4121,7 @@ function DashboardPage() {
 
 const page = {
   minHeight: "100vh",
+  colorScheme: "var(--pf-color-scheme)",
   padding: 24,
   position: "relative",
   overflowX: "hidden",
@@ -5337,15 +5338,16 @@ const analyticsGridLayout = {
 };
 
 const inventoryLayout = {
-  display: "flex",
-
-  gap: 20,
-
-  alignItems: "flex-start",
+  display: "grid",
+  gridTemplateColumns: "minmax(200px,220px) minmax(0,1fr)",
+  gap: 18,
+  alignItems: "start",
+  minWidth: 0,
 };
 
 const inventoryMain = {
   flex: 1,
+  minWidth: 0,
 
   display: "flex",
 
@@ -5698,9 +5700,9 @@ const activityLiveBadge = {
   display: "inline-flex",
   alignItems: "center",
   gap: 5,
-  color: "#86efac",
+  color: "color-mix(in srgb,#059669 78%,var(--pf-text-strong))",
   background:
-    "rgba(34,197,94,.08)",
+    "rgba(34,197,94,.09)",
   border:
     "1px solid rgba(34,197,94,.14)",
   fontSize: 7.8,
@@ -5800,11 +5802,9 @@ const activityFeedShell = {
   flex: 1,
   minHeight: 0,
   marginTop: 8,
-  overflowY: "auto",
+  overflowY: "hidden",
   overflowX: "hidden",
   overscrollBehavior: "contain",
-  scrollbarWidth: "thin",
-  scrollbarColor: "#94a3b8 transparent",
   borderRadius: 12,
   background: "var(--pf-surface-alt)",
   border:
@@ -5825,7 +5825,7 @@ const dashboardDrillOverlay = {
 const dashboardDrillModal = {
   width: "min(1480px,100%)",
   height: "min(900px,calc(100vh - 36px))",
-  minHeight: 620,
+  minHeight: 0,
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
@@ -5833,7 +5833,7 @@ const dashboardDrillModal = {
   background:
     "radial-gradient(circle at top right,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border: "1px solid rgba(96,165,250,.18)",
-  boxShadow: "0 42px 120px rgba(0,0,0,.70)",
+  boxShadow: "0 32px 90px rgba(var(--pf-shadow-rgb),.28)",
   color: "var(--pf-text-strong)",
 };
 
@@ -5850,7 +5850,7 @@ const dashboardDrillHeader = (accent) => ({
 });
 
 const dashboardDrillEyebrow = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 9,
   fontWeight: 950,
   letterSpacing: ".11em",
@@ -5953,7 +5953,7 @@ const dashboardDrillError = {
   margin: "0 12px 10px",
   padding: 10,
   borderRadius: 12,
-  color: "#fecaca",
+  color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
   background: "rgba(239,68,68,.08)",
   border: "1px solid rgba(239,68,68,.18)",
   fontSize: 10,
@@ -6023,7 +6023,7 @@ const dashboardException = {
 };
 
 const dashboardClear = {
-  color: "#4ade80",
+  color: "color-mix(in srgb,#059669 78%,var(--pf-text-strong))",
   fontWeight: 900,
 };
 
@@ -6127,7 +6127,7 @@ const dashboardRecordModal = {
   background:
     "radial-gradient(circle at top right,rgba(59,130,246,.13),transparent 30%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
   border: "1px solid rgba(96,165,250,.18)",
-  boxShadow: "0 40px 110px rgba(0,0,0,.70)",
+  boxShadow: "0 30px 84px rgba(var(--pf-shadow-rgb),.26)",
   color: "var(--pf-text-strong)",
 };
 
@@ -6141,7 +6141,7 @@ const dashboardRecordHeader = {
 };
 
 const dashboardRecordEyebrow = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 9,
   fontWeight: 950,
   letterSpacing: ".09em",

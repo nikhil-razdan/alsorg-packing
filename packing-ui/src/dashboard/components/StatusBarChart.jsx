@@ -396,8 +396,7 @@ const legendPanel = {
   minWidth: 0,
   padding: 10,
   borderRadius: 13,
-  background:
-    "rgba(var(--pf-surface-deep-rgb),.22)",
+  background: "var(--pf-surface-alt)",
   border:
     "1px solid rgba(148,163,184,.05)",
 };

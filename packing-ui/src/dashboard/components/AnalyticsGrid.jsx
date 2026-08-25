@@ -306,29 +306,29 @@ STYLES
 
 const grid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(2, minmax(0, 1fr))",
-  gap: 16,
+  gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+  gap: 14,
+  alignItems: "stretch",
 };
 
 const card = {
+  minWidth: 0,
   background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 22,
+    "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+  borderRadius: 16,
   padding: 18,
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  boxShadow:
-    "0 10px 30px rgba(0,0,0,0.35)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 10px 26px rgba(var(--pf-shadow-rgb),.07)",
+  color: "var(--pf-text-strong)",
 };
 
 const wideCard = {
   ...card,
-  gridColumn: "span 2",
+  gridColumn: "1 / -1",
 };
 
 const title = {
-  color: "#f8fafc",
+  color: "var(--pf-text-strong)",
   fontSize: 15,
   fontWeight: 800,
   marginBottom: 18,
@@ -349,7 +349,7 @@ const barRow = {
 };
 
 const barLabel = {
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 12,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -359,8 +359,7 @@ const barLabel = {
 const barTrack = {
   height: 10,
   borderRadius: 999,
-  background:
-    "rgba(255,255,255,0.08)",
+  background: "rgba(var(--pf-fg-rgb),.08)",
   overflow: "hidden",
 };
 
@@ -371,7 +370,7 @@ const barFill = (color) => ({
 });
 
 const barValue = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 12,
   fontWeight: 700,
 };
@@ -381,6 +380,7 @@ const donutWrap = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 20,
+  flexWrap: "wrap",
 };
 
 const legendWrap = {
@@ -393,7 +393,7 @@ const legendRow = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 12,
 };
 
@@ -416,7 +416,7 @@ const alertItem = {
     "rgba(239,68,68,0.15)",
   border:
     "1px solid rgba(239,68,68,0.3)",
-  color: "#fecaca",
+  color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
   fontSize: 13,
   fontWeight: 700,
 };
@@ -428,7 +428,7 @@ const goodAlert = {
     "rgba(34,197,94,0.15)",
   border:
     "1px solid rgba(34,197,94,0.3)",
-  color: "#bbf7d0",
+  color: "color-mix(in srgb,#059669 78%,var(--pf-text-strong))",
   fontSize: 13,
   fontWeight: 700,
 };
