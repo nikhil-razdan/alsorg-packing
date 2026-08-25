@@ -1,157 +1,521 @@
 /*
- * ALSORG Logistics — Professional Scrollbars
- * Shared by Driver Management, Fleet Management, Legacy Operations,
- * Logistics Reports, Driver 360° and logistics modal content.
+ * ============================================================
+ * ALSORG / PackFlow Logistics — Theme-Aware Scrollbars
+ * ============================================================
  *
- * Chromium / Edge / Safari use ::-webkit-scrollbar.
- * Firefox uses scrollbar-width / scrollbar-color.
+ * Shared by:
+ * - Driver Management
+ * - Vehicle / Fleet Management
+ * - Trip Operations
+ * - Dispatch Challans
+ * - Manual / Legacy Operations
+ * - Operations History
+ * - Logistics Reports
+ * - Driver 360° Activity
+ * - Logistics modals
+ *
+ * IMPORTANT:
+ * This file changes presentation only.
+ * It does not change scrolling logic, APIs, pagination,
+ * table behavior or logistics workflow.
+ *
+ * Chromium / Edge / Safari:
+ *   ::-webkit-scrollbar
+ *
+ * Firefox:
+ *   scrollbar-width / scrollbar-color
+ * ============================================================
  */
 
-/* Scope defaults: subtle dark rail with a visible, high-contrast thumb. */
+
+/* ============================================================
+   1. SHARED THEME-AWARE SCROLLBAR VARIABLES
+   ============================================================ */
+
+/*
+ * --pf-fg-rgb changes with the PackFlow theme:
+ *
+ * Light mode:
+ *   normally resolves to a dark foreground RGB.
+ *
+ * Dark mode:
+ *   normally resolves to a light foreground RGB.
+ *
+ * Therefore translucent values automatically invert correctly
+ * without us needing separate light/dark hardcoded scrollbar
+ * definitions.
+ */
+
 .logistics-scroll-scope,
-.logistics-scroll-scope * {
-    scrollbar-width: thin;
-    scrollbar-color: #52627a #0b1220;
+.logistics-scrollbar {
+    --logistics-scroll-track:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.055);
+
+    --logistics-scroll-track-strong:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.085);
+
+    --logistics-scroll-thumb:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.26);
+
+    --logistics-scroll-thumb-strong:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.38);
+
+    --logistics-scroll-thumb-hover:
+        #3b82f6;
+
+    --logistics-scroll-thumb-active:
+        #2563eb;
+
+    --logistics-scroll-blue-soft:
+        rgba(59, 130, 246, 0.32);
+
+    --logistics-scroll-blue-medium:
+        rgba(59, 130, 246, 0.58);
+
+    --logistics-scroll-blue-strong:
+        rgba(37, 99, 235, 0.90);
+
+    --logistics-scroll-border:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.08);
+
+    --logistics-scroll-corner:
+        var(--pf-surface, transparent);
 }
 
-/* Scroll behavior helpers. */
+
+/* ============================================================
+   2. FIREFOX
+   ============================================================ */
+
+.logistics-scroll-scope,
+.logistics-scroll-scope *,
+.logistics-scrollbar {
+    scrollbar-width: thin;
+
+    scrollbar-color:
+        var(--logistics-scroll-thumb)
+        var(--logistics-scroll-track);
+}
+
+
+/* ============================================================
+   3. GENERIC SCROLL BEHAVIOUR
+   ============================================================ */
+
 .logistics-scrollbar {
     overscroll-behavior: contain;
+
     -webkit-overflow-scrolling: touch;
 }
 
+
+/* Horizontal scrolling areas */
+
 .logistics-scrollbar-x {
     overscroll-behavior-x: contain;
+
     scroll-behavior: smooth;
 }
 
+
+/* Vertical scrolling areas */
+
 .logistics-scrollbar-y {
     overscroll-behavior-y: contain;
+
     scroll-behavior: smooth;
 }
+
+
+/*
+ * Useful when we do not want layout width to jump when a
+ * vertical scrollbar appears/disappears.
+ */
 
 .logistics-scrollbar-stable {
     scrollbar-gutter: stable;
 }
 
-/* Chromium / Edge / Safari — scoped scrollbars. */
+
+/* ============================================================
+   4. STANDARD WEBKIT SCROLLBAR
+   Chromium / Edge / Safari
+   ============================================================ */
+
 .logistics-scroll-scope::-webkit-scrollbar,
-.logistics-scroll-scope *::-webkit-scrollbar {
+.logistics-scroll-scope *::-webkit-scrollbar,
+.logistics-scrollbar::-webkit-scrollbar {
     width: 10px;
+
     height: 10px;
 }
 
+
+/* Track */
+
 .logistics-scroll-scope::-webkit-scrollbar-track,
-.logistics-scroll-scope *::-webkit-scrollbar-track {
+.logistics-scroll-scope *::-webkit-scrollbar-track,
+.logistics-scrollbar::-webkit-scrollbar-track {
     background:
-        linear-gradient(180deg,
-            rgba(2, 6, 23, 0.72),
-            rgba(15, 23, 42, 0.72));
+        var(--logistics-scroll-track);
+
     border-radius: 999px;
+
     box-shadow:
-        inset 0 0 0 1px rgba(148, 163, 184, 0.045);
+        inset 0 0 0 1px
+        var(--logistics-scroll-border);
 }
+
+
+/* Thumb */
 
 .logistics-scroll-scope::-webkit-scrollbar-thumb,
-.logistics-scroll-scope *::-webkit-scrollbar-thumb {
-    min-height: 42px;
+.logistics-scroll-scope *::-webkit-scrollbar-thumb,
+.logistics-scrollbar::-webkit-scrollbar-thumb {
     min-width: 42px;
+
+    min-height: 42px;
+
     border: 2px solid transparent;
+
     border-radius: 999px;
+
     background:
-        linear-gradient(180deg,
-            rgba(100, 116, 139, 0.94),
-            rgba(51, 65, 85, 0.94));
+        var(--logistics-scroll-thumb);
+
     background-clip: padding-box;
-    box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+
+    transition:
+        background-color 0.18s ease,
+        opacity 0.18s ease;
 }
+
+
+/* Hover */
 
 .logistics-scroll-scope::-webkit-scrollbar-thumb:hover,
-.logistics-scroll-scope *::-webkit-scrollbar-thumb:hover {
+.logistics-scroll-scope *::-webkit-scrollbar-thumb:hover,
+.logistics-scrollbar::-webkit-scrollbar-thumb:hover {
     background:
-        linear-gradient(180deg,
-            rgba(96, 165, 250, 0.98),
-            rgba(37, 99, 235, 0.98));
+        var(--logistics-scroll-thumb-hover);
+
     background-clip: padding-box;
 }
+
+
+/* Active / dragging */
 
 .logistics-scroll-scope::-webkit-scrollbar-thumb:active,
-.logistics-scroll-scope *::-webkit-scrollbar-thumb:active {
+.logistics-scroll-scope *::-webkit-scrollbar-thumb:active,
+.logistics-scrollbar::-webkit-scrollbar-thumb:active {
     background:
-        linear-gradient(180deg,
-            rgba(147, 197, 253, 1),
-            rgba(37, 99, 235, 1));
+        var(--logistics-scroll-thumb-active);
+
     background-clip: padding-box;
 }
 
+
+/* Bottom-right intersection */
+
 .logistics-scroll-scope::-webkit-scrollbar-corner,
-.logistics-scroll-scope *::-webkit-scrollbar-corner {
-    background: #0b1220;
+.logistics-scroll-scope *::-webkit-scrollbar-corner,
+.logistics-scrollbar::-webkit-scrollbar-corner {
+    background:
+        var(--logistics-scroll-corner);
 }
 
-/* Horizontal data tables get a slightly stronger blue treatment. */
+
+/* ============================================================
+   5. HORIZONTAL TABLE SCROLLBARS
+   ============================================================ */
+
+/*
+ * Tables need a more obvious horizontal rail because wide
+ * Driver 360°, Fleet and Reports tables rely on it.
+ */
+
+.logistics-scrollbar-x {
+    scrollbar-color:
+        var(--logistics-scroll-blue-medium)
+        var(--logistics-scroll-track);
+}
+
+
 .logistics-scrollbar-x::-webkit-scrollbar {
     height: 11px;
 }
 
+
 .logistics-scrollbar-x::-webkit-scrollbar-track {
     margin-inline: 8px;
+
     background:
-        linear-gradient(90deg,
-            rgba(2, 6, 23, 0.78),
-            rgba(15, 23, 42, 0.82),
-            rgba(2, 6, 23, 0.78));
+        linear-gradient(
+            90deg,
+            var(--logistics-scroll-track),
+            var(--logistics-scroll-track-strong),
+            var(--logistics-scroll-track)
+        );
+
+    border-radius: 999px;
 }
+
 
 .logistics-scrollbar-x::-webkit-scrollbar-thumb {
+    min-width: 60px;
+
+    border: 2px solid transparent;
+
+    border-radius: 999px;
+
     background:
-        linear-gradient(90deg,
-            rgba(71, 85, 105, 0.98),
-            rgba(96, 165, 250, 0.86),
-            rgba(71, 85, 105, 0.98));
+        linear-gradient(
+            90deg,
+            var(--logistics-scroll-thumb),
+            var(--logistics-scroll-blue-medium),
+            var(--logistics-scroll-thumb)
+        );
+
     background-clip: padding-box;
 }
 
-/* Main modal vertical rail: a little wider and easier to grab. */
+
+.logistics-scrollbar-x::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(
+            90deg,
+            var(--logistics-scroll-blue-medium),
+            #60a5fa,
+            var(--logistics-scroll-blue-medium)
+        );
+
+    background-clip: padding-box;
+}
+
+
+.logistics-scrollbar-x::-webkit-scrollbar-thumb:active {
+    background:
+        linear-gradient(
+            90deg,
+            #3b82f6,
+            #2563eb,
+            #3b82f6
+        );
+
+    background-clip: padding-box;
+}
+
+
+/* ============================================================
+   6. LOGISTICS DATA TABLE SCROLL AREA
+   ============================================================ */
+
+.logistics-table-scroll {
+    /*
+     * Keeps the horizontal rail slightly away from row content
+     * and from rounded table borders.
+     */
+
+    padding-bottom: 3px;
+
+    overscroll-behavior-x: contain;
+}
+
+
+/*
+ * Prevent accidental browser/page horizontal overscroll from a
+ * large logistics table while retaining normal mouse-wheel
+ * vertical scrolling.
+ */
+
+.logistics-table-scroll {
+    touch-action: pan-x pan-y;
+}
+
+
+/* ============================================================
+   7. LOGISTICS MODAL SCROLLBARS
+   ============================================================ */
+
+/*
+ * Driver 360°, vehicle forms and similar long dialogs should
+ * have a slightly wider vertical scrollbar.
+ */
+
+.logistics-modal-scroll {
+    scrollbar-width: thin;
+
+    scrollbar-color:
+        var(--logistics-scroll-blue-medium)
+        var(--logistics-scroll-track);
+
+    overscroll-behavior-y: contain;
+}
+
+
 .logistics-modal-scroll::-webkit-scrollbar {
     width: 11px;
+
+    height: 10px;
 }
+
 
 .logistics-modal-scroll::-webkit-scrollbar-track {
-    margin-block: 14px;
+    margin-block: 12px;
+
     background:
-        linear-gradient(180deg,
-            rgba(2, 6, 23, 0.80),
-            rgba(15, 23, 42, 0.72));
+        linear-gradient(
+            180deg,
+            var(--logistics-scroll-track),
+            var(--logistics-scroll-track-strong),
+            var(--logistics-scroll-track)
+        );
+
+    border-radius: 999px;
+
+    box-shadow:
+        inset 0 0 0 1px
+        var(--logistics-scroll-border);
 }
 
+
 .logistics-modal-scroll::-webkit-scrollbar-thumb {
+    min-height: 54px;
+
+    border: 2px solid transparent;
+
+    border-radius: 999px;
+
     background:
-        linear-gradient(180deg,
-            rgba(71, 85, 105, 0.95),
-            rgba(59, 130, 246, 0.82));
+        linear-gradient(
+            180deg,
+            var(--logistics-scroll-thumb),
+            var(--logistics-scroll-blue-medium)
+        );
+
     background-clip: padding-box;
 }
 
-/* Keep horizontal rails away from table content and rounded card edges. */
-.logistics-table-scroll {
-    padding-bottom: 3px;
+
+.logistics-modal-scroll::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(
+            180deg,
+            #60a5fa,
+            #3b82f6
+        );
+
+    background-clip: padding-box;
 }
 
-/* Smaller rail for compact nested areas. */
+
+.logistics-modal-scroll::-webkit-scrollbar-thumb:active {
+    background:
+        linear-gradient(
+            180deg,
+            #3b82f6,
+            #2563eb
+        );
+
+    background-clip: padding-box;
+}
+
+
+/* ============================================================
+   8. COMPACT / NESTED SCROLL AREA
+   ============================================================ */
+
+.logistics-scrollbar-thin {
+    scrollbar-width: thin;
+}
+
+
 .logistics-scrollbar-thin::-webkit-scrollbar {
     width: 8px;
+
     height: 8px;
 }
 
-/* Accessible focus treatment when a scroll area is keyboard-focused. */
+
+.logistics-scrollbar-thin::-webkit-scrollbar-thumb {
+    min-width: 32px;
+
+    min-height: 32px;
+}
+
+
+/* ============================================================
+   9. DRIVER 360° / DENSE TABLE SUPPORT
+   ============================================================ */
+
+/*
+ * Keeps bottom horizontal rails readable inside large modal
+ * tables without creating the thick dark bar seen previously
+ * in light mode.
+ */
+
+.logistics-scroll-scope .logistics-table-scroll::-webkit-scrollbar-track {
+    background:
+        rgba(var(--pf-fg-rgb, 15, 23, 42), 0.045);
+}
+
+
+.logistics-scroll-scope .logistics-table-scroll::-webkit-scrollbar-thumb {
+    background:
+        linear-gradient(
+            90deg,
+            rgba(59, 130, 246, 0.48),
+            rgba(96, 165, 250, 0.88),
+            rgba(59, 130, 246, 0.48)
+        );
+
+    background-clip: padding-box;
+}
+
+
+.logistics-scroll-scope .logistics-table-scroll::-webkit-scrollbar-thumb:hover {
+    background:
+        linear-gradient(
+            90deg,
+            #3b82f6,
+            #60a5fa,
+            #3b82f6
+        );
+
+    background-clip: padding-box;
+}
+
+
+/* ============================================================
+   10. KEYBOARD ACCESSIBILITY
+   ============================================================ */
+
 .logistics-scrollbar:focus-visible {
-    outline: 1px solid rgba(96, 165, 250, 0.55);
+    outline:
+        2px solid rgba(59, 130, 246, 0.55);
+
     outline-offset: 2px;
 }
 
-/* Avoid strong decorative motion when the OS requests reduced motion. */
+
+/* ============================================================
+   11. DISABLED / LOW-INTERACTION AREAS
+   ============================================================ */
+
+/*
+ * Avoid visually dominant rails when a region cannot currently
+ * be interacted with.
+ */
+
+.logistics-scrollbar[aria-disabled="true"]::-webkit-scrollbar-thumb {
+    opacity: 0.55;
+}
+
+
+/* ============================================================
+   12. REDUCED MOTION
+   ============================================================ */
+
 @media (prefers-reduced-motion: reduce) {
 
     .logistics-scrollbar-x,
@@ -160,20 +524,65 @@
     }
 }
 
-/* Mobile: retain a visible but compact rail. */
+
+/* ============================================================
+   13. MOBILE / TABLET
+   ============================================================ */
+
 @media (max-width: 720px) {
 
     .logistics-scroll-scope::-webkit-scrollbar,
-    .logistics-scroll-scope *::-webkit-scrollbar {
+    .logistics-scroll-scope *::-webkit-scrollbar,
+    .logistics-scrollbar::-webkit-scrollbar {
         width: 8px;
+
         height: 8px;
     }
+
 
     .logistics-scrollbar-x::-webkit-scrollbar {
         height: 9px;
     }
 
+
     .logistics-modal-scroll::-webkit-scrollbar {
         width: 9px;
+    }
+
+
+    .logistics-scrollbar-x::-webkit-scrollbar-thumb {
+        min-width: 42px;
+    }
+
+
+    .logistics-modal-scroll::-webkit-scrollbar-thumb {
+        min-height: 42px;
+    }
+}
+
+
+/* ============================================================
+   14. HIGH-CONTRAST MODE
+   ============================================================ */
+
+@media (prefers-contrast: more) {
+
+    .logistics-scroll-scope,
+    .logistics-scrollbar {
+        --logistics-scroll-track:
+            rgba(var(--pf-fg-rgb, 15, 23, 42), 0.10);
+
+        --logistics-scroll-thumb:
+            rgba(var(--pf-fg-rgb, 15, 23, 42), 0.48);
+
+        --logistics-scroll-thumb-strong:
+            rgba(var(--pf-fg-rgb, 15, 23, 42), 0.60);
+    }
+
+
+    .logistics-scroll-scope::-webkit-scrollbar-thumb,
+    .logistics-scroll-scope *::-webkit-scrollbar-thumb,
+    .logistics-scrollbar::-webkit-scrollbar-thumb {
+        border-width: 1px;
     }
 }

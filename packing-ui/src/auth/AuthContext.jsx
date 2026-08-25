@@ -24,7 +24,7 @@ import { normalizeRole } from "../utils/permissions";
 import HrCandidateApplicationPage from "../modules/hrflow/HrCandidateApplicationPage";
 import HrOnboardingPortalPage from "../modules/hrflow/HrOnboardingPortalPage";
 import { HrFlowThemeProvider } from "../modules/hrflow/HrFlowCommon";
-import AssetFlowRequestPortal from "../modules/assetflow/AssetFlowRequestPortal";
+import MachFlowRequestPortal from "../modules/machflow/MachFlowRequestPortal";
 
 const AuthContext = createContext(null);
 
@@ -74,7 +74,7 @@ const modulesForRoles = (roles) => {
 			"PACKFLOW",
 			"BOMFLOW",
 			"MATFLOW",
-			"ASSETFLOW",
+			"MACHFLOW",
 			"MATERIALS",
 			"CLIENTS",
 			"HRFLOW",
@@ -116,19 +116,11 @@ const modulesForRoles = (roles) => {
 		}
 
 		if (
-			[
-				"ASSETFLOW_DIRECTOR",
-				"ASSETFLOW_MACHINE_HEAD",
-				"ASSETFLOW_MACHINE_TECHNICIAN",
-				"ASSETFLOW_IT_HEAD",
-				"ASSETFLOW_IT_TECHNICIAN",
-				"ASSETFLOW_MANAGER",
-				"ASSETFLOW_PLANNER",
-				"ASSETFLOW_HEAD_TECHNICIAN",
-				"ASSETFLOW_TECHNICIAN",
-			].includes(role)
+			role.startsWith(
+				"MACHFLOW_"
+			)
 		) {
-			modules.add("ASSETFLOW");
+			modules.add("MACHFLOW");
 		}
 
 		/*
@@ -326,13 +318,13 @@ const resolveHrPublicPortal = () => {
 };
 
 /*
- * Standalone AssetFlow request center.
+ * Standalone MachFlow request center.
  *
  * This route is intentionally available before the authenticated FlowSuite
  * router because approved non-FlowSuite employees may use Reporter Passes.
  * The backend still requires Reporter Code + PIN before it accepts a post.
  */
-const resolveAssetFlowPublicPortal = () => {
+const resolveMachFlowPublicPortal = () => {
 	if (typeof window === "undefined") {
 		return false;
 	}
@@ -348,7 +340,7 @@ const resolveAssetFlowPublicPortal = () => {
 			.replace(/\/+/g, "/")
 			.toLowerCase();
 
-		return path === "/assetflow/request" || path.endsWith("/assetflow/request");
+		return path === "/machflow/request" || path.endsWith("/machflow/request");
 	});
 };
 
@@ -372,8 +364,8 @@ export function AuthProvider({
 		[]
 	);
 
-	const publicAssetFlowPortal = useMemo(
-		() => resolveAssetFlowPublicPortal(),
+	const publicMachFlowPortal = useMemo(
+		() => resolveMachFlowPublicPortal(),
 		[]
 	);
 
@@ -566,7 +558,7 @@ export function AuthProvider({
 		 * by /auth/me. Do not initialise the ordinary FlowSuite session on
 		 * those two standalone public pages.
 		 */
-		if (publicHrPortal || publicAssetFlowPortal) {
+		if (publicHrPortal || publicMachFlowPortal) {
 			setAuthLoading(false);
 		} else {
 			loadMe();
@@ -578,7 +570,7 @@ export function AuthProvider({
 			 * inside the public portal. It must not turn into a FlowSuite login
 			 * redirect or clear a user's stored FlowSuite session.
 			 */
-			if (resolveHrPublicPortal() || resolveAssetFlowPublicPortal()) {
+			if (resolveHrPublicPortal() || resolveMachFlowPublicPortal()) {
 				return;
 			}
 
@@ -600,7 +592,7 @@ export function AuthProvider({
 		clearSession,
 		loadMe,
 		publicHrPortal,
-		publicAssetFlowPortal,
+		publicMachFlowPortal,
 	]);
 
 	const logout = useCallback(
@@ -716,16 +708,16 @@ export function AuthProvider({
 	);
 
 	/*
-	 * PRIMARY ASSETFLOW REQUEST GATE
+	 * PRIMARY MACHFLOW REQUEST GATE
 	 *
 	 * This page can be opened by a QR without creating a FlowSuite account.
 	 * Identity enforcement happens through either an existing FlowSuite session
 	 * or a controlled Reporter Pass. Other FlowSuite routes are unchanged.
 	 */
-	if (publicAssetFlowPortal) {
+	if (publicMachFlowPortal) {
 		return (
 			<AuthContext.Provider value={value}>
-				<AssetFlowRequestPortal />
+				<MachFlowRequestPortal />
 			</AuthContext.Provider>
 		);
 	}

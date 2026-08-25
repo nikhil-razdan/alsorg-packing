@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,11 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
 import com.alsorg.packing.repository.VehicleRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
@@ -87,6 +92,14 @@ public class DispatchedItemService {
         private final DriverRepository driverRepository;
         private final VehicleRepository vehicleRepository;
         private final StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService;
+
+        /*
+         * Read-only Dispatch register queries sometimes need a content-only page
+         * without Spring Data's automatic COUNT query. Field injection keeps the
+         * existing constructor contract completely unchanged.
+         */
+        @PersistenceContext
+        private EntityManager entityManager;
 
         private static final Set<AdminDispatchEditField> STICKER_PDF_CONTENT_FIELDS = Set.of(
                         AdminDispatchEditField.ITEM_NAME,
@@ -157,7 +170,155 @@ public class DispatchedItemService {
                                         "Dispatch page request is required");
                 }
 
-                Specification<DispatchedItem> specification = (root, query, cb) -> {
+                Specification<DispatchedItem> specification = buildDispatchRegisterSpecification(
+                                search,
+                                statuses,
+                                plantFilter,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                completeRegisterAccess,
+                                allowedPlants);
+
+                return dispatchedRepo.findAll(
+                                specification,
+                                pageable);
+        }
+
+        /**
+         * High-volume page window used only by GET /api/dispatched/search.
+         *
+         * Existing clients still default to includeTotal=true and therefore receive
+         * the exact same total-count semantics as before. The optimized Dispatch UI
+         * can pass a total it already obtained for the same filter signature. In that
+         * case only the requested rows (+ one look-ahead row) are queried and the
+         * expensive COUNT is skipped.
+         */
+        public DispatchRegisterWindow searchDispatchRegisterWindow(
+                        Pageable pageable,
+                        String search,
+                        Collection<ItemDispatchStatus> statuses,
+                        String plantFilter,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants,
+                        boolean includeTotal,
+                        Long knownTotalElements) {
+
+                if (pageable == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch page request is required");
+                }
+
+                Specification<DispatchedItem> specification = buildDispatchRegisterSpecification(
+                                search,
+                                statuses,
+                                plantFilter,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                completeRegisterAccess,
+                                allowedPlants);
+
+                boolean requestedTotalReuse = !includeTotal
+                                && knownTotalElements != null
+                                && knownTotalElements >= 0L;
+
+                int pageSize = Math.max(1, pageable.getPageSize());
+
+                List<DispatchedItem> fetched = fetchDispatchRegisterRows(
+                                specification,
+                                pageable,
+                                pageSize + 1);
+
+                boolean hasLookAhead = fetched.size() > pageSize;
+
+                List<DispatchedItem> items = hasLookAhead
+                                ? List.copyOf(fetched.subList(0, pageSize))
+                                : List.copyOf(fetched);
+
+                /*
+                 * If a concurrent delete made a formerly-valid page empty, a reused
+                 * total can no longer tell us the new last page. Fall back to one
+                 * exact count so the frontend can clamp itself safely.
+                 */
+                boolean canReuseTotal = requestedTotalReuse
+                                && !(pageable.getPageNumber() > 0 && items.isEmpty());
+
+                long totalElements;
+
+                if (canReuseTotal) {
+                        long observedOffset = Math.max(0L, pageable.getOffset());
+
+                        if (hasLookAhead) {
+                                /*
+                                 * Concurrent inserts can only make the supplied total
+                                 * too small. Never report fewer rows than this page has
+                                 * already proved exist.
+                                 */
+                                long observedMinimum = observedOffset
+                                                + items.size()
+                                                + 1L;
+
+                                totalElements = Math.max(
+                                                knownTotalElements.longValue(),
+                                                observedMinimum);
+                        } else {
+                                /*
+                                 * The pageSize+1 probe proved there is no next row, so
+                                 * this page gives us an exact current upper bound without
+                                 * running COUNT(*).
+                                 */
+                                totalElements = observedOffset + items.size();
+                        }
+                } else {
+                        totalElements = countDispatchRegisterRows(specification);
+                }
+
+                int totalPages = totalElements <= 0L
+                                ? 1
+                                : (int) Math.min(
+                                                Integer.MAX_VALUE,
+                                                Math.max(
+                                                                1L,
+                                                                (totalElements + pageSize - 1L) / pageSize));
+
+                boolean hasNext = canReuseTotal
+                                ? hasLookAhead
+                                : pageable.getPageNumber() + 1 < totalPages;
+
+                return new DispatchRegisterWindow(
+                                items,
+                                totalElements,
+                                totalPages,
+                                pageable.getPageNumber(),
+                                pageSize,
+                                hasNext,
+                                canReuseTotal);
+        }
+
+        private Specification<DispatchedItem> buildDispatchRegisterSpecification(
+                        String search,
+                        Collection<ItemDispatchStatus> statuses,
+                        String plantFilter,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants) {
+
+                return (root, query, cb) -> {
                         List<Predicate> predicates = new ArrayList<>();
 
                         appendDispatchAccessPredicate(
@@ -198,10 +359,117 @@ public class DispatchedItemService {
                                         ? cb.conjunction()
                                         : cb.and(predicates.toArray(Predicate[]::new));
                 };
+        }
 
-                return dispatchedRepo.findAll(
-                                specification,
-                                pageable);
+        private List<DispatchedItem> fetchDispatchRegisterRows(
+                        Specification<DispatchedItem> specification,
+                        Pageable pageable,
+                        int maxResults) {
+
+                CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+                CriteriaQuery<DispatchedItem> query = cb.createQuery(DispatchedItem.class);
+                Root<DispatchedItem> root = query.from(DispatchedItem.class);
+
+                Predicate predicate = specification.toPredicate(
+                                root,
+                                query,
+                                cb);
+
+                query.select(root);
+
+                if (predicate != null) {
+                        query.where(predicate);
+                }
+
+                applyDispatchRegisterSort(
+                                query,
+                                root,
+                                cb,
+                                pageable.getSort());
+
+                TypedQuery<DispatchedItem> typedQuery = entityManager.createQuery(query);
+
+                long offset = Math.max(0L, pageable.getOffset());
+
+                if (offset > Integer.MAX_VALUE) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch page offset is too large");
+                }
+
+                typedQuery.setFirstResult((int) offset);
+                typedQuery.setMaxResults(Math.max(1, maxResults));
+
+                return typedQuery.getResultList();
+        }
+
+        private long countDispatchRegisterRows(
+                        Specification<DispatchedItem> specification) {
+
+                CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+                CriteriaQuery<Long> query = cb.createQuery(Long.class);
+                Root<DispatchedItem> root = query.from(DispatchedItem.class);
+
+                Predicate predicate = specification.toPredicate(
+                                root,
+                                query,
+                                cb);
+
+                query.select(cb.count(root));
+
+                if (predicate != null) {
+                        query.where(predicate);
+                }
+
+                Long count = entityManager
+                                .createQuery(query)
+                                .getSingleResult();
+
+                return count == null
+                                ? 0L
+                                : Math.max(0L, count.longValue());
+        }
+
+        private void applyDispatchRegisterSort(
+                        CriteriaQuery<DispatchedItem> query,
+                        Root<DispatchedItem> root,
+                        CriteriaBuilder cb,
+                        Sort sort) {
+
+                if (sort == null || sort.isUnsorted()) {
+                        return;
+                }
+
+                List<jakarta.persistence.criteria.Order> orders = new ArrayList<>();
+
+                for (Sort.Order order : sort) {
+                        String property = order.getProperty();
+
+                        if (!hasDispatchAttribute(root, property)) {
+                                continue;
+                        }
+
+                        Expression<?> expression = root.get(property);
+
+                        orders.add(
+                                        order.isAscending()
+                                                        ? cb.asc(expression)
+                                                        : cb.desc(expression));
+                }
+
+                if (!orders.isEmpty()) {
+                        query.orderBy(orders);
+                }
+        }
+
+        public record DispatchRegisterWindow(
+                        List<DispatchedItem> items,
+                        long totalElements,
+                        int totalPages,
+                        int pageNumber,
+                        int pageSize,
+                        boolean hasNext,
+                        boolean countReused) {
         }
 
         private void appendDispatchAccessPredicate(
@@ -311,41 +579,71 @@ public class DispatchedItemService {
                                 "itemType"
                 };
 
+                /*
+                 * Build the searchable row document once per SQL row instead of
+                 * generating normal + compact LIKE expressions independently for
+                 * every field and every token. With 21 fields, the previous query
+                 * could create 42 LIKE branches per token and repeatedly execute
+                 * the same replace/lower functions. The separator is deliberately
+                 * not removed by compact normalization, so a match still cannot
+                 * accidentally span from one field into the next.
+                 */
+                List<Expression<?>> searchDocumentParts = new ArrayList<>();
+                searchDocumentParts.add(cb.literal("§"));
+
+                for (String field : searchableFields) {
+                        if (!hasDispatchAttribute(root, field)) {
+                                continue;
+                        }
+
+                        searchDocumentParts.add(
+                                        dispatchSearchFieldExpression(
+                                                        root,
+                                                        cb,
+                                                        field));
+                }
+
+                if (searchDocumentParts.size() <= 1) {
+                        return;
+                }
+
+                Expression<String> searchDocument = cb.function(
+                                "concat_ws",
+                                String.class,
+                                searchDocumentParts.toArray(new Expression<?>[0]));
+
+                Expression<String> normalSearchDocument = dispatchNormalSearchExpression(
+                                cb,
+                                searchDocument);
+
+                Expression<String> compactSearchDocument = dispatchCompactSearchExpression(
+                                cb,
+                                searchDocument);
+
                 for (String token : tokens) {
                         String normalToken = normalizeDispatchServerSearch(token);
                         String compactToken = compactDispatchServerSearch(token);
 
-                        List<Predicate> tokenMatches = new ArrayList<>();
+                        List<Predicate> tokenMatches = new ArrayList<>(3);
 
-                        for (String field : searchableFields) {
-                                if (!hasDispatchAttribute(root, field)) {
-                                        continue;
-                                }
+                        if (!normalToken.isBlank()) {
+                                tokenMatches.add(
+                                                cb.like(
+                                                                normalSearchDocument,
+                                                                "%" + escapeDispatchLike(normalToken) + "%",
+                                                                '\\'));
+                        }
 
-                                Expression<String> value = dispatchSearchFieldExpression(
-                                                root,
-                                                cb,
-                                                field);
-
-                                if (!normalToken.isBlank()) {
-                                        tokenMatches.add(
-                                                        cb.like(
-                                                                        dispatchNormalSearchExpression(cb, value),
-                                                                        "%" + escapeDispatchLike(normalToken) + "%",
-                                                                        '\\'));
-                                }
-
-                                if (!compactToken.isBlank()) {
-                                        tokenMatches.add(
-                                                        cb.like(
-                                                                        dispatchCompactSearchExpression(cb, value),
-                                                                        "%" + escapeDispatchLike(compactToken) + "%",
-                                                                        '\\'));
-                                }
+                        if (!compactToken.isBlank()) {
+                                tokenMatches.add(
+                                                cb.like(
+                                                                compactSearchDocument,
+                                                                "%" + escapeDispatchLike(compactToken) + "%",
+                                                                '\\'));
                         }
 
                         /*
-                         * Compatibility aliases used by the existing smart search.
+                         * Compatibility alias used by the existing smart search.
                          */
                         if ("hw".equals(compactToken)
                                         || "hardware".equals(compactToken)) {
@@ -1310,7 +1608,7 @@ public class DispatchedItemService {
          * row from ANY current status to DISPATCHED.
          *
          * Matching is authoritative on:
-         *   Item Name + PD No + DWG No
+         * Item Name + PD No + DWG No
          *
          * Description and Client are used only as duplicate tie-breakers. Every
          * database row can be allocated only once per verification request, which

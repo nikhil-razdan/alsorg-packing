@@ -69,14 +69,11 @@ import HrFlowWorkspace
 import hrflowApi
 	from "../modules/hrflow/hrflowApi";
 
-import AssetFlowWorkspace
-	from "../modules/assetflow/AssetFlowWorkspace";
+import MachFlowWorkspace
+	from "../modules/machflow/MachFlowWorkspace";
 
-import AssetFlowRequestPortal
-	from "../modules/assetflow/AssetFlowRequestPortal";
-
-import assetFlowApi
-	from "../modules/assetflow/assetFlowApi";
+import MachFlowRequestPortal
+	from "../modules/machflow/MachFlowRequestPortal";
 
 import {
 	MODULE_KEYS,
@@ -135,9 +132,6 @@ function ModuleHubContent() {
 	const [hrFlowAllowed, setHrFlowAllowed] =
 		React.useState(() => Boolean(hasRole("ADMIN")));
 
-	const [assetFlowRequestAllowed, setAssetFlowRequestAllowed] =
-		React.useState(false);
-
 	React.useEffect(() => {
 		let active = true;
 
@@ -167,22 +161,6 @@ function ModuleHubContent() {
 		};
 	}, [user?.username, role, roles, hasRole]);
 
-	React.useEffect(() => {
-		let active = true;
-
-		assetFlowApi.requesterContext()
-			.then((payload) => {
-				if (!active) return;
-				setAssetFlowRequestAllowed(payload?.allowed === true);
-			})
-			.catch(() => {
-				if (!active) return;
-				setAssetFlowRequestAllowed(false);
-			});
-
-		return () => { active = false; };
-	}, [user?.username, role, roles]);
-
 	/*
 	 * Shared FlowSuite module hosting.
 	 *
@@ -210,12 +188,12 @@ function ModuleHubContent() {
 		requestedSharedModule === "hrflow" ||
 		requestedSharedModule === "hr";
 
-	const assetFlowView =
-		requestedSharedModule === "assetflow" ||
+	const machFlowView =
+		requestedSharedModule === "machflow" ||
 		requestedSharedModule === "maintenance";
 
-	const assetFlowRequestView =
-		requestedSharedModule === "assetflow-request" ||
+	const machFlowRequestView =
+		requestedSharedModule === "machflow-request" ||
 		requestedSharedModule === "service-request" ||
 		requestedSharedModule === "maintenance-request";
 
@@ -231,8 +209,8 @@ function ModuleHubContent() {
 		return <HrFlowWorkspace />;
 	}
 
-	if (assetFlowRequestView) {
-		return <AssetFlowRequestPortal />;
+	if (machFlowRequestView) {
+		return <MachFlowRequestPortal />;
 	}
 
 	/*
@@ -262,15 +240,14 @@ function ModuleHubContent() {
 					: [],
 	};
 
-	const assetFlowAllowed =
-		hasRole("ADMIN") ||
+	const machFlowAllowed =
 		hasModuleAccessFromUser(
 			accessUser,
-			MODULE_KEYS.ASSETFLOW
+			MODULE_KEYS.MACHFLOW
 		);
 
-	if (assetFlowView && assetFlowAllowed) {
-		return <AssetFlowWorkspace />;
+	if (machFlowView && machFlowAllowed) {
+		return <MachFlowWorkspace />;
 	}
 
 	const isHardwareOnly =
@@ -361,50 +338,44 @@ function ModuleHubContent() {
 			accent: "Material Control",
 		},
 		{
-			key: "ASSETFLOW_REQUEST",
+			key: "MACHFLOW_REQUEST",
 			title: "Maintenance Request",
 			subtitle:
-				"Raise a controlled Machine Maintenance or IT Support request through an approved linked Reporter profile.",
+				"Raise a controlled machine, IT, electrical, facility or utility service request without needing MachFlow operational access.",
 			icon: (
 				<EngineeringOutlinedIcon
 					fontSize="large"
 				/>
 			),
-			path: "/modules?module=assetflow-request",
+			path: "/modules?module=machflow-request",
 			tags: [
-				"Machine Maintenance",
-				"IT Support",
-				"Asset QR",
-				"My Requests",
+				"Machine",
+				"IT / LAN",
+				"Electrical",
+				"Facility",
 			],
-			/*
-			 * Request-only users get the lightweight request card.
-			 * ADMIN / Director / Machine / IT operational users get the full
-			 * AssetFlow card instead, so the hub cannot accidentally funnel them
-			 * into the complainant portal.
-			 */
-			visible: assetFlowRequestAllowed && !assetFlowAllowed,
-			accent: "Approved Request Portal",
+			visible: true,
+			accent: "Employee Service Desk",
 		},
 		{
-			key: MODULE_KEYS.ASSETFLOW,
-			title: "AssetFlow",
+			key: MODULE_KEYS.MACHFLOW,
+			title: "MachFlow",
 			subtitle:
-				"Department-separated Machine Maintenance and IT Support with controlled request intake, asset QR, preventive planning and management intelligence.",
+				"Unified machine, IT, electrical, facility and utility maintenance with controlled request intake, preventive planning and reliability tracking.",
 			icon: (
 				<EngineeringOutlinedIcon
 					fontSize="large"
 				/>
 			),
-			path: "/modules?module=assetflow",
+			path: "/modules?module=machflow",
 			tags: [
 				"Service Requests",
-				"Machine Master",
-				"IT Asset Master",
-				"Department Reports",
+				"Equipment",
+				"Preventive PM",
+				"Reporter Passes",
 			],
 			visible: canAccess(
-				MODULE_KEYS.ASSETFLOW
+				MODULE_KEYS.MACHFLOW
 			),
 			accent: "Maintenance Control",
 		},
