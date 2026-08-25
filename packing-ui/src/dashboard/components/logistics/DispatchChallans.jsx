@@ -1414,7 +1414,7 @@ function DispatchChallans({
                 <SearchIcon
                     sx={{
                         color:
-                            "rgba(255,255,255,.45)",
+                            "rgba(var(--pf-fg-rgb),.45)",
                         flexShrink: 0,
                     }}
                 />
@@ -1436,14 +1436,14 @@ function DispatchChallans({
                         minWidth: 220,
 
                         "& .MuiInputBase-root": {
-                            color: "#fff",
+                            color: "var(--pf-text-strong)",
                             fontSize: 14,
                             fontWeight: 700,
                         },
 
                         "& input::placeholder": {
                             color:
-                                "rgba(255,255,255,.42)",
+                                "rgba(var(--pf-fg-rgb),.42)",
                             opacity: 1,
                         },
                     }}
@@ -1473,7 +1473,7 @@ function DispatchChallans({
                     >
                         <Box
                             sx={{
-                                color: "#fff",
+                                color: "var(--pf-text-strong)",
                                 fontSize: 11,
                                 fontWeight: 950,
                                 whiteSpace: "nowrap",
@@ -1490,8 +1490,8 @@ function DispatchChallans({
                                 mt: 0.35,
                                 color:
                                     dateFilterActive
-                                        ? "#bfdbfe"
-                                        : "#94a3b8",
+                                        ? "#2563eb"
+                                        : "var(--pf-text-muted)",
                                 fontSize: 9.5,
                                 fontWeight: 750,
                                 whiteSpace: "nowrap",
@@ -1531,11 +1531,11 @@ function DispatchChallans({
                         PaperProps: {
                             sx: {
                                 mt: 1,
-                                borderRadius: "12px",
-                                color: "#fff",
-                                background: "#0f172a",
+                                borderRadius: "10px",
+                                color: "var(--pf-text-strong)",
+                                background: "var(--pf-surface)",
                                 border:
-                                    "1px solid rgba(255,255,255,.12)",
+                                    "1px solid rgba(var(--pf-fg-rgb),.12)",
 
                                 "& .MuiMenuItem-root": {
                                     fontSize: 13,
@@ -2076,7 +2076,7 @@ function DispatchChallans({
                         <EventAvailableOutlinedIcon
                             sx={{
                                 fontSize: 18,
-                                color: "#6ee7b7",
+                                color: "#059669",
                                 flexShrink: 0,
                             }}
                         />
@@ -2097,7 +2097,7 @@ function DispatchChallans({
                             <Box
                                 sx={{
                                     mt: 0.3,
-                                    color: "#94a3b8",
+                                    color: "var(--pf-text-muted)",
                                     fontSize: 10,
                                     fontWeight: 650,
                                 }}
@@ -2139,20 +2139,20 @@ function DispatchChallans({
                 PaperProps={{
                     sx: {
                         borderRadius: "18px",
-                        background: "#020617",
-                        border: "1px solid rgba(255,255,255,.12)",
-                        color: "#fff",
+                        background: "var(--pf-surface)",
+                        border: "1px solid var(--pf-border)",
+                        color: "var(--pf-text-strong)",
                     },
                 }}
             >
                 <DialogTitle
                     sx={{
-                        color: "#fff",
+                        color: "var(--pf-text-strong)",
                         fontWeight: 900,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
-                        borderBottom: "1px solid rgba(255,255,255,.08)",
+                        borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
                     }}
                 >
                     Enter Trip End Time
@@ -2160,7 +2160,7 @@ function DispatchChallans({
                     <IconButton
                         onClick={closeEndTripDialog}
                         sx={{
-                            color: "#fff",
+                            color: "var(--pf-text-muted)",
                         }}
                     >
                         <CloseIcon />
@@ -2225,23 +2225,22 @@ function DispatchChallans({
                 PaperProps={{
                     sx: {
                         borderRadius: "18px",
-                        background: "#020617",
-                        border:
-                            "1px solid rgba(255,255,255,.12)",
-                        color: "#fff",
+                        background: "var(--pf-surface)",
+                        border: "1px solid var(--pf-border)",
+                        color: "var(--pf-text-strong)",
                     },
                 }}
             >
                 <DialogTitle
                     sx={{
-                        color: "#fff",
+                        color: "var(--pf-text-strong)",
                         fontWeight: 900,
                         display: "flex",
                         alignItems: "center",
                         justifyContent:
                             "space-between",
                         borderBottom:
-                            "1px solid rgba(255,255,255,.08)",
+                            "1px solid rgba(var(--pf-fg-rgb),.08)",
                     }}
                 >
                     Helpers / Loaders
@@ -2250,7 +2249,7 @@ function DispatchChallans({
                         onClick={
                             closeHelperDialog
                         }
-                        sx={{ color: "#fff" }}
+                        sx={{ color: "var(--pf-text-muted)" }}
                     >
                         <CloseIcon />
                     </IconButton>
@@ -2326,22 +2325,21 @@ function DispatchChallans({
                 PaperProps={{
                     sx: {
                         borderRadius: "18px",
-                        background: "#020617",
-                        border:
-                            "1px solid rgba(255,255,255,.12)",
+                        background: "var(--pf-surface)",
+                        border: "1px solid var(--pf-border)",
                         overflow: "hidden",
                     },
                 }}
             >
                 <DialogTitle
                     sx={{
-                        color: "#fff",
+                        color: "var(--pf-text-strong)",
                         fontWeight: 900,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         borderBottom:
-                            "1px solid rgba(255,255,255,.08)",
+                            "1px solid rgba(var(--pf-fg-rgb),.08)",
                     }}
                 >
                     Challan PDF • {pdfPreview.challanNumber}
@@ -2349,7 +2347,7 @@ function DispatchChallans({
                     <IconButton
                         onClick={closePdfPreview}
                         sx={{
-                            color: "#fff",
+                            color: "var(--pf-text-muted)",
                         }}
                     >
                         <CloseIcon />
@@ -2360,7 +2358,7 @@ function DispatchChallans({
                     sx={{
                         p: 0,
                         height: "78vh",
-                        background: "#111827",
+                        background: "var(--pf-surface-alt)",
                     }}
                 >
                     {pdfPreview.url && (
@@ -2692,13 +2690,12 @@ function sanitizeFilename(value) {
 }
 
 const wrap = {
-    p: 3,
-    borderRadius: "24px",
-    background:
-        "linear-gradient(180deg,#0f172a,#111827)",
-    border:
-        "1px solid rgba(255,255,255,.06)",
-    color: "#fff",
+    p: 2.5,
+    borderRadius: "18px",
+    background: "var(--pf-surface)",
+    border: "1px solid var(--pf-border)",
+    boxShadow: "var(--pf-card-shadow)",
+    color: "var(--pf-text-strong)",
 };
 
 const topRow = {
@@ -2710,14 +2707,14 @@ const topRow = {
 };
 
 const title = {
-    fontSize: 26,
-    fontWeight: 900,
-    color: "#fff",
+    fontSize: 25,
+    fontWeight: 950,
+    color: "var(--pf-text-strong)",
 };
 
 const subtitle = {
     mt: 0.5,
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
     fontSize: 13,
     fontWeight: 600,
 };
@@ -2747,12 +2744,11 @@ const summaryRow = {
 };
 
 const summaryCard = {
-    p: 2,
-    borderRadius: "16px",
-    background:
-        "rgba(255,255,255,.035)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    p: 1.8,
+    borderRadius: "13px",
+    background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+    border: "1px solid var(--pf-border-soft)",
+    boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const summaryValue = {
@@ -2762,7 +2758,7 @@ const summaryValue = {
 };
 
 const summaryLabel = {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 13,
     fontWeight: 700,
 };
@@ -2777,10 +2773,8 @@ const searchPanel = {
     py: 0.75,
     mb: 2,
     borderRadius: "14px",
-    background:
-        "rgba(255,255,255,.035)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
 };
 
 const searchFilterDivider = {
@@ -2788,7 +2782,7 @@ const searchFilterDivider = {
     height: 28,
     flexShrink: 0,
     background:
-        "rgba(255,255,255,.10)",
+        "rgba(var(--pf-fg-rgb),.10)",
 
     "@media (max-width: 700px)": {
         display: "none",
@@ -2799,7 +2793,7 @@ const endTimeFilterSelect = {
     minWidth: 230,
     height: 38,
     flexShrink: 0,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 13,
     fontWeight: 850,
     borderRadius: "10px",
@@ -2821,7 +2815,7 @@ const endTimeFilterSelect = {
     },
 
     "& .MuiSvgIcon-root": {
-        color: "#93c5fd",
+        color: "#2563eb",
     },
 
     "@media (max-width: 700px)": {
@@ -2840,27 +2834,27 @@ const dateFilterButtonSx = (
     borderRadius: "12px",
     textTransform: "none",
     justifyContent: "flex-start",
-    color: "#fff",
+    color: active ? "#1d4ed8" : "var(--pf-text)",
     background: active
-        ? "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.18))"
-        : "rgba(255,255,255,.04)",
+        ? "rgba(59,130,246,.10)"
+        : "var(--pf-surface)",
     border: active
         ? "1px solid rgba(96,165,250,.42)"
-        : "1px solid rgba(255,255,255,.08)",
+        : "1px solid rgba(var(--pf-fg-rgb),.08)",
     boxShadow: active
         ? "0 12px 26px rgba(37,99,235,.18)"
         : "none",
 
     "& .MuiButton-startIcon": {
         color: active
-            ? "#93c5fd"
-            : "#64748b",
+            ? "#2563eb"
+            : "var(--pf-text-dim)",
     },
 
     "&:hover": {
         background: active
             ? "linear-gradient(135deg,rgba(37,99,235,.42),rgba(59,130,246,.24))"
-            : "rgba(255,255,255,.075)",
+            : "rgba(var(--pf-fg-rgb),.075)",
         borderColor:
             "rgba(96,165,250,.34)",
     },
@@ -2872,15 +2866,12 @@ const dateFilterButtonSx = (
 });
 
 const dateFilterDialogPaperSx = {
-    borderRadius: "22px",
+    borderRadius: "16px",
     overflow: "hidden",
-    color: "#fff",
-    background:
-        "radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 34%), linear-gradient(180deg,#0f172a,#111827)",
-    border:
-        "1px solid rgba(148,163,184,.16)",
-    boxShadow:
-        "0 32px 90px rgba(2,6,23,.68)",
+    color: "var(--pf-text-strong)",
+    background: "var(--pf-surface)",
+    border: "1px solid var(--pf-border)",
+    boxShadow: "0 28px 70px rgba(var(--pf-shadow-rgb),.18)",
 };
 
 const dateFilterDialogTitleSx = {
@@ -2890,11 +2881,9 @@ const dateFilterDialogTitleSx = {
     gap: 1.5,
     px: 2.2,
     py: 1.8,
-    color: "#fff",
-    borderBottom:
-        "1px solid rgba(255,255,255,.07)",
-    background:
-        "rgba(2,6,23,.26)",
+    color: "var(--pf-text-strong)",
+    borderBottom: "1px solid var(--pf-border)",
+    background: "var(--pf-surface-alt)",
 };
 
 const dateFilterContentSx = {
@@ -2902,16 +2891,14 @@ const dateFilterContentSx = {
     maxHeight: "min(72vh, 720px)",
     overflowY: "auto",
     scrollbarWidth: "thin",
-    scrollbarColor:
-        "#60a5fa rgba(15,23,42,.8)",
+    scrollbarColor: "#60a5fa var(--pf-scroll-track)",
 
     "&::-webkit-scrollbar": {
         width: 8,
     },
 
     "&::-webkit-scrollbar-track": {
-        background:
-            "rgba(15,23,42,.8)",
+        background: "var(--pf-scroll-track)",
         borderRadius: 999,
     },
 
@@ -2930,7 +2917,7 @@ const dateFilterIconSx = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#bfdbfe",
+    color: "#2563eb",
     background:
         "linear-gradient(135deg,rgba(37,99,235,.34),rgba(59,130,246,.14))",
     border:
@@ -2940,21 +2927,21 @@ const dateFilterIconSx = {
 };
 
 const dateFilterTitleSx = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 16,
     fontWeight: 950,
 };
 
 const dateFilterSubtitleSx = {
     mt: 0.35,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 10.5,
     fontWeight: 650,
 };
 
 const dateFilterCountChipSx = {
     height: 24,
-    color: "#6ee7b7",
+    color: "#059669",
     fontSize: 10,
     fontWeight: 950,
     background:
@@ -2966,16 +2953,16 @@ const dateFilterCountChipSx = {
 const dateFilterCloseButtonSx = {
     width: 34,
     height: 34,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     background:
-        "rgba(255,255,255,.04)",
+        "rgba(var(--pf-fg-rgb),.04)",
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid rgba(var(--pf-fg-rgb),.08)",
 
     "&:hover": {
-        color: "#fff",
+        color: "#dc2626",
         background:
-            "rgba(239,68,68,.16)",
+            "rgba(239,68,68,.10)",
     },
 };
 
@@ -2985,7 +2972,7 @@ const dateModeSectionSx = {
 
 const dateModeSectionLabelSx = {
     mb: 0.8,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 10,
     fontWeight: 950,
     letterSpacing: ".10em",
@@ -3016,22 +3003,22 @@ const dateModeCardSx = (
     alignItems: "flex-start",
     gap: 1,
     textAlign: "left",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     background: active
-        ? "linear-gradient(135deg,rgba(37,99,235,.30),rgba(59,130,246,.14))"
-        : "rgba(255,255,255,.035)",
+        ? "rgba(59,130,246,.09)"
+        : "var(--pf-surface-alt)",
     border: active
         ? "1px solid rgba(96,165,250,.48)"
-        : "1px solid rgba(255,255,255,.075)",
+        : "1px solid rgba(var(--pf-fg-rgb),.075)",
     boxShadow: active
-        ? "0 12px 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(255,255,255,.04)"
+        ? "0 12px 28px rgba(37,99,235,.16), inset 0 1px 0 rgba(var(--pf-fg-rgb),.04)"
         : "none",
 
     "&:hover": {
         transform: "translateY(-1px)",
         background: active
             ? "linear-gradient(135deg,rgba(37,99,235,.38),rgba(59,130,246,.20))"
-            : "rgba(255,255,255,.065)",
+            : "rgba(var(--pf-fg-rgb),.065)",
         borderColor:
             "rgba(96,165,250,.34)",
     },
@@ -3043,7 +3030,7 @@ const dateModeCardTextSx = {
 };
 
 const dateModeCardTitleSx = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 11.5,
     fontWeight: 950,
     lineHeight: 1.25,
@@ -3051,7 +3038,7 @@ const dateModeCardTitleSx = {
 
 const dateModeCardDescriptionSx = {
     mt: 0.35,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 9.5,
     fontWeight: 650,
     lineHeight: 1.35,
@@ -3074,10 +3061,10 @@ const dateModeCheckSx = (
     fontWeight: 950,
     background: active
         ? "linear-gradient(135deg,#2563eb,#60a5fa)"
-        : "rgba(255,255,255,.035)",
+        : "rgba(var(--pf-fg-rgb),.035)",
     border: active
         ? "1px solid rgba(147,197,253,.48)"
-        : "1px solid rgba(255,255,255,.10)",
+        : "1px solid rgba(var(--pf-fg-rgb),.10)",
 });
 
 const datePresetRowSx = {
@@ -3098,7 +3085,7 @@ const datePresetButtonSx = {
     height: 34,
     borderRadius: "11px",
     textTransform: "none",
-    color: "#dbeafe",
+    color: "#2563eb",
     fontSize: 10.5,
     fontWeight: 900,
     background:
@@ -3130,25 +3117,24 @@ const dateFilterGridSx = {
 
 const dateFilterFieldSx = {
     "& .MuiInputLabel-root": {
-        color: "#94a3b8",
+        color: "var(--pf-text-muted)",
         fontSize: 12,
         fontWeight: 800,
     },
 
     "& .MuiInputLabel-root.Mui-focused": {
-        color: "#93c5fd",
+        color: "#2563eb",
     },
 
     "& .MuiOutlinedInput-root": {
         minHeight: 46,
-        borderRadius: "13px",
-        color: "#fff",
-        background:
-            "rgba(255,255,255,.04)",
+        borderRadius: "10px",
+        color: "var(--pf-text-strong)",
+        background: "var(--pf-input)",
 
         "& fieldset": {
             borderColor:
-                "rgba(255,255,255,.09)",
+                "rgba(var(--pf-fg-rgb),.09)",
         },
 
         "&:hover fieldset": {
@@ -3164,14 +3150,14 @@ const dateFilterFieldSx = {
     },
 
     "& input": {
-        color: "#fff",
+        color: "var(--pf-text-strong)",
         fontSize: 12,
         fontWeight: 850,
-        colorScheme: "dark",
+        colorScheme: "var(--pf-color-scheme)",
     },
 
     "& input::-webkit-calendar-picker-indicator": {
-        filter: "invert(1)",
+        filter: "none",
         opacity: 0.88,
         cursor: "pointer",
     },
@@ -3203,14 +3189,14 @@ const dateFilterFooterSx = {
     mt: 1.5,
     pt: 1.4,
     borderTop:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const dateFilterClearButtonSx = {
     height: 36,
     borderRadius: "11px",
     textTransform: "none",
-    color: "#fca5a5",
+    color: "#dc2626",
     fontWeight: 900,
     background:
         "rgba(239,68,68,.08)",
@@ -3224,7 +3210,7 @@ const dateFilterClearButtonSx = {
 
     "&.Mui-disabled": {
         opacity: 0.35,
-        color: "#94a3b8",
+        color: "var(--pf-text-muted)",
     },
 };
 
@@ -3250,11 +3236,11 @@ const emptyState = {
     p: 3,
     borderRadius: "16px",
     textAlign: "center",
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     background:
-        "rgba(255,255,255,.03)",
+        "rgba(var(--pf-fg-rgb),.03)",
     border:
-        "1px dashed rgba(255,255,255,.12)",
+        "1px dashed rgba(var(--pf-fg-rgb),.12)",
     fontWeight: 700,
 };
 
@@ -3262,10 +3248,8 @@ const challanCard = {
     mb: 1.6,
     borderRadius: "18px",
     overflow: "hidden",
-    background:
-        "rgba(255,255,255,.035)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
 };
 
 const challanHeader = {
@@ -3278,7 +3262,7 @@ const challanHeader = {
 };
 
 const challanNo = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 17,
     fontWeight: 900,
     fontFamily: "monospace",
@@ -3286,7 +3270,7 @@ const challanNo = {
 
 const challanMeta = {
     mt: 0.6,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 12,
     fontWeight: 650,
 };
@@ -3299,7 +3283,7 @@ const rightBox = {
 };
 
 const countChip = {
-    color: "#6ee7b7",
+    color: "#059669",
     fontWeight: 900,
     background:
         "rgba(16,185,129,.14)",
@@ -3312,7 +3296,7 @@ const pdfButton = {
     borderRadius: "10px",
     textTransform: "none",
     fontWeight: 800,
-    color: "#facc15",
+    color: "#ca8a04",
     background:
         "rgba(251,191,36,.12)",
     border:
@@ -3329,7 +3313,7 @@ const downloadButton = {
     borderRadius: "10px",
     textTransform: "none",
     fontWeight: 800,
-    color: "#93c5fd",
+    color: "#2563eb",
     background:
         "rgba(59,130,246,.12)",
     border:
@@ -3362,12 +3346,11 @@ const helperButton = {
 
 const viewButton = {
     height: 34,
-    borderRadius: "10px",
+    borderRadius: "9px",
     textTransform: "none",
-    fontWeight: 800,
-    color: "#fff",
-    background:
-        "rgba(59,130,246,.16)",
+    fontWeight: 850,
+    color: "#2563eb",
+    background: "rgba(59,130,246,.09)",
     border:
         "1px solid rgba(59,130,246,.22)",
 
@@ -3379,7 +3362,7 @@ const viewButton = {
 
 const itemsBox = {
     borderTop:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
     overflowX: "auto",
 };
 
@@ -3391,11 +3374,10 @@ const tableHeader = {
     gap: 1.5,
     px: 2,
     py: 1.4,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 12,
     fontWeight: 900,
-    background:
-        "rgba(2,6,23,.55)",
+    background: "var(--pf-surface-alt)",
 };
 
 const tableRow = {
@@ -3408,11 +3390,11 @@ const tableRow = {
     py: 1.4,
     alignItems: "center",
     borderTop:
-        "1px solid rgba(255,255,255,.05)",
+        "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const cellText = {
-    color: "#f8fafc",
+    color: "var(--pf-text)",
     fontSize: 13,
     fontWeight: 750,
     minWidth: 0,
@@ -3422,7 +3404,7 @@ const cellText = {
 };
 
 const subText = {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 11,
     fontWeight: 600,
     mt: 0.4,
@@ -3437,7 +3419,7 @@ const monoText = {
 };
 
 const statusChip = {
-    color: "#4ade80",
+    color: "#16a34a",
     fontWeight: 800,
     background:
         "rgba(34,197,94,.13)",
@@ -3449,10 +3431,8 @@ const paginationWrap = {
     mt: 2,
     p: 1.5,
     borderRadius: "16px",
-    background:
-        "rgba(255,255,255,.035)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -3461,7 +3441,7 @@ const paginationWrap = {
 };
 
 const paginationText = {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 13,
     fontWeight: 700,
 };
@@ -3476,36 +3456,35 @@ const paginationActions = {
 const pageSizeSelect = {
     height: 36,
     minWidth: 120,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     borderRadius: "10px",
     background:
-        "rgba(255,255,255,.04)",
+        "rgba(var(--pf-fg-rgb),.04)",
 
     ".MuiOutlinedInput-notchedOutline": {
         borderColor:
-            "rgba(255,255,255,.12)",
+            "rgba(var(--pf-fg-rgb),.12)",
     },
 
     ".MuiSvgIcon-root": {
-        color: "#fff",
+        color: "var(--pf-text-muted)",
     },
 };
 
 const pageButton = {
     height: 36,
-    borderRadius: "10px",
+    borderRadius: "9px",
     textTransform: "none",
-    fontWeight: 800,
-    color: "#fff",
-    background:
-        "rgba(59,130,246,.16)",
+    fontWeight: 850,
+    color: "#2563eb",
+    background: "rgba(59,130,246,.09)",
     border:
         "1px solid rgba(59,130,246,.22)",
 
     "&:disabled": {
-        color: "rgba(255,255,255,.3)",
+        color: "rgba(var(--pf-fg-rgb),.3)",
         background:
-            "rgba(255,255,255,.04)",
+            "rgba(var(--pf-fg-rgb),.04)",
     },
 };
 
@@ -3513,16 +3492,16 @@ const pageBadge = {
     minWidth: 72,
     height: 36,
     px: 1.2,
-    borderRadius: "10px",
+    borderRadius: "9px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 900,
     background:
-        "rgba(255,255,255,.055)",
+        "rgba(var(--pf-fg-rgb),.055)",
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 
@@ -3542,43 +3521,43 @@ const endTimeButton = {
 };
 
 const endDialogLabel = {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 12,
     fontWeight: 900,
     mb: 0.7,
 };
 
 const endDialogChallan = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontWeight: 900,
     fontFamily: "monospace",
     mb: 2,
     p: 1.2,
     borderRadius: "12px",
-    background: "rgba(255,255,255,.045)",
-    border: "1px solid rgba(255,255,255,.08)",
+    background: "rgba(var(--pf-fg-rgb),.045)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
 };
 
 const endTimeInput = {
     mt: 1,
 
     "& label": {
-        color: "#94a3b8",
+        color: "var(--pf-text-muted)",
         fontWeight: 800,
     },
 
     "& label.Mui-focused": {
-        color: "#93c5fd",
+        color: "#2563eb",
     },
 
     "& .MuiInputBase-root": {
-        color: "#fff",
-        borderRadius: "12px",
-        background: "rgba(255,255,255,.04)",
+        color: "var(--pf-text-strong)",
+        borderRadius: "10px",
+        background: "var(--pf-input)",
     },
 
     "& .MuiOutlinedInput-notchedOutline": {
-        borderColor: "rgba(255,255,255,.12)",
+        borderColor: "rgba(var(--pf-fg-rgb),.12)",
     },
 
     "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
@@ -3586,12 +3565,12 @@ const endTimeInput = {
     },
 
     "& input": {
-        color: "#fff",
-        colorScheme: "dark",
+        color: "var(--pf-text-strong)",
+        colorScheme: "var(--pf-color-scheme)",
     },
 
     "& input::-webkit-calendar-picker-indicator": {
-        filter: "invert(1)",
+        filter: "none",
         opacity: 0.85,
         cursor: "pointer",
     },
@@ -3609,8 +3588,8 @@ const cancelEndButton = {
     borderRadius: "10px",
     textTransform: "none",
     fontWeight: 800,
-    color: "#cbd5e1",
-    background: "rgba(255,255,255,.05)",
+    color: "var(--pf-text)",
+    background: "rgba(var(--pf-fg-rgb),.05)",
 };
 
 const saveEndButton = {
@@ -3626,8 +3605,8 @@ const saveEndButton = {
     },
 
     "&:disabled": {
-        color: "rgba(255,255,255,.45)",
-        background: "rgba(255,255,255,.08)",
+        color: "rgba(var(--pf-fg-rgb),.45)",
+        background: "rgba(var(--pf-fg-rgb),.08)",
     },
 };
 

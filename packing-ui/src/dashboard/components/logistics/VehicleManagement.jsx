@@ -593,12 +593,11 @@ function VehicleManagement({
           className:
             "logistics-scrollbar logistics-scrollbar-y logistics-modal-scroll",
           sx: {
-            background:
-              "linear-gradient(180deg,#0f172a,#111827)",
-            color: "#fff",
-            borderRadius: "24px",
-            border:
-              "1px solid rgba(255,255,255,.06)",
+            background: "var(--pf-surface)",
+            color: "var(--pf-text-strong)",
+            borderRadius: "14px",
+            border: "1px solid var(--pf-border)",
+            boxShadow: "var(--pf-card-shadow)",
           },
         }}
       >
@@ -745,10 +744,12 @@ function getComplianceRowStyle(severity) {
 }
 
 const wrap = {
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  borderRadius: 18,
+  padding: 22,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const header = {
@@ -767,13 +768,13 @@ const headerActions = {
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 900,
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
   maxWidth: 760,
   lineHeight: 1.5,
@@ -796,10 +797,10 @@ const refreshBtn = {
   padding: "0 15px",
   borderRadius: 12,
   border:
-    "1px solid rgba(255,255,255,.08)",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
   background:
-    "rgba(255,255,255,.04)",
-  color: "#cbd5e1",
+    "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text)",
   fontWeight: 800,
   cursor: "pointer",
 };
@@ -816,14 +817,13 @@ const summaryCard = {
   padding: 13,
   minHeight: 74,
   borderRadius: 14,
-  background:
-    "rgba(2,6,23,.38)",
-  border:
-    "1px solid rgba(255,255,255,.055)",
+  background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const summaryLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.5,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -831,7 +831,7 @@ const summaryLabel = {
 
 const summaryValue = {
   marginTop: 6,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
 };
@@ -847,14 +847,14 @@ const complianceNotice = {
 };
 
 const complianceNoticeTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 12,
   fontWeight: 900,
 };
 
 const complianceNoticeText = {
   marginTop: 4,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   lineHeight: 1.5,
   fontWeight: 650,
@@ -868,10 +868,8 @@ const filtersRow = {
   marginBottom: 14,
   padding: 11,
   borderRadius: 14,
-  background:
-    "rgba(255,255,255,.025)",
-  border:
-    "1px solid rgba(255,255,255,.055)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const searchInput = {
@@ -879,30 +877,30 @@ const searchInput = {
   minWidth: 230,
   height: 38,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 11px",
   outline: "none",
   fontWeight: 700,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const filterSelect = {
   height: 38,
   minWidth: 190,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 10px",
   outline: "none",
   fontWeight: 750,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const resultCount = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10.5,
   fontWeight: 800,
 };
@@ -913,7 +911,7 @@ const table = {
   overflowY: "hidden",
   overscrollBehaviorX: "contain",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const tableHead = {
@@ -922,8 +920,8 @@ const tableHead = {
     "1.18fr 1.05fr 1.1fr 1.1fr 1fr 1.05fr 2.15fr 1.15fr",
   minWidth: 1620,
   padding: "16px 18px",
-  background: "#111827",
-  color: "#94a3b8",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   fontWeight: 900,
   fontSize: 12,
   columnGap: 18,
@@ -935,9 +933,9 @@ const tableRow = {
     "1.18fr 1.05fr 1.1fr 1.1fr 1fr 1.05fr 2.15fr 1.15fr",
   minWidth: 1620,
   padding: "18px 18px",
-  color: "#fff",
+  color: "var(--pf-text)",
   borderTop:
-    "1px solid rgba(255,255,255,0.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   alignItems: "center",
   columnGap: 18,
 };
@@ -945,10 +943,10 @@ const tableRow = {
 const emptyState = {
   minWidth: 1620,
   padding: 24,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
   borderTop:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const mainCell = {
@@ -959,26 +957,26 @@ const mainCell = {
 };
 
 const normalCell = {
-  color: "#e5e7eb",
+  color: "var(--pf-text)",
   fontWeight: 700,
   fontSize: 13,
 };
 
 const vehicleNoText = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 14,
   letterSpacing: ".03em",
 };
 
 const normalText = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 800,
   fontSize: 13,
 };
 
 const subText = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   fontWeight: 650,
 };
@@ -991,7 +989,7 @@ const statusAgeCell = {
 };
 
 const ageLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8.5,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -999,7 +997,7 @@ const ageLabel = {
 };
 
 const ageValue = {
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 10.5,
   fontWeight: 850,
 };
@@ -1013,10 +1011,10 @@ const complianceBadge = (severity) => ({
   fontWeight: 900,
   color:
     severity === "DANGER"
-      ? "#fecaca"
+      ? "#dc2626"
       : severity === "WARNING"
-        ? "#fde68a"
-        : "#bbf7d0",
+        ? "#d97706"
+        : "#16a34a",
   background:
     severity === "DANGER"
       ? "rgba(239,68,68,.13)"
@@ -1064,13 +1062,13 @@ const validityLineSx = (severity) => ({
 });
 
 const validityDocNameSx = {
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 10.5,
   fontWeight: 900,
 };
 
 const validityDateSx = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 10.5,
   fontWeight: 850,
   whiteSpace: "nowrap",
@@ -1079,10 +1077,10 @@ const validityDateSx = {
 const validityStatusSx = (severity) => ({
   color:
     severity === "DANGER"
-      ? "#f87171"
+      ? "#dc2626"
       : severity === "WARNING"
-        ? "#fbbf24"
-        : "#4ade80",
+        ? "#d97706"
+        : "#16a34a",
   fontSize: 8.5,
   fontWeight: 950,
   textTransform: "uppercase",
@@ -1091,10 +1089,10 @@ const validityStatusSx = (severity) => ({
 const validityMessageSx = (severity) => ({
   color:
     severity === "DANGER"
-      ? "#fca5a5"
+      ? "#dc2626"
       : severity === "WARNING"
-        ? "#fde68a"
-        : "#86efac",
+        ? "#d97706"
+        : "#16a34a",
   fontSize: 9,
   fontWeight: 750,
 });
@@ -1110,7 +1108,7 @@ const actionsCell = {
   justifyContent: "flex-start",
   paddingLeft: 14,
   borderLeft:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   flexWrap: "wrap",
 };
 
@@ -1151,7 +1149,7 @@ const expenseBtn = {
 };
 
 const statusActiveChipSx = {
-  color: "#bbf7d0",
+  color: "#16a34a",
   background: "rgba(34,197,94,.15)",
   border:
     "1px solid rgba(34,197,94,.25)",
@@ -1159,7 +1157,7 @@ const statusActiveChipSx = {
 };
 
 const statusWarningChipSx = {
-  color: "#fde68a",
+  color: "#d97706",
   background: "rgba(245,158,11,.15)",
   border:
     "1px solid rgba(245,158,11,.25)",
@@ -1167,7 +1165,7 @@ const statusWarningChipSx = {
 };
 
 const statusDangerChipSx = {
-  color: "#fecaca",
+  color: "#dc2626",
   background: "rgba(239,68,68,.15)",
   border:
     "1px solid rgba(239,68,68,.25)",
@@ -1175,18 +1173,15 @@ const statusDangerChipSx = {
 };
 
 const actionSecondary = {
-  borderRadius: 12,
+  borderRadius: 10,
   textTransform: "none",
   fontWeight: 700,
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
+  border: "1px solid var(--pf-border)",
 
   "&:hover": {
-    background:
-      "rgba(255,255,255,.08)",
+    background: "var(--pf-hover)",
   },
 };
 

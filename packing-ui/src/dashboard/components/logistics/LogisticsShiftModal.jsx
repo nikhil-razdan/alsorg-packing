@@ -2589,7 +2589,7 @@ function Field({
 const overlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.60)",
+  background: "var(--pf-overlay)",
   backdropFilter: "blur(8px)",
   display: "flex",
   justifyContent: "center",
@@ -2600,14 +2600,12 @@ const overlay = {
 const modal = {
   width: "95%",
   maxWidth: 1220,
-  borderRadius: 24,
-  padding: 24,
-  background:
-    "linear-gradient(180deg,#020617,#0f172a)",
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  boxShadow:
-    "0 28px 80px rgba(0,0,0,0.55)",
+  borderRadius: 16,
+  padding: 22,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 28px 70px rgba(var(--pf-shadow-rgb),.18)",
   maxHeight: "92vh",
   overflowX: "hidden",
   overflowY: "auto",
@@ -2623,22 +2621,21 @@ const header = {
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 900,
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
   lineHeight: 1.5,
 };
 
 const closeBtn = {
-  background: "rgba(255,255,255,.04)",
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  color: "#fff",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border)",
+  color: "var(--pf-text-muted)",
   width: 38,
   height: 38,
   borderRadius: 12,
@@ -2647,12 +2644,10 @@ const closeBtn = {
 };
 
 const historySection = {
-  borderRadius: 20,
-  padding: 18,
-  background:
-    "linear-gradient(180deg,rgba(30,41,59,.52),rgba(15,23,42,.48))",
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  borderRadius: 14,
+  padding: 16,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
   marginBottom: 20,
 };
 
@@ -2681,13 +2676,13 @@ const sectionHeader = {
 };
 
 const sectionTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 17,
   fontWeight: 900,
 };
 
 const sectionSub = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 12,
   marginTop: 5,
   lineHeight: 1.5,
@@ -2696,7 +2691,7 @@ const sectionSub = {
 const loadingPill = {
   padding: "8px 12px",
   borderRadius: 999,
-  color: "#93c5fd",
+  color: "#2563eb",
   background:
     "rgba(59,130,246,.10)",
   border:
@@ -2709,7 +2704,7 @@ const warningBox = {
   padding: "10px 12px",
   marginBottom: 14,
   borderRadius: 12,
-  color: "#fbbf24",
+  color: "#d97706",
   background:
     "rgba(245,158,11,.08)",
   border:
@@ -2729,29 +2724,28 @@ const activitySummaryGrid = {
 const activitySummaryCard = {
   padding: 13,
   minHeight: 86,
-  borderRadius: 14,
-  background:
-    "rgba(2,6,23,.42)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  borderRadius: 12,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 5px 14px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const activitySummaryLabel = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   fontWeight: 850,
 };
 
 const activitySummaryValue = {
   marginTop: 6,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
 };
 
 const activitySummaryDetail = {
   marginTop: 4,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10,
   fontWeight: 700,
 };
@@ -2769,32 +2763,32 @@ const historySearchInput = {
   height: 38,
   minWidth: 0,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 11px",
   outline: "none",
   fontWeight: 700,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const historySelect = {
   height: 38,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 9px",
   outline: "none",
   fontWeight: 750,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const dateLabel = {
   display: "flex",
   flexDirection: "column",
   gap: 4,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -2803,23 +2797,21 @@ const dateLabel = {
 const dateInput = {
   height: 38,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 9px",
   outline: "none",
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const clearDateBtn = {
   height: 38,
   borderRadius: 11,
   border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text)",
   fontWeight: 800,
   padding: "0 12px",
   cursor: "pointer",
@@ -2829,7 +2821,7 @@ const historyTable = {
   borderRadius: 16,
   overflowX: "auto",
   border:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const historyHead = {
@@ -2838,8 +2830,8 @@ const historyHead = {
   gridTemplateColumns:
     "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
   padding: 13,
-  background: "#111827",
-  color: "#94a3b8",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   fontWeight: 850,
   fontSize: 11,
 };
@@ -2850,46 +2842,46 @@ const historyRow = {
   gridTemplateColumns:
     "1.35fr .85fr 1.1fr .85fr .6fr .72fr 1.65fr",
   padding: 13,
-  color: "#fff",
+  color: "var(--pf-text)",
   borderTop:
-    "1px solid rgba(255,255,255,.06)",
+    "1px solid rgba(var(--pf-fg-rgb),.06)",
   alignItems: "center",
   fontSize: 12,
 };
 
 const historyEmpty = {
   padding: 28,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
 };
 
 const historyDateText = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 850,
   fontSize: 12,
 };
 
 const historyTimeText = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10,
   marginTop: 3,
 };
 
 const durationText = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 9.5,
   marginTop: 4,
   fontWeight: 800,
 };
 
 const challanText = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontFamily: "monospace",
 };
 
 const miniMeta = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10,
   marginTop: 4,
 };
@@ -2908,10 +2900,10 @@ const sourcePill = (source) => ({
         : "rgba(245,158,11,.13)",
   color:
     source === SOURCE.CHALLAN
-      ? "#4ade80"
+      ? "#16a34a"
       : source === SOURCE.MANUAL
-        ? "#c4b5fd"
-        : "#fbbf24",
+        ? "#7c3aed"
+        : "#d97706",
   border:
     source === SOURCE.CHALLAN
       ? "1px solid rgba(34,197,94,.22)"
@@ -2951,12 +2943,12 @@ const historyStatus = (value) => {
           ? "rgba(34,197,94,.13)"
           : "rgba(148,163,184,.13)",
     color: cancelled
-      ? "#f87171"
+      ? "#dc2626"
       : completed
-        ? "#60a5fa"
+        ? "#2563eb"
         : active
-          ? "#4ade80"
-          : "#cbd5e1",
+          ? "#16a34a"
+          : "var(--pf-text)",
   };
 };
 
@@ -2975,7 +2967,7 @@ const detailsBtn = {
     "1px solid rgba(96,165,250,.20)",
   background:
     "rgba(59,130,246,.10)",
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -2989,7 +2981,7 @@ const pdfBtn = {
     "1px solid rgba(251,191,36,.20)",
   background:
     "rgba(251,191,36,.10)",
-  color: "#facc15",
+  color: "#ca8a04",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -3004,7 +2996,7 @@ const previewBtn = {
     "1px solid rgba(34,211,238,.20)",
   background:
     "rgba(34,211,238,.09)",
-  color: "#67e8f9",
+  color: "#0891b2",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -3018,7 +3010,7 @@ const endTimeActionBtn = {
     "1px solid rgba(239,68,68,.22)",
   background:
     "rgba(239,68,68,.10)",
-  color: "#fca5a5",
+  color: "#dc2626",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -3032,7 +3024,7 @@ const helperActionBtn = {
     "1px solid rgba(167,139,250,.22)",
   background:
     "rgba(139,92,246,.10)",
-  color: "#c4b5fd",
+  color: "#7c3aed",
   fontSize: 10,
   fontWeight: 850,
   cursor: "pointer",
@@ -3040,10 +3032,9 @@ const helperActionBtn = {
 
 const detailsPanel = {
   padding: "13px 15px",
-  background:
-    "rgba(2,6,23,.55)",
+  background: "var(--pf-surface-alt)",
   borderTop:
-    "1px solid rgba(255,255,255,.05)",
+    "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const detailsGrid = {
@@ -3057,13 +3048,13 @@ const detailValueBox = {
   padding: 10,
   borderRadius: 10,
   background:
-    "rgba(255,255,255,.025)",
+    "rgba(var(--pf-fg-rgb),.025)",
   border:
-    "1px solid rgba(255,255,255,.05)",
+    "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const detailValueLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -3071,7 +3062,7 @@ const detailValueLabel = {
 
 const detailValueText = {
   marginTop: 4,
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 11,
   fontWeight: 750,
   wordBreak: "break-word",
@@ -3088,7 +3079,7 @@ const itemPreviewWrap = {
 };
 
 const itemPreviewTitle = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontSize: 10,
   fontWeight: 900,
   marginBottom: 6,
@@ -3100,15 +3091,15 @@ const itemPreviewRow = {
     "1.4fr .7fr 1fr",
   gap: 8,
   padding: "6px 0",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 10,
   borderTop:
-    "1px solid rgba(255,255,255,.04)",
+    "1px solid rgba(var(--pf-fg-rgb),.04)",
 };
 
 const moreItemsText = {
   marginTop: 7,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.5,
   fontWeight: 750,
 };
@@ -3117,14 +3108,14 @@ const historyPaginationWrap = {
   marginTop: 14,
   paddingTop: 12,
   borderTop:
-    "1px solid rgba(255,255,255,.055)",
+    "1px solid rgba(var(--pf-fg-rgb),.055)",
 };
 
 const historyResultNote = {
   display: "flex",
   alignItems: "center",
   gap: 7,
-  color: "#7f8ea3",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
   fontWeight: 750,
   lineHeight: 1.4,
@@ -3141,12 +3132,10 @@ const historyResultDot = {
 };
 
 const createSection = {
-  borderRadius: 20,
-  padding: 18,
-  background:
-    "rgba(255,255,255,.025)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  borderRadius: 14,
+  padding: 16,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const grid = {
@@ -3163,7 +3152,7 @@ const field = {
 };
 
 const fieldLabel = {
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 13,
   fontWeight: 700,
 };
@@ -3171,22 +3160,20 @@ const fieldLabel = {
 const input = {
   height: 46,
   borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 14px",
   outline: "none",
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const textarea = {
   minHeight: 88,
   borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,0.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: 14,
   outline: "none",
   resize: "vertical",
@@ -3204,9 +3191,9 @@ const cancelBtn = {
   padding: "0 20px",
   borderRadius: 12,
   border:
-    "1px solid rgba(255,255,255,0.08)",
-  background: "#1e293b",
-  color: "#fff",
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   cursor: "pointer",
 };
 
@@ -3230,7 +3217,7 @@ const actionOverlay = {
   alignItems: "center",
   justifyContent: "center",
   padding: 20,
-  background: "rgba(2,6,23,.78)",
+  background: "var(--pf-overlay)",
   backdropFilter: "blur(10px)",
 };
 
@@ -3241,19 +3228,18 @@ const pdfPreviewModal = {
   flexDirection: "column",
   overflow: "hidden",
   borderRadius: 22,
-  background: "#020617",
-  border: "1px solid rgba(255,255,255,.10)",
-  boxShadow: "0 30px 90px rgba(0,0,0,.55)",
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 30px 80px rgba(var(--pf-shadow-rgb),.20)",
 };
 
 const actionFormModal = {
   width: "min(440px,94vw)",
   padding: 20,
   borderRadius: 20,
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  border: "1px solid rgba(255,255,255,.10)",
-  boxShadow: "0 30px 80px rgba(0,0,0,.48)",
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 30px 80px rgba(var(--pf-shadow-rgb),.18)",
 };
 
 const actionModalHeader = {
@@ -3262,18 +3248,18 @@ const actionModalHeader = {
   justifyContent: "space-between",
   gap: 12,
   padding: "16px 18px",
-  borderBottom: "1px solid rgba(255,255,255,.07)",
+  borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const actionModalTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 17,
   fontWeight: 900,
 };
 
 const actionModalSub = {
   marginTop: 4,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 750,
   fontFamily: "monospace",
@@ -3283,9 +3269,9 @@ const actionModalClose = {
   width: 32,
   height: 32,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(255,255,255,.04)",
-  color: "#fff",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   cursor: "pointer",
 };
 
@@ -3301,7 +3287,7 @@ const actionField = {
   flexDirection: "column",
   gap: 8,
   marginTop: 16,
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 12,
   fontWeight: 850,
 };
@@ -3309,17 +3295,17 @@ const actionField = {
 const actionInput = {
   height: 44,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,.10)",
-  background: "rgba(255,255,255,.04)",
-  color: "#fff",
+  border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 12px",
   outline: "none",
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const actionModalHint = {
   marginTop: 8,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10,
   lineHeight: 1.45,
 };
@@ -3335,9 +3321,9 @@ const actionCancelBtn = {
   height: 38,
   padding: "0 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(255,255,255,.04)",
-  color: "#cbd5e1",
+  border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background: "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text)",
   fontWeight: 800,
   cursor: "pointer",
 };

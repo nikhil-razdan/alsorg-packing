@@ -49,41 +49,46 @@ function Card({
 }
 
 const wrap = {
-  marginTop: 24,
+  marginTop: 20,
+  padding: 20,
+  borderRadius: 18,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const title = {
-  color: "#fff",
-  fontSize: 24,
-  fontWeight: 800,
-  marginBottom: 18,
+  color: "var(--pf-text-strong)",
+  fontSize: 22,
+  fontWeight: 900,
+  marginBottom: 16,
 };
 
 const grid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(3,minmax(0,1fr))",
-  gap: 18,
+  gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+  gap: 12,
 };
 
 const card = {
-  background:
-    "linear-gradient(180deg,#111827,#0f172a)",
-
-  padding: 22,
-
-  borderRadius: 20,
+  background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+  padding: 18,
+  borderRadius: 14,
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 7px 18px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const cardTitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
+  fontWeight: 750,
+  fontSize: 12,
 };
 
 const cardValue = {
-  color: "#fff",
-  fontSize: 30,
-  fontWeight: 800,
-  marginTop: 10,
+  color: "var(--pf-text-strong)",
+  fontSize: 28,
+  fontWeight: 900,
+  marginTop: 8,
 };
 
 export default FleetOverview;

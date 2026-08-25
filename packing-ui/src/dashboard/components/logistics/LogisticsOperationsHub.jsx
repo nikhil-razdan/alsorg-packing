@@ -527,7 +527,7 @@ function LogisticsOperationsHub({
                             <SearchIcon
                                 sx={{
                                     color:
-                                        "rgba(255,255,255,.42)",
+                                        "rgba(var(--pf-fg-rgb),.42)",
                                 }}
                             />
 
@@ -704,7 +704,7 @@ function InnerTab({
 
                 color: active
                     ? "#fff"
-                    : "#94a3b8",
+                    : "var(--pf-text-muted)",
 
                 boxShadow: active
                     ? "0 8px 22px rgba(37,99,235,.24)"
@@ -715,12 +715,12 @@ function InnerTab({
                 style={{
                     ...innerTabIcon,
                     background: active
-                        ? "rgba(255,255,255,.14)"
-                        : "rgba(255,255,255,.045)",
+                        ? "rgba(var(--pf-fg-rgb),.14)"
+                        : "rgba(var(--pf-fg-rgb),.045)",
 
                     color: active
                         ? "#fff"
-                        : "#94a3b8",
+                        : "var(--pf-text-muted)",
                 }}
             >
                 {icon}
@@ -870,8 +870,9 @@ function OperationCard({
 }
 
 const hubWrap = {
-    borderRadius: "24px",
+    borderRadius: "18px",
     minWidth: 0,
+    color: "var(--pf-text-strong)",
 };
 
 const primaryButton = {
@@ -912,41 +913,31 @@ const secondaryButton = {
 
     textTransform: "none",
 
-    color: "#cbd5e1",
+    color: "var(--pf-text)",
 
     fontSize: 12,
     fontWeight: 850,
 
     background:
-        "rgba(255,255,255,.045)",
+        "rgba(var(--pf-fg-rgb),.045)",
 
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid rgba(var(--pf-fg-rgb),.08)",
 
     "&:hover": {
-        color: "#fff",
-
-        background:
-            "rgba(255,255,255,.075)",
-
-        borderColor:
-            "rgba(255,255,255,.13)",
+        color: "var(--pf-text-strong)",
+        background: "var(--pf-hover)",
+        borderColor: "rgba(59,130,246,.22)",
     },
 };
 
 const workspaceToolbar = {
     mb: 2,
-    borderRadius: "20px",
+    borderRadius: "16px",
     overflow: "hidden",
-
-    background:
-        "linear-gradient(180deg,rgba(15,23,42,.76),rgba(15,23,42,.52))",
-
-    border:
-        "1px solid rgba(255,255,255,.07)",
-
-    boxShadow:
-        "0 14px 34px rgba(2,6,23,.18)",
+    background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+    border: "1px solid var(--pf-border)",
+    boxShadow: "0 8px 22px rgba(var(--pf-shadow-rgb),.07)",
 };
 
 const workspaceTopRow = {
@@ -962,7 +953,7 @@ const workspaceTopRow = {
     flexWrap: "wrap",
 
     borderBottom:
-        "1px solid rgba(255,255,255,.055)",
+        "1px solid rgba(var(--pf-fg-rgb),.055)",
 };
 
 const workspaceIdentity = {
@@ -983,7 +974,7 @@ const workspaceIcon = {
 
     borderRadius: "12px",
 
-    color: "#93c5fd",
+    color: "#2563eb",
 
     background:
         "linear-gradient(135deg,rgba(37,99,235,.18),rgba(59,130,246,.10))",
@@ -1007,7 +998,7 @@ const workspaceEyebrow = {
 const workspaceDescription = {
     mt: 0.35,
 
-    color: "#cbd5e1",
+    color: "var(--pf-text)",
 
     fontSize: 13,
     fontWeight: 750,
@@ -1050,11 +1041,8 @@ const innerTabs = {
 
     borderRadius: "13px",
 
-    background:
-        "rgba(2,6,23,.42)",
-
-    border:
-        "1px solid rgba(255,255,255,.045)",
+    background: "var(--pf-surface)",
+    border: "1px solid var(--pf-border-soft)",
 
     scrollbarWidth: "thin",
 };
@@ -1140,7 +1128,7 @@ const compactNoticeIcon = {
 };
 
 const compactNoticeText = {
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
 
     fontSize: 10.5,
     fontWeight: 650,
@@ -1162,16 +1150,15 @@ const summaryGrid = {
 };
 
 const summaryCard = {
-    minHeight: 96,
-    p: 1.8,
+    minHeight: 92,
+    p: 1.7,
     display: "flex",
     alignItems: "center",
     gap: 1.4,
-    borderRadius: "18px",
-    background:
-        "linear-gradient(180deg,rgba(30,41,59,.85),rgba(15,23,42,.85))",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    borderRadius: "14px",
+    background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+    border: "1px solid var(--pf-border-soft)",
+    boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const summaryIcon = {
@@ -1187,19 +1174,19 @@ const summaryIcon = {
 };
 
 const summaryValue = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 25,
     fontWeight: 950,
 };
 
 const summaryLabel = {
-    color: "#cbd5e1",
+    color: "var(--pf-text)",
     fontSize: 12,
     fontWeight: 850,
 };
 
 const summaryDetail = {
-    color: "#64748b",
+    color: "var(--pf-text-dim)",
     mt: 0.3,
     fontSize: 10.5,
     fontWeight: 700,
@@ -1215,10 +1202,8 @@ const filters = {
     mb: 2,
     p: 1.2,
     borderRadius: "16px",
-    background:
-        "rgba(255,255,255,.035)",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
 };
 
 const searchBox = {
@@ -1228,53 +1213,47 @@ const searchBox = {
     alignItems: "center",
     gap: 1,
     borderRadius: "12px",
-    background:
-        "rgba(2,6,23,.55)",
-    border:
-        "1px solid rgba(255,255,255,.06)",
+    background: "var(--pf-input)",
+    border: "1px solid var(--pf-border)",
 };
 
 const searchField = {
     flex: 1,
 
     "& .MuiInputBase-root": {
-        color: "#fff",
+        color: "var(--pf-text-strong)",
         fontSize: 13,
         fontWeight: 700,
     },
 
     "& input::placeholder": {
         color:
-            "rgba(255,255,255,.35)",
+            "rgba(var(--pf-fg-rgb),.35)",
         opacity: 1,
     },
 };
 
 const filterSelect = {
     height: 42,
-    color: "#fff",
-    borderRadius: "12px",
-    background:
-        "rgba(2,6,23,.55)",
+    color: "var(--pf-text-strong)",
+    borderRadius: "10px",
+    background: "var(--pf-input)",
 
     ".MuiOutlinedInput-notchedOutline": {
-        borderColor:
-            "rgba(255,255,255,.08)",
+        borderColor: "var(--pf-border)",
     },
-
     ".MuiSvgIcon-root": {
-        color: "#fff",
+        color: "var(--pf-text-muted)",
     },
 };
 
 const operationCard = {
-    mb: 1.2,
-    p: 1.8,
-    borderRadius: "18px",
-    background:
-        "linear-gradient(180deg,rgba(30,41,59,.72),rgba(15,23,42,.82))",
-    border:
-        "1px solid rgba(255,255,255,.07)",
+    mb: 1.05,
+    p: 1.7,
+    borderRadius: "14px",
+    background: "var(--pf-surface)",
+    border: "1px solid var(--pf-border-soft)",
+    boxShadow: "0 4px 14px rgba(var(--pf-shadow-rgb),.04)",
 
     "&:hover": {
         borderColor:
@@ -1308,7 +1287,7 @@ const operationTitleRow = {
 };
 
 const operationTitle = {
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 16,
     fontWeight: 950,
     fontFamily: "monospace",
@@ -1316,7 +1295,7 @@ const operationTitle = {
 
 const operationMeta = {
     mt: 0.7,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     fontSize: 11.5,
     fontWeight: 650,
 };
@@ -1335,7 +1314,7 @@ const metricPill = {
     display: "flex",
     alignItems: "center",
     borderRadius: "999px",
-    color: "#6ee7b7",
+    color: "#059669",
     fontSize: 11,
     fontWeight: 900,
     background:
@@ -1347,18 +1326,17 @@ const metricPill = {
 const manageButton = {
     height: 34,
     px: 1.5,
-    borderRadius: "10px",
+    borderRadius: "9px",
     textTransform: "none",
-    color: "#fff",
+    color: "#2563eb",
     fontWeight: 850,
-    background:
-        "rgba(59,130,246,.16)",
+    background: "rgba(59,130,246,.09)",
     border:
         "1px solid rgba(59,130,246,.22)",
 };
 
 const challanSourceChip = {
-    color: "#facc15",
+    color: "#ca8a04",
     fontWeight: 900,
     background:
         "rgba(251,191,36,.12)",
@@ -1367,7 +1345,7 @@ const challanSourceChip = {
 };
 
 const manualSourceChip = {
-    color: "#c4b5fd",
+    color: "#7c3aed",
     fontWeight: 900,
     background:
         "rgba(139,92,246,.13)",
@@ -1383,37 +1361,37 @@ const statusChip = (status) => {
 
     const palette = {
         RUNNING: [
-            "#4ade80",
+            "#16a34a",
             "rgba(34,197,94,.13)",
             "rgba(34,197,94,.22)",
         ],
 
         WORKING: [
-            "#4ade80",
+            "#16a34a",
             "rgba(34,197,94,.13)",
             "rgba(34,197,94,.22)",
         ],
 
         COMPLETED: [
-            "#60a5fa",
+            "#2563eb",
             "rgba(59,130,246,.13)",
             "rgba(59,130,246,.22)",
         ],
 
         CANCELLED: [
-            "#f87171",
+            "#dc2626",
             "rgba(239,68,68,.13)",
             "rgba(239,68,68,.22)",
         ],
 
         OFF: [
-            "#fbbf24",
+            "#d97706",
             "rgba(251,191,36,.13)",
             "rgba(251,191,36,.22)",
         ],
 
         ON_LEAVE: [
-            "#fbbf24",
+            "#d97706",
             "rgba(251,191,36,.13)",
             "rgba(251,191,36,.22)",
         ],
@@ -1421,7 +1399,7 @@ const statusChip = (status) => {
 
     const selected =
         palette[value] || [
-            "#cbd5e1",
+            "var(--pf-text)",
             "rgba(148,163,184,.13)",
             "rgba(148,163,184,.22)",
         ];
@@ -1437,13 +1415,13 @@ const statusChip = (status) => {
 
 const emptyState = {
     p: 4,
-    color: "#94a3b8",
+    color: "var(--pf-text-muted)",
     textAlign: "center",
     borderRadius: "18px",
     background:
-        "rgba(255,255,255,.025)",
+        "rgba(var(--pf-fg-rgb),.025)",
     border:
-        "1px dashed rgba(255,255,255,.10)",
+        "1px dashed rgba(var(--pf-fg-rgb),.10)",
     fontWeight: 750,
 };
 

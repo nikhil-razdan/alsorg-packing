@@ -635,10 +635,12 @@ function DriverSummary({
 }
 
 const wrap = {
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  borderRadius: 18,
+  padding: 22,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const header = {
@@ -657,70 +659,69 @@ const headerActions = {
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 900,
+  letterSpacing: "-.015em",
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
   fontSize: 12,
   fontWeight: 650,
+  lineHeight: 1.5,
 };
 
 const button = {
   height: 40,
   padding: "0 16px",
-  borderRadius: 11,
+  borderRadius: 10,
   border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-  fontWeight: 800,
+  fontWeight: 850,
   cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(37,99,235,.20)",
 };
 
 const secondaryButton = {
   height: 40,
   padding: "0 14px",
-  borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#cbd5e1",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   fontWeight: 800,
   cursor: "pointer",
 };
 
 const summaryGrid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(165px,1fr))",
+  gridTemplateColumns: "repeat(auto-fit,minmax(165px,1fr))",
   gap: 10,
   marginBottom: 14,
 };
 
 const summaryCard = {
   minHeight: 78,
-  padding: 13,
-  borderRadius: 14,
-  background:
-    "rgba(2,6,23,.38)",
-  border:
-    "1px solid rgba(255,255,255,.055)",
+  padding: 14,
+  borderRadius: 13,
+  background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 6px 16px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const summaryLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 850,
+  letterSpacing: ".02em",
 };
 
 const summaryValue = {
   marginTop: 6,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 950,
 };
@@ -731,75 +732,71 @@ const filtersRow = {
   alignItems: "center",
   flexWrap: "wrap",
   marginBottom: 14,
-  padding: 11,
-  borderRadius: 14,
-  background:
-    "rgba(255,255,255,.025)",
-  border:
-    "1px solid rgba(255,255,255,.055)",
+  padding: 10,
+  borderRadius: 13,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const searchInput = {
   flex: "1 1 280px",
   minWidth: 220,
   height: 38,
-  borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 11px",
   outline: "none",
   fontWeight: 700,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const statusSelect = {
   height: 38,
   minWidth: 170,
-  borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 10px",
   outline: "none",
   fontWeight: 750,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const filterCount = {
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 10.5,
   fontWeight: 800,
 };
 
 const table = {
-  borderRadius: 16,
+  borderRadius: 14,
   overflowX: "auto",
-  border:
-    "1px solid rgba(255,255,255,.05)",
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
 };
 
 const head = {
   minWidth: 1050,
   display: "grid",
-  gridTemplateColumns:
-    "1.15fr 1.15fr .7fr 1fr .7fr .75fr 1.05fr",
-  padding: 13,
-  background: "#111827",
-  color: "#94a3b8",
+  gridTemplateColumns: "1.15fr 1.15fr .7fr 1fr .7fr .75fr 1.05fr",
+  padding: "13px 14px",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   fontWeight: 850,
   fontSize: 11,
+  borderBottom: "1px solid var(--pf-border)",
 };
 
 const row = {
   minWidth: 1050,
   display: "grid",
-  gridTemplateColumns:
-    "1.15fr 1.15fr .7fr 1fr .7fr .75fr 1.05fr",
-  padding: 13,
-  color: "#fff",
-  borderTop:
-    "1px solid rgba(255,255,255,0.06)",
+  gridTemplateColumns: "1.15fr 1.15fr .7fr 1fr .7fr .75fr 1.05fr",
+  padding: "13px 14px",
+  color: "var(--pf-text)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
   fontSize: 12,
 };
@@ -807,7 +804,7 @@ const row = {
 const driverNameBtn = {
   border: "none",
   background: "transparent",
-  color: "#60a5fa",
+  color: "#2563eb",
   cursor: "pointer",
   fontWeight: 900,
   fontSize: 13,
@@ -817,24 +814,24 @@ const driverNameBtn = {
 
 const driverHint = {
   marginTop: 3,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.5,
   fontWeight: 700,
 };
 
 const primaryText = {
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontWeight: 750,
 };
 
 const secondaryText = {
   marginTop: 3,
-  color: "#64748b",
+  color: "var(--pf-text-muted)",
   fontSize: 9.5,
 };
 
 const metricStrong = {
-  color: "#cbd5e1",
+  color: "var(--pf-text-strong)",
   fontWeight: 850,
 };
 
@@ -844,11 +841,9 @@ const activeTripPill = (count) => ({
   justifyContent: "center",
   padding: "5px 8px",
   borderRadius: 999,
-  color: count > 0 ? "#4ade80" : "#64748b",
-  background:
-    count > 0
-      ? "rgba(34,197,94,.12)"
-      : "rgba(148,163,184,.08)",
+  color: count > 0 ? "#16a34a" : "var(--pf-text-muted)",
+  background: count > 0 ? "rgba(34,197,94,.10)" : "rgba(148,163,184,.10)",
+  border: count > 0 ? "1px solid rgba(34,197,94,.16)" : "1px solid var(--pf-border-soft)",
   fontWeight: 900,
 });
 
@@ -860,10 +855,9 @@ const driverStatus = (statusValue) => {
     display: "inline-flex",
     padding: "5px 8px",
     borderRadius: 999,
-    color: active ? "#4ade80" : "#94a3b8",
-    background: active
-      ? "rgba(34,197,94,.12)"
-      : "rgba(148,163,184,.10)",
+    color: active ? "#16a34a" : "var(--pf-text-muted)",
+    background: active ? "rgba(34,197,94,.10)" : "rgba(148,163,184,.10)",
+    border: active ? "1px solid rgba(34,197,94,.16)" : "1px solid var(--pf-border-soft)",
     fontSize: 9.5,
     fontWeight: 900,
   };
@@ -879,12 +873,10 @@ const actions = {
 const viewBtn = {
   height: 30,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(96,165,250,.22)",
-  background:
-    "rgba(59,130,246,.10)",
-  color: "#93c5fd",
+  borderRadius: 8,
+  border: "1px solid rgba(37,99,235,.20)",
+  background: "rgba(59,130,246,.09)",
+  color: "#2563eb",
   cursor: "pointer",
   fontWeight: 850,
   fontSize: 10,
@@ -893,12 +885,10 @@ const viewBtn = {
 const deleteBtn = {
   height: 30,
   padding: "0 9px",
-  borderRadius: 9,
-  border:
-    "1px solid rgba(239,68,68,.20)",
-  background:
-    "rgba(239,68,68,.12)",
-  color: "#f87171",
+  borderRadius: 8,
+  border: "1px solid rgba(239,68,68,.20)",
+  background: "rgba(239,68,68,.09)",
+  color: "#dc2626",
   cursor: "pointer",
   fontWeight: 850,
   fontSize: 10,
@@ -906,8 +896,9 @@ const deleteBtn = {
 
 const emptyRow = {
   padding: 28,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
+  background: "var(--pf-surface)",
 };
 
 export default DriverManagement;

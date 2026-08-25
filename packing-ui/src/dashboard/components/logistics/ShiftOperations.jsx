@@ -631,81 +631,87 @@ function ShiftOperations({
 }
 
 const wrap = {
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  borderRadius: 18,
+  padding: 22,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const header = {
   display: "flex",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 24,
+  gap: 14,
+  marginBottom: 18,
+  flexWrap: "wrap",
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
-  fontWeight: 800,
+  fontWeight: 900,
+  letterSpacing: "-.015em",
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
+  fontSize: 12,
+  fontWeight: 650,
 };
 
 const button = {
-  height: 44,
-  padding: "0 18px",
-  borderRadius: 12,
+  height: 40,
+  padding: "0 16px",
+  borderRadius: 10,
   border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-  fontWeight: 700,
+  fontWeight: 800,
   cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(37,99,235,.20)",
 };
 
 const table = {
   overflowX: "auto",
   overflowY: "hidden",
   overscrollBehaviorX: "contain",
-  borderRadius: 18,
-  border:
-    "1px solid rgba(255,255,255,.05)",
+  borderRadius: 14,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
 };
 
 const head = {
   minWidth: 1080,
   display: "grid",
-  gridTemplateColumns:
-    ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
-  padding: 16,
-  background: "#111827",
-  color: "#94a3b8",
-  fontWeight: 700,
+  gridTemplateColumns: ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
+  padding: "13px 14px",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
+  fontWeight: 850,
+  fontSize: 11,
+  borderBottom: "1px solid var(--pf-border)",
 };
 
 const row = {
   minWidth: 1080,
   display: "grid",
-  gridTemplateColumns:
-    ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
-  padding: 16,
-  color: "#fff",
-  borderTop:
-    "1px solid rgba(255,255,255,0.06)",
+  gridTemplateColumns: ".35fr 1.05fr 1fr 1.1fr .55fr .85fr 1fr 1fr",
+  padding: "13px 14px",
+  color: "var(--pf-text)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
+  fontSize: 12,
 };
 
 const emptyRow = {
   padding: 28,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
-  borderTop:
-    "1px solid rgba(255,255,255,0.06)",
+  borderTop: "1px solid var(--pf-border-soft)",
+  background: "var(--pf-surface)",
 };
 
 const actions = {
@@ -715,26 +721,25 @@ const actions = {
 };
 
 const dateText = {
-  color: "#fff",
-  fontWeight: 800,
+  color: "var(--pf-text-strong)",
+  fontWeight: 850,
   fontSize: 13,
 };
 
 const timeText = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   marginTop: 4,
 };
 
 const editBtn = {
   border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   borderRadius: 8,
   padding: "6px 10px",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 750,
 };
 
 const deleteBtn = {
@@ -744,19 +749,17 @@ const deleteBtn = {
   borderRadius: 8,
   padding: "6px 10px",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 750,
 };
 
 const lateShiftRow = {
-  background:
-    "linear-gradient(90deg,rgba(245,158,11,.12),rgba(15,23,42,0))",
-  borderLeft:
-    "3px solid #f59e0b",
+  background: "linear-gradient(90deg,rgba(245,158,11,.10),transparent)",
+  borderLeft: "3px solid #f59e0b",
 };
 
 const lateTimeText = {
-  color: "#fbbf24",
-  fontWeight: 800,
+  color: "#d97706",
+  fontWeight: 850,
 };
 
 const lateBadge = {
@@ -764,26 +767,25 @@ const lateBadge = {
   marginTop: 6,
   padding: "4px 8px",
   borderRadius: 999,
-  background:
-    "rgba(245,158,11,.16)",
-  color: "#fbbf24",
-  border:
-    "1px solid rgba(245,158,11,.28)",
+  background: "rgba(245,158,11,.12)",
+  color: "#d97706",
+  border: "1px solid rgba(245,158,11,.24)",
   fontSize: 10,
   fontWeight: 900,
 };
 
 const searchInput = {
+  flex: "1 1 320px",
   height: 38,
-  minWidth: 280,
-  borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  minWidth: 260,
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 12px",
   outline: "none",
   fontWeight: 700,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const bulkBar = {
@@ -792,63 +794,58 @@ const bulkBar = {
   justifyContent: "flex-end",
   gap: 10,
   flexWrap: "wrap",
-  marginBottom: 16,
-  padding: 12,
-  borderRadius: 16,
-  background:
-    "rgba(255,255,255,0.035)",
-  border:
-    "1px solid rgba(255,255,255,0.06)",
+  marginBottom: 14,
+  padding: 10,
+  borderRadius: 13,
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const bulkInfo = {
   marginRight: "auto",
-  color: "#94a3b8",
-  fontSize: 13,
-  fontWeight: 700,
+  color: "var(--pf-text-muted)",
+  fontSize: 12,
+  fontWeight: 750,
 };
 
 const bulkSelect = {
   height: 38,
-  borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 12px",
   outline: "none",
-  fontWeight: 700,
+  fontWeight: 750,
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const bulkBtn = {
   height: 38,
-  borderRadius: 12,
+  borderRadius: 10,
   border: "none",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   padding: "0 14px",
-  fontWeight: 800,
+  fontWeight: 850,
 };
 
 const manualNotice = {
-  marginBottom: 16,
+  marginBottom: 14,
   padding: 14,
-  borderRadius: 15,
-  background:
-    "linear-gradient(135deg,rgba(139,92,246,.12),rgba(15,23,42,.42))",
-  border:
-    "1px solid rgba(139,92,246,.20)",
+  borderRadius: 13,
+  background: "linear-gradient(135deg,rgba(139,92,246,.08),rgba(59,130,246,.035))",
+  border: "1px solid rgba(139,92,246,.18)",
 };
 
 const manualNoticeTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 13,
 };
 
 const manualNoticeText = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 5,
   fontSize: 12,
   fontWeight: 650,
@@ -857,12 +854,10 @@ const manualNoticeText = {
 
 const clearBtn = {
   height: 38,
-  borderRadius: 12,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text)",
   padding: "0 14px",
   fontWeight: 800,
   cursor: "pointer",
@@ -871,39 +866,32 @@ const clearBtn = {
 const statusSelect = (value) => ({
   height: 32,
   borderRadius: 999,
-  border:
-    "1px solid rgba(255,255,255,.08)",
+  border: "1px solid var(--pf-border)",
   padding: "0 10px",
-
   color:
     value === "WORKING"
-      ? "#4ade80"
+      ? "#16a34a"
       : value === "COMPLETED"
-        ? "#60a5fa"
+        ? "#2563eb"
         : value === "CANCELLED"
-          ? "#f87171"
-          : value === "OFF"
-            ? "#fbbf24"
-            : value === "ON_LEAVE"
-              ? "#fbbf24"
-              : "#cbd5e1",
-
+          ? "#dc2626"
+          : value === "OFF" || value === "ON_LEAVE"
+            ? "#d97706"
+            : "var(--pf-text)",
   background:
     value === "WORKING"
-      ? "rgba(34,197,94,0.15)"
+      ? "rgba(34,197,94,.10)"
       : value === "COMPLETED"
-        ? "rgba(59,130,246,0.15)"
+        ? "rgba(59,130,246,.10)"
         : value === "CANCELLED"
-          ? "rgba(239,68,68,0.15)"
-          : value === "OFF"
-            ? "rgba(251,191,36,0.15)"
-            : value === "ON_LEAVE"
-              ? "rgba(251,191,36,0.15)"
-              : "rgba(148,163,184,0.15)",
-
+          ? "rgba(239,68,68,.10)"
+          : value === "OFF" || value === "ON_LEAVE"
+            ? "rgba(245,158,11,.11)"
+            : "var(--pf-surface-alt)",
   fontSize: 12,
-  fontWeight: 800,
+  fontWeight: 850,
   outline: "none",
+  colorScheme: "var(--pf-color-scheme)",
 });
 
 export default ShiftOperations;

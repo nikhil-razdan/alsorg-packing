@@ -1004,43 +1004,43 @@ function tripEndImportStatusMeta(status) {
     case TRIP_END_IMPORT_STATUS.READY:
       return {
         label: "Ready",
-        color: "#4ade80",
+        color: "#16a34a",
         background: "rgba(34,197,94,.12)",
       };
     case TRIP_END_IMPORT_STATUS.FUTURE:
       return {
         label: "Future time",
-        color: "#fbbf24",
+        color: "#d97706",
         background: "rgba(245,158,11,.12)",
       };
     case TRIP_END_IMPORT_STATUS.NO_CHANGE:
       return {
         label: "No change",
-        color: "#93c5fd",
+        color: "#2563eb",
         background: "rgba(59,130,246,.10)",
       };
     case TRIP_END_IMPORT_STATUS.BLANK_END:
       return {
         label: "Blank / skipped",
-        color: "#94a3b8",
+        color: "var(--pf-text-muted)",
         background: "rgba(148,163,184,.10)",
       };
     case TRIP_END_IMPORT_STATUS.UPDATED:
       return {
         label: "Updated",
-        color: "#4ade80",
+        color: "#16a34a",
         background: "rgba(34,197,94,.14)",
       };
     case TRIP_END_IMPORT_STATUS.FAILED:
       return {
         label: "Failed",
-        color: "#f87171",
+        color: "#dc2626",
         background: "rgba(239,68,68,.12)",
       };
     default:
       return {
         label: "Blocked",
-        color: "#f87171",
+        color: "#dc2626",
         background: "rgba(239,68,68,.10)",
       };
   }
@@ -1440,7 +1440,7 @@ function TripEndImportModal({
           <TripEndImportSummary
             label="Blank / Skipped"
             value={summary.blank}
-            accent="#94a3b8"
+            accent="var(--pf-text-muted)"
           />
           <TripEndImportSummary
             label="Blocked"
@@ -1625,7 +1625,7 @@ function TripEndImportModal({
 function TripEndImportSummary({
   label,
   value,
-  accent = "#cbd5e1",
+  accent = "var(--pf-text)",
 }) {
   return (
     <div
@@ -3810,7 +3810,7 @@ function ShiftReports({
 function SummaryCard({
   label,
   value,
-  accent = "#94a3b8",
+  accent = "var(--pf-text-muted)",
 }) {
   return (
     <div
@@ -4319,10 +4319,12 @@ function ComplianceDocument({ document }) {
 }
 
 const wrap = {
-  background:
-    "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  borderRadius: 18,
+  padding: 22,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const header = {
@@ -4343,13 +4345,13 @@ const headerActions = {
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 25,
   fontWeight: 950,
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
   maxWidth: 760,
   lineHeight: 1.5,
@@ -4358,12 +4360,10 @@ const subtitle = {
 
 const refreshBtn = {
   height: 38,
-  borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#cbd5e1",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   padding: "0 13px",
   fontWeight: 850,
   cursor: "pointer",
@@ -4377,7 +4377,7 @@ const uploadTripEndBtn = {
     "1px solid rgba(245,158,11,.28)",
   background:
     "linear-gradient(135deg,rgba(245,158,11,.14),rgba(249,115,22,.10))",
-  color: "#fbbf24",
+  color: "#d97706",
   padding: "0 13px",
   fontWeight: 900,
   cursor: "pointer",
@@ -4390,7 +4390,7 @@ const tripEndImportOverlay = {
   display: "grid",
   placeItems: "center",
   padding: 20,
-  background: "rgba(2,6,23,.82)",
+  background: "var(--pf-overlay)",
   backdropFilter: "blur(8px)",
 };
 
@@ -4400,14 +4400,11 @@ const tripEndImportModal = {
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
-  borderRadius: 20,
-  background:
-    "radial-gradient(circle at 100% 0%,rgba(59,130,246,.12),transparent 30%),linear-gradient(180deg,#0f172a,#07101f)",
-  border:
-    "1px solid rgba(148,163,184,.15)",
-  boxShadow:
-    "0 34px 90px rgba(0,0,0,.55)",
-  color: "#e2e8f0",
+  borderRadius: 16,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 34px 90px rgba(var(--pf-shadow-rgb),.20)",
+  color: "var(--pf-text)",
 };
 
 const tripEndImportHeader = {
@@ -4429,14 +4426,14 @@ const tripEndImportEyebrow = {
 
 const tripEndImportTitle = {
   marginTop: 5,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 21,
   fontWeight: 950,
 };
 
 const tripEndImportSubtitle = {
   marginTop: 5,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 10.5,
   fontWeight: 750,
 };
@@ -4448,8 +4445,8 @@ const tripEndImportClose = {
   border:
     "1px solid rgba(148,163,184,.12)",
   background:
-    "rgba(255,255,255,.035)",
-  color: "#cbd5e1",
+    "rgba(var(--pf-fg-rgb),.035)",
+  color: "var(--pf-text)",
   fontSize: 22,
   lineHeight: 1,
   cursor: "pointer",
@@ -4459,7 +4456,7 @@ const tripEndImportRuleBox = {
   margin: "14px 20px 0",
   padding: "11px 13px",
   borderRadius: 12,
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   background:
     "rgba(59,130,246,.065)",
   border:
@@ -4472,7 +4469,7 @@ const tripEndImportErrorBox = {
   margin: "12px 20px 0",
   padding: 12,
   borderRadius: 12,
-  color: "#fecaca",
+  color: "#dc2626",
   background:
     "rgba(239,68,68,.10)",
   border:
@@ -4492,14 +4489,12 @@ const tripEndImportSummaryGrid = {
 const tripEndImportSummaryCard = {
   padding: "9px 10px",
   borderRadius: 10,
-  background:
-    "rgba(255,255,255,.028)",
-  border:
-    "1px solid rgba(148,163,184,.07)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const tripEndImportSummaryLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4508,7 +4503,7 @@ const tripEndImportSummaryLabel = {
 
 const tripEndImportSummaryValue = {
   marginTop: 3,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 18,
   fontWeight: 950,
 };
@@ -4520,7 +4515,7 @@ const tripEndImportFutureToggle = {
   margin: "12px 20px 0",
   padding: "10px 12px",
   borderRadius: 11,
-  color: "#fbbf24",
+  color: "#d97706",
   background:
     "rgba(245,158,11,.075)",
   border:
@@ -4537,9 +4532,8 @@ const tripEndImportTableWrap = {
   margin: "12px 20px 0",
   overflow: "auto",
   borderRadius: 12,
-  border:
-    "1px solid rgba(148,163,184,.09)",
-  background: "rgba(2,6,23,.34)",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface-alt)",
 };
 
 const tripEndImportGridColumns =
@@ -4555,8 +4549,8 @@ const tripEndImportTableHead = {
     tripEndImportGridColumns,
   gap: 8,
   padding: "9px 10px",
-  color: "#7f8ea3",
-  background: "#0f172a",
+  color: "var(--pf-text-muted)",
+  background: "var(--pf-surface)",
   borderBottom:
     "1px solid rgba(148,163,184,.10)",
   fontSize: 8.5,
@@ -4572,38 +4566,38 @@ const tripEndImportTableRow = {
   gap: 8,
   padding: "9px 10px",
   alignItems: "center",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   borderTop:
     "1px solid rgba(148,163,184,.06)",
   fontSize: 9.5,
 };
 
 const tripEndImportMuted = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontWeight: 800,
 };
 
 const tripEndImportChallan = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontFamily: "monospace",
 };
 
 const tripEndImportSmall = {
   marginTop: 3,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8.5,
   fontWeight: 700,
 };
 
 const tripEndImportDateCell = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 9,
   fontWeight: 750,
 };
 
 const tripEndImportDateCellStrong = {
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 9,
   fontWeight: 900,
 };
@@ -4618,7 +4612,7 @@ const tripEndImportStatusPill = {
 
 const tripEndImportReason = {
   marginTop: 4,
-  color: "#7f8ea3",
+  color: "var(--pf-text-muted)",
   fontSize: 8.5,
   lineHeight: 1.35,
 };
@@ -4627,7 +4621,7 @@ const tripEndImportProgressBox = {
   margin: "10px 20px 0",
   padding: "9px 11px",
   borderRadius: 10,
-  color: "#93c5fd",
+  color: "#2563eb",
   background:
     "rgba(59,130,246,.08)",
   border:
@@ -4650,7 +4644,7 @@ const tripEndImportConfirmCheck = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 10,
   fontWeight: 750,
 };
@@ -4668,8 +4662,8 @@ const tripEndImportCancelBtn = {
   border:
     "1px solid rgba(148,163,184,.12)",
   background:
-    "rgba(255,255,255,.035)",
-  color: "#cbd5e1",
+    "rgba(var(--pf-fg-rgb),.035)",
+  color: "var(--pf-text)",
   fontWeight: 850,
   cursor: "pointer",
 };
@@ -4683,7 +4677,7 @@ const tripEndImportConfirmBtn =
     color: "#fff",
     background:
       disabled
-        ? "#334155"
+        ? "rgba(var(--pf-fg-rgb),.16)"
         : "linear-gradient(135deg,#16a34a,#22c55e)",
     opacity: disabled ? 0.58 : 1,
     cursor:
@@ -4700,7 +4694,7 @@ const downloadCurrentBtn = {
     "1px solid rgba(96,165,250,.20)",
   background:
     "rgba(59,130,246,.10)",
-  color: "#93c5fd",
+  color: "#2563eb",
   padding: "0 13px",
   fontWeight: 850,
   cursor: "pointer",
@@ -4722,7 +4716,7 @@ const warningBox = {
   marginBottom: 12,
   padding: 12,
   borderRadius: 13,
-  color: "#fbbf24",
+  color: "#d97706",
   background: "rgba(245,158,11,.08)",
   border:
     "1px solid rgba(245,158,11,.18)",
@@ -4734,7 +4728,7 @@ const sourceNote = {
   marginBottom: 14,
   padding: 12,
   borderRadius: 13,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   background:
     "rgba(59,130,246,.055)",
   border:
@@ -4752,24 +4746,21 @@ const filters = {
   marginBottom: 14,
   padding: 11,
   borderRadius: 15,
-  background:
-    "rgba(255,255,255,.03)",
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  background: "var(--pf-surface-alt)",
+  border: "1px solid var(--pf-border-soft)",
 };
 
 const input = {
   height: 37,
   minWidth: 150,
   borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background: "#111827",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 10px",
   outline: "none",
   fontWeight: 700,
-  colorScheme: "dark",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const searchInput = {
@@ -4780,12 +4771,10 @@ const searchInput = {
 
 const clearBtn = {
   height: 37,
-  borderRadius: 11,
-  border:
-    "1px solid rgba(255,255,255,.08)",
-  background:
-    "rgba(255,255,255,.04)",
-  color: "#fff",
+  borderRadius: 10,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface)",
+  color: "var(--pf-text)",
   padding: "0 13px",
   fontWeight: 800,
   cursor: "pointer",
@@ -4802,15 +4791,14 @@ const summaryGrid = {
 const summaryCard = {
   minHeight: 76,
   padding: 13,
-  borderRadius: 14,
-  background:
-    "rgba(2,6,23,.38)",
-  border:
-    "1px solid rgba(255,255,255,.055)",
+  borderRadius: 12,
+  background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 5px 15px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const summaryLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.5,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4818,7 +4806,7 @@ const summaryLabel = {
 
 const summaryValue = {
   marginTop: 6,
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 23,
   fontWeight: 950,
 };
@@ -4835,13 +4823,13 @@ const miniMetric = {
   padding: "10px 11px",
   borderRadius: 12,
   background:
-    "rgba(255,255,255,.025)",
+    "rgba(var(--pf-fg-rgb),.025)",
   border:
-    "1px solid rgba(255,255,255,.05)",
+    "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const miniMetricLabel = {
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 8.5,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4849,7 +4837,7 @@ const miniMetricLabel = {
 
 const miniMetricValue = {
   marginTop: 4,
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 16,
   fontWeight: 950,
 };
@@ -4867,12 +4855,11 @@ const reportTableWithPager = {
 
 const tableCard = {
   minWidth: 0,
-  padding: 15,
-  borderRadius: 18,
-  background:
-    "linear-gradient(180deg,rgba(15,23,42,.82),rgba(2,6,23,.58))",
-  border:
-    "1px solid rgba(255,255,255,.06)",
+  padding: 14,
+  borderRadius: 14,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border-soft)",
+  boxShadow: "0 5px 15px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const tableTitleRow = {
@@ -4884,14 +4871,14 @@ const tableTitleRow = {
 };
 
 const tableTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 14,
   fontWeight: 900,
 };
 
 const tableSub = {
   marginTop: 3,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   fontSize: 9.5,
   fontWeight: 700,
 };
@@ -4902,7 +4889,7 @@ const scrollTable = {
   overscrollBehaviorX: "contain",
   borderRadius: 12,
   border:
-    "1px solid rgba(255,255,255,.05)",
+    "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const performanceHead = {
@@ -4912,8 +4899,8 @@ const performanceHead = {
     "1.3fr .55fr .65fr .55fr .65fr .55fr .55fr .55fr .65fr .55fr .8fr 1fr",
   gap: 7,
   padding: "9px 10px",
-  background: "#111827",
-  color: "#64748b",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4926,11 +4913,11 @@ const performanceRow = {
     "1.3fr .55fr .65fr .55fr .65fr .55fr .55fr .55fr .65fr .55fr .8fr 1fr",
   gap: 7,
   padding: "10px 10px",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 10,
   alignItems: "center",
   borderTop:
-    "1px solid rgba(255,255,255,.045)",
+    "1px solid rgba(var(--pf-fg-rgb),.045)",
 };
 
 const tripHead = {
@@ -4940,8 +4927,8 @@ const tripHead = {
     ".85fr 1.05fr 1fr .9fr 1.15fr 1.15fr .7fr .8fr .55fr .9fr",
   gap: 7,
   padding: "9px 10px",
-  background: "#111827",
-  color: "#64748b",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4954,11 +4941,11 @@ const tripRow = {
     ".85fr 1.05fr 1fr .9fr 1.15fr 1.15fr .7fr .8fr .55fr .9fr",
   gap: 7,
   padding: "10px 10px",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 10,
   alignItems: "center",
   borderTop:
-    "1px solid rgba(255,255,255,.045)",
+    "1px solid rgba(var(--pf-fg-rgb),.045)",
 };
 
 const complianceHead = {
@@ -4968,8 +4955,8 @@ const complianceHead = {
     "1fr 1fr 1.2fr 1.2fr 1.2fr 1fr",
   gap: 8,
   padding: "9px 10px",
-  background: "#111827",
-  color: "#64748b",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-dim)",
   fontSize: 9,
   fontWeight: 900,
   textTransform: "uppercase",
@@ -4982,31 +4969,31 @@ const complianceRow = {
     "1fr 1fr 1.2fr 1.2fr 1.2fr 1fr",
   gap: 8,
   padding: "10px 10px",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 10,
   alignItems: "center",
   borderTop:
-    "1px solid rgba(255,255,255,.045)",
+    "1px solid rgba(var(--pf-fg-rgb),.045)",
 };
 
 const nameCell = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 850,
 };
 
 const challanCell = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 850,
   fontFamily: "monospace",
 };
 
 const importantValue = {
-  color: "#93c5fd",
+  color: "#2563eb",
   fontWeight: 900,
 };
 
 const mutedCell = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 9,
 };
 
@@ -5016,7 +5003,7 @@ const activePill = {
   justifyContent: "center",
   padding: "4px 6px",
   borderRadius: 999,
-  color: "#4ade80",
+  color: "#16a34a",
   background:
     "rgba(34,197,94,.10)",
   fontWeight: 900,
@@ -5030,10 +5017,10 @@ const sourcePill = (source) => ({
   fontWeight: 900,
   color:
     source === SOURCE.CHALLAN
-      ? "#4ade80"
+      ? "#16a34a"
       : source === SOURCE.MANUAL
-        ? "#c4b5fd"
-        : "#fbbf24",
+        ? "#7c3aed"
+        : "#d97706",
   background:
     source === SOURCE.CHALLAN
       ? "rgba(34,197,94,.10)"
@@ -5050,12 +5037,12 @@ const statusPill = (bucket) => ({
   fontWeight: 900,
   color:
     bucket === "ACTIVE"
-      ? "#4ade80"
+      ? "#16a34a"
       : bucket === "COMPLETED"
-        ? "#60a5fa"
+        ? "#2563eb"
         : bucket === "CANCELLED"
-          ? "#f87171"
-          : "#cbd5e1",
+          ? "#dc2626"
+          : "var(--pf-text)",
   background:
     bucket === "ACTIVE"
       ? "rgba(34,197,94,.10)"
@@ -5074,10 +5061,10 @@ const compliancePill = (severity) => ({
   fontWeight: 900,
   color:
     severity === "DANGER"
-      ? "#f87171"
+      ? "#dc2626"
       : severity === "WARNING"
-        ? "#fbbf24"
-        : "#4ade80",
+        ? "#d97706"
+        : "#16a34a",
   background:
     severity === "DANGER"
       ? "rgba(239,68,68,.10)"
@@ -5087,7 +5074,7 @@ const compliancePill = (severity) => ({
 });
 
 const documentDate = {
-  color: "#e2e8f0",
+  color: "var(--pf-text)",
   fontSize: 9.5,
   fontWeight: 800,
 };
@@ -5096,17 +5083,17 @@ const documentStatus = (severity) => ({
   marginTop: 3,
   color:
     severity === "DANGER"
-      ? "#f87171"
+      ? "#dc2626"
       : severity === "WARNING"
-        ? "#fbbf24"
-        : "#4ade80",
+        ? "#d97706"
+        : "#16a34a",
   fontSize: 8.5,
   fontWeight: 850,
 });
 
 const tableEmpty = {
   padding: 22,
-  color: "#64748b",
+  color: "var(--pf-text-dim)",
   textAlign: "center",
   fontSize: 10.5,
   fontWeight: 750,
@@ -5115,12 +5102,12 @@ const tableEmpty = {
 const emptyRow = {
   padding: 30,
   borderRadius: 16,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
   background:
-    "rgba(255,255,255,.025)",
+    "rgba(var(--pf-fg-rgb),.025)",
   border:
-    "1px dashed rgba(255,255,255,.08)",
+    "1px dashed rgba(var(--pf-fg-rgb),.08)",
   fontWeight: 800,
 };
 

@@ -682,9 +682,12 @@ function SectionTitle({ text }) {
 }
 
 const wrap = {
-  background: "linear-gradient(180deg,#0f172a,#111827)",
-  borderRadius: 24,
-  padding: 24,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  borderRadius: 18,
+  padding: 22,
+  border: "1px solid var(--pf-border)",
+  boxShadow: "var(--pf-card-shadow)",
 };
 
 const header = {
@@ -695,18 +698,18 @@ const header = {
 };
 
 const title = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 24,
   fontWeight: 800,
 };
 
 const subtitle = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
 };
 
 const sectionTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontSize: 18,
   fontWeight: 900,
   marginTop: 22,
@@ -714,26 +717,29 @@ const sectionTitle = {
 };
 
 const table = {
-  borderRadius: 18,
-  overflow: "hidden",
+  borderRadius: 14,
+  overflowX: "auto",
+  overflowY: "hidden",
   marginBottom: 20,
+  background: "var(--pf-surface)",
+  border: "1px solid var(--pf-border)",
 };
 
 const head = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr 1.4fr",
   padding: 16,
-  background: "#111827",
-  color: "#94a3b8",
-  fontWeight: 700,
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
+  fontWeight: 850,
 };
 
 const row = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr 1.4fr .6fr 1fr 1.4fr",
   padding: 16,
-  color: "#fff",
-  borderTop: "1px solid rgba(255,255,255,0.06)",
+  color: "var(--pf-text)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
 };
 
@@ -741,17 +747,17 @@ const headCompleted = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
   padding: 16,
-  background: "#111827",
-  color: "#94a3b8",
-  fontWeight: 700,
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
+  fontWeight: 850,
 };
 
 const rowCompleted = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr 1.2fr 1.2fr .6fr 1fr 1.4fr",
   padding: 16,
-  color: "#fff",
-  borderTop: "1px solid rgba(255,255,255,0.06)",
+  color: "var(--pf-text)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
 };
 
@@ -759,7 +765,7 @@ const activeChip = {
   padding: "6px 10px",
   borderRadius: 999,
   background: "rgba(59,130,246,.16)",
-  color: "#93c5fd",
+  color: "#2563eb",
   fontWeight: 900,
   fontSize: 11,
 };
@@ -768,7 +774,7 @@ const doneChip = {
   padding: "6px 10px",
   borderRadius: 999,
   background: "rgba(16,185,129,.16)",
-  color: "#6ee7b7",
+  color: "#059669",
   fontWeight: 900,
   fontSize: 11,
 };
@@ -785,15 +791,15 @@ const endBtn = {
 
 const emptyRow = {
   padding: 28,
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   textAlign: "center",
-  borderTop: "1px solid rgba(255,255,255,0.06)",
+  borderTop: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const overlay = {
   position: "fixed",
   inset: 0,
-  background: "rgba(2,6,23,.72)",
+  background: "var(--pf-overlay)",
   backdropFilter: "blur(10px)",
   zIndex: 6000,
   display: "flex",
@@ -803,11 +809,12 @@ const overlay = {
 
 const modal = {
   width: 520,
-  padding: 24,
-  borderRadius: 24,
-  background: "linear-gradient(180deg,#0f172a,#111827)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.08)",
+  padding: 22,
+  borderRadius: 16,
+  background: "var(--pf-surface)",
+  color: "var(--pf-text-strong)",
+  border: "1px solid var(--pf-border)",
+  boxShadow: "0 28px 70px rgba(var(--pf-shadow-rgb),.18)",
 };
 
 const modalTitle = {
@@ -816,7 +823,7 @@ const modalTitle = {
 };
 
 const modalSub = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   marginTop: 6,
   marginBottom: 18,
 };
@@ -826,7 +833,7 @@ const field = {
   flexDirection: "column",
   gap: 8,
   marginBottom: 14,
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontWeight: 800,
   fontSize: 13,
 };
@@ -834,17 +841,18 @@ const field = {
 const input = {
   height: 42,
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,.10)",
-  background: "rgba(255,255,255,.05)",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: "0 12px",
+  colorScheme: "var(--pf-color-scheme)",
 };
 
 const textarea = {
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,.10)",
-  background: "rgba(255,255,255,.05)",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-input)",
+  color: "var(--pf-text-strong)",
   padding: 12,
 };
 
@@ -856,9 +864,9 @@ const footer = {
 };
 
 const cancelBtn = {
-  border: "1px solid rgba(255,255,255,.08)",
-  background: "rgba(255,255,255,.05)",
-  color: "#fff",
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text)",
   borderRadius: 12,
   padding: "10px 16px",
   fontWeight: 800,
@@ -885,7 +893,7 @@ const viewBtn = {
   border: "1px solid rgba(96,165,250,.25)",
   borderRadius: 10,
   padding: "8px 12px",
-  color: "#93c5fd",
+  color: "#2563eb",
   fontWeight: 800,
   cursor: "pointer",
   background: "rgba(59,130,246,.12)",
@@ -895,7 +903,7 @@ const tripItemsTable = {
   borderRadius: 16,
   overflow: "auto",
   maxHeight: "56vh",
-  border: "1px solid rgba(255,255,255,.06)",
+  border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const tripItemsHead = {
@@ -903,8 +911,8 @@ const tripItemsHead = {
   gridTemplateColumns:
     "1.2fr 1.2fr .7fr .8fr 1fr 1.4fr",
   padding: 14,
-  background: "#111827",
-  color: "#94a3b8",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-muted)",
   fontWeight: 900,
   fontSize: 12,
   minWidth: 980,
@@ -915,8 +923,8 @@ const tripItemsRow = {
   gridTemplateColumns:
     "1.2fr 1.2fr .7fr .8fr 1fr 1.4fr",
   padding: 14,
-  color: "#fff",
-  borderTop: "1px solid rgba(255,255,255,0.06)",
+  color: "var(--pf-text)",
+  borderTop: "1px solid var(--pf-border-soft)",
   alignItems: "center",
   fontSize: 13,
   minWidth: 980,
@@ -935,20 +943,20 @@ const locationBox = {
 };
 
 const locationTitle = {
-  color: "#fff",
+  color: "var(--pf-text-strong)",
   fontWeight: 900,
   fontSize: 13,
 };
 
 const podMiniText = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 11,
   fontWeight: 700,
   marginTop: 6,
 };
 
 const locationSub = {
-  color: "#94a3b8",
+  color: "var(--pf-text-muted)",
   fontSize: 12,
   marginTop: 4,
   fontWeight: 700,
@@ -973,14 +981,14 @@ const podSummaryBox = {
   borderRadius: 14,
   background: "rgba(16,185,129,.10)",
   border: "1px solid rgba(16,185,129,.18)",
-  color: "#cbd5e1",
+  color: "var(--pf-text)",
   fontSize: 13,
   fontWeight: 700,
   marginBottom: 14,
 };
 
 const podLink = {
-  color: "#60a5fa",
+  color: "#2563eb",
   fontWeight: 900,
   textDecoration: "none",
 };
@@ -989,7 +997,7 @@ const challanBtn = {
   border: "1px solid rgba(251,191,36,.28)",
   borderRadius: 10,
   padding: "8px 12px",
-  color: "#facc15",
+  color: "#ca8a04",
   fontWeight: 800,
   cursor: "pointer",
   background: "rgba(251,191,36,.12)",
