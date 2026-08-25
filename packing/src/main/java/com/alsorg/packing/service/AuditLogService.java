@@ -1,6 +1,7 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +12,8 @@ import com.alsorg.packing.repository.AuditLogRepository;
 @Service
 @Transactional
 public class AuditLogService {
+
+    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final AuditLogRepository auditRepo;
 
@@ -32,7 +35,7 @@ public class AuditLogService {
         log.setAction(action);
         log.setPerformedBy(performedBy);
         log.setRole(role);
-        log.setPerformedAt(LocalDateTime.now());
+        log.setPerformedAt(LocalDateTime.now(APP_ZONE));
 
         auditRepo.save(log);
     }

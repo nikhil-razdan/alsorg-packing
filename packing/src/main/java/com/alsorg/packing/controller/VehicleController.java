@@ -1,6 +1,5 @@
 package com.alsorg.packing.controller;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -68,8 +67,28 @@ public class VehicleController {
     }
 
     @GetMapping
-    public List<Vehicle> getAll() {
-        return service.getAll();
+    public ResponseEntity<?> getAll(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false)
+            String auth) {
+
+        User user = currentUserService
+                .getCurrentUserFromAuth(auth);
+
+        if (!currentUserService.isAdmin(user)
+                && !currentUserService.isDispatch(user)
+                && !currentUserService.isLogistics(user)
+                && !currentUserService.isDriver(user)) {
+
+            return ResponseEntity
+                    .status(403)
+                    .body(
+                            "You do not have permission to view vehicles");
+        }
+
+        return ResponseEntity.ok(
+                service.getAll());
     }
 
     @PutMapping("/{id}")

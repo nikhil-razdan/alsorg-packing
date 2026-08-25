@@ -26,6 +26,7 @@ import jakarta.persistence.PersistenceContext;
 public class CustomChallanService {
 
     private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final int MAX_CUSTOM_CHALLAN_ITEMS = 500;
 
     private final CustomChallanRepository repository;
     private final ChalaanPdfService pdfService;
@@ -375,6 +376,12 @@ public class CustomChallanService {
             throw new RuntimeException("At least one item is required");
         }
 
+        if (request.items().size() > MAX_CUSTOM_CHALLAN_ITEMS) {
+            throw new RuntimeException(
+                    "A maximum of " + MAX_CUSTOM_CHALLAN_ITEMS
+                            + " items can be added to one custom challan");
+        }
+
         boolean hasValidItem = request.items()
                 .stream()
                 .anyMatch(item -> item != null &&
@@ -415,7 +422,7 @@ public class CustomChallanService {
 
         String suffix = UUID.randomUUID()
                 .toString()
-                .substring(0, 6)
+                .substring(0, 12)
                 .toUpperCase();
 
         return prefix + "-" + date + "-" + suffix;

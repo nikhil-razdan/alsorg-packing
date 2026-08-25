@@ -198,6 +198,67 @@ public interface DispatchedItemRepository
 
         /*
          * =====================================================
+         * PAGED DISPATCH CHALLAN HISTORY
+         * =====================================================
+         *
+         * Page by distinct challan number first, then load only the items for
+         * those challans. This avoids materializing the entire DISPATCHED history
+         * every time the Challan History modal opens.
+         */
+        @Query(value = """
+                        SELECT d.chalaanNumber
+                        FROM DispatchedItem d
+                        WHERE d.status = :status
+                          AND d.chalaanNumber IS NOT NULL
+                          AND TRIM(d.chalaanNumber) <> ''
+                        GROUP BY d.chalaanNumber
+                        ORDER BY MAX(d.dispatchedAt) DESC, d.chalaanNumber DESC
+                        """, countQuery = """
+                        SELECT COUNT(DISTINCT d.chalaanNumber)
+                        FROM DispatchedItem d
+                        WHERE d.status = :status
+                          AND d.chalaanNumber IS NOT NULL
+                          AND TRIM(d.chalaanNumber) <> ''
+                        """)
+        Page<String> findChallanNumbersPage(
+                        @Param("status") ItemDispatchStatus status,
+                        Pageable pageable);
+
+        @Query(value = """
+                        SELECT d.chalaanNumber
+                        FROM DispatchedItem d
+                        WHERE d.status = :status
+                          AND d.chalaanNumber IS NOT NULL
+                          AND TRIM(d.chalaanNumber) <> ''
+                          AND LOWER(TRIM(COALESCE(d.dispatchedBy, ''))) = :username
+                          AND (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                              )
+                        GROUP BY d.chalaanNumber
+                        ORDER BY MAX(d.dispatchedAt) DESC, d.chalaanNumber DESC
+                        """, countQuery = """
+                        SELECT COUNT(DISTINCT d.chalaanNumber)
+                        FROM DispatchedItem d
+                        WHERE d.status = :status
+                          AND d.chalaanNumber IS NOT NULL
+                          AND TRIM(d.chalaanNumber) <> ''
+                          AND LOWER(TRIM(COALESCE(d.dispatchedBy, ''))) = :username
+                          AND (
+                                d.plantCode IN :plantCodes
+                                OR d.plantCode IS NULL
+                                OR TRIM(d.plantCode) = ''
+                              )
+                        """)
+        Page<String> findVisibleChallanNumbersPageForUser(
+                        @Param("status") ItemDispatchStatus status,
+                        @Param("username") String username,
+                        @Param("plantCodes") Collection<String> plantCodes,
+                        Pageable pageable);
+
+        /*
+         * =====================================================
          * LOGISTICS
          * =====================================================
          */
@@ -244,6 +305,34 @@ public interface DispatchedItemRepository
 
         long countByLogisticsTripId(
                         UUID logisticsTripId);
+
+        /*
+         * =====================================================
+         * DISPATCH / IMPORT CONCURRENCY LOCKS
+         * =====================================================
+         *
+         * Critical lifecycle mutations lock selected Dispatch rows in a stable
+         * primary-key order. This prevents two concurrent requests from both
+         * validating the same READY row and dispatching it independently.
+         */
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.zohoItemId = :zohoItemId
+                        """)
+        Optional<DispatchedItem> findByIdForLifecycleUpdate(
+                        @Param("zohoItemId") String zohoItemId);
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                            SELECT d
+                            FROM DispatchedItem d
+                            WHERE d.zohoItemId IN :zohoItemIds
+                            ORDER BY d.zohoItemId ASC
+                        """)
+        List<DispatchedItem> findAllByIdForDispatchUpdate(
+                        @Param("zohoItemIds") Collection<String> zohoItemIds);
 
         /*
          * =====================================================

@@ -61,6 +61,8 @@ public class DispatchedItemsController {
 
         private static final int DEFAULT_DISPATCH_PAGE_SIZE = 200;
         private static final int MAX_DISPATCH_PAGE_SIZE = 200;
+        private static final int DEFAULT_CHALLAN_PAGE_SIZE = 50;
+        private static final int MAX_CHALLAN_PAGE_SIZE = 100;
 
         /*
          * ============================================================
@@ -556,8 +558,6 @@ public class DispatchedItemsController {
                                 parsedStatus,
                                 user.getUsername(),
                                 currentUserService.allowedPlants(user));
-                System.out.println("➡ CONTROLLER HIT ID: " + zohoItemId);
-                System.out.println("➡ STATUS: " + status);
                 return ResponseEntity.ok().build();
 
         }
@@ -719,6 +719,200 @@ public class DispatchedItemsController {
                                                 req.getFgZoneCode(),
                                                 req.getWarehouseCode(),
                                                 user.getUsername()));
+        }
+
+        /*
+         * ============================================================
+         * PAGED DISPATCH CHALLAN HISTORY
+         * ============================================================
+         *
+         * Additive endpoint used by the optimized Dispatch UI.
+         * The legacy /challans endpoint remains available for older clients.
+         */
+        @GetMapping("/challans/search")
+        public ResponseEntity<List<DispatchedChallanResponse>> searchDispatchedChallans(
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "" + DEFAULT_CHALLAN_PAGE_SIZE) int size,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                int safePage = Math.max(page, 0);
+                int safeSize = Math.min(
+                                Math.max(size, 1),
+                                MAX_CHALLAN_PAGE_SIZE);
+
+                Pageable pageable = PageRequest.of(
+                                safePage,
+                                safeSize);
+
+                Page<String> challanNumbersPage;
+
+                if (currentUserService.isAdmin(user)) {
+                        challanNumbersPage = repository.findChallanNumbersPage(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        pageable);
+                } else {
+                        challanNumbersPage = repository.findVisibleChallanNumbersPageForUser(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanLower(user.getUsername()),
+                                        currentUserService.allowedPlants(user),
+                                        pageable);
+                }
+
+                List<String> challanNumbers = challanNumbersPage.getContent();
+
+                if (challanNumbers.isEmpty()) {
+                        return ResponseEntity
+                                        .ok()
+                                        .header(
+                                                        "X-Total-Pages",
+                                                        String.valueOf(challanNumbersPage.getTotalPages()))
+                                        .header(
+                                                        "X-Total-Elements",
+                                                        String.valueOf(challanNumbersPage.getTotalElements()))
+                                        .header(
+                                                        "X-Page-Number",
+                                                        String.valueOf(challanNumbersPage.getNumber()))
+                                        .header(
+                                                        "X-Page-Size",
+                                                        String.valueOf(challanNumbersPage.getSize()))
+                                        .header(
+                                                        "X-Has-Next",
+                                                        String.valueOf(challanNumbersPage.hasNext()))
+                                        .body(List.of());
+                }
+
+                List<DispatchedItem> pageItems = repository.findAllByChalaanNumberIn(
+                                challanNumbers);
+
+                String currentUsername = cleanLower(user.getUsername());
+                Set<String> allowedPlants = currentUserService.isAdmin(user)
+                                ? Set.of()
+                                : currentUserService.allowedPlants(user);
+
+                Map<String, List<DispatchedItem>> grouped = new LinkedHashMap<>();
+
+                for (String challanNumber : challanNumbers) {
+                        grouped.put(challanNumber, new ArrayList<>());
+                }
+
+                for (DispatchedItem item : pageItems) {
+                        if (item == null
+                                        || item.getStatus() != ItemDispatchStatus.DISPATCHED
+                                        || item.getChalaanNumber() == null
+                                        || item.getChalaanNumber().isBlank()) {
+                                continue;
+                        }
+
+                        if (!currentUserService.isAdmin(user)) {
+                                if (!cleanLower(item.getDispatchedBy()).equals(currentUsername)) {
+                                        continue;
+                                }
+
+                                if (!isVisiblePlant(
+                                                item.getPlantCode(),
+                                                allowedPlants)) {
+                                        continue;
+                                }
+                        }
+
+                        List<DispatchedItem> bucket = grouped.get(
+                                        item.getChalaanNumber().trim());
+
+                        if (bucket != null) {
+                                bucket.add(item);
+                        }
+                }
+
+                List<DispatchedChallanResponse> response = new ArrayList<>();
+
+                for (String challanNumber : challanNumbers) {
+                        List<DispatchedItem> items = grouped.getOrDefault(
+                                        challanNumber,
+                                        List.of());
+
+                        if (items.isEmpty()) {
+                                continue;
+                        }
+
+                        response.add(
+                                        buildDispatchedChallanResponse(
+                                                        challanNumber,
+                                                        items));
+                }
+
+                return ResponseEntity
+                                .ok()
+                                .header(
+                                                HttpHeaders.CACHE_CONTROL,
+                                                "no-store, no-cache, must-revalidate")
+                                .header(
+                                                "X-Total-Pages",
+                                                String.valueOf(challanNumbersPage.getTotalPages()))
+                                .header(
+                                                "X-Total-Elements",
+                                                String.valueOf(challanNumbersPage.getTotalElements()))
+                                .header(
+                                                "X-Page-Number",
+                                                String.valueOf(challanNumbersPage.getNumber()))
+                                .header(
+                                                "X-Page-Size",
+                                                String.valueOf(challanNumbersPage.getSize()))
+                                .header(
+                                                "X-Has-Next",
+                                                String.valueOf(challanNumbersPage.hasNext()))
+                                .body(response);
+        }
+
+        @GetMapping("/challans/{challanNumber:.+}")
+        public ResponseEntity<DispatchedChallanResponse> getDispatchedChallan(
+                        @PathVariable String challanNumber,
+                        @RequestHeader(value = "Authorization", required = false) String auth) {
+
+                User user = currentUserService.getCurrentUserFromAuth(auth);
+
+                String cleanChallanNumber = challanNumber == null
+                                ? ""
+                                : challanNumber.trim();
+
+                if (cleanChallanNumber.isBlank()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Challan number is required");
+                }
+
+                List<DispatchedItem> items;
+
+                if (currentUserService.isAdmin(user)) {
+                        items = repository.findByStatusAndChalaanNumber(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber);
+                } else {
+                        items = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber,
+                                        currentUserService.allowedPlants(user));
+
+                        String currentUsername = cleanLower(user.getUsername());
+
+                        items = items
+                                        .stream()
+                                        .filter(item -> cleanLower(item.getDispatchedBy())
+                                                        .equals(currentUsername))
+                                        .toList();
+                }
+
+                if (items.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Dispatched challan not found");
+                }
+
+                return ResponseEntity.ok(
+                                buildDispatchedChallanResponse(
+                                                cleanChallanNumber,
+                                                items));
         }
 
         @GetMapping("/challans")
@@ -1115,6 +1309,96 @@ public class DispatchedItemsController {
                 }
 
                 return value;
+        }
+
+        private DispatchedChallanResponse buildDispatchedChallanResponse(
+                        String challanNumber,
+                        List<DispatchedItem> items) {
+
+                if (items == null || items.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Dispatched challan not found");
+                }
+
+                DispatchedItem first = items.get(0);
+
+                LocalDateTime dispatchedAt = items
+                                .stream()
+                                .map(DispatchedItem::getDispatchedAt)
+                                .filter(date -> date != null)
+                                .min(LocalDateTime::compareTo)
+                                .orElse(null);
+
+                LocalDateTime tripStartedAt = items
+                                .stream()
+                                .map(DispatchedItem::getTripStartedAt)
+                                .filter(date -> date != null)
+                                .min(LocalDateTime::compareTo)
+                                .orElse(dispatchedAt);
+
+                LocalDateTime tripEndedAt = items
+                                .stream()
+                                .map(DispatchedItem::getTripEndedAt)
+                                .filter(date -> date != null)
+                                .max(LocalDateTime::compareTo)
+                                .orElse(null);
+
+                LocalDateTime durationEnd = tripEndedAt != null
+                                ? tripEndedAt
+                                : LocalDateTime.now(
+                                                ZoneId.of("Asia/Kolkata"));
+
+                Long tripDurationMinutes = tripStartedAt == null
+                                ? null
+                                : ChronoUnit.MINUTES.between(
+                                                tripStartedAt,
+                                                durationEnd);
+
+                String tripStatus = tripEndedAt == null
+                                ? "RUNNING"
+                                : "ENDED";
+
+                List<DispatchedChallanItemResponse> itemResponses = items
+                                .stream()
+                                .map(this::toDispatchedChallanItemResponse)
+                                .toList();
+
+                return new DispatchedChallanResponse(
+                                challanNumber,
+                                first.getDriverId(),
+                                first.getDriverName(),
+                                first.getVehicleId(),
+                                first.getVehicleNumber(),
+                                first.getHelperLoaderCount(),
+                                dispatchedAt,
+                                first.getDispatchedBy(),
+                                tripStartedAt,
+                                tripEndedAt,
+                                tripDurationMinutes,
+                                tripStatus,
+                                items.size(),
+                                itemResponses);
+        }
+
+        private boolean isVisiblePlant(
+                        String plantCode,
+                        Set<String> allowedPlants) {
+
+                if (plantCode == null || plantCode.trim().isBlank()) {
+                        return true;
+                }
+
+                if (allowedPlants == null || allowedPlants.isEmpty()) {
+                        return false;
+                }
+
+                String cleanPlant = plantCode.trim();
+
+                return allowedPlants.stream()
+                                .filter(value -> value != null)
+                                .map(String::trim)
+                                .anyMatch(cleanPlant::equalsIgnoreCase);
         }
 
         private DispatchedChallanItemResponse toDispatchedChallanItemResponse(

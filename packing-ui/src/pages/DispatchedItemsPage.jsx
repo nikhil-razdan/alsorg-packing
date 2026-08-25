@@ -5684,6 +5684,7 @@ const DISPATCH_SERVER_SEARCH_DEBOUNCE_MS = 220;
 const DISPATCH_PAGE_CACHE_LIMIT = 18;
 const DISPATCH_PAGE_CACHE_FRESH_MS = 15_000;
 const DISPATCH_TOTAL_REUSE_FRESH_MS = 30_000;
+const CHALLAN_HISTORY_SERVER_PAGE_SIZE = 50;
 
 export default function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
@@ -5797,6 +5798,10 @@ export default function DispatchedItemsPage() {
 	const [challanHistoryLoading, setChallanHistoryLoading] = useState(false);
 	const [challanHistoryRows, setChallanHistoryRows] = useState([]);
 	const [challanHistorySearch, setChallanHistorySearch] = useState("");
+	const [challanHistoryServerPage, setChallanHistoryServerPage] = useState(0);
+	const [challanHistoryServerTotal, setChallanHistoryServerTotal] = useState(0);
+	const [challanHistoryHasMore, setChallanHistoryHasMore] = useState(false);
+	const [challanHistoryLoadingMore, setChallanHistoryLoadingMore] = useState(false);
 
 	/* Normal Dispatch Challan deep inspector — custom challans are untouched. */
 	const [normalChallanViewOpen, setNormalChallanViewOpen] = useState(false);
@@ -16616,23 +16621,104 @@ export default function DispatchedItemsPage() {
 			""
 		).trim();
 
-	async function fetchChallanHistoryRows() {
+	async function fetchChallanHistoryRows({
+		page = 0,
+		size = CHALLAN_HISTORY_SERVER_PAGE_SIZE,
+	} = {}) {
+		const params = new URLSearchParams({
+			page: String(Math.max(0, Number(page) || 0)),
+			size: String(
+				Math.min(
+					100,
+					Math.max(1, Number(size) || CHALLAN_HISTORY_SERVER_PAGE_SIZE)
+				)
+			),
+		});
+
 		const res =
-			await authFetch(`${API_BASE_URL}/api/dispatched/challans`, {
-				method: "GET",
-			});
+			await authFetch(
+				`${API_BASE_URL}/api/dispatched/challans/search?${params.toString()}`,
+				{
+					method: "GET",
+					headers: {
+						Accept: "application/json",
+					},
+					cache: "no-store",
+				}
+			);
 
 		if (!res.ok) {
 			const text = await res.text();
 			throw new Error(text || "Failed to load challan history");
 		}
 
-		const data =
-			await res.json();
+		const data = await res.json();
 
-		return Array.isArray(data)
+		const rows = Array.isArray(data)
 			? data
 			: [];
+
+		const totalElements = Number(
+			res.headers.get("X-Total-Elements")
+		);
+		const totalPages = Number(
+			res.headers.get("X-Total-Pages")
+		);
+		const pageNumber = Number(
+			res.headers.get("X-Page-Number")
+		);
+		const hasNextHeader = String(
+			res.headers.get("X-Has-Next") || ""
+		).toLowerCase();
+
+		return {
+			rows,
+			totalElements:
+				Number.isFinite(totalElements) && totalElements >= 0
+					? totalElements
+					: rows.length,
+			totalPages:
+				Number.isFinite(totalPages) && totalPages >= 0
+					? totalPages
+					: 1,
+			pageNumber:
+				Number.isFinite(pageNumber) && pageNumber >= 0
+					? pageNumber
+					: Math.max(0, Number(page) || 0),
+			hasNext:
+				hasNextHeader === "true" ||
+				(
+					Number.isFinite(totalPages) &&
+					Number.isFinite(pageNumber) &&
+					pageNumber + 1 < totalPages
+				),
+		};
+	}
+
+	async function fetchChallanHistoryByNumber(challanNumber) {
+		const cleanNumber = String(challanNumber || "").trim();
+
+		if (!cleanNumber) {
+			throw new Error("Challan number missing");
+		}
+
+		const res = await authFetch(
+			`${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(cleanNumber)}`,
+			{
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+				},
+				cache: "no-store",
+			}
+		);
+
+		if (!res.ok) {
+			const text = await res.text();
+			throw new Error(text || `Unable to load challan ${cleanNumber}`);
+		}
+
+		return await res.json();
 	}
 
 	const openChallanHistory = async () => {
@@ -16642,20 +16728,71 @@ export default function DispatchedItemsPage() {
 			setChallanHistorySearch("");
 			setChallanHistoryPageNo(1);
 			setCustomChallanHistoryPageNo(1);
+			setChallanHistoryServerPage(0);
+			setChallanHistoryServerTotal(0);
+			setChallanHistoryHasMore(false);
 
-			const [normalRows] =
+			const [normalResult] =
 				await Promise.all([
-					fetchChallanHistoryRows(),
+					fetchChallanHistoryRows({
+						page: 0,
+						size: CHALLAN_HISTORY_SERVER_PAGE_SIZE,
+					}),
 					loadCustomChallans(),
 				]);
 
-			setChallanHistoryRows(normalRows);
+			setChallanHistoryRows(normalResult.rows);
+			setChallanHistoryServerPage(normalResult.pageNumber);
+			setChallanHistoryServerTotal(normalResult.totalElements);
+			setChallanHistoryHasMore(normalResult.hasNext);
 		} catch (err) {
 			console.error(err);
 			alert(err.message || "Failed to load challan history");
 			setChallanHistoryRows([]);
+			setChallanHistoryServerTotal(0);
+			setChallanHistoryHasMore(false);
 		} finally {
 			setChallanHistoryLoading(false);
+		}
+	};
+
+	const loadOlderChallanHistory = async () => {
+		if (challanHistoryLoadingMore || !challanHistoryHasMore) {
+			return;
+		}
+
+		try {
+			setChallanHistoryLoadingMore(true);
+
+			const result = await fetchChallanHistoryRows({
+				page: challanHistoryServerPage + 1,
+				size: CHALLAN_HISTORY_SERVER_PAGE_SIZE,
+			});
+
+			setChallanHistoryRows((current) => {
+				const merged = new Map();
+
+				(current || []).forEach((row) => {
+					const key = getChallanNumber(row);
+					if (key) merged.set(key, row);
+				});
+
+				(result.rows || []).forEach((row) => {
+					const key = getChallanNumber(row);
+					if (key) merged.set(key, row);
+				});
+
+				return Array.from(merged.values());
+			});
+
+			setChallanHistoryServerPage(result.pageNumber);
+			setChallanHistoryServerTotal(result.totalElements);
+			setChallanHistoryHasMore(result.hasNext);
+		} catch (err) {
+			console.error(err);
+			alert(err?.message || "Unable to load older challan history");
+		} finally {
+			setChallanHistoryLoadingMore(false);
 		}
 	};
 
@@ -16812,12 +16949,25 @@ export default function DispatchedItemsPage() {
 			);
 
 			if (!challan) {
-				sourceRows = await fetchChallanHistoryRows();
-				setChallanHistoryRows(sourceRows);
-
-				challan = sourceRows.find(
-					(row) => getChallanNumber(row) === cleanNumber
+				challan = await fetchChallanHistoryByNumber(
+					cleanNumber
 				);
+
+				setChallanHistoryRows((current) => {
+					const rows = Array.isArray(current)
+						? current
+						: [];
+
+					if (
+						rows.some(
+							(row) => getChallanNumber(row) === cleanNumber
+						)
+					) {
+						return rows;
+					}
+
+					return [challan, ...rows];
+				});
 			}
 
 			if (!challan) {
@@ -27810,7 +27960,11 @@ export default function DispatchedItemsPage() {
 
 									<ChallanHistoryStat
 										label="Dispatch Challans"
-										value={challanHistoryRows.length}
+										value={
+											challanHistoryServerTotal > challanHistoryRows.length
+												? `${challanHistoryRows.length}/${challanHistoryServerTotal}`
+												: challanHistoryRows.length
+										}
 										accent="#22c55e"
 									/>
 
@@ -28041,6 +28195,28 @@ export default function DispatchedItemsPage() {
 												</Box>
 											</Box>
 										))}
+
+										{challanHistoryHasMore && (
+											<Box
+												sx={{
+													display: "flex",
+													alignItems: "center",
+													justifyContent: "center",
+													gap: 1.2,
+													py: 1.5,
+												}}
+											>
+												<Button
+													onClick={loadOlderChallanHistory}
+													disabled={challanHistoryLoadingMore}
+													sx={modalSecondaryButtonSx}
+												>
+													{challanHistoryLoadingMore
+														? "Loading older challans…"
+														: `Load older challans (${challanHistoryRows.length}/${challanHistoryServerTotal})`}
+												</Button>
+											</Box>
+										)}
 
 										<Box
 											sx={{

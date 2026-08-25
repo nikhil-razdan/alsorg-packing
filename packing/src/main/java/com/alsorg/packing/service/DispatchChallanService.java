@@ -22,8 +22,10 @@ import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,6 +34,8 @@ import java.util.UUID;
 public class DispatchChallanService {
 
         private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+
+        private static final int MAX_CHALLAN_ITEMS = 1000;
 
         private final ChalaanPdfService pdfService;
         private final DispatchedItemRepository dispatchedRepo;
@@ -121,12 +125,39 @@ public class DispatchChallanService {
                         throw new RuntimeException("No valid items selected for challan");
                 }
 
+                if (itemIds.size() > MAX_CHALLAN_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A maximum of " + MAX_CHALLAN_ITEMS
+                                                        + " items can be dispatched in one challan");
+                }
+
+                /*
+                 * Lock all selected rows in one query before validating/mutating
+                 * them. This prevents two concurrent challan requests from both
+                 * dispatching the same READY item.
+                 */
+                List<DispatchedItem> lockedItems = dispatchedRepo
+                                .findAllByIdForDispatchUpdate(itemIds);
+
+                if (lockedItems.size() != itemIds.size()) {
+                        throw new RuntimeException(
+                                        "One or more selected dispatch items no longer exist");
+                }
+
+                Map<String, DispatchedItem> lockedById = new LinkedHashMap<>();
+
+                for (DispatchedItem item : lockedItems) {
+                        lockedById.put(item.getZohoItemId(), item);
+                }
+
                 List<DispatchedItem> items = new ArrayList<>();
 
                 for (String id : itemIds) {
-                        DispatchedItem item = dispatchedRepo
-                                        .findById(id)
-                                        .orElseThrow(() -> new RuntimeException("Item not found: " + id));
+                        DispatchedItem item = lockedById.get(id);
+
+                        if (item == null) {
+                                throw new RuntimeException("Item not found: " + id);
+                        }
 
                         assertPlantAccess(
                                         item,
@@ -204,13 +235,28 @@ public class DispatchChallanService {
                         }
                 }
 
+                List<DispatchedItem> reloadedItems = dispatchedRepo.findAllById(itemIds);
+
+                if (reloadedItems.size() != itemIds.size()) {
+                        throw new RuntimeException(
+                                        "One or more items are missing after dispatch");
+                }
+
+                Map<String, DispatchedItem> reloadedById = new LinkedHashMap<>();
+
+                for (DispatchedItem reloaded : reloadedItems) {
+                        reloadedById.put(reloaded.getZohoItemId(), reloaded);
+                }
+
                 List<DispatchedItem> finalItems = new ArrayList<>();
 
-                for (DispatchedItem item : items) {
-                        DispatchedItem saved = dispatchedRepo
-                                        .findById(item.getZohoItemId())
-                                        .orElseThrow(() -> new RuntimeException(
-                                                        "Item missing after dispatch: " + item.getZohoItemId()));
+                for (String itemId : itemIds) {
+                        DispatchedItem saved = reloadedById.get(itemId);
+
+                        if (saved == null) {
+                                throw new RuntimeException(
+                                                "Item missing after dispatch: " + itemId);
+                        }
 
                         applyDispatchMetadata(
                                         saved,
@@ -319,16 +365,35 @@ public class DispatchChallanService {
                         List<String> itemIds,
                         Set<String> allowedPlants) {
 
+                if (itemIds.size() > MAX_CHALLAN_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A maximum of " + MAX_CHALLAN_ITEMS
+                                                        + " items can be previewed in one challan");
+                }
+
+                List<DispatchedItem> loaded = dispatchedRepo.findAllById(itemIds);
+
+                if (loaded.size() != itemIds.size()) {
+                        throw new RuntimeException(
+                                        "One or more selected dispatch items were not found");
+                }
+
+                Map<String, DispatchedItem> byId = new LinkedHashMap<>();
+
+                for (DispatchedItem item : loaded) {
+                        byId.put(item.getZohoItemId(), item);
+                }
+
                 List<DispatchedItem> items = new ArrayList<>();
 
                 for (String id : itemIds) {
 
-                        DispatchedItem item = dispatchedRepo
-                                        .findById(id)
-                                        .orElseThrow(
-                                                        () -> new RuntimeException(
-                                                                        "Item not found: "
-                                                                                        + id));
+                        DispatchedItem item = byId.get(id);
+
+                        if (item == null) {
+                                throw new RuntimeException(
+                                                "Item not found: " + id);
+                        }
 
                         assertPlantAccess(
                                         item,
@@ -611,14 +676,12 @@ public class DispatchChallanService {
 
                 List<ChalaanItem> challanItems = new ArrayList<>();
 
-                for (DispatchedItem item : items) {
-                        PacketItem packetItem = null;
+                Map<UUID, PacketItem> packetItemsById = loadPacketItemsById(items);
 
-                        if (item.getPacketItemId() != null) {
-                                packetItem = packetItemRepo
-                                                .findById(item.getPacketItemId())
-                                                .orElse(null);
-                        }
+                for (DispatchedItem item : items) {
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
 
                         challanItems.add(
                                         buildChallanItem(
@@ -636,6 +699,35 @@ public class DispatchChallanService {
                 }
 
                 return data;
+        }
+
+        private Map<UUID, PacketItem> loadPacketItemsById(
+                        List<DispatchedItem> items) {
+
+                LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+
+                if (items != null) {
+                        for (DispatchedItem item : items) {
+                                if (item != null && item.getPacketItemId() != null) {
+                                        ids.add(item.getPacketItemId());
+                                }
+                        }
+                }
+
+                if (ids.isEmpty()) {
+                        return Map.of();
+                }
+
+                Map<UUID, PacketItem> result = new LinkedHashMap<>();
+
+                packetItemRepo.findAllById(ids)
+                                .forEach(packetItem -> {
+                                        if (packetItem != null && packetItem.getId() != null) {
+                                                result.put(packetItem.getId(), packetItem);
+                                        }
+                                });
+
+                return result;
         }
 
         private void applyDispatchMetadata(
@@ -919,7 +1011,7 @@ public class DispatchChallanService {
 
                 String suffix = UUID.randomUUID()
                                 .toString()
-                                .substring(0, 6)
+                                .substring(0, 12)
                                 .toUpperCase();
 
                 return "CH-" + date + "-" + suffix;
@@ -1010,7 +1102,7 @@ public class DispatchChallanService {
 
                 String suffix = UUID.randomUUID()
                                 .toString()
-                                .substring(0, 6)
+                                .substring(0, 12)
                                 .toUpperCase();
 
                 return prefix + "-" + date + "-" + suffix;

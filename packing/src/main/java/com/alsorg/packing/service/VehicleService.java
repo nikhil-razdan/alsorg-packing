@@ -72,6 +72,7 @@ public class VehicleService {
      * GET ALL
      */
 
+    @Transactional(readOnly = true)
     public List<Vehicle> getAll() {
         return repository.findAll();
     }

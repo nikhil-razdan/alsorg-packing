@@ -59,6 +59,15 @@ public class DispatchedItemService {
 
         private static final java.time.ZoneId APP_ZONE = java.time.ZoneId.of("Asia/Kolkata");
 
+        /*
+         * Keeps the controlled XLSX reconciliation lookup bounded. Verification
+         * queries only candidate rows whose normalized item names occur in the
+         * submitted workbook instead of materializing the complete Dispatch table.
+         */
+
+        private static final int MAX_DISPATCH_SEARCH_LENGTH = 300;
+        private static final int MAX_DISPATCH_SEARCH_TOKENS = 12;
+
         private static final Set<String> FIXED_WAREHOUSE_CODES = Set.of(
                         "BLS-WH-1",
                         "RTP-WH-2",
@@ -950,9 +959,24 @@ public class DispatchedItemService {
                         return List.of();
                 }
 
-                String[] rawTokens = search
-                                .trim()
+                String cleanSearch = search.trim();
+
+                if (cleanSearch.length() > MAX_DISPATCH_SEARCH_LENGTH) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch search is too long");
+                }
+
+                String[] rawTokens = cleanSearch
                                 .split("[\\s,]+");
+
+                if (rawTokens.length > MAX_DISPATCH_SEARCH_TOKENS) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Dispatch search supports a maximum of "
+                                                        + MAX_DISPATCH_SEARCH_TOKENS
+                                                        + " terms at one time");
+                }
 
                 List<String> tokens = new ArrayList<>();
 
@@ -1061,7 +1085,7 @@ public class DispatchedItemService {
                         String role) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -1119,7 +1143,7 @@ public class DispatchedItemService {
                         String admin) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -1335,7 +1359,7 @@ public class DispatchedItemService {
                         String admin) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -1463,7 +1487,7 @@ public class DispatchedItemService {
                         Set<String> allowedPlants) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -1578,18 +1602,36 @@ public class DispatchedItemService {
                                         "No items selected");
                 }
 
-                List<DispatchedItem> items = dispatchedRepo.findAllById(ids);
+                LinkedHashSet<String> uniqueIds = ids.stream()
+                                .filter(Objects::nonNull)
+                                .map(String::trim)
+                                .filter(value -> !value.isBlank())
+                                .collect(Collectors.toCollection(LinkedHashSet::new));
 
-                if (items.size() != new LinkedHashSet<>(ids).size()) {
+                if (uniqueIds.isEmpty()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "No valid items selected");
+                }
+
+                List<DispatchedItem> items = dispatchedRepo
+                                .findAllByIdForDispatchUpdate(uniqueIds);
+
+                if (items.size() != uniqueIds.size()) {
 
                         throw new ResponseStatusException(
                                         HttpStatus.NOT_FOUND,
                                         "One or more selected dispatch items were not found");
                 }
 
-                for (DispatchedItem item : items) {
+                /*
+                 * Rows are already locked in this transaction. updateDispatchStatus()
+                 * preserves all existing transition/audit logic while operating on
+                 * the same managed entities.
+                 */
+                for (String itemId : uniqueIds) {
                         updateDispatchStatus(
-                                        item.getZohoItemId(),
+                                        itemId,
                                         status,
                                         username,
                                         allowedPlants);
@@ -1631,11 +1673,12 @@ public class DispatchedItemService {
                                         "A maximum of 5000 Excel rows can be verified at one time");
                 }
 
-                List<DispatchedItem> allDispatchItems = dispatchedRepo.findAll();
+                List<DispatchedItem> dispatchImportCandidates =
+                                loadDispatchImportCandidates(importRows);
 
                 Map<String, List<DispatchedItem>> candidatesByKey = new LinkedHashMap<>();
 
-                for (DispatchedItem item : allDispatchItems) {
+                for (DispatchedItem item : dispatchImportCandidates) {
                         if (item == null || item.getZohoItemId() == null) {
                                 continue;
                         }
@@ -1858,7 +1901,13 @@ public class DispatchedItemService {
                         }
                 }
 
-                List<DispatchedItem> items = dispatchedRepo.findAllById(requestedById.keySet());
+                /*
+                 * Lock the verified rows for the duration of the apply transaction.
+                 * This closes the race where another user could dispatch/edit a row
+                 * after verification but before this reconciliation commits.
+                 */
+                List<DispatchedItem> items = dispatchedRepo
+                                .findAllByIdForDispatchUpdate(requestedById.keySet());
 
                 if (items.size() != requestedById.size()) {
                         throw new ResponseStatusException(
@@ -2026,6 +2075,78 @@ public class DispatchedItemService {
                                 request.rows().size(),
                                 appliedRows.size(),
                                 appliedRows);
+        }
+
+        /**
+         * Loads only plausible database candidates for XLSX verification.
+         *
+         * The historical implementation called dispatchedRepo.findAll(), which
+         * made verification O(total Dispatch history) and eventually caused a
+         * large heap/GC spike. Matching semantics are still authoritative on the
+         * existing Java key (Item Name + PD No + DWG No); this query is only a
+         * safe coarse pre-filter by the same normalized item-name component.
+         */
+        private List<DispatchedItem> loadDispatchImportCandidates(
+                        List<DispatchImportRow> importRows) {
+
+                LinkedHashSet<String> normalizedNames = new LinkedHashSet<>();
+
+                if (importRows != null) {
+                        for (DispatchImportRow row : importRows) {
+                                if (row == null) {
+                                        continue;
+                                }
+
+                                String key = buildDispatchImportKey(
+                                                row.itemName(),
+                                                row.pdNo(),
+                                                row.drawingNo());
+
+                                if (key == null) {
+                                        continue;
+                                }
+
+                                String normalizedName = normalizeDispatchImportName(
+                                                row.itemName());
+
+                                if (!normalizedName.isBlank()) {
+                                        normalizedNames.add(normalizedName);
+                                }
+                        }
+                }
+
+                if (normalizedNames.isEmpty()) {
+                        return List.of();
+                }
+
+                CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+                CriteriaQuery<DispatchedItem> query = cb.createQuery(DispatchedItem.class);
+                Root<DispatchedItem> root = query.from(DispatchedItem.class);
+
+                /*
+                 * PostgreSQL normalization mirrors normalizeDispatchImportName():
+                 * lower-case and remove non-alphanumeric separators.
+                 *
+                 * This is intentionally only a candidate pre-filter. The exact
+                 * existing Java key comparison below remains the final authority.
+                 */
+                Expression<String> normalizedDbName = cb.function(
+                                "regexp_replace",
+                                String.class,
+                                cb.lower(
+                                                cb.coalesce(
+                                                                root.get("name").as(String.class),
+                                                                "")),
+                                cb.literal("[^[:alnum:]]"),
+                                cb.literal(""),
+                                cb.literal("g"));
+
+                query.select(root)
+                                .where(normalizedDbName.in(normalizedNames));
+
+                return entityManager
+                                .createQuery(query)
+                                .getResultList();
         }
 
         private DispatchImportVerificationRow invalidDispatchImportRow(
@@ -2321,7 +2442,7 @@ public class DispatchedItemService {
                         Set<String> allowedPlants) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -2494,8 +2615,8 @@ public class DispatchedItemService {
                 assertAllowedFromLocation(
                                 cleanFromLocation);
 
-                List<DispatchedItem> items = dispatchedRepo.findAllById(
-                                uniqueIds);
+                List<DispatchedItem> items = dispatchedRepo
+                                .findAllByIdForDispatchUpdate(uniqueIds);
 
                 if (items.size() != uniqueIds.size()) {
 
@@ -2601,7 +2722,7 @@ public class DispatchedItemService {
                         String role) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -2708,7 +2829,7 @@ public class DispatchedItemService {
                         String role) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -2785,7 +2906,7 @@ public class DispatchedItemService {
                         String username) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -2867,7 +2988,7 @@ public class DispatchedItemService {
                         String username) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -3047,7 +3168,7 @@ public class DispatchedItemService {
                         String username) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -3083,7 +3204,7 @@ public class DispatchedItemService {
                         String admin) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -3119,7 +3240,7 @@ public class DispatchedItemService {
                         String admin) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -3157,7 +3278,7 @@ public class DispatchedItemService {
                         Set<String> allowedPlants) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new IllegalStateException(
                                                 "Item not found"));
 
@@ -3303,7 +3424,7 @@ public class DispatchedItemService {
                         String username) {
 
                 DispatchedItem item = dispatchedRepo
-                                .findById(zohoItemId)
+                                .findByIdForLifecycleUpdate(zohoItemId)
                                 .orElseThrow(() -> new RuntimeException(
                                                 "Item not found"));
 
@@ -3532,7 +3653,7 @@ public class DispatchedItemService {
                 }
 
                 List<DispatchedItem> selectedItems = dispatchedRepo
-                                .findAllById(
+                                .findAllByIdForDispatchUpdate(
                                                 requestedIds);
 
                 Set<String> foundIds = selectedItems.stream()

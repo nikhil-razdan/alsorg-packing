@@ -31,12 +31,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class LogisticsDispatchTripService {
+
+        private static final int MAX_TRIP_ITEMS = 1000;
+        private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+
 
         private final LogisticsTripRepository tripRepository;
         private final LogisticsTripItemRepository tripItemRepository;
@@ -83,8 +92,17 @@ public class LogisticsDispatchTripService {
                         LocalDateTime tripStart,
                         String username,
                         String source) {
-                if (itemIds == null || itemIds.isEmpty()) {
+                List<String> cleanItemIds = cleanUniqueItemIds(itemIds);
+
+                if (cleanItemIds.isEmpty()) {
                         throw new RuntimeException("No items selected for dispatch");
+                }
+
+                if (cleanItemIds.size() > MAX_TRIP_ITEMS) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "A maximum of " + MAX_TRIP_ITEMS
+                                                        + " items can be dispatched in one trip");
                 }
 
                 if (driverId == null) {
@@ -101,10 +119,30 @@ public class LogisticsDispatchTripService {
                 Vehicle vehicle = vehicleRepository.findById(vehicleId)
                                 .orElseThrow(() -> new RuntimeException("Vehicle not found"));
 
-                List<DispatchedItem> items = dispatchedItemRepository.findAllById(itemIds);
+                List<DispatchedItem> lockedItems = dispatchedItemRepository
+                                .findAllByIdForDispatchUpdate(cleanItemIds);
 
-                if (items.size() != itemIds.size()) {
+                if (lockedItems.size() != cleanItemIds.size()) {
                         throw new RuntimeException("One or more dispatch items were not found");
+                }
+
+                Map<String, DispatchedItem> itemsById = new LinkedHashMap<>();
+
+                for (DispatchedItem item : lockedItems) {
+                        itemsById.put(item.getZohoItemId(), item);
+                }
+
+                List<DispatchedItem> items = new ArrayList<>();
+
+                for (String itemId : cleanItemIds) {
+                        DispatchedItem item = itemsById.get(itemId);
+
+                        if (item == null) {
+                                throw new RuntimeException(
+                                                "Dispatch item not found: " + itemId);
+                        }
+
+                        items.add(item);
                 }
 
                 for (DispatchedItem item : items) {
@@ -142,14 +180,12 @@ public class LogisticsDispatchTripService {
 
                 List<ChalaanItem> chalaanItems = new ArrayList<>();
 
-                for (DispatchedItem item : items) {
-                        PacketItem packetItem = null;
+                Map<UUID, PacketItem> packetItemsById = loadPacketItemsById(items);
 
-                        if (item.getPacketItemId() != null) {
-                                packetItem = packetItemRepository
-                                                .findById(item.getPacketItemId())
-                                                .orElse(null);
-                        }
+                for (DispatchedItem item : items) {
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
 
                         chalaanItems.add(
                                         buildChalaanItem(item, packetItem));
@@ -164,7 +200,7 @@ public class LogisticsDispatchTripService {
 
                 byte[] pdf = chalaanPdfService.generateChalaan(data);
 
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 LocalDateTime dispatchTime = tripStart != null
                                 ? tripStart
@@ -196,13 +232,9 @@ public class LogisticsDispatchTripService {
                                         ? null
                                         : item.getStatus().name();
 
-                        PacketItem packetItem = null;
-
-                        if (item.getPacketItemId() != null) {
-                                packetItem = packetItemRepository
-                                                .findById(item.getPacketItemId())
-                                                .orElse(null);
-                        }
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
 
                         LogisticsTripItem tripItem = new LogisticsTripItem();
 
@@ -341,11 +373,11 @@ public class LogisticsDispatchTripService {
 
                 LocalDateTime start = requestedStart != null
                                 ? requestedStart
-                                : LocalDateTime.now();
+                                : LocalDateTime.now(APP_ZONE);
 
                 trip.setStatus(LogisticsTripStatus.OUT_FOR_DELIVERY);
                 trip.setTripStart(start);
-                trip.setUpdatedAt(LocalDateTime.now());
+                trip.setUpdatedAt(LocalDateTime.now(APP_ZONE));
 
                 tripRepository.save(trip);
 
@@ -356,7 +388,7 @@ public class LogisticsDispatchTripService {
                                 continue;
                         }
 
-                        dispatchedItemRepository.findById(tripItem.getZohoItemId())
+                        dispatchedItemRepository.findByIdForLifecycleUpdate(tripItem.getZohoItemId())
                                         .ifPresent(item -> {
                                                 if (item.getStatus() != ItemDispatchStatus.LOADED) {
                                                         throw new ResponseStatusException(
@@ -442,7 +474,7 @@ public class LogisticsDispatchTripService {
                                         "Live location allowed only for active trips");
                 }
 
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 trip.setCurrentLatitude(latitude);
                 trip.setCurrentLongitude(longitude);
@@ -522,7 +554,7 @@ public class LogisticsDispatchTripService {
 
                 LocalDateTime finalEnd = tripEnd != null
                                 ? tripEnd
-                                : LocalDateTime.now();
+                                : LocalDateTime.now(APP_ZONE);
 
                 if (trip.getTripStart() != null && finalEnd.isBefore(trip.getTripStart())) {
                         throw new ResponseStatusException(
@@ -533,7 +565,7 @@ public class LogisticsDispatchTripService {
                 trip.setTripEnd(finalEnd);
                 trip.setStatus(LogisticsTripStatus.DELIVERED);
                 trip.setEndedBy(safeActor(user.getUsername()));
-                trip.setUpdatedAt(LocalDateTime.now());
+                trip.setUpdatedAt(LocalDateTime.now(APP_ZONE));
 
                 if (remarks != null && !remarks.isBlank()) {
                         trip.setRemarks(remarks.trim());
@@ -559,7 +591,7 @@ public class LogisticsDispatchTripService {
 
                 for (LogisticsTripItem tripItem : tripItems) {
                         dispatchedItemRepository
-                                        .findById(tripItem.getZohoItemId())
+                                        .findByIdForLifecycleUpdate(tripItem.getZohoItemId())
                                         .ifPresent(item -> {
                                                 if (item.getStatus() == ItemDispatchStatus.OUT_FOR_DELIVERY) {
                                                         item.setStatus(ItemDispatchStatus.DELIVERED);
@@ -652,22 +684,35 @@ public class LogisticsDispatchTripService {
                 List<LogisticsTripItem> tripItems = tripItemRepository.findByTripId(tripId);
 
                 if (tripItems != null && !tripItems.isEmpty()) {
+                        LinkedHashSet<String> dispatchedIds = tripItems
+                                        .stream()
+                                        .map(LogisticsTripItem::getZohoItemId)
+                                        .filter(value -> value != null && !value.isBlank())
+                                        .collect(java.util.stream.Collectors.toCollection(
+                                                        LinkedHashSet::new));
+
+                        Map<String, DispatchedItem> dispatchedById = new LinkedHashMap<>();
+
+                        if (!dispatchedIds.isEmpty()) {
+                                dispatchedItemRepository.findAllById(dispatchedIds)
+                                                .forEach(item -> dispatchedById.put(
+                                                                item.getZohoItemId(),
+                                                                item));
+                        }
+
+                        Map<UUID, PacketItem> packetItemsById = loadPacketItemsById(
+                                        new ArrayList<>(dispatchedById.values()));
+
                         for (LogisticsTripItem tripItem : tripItems) {
-                                DispatchedItem dispatchedItem = null;
-                                PacketItem packetItem = null;
+                                DispatchedItem dispatchedItem = tripItem.getZohoItemId() == null
+                                                ? null
+                                                : dispatchedById.get(tripItem.getZohoItemId());
 
-                                if (tripItem.getZohoItemId() != null) {
-                                        dispatchedItem = dispatchedItemRepository
-                                                        .findById(tripItem.getZohoItemId())
-                                                        .orElse(null);
-                                }
-
-                                if (dispatchedItem != null &&
-                                                dispatchedItem.getPacketItemId() != null) {
-                                        packetItem = packetItemRepository
-                                                        .findById(dispatchedItem.getPacketItemId())
-                                                        .orElse(null);
-                                }
+                                PacketItem packetItem = dispatchedItem == null
+                                                || dispatchedItem.getPacketItemId() == null
+                                                                ? null
+                                                                : packetItemsById.get(
+                                                                                dispatchedItem.getPacketItemId());
 
                                 if (dispatchedItem != null) {
                                         chalaanItems.add(
@@ -689,19 +734,19 @@ public class LogisticsDispatchTripService {
                         }
                 }
 
-                
                 if (chalaanItems.isEmpty()) {
-                        List<DispatchedItem> dispatchedItems = dispatchedItemRepository.findByLogisticsTripId(tripId);
+                        List<DispatchedItem> dispatchedItems =
+                                        dispatchedItemRepository.findByLogisticsTripId(tripId);
 
                         if (dispatchedItems != null && !dispatchedItems.isEmpty()) {
-                                for (DispatchedItem item : dispatchedItems) {
-                                        PacketItem packetItem = null;
+                                Map<UUID, PacketItem> packetItemsById =
+                                                loadPacketItemsById(dispatchedItems);
 
-                                        if (item.getPacketItemId() != null) {
-                                                packetItem = packetItemRepository
-                                                                .findById(item.getPacketItemId())
-                                                                .orElse(null);
-                                        }
+                                for (DispatchedItem item : dispatchedItems) {
+                                        PacketItem packetItem = item.getPacketItemId() == null
+                                                        ? null
+                                                        : packetItemsById.get(
+                                                                        item.getPacketItemId());
 
                                         chalaanItems.add(
                                                         buildChalaanItem(item, packetItem));
@@ -773,6 +818,59 @@ public class LogisticsDispatchTripService {
 
         public List<LogisticsTrip> getAllTrips() {
                 return tripRepository.findAllByOrderByTripStartDesc();
+        }
+
+        private List<String> cleanUniqueItemIds(
+                        List<String> itemIds) {
+
+                if (itemIds == null || itemIds.isEmpty()) {
+                        return List.of();
+                }
+
+                LinkedHashSet<String> unique = new LinkedHashSet<>();
+
+                for (String itemId : itemIds) {
+                        if (itemId == null) {
+                                continue;
+                        }
+
+                        String clean = itemId.trim();
+
+                        if (!clean.isBlank()) {
+                                unique.add(clean);
+                        }
+                }
+
+                return new ArrayList<>(unique);
+        }
+
+        private Map<UUID, PacketItem> loadPacketItemsById(
+                        List<DispatchedItem> items) {
+
+                LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+
+                if (items != null) {
+                        for (DispatchedItem item : items) {
+                                if (item != null && item.getPacketItemId() != null) {
+                                        ids.add(item.getPacketItemId());
+                                }
+                        }
+                }
+
+                if (ids.isEmpty()) {
+                        return Map.of();
+                }
+
+                Map<UUID, PacketItem> result = new LinkedHashMap<>();
+
+                packetItemRepository.findAllById(ids)
+                                .forEach(packetItem -> {
+                                        if (packetItem != null && packetItem.getId() != null) {
+                                                result.put(packetItem.getId(), packetItem);
+                                        }
+                                });
+
+                return result;
         }
 
         private ChalaanItem buildChalaanItem(
@@ -863,7 +961,16 @@ public class LogisticsDispatchTripService {
         }
 
         private String generateChallanNumber() {
-                return "CH-" + System.currentTimeMillis();
+                String date = java.time.LocalDate.now(APP_ZONE)
+                                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+
+                String suffix = UUID.randomUUID()
+                                .toString()
+                                .replace("-", "")
+                                .substring(0, 12)
+                                .toUpperCase();
+
+                return "CH-" + date + "-" + suffix;
         }
 
         private String cleanOrNull(String value) {

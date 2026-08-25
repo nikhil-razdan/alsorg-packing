@@ -10,8 +10,10 @@ import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -22,6 +24,10 @@ import java.util.regex.Pattern;
 
 @Service
 public class ScannerDispatchService {
+
+    private static final int MAX_SCAN_TEXT_LENGTH = 4096;
+    private static final int MAX_BULK_SCANS = 1000;
+
 
     private final PacketItemRepository packetItemRepository;
     private final StickerHistoryRepository stickerHistoryRepository;
@@ -202,7 +208,16 @@ public class ScannerDispatchService {
             Integer helperLoaderCount) {
 
         if (rawScanTexts == null || rawScanTexts.isEmpty()) {
-            throw new RuntimeException("No QR / sticker scans provided");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "No QR / sticker scans provided");
+        }
+
+        if (rawScanTexts.size() > MAX_BULK_SCANS) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "A maximum of " + MAX_BULK_SCANS
+                            + " scans can be submitted at one time");
         }
 
         Map<String, ResolvedScan> unique = new LinkedHashMap<>();
@@ -341,12 +356,36 @@ public class ScannerDispatchService {
     private DecodedScan decode(
             String rawScanText) {
         if (rawScanText == null || rawScanText.trim().isEmpty()) {
-            throw new RuntimeException("Empty QR scan");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Empty QR scan");
         }
 
-        String scanText = URLDecoder.decode(
-                rawScanText.trim(),
-                StandardCharsets.UTF_8);
+        String trimmed = rawScanText.trim();
+
+        if (trimmed.length() > MAX_SCAN_TEXT_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "QR / sticker scan is too large");
+        }
+
+        final String scanText;
+
+        try {
+            scanText = URLDecoder.decode(
+                    trimmed,
+                    StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid URL-encoded QR data");
+        }
+
+        if (scanText.length() > MAX_SCAN_TEXT_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Decoded QR / sticker scan is too large");
+        }
 
         DecodedScan decoded = new DecodedScan();
 
@@ -355,7 +394,8 @@ public class ScannerDispatchService {
 
             for (String part : parts) {
                 if (part.startsWith("PI=")) {
-                    decoded.packetItemId = UUID.fromString(part.substring(3).trim());
+                    decoded.packetItemId = parseUuid(
+                            part.substring(3).trim());
                 }
 
                 if (part.startsWith("SN=")) {
@@ -371,7 +411,8 @@ public class ScannerDispatchService {
                 .matcher(scanText);
 
         if (uuidMatcher.find()) {
-            decoded.packetItemId = UUID.fromString(uuidMatcher.group());
+            decoded.packetItemId = parseUuid(
+                    uuidMatcher.group());
 
             return decoded;
         }
@@ -397,6 +438,18 @@ public class ScannerDispatchService {
         }
 
         throw new RuntimeException("Invalid QR format");
+    }
+
+    private UUID parseUuid(
+            String value) {
+
+        try {
+            return UUID.fromString(value);
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid packet item identifier in QR");
+        }
     }
 
     private void assertScanPlantAccess(

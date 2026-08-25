@@ -2,6 +2,7 @@ package com.alsorg.packing.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -21,6 +22,8 @@ import com.alsorg.packing.repository.VehicleRepository;
 @Service
 @Transactional
 public class LogisticsShiftService {
+
+        private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
 
         private static final List<String> ALLOWED_STATUSES = List.of(
                         "WORKING",
@@ -61,7 +64,7 @@ public class LogisticsShiftService {
                                 vehicle);
 
                 shift.setCreatedAt(
-                                LocalDateTime.now());
+                                LocalDateTime.now(APP_ZONE));
 
                 return shiftRepository.save(shift);
         }
