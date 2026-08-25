@@ -11,6 +11,8 @@ import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.security.JwtUtil;
 
+import io.jsonwebtoken.JwtException;
+
 @Service
 public class CurrentUserService {
 
@@ -25,8 +27,8 @@ public class CurrentUserService {
     }
 
     /*
-     * NEW PREFERRED METHOD:
-     * Uses Spring SecurityContext populated by JwtAuthenticationFilter.
+     * Preferred path: use the SecurityContext populated by
+     * JwtAuthenticationFilter.
      */
     public User requireCurrentUser() {
         String username = usernameFromSecurityContext();
@@ -35,7 +37,34 @@ public class CurrentUserService {
             throw new AccessDeniedException("Authentication required");
         }
 
-        User user = userRepository.findByUsernameIgnoreCase(username)
+        return requireEnabledUser(username);
+    }
+
+    /*
+     * Backward-compatible bridge for older controllers that still pass the
+     * Authorization header explicitly.
+     *
+     * SECURITY: prefer SecurityContext first. A stale/invalid Authorization
+     * header must not override an already-authenticated HttpOnly-cookie session.
+     */
+    public User getCurrentUserFromAuth(String auth) {
+        String username = usernameFromSecurityContext();
+
+        if (username == null || username.isBlank()) {
+            username = usernameFromBearerHeader(auth);
+        }
+
+        if (username == null || username.isBlank()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+
+        return requireEnabledUser(username);
+    }
+
+    private User requireEnabledUser(String username) {
+        String cleanUsername = username == null ? "" : username.trim();
+
+        User user = userRepository.findByUsernameIgnoreCase(cleanUsername)
                 .orElseThrow(() -> new AccessDeniedException("User not found"));
 
         if (!user.isEnabled()) {
@@ -45,44 +74,25 @@ public class CurrentUserService {
         return user;
     }
 
-    /*
-     * BACKWARD COMPATIBILITY:
-     * Existing controllers still call getCurrentUserFromAuth(auth).
-     *
-     * If Authorization header is present, parse it.
-     * If Authorization header is missing because frontend now uses HttpOnly cookie,
-     * fallback to SecurityContext.
-     */
-    public User getCurrentUserFromAuth(String auth) {
-        String username = null;
-
-        if (auth != null && auth.startsWith("Bearer ")) {
-            String token = auth.substring(7).trim();
-
-            if (!token.isBlank()) {
-                username = JwtUtil.getUsername(token);
-            }
+    private String usernameFromBearerHeader(String auth) {
+        if (auth == null
+                || !auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            return null;
         }
 
-        if (username == null || username.isBlank()) {
-            username = usernameFromSecurityContext();
+        String token = auth.substring(7).trim();
+
+        if (token.isBlank()
+                || "null".equalsIgnoreCase(token)
+                || "undefined".equalsIgnoreCase(token)) {
+            return null;
         }
 
-        if (username == null || username.isBlank()) {
-            throw new AccessDeniedException("Authentication required");
+        try {
+            return JwtUtil.getUsername(token);
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw new AccessDeniedException("Invalid authentication token");
         }
-
-        final String finalUsername = username;
-
-        User user = userRepository.findByUsernameIgnoreCase(finalUsername)
-                .orElseThrow(() -> new AccessDeniedException(
-                        "User not found: " + finalUsername));
-
-        if (!user.isEnabled()) {
-            throw new AccessDeniedException("User is disabled");
-        }
-
-        return user;
     }
 
     private String usernameFromSecurityContext() {
@@ -93,7 +103,8 @@ public class CurrentUserService {
         if (authentication == null
                 || !authentication.isAuthenticated()
                 || authentication.getName() == null
-                || authentication.getName().isBlank()) {
+                || authentication.getName().isBlank()
+                || "anonymousUser".equals(authentication.getName())) {
             return null;
         }
 

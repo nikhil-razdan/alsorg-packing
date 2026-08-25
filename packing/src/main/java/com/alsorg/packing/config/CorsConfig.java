@@ -1,7 +1,14 @@
 package com.alsorg.packing.config;
 
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -11,71 +18,130 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 public class CorsConfig {
 
-        @Bean
-        public CorsConfigurationSource corsConfigurationSource() {
-                CorsConfiguration config = new CorsConfiguration();
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.security.allowed-origins:http://localhost:5173,http://localhost:3000,https://alsorg-packing-frontend.onrender.com}")
+            String configuredOrigins) {
 
-                /*
-                 * Required for HttpOnly cookie auth.
-                 * Without this, browser will not send ALSORG_ACCESS cookie.
-                 */
-                config.setAllowCredentials(true);
+        CorsConfiguration config = new CorsConfiguration();
 
-                /*
-                 * Must be exact frontend origins.
-                 * Do not use "*" with credentials.
-                 */
-                config.setAllowedOrigins(List.of(
-                                "http://localhost:5173",
-                                "http://localhost:3000",
-                                "https://alsorg-packing-frontend.onrender.com"));
+        config.setAllowCredentials(true);
 
-                /*
-                 * Allow all headers your frontend may send.
-                 *
-                 * Authorization is kept temporarily because some old frontend code
-                 * may still send it during transition.
-                 *
-                 * X-Username is kept temporarily because old pages may still send it.
-                 */
-                config.setAllowedHeaders(List.of(
-                                "Content-Type",
-                                "Accept",
-                                "Origin",
-                                "X-Requested-With",
-                                "Authorization",
-                                "X-Username"));
+        config.setAllowedOrigins(
+                parseExactOrigins(
+                        configuredOrigins));
 
-                config.setAllowedMethods(List.of(
-                                "GET",
-                                "POST",
-                                "PUT",
-                                "PATCH",
-                                "DELETE",
-                                "OPTIONS"));
+        config.setAllowedHeaders(
+                List.of(
+                        "Content-Type",
+                        "Accept",
+                        "Origin",
+                        "X-Requested-With",
+                        "Authorization",
+                        "X-Username",
+                        "X-Client-Type",
+                        "X-Request-ID"));
 
-                /*
-                 * Frontend needs Content-Disposition for PDF/Excel/CSV filenames.
-                 * Logistics challan flow also reads X-Trip-Id and X-Challan-No.
-                 */
-                config.setExposedHeaders(List.of(
-                                "Content-Disposition",
-                                "X-Trip-Id",
-                                "X-Challan-No",
-                                "X-Total-Pages",
-                                "X-Total-Elements",
-                                "X-Page-Number",
-                                "X-Page-Size",
-                                "X-Has-Next"));
+        config.setAllowedMethods(
+                List.of(
+                        "GET",
+                        "HEAD",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"));
 
-                config.setMaxAge(3600L);
+        config.setExposedHeaders(
+                List.of(
+                        "Content-Disposition",
+                        "X-Trip-Id",
+                        "X-Challan-No",
+                        "X-Total-Pages",
+                        "X-Total-Elements",
+                        "X-Page-Number",
+                        "X-Page-Size",
+                        "X-Has-Next",
+                        "X-Dispatch-Count-Reused",
+                        "X-Request-ID"));
 
-                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        config.setMaxAge(3600L);
 
-                source.registerCorsConfiguration(
-                                "/**",
-                                config);
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
 
-                return source;
+        source.registerCorsConfiguration(
+                "/**",
+                config);
+
+        return source;
+    }
+
+    private List<String> parseExactOrigins(
+            String configuredOrigins) {
+
+        Set<String> values = new LinkedHashSet<>();
+
+        if (configuredOrigins != null) {
+            Arrays.stream(
+                            configuredOrigins.split(","))
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .map(this::normalizeOrigin)
+                    .filter(value -> value != null)
+                    .forEach(values::add);
         }
+
+        if (values.isEmpty()) {
+            throw new IllegalStateException(
+                    "At least one exact app.security.allowed-origins value is required");
+        }
+
+        return new ArrayList<>(values);
+    }
+
+    private String normalizeOrigin(
+            String value) {
+
+        try {
+            URI uri = URI.create(value);
+
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+
+            if (scheme == null
+                    || host == null) {
+                return null;
+            }
+
+            scheme = scheme.toLowerCase(
+                    Locale.ROOT);
+
+            host = host.toLowerCase(
+                    Locale.ROOT);
+
+            if (!"http".equals(scheme)
+                    && !"https".equals(scheme)) {
+                return null;
+            }
+
+            int port = uri.getPort();
+
+            boolean defaultPort = port < 0
+                    || ("http".equals(scheme)
+                            && port == 80)
+                    || ("https".equals(scheme)
+                            && port == 443);
+
+            return scheme
+                    + "://"
+                    + host
+                    + (defaultPort
+                            ? ""
+                            : ":" + port);
+
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
 }

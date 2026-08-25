@@ -1,25 +1,38 @@
 spring:
+  config:
+    activate:
+      on-profile: production
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/alsorg_production
-    username: alsorg_prod
-    password: prod123
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: false
-
-sticker:
-  storage:
-    path: /data/alsorg/production/stickers
 
 server:
   servlet:
     session:
       cookie:
-        secure: true
         http-only: true
+        secure: true
+
+sticker:
+  storage:
+    path: ${STICKER_STORAGE_PATH:/app/data/stickers}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+
+  security:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS}
+    cookie-secure: true
+    cookie-same-site: ${APP_AUTH_COOKIE_SAME_SITE:None}
 
 logging:
   level:
@@ -29,8 +42,8 @@ logging:
 zoho:
   inventory:
     enabled: true
-    base-url: https://www.zohoapis.in
-    organization-id: 60059178154
-    client-id: 1000.RUC8TS1I1XFY8N8AABZ4B22UB98L8P
-    client-secret: 173d57b4e89c55d00b05799419b36cce277cf9922d
-    refresh-token: 1000.a0c4b262cc7f55b8a98f7cd9f4e3c77f.a80c38669c4059b92604398ba1971504
+    base-url: ${ZOHO_BASE_URL:https://www.zohoapis.in}
+    organization-id: ${ZOHO_ORG_ID:}
+    client-id: ${ZOHO_CLIENT_ID:}
+    client-secret: ${ZOHO_CLIENT_SECRET:}
+    refresh-token: ${ZOHO_REFRESH_TOKEN:}

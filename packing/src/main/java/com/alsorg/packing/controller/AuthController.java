@@ -4,15 +4,23 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.security.JwtAuthenticationFilter;
 import com.alsorg.packing.security.JwtUtil;
+import com.alsorg.packing.security.LoginAttemptService;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -24,228 +32,384 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final Logger log =
+            LoggerFactory.getLogger(
+                    AuthController.class);
+
+    private static final int MAX_USERNAME_LENGTH = 180;
+    private static final int MAX_PASSWORD_LENGTH = 512;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final LoginAttemptService loginAttemptService;
+
+    private final String dummyPasswordHash;
+    private final boolean forceSecureCookie;
+    private final String cookieSameSite;
 
     public AuthController(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            JwtUtil jwtUtil
-    ) {
+            JwtUtil jwtUtil,
+            LoginAttemptService loginAttemptService,
+            @Value("${app.security.cookie-secure:false}") boolean forceSecureCookie,
+            @Value("${app.security.cookie-same-site:Lax}") String cookieSameSite) {
+
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.loginAttemptService = loginAttemptService;
+        this.forceSecureCookie = forceSecureCookie;
+        this.cookieSameSite = normalizeSameSite(
+                cookieSameSite);
+
+        /*
+         * Used to make an unknown username perform one password-hash check too.
+         * This reduces username-enumeration information from response timing.
+         */
+        this.dummyPasswordHash = passwordEncoder.encode(
+                "FlowSuite-Dummy-"
+                        + UUID.randomUUID());
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(
-            @RequestBody LoginRequest request,
-            @RequestHeader(value = "X-Client-Type", required = false) String clientType,
-            HttpServletRequest httpRequest
-    ) {
-        String username = clean(request.username());
-        String password = request.password();
+            @RequestBody(required = false) LoginRequest request,
+            @RequestHeader(
+                    value = "X-Client-Type",
+                    required = false)
+            String clientType,
+            HttpServletRequest httpRequest) {
 
-        if (username == null || username.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Username is required"));
+        String username = clean(
+                request == null
+                        ? null
+                        : request.username());
+
+        String password = request == null
+                ? null
+                : request.password();
+
+        String clientIp = resolveClientIp(
+                httpRequest);
+
+        LoginAttemptService.Decision decision =
+                loginAttemptService.checkAllowed(
+                        clientIp,
+                        username);
+
+        if (!decision.allowed()) {
+
+            log.warn(
+                    "Blocked login attempt: ip={}, username={}",
+                    safeLogValue(clientIp),
+                    safeLogValue(username));
+
+            return noStore(
+                    ResponseEntity
+                            .status(
+                                    HttpStatus.TOO_MANY_REQUESTS)
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Too many login attempts. Try again later.")));
         }
 
-        if (password == null || password.isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Password is required"));
+        if (username == null
+                || username.isBlank()) {
+            return noStore(
+                    ResponseEntity
+                            .badRequest()
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Username is required")));
+        }
+
+        if (username.length() > MAX_USERNAME_LENGTH) {
+            loginAttemptService.recordFailure(
+                    clientIp,
+                    username);
+
+            return noStore(
+                    ResponseEntity
+                            .badRequest()
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Invalid credentials")));
+        }
+
+        if (password == null
+                || password.isBlank()) {
+            return noStore(
+                    ResponseEntity
+                            .badRequest()
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Password is required")));
+        }
+
+        if (password.length() > MAX_PASSWORD_LENGTH) {
+            loginAttemptService.recordFailure(
+                    clientIp,
+                    username);
+
+            return noStore(
+                    ResponseEntity
+                            .status(
+                                    HttpStatus.UNAUTHORIZED)
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Invalid credentials")));
         }
 
         Optional<User> optionalUser =
-                userRepository.findByUsernameIgnoreCase(username);
+                userRepository
+                        .findByUsernameIgnoreCase(
+                                username);
 
-        if (optionalUser.isEmpty()) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("message", "Invalid credentials"));
+        User user = optionalUser
+                .orElse(null);
+
+        String storedPassword = user == null
+                ? dummyPasswordHash
+                : user.getPassword();
+
+        boolean passwordMatch = false;
+
+        try {
+            passwordMatch =
+                    storedPassword != null
+                            && passwordEncoder.matches(
+                                    password,
+                                    storedPassword);
+
+        } catch (IllegalArgumentException exception) {
+            /*
+             * A malformed legacy password hash must not leak its format or
+             * produce a 500 during login.
+             */
+            passwordMatch = false;
         }
 
-        User user = optionalUser.get();
+        if (user == null
+                || !user.isEnabled()
+                || !passwordMatch) {
 
-        if (!user.isEnabled()) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "User is disabled"));
+            loginAttemptService.recordFailure(
+                    clientIp,
+                    username);
+
+            log.warn(
+                    "Rejected login attempt: ip={}, username={}",
+                    safeLogValue(clientIp),
+                    safeLogValue(username));
+
+            /*
+             * Do not reveal whether the username exists or is disabled.
+             */
+            return noStore(
+                    ResponseEntity
+                            .status(
+                                    HttpStatus.UNAUTHORIZED)
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "Invalid credentials")));
         }
 
-        boolean passwordMatch =
-                passwordEncoder.matches(
-                        password,
-                        user.getPassword()
-                );
-
-        if (!passwordMatch) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("message", "Invalid credentials"));
-        }
+        loginAttemptService.recordSuccess(
+                clientIp,
+                username);
 
         String token =
                 jwtUtil.generateToken(
                         user.getUsername(),
-                        normalizeRole(user.getRole())
-                );
+                        normalizeRole(
+                                user.getRole()));
 
         ResponseCookie cookie =
                 buildAccessCookie(
                         token,
-                        httpRequest
-                );
+                        httpRequest);
 
         Map<String, Object> response =
-                buildAuthResponse(user);
+                buildAuthResponse(
+                        user);
 
         /*
-         * Web PackFlow:
-         * Token is stored only in HttpOnly cookie.
+         * Browser:
+         * JWT stays in HttpOnly cookie.
          *
-         * Mobile ShipTrack:
-         * React Native cannot depend on browser HttpOnly cookies,
-         * so mobile gets token in JSON and stores it in Expo SecureStore.
+         * ShipTrack/mobile:
+         * bearer token is also returned in JSON for secure native storage.
          */
-        if (isMobileClient(clientType)) {
-            response.put("token", token);
-            response.put("accessToken", token);
+        if (isMobileClient(
+                clientType)) {
+
+            response.put(
+                    "token",
+                    token);
+
+            response.put(
+                    "accessToken",
+                    token);
         }
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.SET_COOKIE,
-                        cookie.toString()
-                )
-                .body(response);
-                
+        return noStore(
+                ResponseEntity
+                        .ok()
+                        .header(
+                                HttpHeaders.SET_COOKIE,
+                                cookie.toString())
+                        .body(response));
     }
 
     @GetMapping("/me")
     public ResponseEntity<?> me() {
+
         Authentication authentication =
                 SecurityContextHolder
                         .getContext()
                         .getAuthentication();
 
-        if (
-                authentication == null
-                        || !authentication.isAuthenticated()
-                        || authentication.getName() == null
-                        || authentication.getName().isBlank()
-                        || "anonymousUser".equals(authentication.getName())
-        ) {
-            return ResponseEntity.ok(
-                    Map.of(
-                            "authenticated",
-                            false
-                    )
-            );
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication.getName() == null
+                || authentication.getName().isBlank()
+                || "anonymousUser".equals(
+                        authentication.getName())) {
+
+            return noStore(
+                    ResponseEntity.ok(
+                            Map.of(
+                                    "authenticated",
+                                    false)));
         }
 
         Optional<User> optionalUser =
-                userRepository.findByUsernameIgnoreCase(
-                        authentication.getName()
-                );
+                userRepository
+                        .findByUsernameIgnoreCase(
+                                authentication.getName());
 
         if (optionalUser.isEmpty()) {
-            return ResponseEntity.ok(
-                    Map.of(
-                            "authenticated",
-                            false
-                    )
-            );
+
+            return noStore(
+                    ResponseEntity.ok(
+                            Map.of(
+                                    "authenticated",
+                                    false)));
         }
 
         User user =
                 optionalUser.get();
 
         if (!user.isEnabled()) {
-            return ResponseEntity.status(403)
-                    .body(Map.of("message", "User is disabled"));
+
+            return noStore(
+                    ResponseEntity
+                            .status(
+                                    HttpStatus.FORBIDDEN)
+                            .body(
+                                    Map.of(
+                                            "message",
+                                            "User is disabled")));
         }
 
-        return ResponseEntity.ok(
-                buildAuthResponse(user)
-        );
+        return noStore(
+                ResponseEntity.ok(
+                        buildAuthResponse(
+                                user)));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
-            HttpServletRequest request
-    ) {
-        SecurityContextHolder.clearContext();
+            HttpServletRequest request) {
+
+        SecurityContextHolder
+                .clearContext();
 
         ResponseCookie cookie =
-                clearAccessCookie(request);
+                clearAccessCookie(
+                        request);
 
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.SET_COOKIE,
-                        cookie.toString()
-                )
-                .body(Map.of("message", "Logged out successfully"));
+        return noStore(
+                ResponseEntity
+                        .ok()
+                        .header(
+                                HttpHeaders.SET_COOKIE,
+                                cookie.toString())
+                        .body(
+                                Map.of(
+                                        "message",
+                                        "Logged out successfully")));
     }
 
     private Map<String, Object> buildAuthResponse(
-            User user
-    ) {
+            User user) {
+
         Map<String, Object> response =
                 new LinkedHashMap<>();
 
         String role =
-                normalizeRole(user.getRole());
+                normalizeRole(
+                        user.getRole());
 
-        response.put("authenticated", true);
-        response.put("id", user.getId());
-        response.put("username", user.getUsername());
-        response.put("role", role);
+        response.put(
+                "authenticated",
+                true);
 
-        /*
-         * IMPORTANT FOR MULTI-ROLE USERS:
-         *
-         * The frontend AuthContext builds its effective role list from this
-         * field.  Omitting it caused users such as
-         * HARDWARE_PACKING + DISPATCH to collapse back to only the legacy
-         * primary role after /login or /auth/me.
-         */
+        response.put(
+                "id",
+                user.getId());
+
+        response.put(
+                "username",
+                user.getUsername());
+
+        response.put(
+                "role",
+                role);
+
         response.put(
                 "roles",
-                user.getEffectiveRoles()
-        );
+                user.getEffectiveRoles());
 
-        response.put("enabled", user.isEnabled());
+        response.put(
+                "enabled",
+                user.isEnabled());
 
         response.put(
                 "warehouseAccess",
-                hasWarehouseAccess(user)
-        );
+                hasWarehouseAccess(
+                        user));
 
         response.put(
                 "plantCode",
-                user.getPlantCode()
-        );
+                user.getPlantCode());
 
         response.put(
                 "plantCodes",
-                user.getEffectivePlantCodes()
-        );
+                user.getEffectivePlantCodes());
 
         response.put(
                 "driverId",
-                user.getDriverId()
-        );
+                user.getDriverId());
 
         response.put(
                 "modules",
-                user.getEffectiveModules()
-        );
+                user.getEffectiveModules());
 
         return response;
     }
 
     private boolean hasWarehouseAccess(
-            User user
-    ) {
+            User user) {
+
         if (user == null) {
             return false;
         }
@@ -254,84 +418,115 @@ public class AuthController {
                 || user.getEffectiveRoles()
                         .stream()
                         .map(this::normalizeRole)
-                        .anyMatch(role ->
-                                "ADMIN".equals(role)
-                                        || "WAREHOUSE".equals(role)
-                                        || "DISPATCH".equals(role));
+                        .anyMatch(
+                                role ->
+                                        "ADMIN".equals(role)
+                                                || "WAREHOUSE".equals(role)
+                                                || "DISPATCH".equals(role));
     }
 
     private boolean isMobileClient(
-            String clientType
-    ) {
+            String clientType) {
+
         return clientType != null
-                && "mobile".equalsIgnoreCase(clientType.trim());
+                && "mobile".equalsIgnoreCase(
+                        clientType.trim());
     }
 
     private ResponseCookie buildAccessCookie(
             String token,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
+
         boolean secure =
-                isSecureRequest(request);
+                forceSecureCookie
+                        || isSecureRequest(
+                                request);
 
         return ResponseCookie
                 .from(
                         JwtAuthenticationFilter.ACCESS_COOKIE,
-                        token
-                )
+                        token)
                 .httpOnly(true)
                 .secure(secure)
-                .sameSite(secure ? "None" : "Lax")
+                .sameSite(
+                        secure
+                                ? cookieSameSite
+                                : "Lax")
                 .path("/")
-                .maxAge(Duration.ofHours(8))
+                .maxAge(
+                        Duration.ofMillis(
+                                JwtUtil.getExpiryMillis()))
                 .build();
     }
 
     private ResponseCookie clearAccessCookie(
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
+
         boolean secure =
-                isSecureRequest(request);
+                forceSecureCookie
+                        || isSecureRequest(
+                                request);
 
         return ResponseCookie
                 .from(
                         JwtAuthenticationFilter.ACCESS_COOKIE,
-                        ""
-                )
+                        "")
                 .httpOnly(true)
                 .secure(secure)
-                .sameSite(secure ? "None" : "Lax")
+                .sameSite(
+                        secure
+                                ? cookieSameSite
+                                : "Lax")
                 .path("/")
                 .maxAge(0)
                 .build();
     }
 
     private boolean isSecureRequest(
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
+
         String proto =
-                request.getHeader("X-Forwarded-Proto");
+                request.getHeader(
+                        "X-Forwarded-Proto");
 
         return request.isSecure()
-                || "https".equalsIgnoreCase(proto);
+                || "https".equalsIgnoreCase(
+                        proto);
+    }
+
+    private String resolveClientIp(
+            HttpServletRequest request) {
+
+        if (request == null
+                || request.getRemoteAddr() == null
+                || request.getRemoteAddr()
+                        .isBlank()) {
+            return "unknown";
+        }
+
+        return request.getRemoteAddr()
+                .trim();
     }
 
     private String normalizeRole(
-            String role
-    ) {
-        if (role == null || role.isBlank()) {
+            String role) {
+
+        if (role == null
+                || role.isBlank()) {
             return "";
         }
 
         return role
-                .replace("ROLE_", "")
+                .replaceFirst(
+                        "(?i)^ROLE_",
+                        "")
                 .trim()
                 .toUpperCase();
     }
 
     private String clean(
-            String value
-    ) {
+            String value) {
+
         if (value == null) {
             return null;
         }
@@ -339,20 +534,83 @@ public class AuthController {
         String text =
                 value.trim();
 
-        if (
-                text.isBlank()
-                        || "null".equalsIgnoreCase(text)
-                        || "undefined".equalsIgnoreCase(text)
-        ) {
+        if (text.isBlank()
+                || "null".equalsIgnoreCase(
+                        text)
+                || "undefined".equalsIgnoreCase(
+                        text)) {
             return null;
         }
 
         return text;
     }
 
+    private String normalizeSameSite(
+            String value) {
+
+        String clean = value == null
+                ? "Lax"
+                : value.trim();
+
+        if ("None".equalsIgnoreCase(clean)) {
+            return "None";
+        }
+
+        if ("Strict".equalsIgnoreCase(clean)) {
+            return "Strict";
+        }
+
+        return "Lax";
+    }
+
+    private String safeLogValue(
+            String value) {
+
+        if (value == null) {
+            return "-";
+        }
+
+        String clean = value
+                .replace('\r', '_')
+                .replace('\n', '_')
+                .replace('\t', '_')
+                .trim();
+
+        if (clean.length() > 180) {
+            clean = clean.substring(
+                    0,
+                    180);
+        }
+
+        return clean;
+    }
+
+    private <T> ResponseEntity<T> noStore(
+            ResponseEntity<T> response) {
+
+        HttpHeaders headers =
+                response.getHeaders();
+
+        /*
+         * ResponseEntity headers are read-only at this point in some builders,
+         * so rebuild with the original status/body and explicit cache headers.
+         */
+        return ResponseEntity
+                .status(
+                        response.getStatusCode())
+                .headers(existing -> {
+                    existing.putAll(headers);
+                    existing.setCacheControl(
+                            CacheControl.noStore());
+                    existing.setPragma(
+                            "no-cache");
+                })
+                .body(
+                        response.getBody());
+    }
+
     public record LoginRequest(
             String username,
-            String password
-    ) {
+            String password) {
     }
 }
