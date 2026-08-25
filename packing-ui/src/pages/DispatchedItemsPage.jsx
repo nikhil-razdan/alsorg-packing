@@ -2608,34 +2608,71 @@ const actionDanger = {
 };
 
 const searchPanel = {
-	display: "flex",
+	display: "grid",
+	gridTemplateColumns:
+		"minmax(300px,1fr) 210px 160px 190px 150px",
 	alignItems: "center",
-	flexWrap: "wrap",
 	maxWidth: "100%",
+	width: "100%",
 	boxSizing: "border-box",
 	overflow: "visible",
-	gap: 9,
-	minHeight: 56,
+	columnGap: 9,
+	rowGap: 9,
+	minHeight: 62,
 	padding: "9px 12px",
 	borderRadius: 14,
 	background: "var(--pf-surface-raised)",
 	border: "1px solid var(--pf-border)",
 	boxShadow: "0 7px 18px rgba(var(--pf-surface-deep-rgb),.045)",
+
+	/*
+	 * At normal desktop widths all controls stay on one compact row.
+	 * At narrower/zoomed widths the search gets its own row and the
+	 * four filters form a deliberate grid instead of one control
+	 * wrapping by itself and stretching the whole panel vertically.
+	 */
+	"@media (max-width: 1280px)": {
+		gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+	},
+
+	"@media (max-width: 760px)": {
+		gridTemplateColumns: "repeat(2,minmax(0,1fr))",
+	},
+
+	"@media (max-width: 480px)": {
+		gridTemplateColumns: "minmax(0,1fr)",
+	},
+};
+
+const dispatchSearchInputWrapSx = {
+	minWidth: 0,
+	width: "100%",
+	height: 44,
+	display: "flex",
+	alignItems: "center",
+	gap: 1,
+	px: 1.1,
+	borderRadius: "10px",
+	background: "var(--pf-input)",
+	border: "1px solid var(--pf-border-soft)",
+	boxSizing: "border-box",
+
+	"&:focus-within": {
+		borderColor: "rgba(59,130,246,.34)",
+		boxShadow: "0 0 0 3px rgba(59,130,246,.07)",
+	},
+
+	"@media (max-width: 1280px)": {
+		gridColumn: "1 / -1",
+	},
 };
 
 const searchActivitySlotSx = {
-	width: 126,
-	minWidth: 126,
-	height: 34,
+	height: 30,
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "flex-end",
-	flexShrink: 0,
-
-	"@media (max-width: 900px)": {
-		width: 116,
-		minWidth: 116,
-	},
+	flex: "0 0 auto",
 };
 
 const searchActivityPillSx = {
@@ -2666,7 +2703,8 @@ const activeSearchPanelSx = {
 const dateFilterButtonSx = (
 	active
 ) => ({
-	minWidth: 210,
+	width: "100%",
+	minWidth: 0,
 	height: 44,
 	px: 1.5,
 	borderRadius: "10px",
@@ -19261,98 +19299,92 @@ export default function DispatchedItemsPage() {
 							: {}),
 					}}
 				>
-					<SearchIcon
-						sx={{
-							color:
-								dispatchSearchPending
-									? "var(--dispatch-blue-text)"
-									: "var(--pf-text-muted)",
-							transition:
-								"color .16s ease",
-						}}
-					/>
-
-					<TextField
-						variant="standard"
-						placeholder="Search item, SKU, client, PD, DWG, plant, location, status..."
-						value={search}
-						onChange={(e) => {
-							setSearch(
-								e.target.value
-							);
-							setPageNo(1);
-						}}
-						InputProps={{ disableUnderline: true }}
-						sx={{
-							/*
-							 * Prevent the search input itself from becoming an oversized
-							 * flex item while still letting it shrink cleanly at zoom.
-							 */
-							flex: "1 1 420px",
-							minWidth: 220,
-							maxWidth: 600,
-
-							"& .MuiInputBase-root": {
-								color: "var(--pf-text-strong)",
-								fontSize: 12.5,
-								fontWeight: 750,
-							},
-
-							"& input::placeholder": {
-								color: "rgba(var(--pf-fg-rgb),.42)",
-								opacity: 1,
-							},
-						}}
-					/>
-
-					<Box
-						sx={searchActivitySlotSx}
-						aria-live="polite"
-						aria-atomic="true"
-						title={
-							dispatchSearchPending
-								? `Searching for "${String(search || "").trim()}"`
-								: ""
-						}
-					>
-						{dispatchSearchPending ? (
-							<Box sx={searchActivityPillSx}>
-								<CircularProgress
-									size={13}
-									thickness={5}
-									sx={{
-										color: "var(--dispatch-blue-text)",
-									}}
-								/>
-								Searching…
-							</Box>
-						) : null}
-					</Box>
-
-					{search ? (
-						<Button
-							size="small"
-							onClick={() => setSearch("")}
+					<Box sx={dispatchSearchInputWrapSx}>
+						<SearchIcon
 							sx={{
-								minWidth: 70,
-								height: 34,
-								borderRadius: "10px",
-								textTransform: "none",
-								fontWeight: 800,
-								color: "var(--pf-text-soft)",
-								background: "rgba(var(--pf-fg-rgb),.05)",
-								border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-
-								"&:hover": {
-									background: "rgba(var(--pf-fg-rgb),.10)",
-									color: "#fff",
+								color:
+									dispatchSearchPending
+										? "var(--dispatch-blue-text)"
+										: "var(--pf-text-muted)",
+								transition:
+									"color .16s ease",
+							}}
+						/>
+	
+						<TextField
+							variant="standard"
+							placeholder="Search item, SKU, client, PD, DWG, plant, location, status..."
+							value={search}
+							onChange={(e) => {
+								setSearch(
+									e.target.value
+								);
+								setPageNo(1);
+							}}
+							InputProps={{ disableUnderline: true }}
+							sx={{
+								flex: "1 1 auto",
+								minWidth: 0,
+								width: "100%",
+	
+								"& .MuiInputBase-root": {
+									color: "var(--pf-text-strong)",
+									fontSize: 12.5,
+									fontWeight: 750,
+								},
+	
+								"& input::placeholder": {
+									color: "rgba(var(--pf-fg-rgb),.42)",
+									opacity: 1,
 								},
 							}}
-						>
-							Clear
-						</Button>
-
-					) : null}
+						/>
+	
+						{dispatchSearchPending ? (
+							<Box
+								sx={searchActivitySlotSx}
+								aria-live="polite"
+								aria-atomic="true"
+								title={`Searching for "${String(search || "").trim()}"`}
+							>
+								<Box sx={searchActivityPillSx}>
+									<CircularProgress
+										size={13}
+										thickness={5}
+										sx={{
+											color: "var(--dispatch-blue-text)",
+										}}
+									/>
+									Searching…
+								</Box>
+							</Box>
+						) : null}
+	
+						{search ? (
+							<Button
+								size="small"
+								onClick={() => setSearch("")}
+								sx={{
+									minWidth: 70,
+									height: 34,
+									borderRadius: "10px",
+									textTransform: "none",
+									fontWeight: 800,
+									color: "var(--pf-text-soft)",
+									background: "rgba(var(--pf-fg-rgb),.05)",
+									border: "1px solid rgba(var(--pf-fg-rgb),.08)",
+	
+									"&:hover": {
+										background: "rgba(var(--pf-fg-rgb),.10)",
+										color: "#fff",
+									},
+								}}
+							>
+								Clear
+							</Button>
+	
+						) : null}
+					</Box>
 
 					<Button
 						startIcon={
@@ -19837,7 +19869,8 @@ export default function DispatchedItemsPage() {
 							},
 						}}
 						sx={{
-							minWidth: 160,
+							width: "100%",
+							minWidth: 0,
 
 							...formFieldSx,
 
@@ -19923,7 +19956,8 @@ export default function DispatchedItemsPage() {
 							setPageNo(1);
 						}}
 						sx={{
-							minWidth: 190,
+							width: "100%",
+							minWidth: 0,
 
 							...formFieldSx,
 
@@ -19994,7 +20028,8 @@ export default function DispatchedItemsPage() {
 							setPageNo(1);
 						}}
 						sx={{
-							minWidth: 150,
+							width: "100%",
+							minWidth: 0,
 
 							...formFieldSx,
 
