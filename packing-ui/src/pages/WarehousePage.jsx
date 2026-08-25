@@ -2681,7 +2681,7 @@ function WarehousePage() {
 								borderRadius: "24px",
 								background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
 								border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-								boxShadow: "0 30px 80px rgba(0,0,0,.45)",
+								boxShadow: "0 20px 54px rgba(var(--pf-shadow-rgb),.14)",
 								textAlign: "center",
 							}}
 						>
@@ -2750,7 +2750,7 @@ function WarehousePage() {
 									fontSize: 34,
 									display: "flex",
 									alignItems: "center",
-									color: "#60a5fa",
+									color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
 								}}
 							>
 								🏭
@@ -2778,7 +2778,7 @@ function WarehousePage() {
 						Total Items:{" "}
 						<span
 							style={{
-								color: "#60a5fa",
+								color: "color-mix(in srgb,#2563eb 76%,var(--pf-text-strong))",
 								fontWeight: 800,
 							}}
 						>
@@ -3093,10 +3093,10 @@ function WarehousePage() {
 
 											color:
 												allSelectedWarehouseRequested || allWarehouseItems || allSelectedReturnRequested
-													? "#34d399"
-													: "#f87171",
+													? "color-mix(in srgb,#059669 78%,var(--pf-text-strong))"
+													: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
 
-											fontWeight: 700,
+											fontWeight: 800,
 										}}
 									/>
 								</Box>
@@ -3600,7 +3600,7 @@ function WarehousePage() {
 									component="span"
 									sx={{
 										mx: 1,
-										color: "#60a5fa",
+										color: "color-mix(in srgb,#2563eb 76%,var(--pf-text-strong))",
 									}}
 								>
 									{safePageNo}
@@ -3666,7 +3666,7 @@ function WarehousePage() {
 								<Box
 									component="span"
 									sx={{
-										color: "#93c5fd",
+										color: "color-mix(in srgb,#3b82f6 74%,var(--pf-text-strong))",
 										fontSize: 10,
 										fontWeight: 950,
 										letterSpacing: ".11em",
@@ -4078,7 +4078,7 @@ function WarehousePage() {
 							{warehouseDeletePreview && (
 								<>
 									<Box sx={warehouseDeleteWarningSx}>
-										<Box sx={{ fontWeight: 950, color: "#fecaca" }}>
+										<Box sx={{ fontWeight: 950, color: "color-mix(in srgb,#dc2626 76%,var(--pf-text-strong))" }}>
 											⚠ This action cannot be undone
 										</Box>
 										<Box sx={{ mt: 0.7, color: "var(--pf-text-soft)", fontSize: 12, lineHeight: 1.55 }}>
@@ -4387,7 +4387,7 @@ function WarehousePage() {
 								borderRadius: "14px",
 								background: "rgba(16,185,129,.10)",
 								border: "1px solid rgba(16,185,129,.18)",
-								color: "#6ee7b7",
+								color: "color-mix(in srgb,#059669 76%,var(--pf-text-strong))",
 								fontWeight: 900,
 							}}
 						>
@@ -4520,13 +4520,12 @@ function WarehousePage() {
 
 									borderRadius: "14px",
 
-									background:
-										"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
-
-									border:
-										"1px solid rgba(var(--pf-fg-rgb),.08)",
-
-									color: "var(--pf-text-strong)",
+									background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+									border: "1px solid rgba(37,99,235,.28)",
+									color: "#fff",
+									WebkitTextFillColor: "#fff",
+									fontWeight: 850,
+									boxShadow: "0 6px 16px rgba(37,99,235,.18)",
 								}}
 								onClick={() => {
 									try {
@@ -4586,7 +4585,7 @@ function WarehousePage() {
 										display: "flex",
 										justifyContent: "space-between",
 										padding: 8,
-										borderBottom: "1px solid #eee",
+										borderBottom: "1px solid var(--pf-border-soft)",
 										background: row.valid
 											? "rgba(16,185,129,.12)"
 											: "rgba(239,68,68,.12)",
@@ -4631,13 +4630,12 @@ function WarehousePage() {
 
 									borderRadius: "14px",
 
-									background:
-										"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
-
-									border:
-										"1px solid rgba(var(--pf-fg-rgb),.08)",
-
-									color: "var(--pf-text-strong)",
+									background: "linear-gradient(135deg,#059669,#10b981)",
+									border: "1px solid rgba(5,150,105,.28)",
+									color: "#fff",
+									WebkitTextFillColor: "#fff",
+									fontWeight: 850,
+									boxShadow: "0 6px 16px rgba(5,150,105,.18)",
 								}}
 							>
 								Confirm Import
@@ -4679,14 +4677,11 @@ const content = {
 };
 
 const wrap = {
-	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.76),rgba(var(--pf-surface-deep-rgb),.48))",
-	borderRadius: 20,
-	padding: 16,
-	border:
-		"1px solid rgba(148,163,184,.10)",
-	boxShadow:
-		"0 18px 46px rgba(2,6,23,.24)",
+	background: "var(--pf-surface)",
+	borderRadius: 18,
+	padding: 14,
+	border: "1px solid var(--pf-border)",
+	boxShadow: "var(--pf-card-shadow)",
 };
 
 const tableHeader = {
@@ -4700,8 +4695,7 @@ const tableHeader = {
 
 	padding: 0,
 
-	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.995),rgba(var(--pf-surface-alt-rgb),.985))",
+	background: "linear-gradient(180deg,var(--pf-surface-alt),var(--pf-surface))",
 	color: "var(--pf-text-muted)",
 
 	fontWeight: 950,
@@ -4709,11 +4703,9 @@ const tableHeader = {
 	letterSpacing: ".075em",
 	textTransform: "uppercase",
 
-	borderBottom:
-		"1px solid rgba(148,163,184,.14)",
+	borderBottom: "1px solid var(--pf-border)",
 
-	boxShadow:
-		"0 10px 24px rgba(2,6,23,.20)",
+	boxShadow: "0 5px 14px rgba(var(--pf-shadow-rgb),.06)",
 
 	backdropFilter: "blur(18px)",
 	WebkitBackdropFilter: "blur(18px)",
@@ -4729,8 +4721,7 @@ const tableRow = {
 		"1px solid rgba(148,163,184,.075)",
 	minHeight: 68,
 	fontSize: 13,
-	background:
-		"rgba(var(--pf-surface-rgb),.40)",
+	background: "var(--pf-surface)",
 	transition:
 		"background .16s ease, border-color .16s ease, box-shadow .16s ease",
 };
@@ -4739,17 +4730,12 @@ const searchPanel = {
 	display: "flex",
 	alignItems: "center",
 	gap: 10,
-
-	height: 44,
-
+	minHeight: 46,
 	padding: "0 14px",
-
 	borderRadius: 14,
-
-	background: "rgba(var(--pf-fg-rgb),0.03)",
-
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.06)",
+	background: "var(--pf-surface)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 4px 14px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const page = {
@@ -4762,22 +4748,32 @@ const headerRow = {
 	display: "flex",
 	justifyContent: "space-between",
 	alignItems: "center",
+	gap: 16,
+	flexWrap: "wrap",
+	padding: "14px 16px",
 	marginBottom: 2,
+	borderRadius: 16,
+	background: "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))",
+	border: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 6px 18px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const logo = {
 	color: "var(--pf-text-strong)",
-	fontSize: 32,
-	fontWeight: 900,
-	marginBottom: 8,
+	fontSize: 30,
+	fontWeight: 950,
+	letterSpacing: "-.025em",
+	marginBottom: 4,
 };
 
 const subtitle = {
-	color: "rgba(var(--pf-fg-rgb),.62)",
-	fontSize: 14,
+	color: "var(--pf-text-muted)",
+	fontSize: 12.5,
+	fontWeight: 650,
 };
 
 const compactActionFieldSx = {
+	colorScheme: "var(--pf-color-scheme)",
 	"& .MuiOutlinedInput-root": {
 		height: 32,
 		borderRadius: "12px",
@@ -4818,14 +4814,11 @@ const tableWrapper = {
 
 	borderRadius: "18px",
 
-	background:
-		"linear-gradient(180deg,rgba(var(--pf-surface-rgb),.72),rgba(var(--pf-surface-deep-rgb),.46))",
+	background: "var(--pf-surface)",
 
-	border:
-		"1px solid rgba(148,163,184,.11)",
+	border: "1px solid var(--pf-border)",
 
-	boxShadow:
-		"0 18px 42px rgba(2,6,23,.24)",
+	boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.07)",
 
 	scrollbarWidth: "thin",
 	scrollbarColor: "#3b82f6 var(--pf-surface)",
@@ -4848,10 +4841,8 @@ const tableWrapper = {
 		background:
 			"linear-gradient(90deg,#2563eb,#60a5fa)",
 		borderRadius: 999,
-		border:
-			"2px solid #0f172a",
-		boxShadow:
-			"0 0 14px rgba(59,130,246,.48)",
+		border: "2px solid var(--pf-surface)",
+		boxShadow: "0 2px 8px rgba(59,130,246,.24)",
 	},
 
 	"&::-webkit-scrollbar-thumb:hover": {
@@ -4943,8 +4934,7 @@ const warehouseTableRowSx = {
 	...tableRow,
 
 	"&:nth-of-type(even)": {
-		background:
-			"rgba(var(--pf-surface-alt-rgb),.48)",
+		background: "var(--pf-surface-alt)",
 	},
 
 	"&:hover": {
@@ -4989,7 +4979,7 @@ const warehouseSelectCellSx = (
 		"1px solid rgba(148,163,184,.13)",
 
 	boxShadow:
-		"10px 0 22px rgba(2,6,23,.20)",
+		"8px 0 18px rgba(var(--pf-shadow-rgb),.07)",
 });
 
 const warehouseActionCellSx = (
@@ -5017,7 +5007,7 @@ const warehouseActionCellSx = (
 		"1px solid rgba(148,163,184,.13)",
 
 	boxShadow:
-		"-12px 0 24px rgba(2,6,23,.22)",
+		"-8px 0 18px rgba(var(--pf-shadow-rgb),.08)",
 
 	"& > *": {
 		minWidth: 0,
@@ -5028,12 +5018,9 @@ const warehouseItemDrawerPaperSx = {
 	width: "min(760px, 96vw)",
 	maxWidth: "96vw",
 	color: "var(--pf-text-strong)",
-	background:
-		"radial-gradient(circle at top right,rgba(59,130,246,.16),transparent 34%),linear-gradient(180deg,var(--pf-bg-alt),var(--pf-surface) 46%,var(--pf-surface-alt))",
-	borderLeft:
-		"1px solid rgba(96,165,250,.18)",
-	boxShadow:
-		"-28px 0 80px rgba(2,6,23,.58)",
+	background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
+	borderLeft: "1px solid var(--pf-border)",
+	boxShadow: "-18px 0 54px rgba(var(--pf-shadow-rgb),.16)",
 };
 
 const warehouseItemDrawerHeaderSx = {
@@ -5049,8 +5036,7 @@ const warehouseItemDrawerHeaderSx = {
 	justifyContent: "space-between",
 	gap: 2,
 
-	background:
-		"linear-gradient(180deg,rgba(8,17,31,.99),rgba(var(--pf-surface-rgb),.96))",
+	background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
 
 	borderBottom:
 		"1px solid rgba(var(--pf-fg-rgb),.07)",
@@ -5079,8 +5065,7 @@ const warehouseItemDrawerBodySx = {
 		background:
 			"linear-gradient(180deg,#2563eb,#60a5fa)",
 		borderRadius: 999,
-		border:
-			"2px solid rgba(15,23,42,.95)",
+		border: "2px solid var(--pf-surface)",
 	},
 };
 
@@ -5096,7 +5081,7 @@ const warehouseItemDrawerHeroSx = {
 		"1px solid rgba(96,165,250,.18)",
 
 	boxShadow:
-		"0 14px 32px rgba(2,6,23,.22)",
+		"0 14px 32px rgba(var(--pf-shadow-rgb),.09)",
 };
 
 const warehouseItemDrawerSectionSx = {
@@ -5111,7 +5096,7 @@ const warehouseItemDrawerSectionSx = {
 
 const warehouseItemDrawerSectionTitleSx = {
 	mb: 1,
-	color: "#93c5fd",
+	color: "color-mix(in srgb,#3b82f6 74%,var(--pf-text-strong))",
 	fontSize: 10,
 	fontWeight: 950,
 	letterSpacing: ".11em",
@@ -5131,8 +5116,7 @@ const warehouseItemDrawerFieldSx = {
 	minWidth: 0,
 	p: 1.05,
 	borderRadius: "12px",
-	background:
-		"rgba(var(--pf-surface-deep-rgb),.28)",
+	background: "var(--pf-surface-alt)",
 	border:
 		"1px solid rgba(var(--pf-fg-rgb),.055)",
 };
@@ -5194,6 +5178,7 @@ const warehouseDrawerCloseButtonSx = {
 };
 
 const warehouseDrawerEditFieldSx = {
+	colorScheme: "var(--pf-color-scheme)",
 	"& .MuiInputLabel-root": {
 		color: "var(--pf-text-muted)",
 		fontSize: 11,
@@ -5201,7 +5186,7 @@ const warehouseDrawerEditFieldSx = {
 	},
 
 	"& .MuiInputLabel-root.Mui-focused": {
-		color: "#93c5fd",
+		color: "color-mix(in srgb,#3b82f6 74%,var(--pf-text-strong))",
 	},
 
 	"& .MuiOutlinedInput-root": {
@@ -5293,17 +5278,20 @@ const toolbarLeft = {
 const toolbarButton = {
 	height: 36,
 	px: 2,
-	borderRadius: "12px",
+	borderRadius: "10px",
 	textTransform: "none",
-	fontWeight: 700,
-	fontSize: 12,
-	background: "linear-gradient(135deg,var(--pf-surface-raised),var(--pf-surface))",
-	border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-	color: "var(--pf-text-strong)",
-	boxShadow: "none",
+	fontWeight: 850,
+	fontSize: 11.5,
+	background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+	border: "1px solid rgba(37,99,235,.28)",
+	color: "#fff",
+	WebkitTextFillColor: "#fff",
+	boxShadow: "0 6px 16px rgba(37,99,235,.18)",
 
 	"&:hover": {
-		background: "linear-gradient(135deg,#334155,var(--pf-surface-raised))",
+		background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+		color: "#fff",
+		WebkitTextFillColor: "#fff",
 	},
 };
 
@@ -5320,7 +5308,7 @@ const simpleCellText = {
 
 const missingGatePassChip = {
 	background: "rgba(245,158,11,.14)",
-	color: "#fbbf24",
+	color: "color-mix(in srgb,#d97706 82%,var(--pf-text-strong))",
 	border: "1px solid rgba(245,158,11,.24)",
 	fontWeight: 800,
 };
@@ -5351,13 +5339,13 @@ const simpleMonoText = {
 const toolbarButtonSecondary = {
 	height: 36,
 	px: 2,
-	borderRadius: "12px",
+	borderRadius: "10px",
 	textTransform: "none",
-	fontWeight: 700,
-	fontSize: 12,
-	color: "var(--pf-text-soft)",
-	border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-	background: "rgba(var(--pf-fg-rgb),.03)",
+	fontWeight: 800,
+	fontSize: 11.5,
+	color: "var(--pf-text-strong)",
+	border: "1px solid var(--pf-border)",
+	background: "var(--pf-surface-alt)",
 
 	"&:hover": {
 		background: "rgba(var(--pf-fg-rgb),.06)",
@@ -5376,6 +5364,7 @@ const compactLegend = {
 };
 
 const formFieldSx = {
+	colorScheme: "var(--pf-color-scheme)",
 	"& .MuiOutlinedInput-root": {
 		borderRadius: "16px",
 
@@ -5406,6 +5395,7 @@ const formFieldSx = {
 };
 
 const compactFieldSx = {
+	colorScheme: "var(--pf-color-scheme)",
 	"& .MuiOutlinedInput-root": {
 		height: 36,
 		borderRadius: "12px",
@@ -5447,15 +5437,15 @@ const compactFieldSx = {
 const warehouseSelectMenuSx = {
 	mt: 1,
 	borderRadius: "14px",
-	background: "#f8fafc",
-	color: "#0f172a",
-	border: "1px solid rgba(15,23,42,.12)",
-	boxShadow: "0 20px 50px rgba(0,0,0,.35)",
+	background: "var(--pf-surface)",
+	color: "var(--pf-text-strong)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 18px 46px rgba(var(--pf-shadow-rgb),.14)",
 
 	"& .MuiMenuItem-root": {
 		fontSize: 13,
-		fontWeight: 700,
-		color: "#0f172a",
+		fontWeight: 750,
+		color: "var(--pf-text-strong)",
 		minHeight: 36,
 	},
 
@@ -5480,7 +5470,7 @@ const importModeFieldSx = {
 		fontSize: 12,
 		border: "1px solid rgba(59,130,246,.16)",
 		boxShadow:
-			"inset 0 1px 0 rgba(var(--pf-fg-rgb),.05), 0 8px 22px rgba(2,6,23,.20)",
+			"inset 0 1px 0 rgba(var(--pf-fg-rgb),.05), 0 8px 22px rgba(var(--pf-shadow-rgb),.08)",
 
 		"& fieldset": {
 			borderColor: "rgba(var(--pf-fg-rgb),.08)",
@@ -5507,7 +5497,7 @@ const importModeFieldSx = {
 	},
 
 	"& .MuiSvgIcon-root": {
-		color: "#60a5fa",
+		color: "color-mix(in srgb,#2563eb 76%,var(--pf-text-strong))",
 	},
 };
 
@@ -5524,7 +5514,7 @@ const importModeValueSx = {
 	display: "flex",
 	alignItems: "center",
 	gap: 1,
-	color: "#e0f2fe",
+	color: "color-mix(in srgb,#2563eb 72%,var(--pf-text-strong))",
 	fontWeight: 900,
 	fontSize: 12,
 };
@@ -5536,7 +5526,7 @@ const importModeMenuPaperSx = {
 		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
 	color: "var(--pf-text-strong)",
 	border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-	boxShadow: "0 24px 70px rgba(0,0,0,.55)",
+	boxShadow: "0 20px 54px rgba(var(--pf-shadow-rgb),.16)",
 	overflow: "hidden",
 
 	"& .MuiMenuItem-root": {
@@ -5682,34 +5672,21 @@ const statusViewButton = {
 };
 
 const statusBase = {
-	fontSize: 12,
-
-	fontWeight: 800,
-
-	height: 28,
-
+	fontSize: 11,
+	fontWeight: 900,
+	height: 27,
 	borderRadius: "999px",
-
-	px: 1.8,
-
-	letterSpacing: ".25px",
-
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.08)",
-
-	backdropFilter: "blur(10px)",
-
-	boxShadow:
-		"0 6px 16px rgba(0,0,0,.18)",
+	px: 1.5,
+	letterSpacing: ".08px",
+	border: "1px solid var(--pf-border-soft)",
+	boxShadow: "0 2px 7px rgba(var(--pf-shadow-rgb),.05)",
 };
 
 const statusPacked = {
 	...statusBase,
-
-	color: "#93c5fd",
-
-	background:
-		"rgba(37,99,235,.15)",
+	color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
+	background: "rgba(37,99,235,.10)",
+	border: "1px solid rgba(37,99,235,.18)",
 };
 
 const selectHeaderCellSx = {
@@ -5733,29 +5710,23 @@ const selectCheckboxDisabledStyle = {
 
 const statusStored = {
 	...statusBase,
-
-	color: "#6ee7b7",
-
-	background:
-		"rgba(16,185,129,.15)",
+	color: "color-mix(in srgb,#059669 80%,var(--pf-text-strong))",
+	background: "rgba(16,185,129,.10)",
+	border: "1px solid rgba(16,185,129,.19)",
 };
 
 const pendingChip = {
 	...statusBase,
-
-	color: "#fcd34d",
-
-	background:
-		"rgba(245,158,11,.15)",
+	color: "color-mix(in srgb,#b45309 82%,var(--pf-text-strong))",
+	background: "rgba(245,158,11,.10)",
+	border: "1px solid rgba(245,158,11,.20)",
 };
 
 const returnChip = {
 	...statusBase,
-
-	color: "#fca5a5",
-
-	background:
-		"rgba(239,68,68,.15)",
+	color: "color-mix(in srgb,#b91c1c 82%,var(--pf-text-strong))",
+	background: "rgba(239,68,68,.09)",
+	border: "1px solid rgba(239,68,68,.19)",
 };
 
 const bulkBar = {
@@ -5786,7 +5757,7 @@ const bulkBar = {
 	backdropFilter: "blur(24px)",
 
 	boxShadow:
-		"0 20px 50px rgba(0,0,0,.45)",
+		"0 20px 50px rgba(var(--pf-shadow-rgb),.18)",
 
 	color: "var(--pf-text-strong)",
 
@@ -5810,6 +5781,7 @@ const actionPrimary = {
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
 
 	color: "#fff",
+	WebkitTextFillColor: "#fff",
 
 	border:
 		"1px solid rgba(59,130,246,.35)",
@@ -5830,6 +5802,7 @@ const actionSuccess = {
 		"linear-gradient(135deg,#059669,#10b981)",
 
 	color: "#fff",
+	WebkitTextFillColor: "#fff",
 
 	border:
 		"1px solid rgba(16,185,129,.35)",
@@ -5850,6 +5823,7 @@ const actionDanger = {
 		"linear-gradient(135deg,#dc2626,#ef4444)",
 
 	color: "#fff",
+	WebkitTextFillColor: "#fff",
 
 	boxShadow:
 		"0 10px 24px rgba(239,68,68,.28)",
@@ -5868,10 +5842,11 @@ const actionWarning = {
 	background:
 		"linear-gradient(135deg,#f59e0b,#d97706)",
 
-	color: "var(--pf-text-strong)",
+	color: "#fff",
+	WebkitTextFillColor: "#fff",
 
 	boxShadow:
-		"0 10px 24px rgba(245,158,11,.30)",
+		"0 8px 18px rgba(245,158,11,.22)",
 
 	"&:hover": {
 		background:
@@ -5886,6 +5861,7 @@ const actionInfo = {
 		"linear-gradient(135deg,#2563eb,#3b82f6)",
 
 	color: "#fff",
+	WebkitTextFillColor: "#fff",
 
 	border:
 		"1px solid rgba(59,130,246,.35)",
@@ -5902,11 +5878,11 @@ const actionInfo = {
 const warehouseDeleteButtonSx = {
 	...tableActionButton,
 	minWidth: 92,
-	background:
-		"linear-gradient(135deg,rgba(220,38,38,.22),rgba(239,68,68,.12))",
-	color: "#fecaca",
-	border: "1px solid rgba(248,113,113,.28)",
-	boxShadow: "0 10px 22px rgba(127,29,29,.16)",
+	background: "linear-gradient(135deg,#dc2626,#ef4444)",
+	color: "#fff",
+	WebkitTextFillColor: "#fff",
+	border: "1px solid rgba(220,38,38,.24)",
+	boxShadow: "0 7px 16px rgba(220,38,38,.20)",
 
 	"&:hover": {
 		background: "linear-gradient(135deg,#b91c1c,#dc2626)",
@@ -5938,8 +5914,7 @@ const warehouseDeleteOverlaySx = {
 	alignItems: "center",
 	justifyContent: "center",
 	p: 2,
-	background:
-		"radial-gradient(circle at 20% 10%,rgba(239,68,68,.14),transparent 32%),rgba(var(--pf-surface-deep-rgb),.82)",
+	background: "var(--pf-overlay)",
 	backdropFilter: "blur(14px)",
 };
 
@@ -5954,7 +5929,7 @@ const warehouseDeleteModalSx = {
 	background:
 		"radial-gradient(circle at top right,rgba(220,38,38,.12),transparent 34%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
 	border: "1px solid rgba(248,113,113,.20)",
-	boxShadow: "0 42px 120px rgba(0,0,0,.72)",
+	boxShadow: "0 34px 90px rgba(var(--pf-shadow-rgb),.24)",
 };
 
 const warehouseDeleteHeaderSx = {
@@ -5969,7 +5944,7 @@ const warehouseDeleteHeaderSx = {
 };
 
 const warehouseDeleteEyebrowSx = {
-	color: "#fca5a5",
+	color: "color-mix(in srgb,#dc2626 74%,var(--pf-text-strong))",
 	fontSize: 9.5,
 	fontWeight: 950,
 	letterSpacing: ".13em",
@@ -5995,7 +5970,7 @@ const warehouseDeleteCloseSx = {
 	width: 36,
 	height: 36,
 	borderRadius: "10px",
-	color: "#fca5a5",
+	color: "color-mix(in srgb,#dc2626 74%,var(--pf-text-strong))",
 	background: "rgba(239,68,68,.08)",
 	border: "1px solid rgba(248,113,113,.16)",
 };
@@ -6039,7 +6014,7 @@ const warehouseDeleteSelectedRowSx = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	gap: 1.2,
-	background: "rgba(var(--pf-surface-deep-rgb),.34)",
+	background: "var(--pf-surface-alt)",
 	border: "1px solid rgba(var(--pf-fg-rgb),.055)",
 };
 
@@ -6064,7 +6039,7 @@ const warehouseDeleteSelectedMetaSx = {
 
 const warehouseDeleteStatusChipSx = {
 	flexShrink: 0,
-	color: "#fde68a",
+	color: "color-mix(in srgb,#d97706 78%,var(--pf-text-strong))",
 	background: "rgba(245,158,11,.10)",
 	border: "1px solid rgba(245,158,11,.20)",
 	fontWeight: 900,
@@ -6076,7 +6051,7 @@ const warehouseDeleteLoadingSx = {
 	mb: 1.3,
 	borderRadius: "14px",
 	textAlign: "center",
-	color: "#bfdbfe",
+	color: "color-mix(in srgb,#2563eb 72%,var(--pf-text-strong))",
 	fontSize: 11.5,
 	fontWeight: 800,
 	background: "rgba(37,99,235,.08)",
@@ -6087,7 +6062,7 @@ const warehouseDeleteErrorSx = {
 	p: 1.3,
 	mb: 1.3,
 	borderRadius: "13px",
-	color: "#fecaca",
+	color: "color-mix(in srgb,#dc2626 76%,var(--pf-text-strong))",
 	fontSize: 11,
 	fontWeight: 800,
 	background: "rgba(127,29,29,.18)",
@@ -6131,6 +6106,7 @@ const warehouseDeleteImpactValueSx = {
 };
 
 const warehouseDeleteFieldSx = {
+	colorScheme: "var(--pf-color-scheme)",
 	mb: 1.2,
 
 	"& .MuiInputLabel-root": {
@@ -6155,7 +6131,7 @@ const warehouseDeleteFieldSx = {
 const warehouseDeleteConfirmationHintSx = {
 	p: 1,
 	borderRadius: "11px",
-	color: "#fca5a5",
+	color: "color-mix(in srgb,#dc2626 74%,var(--pf-text-strong))",
 	fontSize: 10,
 	background: "rgba(239,68,68,.055)",
 	border: "1px dashed rgba(248,113,113,.20)",
@@ -6169,7 +6145,7 @@ const warehouseDeleteFooterSx = {
 	justifyContent: "flex-end",
 	gap: 1,
 	borderTop: "1px solid rgba(var(--pf-fg-rgb),.07)",
-	background: "rgba(var(--pf-surface-deep-rgb),.28)",
+	background: "var(--pf-surface-alt)",
 };
 
 const warehouseDeleteCancelSx = {
@@ -6204,7 +6180,7 @@ const popupOverlay = {
 	left: 0,
 	width: "100%",
 	height: "100%",
-	background: "rgba(var(--pf-surface-rgb),0.55)",
+	background: "var(--pf-overlay)",
 	backdropFilter: "blur(8px)",
 	WebkitBackdropFilter: "blur(8px)",
 	display: "flex",
@@ -6233,17 +6209,14 @@ const popupBox = {
 	border:
 		"1px solid rgba(var(--pf-fg-rgb),.06)",
 
-	boxShadow:
-		"0 30px 80px rgba(0,0,0,.55)",
+	boxShadow: "0 28px 72px rgba(var(--pf-shadow-rgb),.20)",
 };
 
 
 const gatePassNumber = {
-	fontSize: 30,
-
-	fontWeight: 900,
-
-	color: "#60a5fa",
+	fontSize: 28,
+	fontWeight: 950,
+	color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
 
 	letterSpacing: 2,
 
