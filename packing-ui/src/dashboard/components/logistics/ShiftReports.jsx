@@ -4359,28 +4359,37 @@ const subtitle = {
 };
 
 const refreshBtn = {
-  height: 38,
-  borderRadius: 10,
-  border: "1px solid var(--pf-border)",
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 40,
+  borderRadius: 11,
+  border:
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
   background: "var(--pf-surface-alt)",
-  color: "var(--pf-text)",
-  padding: "0 13px",
+  color: "var(--pf-text-strong)",
+  WebkitTextFillColor:
+    "var(--pf-text-strong)",
+  padding: "0 14px",
   fontWeight: 850,
   cursor: "pointer",
 };
 
 
 const uploadTripEndBtn = {
-  height: 38,
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 40,
   borderRadius: 11,
-  border:
-    "1px solid rgba(245,158,11,.28)",
+  border: "none",
   background:
-    "linear-gradient(135deg,rgba(245,158,11,.14),rgba(249,115,22,.10))",
-  color: "#d97706",
-  padding: "0 13px",
+    "linear-gradient(135deg,#d97706,#f59e0b)",
+  color: "#fff",
+  WebkitTextFillColor: "#fff",
+  padding: "0 14px",
   fontWeight: 900,
   cursor: "pointer",
+  boxShadow:
+    "0 7px 16px rgba(245,158,11,.18)",
 };
 
 const tripEndImportOverlay = {
@@ -4439,14 +4448,17 @@ const tripEndImportSubtitle = {
 };
 
 const tripEndImportClose = {
+  appearance: "none",
+  WebkitAppearance: "none",
   width: 34,
   height: 34,
   borderRadius: 10,
   border:
-    "1px solid rgba(148,163,184,.12)",
-  background:
-    "rgba(var(--pf-fg-rgb),.035)",
-  color: "var(--pf-text)",
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
+  WebkitTextFillColor:
+    "var(--pf-text-strong)",
   fontSize: 22,
   lineHeight: 1,
   cursor: "pointer",
@@ -4656,28 +4668,34 @@ const tripEndImportFooterActions = {
 };
 
 const tripEndImportCancelBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
   height: 38,
   padding: "0 14px",
   borderRadius: 10,
   border:
-    "1px solid rgba(148,163,184,.12)",
-  background:
-    "rgba(var(--pf-fg-rgb),.035)",
-  color: "var(--pf-text)",
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
+  background: "var(--pf-surface-alt)",
+  color: "var(--pf-text-strong)",
+  WebkitTextFillColor:
+    "var(--pf-text-strong)",
   fontWeight: 850,
   cursor: "pointer",
 };
 
 const tripEndImportConfirmBtn =
   (disabled) => ({
+    appearance: "none",
+    WebkitAppearance: "none",
     height: 38,
     padding: "0 15px",
     borderRadius: 10,
     border: "none",
     color: "#fff",
+    WebkitTextFillColor: "#fff",
     background:
       disabled
-        ? "rgba(var(--pf-fg-rgb),.16)"
+        ? "#94a3b8"
         : "linear-gradient(135deg,#16a34a,#22c55e)",
     opacity: disabled ? 0.58 : 1,
     cursor:
@@ -4685,31 +4703,43 @@ const tripEndImportConfirmBtn =
         ? "not-allowed"
         : "pointer",
     fontWeight: 900,
+    boxShadow: disabled
+      ? "none"
+      : "0 7px 16px rgba(34,197,94,.18)",
   });
 
 const downloadCurrentBtn = {
-  height: 38,
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 40,
   borderRadius: 11,
-  border:
-    "1px solid rgba(96,165,250,.20)",
+  border: "none",
   background:
-    "rgba(59,130,246,.10)",
-  color: "#2563eb",
-  padding: "0 13px",
-  fontWeight: 850,
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  WebkitTextFillColor: "#fff",
+  padding: "0 14px",
+  fontWeight: 900,
   cursor: "pointer",
+  boxShadow:
+    "0 7px 16px rgba(37,99,235,.18)",
 };
 
 const downloadBtn = {
-  height: 38,
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 40,
   borderRadius: 11,
   border: "none",
   background:
     "linear-gradient(135deg,#16a34a,#22c55e)",
   color: "#fff",
+  WebkitTextFillColor: "#fff",
   padding: "0 15px",
   fontWeight: 900,
   cursor: "pointer",
+  boxShadow:
+    "0 7px 16px rgba(34,197,94,.18)",
 };
 
 const warningBox = {
@@ -4770,13 +4800,18 @@ const searchInput = {
 };
 
 const clearBtn = {
+  appearance: "none",
+  WebkitAppearance: "none",
   height: 37,
   borderRadius: 10,
-  border: "1px solid var(--pf-border)",
+  border:
+    "1px solid rgba(var(--pf-fg-rgb),.12)",
   background: "var(--pf-surface)",
-  color: "var(--pf-text)",
+  color: "var(--pf-text-strong)",
+  WebkitTextFillColor:
+    "var(--pf-text-strong)",
   padding: "0 13px",
-  fontWeight: 800,
+  fontWeight: 850,
   cursor: "pointer",
 };
 

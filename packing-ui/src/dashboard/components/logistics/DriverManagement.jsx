@@ -690,25 +690,35 @@ const subtitle = {
 };
 
 const button = {
-  height: 40,
-  padding: "0 16px",
-  borderRadius: 10,
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 42,
+  padding: "0 18px",
+  borderRadius: 12,
   border: "none",
-  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
-  fontWeight: 850,
+  WebkitTextFillColor: "#fff",
+  fontWeight: 900,
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,.20)",
+  boxShadow:
+    "0 8px 18px rgba(37,99,235,.20)",
 };
 
 const secondaryButton = {
-  height: 40,
-  padding: "0 14px",
-  borderRadius: 10,
-  border: "1px solid var(--pf-border)",
+  appearance: "none",
+  WebkitAppearance: "none",
+  height: 42,
+  padding: "0 15px",
+  borderRadius: 12,
+  border:
+    "1px solid rgba(var(--pf-fg-rgb),.10)",
   background: "var(--pf-surface-alt)",
-  color: "var(--pf-text)",
-  fontWeight: 800,
+  color: "var(--pf-text-strong)",
+  WebkitTextFillColor:
+    "var(--pf-text-strong)",
+  fontWeight: 850,
   cursor: "pointer",
 };
 
@@ -921,33 +931,39 @@ const actions = {
 const viewBtn = {
   appearance: "none",
   WebkitAppearance: "none",
-  height: 30,
-  padding: "0 10px",
-  borderRadius: 8,
-  border: "1px solid rgba(37,99,235,.28)",
-  background: "rgba(37,99,235,.11)",
-  color: "#1d4ed8",
-  WebkitTextFillColor: "#1d4ed8",
+  height: 32,
+  padding: "0 12px",
+  borderRadius: 10,
+  border: "none",
+  background:
+    "linear-gradient(135deg,#2563eb,#3b82f6)",
+  color: "#fff",
+  WebkitTextFillColor: "#fff",
   cursor: "pointer",
   fontWeight: 900,
-  fontSize: 10,
+  fontSize: 10.5,
   opacity: 1,
+  boxShadow:
+    "0 6px 14px rgba(37,99,235,.18)",
 };
 
 const deleteBtn = {
   appearance: "none",
   WebkitAppearance: "none",
-  height: 30,
-  padding: "0 10px",
-  borderRadius: 8,
-  border: "1px solid rgba(220,38,38,.26)",
-  background: "rgba(239,68,68,.10)",
-  color: "#b91c1c",
-  WebkitTextFillColor: "#b91c1c",
+  height: 32,
+  padding: "0 12px",
+  borderRadius: 10,
+  border: "none",
+  background:
+    "linear-gradient(135deg,#dc2626,#ef4444)",
+  color: "#fff",
+  WebkitTextFillColor: "#fff",
   cursor: "pointer",
   fontWeight: 900,
-  fontSize: 10,
+  fontSize: 10.5,
   opacity: 1,
+  boxShadow:
+    "0 6px 14px rgba(239,68,68,.17)",
 };
 
 const emptyRow = {

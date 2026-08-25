@@ -64,14 +64,32 @@ const MasterItemsModal = lazy(() =>
 
 const page = {
 	minHeight: "100vh",
+	colorScheme: "var(--pf-color-scheme)",
 	background:
-		"linear-gradient(135deg,var(--pf-bg),var(--pf-surface))",
+		"linear-gradient(180deg,var(--pf-bg) 0%,color-mix(in srgb,var(--pf-bg) 88%,#3b82f6 12%) 100%)",
+
+	/*
+	 * Local semantic colors stay readable in both PackFlow themes.
+	 * color-mix blends the accent toward the active theme foreground.
+	 */
+	"--dispatch-blue-text":
+		"color-mix(in srgb,#2563eb 74%,var(--pf-text-strong))",
+	"--dispatch-green-text":
+		"color-mix(in srgb,#059669 74%,var(--pf-text-strong))",
+	"--dispatch-amber-text":
+		"color-mix(in srgb,#d97706 76%,var(--pf-text-strong))",
+	"--dispatch-red-text":
+		"color-mix(in srgb,#dc2626 76%,var(--pf-text-strong))",
+	"--dispatch-purple-text":
+		"color-mix(in srgb,#7c3aed 74%,var(--pf-text-strong))",
+	"--dispatch-cyan-text":
+		"color-mix(in srgb,#0891b2 74%,var(--pf-text-strong))",
 };
 
 const dispatchGrid =
-	"64px minmax(260px,1.25fr) minmax(220px,1fr) 120px 150px minmax(270px,1.25fr) minmax(190px,.9fr) 105px 155px 185px 210px 540px";
+	"56px 280px 220px 100px 120px 240px 170px 85px 130px 165px 180px 360px";
 
-const dispatchMinWidth = 2580;
+const dispatchMinWidth = 2206;
 
 /*
  * Frontend-only resizable Dispatch table columns.
@@ -80,18 +98,18 @@ const dispatchMinWidth = 2580;
  * permissions and actions. This configuration controls visual width only.
  */
 const DISPATCH_COLUMN_LAYOUT = [
-	{ key: "select", label: "", width: 64, min: 54, max: 110 },
-	{ key: "item", label: "Item Name", width: 320, min: 210, max: 680 },
-	{ key: "sku", label: "SKU", width: 280, min: 180, max: 620 },
-	{ key: "pdNo", label: "PD No", width: 130, min: 90, max: 300 },
-	{ key: "drawingNo", label: "DWG No", width: 160, min: 100, max: 360 },
-	{ key: "description", label: "Description", width: 320, min: 180, max: 760 },
-	{ key: "client", label: "Client", width: 220, min: 150, max: 560 },
-	{ key: "plant", label: "Plant", width: 110, min: 82, max: 240 },
-	{ key: "location", label: "Location", width: 170, min: 120, max: 380 },
-	{ key: "dateTime", label: "Date / Time", width: 200, min: 150, max: 420 },
-	{ key: "status", label: "Status", width: 230, min: 160, max: 460 },
-	{ key: "actions", label: "Actions", width: 540, min: 360, max: 900 },
+	{ key: "select", label: "", width: 56, min: 52, max: 78 },
+	{ key: "item", label: "Item Name", width: 280, min: 230, max: 520 },
+	{ key: "sku", label: "SKU", width: 220, min: 170, max: 420 },
+	{ key: "pdNo", label: "PD No", width: 100, min: 88, max: 220 },
+	{ key: "drawingNo", label: "DWG No", width: 120, min: 96, max: 260 },
+	{ key: "description", label: "Description", width: 240, min: 190, max: 520 },
+	{ key: "client", label: "Client", width: 170, min: 140, max: 360 },
+	{ key: "plant", label: "Plant", width: 85, min: 78, max: 180 },
+	{ key: "location", label: "Location", width: 130, min: 110, max: 280 },
+	{ key: "dateTime", label: "Date / Time", width: 165, min: 150, max: 320 },
+	{ key: "status", label: "Status", width: 180, min: 160, max: 340 },
+	{ key: "actions", label: "Actions", width: 360, min: 320, max: 620 },
 ];
 
 const tableHeader = {
@@ -104,27 +122,25 @@ const tableHeader = {
 	alignItems: "stretch",
 	padding: 0,
 	background:
-		"linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
-	color: "var(--pf-text-muted)",
+		"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+	color: "var(--pf-text)",
 	fontWeight: 950,
 	fontSize: 10.5,
-	letterSpacing: ".075em",
+	letterSpacing: ".065em",
 	textTransform: "uppercase",
-	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.10)",
+	borderBottom: "1px solid var(--pf-border)",
 	boxShadow:
-		"0 8px 18px rgba(var(--pf-surface-deep-rgb),.08)",
+		"0 8px 18px rgba(var(--pf-surface-deep-rgb),.07)",
 };
 
 const dispatchHeaderCellSx = {
 	minWidth: 0,
-	minHeight: 50,
+	minHeight: 48,
 	display: "flex",
 	alignItems: "center",
-	px: 1.5,
-	py: 1.15,
-	borderRight:
-		"1px solid rgba(var(--pf-fg-rgb),.055)",
+	px: 1.35,
+	py: 1,
+	borderRight: "1px solid var(--pf-border-soft)",
 	whiteSpace: "nowrap",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
@@ -135,10 +151,9 @@ const tableCellWrap = {
 	overflow: "hidden",
 	display: "flex",
 	alignItems: "center",
-	minHeight: 68,
-	padding: "10px 14px",
-	borderRight:
-		"1px solid rgba(var(--pf-fg-rgb),.045)",
+	minHeight: 72,
+	padding: "10px 12px",
+	borderRight: "1px solid var(--pf-border-soft)",
 };
 
 const tableBody = {
@@ -153,13 +168,12 @@ const tableRow = {
 	alignItems: "stretch",
 	padding: 0,
 	color: "var(--pf-text-strong)",
-	borderBottom:
-		"1px solid rgba(var(--pf-fg-rgb),.065)",
-	minHeight: 68,
+	borderBottom: "1px solid var(--pf-border-soft)",
+	minHeight: 72,
 	fontSize: 13,
 	background: "var(--pf-surface)",
 	transition:
-		"background .16s ease, border-color .16s ease, box-shadow .16s ease",
+		"background .15s ease, border-color .15s ease, box-shadow .15s ease",
 };
 
 const dispatchTableRowSx = (
@@ -168,27 +182,25 @@ const dispatchTableRowSx = (
 	...tableRow,
 	...(hardwareRow
 		? {
-			borderLeft: "3px solid #a78bfa",
+			borderLeft: "3px solid #8b5cf6",
 			background:
-				"linear-gradient(90deg,rgba(139,92,246,.065),var(--pf-surface))",
+				"linear-gradient(90deg,rgba(139,92,246,.055),var(--pf-surface) 24%)",
 		}
 		: {}),
 	"&:nth-of-type(even)": {
 		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.075),var(--pf-surface-alt))"
+			? "linear-gradient(90deg,rgba(139,92,246,.065),var(--pf-surface-alt) 24%)"
 			: "var(--pf-surface-alt)",
 	},
 	"&:hover": {
 		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.11),rgba(59,130,246,.035))"
-			: "rgba(59,130,246,.045)",
-		borderBottomColor:
-			"rgba(59,130,246,.16)",
+			? "linear-gradient(90deg,rgba(139,92,246,.095),rgba(59,130,246,.045))"
+			: "rgba(59,130,246,.052)",
+		borderBottomColor: "rgba(59,130,246,.18)",
+		boxShadow: "inset 0 0 0 1px rgba(59,130,246,.055)",
 	},
 	"&:focus-within": {
-		background: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.11),rgba(59,130,246,.04))"
-			: "rgba(59,130,246,.055)",
+		background: "rgba(59,130,246,.065)",
 	},
 });
 
@@ -202,17 +214,37 @@ const dispatchSelectCellSx = (
 	justifyContent: "center",
 	position: "sticky",
 	left: 0,
-	zIndex: header ? 42 : 8,
-	minHeight: header ? 50 : 68,
+	zIndex: header ? 44 : 10,
+	minHeight: header ? 48 : 72,
 	background: header
-		? "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))"
+		? "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))"
 		: hardwareRow
-			? "linear-gradient(90deg,rgba(139,92,246,.08),var(--pf-surface))"
+			? "linear-gradient(90deg,rgba(139,92,246,.07),var(--pf-surface))"
 			: "var(--pf-surface)",
-	borderRight:
-		"1px solid rgba(var(--pf-fg-rgb),.09)",
-	boxShadow:
-		"8px 0 18px rgba(var(--pf-surface-deep-rgb),.07)",
+	borderRight: "1px solid var(--pf-border)",
+	boxShadow: "6px 0 16px rgba(var(--pf-surface-deep-rgb),.055)",
+});
+
+/*
+ * Keep the item identity visible while horizontally scrolling the register.
+ * The offset follows the user-resizable checkbox column.
+ */
+const dispatchIdentityCellSx = (
+	hardwareRow = false,
+	leftOffset = 56,
+	header = false
+) => ({
+	...tableCellWrap,
+	position: "sticky",
+	left: `${Math.round(Number(leftOffset) || 56)}px`,
+	zIndex: header ? 43 : 9,
+	background: header
+		? "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))"
+		: hardwareRow
+			? "linear-gradient(90deg,rgba(139,92,246,.055),var(--pf-surface) 38%)"
+			: "var(--pf-surface)",
+	borderRight: "1px solid var(--pf-border)",
+	boxShadow: "8px 0 18px rgba(var(--pf-surface-deep-rgb),.055)",
 });
 
 const dispatchActionCellSx = (
@@ -224,19 +256,17 @@ const dispatchActionCellSx = (
 	alignItems: "center",
 	position: "sticky",
 	right: 0,
-	zIndex: header ? 42 : 8,
-	minHeight: header ? 50 : 68,
-	px: header ? 1.5 : 1.25,
-	py: header ? 1.15 : 0.85,
+	zIndex: header ? 44 : 10,
+	minHeight: header ? 48 : 72,
+	px: header ? 1.35 : 1,
+	py: header ? 1 : 0.8,
 	background: header
-		? "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))"
+		? "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))"
 		: hardwareRow
-			? "linear-gradient(90deg,var(--pf-surface),rgba(139,92,246,.055))"
+			? "linear-gradient(90deg,var(--pf-surface),rgba(139,92,246,.045))"
 			: "var(--pf-surface)",
-	borderLeft:
-		"1px solid rgba(var(--pf-fg-rgb),.09)",
-	boxShadow:
-		"-8px 0 18px rgba(var(--pf-surface-deep-rgb),.07)",
+	borderLeft: "1px solid var(--pf-border)",
+	boxShadow: "-8px 0 18px rgba(var(--pf-surface-deep-rgb),.06)",
 });
 
 const selectHeaderCellSx = {
@@ -308,13 +338,14 @@ const selectCheckboxDisabledStyle = {
 };
 
 const tableActionButton = {
-	minWidth: 130,
-	height: 34,
-	borderRadius: 12,
-	fontWeight: 800,
-	fontSize: 11,
+	minWidth: 96,
+	height: 32,
+	borderRadius: 9,
+	fontWeight: 850,
+	fontSize: 10.5,
 	textTransform: "none",
 	whiteSpace: "nowrap",
+	px: 1.25,
 };
 
 /*
@@ -325,35 +356,29 @@ const tableActionButton = {
  */
 const rowChallanPdfButtonSx = {
 	...tableActionButton,
-	minWidth: 128,
-	color: "#1d4ed8",
-	background:
-		"linear-gradient(135deg,rgba(219,234,254,.96),rgba(239,246,255,.96))",
-	border:
-		"1px solid rgba(59,130,246,.28)",
-	boxShadow:
-		"0 8px 20px rgba(37,99,235,.10)",
+	minWidth: 112,
+	color: "var(--dispatch-blue-text)",
+	background: "rgba(59,130,246,.075)",
+	border: "1px solid rgba(59,130,246,.22)",
+	boxShadow: "0 5px 14px rgba(37,99,235,.07)",
 
 	"& .MuiButton-startIcon": {
-		marginRight: "6px",
+		marginRight: "5px",
 	},
 
 	"&:hover": {
 		color: "#fff",
-		background:
-			"linear-gradient(135deg,#2563eb,#3b82f6)",
-		borderColor:
-			"rgba(147,197,253,.42)",
-		boxShadow:
-			"0 10px 24px rgba(37,99,235,.30)",
+		background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+		borderColor: "rgba(147,197,253,.42)",
+		boxShadow: "0 8px 18px rgba(37,99,235,.24)",
 	},
 };
 
 const simpleCellText = {
 	color: "var(--pf-text-strong)",
-	fontWeight: 800,
-	fontSize: 13,
-	lineHeight: 1.25,
+	fontWeight: 850,
+	fontSize: 12.5,
+	lineHeight: 1.3,
 	whiteSpace: "nowrap",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
@@ -549,8 +574,8 @@ const scannerGenerateButtonSx = {
 const simpleMutedText = {
 	color: "var(--pf-text)",
 	fontWeight: 750,
-	fontSize: 13,
-	lineHeight: 1.25,
+	fontSize: 12.25,
+	lineHeight: 1.3,
 	whiteSpace: "nowrap",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
@@ -560,9 +585,9 @@ const simpleMutedText = {
 const simpleMonoText = {
 	color: "var(--pf-text-strong)",
 	fontWeight: 800,
-	fontSize: 13,
-	lineHeight: 1.25,
-	fontFamily: "monospace",
+	fontSize: 12.1,
+	lineHeight: 1.3,
+	fontFamily: "ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
 	whiteSpace: "nowrap",
 	overflow: "hidden",
 	textOverflow: "ellipsis",
@@ -581,19 +606,21 @@ const itemNameText = {
 	maxWidth: "100%",
 	flex: 1,
 	minWidth: 0,
+	fontWeight: 900,
+	fontSize: 12.5,
 };
 
 const tableIconButton = {
-	width: 32,
-	height: 32,
-	borderRadius: "12px",
+	width: 30,
+	height: 30,
+	borderRadius: "9px",
 	flexShrink: 0,
-	transition: "all .2s ease",
-	border: "1px solid rgba(var(--pf-fg-rgb),.08)",
-	backdropFilter: "blur(12px)",
+	transition: "all .16s ease",
+	border: "1px solid var(--pf-border)",
+	background: "var(--pf-surface-raised)",
 
 	"& svg": {
-		fontSize: 17,
+		fontSize: 16,
 	},
 
 	"&:hover": {
@@ -603,43 +630,29 @@ const tableIconButton = {
 
 const stickerHistoryButton = {
 	...tableIconButton,
-
-	color: "#93c5fd",
-
-	background:
-		"linear-gradient(135deg,rgba(37,99,235,.20),rgba(59,130,246,.08))",
-
-	boxShadow:
-		"0 8px 18px rgba(37,99,235,.16)",
+	color: "var(--dispatch-blue-text)",
+	background: "rgba(59,130,246,.075)",
+	boxShadow: "0 4px 12px rgba(37,99,235,.07)",
 
 	"&:hover": {
 		...tableIconButton["&:hover"],
 		color: "#fff",
-		background:
-			"linear-gradient(135deg,#2563eb,#3b82f6)",
-		boxShadow:
-			"0 10px 24px rgba(37,99,235,.35)",
+		background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+		boxShadow: "0 7px 18px rgba(37,99,235,.28)",
 	},
 };
 
 const auditLogButton = {
 	...tableIconButton,
-
-	color: "#fdba74",
-
-	background:
-		"linear-gradient(135deg,rgba(249,115,22,.20),rgba(251,146,60,.08))",
-
-	boxShadow:
-		"0 8px 18px rgba(249,115,22,.15)",
+	color: "var(--dispatch-amber-text)",
+	background: "rgba(249,115,22,.075)",
+	boxShadow: "0 4px 12px rgba(249,115,22,.07)",
 
 	"&:hover": {
 		...tableIconButton["&:hover"],
 		color: "#fff",
-		background:
-			"linear-gradient(135deg,#ea580c,#f97316)",
-		boxShadow:
-			"0 10px 24px rgba(249,115,22,.30)",
+		background: "linear-gradient(135deg,#ea580c,#f97316)",
+		boxShadow: "0 7px 18px rgba(249,115,22,.24)",
 	},
 };
 
@@ -720,15 +733,15 @@ const modalHeaderSx = {
 
 const packedYellowChip = {
 	fontWeight: 800,
-	color: "#facc15",
-	background: "rgba(250,204,21,.14)",
+	color: "var(--dispatch-amber-text)",
+	background: "rgba(245,158,11,.10)",
 	border: "1px solid rgba(250,204,21,.24)",
 };
 
 const packedGreenChip = {
 	fontWeight: 800,
-	color: "#4ade80",
-	background: "rgba(34,197,94,.14)",
+	color: "var(--dispatch-green-text)",
+	background: "rgba(34,197,94,.10)",
 	border: "1px solid rgba(34,197,94,.24)",
 };
 
@@ -960,7 +973,7 @@ const customChallanCountChipSx = {
 	height: 22,
 	borderRadius: 999,
 	background: "rgba(139,92,246,.15)",
-	color: "#c4b5fd",
+	color: "var(--dispatch-purple-text)",
 	border: "1px solid rgba(139,92,246,.28)",
 	fontWeight: 900,
 	fontSize: 10.5,
@@ -1005,7 +1018,7 @@ const customChallanSearchIconSx = {
 	alignItems: "center",
 	justifyContent: "center",
 	flexShrink: 0,
-	color: "#ddd6fe",
+	color: "var(--dispatch-purple-text)",
 	background:
 		"linear-gradient(135deg,rgba(124,58,237,.26),rgba(139,92,246,.10))",
 	border: "1px solid rgba(167,139,250,.24)",
@@ -1056,7 +1069,7 @@ const customChallanSearchFieldSx = {
 	},
 
 	"& input::placeholder": {
-		color: "rgba(226,232,240,.43)",
+		color: "var(--pf-text-dim)",
 		opacity: 1,
 	},
 };
@@ -1090,7 +1103,7 @@ const customChallanSearchHintChipSx = {
 const customChallanSearchResultChipSx = {
 	height: 24,
 	borderRadius: 999,
-	color: "#ddd6fe",
+	color: "var(--dispatch-purple-text)",
 	fontSize: 9.5,
 	fontWeight: 950,
 	background: "rgba(139,92,246,.12)",
@@ -1202,8 +1215,8 @@ const dispatchPageSizeNativeSelectSx = {
 	},
 
 	"& option": {
-		color: "var(--pf-surface-alt)",
-		background: "#fff",
+		color: "var(--pf-text-strong)",
+		background: "var(--pf-surface)",
 		fontWeight: 800,
 	},
 };
@@ -1296,7 +1309,7 @@ const customChallanItemCardSx = {
 const customItemNumberChipSx = {
 	height: 24,
 	borderRadius: 999,
-	color: "#ddd6fe",
+	color: "var(--dispatch-purple-text)",
 	background: "rgba(139,92,246,.14)",
 	border: "1px solid rgba(139,92,246,.26)",
 	fontWeight: 900,
@@ -1307,7 +1320,7 @@ const customChallanStickyFooterSx = {
 	...modalFooterSx,
 	flexShrink: 0,
 	alignItems: "center",
-	background: "rgba(var(--pf-surface-deep-rgb),.94)",
+	background: "color-mix(in srgb,var(--pf-surface) 94%,transparent)",
 	backdropFilter: "blur(18px)",
 	borderTop: "1px solid rgba(167,139,250,.13)",
 };
@@ -1441,9 +1454,11 @@ const customAdminFilterFieldSx = {
 		color: "var(--pf-text-muted)",
 	},
 
+	"& input": {
+		colorScheme: "var(--pf-color-scheme)",
+	},
 	"& input::-webkit-calendar-picker-indicator": {
-		filter: "invert(1)",
-		opacity: 0.8,
+		opacity: 0.78,
 	},
 };
 
@@ -1516,7 +1531,7 @@ const customAdminInsightCardSx = {
 };
 
 const customAdminInsightTitleSx = {
-	color: "#ddd6fe",
+	color: "var(--dispatch-purple-text)",
 	fontSize: 10.5,
 	fontWeight: 950,
 	letterSpacing: ".06em",
@@ -1851,10 +1866,10 @@ const statusChoiceArrowSx = {
 const readyStatusChip = {
 	fontWeight: 700,
 
-	color: "#60a5fa",
+	color: "var(--dispatch-blue-text)",
 
 	background:
-		"rgba(59,130,246,.12)",
+		"rgba(59,130,246,.10)",
 
 	border:
 		"1px solid rgba(59,130,246,.18)",
@@ -1863,10 +1878,10 @@ const readyStatusChip = {
 const queuedStatusChip = {
 	fontWeight: 700,
 
-	color: "#fcd34d",
+	color: "var(--dispatch-amber-text)",
 
 	background:
-		"rgba(245,158,11,.13)",
+		"rgba(245,158,11,.10)",
 
 	border:
 		"1px solid rgba(245,158,11,.22)",
@@ -1875,10 +1890,10 @@ const queuedStatusChip = {
 const dispatchedStatusChip = {
 	fontWeight: 700,
 
-	color: "#4ade80",
+	color: "var(--dispatch-green-text)",
 
 	background:
-		"rgba(34,197,94,.12)",
+		"rgba(34,197,94,.10)",
 
 	border:
 		"1px solid rgba(34,197,94,.18)",
@@ -1887,10 +1902,10 @@ const dispatchedStatusChip = {
 const pendingStatusChip = {
 	fontWeight: 700,
 
-	color: "#fbbf24",
+	color: "var(--dispatch-amber-text)",
 
 	background:
-		"rgba(251,191,36,.12)",
+		"rgba(251,191,36,.10)",
 
 	border:
 		"1px solid rgba(251,191,36,.18)",
@@ -1926,10 +1941,10 @@ const premiumButton = {
 };
 
 const content = {
-	padding: 24,
+	padding: "clamp(16px,1.6vw,24px)",
 	display: "flex",
 	flexDirection: "column",
-	gap: 20,
+	gap: 14,
 	width: "100%",
 	boxSizing: "border-box",
 };
@@ -1940,32 +1955,40 @@ const headerRow = {
 	alignItems: "center",
 	gap: 16,
 	flexWrap: "wrap",
+	padding: "14px 16px",
+	borderRadius: 16,
+	background:
+		"linear-gradient(135deg,var(--pf-surface-raised),color-mix(in srgb,var(--pf-surface) 94%,#3b82f6 6%))",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 8px 22px rgba(var(--pf-surface-deep-rgb),.055)",
 };
 
 const logo = {
 	color: "var(--pf-text-strong)",
-	fontSize: 32,
-	fontWeight: 900,
-	marginBottom: 8,
+	fontSize: 28,
+	fontWeight: 950,
+	letterSpacing: "-.025em",
+	lineHeight: 1.05,
+	marginBottom: 5,
 };
 
 const subtitle = {
 	color: "var(--pf-text-muted)",
-	fontSize: 14,
+	fontSize: 12.5,
+	fontWeight: 650,
+	lineHeight: 1.45,
 };
 
 const tableWrapper = {
 	position: "relative",
 	overflowX: "auto",
 	overflowY: "visible",
-	borderRadius: "16px",
+	borderRadius: "14px",
 	background: "var(--pf-surface)",
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
-	boxShadow:
-		"0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 10px 26px rgba(var(--pf-surface-deep-rgb),.065)",
 	scrollbarWidth: "thin",
-	scrollbarColor: "#3b82f6 var(--pf-surface-alt)",
+	scrollbarColor: "rgba(59,130,246,.58) var(--pf-surface-alt)",
 	WebkitOverflowScrolling: "touch",
 	overscrollBehaviorX: "contain",
 	scrollbarGutter: "stable",
@@ -1975,7 +1998,7 @@ const tableWrapper = {
 		borderRadius: 999,
 	},
 	"&::-webkit-scrollbar-thumb": {
-		background: "linear-gradient(90deg,#2563eb,#60a5fa)",
+		background: "linear-gradient(90deg,rgba(37,99,235,.64),rgba(96,165,250,.88))",
 		borderRadius: 999,
 		border: "2px solid var(--pf-surface-alt)",
 	},
@@ -2244,7 +2267,7 @@ const dispatchExportPreviewTableSx = {
 
 	"& td": {
 		padding: "10px 12px",
-		color: "#e5e7eb",
+		color: "var(--pf-text)",
 		fontSize: 12,
 		fontWeight: 750,
 		borderBottom: "1px solid rgba(var(--pf-fg-rgb),.06)",
@@ -2281,21 +2304,20 @@ const bulkBar = {
 const actionContainer = {
 	display: "flex",
 	alignItems: "center",
-	gap: 0.75,
+	gap: 0.6,
 	flexWrap: "wrap",
 	minWidth: 0,
 	width: "100%",
 
-	/*
-	 * All original row actions stay present; wrapping only prevents
-	 * long action sets from being clipped inside the table cell.
-	 */
+	/* Keep every original action while avoiding the oversized action column. */
 	"& .MuiButton-root": {
-		minHeight: 32,
-		borderRadius: "10px",
-		fontSize: 10.5,
-		lineHeight: 1.1,
+		minHeight: 30,
+		minWidth: 0,
+		borderRadius: "9px",
+		fontSize: 10,
+		lineHeight: 1.05,
 		whiteSpace: "nowrap",
+		px: 1.15,
 	},
 
 	"& .MuiChip-root": {
@@ -2392,9 +2414,11 @@ const formFieldSx = {
 const dateTimeFieldSx = {
 	...formFieldSx,
 
+	"& input": {
+		colorScheme: "var(--pf-color-scheme)",
+	},
 	"& input::-webkit-calendar-picker-indicator": {
-		filter: "invert(1)",
-		opacity: 0.85,
+		opacity: 0.8,
 		cursor: "pointer",
 	},
 };
@@ -2461,27 +2485,17 @@ const actionDanger = {
 const searchPanel = {
 	display: "flex",
 	alignItems: "center",
-	flexWrap: "nowrap",
+	flexWrap: "wrap",
 	maxWidth: "100%",
 	boxSizing: "border-box",
-	overflowX: "auto",
-	overflowY: "hidden",
-	overscrollBehaviorX: "contain",
-	scrollbarWidth: "thin",
-	scrollbarColor: "rgba(96,165,250,.28) transparent",
-	"&::-webkit-scrollbar": { height: 5 },
-	"&::-webkit-scrollbar-track": { background: "transparent" },
-	"&::-webkit-scrollbar-thumb": {
-		background: "rgba(96,165,250,.28)",
-		borderRadius: 999,
-	},
-	gap: 12,
-	minHeight: 52,
-	padding: "8px 16px",
+	overflow: "visible",
+	gap: 9,
+	minHeight: 56,
+	padding: "9px 12px",
 	borderRadius: 14,
-	background: "rgba(var(--pf-fg-rgb),.025)",
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
+	background: "var(--pf-surface-raised)",
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 7px 18px rgba(var(--pf-surface-deep-rgb),.045)",
 };
 
 const searchActivitySlotSx = {
@@ -2506,17 +2520,14 @@ const searchActivityPillSx = {
 	display: "inline-flex",
 	alignItems: "center",
 	gap: 0.8,
-	color: "#dbeafe",
+	color: "var(--dispatch-blue-text)",
 	fontSize: 10.5,
 	fontWeight: 950,
 	letterSpacing: ".02em",
 	whiteSpace: "nowrap",
-	background:
-		"linear-gradient(135deg,rgba(37,99,235,.22),rgba(59,130,246,.10))",
-	border:
-		"1px solid rgba(96,165,250,.30)",
-	boxShadow:
-		"0 8px 22px rgba(37,99,235,.18)",
+	background: "rgba(59,130,246,.08)",
+	border: "1px solid rgba(59,130,246,.20)",
+	boxShadow: "0 5px 14px rgba(37,99,235,.08)",
 };
 
 const activeSearchPanelSx = {
@@ -2799,7 +2810,7 @@ const dateFilterFieldSx = {
 		color: "var(--pf-text-strong)",
 		fontSize: 12,
 		fontWeight: 850,
-		colorScheme: "light dark",
+		colorScheme: "var(--pf-color-scheme)",
 	},
 	"& .MuiSelect-select": {
 		color: "var(--pf-text-strong)",
@@ -2875,11 +2886,9 @@ const dateFilterDoneButtonSx = {
 const wrap = {
 	background: "var(--pf-surface)",
 	borderRadius: 16,
-	padding: 16,
-	border:
-		"1px solid rgba(var(--pf-fg-rgb),.07)",
-	boxShadow:
-		"0 12px 28px rgba(var(--pf-surface-deep-rgb),.10)",
+	padding: 12,
+	border: "1px solid var(--pf-border)",
+	boxShadow: "0 10px 24px rgba(var(--pf-surface-deep-rgb),.055)",
 };
 
 const dispatchResizableHeaderCellSx = {
@@ -3341,7 +3350,7 @@ const challanHistoryPageButtonSx = {
 
 	textTransform: "none",
 
-	color: "#dbeafe",
+	color: "var(--dispatch-blue-text)",
 	fontSize: 11,
 	fontWeight: 950,
 
@@ -3463,7 +3472,7 @@ const masterChallanCountValueSx = {
 
 const masterChallanCountLabelSx = {
 	mt: 0.4,
-	color: "#bfdbfe",
+	color: "var(--dispatch-blue-text)",
 	fontSize: 10,
 	fontWeight: 900,
 };
@@ -3721,7 +3730,7 @@ const normalChallanAnalyticsPanelSx = {
 };
 
 const normalChallanAnalyticsTitleSx = {
-	color: "#dbeafe",
+	color: "var(--dispatch-blue-text)",
 	fontSize: 11,
 	fontWeight: 950,
 	letterSpacing: ".11em",
@@ -3778,7 +3787,7 @@ const normalChallanViewModalSx = {
 	flexDirection: "column",
 	borderRadius: "12px",
 	background:
-		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.22),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.12),transparent 28%),linear-gradient(180deg,#07101f,var(--pf-surface))",
+		"radial-gradient(circle at 8% 0%,rgba(37,99,235,.12),transparent 28%),radial-gradient(circle at 92% 8%,rgba(16,185,129,.08),transparent 28%),linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
 	border: "1px solid rgba(96,165,250,.20)",
 	boxShadow: "0 44px 130px rgba(0,0,0,.74)",
 };
@@ -3907,7 +3916,7 @@ const normalChallanItemIndexSx = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	color: "#bfdbfe",
+	color: "var(--dispatch-blue-text)",
 	fontSize: 10,
 	fontWeight: 950,
 	background: "rgba(37,99,235,.12)",
@@ -13005,7 +13014,7 @@ export default function DispatchedItemsPage() {
 									height: 21,
 									mr: 0.8,
 									flexShrink: 0,
-									color: "#ddd6fe",
+									color: "var(--dispatch-purple-text)",
 									fontSize: 9,
 									fontWeight: 950,
 									background:
@@ -13094,7 +13103,7 @@ export default function DispatchedItemsPage() {
 						{hardwareRow && (
 							<Box
 								sx={{
-									color: "#c4b5fd",
+									color: "var(--dispatch-purple-text)",
 									fontSize: 9,
 									fontWeight: 950,
 									letterSpacing: ".08em",
@@ -13253,7 +13262,7 @@ export default function DispatchedItemsPage() {
 								maxWidth: "100%",
 								color:
 									dateInfo.date
-										? "#bfdbfe"
+										? "var(--dispatch-blue-text)"
 										: "var(--pf-text-muted)",
 								fontSize: 9,
 								fontWeight: 950,
@@ -19012,10 +19021,17 @@ export default function DispatchedItemsPage() {
 						>
 							<Box
 								sx={{
-									fontSize: 34,
+									width: 46,
+									height: 46,
+									borderRadius: "13px",
+									fontSize: 23,
 									display: "flex",
 									alignItems: "center",
-									color: "#60a5fa",
+									justifyContent: "center",
+									color: "var(--dispatch-blue-text)",
+									background: "rgba(59,130,246,.09)",
+									border: "1px solid rgba(59,130,246,.18)",
+									boxShadow: "0 6px 16px rgba(37,99,235,.08)",
 								}}
 							>
 								🚚
@@ -19036,25 +19052,37 @@ export default function DispatchedItemsPage() {
 						sx={{
 							display: "flex",
 							alignItems: "center",
-							gap: 2,
+							gap: 1,
+							flexWrap: "wrap",
+							justifyContent: "flex-end",
 						}}
 					>
 						<Box
 							sx={{
+								display: "inline-flex",
+								alignItems: "center",
+								gap: 0.7,
+								height: 38,
+								px: 1.3,
+								borderRadius: "10px",
 								color: "var(--pf-text-muted)",
-								fontSize: 14,
-								fontWeight: 600,
+								fontSize: 11.5,
+								fontWeight: 800,
+								background: "var(--pf-surface-alt)",
+								border: "1px solid var(--pf-border-soft)",
 							}}
 						>
-							Total Items:{" "}
-							<span
-								style={{
-									color: "#60a5fa",
-									fontWeight: 800,
+							Total Items
+							<Box
+								component="span"
+								sx={{
+									color: "var(--dispatch-blue-text)",
+									fontSize: 13,
+									fontWeight: 950,
 								}}
 							>
 								{dispatchMatchingRowCount}
-							</span>
+							</Box>
 						</Box>
 
 						{(isDispatch || isAdmin) && (
@@ -19128,8 +19156,8 @@ export default function DispatchedItemsPage() {
 						sx={{
 							color:
 								dispatchSearchPending
-									? "#60a5fa"
-									: "rgba(var(--pf-fg-rgb),.45)",
+									? "var(--dispatch-blue-text)"
+									: "var(--pf-text-muted)",
 							transition:
 								"color .16s ease",
 						}}
@@ -19157,7 +19185,8 @@ export default function DispatchedItemsPage() {
 
 							"& .MuiInputBase-root": {
 								color: "var(--pf-text-strong)",
-								fontSize: 14,
+								fontSize: 12.5,
+								fontWeight: 750,
 							},
 
 							"& input::placeholder": {
@@ -19183,7 +19212,7 @@ export default function DispatchedItemsPage() {
 									size={13}
 									thickness={5}
 									sx={{
-										color: "#60a5fa",
+										color: "var(--dispatch-blue-text)",
 									}}
 								/>
 								Searching…
@@ -19581,7 +19610,7 @@ export default function DispatchedItemsPage() {
 								<EventAvailableOutlinedIcon
 									sx={{
 										fontSize: 18,
-										color: "#6ee7b7",
+										color: "var(--dispatch-green-text)",
 										flexShrink: 0,
 									}}
 								/>
@@ -19690,7 +19719,7 @@ export default function DispatchedItemsPage() {
 											"& .Mui-selected": {
 												background:
 													"rgba(59,130,246,.16) !important",
-												color: "#60a5fa",
+												color: "var(--dispatch-blue-text)",
 												fontWeight: 900,
 											},
 										},
@@ -19699,7 +19728,7 @@ export default function DispatchedItemsPage() {
 							},
 						}}
 						sx={{
-							minWidth: 230,
+							minWidth: 160,
 
 							...formFieldSx,
 
@@ -19856,7 +19885,7 @@ export default function DispatchedItemsPage() {
 							setPageNo(1);
 						}}
 						sx={{
-							minWidth: 180,
+							minWidth: 150,
 
 							...formFieldSx,
 
@@ -19985,9 +20014,9 @@ export default function DispatchedItemsPage() {
 										sx={{
 											...modalSecondaryButtonSx,
 											height: 34,
-											color: "#fff",
+											color: "var(--dispatch-purple-text)",
 											background:
-												"rgba(139,92,246,.14)",
+												"rgba(139,92,246,.10)",
 											border:
 												"1px solid rgba(139,92,246,.24)",
 
@@ -20397,7 +20426,7 @@ export default function DispatchedItemsPage() {
 																				<Box sx={{ height: 80, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
 																					<Box sx={{ width: 24, height, minHeight: 10, borderRadius: "7px 7px 3px 3px", background: "linear-gradient(180deg,#a78bfa,#6d28d9)", boxShadow: "0 8px 20px rgba(139,92,246,.18)" }} />
 																				</Box>
-																				<Box sx={{ mt: 0.45, color: "#fff", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
+																				<Box sx={{ mt: 0.45, color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 950 }}>{day.challans}</Box>
 																				<Box sx={{ color: "rgba(var(--pf-fg-rgb),.42)", fontSize: 9, fontWeight: 700 }}>{day.label}</Box>
 																			</Box>
 																		);
@@ -20489,7 +20518,7 @@ export default function DispatchedItemsPage() {
 													<Box sx={{ minWidth: 0 }}>
 														<Box
 															sx={{
-																color: "#fff",
+																color: "var(--pf-text-strong)",
 																fontWeight: 900,
 																fontSize: 13,
 																whiteSpace: "nowrap",
@@ -20531,7 +20560,7 @@ export default function DispatchedItemsPage() {
 													<Box sx={{ minWidth: 0 }}>
 														<Box
 															sx={{
-																color: "#fff",
+																color: "var(--pf-text-strong)",
 																fontSize: 13,
 																fontWeight: 800,
 																whiteSpace: "nowrap",
@@ -20685,7 +20714,18 @@ export default function DispatchedItemsPage() {
 										return (
 											<Box
 												key={column.key}
-												sx={dispatchResizableHeaderCellSx}
+												sx={
+													columnIndex === 1
+														? {
+															...dispatchResizableHeaderCellSx,
+															position: "sticky",
+															left: `${Math.round(Number(dispatchColumnWidths[0]) || 56)}px`,
+															zIndex: 43,
+															background: "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface-alt))",
+															boxShadow: "8px 0 18px rgba(var(--pf-surface-deep-rgb),.055)",
+														}
+														: dispatchResizableHeaderCellSx
+												}
 											>
 												<Box
 													component="span"
@@ -20760,7 +20800,12 @@ export default function DispatchedItemsPage() {
 											{columns[0].renderCell({ row })}
 										</Box>
 
-										<Box sx={tableCellWrap}>
+										<Box
+											sx={dispatchIdentityCellSx(
+												isHardwareDispatchRow(row),
+												dispatchColumnWidths[0]
+											)}
+										>
 											{columns[1].renderCell({ row })}
 										</Box>
 
@@ -20902,7 +20947,7 @@ export default function DispatchedItemsPage() {
 									borderRadius: "12px",
 									background:
 										"linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
-									color: "#fff",
+									color: "var(--pf-text-strong)",
 									border:
 										"1px solid rgba(var(--pf-fg-rgb),.08)",
 
@@ -20946,7 +20991,7 @@ export default function DispatchedItemsPage() {
 									component="span"
 									sx={{
 										mx: 1,
-										color: "#60a5fa",
+										color: "var(--dispatch-blue-text)",
 									}}
 								>
 									{safePageNo}
@@ -23441,7 +23486,7 @@ export default function DispatchedItemsPage() {
 																	label={log.performedBy || "System"}
 																	size="small"
 																	sx={{
-																		color: "#e5e7eb",
+																		color: "var(--pf-text)",
 																		fontWeight: 800,
 																		background: "rgba(var(--pf-fg-rgb),.05)",
 																		border: "1px solid rgba(var(--pf-fg-rgb),.08)",
