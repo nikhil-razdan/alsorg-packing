@@ -1608,7 +1608,7 @@ public class DispatchedItemService {
          * row from ANY current status to DISPATCHED.
          *
          * Matching is authoritative on:
-         * Item Name + PD No + DWG No
+         *   Item Name + PD No + DWG No
          *
          * Description and Client are used only as duplicate tie-breakers. Every
          * database row can be allocated only once per verification request, which
