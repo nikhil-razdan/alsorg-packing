@@ -12423,7 +12423,7 @@ function ZohoItemsPage() {
                 setHistoryLifecycleRequestError("");
               }
             }}
-            sx={formFieldSx(darkMode)}
+            sx={formFieldSx()}
           />
 
           <Box
