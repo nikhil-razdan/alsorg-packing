@@ -31,7 +31,7 @@ import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
 import {
   submitPacketLifecycleRequests,
-} from "../dashboard/api/packetLifecycleRequestApi";
+} from "../dashboard/api/packetlifecycleRequestApi";
 
 /*
  * Keep role normalization local to this page.
