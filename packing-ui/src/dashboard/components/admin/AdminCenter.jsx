@@ -30,6 +30,12 @@ import {
     rejectPacketLifecycleRequests,
 } from "../../api/packetLifecycleRequestApi";
 
+import {
+    approvePacketDeletionRequests,
+    fetchPendingPacketDeletionRequests,
+    rejectPacketDeletionRequests,
+} from "../../api/packetDeletionRequestApi";
+
 async function requestAdminWarehouseDeletion(
     path,
     options = {}
@@ -1572,6 +1578,522 @@ function AdminLifecycleRequestQueue({
     );
 }
 
+function AdminDeletionRequestQueue({
+    onChanged,
+}) {
+    const [page, setPage] =
+        useState(EMPTY_PAGE);
+    const [pageNo, setPageNo] =
+        useState(0);
+    const [loading, setLoading] =
+        useState(false);
+    const [error, setError] =
+        useState("");
+    const [message, setMessage] =
+        useState("");
+    const [selectedIds, setSelectedIds] =
+        useState([]);
+    const [decisionReason, setDecisionReason] =
+        useState("");
+    const [acting, setActing] =
+        useState(false);
+
+    const rows =
+        Array.isArray(page?.content)
+            ? page.content
+            : [];
+
+    const selectedSet = useMemo(
+        () => new Set(selectedIds),
+        [selectedIds]
+    );
+
+    const allVisibleSelected =
+        rows.length > 0 &&
+        rows.every((row) =>
+            selectedSet.has(row.id)
+        );
+
+    const someVisibleSelected =
+        rows.some((row) =>
+            selectedSet.has(row.id)
+        );
+
+    const load = useCallback(
+        async (requestedPage = 0) => {
+            setLoading(true);
+            setError("");
+
+            try {
+                const data =
+                    await fetchPendingPacketDeletionRequests({
+                        page: requestedPage,
+                        size: 50,
+                    });
+
+                const normalized =
+                    normalizePageResponse(
+                        data,
+                        requestedPage,
+                        50
+                    );
+
+                setPage(normalized);
+                setPageNo(
+                    normalized.number || 0
+                );
+                setSelectedIds([]);
+            } catch (loadError) {
+                console.error(loadError);
+                setPage(EMPTY_PAGE);
+                setError(
+                    loadError?.message ||
+                    "Unable to load pending deletion requests."
+                );
+            } finally {
+                setLoading(false);
+            }
+        },
+        []
+    );
+
+    useEffect(() => {
+        load(0);
+    }, [load]);
+
+    const toggleVisible = (checked) => {
+        const visibleIds = rows
+            .map((row) => row?.id)
+            .filter(Boolean);
+
+        setSelectedIds((previous) => {
+            const next = new Set(previous);
+
+            visibleIds.forEach((id) => {
+                if (checked) {
+                    next.add(id);
+                } else {
+                    next.delete(id);
+                }
+            });
+
+            return Array.from(next);
+        });
+    };
+
+    const toggleOne = (id, checked) => {
+        if (!id) return;
+
+        setSelectedIds((previous) => {
+            const next = new Set(previous);
+
+            if (checked) {
+                next.add(id);
+            } else {
+                next.delete(id);
+            }
+
+            return Array.from(next);
+        });
+    };
+
+    const approve = async (ids) => {
+        const requestIds = Array.from(
+            new Set(
+                (ids || []).filter(Boolean)
+            )
+        );
+
+        if (requestIds.length === 0 || acting) {
+            return;
+        }
+
+        const confirmed = window.confirm(
+            requestIds.length === 1
+                ? "Approve this request and permanently delete the selected PackFlow item? This action cannot be restored from the application."
+                : `Approve ${requestIds.length} requests and permanently delete all selected PackFlow items? The entire batch is transactional and cannot be restored from the application.`
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        setActing(true);
+        setError("");
+        setMessage("");
+
+        try {
+            const result =
+                await approvePacketDeletionRequests({
+                    requestIds,
+                    reason: decisionReason,
+                });
+
+            setMessage(
+                result?.message ||
+                "Deletion request approved."
+            );
+            setDecisionReason("");
+            setSelectedIds([]);
+
+            try {
+                await onChanged?.({
+                    action:
+                        "USER_DELETION_REQUEST_APPROVED",
+                    targetType:
+                        "DELETION_REQUEST",
+                    requestIds,
+                    requests:
+                        result?.requests || [],
+                });
+            } catch (refreshError) {
+                console.error(refreshError);
+            }
+
+            await load(0);
+        } catch (actionError) {
+            console.error(actionError);
+            setError(
+                actionError?.message ||
+                "Unable to approve deletion request."
+            );
+        } finally {
+            setActing(false);
+        }
+    };
+
+    const reject = async (ids) => {
+        const requestIds = Array.from(
+            new Set(
+                (ids || []).filter(Boolean)
+            )
+        );
+
+        if (requestIds.length === 0 || acting) {
+            return;
+        }
+
+        const reason =
+            String(decisionReason || "").trim();
+
+        if (reason.length < 3) {
+            setError(
+                "Enter a rejection reason of at least 3 characters."
+            );
+            return;
+        }
+
+        setActing(true);
+        setError("");
+        setMessage("");
+
+        try {
+            const result =
+                await rejectPacketDeletionRequests({
+                    requestIds,
+                    reason,
+                });
+
+            setMessage(
+                result?.message ||
+                "Deletion request rejected."
+            );
+            setDecisionReason("");
+            setSelectedIds([]);
+            await load(0);
+        } catch (actionError) {
+            console.error(actionError);
+            setError(
+                actionError?.message ||
+                "Unable to reject deletion request."
+            );
+        } finally {
+            setActing(false);
+        }
+    };
+
+    return (
+        <div style={requestQueueShell}>
+            <div style={requestQueueHeader}>
+                <div>
+                    <div
+                        style={{
+                            ...sectionEyebrow,
+                            color: "#ef4444",
+                        }}
+                    >
+                        PERMANENT DELETION APPROVAL QUEUE
+                    </div>
+
+                    <h3 style={sectionTitle}>
+                        Requested Packet / Item Deletions
+                    </h3>
+
+                    <p style={sectionDescription}>
+                        A user request never deletes data directly. Approval routes the exact target through the existing audited Admin permanent-deletion engine. Linked packets remove the same complete operational graph as direct Admin deletion; standalone imported Dispatch rows remain supported. Bulk approval is atomic.
+                    </p>
+                </div>
+
+                <div
+                    style={{
+                        ...requestCountBadge,
+                        color: "#fecaca",
+                        borderColor: "rgba(248,113,113,.30)",
+                        background: "rgba(220,38,38,.10)",
+                    }}
+                >
+                    {Number(page?.totalElements || 0)} pending
+                </div>
+            </div>
+
+            <div style={requestQueueToolbar}>
+                <label style={requestSelectAllLabel}>
+                    <input
+                        type="checkbox"
+                        ref={(element) => {
+                            if (element) {
+                                element.indeterminate =
+                                    someVisibleSelected &&
+                                    !allVisibleSelected;
+                            }
+                        }}
+                        checked={allVisibleSelected}
+                        disabled={loading || rows.length === 0 || acting}
+                        onChange={(event) =>
+                            toggleVisible(event.target.checked)
+                        }
+                    />
+                    Select page
+                </label>
+
+                <div style={requestQueueSelectionMeta}>
+                    {selectedIds.length} selected
+                </div>
+
+                <button
+                    type="button"
+                    disabled={selectedIds.length === 0 || acting}
+                    onClick={() => approve(selectedIds)}
+                    style={{
+                        ...requestRejectButton(
+                            selectedIds.length === 0 || acting
+                        ),
+                        background:
+                            selectedIds.length === 0 || acting
+                                ? undefined
+                                : "linear-gradient(135deg,#dc2626,#b91c1c)",
+                    }}
+                >
+                    {acting
+                        ? "Processing..."
+                        : "Approve & Delete Selected"}
+                </button>
+
+                <button
+                    type="button"
+                    disabled={selectedIds.length === 0 || acting}
+                    onClick={() => reject(selectedIds)}
+                    style={requestApproveButton(
+                        selectedIds.length === 0 || acting
+                    )}
+                >
+                    Reject Selected
+                </button>
+
+                <button
+                    type="button"
+                    disabled={loading || acting}
+                    onClick={() => load(pageNo)}
+                    style={requestRefreshButton}
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div style={requestDecisionNoteWrap}>
+                <label style={requestDecisionLabel}>
+                    Admin note / rejection reason
+                </label>
+
+                <textarea
+                    value={decisionReason}
+                    disabled={acting}
+                    maxLength={500}
+                    onChange={(event) =>
+                        setDecisionReason(event.target.value)
+                    }
+                    placeholder="Optional for approval. Required when rejecting."
+                    style={requestDecisionTextarea}
+                />
+
+                <div style={requestDecisionCounter}>
+                    {decisionReason.length}/500
+                </div>
+            </div>
+
+            {error && (
+                <div style={errorBox}>
+                    {error}
+                </div>
+            )}
+
+            {message && (
+                <div style={requestSuccessBox}>
+                    {message}
+                </div>
+            )}
+
+            {loading ? (
+                <div style={requestEmptyState}>
+                    Loading pending deletion requests...
+                </div>
+            ) : rows.length === 0 ? (
+                <div style={requestEmptyState}>
+                    No pending packet deletion requests.
+                </div>
+            ) : (
+                <div style={requestQueueList}>
+                    {rows.map((row) => {
+                        const selected =
+                            selectedSet.has(row.id);
+
+                        return (
+                            <div
+                                key={row.id}
+                                style={{
+                                    ...requestQueueCard(
+                                        selected
+                                    ),
+                                    borderColor:
+                                        selected
+                                            ? "rgba(248,113,113,.46)"
+                                            : "rgba(248,113,113,.16)",
+                                }}
+                            >
+                                <div style={requestQueueCardTop}>
+                                    <label style={requestRowCheckboxLabel}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            disabled={acting}
+                                            onChange={(event) =>
+                                                toggleOne(
+                                                    row.id,
+                                                    event.target.checked
+                                                )
+                                            }
+                                        />
+                                    </label>
+
+                                    <div style={requestQueueIdentity}>
+                                        <div style={requestQueueTitle}>
+                                            {row.displayName ||
+                                                row.itemName ||
+                                                row.targetId}
+                                        </div>
+
+                                        <div style={requestQueueMetaLine}>
+                                            Requested by <strong>{row.requestedBy || "-"}</strong>
+                                            {" · "}
+                                            {formatDateTime(row.requestedAt)}
+                                            {" · "}
+                                            {row.source === "INVENTORY_HISTORY"
+                                                ? "Inventory Generated History"
+                                                : "Dispatch"}
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        style={{
+                                            ...requestQueueStateBadge,
+                                            color: "#fecaca",
+                                            borderColor: "rgba(248,113,113,.28)",
+                                            background: "rgba(220,38,38,.09)",
+                                        }}
+                                    >
+                                        {formatLabel(
+                                            row.targetType ||
+                                            "DELETE"
+                                        )}
+                                        <span>•</span>
+                                        PERMANENT DELETE
+                                    </div>
+                                </div>
+
+                                <div style={requestQueueInfoGrid}>
+                                    <div>
+                                        <span>Packet</span>
+                                        <strong>{row.packetNumber || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>SKU</span>
+                                        <strong>{row.sku || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>PD / DWG</span>
+                                        <strong>
+                                            {row.pdNo || "-"} / {row.drawingNo || "-"}
+                                        </strong>
+                                    </div>
+                                    <div>
+                                        <span>Plant</span>
+                                        <strong>{row.plantCode || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>Requested Status</span>
+                                        <strong>{row.requestedStatus || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>Requested Location</span>
+                                        <strong>{row.requestedLocation || "-"}</strong>
+                                    </div>
+                                </div>
+
+                                <div style={requestReasonBox}>
+                                    <span>User deletion reason</span>
+                                    <strong>{row.reason || "-"}</strong>
+                                </div>
+
+                                <div style={requestQueueCardActions}>
+                                    <button
+                                        type="button"
+                                        disabled={acting}
+                                        onClick={() => approve([row.id])}
+                                        style={{
+                                            ...requestRejectButton(acting),
+                                            background:
+                                                acting
+                                                    ? undefined
+                                                    : "linear-gradient(135deg,#dc2626,#b91c1c)",
+                                        }}
+                                    >
+                                        Approve & Permanently Delete
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        disabled={acting}
+                                        onClick={() => reject([row.id])}
+                                        style={requestApproveButton(acting)}
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            <ResultPagination
+                page={page}
+                onPageChange={load}
+                disabled={loading || acting}
+            />
+        </div>
+    );
+}
+
 function AdminPacketRollbackPanel({
     onChanged,
 }) {
@@ -2558,9 +3080,16 @@ function AdminCenter({
                 ?.pendingLifecycleRequests || 0
         );
 
+    const pendingDeletionRequests =
+        Number(
+            preview?.affectedRows
+                ?.pendingDeletionRequests || 0
+        );
+
     const canDelete =
         Boolean(preview) &&
         pendingLifecycleRequests <= 0 &&
+        pendingDeletionRequests <= 0 &&
         reasonValid &&
         confirmationValid &&
         !deleting;
@@ -3358,7 +3887,7 @@ function AdminCenter({
                             </div>
 
                             <div style={modalSubtitle}>
-                                Review user lifecycle requests, correct packet states and manage permanent administrative deletion
+                                Review user state-change and deletion requests, correct packet states and manage permanent administrative deletion
                             </div>
                         </div>
                     </div>
@@ -3375,7 +3904,8 @@ function AdminCenter({
                     </button>
                 </div>
 
-                {workspaceTab === "delete" && (
+                {(workspaceTab === "delete" ||
+                    workspaceTab === "deletionRequests") && (
                     <div style={permanentWarning}>
                         <strong>
                             Permanent action:
@@ -3396,7 +3926,19 @@ function AdminCenter({
                             workspaceTab === "requests"
                         )}
                     >
-                        User Requests
+                        State Requests
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setWorkspaceTab("deletionRequests")
+                        }
+                        style={workspaceTabButton(
+                            workspaceTab === "deletionRequests"
+                        )}
+                    >
+                        Delete Requests
                     </button>
 
                     <button
@@ -3451,6 +3993,12 @@ function AdminCenter({
                 <div style={modalBody} className="admin-center-scroll">
                     {workspaceTab === "requests" && (
                         <AdminLifecycleRequestQueue
+                            onChanged={notifyAdminDataChanged}
+                        />
+                    )}
+
+                    {workspaceTab === "deletionRequests" && (
+                        <AdminDeletionRequestQueue
                             onChanged={notifyAdminDataChanged}
                         />
                     )}
@@ -4060,7 +4608,20 @@ function AdminCenter({
                                                     Permanent deletion is blocked while {pendingLifecycleRequests}{" "}
                                                     pending lifecycle request{pendingLifecycleRequests === 1 ? " is" : "s are"}{" "}
                                                     unresolved. Approve or reject {pendingLifecycleRequests === 1 ? "it" : "them"}{" "}
-                                                    in User Requests first.
+                                                    in State Requests first.
+                                                </div>
+                                            )}
+
+                                            {pendingDeletionRequests > 0 && (
+                                                <div
+                                                    style={
+                                                        impactWarning
+                                                    }
+                                                >
+                                                    Direct permanent deletion is blocked while {pendingDeletionRequests}{" "}
+                                                    user deletion request{pendingDeletionRequests === 1 ? " is" : "s are"}{" "}
+                                                    pending. Review {pendingDeletionRequests === 1 ? "it" : "them"}{" "}
+                                                    in Delete Requests so the original requester and Admin decision remain auditable.
                                                 </div>
                                             )}
 

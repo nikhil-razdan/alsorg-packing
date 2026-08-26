@@ -32,6 +32,9 @@ import usePackFlowDataRefresh
 import {
   submitPacketLifecycleRequests,
 } from "../dashboard/api/packetLifecycleRequestApi";
+import {
+  submitPacketDeletionRequests,
+} from "../dashboard/api/packetDeletionRequestApi";
 
 /*
  * Keep role normalization local to this page.
@@ -2127,6 +2130,10 @@ function ZohoItemsPage() {
     isPacking &&
     !isAdmin;
 
+  const canRequestDeletionFromGeneratedHistory =
+    isPacking &&
+    !isAdmin;
+
   /*
    * ADMIN, PACKING and HARDWARE_PACKING can use
    * the master workbench.
@@ -2287,6 +2294,11 @@ function ZohoItemsPage() {
   const [historyLifecycleRequestReason, setHistoryLifecycleRequestReason] = useState("");
   const [historyLifecycleRequestSubmitting, setHistoryLifecycleRequestSubmitting] = useState(false);
   const [historyLifecycleRequestError, setHistoryLifecycleRequestError] = useState("");
+  const [historyDeletionRequestOpen, setHistoryDeletionRequestOpen] = useState(false);
+  const [historyDeletionRequestRows, setHistoryDeletionRequestRows] = useState([]);
+  const [historyDeletionRequestReason, setHistoryDeletionRequestReason] = useState("");
+  const [historyDeletionRequestSubmitting, setHistoryDeletionRequestSubmitting] = useState(false);
+  const [historyDeletionRequestError, setHistoryDeletionRequestError] = useState("");
   const [generatedHistoryLoading, setGeneratedHistoryLoading] = useState(false);
   const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
   const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
@@ -4629,6 +4641,141 @@ function ZohoItemsPage() {
     }
   };
 
+  const openGeneratedHistoryDeletionRequest = (targetRows) => {
+    if (!canRequestDeletionFromGeneratedHistory) {
+      showUiAlert(
+        "error",
+        "Only a Packing user can request permanent packet deletion from Generated History."
+      );
+      return;
+    }
+
+    const uniqueRows = [];
+    const seen = new Set();
+
+    (Array.isArray(targetRows) ? targetRows : [])
+      .forEach((row) => {
+        const historyId =
+          String(row?.historyId || "").trim();
+
+        if (!historyId || seen.has(historyId)) {
+          return;
+        }
+
+        seen.add(historyId);
+        uniqueRows.push(row);
+      });
+
+    if (uniqueRows.length === 0) {
+      showUiAlert(
+        "error",
+        "Select at least one Generated History record."
+      );
+      return;
+    }
+
+    if (uniqueRows.length > 200) {
+      showUiAlert(
+        "error",
+        "A maximum of 200 Generated History records can be included in one deletion request."
+      );
+      return;
+    }
+
+    setHistoryDeletionRequestRows(uniqueRows);
+    setHistoryDeletionRequestReason("");
+    setHistoryDeletionRequestError("");
+    setHistoryDeletionRequestOpen(true);
+  };
+
+  const closeGeneratedHistoryDeletionRequest = () => {
+    if (historyDeletionRequestSubmitting) {
+      return;
+    }
+
+    setHistoryDeletionRequestOpen(false);
+    setHistoryDeletionRequestRows([]);
+    setHistoryDeletionRequestReason("");
+    setHistoryDeletionRequestError("");
+  };
+
+  const submitGeneratedHistoryDeletionRequest = async () => {
+    if (historyDeletionRequestSubmitting) {
+      return;
+    }
+
+    const reason =
+      String(historyDeletionRequestReason || "").trim();
+
+    if (reason.length < 5) {
+      setHistoryDeletionRequestError(
+        "Please enter a clear deletion reason of at least 5 characters."
+      );
+      return;
+    }
+
+    if (reason.length > 1000) {
+      setHistoryDeletionRequestError(
+        "Deletion reason cannot exceed 1000 characters."
+      );
+      return;
+    }
+
+    const targetIds =
+      historyDeletionRequestRows
+        .map((row) => String(row?.historyId || "").trim())
+        .filter(Boolean);
+
+    if (targetIds.length === 0) {
+      setHistoryDeletionRequestError(
+        "No valid Generated History records are selected."
+      );
+      return;
+    }
+
+    try {
+      setHistoryDeletionRequestSubmitting(true);
+      setHistoryDeletionRequestError("");
+
+      const result =
+        await submitPacketDeletionRequests({
+          targetIds,
+          reason,
+          source: "INVENTORY_HISTORY",
+        });
+
+      const submitted = new Set(targetIds);
+
+      setGeneratedHistoryRequestSelection((previous) =>
+        (previous || []).filter(
+          (historyId) => !submitted.has(String(historyId || "").trim())
+        )
+      );
+
+      setHistoryDeletionRequestOpen(false);
+      setHistoryDeletionRequestRows([]);
+      setHistoryDeletionRequestReason("");
+
+      showUiAlert(
+        "success",
+        result?.message ||
+        "Deletion request sent to Admin for approval."
+      );
+    } catch (error) {
+      console.error(
+        "Generated History deletion request failed:",
+        error
+      );
+
+      setHistoryDeletionRequestError(
+        error?.message ||
+        "Unable to send deletion request."
+      );
+    } finally {
+      setHistoryDeletionRequestSubmitting(false);
+    }
+  };
+
   const getStickerStatusKey = (row) => {
     return row?.stickerNumber ? "STICKER_PRINTED" : "CREATED";
   };
@@ -5772,7 +5919,10 @@ function ZohoItemsPage() {
     );
 
   const selectableGeneratedHistoryPageRows =
-    canRequestLifecycleFromGeneratedHistory &&
+    (
+      canRequestLifecycleFromGeneratedHistory ||
+      canRequestDeletionFromGeneratedHistory
+    ) &&
       generatedHistoryReportMode === "DETAILED"
       ? paginatedGeneratedHistoryRows.filter(
         (row) => Boolean(row?.historyId)
@@ -11823,7 +11973,8 @@ function ZohoItemsPage() {
                     : historyMainContentSx
                 }
               >
-                {canRequestLifecycleFromGeneratedHistory &&
+                {(canRequestLifecycleFromGeneratedHistory ||
+                  canRequestDeletionFromGeneratedHistory) &&
                   generatedHistoryReportMode === "DETAILED" && (
                     <Box
                       sx={{
@@ -11852,29 +12003,59 @@ function ZohoItemsPage() {
                         selected
                       </Box>
 
-                      <Button
-                        size="small"
-                        disabled={
-                          selectedGeneratedHistoryRequestRows.length === 0 ||
-                          historyLifecycleRequestSubmitting
-                        }
-                        onClick={() =>
-                          openGeneratedHistoryLifecycleRequest(
-                            selectedGeneratedHistoryRequestRows
-                          )
-                        }
-                        sx={{
-                          ...modalSecondaryButtonSx,
-                          background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
-                          color: "#fff",
-                          "&:disabled": {
-                            opacity: 0.42,
+                      {canRequestLifecycleFromGeneratedHistory && (
+                        <Button
+                          size="small"
+                          disabled={
+                            selectedGeneratedHistoryRequestRows.length === 0 ||
+                            historyLifecycleRequestSubmitting ||
+                            historyDeletionRequestSubmitting
+                          }
+                          onClick={() =>
+                            openGeneratedHistoryLifecycleRequest(
+                              selectedGeneratedHistoryRequestRows
+                            )
+                          }
+                          sx={{
+                            ...modalSecondaryButtonSx,
+                            background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
                             color: "#fff",
-                          },
-                        }}
-                      >
-                        Request Previous State
-                      </Button>
+                            "&:disabled": {
+                              opacity: 0.42,
+                              color: "#fff",
+                            },
+                          }}
+                        >
+                          Request Previous State
+                        </Button>
+                      )}
+
+                      {canRequestDeletionFromGeneratedHistory && (
+                        <Button
+                          size="small"
+                          disabled={
+                            selectedGeneratedHistoryRequestRows.length === 0 ||
+                            historyDeletionRequestSubmitting ||
+                            historyLifecycleRequestSubmitting
+                          }
+                          onClick={() =>
+                            openGeneratedHistoryDeletionRequest(
+                              selectedGeneratedHistoryRequestRows
+                            )
+                          }
+                          sx={{
+                            ...modalSecondaryButtonSx,
+                            background: "linear-gradient(135deg,#dc2626,#b91c1c)",
+                            color: "#fff",
+                            "&:disabled": {
+                              opacity: 0.42,
+                              color: "#fff",
+                            },
+                          }}
+                        >
+                          Request Delete
+                        </Button>
+                      )}
                     </Box>
                   )}
 
@@ -11978,7 +12159,8 @@ function ZohoItemsPage() {
                     <Box sx={historyTableViewportSx}>
                       <div style={historyTableHeader}>
                         <div>
-                          {canRequestLifecycleFromGeneratedHistory && (
+                          {(canRequestLifecycleFromGeneratedHistory ||
+                            canRequestDeletionFromGeneratedHistory) && (
                             <input
                               type="checkbox"
                               ref={(element) => {
@@ -11991,7 +12173,8 @@ function ZohoItemsPage() {
                               checked={allGeneratedHistoryPageSelected}
                               disabled={
                                 selectableGeneratedHistoryPageRows.length === 0 ||
-                                historyLifecycleRequestSubmitting
+                                historyLifecycleRequestSubmitting ||
+                                historyDeletionRequestSubmitting
                               }
                               title="Select current history page"
                               onChange={(event) =>
@@ -12034,7 +12217,8 @@ function ZohoItemsPage() {
                             style={historyTableRow}
                           >
                             <div style={historyCellWrap}>
-                              {canRequestLifecycleFromGeneratedHistory && (
+                              {(canRequestLifecycleFromGeneratedHistory ||
+                                canRequestDeletionFromGeneratedHistory) && (
                                 <input
                                   type="checkbox"
                                   checked={
@@ -12042,7 +12226,10 @@ function ZohoItemsPage() {
                                       row.historyId
                                     )
                                   }
-                                  disabled={historyLifecycleRequestSubmitting}
+                                  disabled={
+                                    historyLifecycleRequestSubmitting ||
+                                    historyDeletionRequestSubmitting
+                                  }
                                   onChange={(event) =>
                                     toggleGeneratedHistoryRowSelection(
                                       row.historyId,
@@ -12163,7 +12350,10 @@ function ZohoItemsPage() {
                               {canRequestLifecycleFromGeneratedHistory && (
                                 <Button
                                   size="small"
-                                  disabled={historyLifecycleRequestSubmitting}
+                                  disabled={
+                                    historyLifecycleRequestSubmitting ||
+                                    historyDeletionRequestSubmitting
+                                  }
                                   onClick={() =>
                                     openGeneratedHistoryLifecycleRequest([row])
                                   }
@@ -12175,6 +12365,27 @@ function ZohoItemsPage() {
                                   }}
                                 >
                                   Request Change
+                                </Button>
+                              )}
+
+                              {canRequestDeletionFromGeneratedHistory && (
+                                <Button
+                                  size="small"
+                                  disabled={
+                                    historyDeletionRequestSubmitting ||
+                                    historyLifecycleRequestSubmitting
+                                  }
+                                  onClick={() =>
+                                    openGeneratedHistoryDeletionRequest([row])
+                                  }
+                                  sx={{
+                                    ...historyViewButtonSx,
+                                    color: "#ef4444",
+                                    borderColor: "rgba(239,68,68,.28)",
+                                    background: "rgba(220,38,38,.07)",
+                                  }}
+                                >
+                                  Request Delete
                                 </Button>
                               )}
                             </div>
@@ -12451,6 +12662,144 @@ function ZohoItemsPage() {
               }}
             >
               {historyLifecycleRequestError}
+            </Box>
+          )}
+        </InventoryModal>
+
+        <InventoryModal
+          open={historyDeletionRequestOpen}
+          onClose={closeGeneratedHistoryDeletionRequest}
+          icon="🗑️"
+          title="Request Permanent Packet Deletion"
+          subtitle="Nothing is deleted now. Admin must approve the request in Dashboard → Admin Center → Delete Requests."
+          width={700}
+          footer={
+            <>
+              <Button
+                disabled={historyDeletionRequestSubmitting}
+                onClick={closeGeneratedHistoryDeletionRequest}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={
+                  historyDeletionRequestSubmitting ||
+                  String(historyDeletionRequestReason || "").trim().length < 5
+                }
+                onClick={submitGeneratedHistoryDeletionRequest}
+                sx={{
+                  ...premiumButton,
+                  background: "linear-gradient(135deg,#dc2626,#b91c1c)",
+                }}
+              >
+                {historyDeletionRequestSubmitting
+                  ? "Sending Request..."
+                  : "Send Delete Request"}
+              </Button>
+            </>
+          }
+        >
+          <Box
+            sx={{
+              p: 1.5,
+              mb: 1.5,
+              borderRadius: "12px",
+              background: "rgba(220,38,38,.07)",
+              border: "1px solid rgba(248,113,113,.20)",
+              color: "var(--pf-text)",
+              fontSize: 12,
+              lineHeight: 1.55,
+            }}
+          >
+            <strong>{historyDeletionRequestRows.length}</strong>{" "}
+            selected Generated History record
+            {historyDeletionRequestRows.length === 1 ? "" : "s"}. Reprints for the same packet are deduplicated by the backend. Ownership, plant access, current linkage and conflicting state-change requests are checked again before the request is accepted. Approval uses the existing permanent Admin deletion engine.
+          </Box>
+
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.8,
+              maxHeight: 210,
+              overflowY: "auto",
+              mb: 1.5,
+            }}
+          >
+            {historyDeletionRequestRows.map((row) => (
+              <Box
+                key={row.historyId}
+                sx={{
+                  p: 1.15,
+                  borderRadius: "10px",
+                  background: "var(--pf-surface-alt)",
+                  border: "1px solid var(--pf-border-soft)",
+                }}
+              >
+                <Box sx={{ fontSize: 12, fontWeight: 900 }}>
+                  {row.itemName || "Packet"}
+                </Box>
+
+                <Box
+                  sx={{
+                    mt: 0.35,
+                    color: "var(--pf-text-muted)",
+                    fontSize: 10.5,
+                  }}
+                >
+                  {row.packetNumber || "No packet no."} · {row.sku || "No SKU"} · {row.stickerNumber || "No sticker no."}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={4}
+            maxRows={8}
+            label="Reason for deletion request"
+            placeholder="Explain why the packet should be permanently deleted..."
+            value={historyDeletionRequestReason}
+            disabled={historyDeletionRequestSubmitting}
+            inputProps={{ maxLength: 1000 }}
+            onChange={(event) => {
+              setHistoryDeletionRequestReason(event.target.value);
+
+              if (historyDeletionRequestError) {
+                setHistoryDeletionRequestError("");
+              }
+            }}
+            sx={formFieldSx()}
+          />
+
+          <Box
+            sx={{
+              mt: 0.65,
+              textAlign: "right",
+              color: "var(--pf-text-muted)",
+              fontSize: 10,
+            }}
+          >
+            {historyDeletionRequestReason.length}/1000
+          </Box>
+
+          {historyDeletionRequestError && (
+            <Box
+              sx={{
+                mt: 1.2,
+                p: 1.2,
+                borderRadius: "10px",
+                background: "rgba(239,68,68,.08)",
+                border: "1px solid rgba(248,113,113,.18)",
+                color: "#ef4444",
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              {historyDeletionRequestError}
             </Box>
           )}
         </InventoryModal>

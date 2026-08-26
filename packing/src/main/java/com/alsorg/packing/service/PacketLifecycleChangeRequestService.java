@@ -26,6 +26,7 @@ import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.Decisi
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.RequestResponse;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.SubmitRequest;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.SubmitResponse;
+import com.alsorg.packing.domain.admin.PacketDeletionRequestStatus;
 import com.alsorg.packing.domain.admin.PacketLifecycleChangeRequest;
 import com.alsorg.packing.domain.admin.PacketLifecycleChangeRequestStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
@@ -33,6 +34,7 @@ import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.DispatchedItemRepository;
+import com.alsorg.packing.repository.PacketDeletionRequestRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketLifecycleChangeRequestRepository;
 import com.alsorg.packing.repository.StickerHistoryRepository;
@@ -49,6 +51,7 @@ public class PacketLifecycleChangeRequestService {
     private static final String SOURCE_INVENTORY_HISTORY = "INVENTORY_HISTORY";
 
     private final PacketLifecycleChangeRequestRepository requestRepository;
+    private final PacketDeletionRequestRepository deletionRequestRepository;
     private final PacketItemRepository packetItemRepository;
     private final DispatchedItemRepository dispatchedItemRepository;
     private final StickerHistoryRepository stickerHistoryRepository;
@@ -57,12 +60,14 @@ public class PacketLifecycleChangeRequestService {
 
     public PacketLifecycleChangeRequestService(
             PacketLifecycleChangeRequestRepository requestRepository,
+            PacketDeletionRequestRepository deletionRequestRepository,
             PacketItemRepository packetItemRepository,
             DispatchedItemRepository dispatchedItemRepository,
             StickerHistoryRepository stickerHistoryRepository,
             AdminPacketLifecycleService lifecycleService,
             CurrentUserService currentUserService) {
         this.requestRepository = requestRepository;
+        this.deletionRequestRepository = deletionRequestRepository;
         this.packetItemRepository = packetItemRepository;
         this.dispatchedItemRepository = dispatchedItemRepository;
         this.stickerHistoryRepository = stickerHistoryRepository;
@@ -148,6 +153,19 @@ public class PacketLifecycleChangeRequestService {
                     target.history(),
                     target.dispatchedItem(),
                     user);
+
+            String deletionTargetKey =
+                    "PACKET_ITEM:" + packetItem.getId();
+
+            if (deletionRequestRepository.existsByTargetKeyAndStatus(
+                    deletionTargetKey,
+                    PacketDeletionRequestStatus.PENDING)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        buildDisplayName(packetItem)
+                                + " already has a pending deletion request. "
+                                + "That request must be approved or rejected before a lifecycle state-change request can be created.");
+            }
 
             if (requestRepository.existsByPacketItemIdAndStatus(
                     packetItem.getId(),

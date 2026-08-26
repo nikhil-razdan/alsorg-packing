@@ -7,6 +7,7 @@ import com.alsorg.packing.controller.dto.admin.AdminDeleteSearchResult;
 import com.alsorg.packing.controller.dto.admin.AdminDeletionHistoryResponse;
 import com.alsorg.packing.controller.dto.admin.AdminWarehouseBulkDeleteRequest;
 import com.alsorg.packing.domain.item.HardwarePacketLine;
+import com.alsorg.packing.domain.admin.PacketDeletionRequestStatus;
 import com.alsorg.packing.domain.admin.PacketLifecycleChangeRequestStatus;
 import com.alsorg.packing.repository.HardwarePacketLineRepository;
 import com.alsorg.packing.domain.audit.AdminDeletionAudit;
@@ -30,6 +31,7 @@ import com.alsorg.packing.repository.LogisticsTripRepository;
 import com.alsorg.packing.repository.MasterItemRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
+import com.alsorg.packing.repository.PacketDeletionRequestRepository;
 import com.alsorg.packing.repository.PacketLifecycleChangeRequestRepository;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 
@@ -123,6 +125,8 @@ public class AdminDeletionService {
 
         private final PacketLifecycleChangeRequestRepository lifecycleChangeRequestRepository;
 
+        private final PacketDeletionRequestRepository deletionRequestRepository;
+
         private final CurrentUserService currentUserService;
 
         private final ObjectMapper objectMapper;
@@ -143,6 +147,7 @@ public class AdminDeletionService {
                         AuditLogRepository auditLogRepository,
                         AdminDeletionAuditRepository adminDeletionAuditRepository,
                         PacketLifecycleChangeRequestRepository lifecycleChangeRequestRepository,
+                        PacketDeletionRequestRepository deletionRequestRepository,
                         CurrentUserService currentUserService,
                         ObjectMapper objectMapper,
                         EntityManager entityManager) {
@@ -159,6 +164,7 @@ public class AdminDeletionService {
                 this.auditLogRepository = auditLogRepository;
                 this.adminDeletionAuditRepository = adminDeletionAuditRepository;
                 this.lifecycleChangeRequestRepository = lifecycleChangeRequestRepository;
+                this.deletionRequestRepository = deletionRequestRepository;
                 this.currentUserService = currentUserService;
                 this.objectMapper = objectMapper;
                 this.entityManager = entityManager;
@@ -341,6 +347,7 @@ public class AdminDeletionService {
                         affectedRows.put("activityLogs", 0L);
                         affectedRows.put("auditLogs", 0L);
                         affectedRows.put("pendingLifecycleRequests", 0L);
+                        affectedRows.put("pendingDeletionRequests", 0L);
                         affectedRows.put("internalPackets", 0L);
                         affectedRows.put("masterItems", 1L);
 
@@ -942,6 +949,93 @@ public class AdminDeletionService {
 
         /*
          * =====================================================
+         * APPROVED USER DELETION REQUEST EXECUTION
+         * =====================================================
+         *
+         * These methods are intentionally not exposed by AdminDeletionController.
+         * PacketDeletionRequestService is the only caller. The request ID is
+         * passed into the central deletion guard so the PENDING request currently
+         * being approved does not block itself, while every other unresolved
+         * deletion/lifecycle request still blocks permanent deletion.
+         */
+
+        @Transactional
+        public AdminDeleteResultResponse deletePacketItemForApprovedRequest(
+                        UUID itemId,
+                        String reason,
+                        String actor,
+                        UUID approvedDeletionRequestId) {
+                if (itemId == null || approvedDeletionRequestId == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Approved packet deletion request is missing its target or request ID");
+                }
+
+                PacketItem item = packetItemRepository
+                                .findByIdForAdminDeletion(itemId)
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
+                                                "Packet item no longer exists"));
+
+                DeletionContext context = buildDeletionContext(
+                                List.of(item));
+
+                return executeDeletion(
+                                context,
+                                "PACKET_ITEM",
+                                itemId.toString(),
+                                buildPacketDisplayName(item),
+                                cleanRequiredReason(reason),
+                                requireApprovedActor(actor),
+                                buildPacketSnapshotJson(
+                                                item,
+                                                context),
+                                null,
+                                approvedDeletionRequestId);
+        }
+
+        @Transactional
+        public AdminDeleteResultResponse deleteDispatchItemForApprovedRequest(
+                        String itemId,
+                        String reason,
+                        String actor,
+                        UUID approvedDeletionRequestId) {
+                if (approvedDeletionRequestId == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Approved Dispatch deletion request is missing its request ID");
+                }
+
+                DispatchedItem item = requireDispatchDeleteItem(
+                                itemId);
+
+                if (item.getPacketItemId() != null ||
+                                item.getLinkedPacketItemId() != null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "This standalone Dispatch deletion request is stale because the row is now linked to a PacketItem. Reject the old request and submit a new deletion request so the linked packet graph is reviewed explicitly.");
+                }
+
+                DeletionContext context = buildDispatchDeletionContext(
+                                List.of(item));
+
+                return executeDeletion(
+                                context,
+                                "DISPATCH_ITEM",
+                                item.getZohoItemId(),
+                                buildDispatchDisplayName(item),
+                                cleanRequiredReason(reason),
+                                requireApprovedActor(actor),
+                                buildDispatchSnapshotJson(
+                                                List.of(item),
+                                                context,
+                                                "APPROVED_USER_REQUEST"),
+                                null,
+                                approvedDeletionRequestId);
+        }
+
+        /*
+         * =====================================================
          * DELETION HISTORY
          * =====================================================
          */
@@ -981,6 +1075,28 @@ public class AdminDeletionService {
                         String actor,
                         String snapshotJson,
                         UUID explicitlyDeletedMasterId) {
+                return executeDeletion(
+                                context,
+                                targetType,
+                                targetId,
+                                displayName,
+                                reason,
+                                actor,
+                                snapshotJson,
+                                explicitlyDeletedMasterId,
+                                null);
+        }
+
+        private AdminDeleteResultResponse executeDeletion(
+                        DeletionContext context,
+                        String targetType,
+                        String targetId,
+                        String displayName,
+                        String reason,
+                        String actor,
+                        String snapshotJson,
+                        UUID explicitlyDeletedMasterId,
+                        UUID allowedDeletionRequestId) {
                 /*
                  * A permanent deletion must never orphan an open user approval
                  * request. Preserve decided request history, but require every
@@ -991,8 +1107,15 @@ public class AdminDeletionService {
                 lockPacketItemsForLifecycleDeletion(
                                 context.packetItemIds());
 
+                lockDispatchItemsForPermanentDeletion(
+                                context.dispatchedItems());
+
                 assertNoPendingLifecycleRequests(
                                 context.packetItemIds());
+
+                assertNoPendingDeletionRequests(
+                                context,
+                                allowedDeletionRequestId);
 
                 /*
                  * Child records must be deleted first.
@@ -1111,6 +1234,10 @@ public class AdminDeletionService {
                                 0L);
 
                 deletedRows.put(
+                                "pendingDeletionRequests",
+                                0L);
+
+                deletedRows.put(
                                 "internalPackets",
                                 packetResult.deletedPackets());
 
@@ -1198,6 +1325,7 @@ public class AdminDeletionService {
                 deletedRows.put("activityLogs", 0L);
                 deletedRows.put("auditLogs", 0L);
                 deletedRows.put("pendingLifecycleRequests", 0L);
+                deletedRows.put("pendingDeletionRequests", 0L);
                 deletedRows.put("internalPackets", 0L);
                 deletedRows.put("masterItems", 1L);
                 deletedRows.put("masterItemsUpdated", 0L);
@@ -1747,6 +1875,12 @@ public class AdminDeletionService {
                                                 context.packetItemIds()));
 
                 counts.put(
+                                "pendingDeletionRequests",
+                                countPendingDeletionRequests(
+                                                context,
+                                                null));
+
+                counts.put(
                                 "internalPackets",
                                 countInternalPacketsThatWillBeDeleted(
                                                 context));
@@ -1807,8 +1941,106 @@ public class AdminDeletionService {
                 throw new ResponseStatusException(
                                 HttpStatus.CONFLICT,
                                 pending == 1L
-                                                ? "This packet has a pending lifecycle change request. Approve or reject it in Admin Center > User Requests before permanent deletion."
-                                                : pending + " selected packets have pending lifecycle change requests. Approve or reject them in Admin Center > User Requests before permanent deletion.");
+                                                ? "This packet has a pending lifecycle change request. Approve or reject it in Admin Center > State Requests before permanent deletion."
+                                                : pending + " selected packets have pending lifecycle change requests. Approve or reject them in Admin Center > State Requests before permanent deletion.");
+        }
+
+        private void lockDispatchItemsForPermanentDeletion(
+                        List<DispatchedItem> dispatchedItems) {
+                if (dispatchedItems == null || dispatchedItems.isEmpty()) {
+                        return;
+                }
+
+                dispatchedItems.stream()
+                                .filter(Objects::nonNull)
+                                .map(DispatchedItem::getZohoItemId)
+                                .filter(this::hasText)
+                                .map(String::trim)
+                                .distinct()
+                                .sorted()
+                                .forEach(itemId ->
+                                                entityManager.find(
+                                                                DispatchedItem.class,
+                                                                itemId,
+                                                                LockModeType.PESSIMISTIC_WRITE));
+        }
+
+        private Set<String> buildDeletionRequestTargetKeys(
+                        DeletionContext context) {
+                Set<String> targetKeys = new LinkedHashSet<>();
+
+                if (context == null) {
+                        return targetKeys;
+                }
+
+                for (UUID packetItemId : context.packetItemIds()) {
+                        if (packetItemId != null) {
+                                targetKeys.add(
+                                                "PACKET_ITEM:" + packetItemId);
+                        }
+                }
+
+                for (DispatchedItem item : context.dispatchedItems()) {
+                        if (item != null && hasText(item.getZohoItemId())) {
+                                targetKeys.add(
+                                                "DISPATCH_ITEM:" + item.getZohoItemId().trim());
+                        }
+                }
+
+                return targetKeys;
+        }
+
+        private long countPendingDeletionRequests(
+                        DeletionContext context,
+                        UUID allowedDeletionRequestId) {
+                Set<String> targetKeys = buildDeletionRequestTargetKeys(
+                                context);
+
+                if (targetKeys.isEmpty()) {
+                        return 0L;
+                }
+
+                if (allowedDeletionRequestId == null) {
+                        return deletionRequestRepository
+                                        .countByTargetKeyInAndStatus(
+                                                        targetKeys,
+                                                        PacketDeletionRequestStatus.PENDING);
+                }
+
+                return deletionRequestRepository
+                                .countByTargetKeyInAndStatusAndIdNot(
+                                                targetKeys,
+                                                PacketDeletionRequestStatus.PENDING,
+                                                allowedDeletionRequestId);
+        }
+
+        private void assertNoPendingDeletionRequests(
+                        DeletionContext context,
+                        UUID allowedDeletionRequestId) {
+                long pending = countPendingDeletionRequests(
+                                context,
+                                allowedDeletionRequestId);
+
+                if (pending <= 0L) {
+                        return;
+                }
+
+                throw new ResponseStatusException(
+                                HttpStatus.CONFLICT,
+                                pending == 1L
+                                                ? "This item has another pending deletion request. Approve or reject it in Admin Center > Delete Requests before permanent deletion."
+                                                : pending + " selected items have pending deletion requests. Approve or reject them in Admin Center > Delete Requests before permanent deletion.");
+        }
+
+        private String requireApprovedActor(
+                        String actor) {
+                if (!hasText(actor)) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.UNAUTHORIZED,
+                                        "Authenticated Admin username is missing");
+                }
+
+                return actor.trim();
         }
 
         private long countInternalPacketsThatWillBeDeleted(

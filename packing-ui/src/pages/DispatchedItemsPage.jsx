@@ -39,6 +39,9 @@ import {
 	submitPacketLifecycleRequests,
 } from "../dashboard/api/packetLifecycleRequestApi";
 import {
+	submitPacketDeletionRequests,
+} from "../dashboard/api/packetDeletionRequestApi";
+import {
 	publishPackFlowDataChanged,
 } from "../utils/packFlowDataEvents";
 import {
@@ -5763,6 +5766,9 @@ export default function DispatchedItemsPage() {
 	const canRequestLifecycleFromDispatch =
 		!isAdmin && isDispatch;
 
+	const canRequestDeletionFromDispatch =
+		!isAdmin && isDispatch;
+
 	const rolesKey =
 		roles.join("|");
 
@@ -5791,6 +5797,11 @@ export default function DispatchedItemsPage() {
 	const [lifecycleRequestReason, setLifecycleRequestReason] = useState("");
 	const [lifecycleRequestSubmitting, setLifecycleRequestSubmitting] = useState(false);
 	const [lifecycleRequestError, setLifecycleRequestError] = useState("");
+	const [deletionRequestOpen, setDeletionRequestOpen] = useState(false);
+	const [deletionRequestRows, setDeletionRequestRows] = useState([]);
+	const [deletionRequestReason, setDeletionRequestReason] = useState("");
+	const [deletionRequestSubmitting, setDeletionRequestSubmitting] = useState(false);
+	const [deletionRequestError, setDeletionRequestError] = useState("");
 	const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 	const [bulkLoading, setBulkLoading] = useState(false);
 	const [bulkReturnDecisionLoading, setBulkReturnDecisionLoading] = useState("");
@@ -12362,6 +12373,145 @@ export default function DispatchedItemsPage() {
 		}
 	};
 
+
+	const isDeletionRequestableDispatchRow = (row) =>
+		Boolean(
+			row &&
+			String(row?.zohoItemId || "").trim()
+		);
+
+	const getDeletionRequestDispatchTargetId = (row) =>
+		String(row?.zohoItemId || "").trim();
+
+	const openDeletionRequestModal = (targetRows) => {
+		if (!canRequestDeletionFromDispatch) {
+			alert("Only a Dispatch user can request permanent deletion from this page.");
+			return;
+		}
+
+		const uniqueRows = [];
+		const seen = new Set();
+
+		(Array.isArray(targetRows) ? targetRows : [])
+			.forEach((row) => {
+				if (!isDeletionRequestableDispatchRow(row)) {
+					return;
+				}
+
+				const targetId =
+					getDeletionRequestDispatchTargetId(row);
+
+				if (!targetId || seen.has(targetId)) {
+					return;
+				}
+
+				seen.add(targetId);
+				uniqueRows.push(row);
+			});
+
+		if (uniqueRows.length === 0) {
+			alert("Select at least one valid Dispatch item.");
+			return;
+		}
+
+		if (uniqueRows.length > 200) {
+			alert("A maximum of 200 items can be included in one deletion request.");
+			return;
+		}
+
+		setDeletionRequestRows(uniqueRows);
+		setDeletionRequestReason("");
+		setDeletionRequestError("");
+		setDeletionRequestOpen(true);
+	};
+
+	const closeDeletionRequestModal = () => {
+		if (deletionRequestSubmitting) {
+			return;
+		}
+
+		setDeletionRequestOpen(false);
+		setDeletionRequestRows([]);
+		setDeletionRequestReason("");
+		setDeletionRequestError("");
+	};
+
+	const submitDeletionRequest = async () => {
+		if (deletionRequestSubmitting) {
+			return;
+		}
+
+		const reason =
+			String(deletionRequestReason || "").trim();
+
+		if (reason.length < 5) {
+			setDeletionRequestError(
+				"Please enter a clear deletion reason of at least 5 characters."
+			);
+			return;
+		}
+
+		if (reason.length > 1000) {
+			setDeletionRequestError(
+				"Deletion reason cannot exceed 1000 characters."
+			);
+			return;
+		}
+
+		const targetIds =
+			deletionRequestRows
+				.map(getDeletionRequestDispatchTargetId)
+				.filter(Boolean);
+
+		if (targetIds.length === 0) {
+			setDeletionRequestError(
+				"No valid Dispatch items are selected."
+			);
+			return;
+		}
+
+		try {
+			setDeletionRequestSubmitting(true);
+			setDeletionRequestError("");
+
+			const result =
+				await submitPacketDeletionRequests({
+					targetIds,
+					reason,
+					source: "DISPATCH",
+				});
+
+			const requestedIds = new Set(targetIds);
+
+			setSelectionModel((previous) =>
+				(previous || []).filter(
+					(id) => !requestedIds.has(String(id || "").trim())
+				)
+			);
+
+			setDeletionRequestOpen(false);
+			setDeletionRequestRows([]);
+			setDeletionRequestReason("");
+
+			alert(
+				result?.message ||
+				"Deletion request sent to Admin for approval."
+			);
+		} catch (error) {
+			console.error(
+				"Deletion request failed:",
+				error
+			);
+
+			setDeletionRequestError(
+				error?.message ||
+				"Unable to send deletion request."
+			);
+		} finally {
+			setDeletionRequestSubmitting(false);
+		}
+	};
+
 	const patchDispatchRows = (
 		itemIds,
 		patchValue
@@ -13880,6 +14030,10 @@ export default function DispatchedItemsPage() {
 					canRequestLifecycleFromDispatch &&
 					isLifecycleRequestableDispatchRow(row);
 
+				const canRequestPermanentDeletion =
+					canRequestDeletionFromDispatch &&
+					isDeletionRequestableDispatchRow(row);
+
 
 				return (
 					<Box sx={actionContainer}>
@@ -14059,6 +14213,24 @@ export default function DispatchedItemsPage() {
 								}}
 							>
 								Request Previous State
+							</Button>
+						)}
+						{canRequestPermanentDeletion && (
+							<Button
+								size="small"
+								disabled={deletionRequestSubmitting}
+								onClick={() =>
+									openDeletionRequestModal([row])
+								}
+								sx={{
+									...actionDanger,
+									...tableActionButton,
+									background: "rgba(220,38,38,.08)",
+									color: "var(--dispatch-red-text)",
+									border: "1px solid rgba(220,38,38,.24)",
+								}}
+							>
+								Request Delete
 							</Button>
 						)}
 
@@ -14784,6 +14956,20 @@ export default function DispatchedItemsPage() {
 	const allSelectedLifecycleRequestable =
 		selectionModel.length > 0 &&
 		selectedLifecycleRequestableItems.length ===
+		selectionModel.length;
+
+	const selectedDeletionRequestableItems =
+		useMemo(
+			() =>
+				selectedItems.filter(
+					isDeletionRequestableDispatchRow
+				),
+			[selectedItems]
+		);
+
+	const allSelectedDeletionRequestable =
+		selectionModel.length > 0 &&
+		selectedDeletionRequestableItems.length ===
 		selectionModel.length;
 
 	const selectedReturnRequestItems = useMemo(() => {
@@ -21902,6 +22088,42 @@ export default function DispatchedItemsPage() {
 								</Button>
 							)}
 
+						{canRequestDeletionFromDispatch && (
+							<Button
+								size="small"
+								disabled={
+									!allSelectedDeletionRequestable ||
+									deletionRequestSubmitting
+								}
+								title={
+									allSelectedDeletionRequestable
+										? "Send selected items to Admin for permanent deletion approval"
+										: "Every selected row must be a valid Dispatch item"
+								}
+								onClick={() =>
+									openDeletionRequestModal(
+										selectedDeletionRequestableItems
+									)
+								}
+								sx={{
+									px: 2.4,
+									height: 38,
+									borderRadius: "12px",
+									fontWeight: 900,
+									textTransform: "none",
+									background: "linear-gradient(180deg,#dc2626,#b91c1c)",
+									color: "#fff",
+									boxShadow: "0 10px 24px rgba(220,38,38,.20)",
+									"&:disabled": {
+										opacity: 0.42,
+										color: "#fff",
+									},
+								}}
+							>
+								Request Delete Selected
+							</Button>
+						)}
+
 							{/*
 			 * ADMIN-SPECIFIC ACTION
 			 *
@@ -23875,6 +24097,170 @@ export default function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				{deletionRequestOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 6450 }}
+						onClick={(event) => {
+							if (
+								event.target === event.currentTarget &&
+								!deletionRequestSubmitting
+							) {
+								closeDeletionRequestModal();
+							}
+						}}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 700,
+								maxHeight: "88vh",
+							}}
+							onClick={(event) => event.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#dc2626")}>
+										🗑️
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Request Permanent Deletion
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											No data is deleted now. Admin must approve this request in Dashboard → Admin Center.
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									disabled={deletionRequestSubmitting}
+									sx={modalCloseButtonSx}
+									onClick={closeDeletionRequestModal}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<Box
+									sx={{
+										p: 1.5,
+										mb: 1.5,
+										borderRadius: "12px",
+										background: "rgba(220,38,38,.07)",
+										border: "1px solid rgba(248,113,113,.20)",
+										color: "var(--pf-text)",
+										fontSize: 12,
+										lineHeight: 1.55,
+									}}
+								>
+									<strong>{deletionRequestRows.length}</strong>{" "}
+									item{deletionRequestRows.length === 1 ? "" : "s"}{" "}
+									will be sent for permanent deletion approval. For linked PackFlow packets, approval uses the existing Admin permanent-deletion engine and removes the same linked operational graph that an Admin deletion would remove. Standalone imported Dispatch rows remain supported.
+								</Box>
+
+								<Box
+									sx={{
+										display: "flex",
+										flexDirection: "column",
+										gap: 0.8,
+										maxHeight: 190,
+										overflowY: "auto",
+										mb: 1.5,
+									}}
+								>
+									{deletionRequestRows.map((row) => (
+										<Box
+											key={getDeletionRequestDispatchTargetId(row)}
+											sx={{
+												p: 1.15,
+												borderRadius: "10px",
+												background: "var(--pf-surface-alt)",
+												border: "1px solid var(--pf-border-soft)",
+											}}
+										>
+											<Box sx={{ fontWeight: 900, fontSize: 12 }}>
+												{row?.name || row?.itemName || "Dispatch Item"}
+											</Box>
+											<Box sx={{ mt: 0.35, color: "var(--pf-text-muted)", fontSize: 10.5 }}>
+												{getDispatchDrawerPacketNumber(row)} · {row?.sku || "No SKU"} · {row?.status || "Unknown state"}
+											</Box>
+										</Box>
+									))}
+								</Box>
+
+								<TextField
+									fullWidth
+									multiline
+									minRows={4}
+									maxRows={8}
+									label="Reason for deletion request"
+									placeholder="Explain why these item(s) should be permanently deleted..."
+									value={deletionRequestReason}
+									disabled={deletionRequestSubmitting}
+									inputProps={{ maxLength: 1000 }}
+									onChange={(event) => {
+										setDeletionRequestReason(event.target.value);
+										if (deletionRequestError) {
+											setDeletionRequestError("");
+										}
+									}}
+									sx={formFieldSx}
+								/>
+
+								<Box sx={{ mt: 0.65, textAlign: "right", color: "var(--pf-text-muted)", fontSize: 10 }}>
+									{deletionRequestReason.length}/1000
+								</Box>
+
+								{deletionRequestError && (
+									<Box
+										sx={{
+											mt: 1.2,
+											p: 1.2,
+											borderRadius: "10px",
+											background: "rgba(239,68,68,.08)",
+											border: "1px solid rgba(248,113,113,.18)",
+											color: "#ef4444",
+											fontSize: 11,
+											fontWeight: 800,
+										}}
+									>
+										{deletionRequestError}
+									</Box>
+								)}
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									disabled={deletionRequestSubmitting}
+									onClick={closeDeletionRequestModal}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={
+										deletionRequestSubmitting ||
+										String(deletionRequestReason || "").trim().length < 5
+									}
+									onClick={submitDeletionRequest}
+									sx={{
+										...premiumButton,
+										background: "linear-gradient(135deg,#dc2626,#b91c1c)",
+									}}
+								>
+									{deletionRequestSubmitting
+										? "Sending Request..."
+										: "Send Delete Request"}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+
 				{lifecycleRequestOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 6400 }}

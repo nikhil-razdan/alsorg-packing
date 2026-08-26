@@ -20,12 +20,14 @@ import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackHistoryRespons
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackPreviewResponse;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackRequest;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackResultResponse;
+import com.alsorg.packing.controller.dto.admin.PacketDeletionRequestDtos;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.DecisionRequest;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.DecisionResponse;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.RequestResponse;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.AdminPacketLifecycleService;
 import com.alsorg.packing.service.CurrentUserService;
+import com.alsorg.packing.service.PacketDeletionRequestService;
 import com.alsorg.packing.service.PacketLifecycleChangeRequestService;
 
 @RestController
@@ -34,14 +36,17 @@ public class AdminCenterController {
 
     private final AdminPacketLifecycleService lifecycleService;
     private final PacketLifecycleChangeRequestService lifecycleRequestService;
+    private final PacketDeletionRequestService deletionRequestService;
     private final CurrentUserService currentUserService;
 
     public AdminCenterController(
             AdminPacketLifecycleService lifecycleService,
             PacketLifecycleChangeRequestService lifecycleRequestService,
+            PacketDeletionRequestService deletionRequestService,
             CurrentUserService currentUserService) {
         this.lifecycleService = lifecycleService;
         this.lifecycleRequestService = lifecycleRequestService;
+        this.deletionRequestService = deletionRequestService;
         this.currentUserService = currentUserService;
     }
 
@@ -132,6 +137,51 @@ public class AdminCenterController {
 
         return ResponseEntity.ok(
                 lifecycleRequestService.reject(
+                        request,
+                        user));
+    }
+
+    /* =====================================================
+     * USER-REQUESTED PERMANENT DELETIONS
+     * ===================================================== */
+
+    @GetMapping("/deletion-requests")
+    public ResponseEntity<Page<PacketDeletionRequestDtos.RequestResponse>> pendingDeletionRequests(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = requireAdmin(auth);
+
+        Pageable pageable = PageRequest.of(
+                Math.max(page, 0),
+                normalizeRequestPageSize(size));
+
+        return ResponseEntity.ok(
+                deletionRequestService.getPending(
+                        pageable,
+                        user));
+    }
+
+    @PostMapping("/deletion-requests/approve")
+    public ResponseEntity<PacketDeletionRequestDtos.DecisionResponse> approveDeletionRequests(
+            @RequestBody PacketDeletionRequestDtos.DecisionRequest request,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = requireAdmin(auth);
+
+        return ResponseEntity.ok(
+                deletionRequestService.approve(
+                        request,
+                        user));
+    }
+
+    @PostMapping("/deletion-requests/reject")
+    public ResponseEntity<PacketDeletionRequestDtos.DecisionResponse> rejectDeletionRequests(
+            @RequestBody PacketDeletionRequestDtos.DecisionRequest request,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        User user = requireAdmin(auth);
+
+        return ResponseEntity.ok(
+                deletionRequestService.reject(
                         request,
                         user));
     }
