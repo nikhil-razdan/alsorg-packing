@@ -11,8 +11,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AdminDeletionAuditRepository
         extends JpaRepository<AdminDeletionAudit, UUID> {
 
-    Page<AdminDeletionAudit>
-    findAllByOrderByDeletedAtDesc(
-            Pageable pageable
-    );
+    Page<AdminDeletionAudit> findAllByOrderByDeletedAtDesc(
+            Pageable pageable);
 }

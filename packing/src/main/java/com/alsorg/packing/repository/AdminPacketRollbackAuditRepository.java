@@ -12,6 +12,5 @@ public interface AdminPacketRollbackAuditRepository
         extends JpaRepository<AdminPacketRollbackAudit, UUID> {
 
     Page<AdminPacketRollbackAudit> findAllByOrderByChangedAtDesc(
-            Pageable pageable
-    );
+            Pageable pageable);
 }

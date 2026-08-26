@@ -412,89 +412,6 @@ public class AdminPacketLifecycleService {
                         + finalState.getLabel());
     }
 
-    /**
-     * Executes an approved user lifecycle-change request.
-     *
-     * The PacketItem is locked before the expected state is compared with the
-     * live state. This prevents an old/stale approval request from accidentally
-     * rolling back a newer packet state.
-     */
-    @Transactional
-    public AdminPacketRollbackResultResponse rollbackOneStepForApprovedRequest(
-            UUID packetItemId,
-            String reason,
-            String changedBy,
-            String expectedFromState,
-            String expectedToState) {
-        String cleanReason = reason == null
-                ? ""
-                : reason.trim();
-
-        if (cleanReason.length() < 5) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Reason must contain at least 5 characters");
-        }
-
-        if (cleanReason.length() > 1000) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Reason cannot exceed 1000 characters");
-        }
-
-        PacketItem packetItem = packetItemRepository
-                .findByIdForAdminRollback(packetItemId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Packet item not found"));
-
-        DispatchedItem dispatchedItem = findDispatchedItemForUpdate(packetItem)
-                .orElse(null);
-
-        AdminPacketLifecycleState liveFromState = resolveLifecycleState(
-                packetItem,
-                dispatchedItem);
-
-        AdminPacketLifecycleState liveToState = previousStateOf(liveFromState);
-
-        String expectedFrom = expectedFromState == null
-                ? ""
-                : expectedFromState.trim();
-
-        String expectedTo = expectedToState == null
-                ? ""
-                : expectedToState.trim();
-
-        if (!liveFromState.name().equals(expectedFrom)
-                || liveToState == null
-                || !liveToState.name().equals(expectedTo)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "This request is stale because the packet lifecycle changed after the request was submitted. "
-                            + "Requested "
-                            + expectedFrom
-                            + " -> "
-                            + expectedTo
-                            + ", but the live packet is now "
-                            + liveFromState.name()
-                            + " -> "
-                            + (liveToState == null ? "NONE" : liveToState.name())
-                            + ". Refresh the queue and reject this old request if it is no longer required.");
-        }
-
-        /*
-         * The same transaction still owns the pessimistic PacketItem lock.
-         * Reuse the existing, already-audited rollback implementation instead of
-         * duplicating any operational state-transition logic.
-         */
-        return rollbackOneStep(
-                packetItemId,
-                new AdminPacketRollbackRequest(
-                        buildConfirmation(packetItem),
-                        cleanReason),
-                changedBy);
-    }
-
     @Transactional(readOnly = true)
     public Page<AdminPacketRollbackHistoryResponse> getHistory(
             Pageable pageable) {
@@ -539,6 +456,8 @@ public class AdminPacketLifecycleService {
 
         dispatchedItem.setTripStartedAt(null);
         dispatchedItem.setTripEndedAt(null);
+        dispatchedItem.setDeliveredAt(null);
+        dispatchedItem.setLogisticsTripId(null);
 
         /*
          * Restore/approval data belongs to the dispatched state.
@@ -836,14 +755,6 @@ public class AdminPacketLifecycleService {
             return;
         }
 
-        /*
-         * Gather every possible historical identifier.
-         *
-         * A LinkedHashSet:
-         * - avoids duplicate values;
-         * - never sends an empty IN collection;
-         * - preserves a predictable order for debugging.
-         */
         Set<String> lookupIds = buildRollbackLookupIds(
                 packetItem,
                 dispatchedItem);
@@ -853,13 +764,14 @@ public class AdminPacketLifecycleService {
                         packetItem.getId(),
                         lookupIds);
 
-        if (tripItems == null ||
-                tripItems.isEmpty()) {
-            return;
+        if (tripItems == null) {
+            tripItems = List.of();
         }
 
         /*
-         * Capture all parent-trip IDs before removing child rows.
+         * Use both relationship sources. Older rows can retain
+         * dispatched_items.logistics_trip_id even when the corresponding
+         * logistics_trip_item row is missing.
          */
         Set<UUID> affectedTripIds = new LinkedHashSet<>();
 
@@ -874,49 +786,61 @@ public class AdminPacketLifecycleService {
                     tripItem.getTrip().getId());
         }
 
-        int removedTripItemCount = tripItems.size();
+        UUID directTripId = dispatchedItem == null
+                ? null
+                : dispatchedItem.getLogisticsTripId();
 
-        /*
-         * Prefer entity-aware deletion over deleteAllInBatch here.
-         *
-         * deleteAllInBatch bypasses Hibernate's persistence context.
-         * Because these entities were just loaded with their Trip,
-         * keeping Hibernate synchronized is safer for the remaining
-         * rollback work in the same transaction.
-         */
-        logisticsTripItemRepository.deleteAll(
-                tripItems);
+        if (directTripId != null) {
+            affectedTripIds.add(directTripId);
+        }
 
-        logisticsTripItemRepository.flush();
+        if (!tripItems.isEmpty()) {
+            int removedTripItemCount = tripItems.size();
 
-        if (changes != null) {
-            changes.add(
-                    "Removed " +
-                            removedTripItemCount +
-                            " logistics trip item link(s).");
+            logisticsTripItemRepository.deleteAll(
+                    tripItems);
+            logisticsTripItemRepository.flush();
+
+            if (changes != null) {
+                changes.add(
+                        "Removed " +
+                                removedTripItemCount +
+                                " logistics trip item link(s).");
+            }
         }
 
         /*
-         * Each affected parent trip must now either:
-         *
-         * 1. be deleted when it contains no remaining items; or
-         * 2. have its cached totalItems count recalculated.
+         * Clear the denormalized Dispatch -> Trip reference before a parent
+         * trip can be deleted. This prevents a stale logisticsTripId and also
+         * avoids FK/order-of-flush problems when the packet was the final item
+         * in its trip.
          */
+        if (dispatchedItem != null && directTripId != null) {
+            dispatchedItem.setLogisticsTripId(null);
+            dispatchedItemRepository.save(dispatchedItem);
+            dispatchedItemRepository.flush();
+
+            if (changes != null) {
+                changes.add(
+                        "Cleared Dispatch logistics trip reference " +
+                                directTripId +
+                                ".");
+            }
+        }
+
         for (UUID tripId : affectedTripIds) {
             if (tripId == null) {
                 continue;
             }
 
-            long remaining = logisticsTripItemRepository
-                    .countByTripId(
-                            tripId);
+            long remainingTripItems = logisticsTripItemRepository
+                    .countByTripId(tripId);
 
-            if (remaining <= 0) {
-                /*
-                 * Delete location records before deleting the trip.
-                 * Otherwise the logistics-trip foreign key may block
-                 * the parent deletion.
-                 */
+            long remainingDispatchItems = dispatchedItemRepository
+                    .countByLogisticsTripId(tripId);
+
+            if (remainingTripItems <= 0L &&
+                    remainingDispatchItems <= 0L) {
                 int removedLocationRows = logisticsTripLocationRepository
                         .deleteByTripIdForAdminRollback(
                                 tripId);
@@ -932,42 +856,38 @@ public class AdminPacketLifecycleService {
                                     tripId +
                                     ".");
                 }
-                /*
-                 * Use findById + delete rather than existsById +
-                 * deleteById. It avoids resolving the same entity twice
-                 * and keeps deletion entity-aware.
-                 */
-                logisticsTripRepository
+
+                LogisticsTrip trip = logisticsTripRepository
                         .findById(tripId)
-                        .ifPresent(
-                                logisticsTripRepository::delete);
+                        .orElse(null);
 
-                logisticsTripRepository.flush();
+                if (trip != null) {
+                    logisticsTripRepository.delete(trip);
+                    logisticsTripRepository.flush();
 
-                if (changes != null) {
-                    changes.add(
-                            "Deleted empty logistics trip " +
-                                    tripId +
-                                    ".");
+                    if (changes != null) {
+                        changes.add(
+                                "Deleted empty logistics trip " +
+                                        tripId +
+                                        ".");
+                    }
                 }
 
                 continue;
             }
 
+            long remainingCount = Math.max(
+                    remainingTripItems,
+                    remainingDispatchItems);
+
             logisticsTripRepository
                     .findById(tripId)
                     .ifPresent(trip -> {
-                        /*
-                         * Keep the stored trip summary synchronized with
-                         * the actual child-row count.
-                         *
-                         * This line assumes LogisticsTrip has:
-                         *
-                         * setTotalItems(Integer/int)
-                         */
                         trip.setTotalItems(
                                 Math.toIntExact(
-                                        remaining));
+                                        remainingCount));
+                        trip.setUpdatedAt(
+                                LocalDateTime.now(APP_ZONE));
 
                         logisticsTripRepository.save(
                                 trip);
@@ -978,7 +898,7 @@ public class AdminPacketLifecycleService {
                         "Recalculated logistics trip " +
                                 tripId +
                                 " to " +
-                                remaining +
+                                remainingCount +
                                 " item(s).");
             }
         }
@@ -1266,6 +1186,8 @@ public class AdminPacketLifecycleService {
 
         item.setTripStartedAt(null);
         item.setTripEndedAt(null);
+        item.setDeliveredAt(null);
+        item.setLogisticsTripId(null);
     }
 
     private void reconcileParentPacketStickerFlag(
@@ -1495,21 +1417,29 @@ public class AdminPacketLifecycleService {
                 logisticsTripItemCount);
 
         /*
-         * Count unique affected parent trips as well.
+         * Count every affected parent trip, including a legacy direct
+         * dispatched_items.logistics_trip_id link that has no trip-item row.
          */
-        long logisticsTripCount = tripItems == null
-                ? 0L
-                : tripItems.stream()
-                        .filter(item -> item != null &&
-                                item.getTrip() != null &&
-                                item.getTrip().getId() != null)
-                        .map(item -> item.getTrip().getId())
-                        .distinct()
-                        .count();
+        Set<UUID> affectedTripIds = new LinkedHashSet<>();
+
+        if (tripItems != null) {
+            tripItems.stream()
+                    .filter(item -> item != null &&
+                            item.getTrip() != null &&
+                            item.getTrip().getId() != null)
+                    .map(item -> item.getTrip().getId())
+                    .forEach(affectedTripIds::add);
+        }
+
+        if (dispatchedItem != null &&
+                dispatchedItem.getLogisticsTripId() != null) {
+            affectedTripIds.add(
+                    dispatchedItem.getLogisticsTripId());
+        }
 
         result.put(
                 "logisticsTrips",
-                logisticsTripCount);
+                (long) affectedTripIds.size());
 
         result.put(
                 "challanMetadata",
@@ -1620,6 +1550,8 @@ public class AdminPacketLifecycleService {
         map.put("dispatchedBy", item.getDispatchedBy());
         map.put("tripStartedAt", item.getTripStartedAt());
         map.put("tripEndedAt", item.getTripEndedAt());
+        map.put("deliveredAt", item.getDeliveredAt());
+        map.put("logisticsTripId", item.getLogisticsTripId());
 
         return map;
     }

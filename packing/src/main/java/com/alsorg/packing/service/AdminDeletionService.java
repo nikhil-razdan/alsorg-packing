@@ -7,6 +7,7 @@ import com.alsorg.packing.controller.dto.admin.AdminDeleteSearchResult;
 import com.alsorg.packing.controller.dto.admin.AdminDeletionHistoryResponse;
 import com.alsorg.packing.controller.dto.admin.AdminWarehouseBulkDeleteRequest;
 import com.alsorg.packing.domain.item.HardwarePacketLine;
+import com.alsorg.packing.domain.admin.PacketLifecycleChangeRequestStatus;
 import com.alsorg.packing.repository.HardwarePacketLineRepository;
 import com.alsorg.packing.domain.audit.AdminDeletionAudit;
 import com.alsorg.packing.domain.common.PacketItemType;
@@ -29,12 +30,14 @@ import com.alsorg.packing.repository.LogisticsTripRepository;
 import com.alsorg.packing.repository.MasterItemRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
+import com.alsorg.packing.repository.PacketLifecycleChangeRequestRepository;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 
@@ -46,6 +49,7 @@ import java.time.ZoneId;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -117,6 +121,8 @@ public class AdminDeletionService {
 
         private final AdminDeletionAuditRepository adminDeletionAuditRepository;
 
+        private final PacketLifecycleChangeRequestRepository lifecycleChangeRequestRepository;
+
         private final CurrentUserService currentUserService;
 
         private final ObjectMapper objectMapper;
@@ -136,6 +142,7 @@ public class AdminDeletionService {
                         ActivityLogRepository activityLogRepository,
                         AuditLogRepository auditLogRepository,
                         AdminDeletionAuditRepository adminDeletionAuditRepository,
+                        PacketLifecycleChangeRequestRepository lifecycleChangeRequestRepository,
                         CurrentUserService currentUserService,
                         ObjectMapper objectMapper,
                         EntityManager entityManager) {
@@ -151,6 +158,7 @@ public class AdminDeletionService {
                 this.activityLogRepository = activityLogRepository;
                 this.auditLogRepository = auditLogRepository;
                 this.adminDeletionAuditRepository = adminDeletionAuditRepository;
+                this.lifecycleChangeRequestRepository = lifecycleChangeRequestRepository;
                 this.currentUserService = currentUserService;
                 this.objectMapper = objectMapper;
                 this.entityManager = entityManager;
@@ -332,6 +340,7 @@ public class AdminDeletionService {
                         affectedRows.put("affectedTrips", 0L);
                         affectedRows.put("activityLogs", 0L);
                         affectedRows.put("auditLogs", 0L);
+                        affectedRows.put("pendingLifecycleRequests", 0L);
                         affectedRows.put("internalPackets", 0L);
                         affectedRows.put("masterItems", 1L);
 
@@ -973,6 +982,19 @@ public class AdminDeletionService {
                         String snapshotJson,
                         UUID explicitlyDeletedMasterId) {
                 /*
+                 * A permanent deletion must never orphan an open user approval
+                 * request. Preserve decided request history, but require every
+                 * PENDING request to be approved/rejected first. This keeps the
+                 * Admin Center queue actionable and avoids an approval later
+                 * targeting a packet that no longer exists.
+                 */
+                lockPacketItemsForLifecycleDeletion(
+                                context.packetItemIds());
+
+                assertNoPendingLifecycleRequests(
+                                context.packetItemIds());
+
+                /*
                  * Child records must be deleted first.
                  */
 
@@ -1085,6 +1107,10 @@ public class AdminDeletionService {
                                 (long) deletedAuditLogs);
 
                 deletedRows.put(
+                                "pendingLifecycleRequests",
+                                0L);
+
+                deletedRows.put(
                                 "internalPackets",
                                 packetResult.deletedPackets());
 
@@ -1171,6 +1197,7 @@ public class AdminDeletionService {
                 deletedRows.put("logisticsTripLocations", 0L);
                 deletedRows.put("activityLogs", 0L);
                 deletedRows.put("auditLogs", 0L);
+                deletedRows.put("pendingLifecycleRequests", 0L);
                 deletedRows.put("internalPackets", 0L);
                 deletedRows.put("masterItems", 1L);
                 deletedRows.put("masterItemsUpdated", 0L);
@@ -1715,6 +1742,11 @@ public class AdminDeletionService {
                                                                                 context.lookupIds()));
 
                 counts.put(
+                                "pendingLifecycleRequests",
+                                countPendingLifecycleRequests(
+                                                context.packetItemIds()));
+
+                counts.put(
                                 "internalPackets",
                                 countInternalPacketsThatWillBeDeleted(
                                                 context));
@@ -1727,6 +1759,56 @@ public class AdminDeletionService {
                                                                 context));
 
                 return counts;
+        }
+
+        private void lockPacketItemsForLifecycleDeletion(
+                        Set<UUID> packetItemIds) {
+                if (packetItemIds == null || packetItemIds.isEmpty()) {
+                        return;
+                }
+
+                /*
+                 * Submit requests lock PacketItem rows in UUID-string order.
+                 * Use the same order here so permanent deletion and request
+                 * submission cannot race past each other or deadlock by taking
+                 * packet locks in different orders.
+                 */
+                packetItemIds.stream()
+                                .filter(Objects::nonNull)
+                                .sorted(Comparator.comparing(UUID::toString))
+                                .forEach(packetItemId ->
+                                                entityManager.find(
+                                                                PacketItem.class,
+                                                                packetItemId,
+                                                                LockModeType.PESSIMISTIC_WRITE));
+        }
+
+        private long countPendingLifecycleRequests(
+                        Set<UUID> packetItemIds) {
+                if (packetItemIds == null || packetItemIds.isEmpty()) {
+                        return 0L;
+                }
+
+                return lifecycleChangeRequestRepository
+                                .countByPacketItemIdInAndStatus(
+                                                packetItemIds,
+                                                PacketLifecycleChangeRequestStatus.PENDING);
+        }
+
+        private void assertNoPendingLifecycleRequests(
+                        Set<UUID> packetItemIds) {
+                long pending = countPendingLifecycleRequests(
+                                packetItemIds);
+
+                if (pending <= 0L) {
+                        return;
+                }
+
+                throw new ResponseStatusException(
+                                HttpStatus.CONFLICT,
+                                pending == 1L
+                                                ? "This packet has a pending lifecycle change request. Approve or reject it in Admin Center > User Requests before permanent deletion."
+                                                : pending + " selected packets have pending lifecycle change requests. Approve or reject them in Admin Center > User Requests before permanent deletion.");
         }
 
         private long countInternalPacketsThatWillBeDeleted(
