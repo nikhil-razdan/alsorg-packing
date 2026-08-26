@@ -2552,8 +2552,15 @@ function AdminCenter({
         confirmation.trim() ===
         requiredConfirmation;
 
+    const pendingLifecycleRequests =
+        Number(
+            preview?.affectedRows
+                ?.pendingLifecycleRequests || 0
+        );
+
     const canDelete =
         Boolean(preview) &&
+        pendingLifecycleRequests <= 0 &&
         reasonValid &&
         confirmationValid &&
         !deleting;
@@ -2690,7 +2697,7 @@ function AdminCenter({
             return;
         }
 
-        setWorkspaceTab("rollback");
+        setWorkspaceTab("requests");
         setTargetType("PACKET_ITEM");
         setWarehouseBulkMode(false);
         setWarehouseBulkTargets([]);
@@ -4041,6 +4048,19 @@ function AdminCenter({
                                                     }
                                                 >
                                                     {preview.warning}
+                                                </div>
+                                            )}
+
+                                            {pendingLifecycleRequests > 0 && (
+                                                <div
+                                                    style={
+                                                        impactWarning
+                                                    }
+                                                >
+                                                    Permanent deletion is blocked while {pendingLifecycleRequests}{" "}
+                                                    pending lifecycle request{pendingLifecycleRequests === 1 ? " is" : "s are"}{" "}
+                                                    unresolved. Approve or reject {pendingLifecycleRequests === 1 ? "it" : "them"}{" "}
+                                                    in User Requests first.
                                                 </div>
                                             )}
 

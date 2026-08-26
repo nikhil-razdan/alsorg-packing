@@ -1,484 +1,218 @@
 import API from "../../services/api";
 
-/*
- * ============================================================
- * PACKFLOW PACKET LIFECYCLE REQUEST API
- * ============================================================
- *
- * Purpose:
- *
- * 1. DISPATCH / PACKING users can REQUEST that a packet be moved
- *    one lifecycle state backwards.
- *
- * 2. The request itself DOES NOT change packet state.
- *
- * 3. ADMIN users can review pending requests from Admin Center.
- *
- * 4. ADMIN can approve or reject one or many requests.
- *
- * 5. Actual packet rollback continues to be executed securely
- *    by the backend lifecycle service
- *
- * IMPORTANT:
- *
- * ../../services/api already uses a base URL ending in "/api".
- *
- * Therefore paths in this file intentionally DO NOT begin with
- * another "/api".
- *
- * Correct:
- *   /packet-lifecycle-requests
- *
- * Incorrect:
- *   /api/packet-lifecycle-requests
- * ============================================================
- */
+const MAX_SUBMIT_REASON_LENGTH = 1000;
+const MAX_DECISION_REASON_LENGTH = 500;
+const MAX_BATCH_SIZE = 200;
+const ALLOWED_SOURCES = new Set([
+  "DISPATCH",
+  "INVENTORY_HISTORY",
+]);
 
-
-/*
- * Extract the most useful error message returned by Spring Boot
- * or Axios while keeping frontend callers simple.
- */
 const getApiMessage = (
   error,
   fallback = "The request could not be completed."
 ) => {
-  const payload =
-    error?.response?.data;
+  const payload = error?.response?.data;
 
-  if (
-    typeof payload === "string" &&
-    payload.trim()
-  ) {
+  if (typeof payload === "string" && payload.trim()) {
     return payload.trim();
   }
 
-  if (
-    payload &&
-    typeof payload === "object"
-  ) {
-    const message =
-      payload.message ||
-      payload.detail ||
-      payload.error;
-
-    if (
-      typeof message === "string" &&
-      message.trim()
-    ) {
-      return message.trim();
-    }
-  }
-
-  if (
-    typeof error?.message === "string" &&
-    error.message.trim()
-  ) {
-    return error.message.trim();
-  }
-
-  return fallback;
+  return (
+    payload?.message ||
+    payload?.detail ||
+    payload?.error ||
+    error?.message ||
+    fallback
+  );
 };
 
-
-/*
- * Clean IDs before sending them to the backend.
- *
- * - removes null/undefined/blank values
- * - converts IDs to strings
- * - trims whitespace
- * - removes duplicate IDs
- *
- * This is useful for both single and bulk operations.
- */
-const normalizeIds = (
-  values
-) => {
-  return Array.from(
+const normalizeIds = (values) =>
+  Array.from(
     new Set(
-      (
-        Array.isArray(values)
-          ? values
-          : []
-      )
-        .map(
-          value =>
-            String(
-              value ?? ""
-            ).trim()
-        )
+      (Array.isArray(values) ? values : [])
+        .map((value) => String(value || "").trim())
         .filter(Boolean)
     )
   );
+
+const requireIds = (values, label) => {
+  const ids = normalizeIds(values);
+
+  if (ids.length === 0) {
+    throw new Error(`Select at least one ${label}.`);
+  }
+
+  if (ids.length > MAX_BATCH_SIZE) {
+    throw new Error(
+      `A maximum of ${MAX_BATCH_SIZE} ${label}s can be processed at once.`
+    );
+  }
+
+  return ids;
 };
 
-
-/*
- * Keep pagination values bounded before sending them to the
- * Admin Center endpoint.
- */
-const normalizePage = (
-  value
-) => {
-  return Math.max(
-    0,
-    Number(value) || 0
-  );
-};
-
-
-const normalizePageSize = (
+const cleanReason = (
   value,
-  fallback = 50
+  {
+    minimum = 0,
+    maximum,
+    label = "Reason",
+    required = false,
+  }
 ) => {
-  return Math.max(
-    1,
-    Math.min(
-      200,
-      Number(value) ||
-      fallback
-    )
-  );
+  const reason = String(value || "").trim();
+
+  if (required && reason.length < minimum) {
+    throw new Error(
+      `${label} must contain at least ${minimum} characters.`
+    );
+  }
+
+  if (!required && reason && reason.length < minimum) {
+    throw new Error(
+      `${label} must contain at least ${minimum} characters when provided.`
+    );
+  }
+
+  if (reason.length > maximum) {
+    throw new Error(
+      `${label} cannot exceed ${maximum} characters.`
+    );
+  }
+
+  return reason;
 };
 
-
-/*
- * ============================================================
- * USER — SUBMIT LIFECYCLE CHANGE REQUEST
- * ============================================================
- *
- * Used by:
- *
- * - DispatchedItemsPage.jsx
- * - ZohoItemsPage.jsx Generated History
- *
- * Backend:
- *
- * POST /api/packet-lifecycle-requests
- *
- * `targetIds` meaning depends on `source`:
- *
- * DISPATCH
- *   targetIds = selected Dispatch item IDs
- *
- * INVENTORY_HISTORY
- *   targetIds = selected StickerHistory IDs
- *
- * The backend resolves the real PacketItem and performs all
- * ownership/access/security checks.
- */
 export async function submitPacketLifecycleRequests({
   targetIds,
   reason,
   source,
 }) {
-  const cleanTargetIds =
-    normalizeIds(
-      targetIds
-    );
+  const normalizedSource = String(source || "")
+    .trim()
+    .toUpperCase();
 
-  const cleanReason =
-    String(
-      reason ?? ""
-    ).trim();
-
-  const cleanSource =
-    String(
-      source ?? ""
-    )
-      .trim()
-      .toUpperCase();
-
-  /*
-   * Frontend validation provides immediate feedback.
-   *
-   * Backend validation remains authoritative.
-   */
-  if (
-    cleanTargetIds.length === 0
-  ) {
+  if (!ALLOWED_SOURCES.has(normalizedSource)) {
     throw new Error(
-      "Select at least one packet."
+      "Lifecycle request source must be DISPATCH or INVENTORY_HISTORY."
     );
   }
 
-  if (
-    cleanTargetIds.length > 200
-  ) {
-    throw new Error(
-      "A maximum of 200 packets can be requested at once."
-    );
-  }
-
-  if (
-    cleanReason.length < 5
-  ) {
-    throw new Error(
-      "Please enter a clear reason of at least 5 characters."
-    );
-  }
-
-  if (
-    cleanReason.length > 1000
-  ) {
-    throw new Error(
-      "Reason cannot exceed 1000 characters."
-    );
-  }
-
-  if (!cleanSource) {
-    throw new Error(
-      "Lifecycle request source is missing."
-    );
-  }
+  const payload = {
+    targetIds: requireIds(targetIds, "item"),
+    reason: cleanReason(reason, {
+      minimum: 5,
+      maximum: MAX_SUBMIT_REASON_LENGTH,
+      label: "Reason",
+      required: true,
+    }),
+    source: normalizedSource,
+  };
 
   try {
-    const response =
-      await API.post(
-        "/packet-lifecycle-requests",
-        {
-          targetIds:
-            cleanTargetIds,
-
-          reason:
-            cleanReason,
-
-          source:
-            cleanSource,
-        }
-      );
+    const response = await API.post(
+      "/packet-lifecycle-requests",
+      payload
+    );
 
     return response.data;
-
   } catch (error) {
     throw new Error(
       getApiMessage(
         error,
-        "Unable to send lifecycle change request."
+        "Unable to send lifecycle change request"
       )
     );
   }
 }
 
-
-/*
- * ============================================================
- * ADMIN — LOAD PENDING REQUESTS
- * ============================================================
- *
- * Used by:
- *
- * src/dashboard/components/admin/AdminCenter.jsx
- *
- * Backend:
- *
- * GET /api/admin/center/lifecycle-requests
- */
 export async function fetchPendingPacketLifecycleRequests({
   page = 0,
   size = 50,
 } = {}) {
   try {
-    const response =
-      await API.get(
-        "/admin/center/lifecycle-requests",
-        {
-          params: {
-            page:
-              normalizePage(
-                page
-              ),
-
-            size:
-              normalizePageSize(
-                size,
-                50
-              ),
-          },
-        }
-      );
+    const response = await API.get(
+      "/admin/center/lifecycle-requests",
+      {
+        params: {
+          page: Math.max(0, Number(page) || 0),
+          size: Math.max(
+            1,
+            Math.min(MAX_BATCH_SIZE, Number(size) || 50)
+          ),
+        },
+      }
+    );
 
     return response.data;
-
   } catch (error) {
     throw new Error(
       getApiMessage(
         error,
-        "Unable to load pending lifecycle requests."
+        "Unable to load pending lifecycle requests"
       )
     );
   }
 }
 
-
-/*
- * ============================================================
- * ADMIN — APPROVE SINGLE / BULK REQUESTS
- * ============================================================
- *
- * Backend:
- *
- * POST /api/admin/center/lifecycle-requests/approve
- *
- * The backend:
- *
- * - verifies ADMIN access
- * - locks relevant records
- * - confirms request is still PENDING
- * - confirms the packet is still in the state recorded when
- *   the request was submitted
- * - performs the existing one-step rollback
- * - writes lifecycle/audit information
- * - marks the request APPROVED
- *
- * `reason` is optional here because the user's original reason
- * is already stored with the request. AdminCenter may provide
- * an additional decision note.
- */
 export async function approvePacketLifecycleRequests({
   requestIds,
   reason = "",
 }) {
-  const cleanRequestIds =
-    normalizeIds(
-      requestIds
-    );
-
-  const cleanReason =
-    String(
-      reason ?? ""
-    ).trim();
-
-  if (
-    cleanRequestIds.length === 0
-  ) {
-    throw new Error(
-      "Select at least one lifecycle request to approve."
-    );
-  }
-
-  if (
-    cleanRequestIds.length > 200
-  ) {
-    throw new Error(
-      "A maximum of 200 lifecycle requests can be approved at once."
-    );
-  }
-
-  if (
-    cleanReason.length > 1000
-  ) {
-    throw new Error(
-      "Admin note cannot exceed 1000 characters."
-    );
-  }
+  const payload = {
+    requestIds: requireIds(requestIds, "request"),
+    reason: cleanReason(reason, {
+      minimum: 0,
+      maximum: MAX_DECISION_REASON_LENGTH,
+      label: "Admin note",
+      required: false,
+    }),
+  };
 
   try {
-    const response =
-      await API.post(
-        "/admin/center/lifecycle-requests/approve",
-        {
-          requestIds:
-            cleanRequestIds,
-
-          reason:
-            cleanReason,
-        }
-      );
+    const response = await API.post(
+      "/admin/center/lifecycle-requests/approve",
+      payload
+    );
 
     return response.data;
-
   } catch (error) {
     throw new Error(
       getApiMessage(
         error,
-        "Unable to approve lifecycle request."
+        "Unable to approve lifecycle request"
       )
     );
   }
 }
 
-
-/*
- * ============================================================
- * ADMIN — REJECT SINGLE / BULK REQUESTS
- * ============================================================
- *
- * Backend:
- *
- * POST /api/admin/center/lifecycle-requests/reject
- *
- * Rejecting a request does NOT change packet state.
- *
- * The rejection reason is required so there is a clear,
- * permanent explanation for the requester/admin audit trail.
- */
 export async function rejectPacketLifecycleRequests({
   requestIds,
   reason,
 }) {
-  const cleanRequestIds =
-    normalizeIds(
-      requestIds
-    );
-
-  const cleanReason =
-    String(
-      reason ?? ""
-    ).trim();
-
-  if (
-    cleanRequestIds.length === 0
-  ) {
-    throw new Error(
-      "Select at least one lifecycle request to reject."
-    );
-  }
-
-  if (
-    cleanRequestIds.length > 200
-  ) {
-    throw new Error(
-      "A maximum of 200 lifecycle requests can be rejected at once."
-    );
-  }
-
-  if (
-    cleanReason.length < 3
-  ) {
-    throw new Error(
-      "Please enter a rejection reason."
-    );
-  }
-
-  if (
-    cleanReason.length > 1000
-  ) {
-    throw new Error(
-      "Rejection reason cannot exceed 1000 characters."
-    );
-  }
+  const payload = {
+    requestIds: requireIds(requestIds, "request"),
+    reason: cleanReason(reason, {
+      minimum: 3,
+      maximum: MAX_DECISION_REASON_LENGTH,
+      label: "Rejection reason",
+      required: true,
+    }),
+  };
 
   try {
-    const response =
-      await API.post(
-        "/admin/center/lifecycle-requests/reject",
-        {
-          requestIds:
-            cleanRequestIds,
-
-          reason:
-            cleanReason,
-        }
-      );
+    const response = await API.post(
+      "/admin/center/lifecycle-requests/reject",
+      payload
+    );
 
     return response.data;
-
   } catch (error) {
     throw new Error(
       getApiMessage(
         error,
-        "Unable to reject lifecycle request."
+        "Unable to reject lifecycle request"
       )
     );
   }

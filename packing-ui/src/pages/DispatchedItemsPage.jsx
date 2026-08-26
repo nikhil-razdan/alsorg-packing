@@ -12229,8 +12229,8 @@ export default function DispatchedItemsPage() {
 
 	const getLifecycleRequestDispatchTargetId = (row) =>
 		String(
-			row?.packetItemId ||
 			row?.zohoItemId ||
+			row?.packetItemId ||
 			""
 		).trim();
 
