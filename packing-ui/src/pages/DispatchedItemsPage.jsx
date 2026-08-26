@@ -5990,6 +5990,19 @@ export default function DispatchedItemsPage() {
 	const [customChallanSectionOpen, setCustomChallanSectionOpen] = useState(false);
 	const [customChallans, setCustomChallans] = useState([]);
 	const [customChallansLoading, setCustomChallansLoading] = useState(false);
+	const [customChallansLoadAttempted, setCustomChallansLoadAttempted] = useState(false);
+
+	/*
+	 * Custom Challan disclosure performance.
+	 *
+	 * Keep a lightweight load-state cache and deduplicate overlapping list
+	 * requests. The Custom Challan section can be opened/closed rapidly without
+	 * creating duplicate network work or coupling the disclosure animation to
+	 * the API response time. Existing explicit Refresh/create/edit/history flows
+	 * still request fresh data through loadCustomChallans().
+	 */
+	const customChallansLoadedRef = useRef(false);
+	const customChallansLoadPromiseRef = useRef(null);
 
 	const [customChallanPageNo, setCustomChallanPageNo] = useState(1);
 	const [customChallanPageSize, setCustomChallanPageSize] = useState(5);
@@ -16386,38 +16399,100 @@ export default function DispatchedItemsPage() {
 		}
 	};
 
-	async function loadCustomChallans() {
-		try {
-			setCustomChallansLoading(true);
+	async function loadCustomChallans({ force = true } = {}) {
+		/*
+		 * The section opener uses force:false so a previously loaded (including
+		 * legitimately empty) register is not fetched again on every reopen.
+		 * Existing callers use the default force:true and therefore keep their
+		 * original refresh semantics.
+		 */
+		if (!force && customChallansLoadedRef.current) {
+			return customChallans;
+		}
 
-			const data = await fetchCustomChallans();
+		/*
+		 * Rapid clicks / overlapping refresh sources used to be able to start the
+		 * same potentially large Custom Challan request more than once. Reuse the
+		 * active promise instead; this changes no returned data or permissions.
+		 */
+		if (customChallansLoadPromiseRef.current) {
+			return customChallansLoadPromiseRef.current;
+		}
 
-			setCustomChallans(
-				Array.isArray(data)
+		const request = (async () => {
+			try {
+				setCustomChallansLoadAttempted(false);
+				setCustomChallansLoading(true);
+
+				const data = await fetchCustomChallans();
+				const nextRows = Array.isArray(data)
 					? data
-					: []
-			);
-		} catch (err) {
-			console.error(err);
-			setCustomChallans([]);
+					: [];
+
+				customChallansLoadedRef.current = true;
+				setCustomChallans(nextRows);
+
+				return nextRows;
+			} catch (err) {
+				console.error(err);
+				setCustomChallans([]);
+
+				/* A failed request must remain retryable on the next open/refresh. */
+				customChallansLoadedRef.current = false;
+				return [];
+			} finally {
+				setCustomChallansLoadAttempted(true);
+				setCustomChallansLoading(false);
+			}
+		})();
+
+		customChallansLoadPromiseRef.current = request;
+
+		try {
+			return await request;
 		} finally {
-			setCustomChallansLoading(false);
+			if (customChallansLoadPromiseRef.current === request) {
+				customChallansLoadPromiseRef.current = null;
+			}
 		}
 	}
 
-	const toggleCustomChallanSection = async () => {
-		const nextOpen = !customChallanSectionOpen;
-
-		setCustomChallanSectionOpen(nextOpen);
-
-		if (nextOpen) {
-			setCustomChallanPageNo(1);
-		}
-
-		if (nextOpen && customChallans.length === 0) {
-			await loadCustomChallans();
-		}
+	/*
+	 * Disclosure toggling is deliberately synchronous and contains no await.
+	 * Fetching starts after the open state has committed, so the click itself is
+	 * never held up by network work. Functional state also prevents stale rapid
+	 * click behaviour.
+	 */
+	const toggleCustomChallanSection = () => {
+		setCustomChallanSectionOpen((previous) => !previous);
 	};
+
+	useEffect(() => {
+		if (!customChallanSectionOpen) {
+			return undefined;
+		}
+
+		setCustomChallanPageNo(1);
+
+		if (
+			customChallansLoadedRef.current ||
+			customChallansLoadPromiseRef.current
+		) {
+			return undefined;
+		}
+
+		/*
+		 * Give the browser one paint for the disclosure state before beginning the
+		 * fetch. This removes the visible click -> fetch -> open coupling.
+		 */
+		const frameId = window.requestAnimationFrame(() => {
+			void loadCustomChallans({ force: false });
+		});
+
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [customChallanSectionOpen]);
 
 	const getRowGeneratedTime = (row) =>
 		row?.dispatchedAt ||
@@ -20473,36 +20548,49 @@ export default function DispatchedItemsPage() {
 								)}
 
 								<Button
-									onClick={loadCustomChallans}
+									disabled={customChallansLoading}
+									onClick={() => {
+										void loadCustomChallans({ force: true });
+									}}
 									sx={{
 										...modalSecondaryButtonSx,
 										height: 34,
 									}}
 								>
-									Refresh
+									{customChallansLoading ? "Refreshing…" : "Refresh"}
 								</Button>
 							</Box>
 						</Box>
 
-						<Collapse
-							in={customChallanSectionOpen}
-							timeout="auto"
-							unmountOnExit
+						{/*
+						 * Do not animate the height of this large/complex section. MUI Collapse
+						 * with timeout="auto" measures and reflows the full body on every frame,
+						 * which was the visible opening/closing lag. Keep the subtree mounted after
+						 * it has data and switch visibility atomically instead.
+						 */}
+						<Box
+							role="region"
+							aria-label="Custom challan records"
+							aria-hidden={!customChallanSectionOpen}
+							sx={{
+								display: customChallanSectionOpen ? "block" : "none",
+								contain: "layout paint",
+							}}
 						>
 							<Box sx={customChallanBodySx}>
-								{customChallansLoading && (
+								{(customChallansLoading || !customChallansLoadAttempted) && (
 									<Box sx={modalEmptyStateSx}>
 										Loading custom challans…
 									</Box>
 								)}
 
-								{!customChallansLoading && customChallans.length === 0 && (
+								{customChallansLoadAttempted && !customChallansLoading && customChallans.length === 0 && (
 									<Box sx={modalEmptyStateSx}>
 										No custom challans generated yet.
 									</Box>
 								)}
 
-								{!customChallansLoading && customChallans.length > 0 && (
+								{customChallansLoadAttempted && !customChallansLoading && customChallans.length > 0 && (
 									<>
 										<Box sx={customChallanSearchPanelSx}>
 											<Box sx={customChallanSearchTopSx}>
@@ -21092,7 +21180,7 @@ export default function DispatchedItemsPage() {
 									</>
 								)}
 							</Box>
-						</Collapse>
+						</Box>
 					</Box>
 				)}
 
