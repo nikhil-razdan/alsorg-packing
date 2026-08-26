@@ -36,6 +36,9 @@ import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
 import {
+	submitPacketLifecycleRequests,
+} from "../dashboard/api/packetLifecycleRequestApi";
+import {
 	publishPackFlowDataChanged,
 } from "../utils/packFlowDataEvents";
 import {
@@ -5757,6 +5760,9 @@ export default function DispatchedItemsPage() {
 	const isLogistics =
 		hasRole("LOGISTICS");
 
+	const canRequestLifecycleFromDispatch =
+		!isAdmin && isDispatch;
+
 	const rolesKey =
 		roles.join("|");
 
@@ -5780,6 +5786,11 @@ export default function DispatchedItemsPage() {
 	const [bulkStatusLoading, setBulkStatusLoading] =
 		useState(false);
 	const [selectionModel, setSelectionModel] = useState([]);
+	const [lifecycleRequestOpen, setLifecycleRequestOpen] = useState(false);
+	const [lifecycleRequestRows, setLifecycleRequestRows] = useState([]);
+	const [lifecycleRequestReason, setLifecycleRequestReason] = useState("");
+	const [lifecycleRequestSubmitting, setLifecycleRequestSubmitting] = useState(false);
+	const [lifecycleRequestError, setLifecycleRequestError] = useState("");
 	const [bulkDrawerOpen, setBulkDrawerOpen] = useState(false);
 	const [bulkLoading, setBulkLoading] = useState(false);
 	const [bulkReturnDecisionLoading, setBulkReturnDecisionLoading] = useState("");
@@ -12193,6 +12204,164 @@ export default function DispatchedItemsPage() {
 		});
 	}, [rows, selectionModel]);
 
+
+	const LIFECYCLE_REQUESTABLE_DISPATCH_STATUSES = new Set([
+		"READY",
+		"READY_TO_STORE",
+		"WAREHOUSE_REQUESTED",
+		"IN_WAREHOUSE",
+		"WAREHOUSE_RETURN_REQUESTED",
+		"READY_TO_DISPATCH",
+		"DISPATCHED",
+	]);
+
+	const isLifecycleRequestableDispatchRow = (row) => {
+		const status = String(row?.status || "")
+			.trim()
+			.toUpperCase();
+
+		return Boolean(
+			row &&
+			LIFECYCLE_REQUESTABLE_DISPATCH_STATUSES.has(status) &&
+			(row?.packetItemId || row?.zohoItemId)
+		);
+	};
+
+	const getLifecycleRequestDispatchTargetId = (row) =>
+		String(
+			row?.packetItemId ||
+			row?.zohoItemId ||
+			""
+		).trim();
+
+	const openLifecycleRequestModal = (targetRows) => {
+		if (!canRequestLifecycleFromDispatch) {
+			alert("Only a Dispatch user can request a packet lifecycle rollback from this page.");
+			return;
+		}
+
+		const uniqueRows = [];
+		const seen = new Set();
+
+		(Array.isArray(targetRows) ? targetRows : [])
+			.forEach((row) => {
+				if (!isLifecycleRequestableDispatchRow(row)) {
+					return;
+				}
+
+				const targetId =
+					getLifecycleRequestDispatchTargetId(row);
+
+				if (!targetId || seen.has(targetId)) {
+					return;
+				}
+
+				seen.add(targetId);
+				uniqueRows.push(row);
+			});
+
+		if (uniqueRows.length === 0) {
+			alert("The selected item is not in a lifecycle state supported by Admin Move Packet Back.");
+			return;
+		}
+
+		setLifecycleRequestRows(uniqueRows);
+		setLifecycleRequestReason("");
+		setLifecycleRequestError("");
+		setLifecycleRequestOpen(true);
+	};
+
+	const closeLifecycleRequestModal = () => {
+		if (lifecycleRequestSubmitting) {
+			return;
+		}
+
+		setLifecycleRequestOpen(false);
+		setLifecycleRequestRows([]);
+		setLifecycleRequestReason("");
+		setLifecycleRequestError("");
+	};
+
+	const submitLifecycleRequest = async () => {
+		if (lifecycleRequestSubmitting) {
+			return;
+		}
+
+		const reason =
+			String(lifecycleRequestReason || "").trim();
+
+		if (reason.length < 5) {
+			setLifecycleRequestError(
+				"Please enter a clear reason of at least 5 characters."
+			);
+			return;
+		}
+
+		if (reason.length > 1000) {
+			setLifecycleRequestError(
+				"Reason cannot exceed 1000 characters."
+			);
+			return;
+		}
+
+		const targetIds =
+			lifecycleRequestRows
+				.map(getLifecycleRequestDispatchTargetId)
+				.filter(Boolean);
+
+		if (targetIds.length === 0) {
+			setLifecycleRequestError(
+				"No valid packet items are selected."
+			);
+			return;
+		}
+
+		try {
+			setLifecycleRequestSubmitting(true);
+			setLifecycleRequestError("");
+
+			const result =
+				await submitPacketLifecycleRequests({
+					targetIds,
+					reason,
+					source: "DISPATCH",
+				});
+
+			const requestedIds = new Set(
+				lifecycleRequestRows
+					.map((row) => String(row?.zohoItemId || "").trim())
+					.filter(Boolean)
+			);
+
+			setSelectionModel((previous) =>
+				(previous || []).filter(
+					(id) => !requestedIds.has(String(id || "").trim())
+				)
+			);
+
+			setLifecycleRequestOpen(false);
+			setLifecycleRequestRows([]);
+			setLifecycleRequestReason("");
+
+			alert(
+				result?.message ||
+				"State-change request sent to Admin for approval."
+			);
+		} catch (error) {
+			console.error(
+				"Lifecycle state request failed:",
+				error
+			);
+
+			setLifecycleRequestError(
+				error?.message ||
+				"Unable to send state-change request."
+			);
+		} finally {
+			setLifecycleRequestSubmitting(false);
+		}
+	};
+
 	const patchDispatchRows = (
 		itemIds,
 		patchValue
@@ -13707,6 +13876,10 @@ export default function DispatchedItemsPage() {
 					["DISPATCHED", "DELIVERED"].includes(row.status) &&
 					row.approvalStatus !== "PENDING";
 
+				const canRequestLifecycleMoveBack =
+					canRequestLifecycleFromDispatch &&
+					isLifecycleRequestableDispatchRow(row);
+
 
 				return (
 					<Box sx={actionContainer}>
@@ -13874,6 +14047,21 @@ export default function DispatchedItemsPage() {
 								Delete
 							</Button>
 						)}
+						{canRequestLifecycleMoveBack && (
+							<Button
+								size="small"
+								onClick={() =>
+									openLifecycleRequestModal([row])
+								}
+								sx={{
+									...actionWarning,
+									...tableActionButton,
+								}}
+							>
+								Request Previous State
+							</Button>
+						)}
+
 						{canRequestRestore && (
 							<Button
 								size="small"
@@ -14583,6 +14771,20 @@ export default function DispatchedItemsPage() {
 			})
 			.filter(Boolean);
 	}, [rows, selectionModel]);
+
+	const selectedLifecycleRequestableItems =
+		useMemo(
+			() =>
+				selectedItems.filter(
+					isLifecycleRequestableDispatchRow
+				),
+			[selectedItems]
+		);
+
+	const allSelectedLifecycleRequestable =
+		selectionModel.length > 0 &&
+		selectedLifecycleRequestableItems.length ===
+		selectionModel.length;
 
 	const selectedReturnRequestItems = useMemo(() => {
 		return selectedItems.filter(
@@ -21665,6 +21867,41 @@ export default function DispatchedItemsPage() {
 								)}
 							</Box>
 
+							{canRequestLifecycleFromDispatch && (
+								<Button
+									size="small"
+									disabled={
+										!allSelectedLifecycleRequestable ||
+										lifecycleRequestSubmitting
+									}
+									title={
+										allSelectedLifecycleRequestable
+											? "Send selected packets to Admin for one-step lifecycle rollback approval"
+											: "Every selected row must be in a state supported by Admin Move Packet Back"
+									}
+									onClick={() =>
+										openLifecycleRequestModal(
+											selectedLifecycleRequestableItems
+										)
+									}
+									sx={{
+										px: 2.4,
+										height: 38,
+										borderRadius: "12px",
+										fontWeight: 900,
+										textTransform: "none",
+										background: "linear-gradient(180deg,#7c3aed,#6d28d9)",
+										color: "#fff",
+										"&:disabled": {
+											opacity: 0.42,
+											color: "#fff",
+										},
+									}}
+								>
+									Request Previous State
+								</Button>
+							)}
+
 							{/*
 			 * ADMIN-SPECIFIC ACTION
 			 *
@@ -23638,6 +23875,170 @@ export default function DispatchedItemsPage() {
 						</Box>
 					</Box>
 				)}
+				{lifecycleRequestOpen && (
+					<Box
+						sx={{ ...enhancedOverlaySx, zIndex: 6400 }}
+						onClick={(event) => {
+							if (
+								event.target === event.currentTarget &&
+								!lifecycleRequestSubmitting
+							) {
+								closeLifecycleRequestModal();
+							}
+						}}
+					>
+						<Box
+							sx={{
+								...enhancedModalSx,
+								width: 680,
+								maxHeight: "88vh",
+							}}
+							onClick={(event) => event.stopPropagation()}
+						>
+							<Box sx={modalHeaderSx}>
+								<Box sx={modalTitleWrapSx}>
+									<Box sx={modalIconBubble("#7c3aed")}>
+										↩
+									</Box>
+
+									<Box>
+										<Box sx={modalTitleSx}>
+											Request Previous Packet State
+										</Box>
+
+										<Box sx={modalSubtitleSx}>
+											Admin approval is required. No packet data changes until approval.
+										</Box>
+									</Box>
+								</Box>
+
+								<IconButton
+									disabled={lifecycleRequestSubmitting}
+									sx={modalCloseButtonSx}
+									onClick={closeLifecycleRequestModal}
+								>
+									×
+								</IconButton>
+							</Box>
+
+							<Box sx={modalContentSx}>
+								<Box
+									sx={{
+										p: 1.5,
+										mb: 1.5,
+										borderRadius: "12px",
+										background: "rgba(124,58,237,.07)",
+										border: "1px solid rgba(167,139,250,.18)",
+										color: "var(--pf-text)",
+										fontSize: 12,
+										lineHeight: 1.55,
+									}}
+								>
+									<strong>{lifecycleRequestRows.length}</strong>{" "}
+									packet{lifecycleRequestRows.length === 1 ? "" : "s"}{" "}
+									will be submitted for the exact one-step rollback supported by Admin Center. The backend records the current and requested previous states and blocks stale approvals if the packet changes later.
+								</Box>
+
+								<Box
+									sx={{
+										display: "flex",
+										flexDirection: "column",
+										gap: 0.8,
+										maxHeight: 190,
+										overflowY: "auto",
+										mb: 1.5,
+									}}
+								>
+									{lifecycleRequestRows.map((row) => (
+										<Box
+											key={getLifecycleRequestDispatchTargetId(row)}
+											sx={{
+												p: 1.15,
+												borderRadius: "10px",
+												background: "var(--pf-surface-alt)",
+												border: "1px solid var(--pf-border-soft)",
+											}}
+										>
+											<Box sx={{ fontWeight: 900, fontSize: 12 }}>
+												{row?.name || row?.itemName || "Packet"}
+											</Box>
+											<Box sx={{ mt: 0.35, color: "var(--pf-text-muted)", fontSize: 10.5 }}>
+												{getDispatchDrawerPacketNumber(row)} · {row?.sku || "No SKU"} · {row?.status || "Unknown state"}
+											</Box>
+										</Box>
+									))}
+								</Box>
+
+								<TextField
+									fullWidth
+									multiline
+									minRows={4}
+									maxRows={8}
+									label="Reason for state-change request"
+									placeholder="Explain why these packet(s) should be moved back one lifecycle state..."
+									value={lifecycleRequestReason}
+									disabled={lifecycleRequestSubmitting}
+									inputProps={{ maxLength: 1000 }}
+									onChange={(event) => {
+										setLifecycleRequestReason(event.target.value);
+										if (lifecycleRequestError) {
+											setLifecycleRequestError("");
+										}
+									}}
+									sx={formFieldSx}
+								/>
+
+								<Box sx={{ mt: 0.65, textAlign: "right", color: "var(--pf-text-muted)", fontSize: 10 }}>
+									{lifecycleRequestReason.length}/1000
+								</Box>
+
+								{lifecycleRequestError && (
+									<Box
+										sx={{
+											mt: 1.2,
+											p: 1.2,
+											borderRadius: "10px",
+											background: "rgba(239,68,68,.08)",
+											border: "1px solid rgba(248,113,113,.18)",
+											color: "#ef4444",
+											fontSize: 11,
+											fontWeight: 800,
+										}}
+									>
+										{lifecycleRequestError}
+									</Box>
+								)}
+							</Box>
+
+							<Box sx={modalFooterSx}>
+								<Button
+									disabled={lifecycleRequestSubmitting}
+									onClick={closeLifecycleRequestModal}
+									sx={modalSecondaryButtonSx}
+								>
+									Cancel
+								</Button>
+
+								<Button
+									disabled={
+										lifecycleRequestSubmitting ||
+										String(lifecycleRequestReason || "").trim().length < 5
+									}
+									onClick={submitLifecycleRequest}
+									sx={{
+										...premiumButton,
+										background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+									}}
+								>
+									{lifecycleRequestSubmitting
+										? "Sending Request..."
+										: "Send to Admin"}
+								</Button>
+							</Box>
+						</Box>
+					</Box>
+				)}
+
 				{historyOpen && (
 					<Box
 						sx={{ ...enhancedOverlaySx, zIndex: 2000 }}

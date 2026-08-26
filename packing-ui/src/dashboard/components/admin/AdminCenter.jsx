@@ -24,6 +24,12 @@ import {
     searchAdminPacketItems,
 } from "../../api/dashboardApi";
 
+import {
+    approvePacketLifecycleRequests,
+    fetchPendingPacketLifecycleRequests,
+    rejectPacketLifecycleRequests,
+} from "../../api/packetLifecycleRequestApi";
+
 async function requestAdminWarehouseDeletion(
     path,
     options = {}
@@ -1120,6 +1126,452 @@ function DeletionHistory({
     );
 }
 
+function AdminLifecycleRequestQueue({
+    onChanged,
+}) {
+    const [page, setPage] =
+        useState(EMPTY_PAGE);
+    const [pageNo, setPageNo] =
+        useState(0);
+    const [loading, setLoading] =
+        useState(false);
+    const [error, setError] =
+        useState("");
+    const [message, setMessage] =
+        useState("");
+    const [selectedIds, setSelectedIds] =
+        useState([]);
+    const [decisionReason, setDecisionReason] =
+        useState("");
+    const [acting, setActing] =
+        useState(false);
+
+    const rows =
+        Array.isArray(page?.content)
+            ? page.content
+            : [];
+
+    const selectedSet = useMemo(
+        () => new Set(selectedIds),
+        [selectedIds]
+    );
+
+    const allVisibleSelected =
+        rows.length > 0 &&
+        rows.every((row) =>
+            selectedSet.has(row.id)
+        );
+
+    const someVisibleSelected =
+        rows.some((row) =>
+            selectedSet.has(row.id)
+        );
+
+    const load = useCallback(
+        async (requestedPage = 0) => {
+            setLoading(true);
+            setError("");
+
+            try {
+                const data =
+                    await fetchPendingPacketLifecycleRequests({
+                        page: requestedPage,
+                        size: 50,
+                    });
+
+                const normalized =
+                    normalizePageResponse(
+                        data,
+                        requestedPage,
+                        50
+                    );
+
+                setPage(normalized);
+                setPageNo(
+                    normalized.number || 0
+                );
+                setSelectedIds([]);
+            } catch (loadError) {
+                console.error(loadError);
+                setPage(EMPTY_PAGE);
+                setError(
+                    loadError?.message ||
+                    "Unable to load pending lifecycle requests."
+                );
+            } finally {
+                setLoading(false);
+            }
+        },
+        []
+    );
+
+    useEffect(() => {
+        load(0);
+    }, [load]);
+
+    const toggleVisible = (checked) => {
+        const visibleIds = rows
+            .map((row) => row?.id)
+            .filter(Boolean);
+
+        setSelectedIds((previous) => {
+            const next = new Set(previous);
+
+            visibleIds.forEach((id) => {
+                if (checked) {
+                    next.add(id);
+                } else {
+                    next.delete(id);
+                }
+            });
+
+            return Array.from(next);
+        });
+    };
+
+    const toggleOne = (id, checked) => {
+        if (!id) return;
+
+        setSelectedIds((previous) => {
+            const next = new Set(previous);
+
+            if (checked) {
+                next.add(id);
+            } else {
+                next.delete(id);
+            }
+
+            return Array.from(next);
+        });
+    };
+
+    const approve = async (ids) => {
+        const requestIds = Array.from(
+            new Set(
+                (ids || []).filter(Boolean)
+            )
+        );
+
+        if (requestIds.length === 0 || acting) {
+            return;
+        }
+
+        setActing(true);
+        setError("");
+        setMessage("");
+
+        try {
+            const result =
+                await approvePacketLifecycleRequests({
+                    requestIds,
+                    reason: decisionReason,
+                });
+
+            setMessage(
+                result?.message ||
+                "Lifecycle request approved."
+            );
+            setDecisionReason("");
+            setSelectedIds([]);
+
+            try {
+                await onChanged?.();
+            } catch (refreshError) {
+                console.error(refreshError);
+            }
+
+            await load(0);
+        } catch (actionError) {
+            console.error(actionError);
+            setError(
+                actionError?.message ||
+                "Unable to approve lifecycle request."
+            );
+        } finally {
+            setActing(false);
+        }
+    };
+
+    const reject = async (ids) => {
+        const requestIds = Array.from(
+            new Set(
+                (ids || []).filter(Boolean)
+            )
+        );
+
+        if (requestIds.length === 0 || acting) {
+            return;
+        }
+
+        const reason =
+            String(decisionReason || "").trim();
+
+        if (reason.length < 3) {
+            setError(
+                "Enter a rejection reason of at least 3 characters."
+            );
+            return;
+        }
+
+        setActing(true);
+        setError("");
+        setMessage("");
+
+        try {
+            const result =
+                await rejectPacketLifecycleRequests({
+                    requestIds,
+                    reason,
+                });
+
+            setMessage(
+                result?.message ||
+                "Lifecycle request rejected."
+            );
+            setDecisionReason("");
+            setSelectedIds([]);
+            await load(0);
+        } catch (actionError) {
+            console.error(actionError);
+            setError(
+                actionError?.message ||
+                "Unable to reject lifecycle request."
+            );
+        } finally {
+            setActing(false);
+        }
+    };
+
+    return (
+        <div style={requestQueueShell}>
+            <div style={requestQueueHeader}>
+                <div>
+                    <div style={sectionEyebrow}>
+                        USER APPROVAL QUEUE
+                    </div>
+
+                    <h3 style={sectionTitle}>
+                        Requested Packet State Changes
+                    </h3>
+
+                    <p style={sectionDescription}>
+                        Users can only request the same one-step rollback already supported by Admin Center. Approval re-checks the live packet state under a database lock before any change is made.
+                    </p>
+                </div>
+
+                <div style={requestCountBadge}>
+                    {Number(page?.totalElements || 0)} pending
+                </div>
+            </div>
+
+            <div style={requestQueueToolbar}>
+                <label style={requestSelectAllLabel}>
+                    <input
+                        type="checkbox"
+                        ref={(element) => {
+                            if (element) {
+                                element.indeterminate =
+                                    someVisibleSelected &&
+                                    !allVisibleSelected;
+                            }
+                        }}
+                        checked={allVisibleSelected}
+                        disabled={loading || rows.length === 0 || acting}
+                        onChange={(event) =>
+                            toggleVisible(event.target.checked)
+                        }
+                    />
+                    Select page
+                </label>
+
+                <div style={requestQueueSelectionMeta}>
+                    {selectedIds.length} selected
+                </div>
+
+                <button
+                    type="button"
+                    disabled={selectedIds.length === 0 || acting}
+                    onClick={() => approve(selectedIds)}
+                    style={requestApproveButton(
+                        selectedIds.length === 0 || acting
+                    )}
+                >
+                    {acting ? "Processing..." : "Approve Selected"}
+                </button>
+
+                <button
+                    type="button"
+                    disabled={selectedIds.length === 0 || acting}
+                    onClick={() => reject(selectedIds)}
+                    style={requestRejectButton(
+                        selectedIds.length === 0 || acting
+                    )}
+                >
+                    Reject Selected
+                </button>
+
+                <button
+                    type="button"
+                    disabled={loading || acting}
+                    onClick={() => load(pageNo)}
+                    style={requestRefreshButton}
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div style={requestDecisionNoteWrap}>
+                <label style={requestDecisionLabel}>
+                    Admin note / rejection reason
+                </label>
+
+                <textarea
+                    value={decisionReason}
+                    disabled={acting}
+                    maxLength={500}
+                    onChange={(event) =>
+                        setDecisionReason(event.target.value)
+                    }
+                    placeholder="Optional for approval. Required when rejecting."
+                    style={requestDecisionTextarea}
+                />
+
+                <div style={requestDecisionCounter}>
+                    {decisionReason.length}/500
+                </div>
+            </div>
+
+            {error && (
+                <div style={errorBox}>
+                    {error}
+                </div>
+            )}
+
+            {message && (
+                <div style={requestSuccessBox}>
+                    {message}
+                </div>
+            )}
+
+            {loading ? (
+                <div style={requestEmptyState}>
+                    Loading pending requests...
+                </div>
+            ) : rows.length === 0 ? (
+                <div style={requestEmptyState}>
+                    No pending packet lifecycle requests.
+                </div>
+            ) : (
+                <div style={requestQueueList}>
+                    {rows.map((row) => {
+                        const selected =
+                            selectedSet.has(row.id);
+
+                        return (
+                            <div
+                                key={row.id}
+                                style={requestQueueCard(
+                                    selected
+                                )}
+                            >
+                                <div style={requestQueueCardTop}>
+                                    <label style={requestRowCheckboxLabel}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            disabled={acting}
+                                            onChange={(event) =>
+                                                toggleOne(
+                                                    row.id,
+                                                    event.target.checked
+                                                )
+                                            }
+                                        />
+                                    </label>
+
+                                    <div style={requestQueueIdentity}>
+                                        <div style={requestQueueTitle}>
+                                            {row.displayName || row.itemName || row.packetItemId}
+                                        </div>
+
+                                        <div style={requestQueueMetaLine}>
+                                            Requested by <strong>{row.requestedBy || "-"}</strong>
+                                            {" · "}
+                                            {formatDateTime(row.requestedAt)}
+                                            {" · "}
+                                            {row.source === "INVENTORY_HISTORY"
+                                                ? "Inventory Generated History"
+                                                : "Dispatch"}
+                                        </div>
+                                    </div>
+
+                                    <div style={requestQueueStateBadge}>
+                                        {row.requestedFromLabel || row.requestedFromState}
+                                        <span>→</span>
+                                        {row.requestedToLabel || row.requestedToState}
+                                    </div>
+                                </div>
+
+                                <div style={requestQueueInfoGrid}>
+                                    <div>
+                                        <span>Packet</span>
+                                        <strong>{row.packetNumber || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>SKU</span>
+                                        <strong>{row.sku || "-"}</strong>
+                                    </div>
+                                    <div>
+                                        <span>PD / DWG</span>
+                                        <strong>
+                                            {row.pdNo || "-"} / {row.drawingNo || "-"}
+                                        </strong>
+                                    </div>
+                                    <div>
+                                        <span>Plant</span>
+                                        <strong>{row.plantCode || "-"}</strong>
+                                    </div>
+                                </div>
+
+                                <div style={requestReasonBox}>
+                                    <span>User reason</span>
+                                    <strong>{row.reason || "-"}</strong>
+                                </div>
+
+                                <div style={requestQueueCardActions}>
+                                    <button
+                                        type="button"
+                                        disabled={acting}
+                                        onClick={() => approve([row.id])}
+                                        style={requestApproveButton(acting)}
+                                    >
+                                        Approve & Move Back
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        disabled={acting}
+                                        onClick={() => reject([row.id])}
+                                        style={requestRejectButton(acting)}
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            <ResultPagination
+                page={page}
+                onPageChange={load}
+                disabled={loading || acting}
+            />
+        </div>
+    );
+}
+
 function AdminPacketRollbackPanel({
     onChanged,
 }) {
@@ -1992,7 +2444,7 @@ function AdminCenter({
         onChanged || onDeleted;
 
     const [workspaceTab, setWorkspaceTab] =
-        useState("rollback");
+        useState("requests");
 
     const [targetType, setTargetType] =
         useState("PACKET_ITEM");
@@ -2873,13 +3325,13 @@ function AdminCenter({
                     height: 10px;
                 }
                 .admin-center-scroll::-webkit-scrollbar-track {
-                    background: rgba(15,23,42,.88);
+                    background: rgba(var(--pf-surface-rgb),.88);
                     border-radius: 999px;
                 }
                 .admin-center-scroll::-webkit-scrollbar-thumb {
                     background: linear-gradient(180deg,#2563eb,#60a5fa);
                     border-radius: 999px;
-                    border: 2px solid rgba(15,23,42,.95);
+                    border: 2px solid rgba(var(--pf-surface-rgb),.95);
                 }
                 .admin-center-scroll::-webkit-scrollbar-thumb:hover {
                     background: linear-gradient(180deg,#3b82f6,#93c5fd);
@@ -2899,7 +3351,7 @@ function AdminCenter({
                             </div>
 
                             <div style={modalSubtitle}>
-                                Manage packet lifecycle corrections and permanent administrative deletion
+                                Review user lifecycle requests, correct packet states and manage permanent administrative deletion
                             </div>
                         </div>
                     </div>
@@ -2928,6 +3380,18 @@ function AdminCenter({
                     </div>
                 )}
                 <div style={workspaceTabs}>
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setWorkspaceTab("requests")
+                        }
+                        style={workspaceTabButton(
+                            workspaceTab === "requests"
+                        )}
+                    >
+                        User Requests
+                    </button>
+
                     <button
                         type="button"
                         onClick={() =>
@@ -2978,6 +3442,12 @@ function AdminCenter({
                 </div>
 
                 <div style={modalBody} className="admin-center-scroll">
+                    {workspaceTab === "requests" && (
+                        <AdminLifecycleRequestQueue
+                            onChanged={notifyAdminDataChanged}
+                        />
+                    )}
+
                     {workspaceTab ===
                         "deletionHistory" && (
                             <DeletionHistory
@@ -3729,14 +4199,276 @@ function AdminCenter({
     );
 }
 
+const sectionEyebrow = {
+    marginBottom: 5,
+    color: "#3b82f6",
+    fontSize: 9.5,
+    fontWeight: 950,
+    letterSpacing: ".085em",
+    textTransform: "uppercase",
+};
+
+const sectionTitle = {
+    margin: 0,
+    color: "var(--pf-text-strong)",
+    fontSize: 18,
+    fontWeight: 950,
+};
+
+const requestQueueShell = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+};
+
+const requestQueueHeader = {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 18,
+};
+
+const requestCountBadge = {
+    flexShrink: 0,
+    minHeight: 30,
+    padding: "0 11px",
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    background: "rgba(59,130,246,.10)",
+    border: "1px solid rgba(96,165,250,.18)",
+    color: "#60a5fa",
+    fontSize: 10.5,
+    fontWeight: 950,
+};
+
+const requestQueueToolbar = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    padding: 11,
+    borderRadius: 14,
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.065)",
+};
+
+const requestSelectAllLabel = {
+    minHeight: 32,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    color: "var(--pf-text)",
+    fontSize: 10.5,
+    fontWeight: 900,
+};
+
+const requestQueueSelectionMeta = {
+    marginRight: "auto",
+    color: "var(--pf-text-muted)",
+    fontSize: 10.5,
+    fontWeight: 800,
+};
+
+const requestActionBase = (disabled) => ({
+    minHeight: 34,
+    padding: "0 12px",
+    borderRadius: 10,
+    border: "1px solid transparent",
+    opacity: disabled ? 0.45 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    fontSize: 10.5,
+    fontWeight: 950,
+});
+
+const requestApproveButton = (disabled) => ({
+    ...requestActionBase(disabled),
+    background: "linear-gradient(135deg,#047857,#10b981)",
+    borderColor: "rgba(52,211,153,.24)",
+    color: "#fff",
+});
+
+const requestRejectButton = (disabled) => ({
+    ...requestActionBase(disabled),
+    background: "rgba(239,68,68,.08)",
+    borderColor: "rgba(248,113,113,.18)",
+    color: "#ef4444",
+});
+
+const requestRefreshButton = {
+    ...requestActionBase(false),
+    background: "rgba(59,130,246,.07)",
+    borderColor: "rgba(96,165,250,.14)",
+    color: "#3b82f6",
+};
+
+const requestDecisionNoteWrap = {
+    position: "relative",
+    padding: 11,
+    borderRadius: 14,
+    background: "rgba(var(--pf-surface-rgb),.28)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.06)",
+};
+
+const requestDecisionLabel = {
+    display: "block",
+    marginBottom: 7,
+    color: "var(--pf-text-muted)",
+    fontSize: 10,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: ".055em",
+};
+
+const requestDecisionTextarea = {
+    width: "100%",
+    minHeight: 74,
+    resize: "vertical",
+    boxSizing: "border-box",
+    padding: "10px 11px 22px",
+    borderRadius: 11,
+    outline: "none",
+    border: "1px solid rgba(96,165,250,.12)",
+    background: "var(--pf-surface)",
+    color: "var(--pf-text)",
+    fontFamily: "inherit",
+    fontSize: 11.5,
+    lineHeight: 1.5,
+};
+
+const requestDecisionCounter = {
+    position: "absolute",
+    right: 20,
+    bottom: 16,
+    color: "var(--pf-text-muted)",
+    fontSize: 9,
+    fontWeight: 800,
+};
+
+const requestSuccessBox = {
+    padding: "10px 12px",
+    borderRadius: 12,
+    background: "rgba(16,185,129,.08)",
+    border: "1px solid rgba(52,211,153,.16)",
+    color: "#10b981",
+    fontSize: 11,
+    fontWeight: 850,
+};
+
+const requestEmptyState = {
+    padding: 28,
+    borderRadius: 16,
+    textAlign: "center",
+    color: "var(--pf-text-muted)",
+    background: "rgba(var(--pf-fg-rgb),.025)",
+    border: "1px dashed rgba(var(--pf-fg-rgb),.08)",
+    fontSize: 11.5,
+    fontWeight: 800,
+};
+
+const requestQueueList = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+};
+
+const requestQueueCard = (selected) => ({
+    padding: 14,
+    borderRadius: 16,
+    background: selected
+        ? "rgba(59,130,246,.075)"
+        : "rgba(var(--pf-fg-rgb),.03)",
+    border: selected
+        ? "1px solid rgba(96,165,250,.22)"
+        : "1px solid rgba(var(--pf-fg-rgb),.06)",
+    boxShadow: selected
+        ? "0 10px 28px rgba(37,99,235,.08)"
+        : "none",
+});
+
+const requestQueueCardTop = {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 11,
+};
+
+const requestRowCheckboxLabel = {
+    paddingTop: 3,
+};
+
+const requestQueueIdentity = {
+    flex: 1,
+    minWidth: 0,
+};
+
+const requestQueueTitle = {
+    color: "var(--pf-text-strong)",
+    fontSize: 13,
+    fontWeight: 950,
+    wordBreak: "break-word",
+};
+
+const requestQueueMetaLine = {
+    marginTop: 5,
+    color: "var(--pf-text-muted)",
+    fontSize: 9.8,
+    fontWeight: 700,
+    lineHeight: 1.45,
+};
+
+const requestQueueStateBadge = {
+    flexShrink: 0,
+    maxWidth: 280,
+    padding: "7px 9px",
+    borderRadius: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: "rgba(245,158,11,.08)",
+    border: "1px solid rgba(251,191,36,.15)",
+    color: "#f59e0b",
+    fontSize: 9.5,
+    fontWeight: 950,
+};
+
+const requestQueueInfoGrid = {
+    marginTop: 11,
+    display: "grid",
+    gridTemplateColumns: "repeat(4,minmax(0,1fr))",
+    gap: 7,
+};
+
+const requestReasonBox = {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 11,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    background: "rgba(var(--pf-surface-rgb),.32)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.05)",
+    color: "var(--pf-text)",
+    fontSize: 10.5,
+};
+
+const requestQueueCardActions = {
+    marginTop: 11,
+    paddingTop: 10,
+    borderTop: "1px solid rgba(var(--pf-fg-rgb),.055)",
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+    flexWrap: "wrap",
+};
+
 const overlay = {
     position: "fixed",
     inset: 0,
     zIndex: 12000,
     padding: 20,
 
-    background:
-        "rgba(2,6,23,.84)",
+    background: "rgba(var(--pf-surface-deep-rgb),.78)",
 
     backdropFilter: "blur(14px)",
 
@@ -3746,9 +4478,10 @@ const overlay = {
 };
 
 const modal = {
+    colorScheme: "var(--pf-color-scheme)",
     width: "min(1280px, 100%)",
     height: "min(850px, calc(100vh - 40px))",
-    minHeight: 580,
+    minHeight: 0,
 
     display: "flex",
     flexDirection: "column",
@@ -3756,15 +4489,15 @@ const modal = {
     borderRadius: 28,
 
     background:
-        "radial-gradient(circle at top right, rgba(239,68,68,.10), transparent 28%), linear-gradient(180deg, rgba(15,23,42,.99), rgba(2,6,23,.98))",
+        "radial-gradient(circle at top right, rgba(239,68,68,.10), transparent 28%), linear-gradient(180deg, rgba(var(--pf-surface-rgb),.99), rgba(var(--pf-surface-rgb),.98))",
 
     border:
         "1px solid rgba(248,113,113,.20)",
 
     boxShadow:
-        "0 40px 110px rgba(0,0,0,.72)",
+        "0 30px 86px rgba(var(--pf-shadow-rgb),.26)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     overflow: "hidden",
 };
 
@@ -3777,7 +4510,7 @@ const modalHeader = {
     gap: 16,
 
     borderBottom:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const headerIdentity = {
@@ -3814,7 +4547,7 @@ const modalSubtitle = {
     marginTop: 5,
     fontSize: 12.5,
     lineHeight: 1.5,
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(var(--pf-fg-rgb),.58)",
 };
 
 const closeButton = (disabled) => ({
@@ -3823,12 +4556,12 @@ const closeButton = (disabled) => ({
     borderRadius: 999,
 
     border:
-        "1px solid rgba(255,255,255,.10)",
+        "1px solid rgba(var(--pf-fg-rgb),.10)",
 
     background:
-        "rgba(255,255,255,.055)",
+        "rgba(var(--pf-fg-rgb),.055)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 24,
     cursor: disabled
         ? "not-allowed"
@@ -3848,7 +4581,7 @@ const permanentWarning = {
     border:
         "1px solid rgba(248,113,113,.20)",
 
-    color: "#fca5a5",
+    color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 12,
     fontWeight: 700,
     lineHeight: 1.55,
@@ -3866,10 +4599,10 @@ const workspaceTabs = {
     borderRadius: 14,
 
     background:
-        "rgba(255,255,255,.045)",
+        "rgba(var(--pf-fg-rgb),.045)",
 
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const workspaceTabButton = (active) => ({
@@ -3884,7 +4617,7 @@ const workspaceTabButton = (active) => ({
 
     color: active
         ? "#fff"
-        : "rgba(255,255,255,.62)",
+        : "rgba(var(--pf-fg-rgb),.62)",
 
     fontSize: 12,
     fontWeight: 900,
@@ -3902,7 +4635,7 @@ const modalBody = {
     overflowY: "auto",
     overflowX: "hidden",
     scrollbarWidth: "thin",
-    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
+    scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.88)",
 };
 
 const deleteLayout = {
@@ -3925,10 +4658,10 @@ const previewColumn = {
     borderRadius: 22,
 
     background:
-        "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018))",
+        "linear-gradient(180deg, rgba(var(--pf-fg-rgb),.045), rgba(var(--pf-fg-rgb),.018))",
 
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const typeTabs = {
@@ -3941,10 +4674,10 @@ const typeTabs = {
     borderRadius: 14,
 
     background:
-        "rgba(255,255,255,.04)",
+        "rgba(var(--pf-fg-rgb),.04)",
 
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const typeTabButton = (active) => ({
@@ -3960,8 +4693,8 @@ const typeTabButton = (active) => ({
         : "transparent",
 
     color: active
-        ? "#bfdbfe"
-        : "rgba(255,255,255,.58)",
+        ? "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))"
+        : "rgba(var(--pf-fg-rgb),.58)",
 
     fontSize: 12,
     fontWeight: 900,
@@ -3970,7 +4703,7 @@ const typeTabButton = (active) => ({
 
 const typeDescription = {
     margin: "9px 2px 14px",
-    color: "rgba(255,255,255,.48)",
+    color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 11.5,
     lineHeight: 1.5,
 };
@@ -3990,12 +4723,11 @@ const searchInput = {
     borderRadius: 13,
 
     border:
-        "1px solid rgba(255,255,255,.10)",
+        "1px solid rgba(var(--pf-fg-rgb),.10)",
 
-    background:
-        "rgba(2,6,23,.54)",
+    background: "var(--pf-input)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     outline: "none",
     fontFamily: "inherit",
     fontSize: 12.5,
@@ -4012,7 +4744,7 @@ const searchButton = (disabled) => ({
         : "linear-gradient(135deg,#2563eb,#3b82f6)",
 
     color: disabled
-        ? "rgba(255,255,255,.42)"
+        ? "rgba(var(--pf-fg-rgb),.42)"
         : "#fff",
 
     fontWeight: 900,
@@ -4031,7 +4763,7 @@ const searchSummary = {
     justifyContent: "space-between",
     alignItems: "center",
 
-    color: "rgba(255,255,255,.60)",
+    color: "rgba(var(--pf-fg-rgb),.60)",
     fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
@@ -4047,7 +4779,7 @@ const searchResults = {
     overflowX: "hidden",
     paddingRight: 6,
     scrollbarWidth: "thin",
-    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
+    scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.88)",
 };
 
 const searchResultCard = (
@@ -4060,13 +4792,13 @@ const searchResultCard = (
 
     border: selected
         ? "1px solid rgba(96,165,250,.52)"
-        : "1px solid rgba(255,255,255,.065)",
+        : "1px solid rgba(var(--pf-fg-rgb),.065)",
 
     background: selected
-        ? "linear-gradient(135deg, rgba(37,99,235,.16), rgba(255,255,255,.035))"
-        : "rgba(255,255,255,.032)",
+        ? "linear-gradient(135deg, rgba(37,99,235,.16), rgba(var(--pf-fg-rgb),.035))"
+        : "rgba(var(--pf-fg-rgb),.032)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     textAlign: "left",
     fontFamily: "inherit",
 
@@ -4087,7 +4819,7 @@ const searchResultTop = {
 const resultDescriptionLabel = {
     marginBottom: 5,
 
-    color: "rgba(255,255,255,.42)",
+    color: "rgba(var(--pf-fg-rgb),.42)",
 
     fontSize: 9,
     fontWeight: 900,
@@ -4097,7 +4829,7 @@ const resultDescriptionLabel = {
 };
 
 const resultDescriptionText = {
-    color: "rgba(255,255,255,.72)",
+    color: "rgba(var(--pf-fg-rgb),.72)",
 
     fontSize: 11.5,
     fontWeight: 650,
@@ -4135,7 +4867,7 @@ const resultTitle = {
     marginTop: 8,
     fontSize: 14,
     fontWeight: 900,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
 };
 
 const selectIndicator = (selected) => ({
@@ -4149,15 +4881,15 @@ const selectIndicator = (selected) => ({
 
     background: selected
         ? "rgba(34,197,94,.14)"
-        : "rgba(255,255,255,.06)",
+        : "rgba(var(--pf-fg-rgb),.06)",
 
     border: selected
         ? "1px solid rgba(74,222,128,.28)"
-        : "1px solid rgba(255,255,255,.08)",
+        : "1px solid rgba(var(--pf-fg-rgb),.08)",
 
     color: selected
-        ? "#86efac"
-        : "rgba(255,255,255,.68)",
+        ? "color-mix(in srgb,#059669 78%,var(--pf-text-strong))"
+        : "rgba(var(--pf-fg-rgb),.68)",
 
     fontWeight: 950,
 });
@@ -4173,7 +4905,7 @@ const resultMetaGrid = {
 
 const resultId = {
     marginTop: 10,
-    color: "rgba(255,255,255,.34)",
+    color: "rgba(var(--pf-fg-rgb),.34)",
     fontSize: 9.5,
     wordBreak: "break-all",
 };
@@ -4218,7 +4950,7 @@ const previewPlaceholderText = {
     marginTop: 7,
     maxWidth: 360,
 
-    color: "rgba(255,255,255,.48)",
+    color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 12.5,
     lineHeight: 1.6,
 };
@@ -4232,7 +4964,7 @@ const previewContent = {
     overflowX: "hidden",
     paddingRight: 5,
     scrollbarWidth: "thin",
-    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
+    scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.88)",
 };
 
 const previewHeader = {
@@ -4246,7 +4978,7 @@ const previewTitle = {
     marginTop: 9,
     fontSize: 19,
     fontWeight: 950,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
 };
 
 const permanentBadge = {
@@ -4259,7 +4991,7 @@ const permanentBadge = {
     border:
         "1px solid rgba(248,113,113,.27)",
 
-    color: "#fca5a5",
+    color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 10,
     fontWeight: 950,
     textTransform: "uppercase",
@@ -4283,7 +5015,7 @@ const impactWarning = {
     border:
         "1px solid rgba(251,191,36,.20)",
 
-    color: "#fde68a",
+    color: "color-mix(in srgb,#d97706 78%,var(--pf-text-strong))",
     fontSize: 11.5,
     fontWeight: 700,
     lineHeight: 1.55,
@@ -4292,7 +5024,7 @@ const impactWarning = {
 const sectionHeading = {
     marginBottom: 9,
 
-    color: "rgba(255,255,255,.72)",
+    color: "rgba(var(--pf-fg-rgb),.72)",
     fontSize: 11,
     fontWeight: 950,
     textTransform: "uppercase",
@@ -4301,7 +5033,7 @@ const sectionHeading = {
 
 const sectionDescription = {
     marginTop: 5,
-    color: "rgba(255,255,255,.46)",
+    color: "rgba(var(--pf-fg-rgb),.46)",
     fontSize: 11.5,
 };
 
@@ -4317,14 +5049,14 @@ const impactItem = {
     borderRadius: 13,
 
     background:
-        "rgba(255,255,255,.035)",
+        "rgba(var(--pf-fg-rgb),.035)",
 
     border:
-        "1px solid rgba(255,255,255,.06)",
+        "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const impactLabel = {
-    color: "rgba(255,255,255,.50)",
+    color: "rgba(var(--pf-fg-rgb),.50)",
     fontSize: 9.5,
     fontWeight: 850,
     textTransform: "uppercase",
@@ -4333,7 +5065,7 @@ const impactLabel = {
 
 const impactValue = {
     marginTop: 6,
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     fontSize: 22,
     fontWeight: 950,
 };
@@ -4342,14 +5074,14 @@ const confirmationSection = {
     paddingTop: 16,
 
     borderTop:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const fieldLabel = {
     display: "block",
     marginBottom: 7,
 
-    color: "rgba(255,255,255,.68)",
+    color: "rgba(var(--pf-fg-rgb),.68)",
     fontSize: 11,
     fontWeight: 900,
 };
@@ -4363,12 +5095,11 @@ const reasonInput = {
     borderRadius: 13,
 
     border:
-        "1px solid rgba(255,255,255,.10)",
+        "1px solid rgba(var(--pf-fg-rgb),.10)",
 
-    background:
-        "rgba(2,6,23,.52)",
+    background: "var(--pf-input)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     outline: "none",
 
     fontFamily: "inherit",
@@ -4381,7 +5112,7 @@ const fieldHelper = {
     marginTop: 5,
     marginBottom: 15,
 
-    color: "rgba(255,255,255,.38)",
+    color: "rgba(var(--pf-fg-rgb),.38)",
     fontSize: 10,
 };
 
@@ -4397,7 +5128,7 @@ const requiredConfirmationBox = {
     border:
         "1px dashed rgba(248,113,113,.32)",
 
-    color: "#fecaca",
+    color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
 
     fontFamily:
         "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -4414,21 +5145,21 @@ const rollbackIntro = {
     borderRadius: 16,
 
     background:
-        "linear-gradient(135deg, rgba(59,130,246,.12), rgba(255,255,255,.025))",
+        "linear-gradient(135deg, rgba(59,130,246,.12), rgba(var(--pf-fg-rgb),.025))",
 
     border:
         "1px solid rgba(96,165,250,.20)",
 };
 
 const rollbackIntroTitle = {
-    color: "#bfdbfe",
+    color: "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))",
     fontSize: 14,
     fontWeight: 950,
 };
 
 const rollbackIntroText = {
     marginTop: 6,
-    color: "rgba(255,255,255,.56)",
+    color: "rgba(var(--pf-fg-rgb),.56)",
     fontSize: 11.5,
     lineHeight: 1.55,
 };
@@ -4448,7 +5179,7 @@ const metadataCellStyles = {
 const metadataLabelStyles = {
     display: "block",
     marginBottom: 5,
-    color: "rgba(255,255,255,.40)",
+    color: "rgba(var(--pf-fg-rgb),.40)",
     fontSize: 9,
     fontWeight: 900,
     textTransform: "uppercase",
@@ -4457,7 +5188,7 @@ const metadataLabelStyles = {
 
 const metadataValueStyles = {
     display: "block",
-    color: "rgba(255,255,255,.82)",
+    color: "rgba(var(--pf-fg-rgb),.82)",
     fontSize: 11,
     fontWeight: 800,
     lineHeight: 1.45,
@@ -4470,10 +5201,10 @@ const stateBox = {
     borderRadius: 14,
 
     background:
-        "rgba(255,255,255,.04)",
+        "rgba(var(--pf-fg-rgb),.04)",
 
     border:
-        "1px solid rgba(255,255,255,.07)",
+        "1px solid rgba(var(--pf-fg-rgb),.07)",
 
     display: "flex",
     flexDirection: "column",
@@ -4481,7 +5212,7 @@ const stateBox = {
 };
 
 const stateArrow = {
-    color: "#93c5fd",
+    color: "#2563eb",
     fontSize: 22,
     fontWeight: 950,
 };
@@ -4502,7 +5233,7 @@ const changeItem = {
     border:
         "1px solid rgba(96,165,250,.13)",
 
-    color: "rgba(255,255,255,.72)",
+    color: "rgba(var(--pf-fg-rgb),.72)",
     fontSize: 11.5,
     fontWeight: 650,
 
@@ -4524,7 +5255,7 @@ const rollbackButton = (disabled) => ({
         : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
 
     color: disabled
-        ? "rgba(255,255,255,.36)"
+        ? "rgba(var(--pf-fg-rgb),.36)"
         : "#fff",
 
     fontFamily: "inherit",
@@ -4549,12 +5280,11 @@ const confirmationInput = (invalid) => ({
 
     border: invalid
         ? "1px solid rgba(248,113,113,.58)"
-        : "1px solid rgba(255,255,255,.10)",
+        : "1px solid rgba(var(--pf-fg-rgb),.10)",
 
-    background:
-        "rgba(2,6,23,.52)",
+    background: "var(--pf-input)",
 
-    color: "#fff",
+    color: "var(--pf-text-strong)",
     outline: "none",
 
     fontFamily:
@@ -4566,7 +5296,7 @@ const confirmationInput = (invalid) => ({
 
 const validationError = {
     marginTop: 6,
-    color: "#fca5a5",
+    color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 10.5,
     fontWeight: 700,
 };
@@ -4583,10 +5313,10 @@ const resultDescription = {
     borderRadius: 11,
 
     background:
-        "rgba(255,255,255,.035)",
+        "rgba(var(--pf-fg-rgb),.035)",
 
     border:
-        "1px solid rgba(255,255,255,.055)",
+        "1px solid rgba(var(--pf-fg-rgb),.055)",
 };
 
 const previewDescription = {
@@ -4595,7 +5325,7 @@ const previewDescription = {
     borderRadius: 15,
 
     background:
-        "linear-gradient(135deg, rgba(56,189,248,.08), rgba(255,255,255,.025))",
+        "linear-gradient(135deg, rgba(56,189,248,.08), rgba(var(--pf-fg-rgb),.025))",
 
     border:
         "1px solid rgba(56,189,248,.17)",
@@ -4614,7 +5344,7 @@ const previewDescriptionLabel = {
 };
 
 const previewDescriptionText = {
-    color: "rgba(255,255,255,.80)",
+    color: "rgba(var(--pf-fg-rgb),.80)",
 
     fontSize: 12.5,
     fontWeight: 650,
@@ -4637,7 +5367,7 @@ const deleteButton = (disabled) => ({
         : "linear-gradient(135deg,#b91c1c,#ef4444)",
 
     color: disabled
-        ? "rgba(255,255,255,.36)"
+        ? "rgba(var(--pf-fg-rgb),.36)"
         : "#fff",
 
     fontFamily: "inherit",
@@ -4664,7 +5394,7 @@ const errorBox = {
     border:
         "1px solid rgba(248,113,113,.21)",
 
-    color: "#fca5a5",
+    color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 11.5,
     fontWeight: 750,
     lineHeight: 1.5,
@@ -4675,12 +5405,12 @@ const emptyState = {
     borderRadius: 15,
 
     background:
-        "rgba(255,255,255,.03)",
+        "rgba(var(--pf-fg-rgb),.03)",
 
     border:
-        "1px solid rgba(255,255,255,.055)",
+        "1px solid rgba(var(--pf-fg-rgb),.055)",
 
-    color: "rgba(255,255,255,.48)",
+    color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 12,
     textAlign: "center",
 };
@@ -4700,14 +5430,14 @@ const paginationButton = (disabled) => ({
     borderRadius: 10,
 
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid rgba(var(--pf-fg-rgb),.08)",
 
     background: disabled
-        ? "rgba(255,255,255,.025)"
-        : "rgba(255,255,255,.06)",
+        ? "rgba(var(--pf-fg-rgb),.025)"
+        : "rgba(var(--pf-fg-rgb),.06)",
 
     color: disabled
-        ? "rgba(255,255,255,.28)"
+        ? "rgba(var(--pf-fg-rgb),.28)"
         : "#fff",
 
     fontFamily: "inherit",
@@ -4720,7 +5450,7 @@ const paginationButton = (disabled) => ({
 });
 
 const paginationText = {
-    color: "rgba(255,255,255,.48)",
+    color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 10.5,
     fontWeight: 750,
 };
@@ -4741,13 +5471,13 @@ const successBox = {
 };
 
 const successTitle = {
-    color: "#86efac",
+    color: "color-mix(in srgb,#059669 78%,var(--pf-text-strong))",
     fontSize: 17,
     fontWeight: 950,
 };
 
 const successMessage = {
-    color: "rgba(255,255,255,.72)",
+    color: "rgba(var(--pf-fg-rgb),.72)",
     fontSize: 12,
     lineHeight: 1.55,
 };
@@ -4772,12 +5502,12 @@ const historyTotal = {
     borderRadius: 999,
 
     background:
-        "rgba(255,255,255,.055)",
+        "rgba(var(--pf-fg-rgb),.055)",
 
     border:
-        "1px solid rgba(255,255,255,.08)",
+        "1px solid rgba(var(--pf-fg-rgb),.08)",
 
-    color: "rgba(255,255,255,.66)",
+    color: "rgba(var(--pf-fg-rgb),.66)",
     fontSize: 10.5,
     fontWeight: 850,
 };
@@ -4791,7 +5521,7 @@ const historyList = {
     overflowX: "hidden",
     paddingRight: 6,
     scrollbarWidth: "thin",
-    scrollbarColor: "#3b82f6 rgba(15,23,42,.88)",
+    scrollbarColor: "#3b82f6 rgba(var(--pf-surface-rgb),.88)",
 };
 
 const historyCard = {
@@ -4799,10 +5529,10 @@ const historyCard = {
     borderRadius: 17,
 
     background:
-        "rgba(255,255,255,.035)",
+        "rgba(var(--pf-fg-rgb),.035)",
 
     border:
-        "1px solid rgba(255,255,255,.065)",
+        "1px solid rgba(var(--pf-fg-rgb),.065)",
 };
 
 const historyCardHeader = {
@@ -4828,7 +5558,7 @@ const historyDeletedCount = {
     border:
         "1px solid rgba(248,113,113,.18)",
 
-    color: "#fca5a5",
+    color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 10,
     fontWeight: 900,
 };
@@ -4844,7 +5574,7 @@ const historyDetails = {
 
 const historyTargetId = {
     marginTop: 10,
-    color: "rgba(255,255,255,.32)",
+    color: "rgba(var(--pf-fg-rgb),.32)",
     fontSize: 9.5,
     wordBreak: "break-all",
 };
@@ -4863,7 +5593,7 @@ const resultStatusBadge = {
     borderRadius: 999,
     display: "inline-flex",
     alignItems: "center",
-    color: "#cbd5e1",
+    color: "var(--pf-text)",
     background: "rgba(148,163,184,.07)",
     border: "1px solid rgba(148,163,184,.11)",
     fontSize: 9,
@@ -4881,7 +5611,7 @@ const lifecycleMetaCard = {
     minWidth: 0,
     padding: 10,
     borderRadius: 13,
-    background: "rgba(2,6,23,.28)",
+    background: "rgba(var(--pf-surface-rgb),.28)",
     border: "1px solid rgba(148,163,184,.06)",
     display: "flex",
     flexDirection: "column",
@@ -4927,13 +5657,13 @@ const paginationShell = {
     marginTop: 13,
     padding: 10,
     borderRadius: 14,
-    background: "rgba(2,6,23,.26)",
+    background: "rgba(var(--pf-surface-rgb),.26)",
     border: "1px solid rgba(148,163,184,.06)",
 };
 
 const paginationRecordMeta = {
     marginBottom: 8,
-    color: "#64748b",
+    color: "var(--pf-text-muted)",
     fontSize: 9.5,
     fontWeight: 800,
 };
@@ -4957,8 +5687,8 @@ const paginationNumberButton = (
         : "1px solid rgba(148,163,184,.07)",
     background: active
         ? "linear-gradient(135deg,#2563eb,#3b82f6)"
-        : "rgba(255,255,255,.035)",
-    color: active ? "#fff" : "#cbd5e1",
+        : "rgba(var(--pf-fg-rgb),.035)",
+    color: active ? "#fff" : "var(--pf-text)",
     opacity: disabled ? 0.45 : 1,
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",
@@ -4974,7 +5704,7 @@ const paginationIconButton = (
     borderRadius: 9,
     border: "1px solid rgba(96,165,250,.10)",
     background: "rgba(59,130,246,.05)",
-    color: "#93c5fd",
+    color: "#2563eb",
     opacity: disabled ? 0.35 : 1,
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",

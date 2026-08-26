@@ -29,6 +29,9 @@ import API from "../services/api";
 import ExcelJS from "exceljs";
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
+import {
+  submitPacketLifecycleRequests,
+} from "../dashboard/api/packetLifecycleRequestApi";
 
 /*
  * Keep role normalization local to this page.
@@ -2120,6 +2123,10 @@ function ZohoItemsPage() {
     isAdmin ||
     isPacking;
 
+  const canRequestLifecycleFromGeneratedHistory =
+    isPacking &&
+    !isAdmin;
+
   /*
    * ADMIN, PACKING and HARDWARE_PACKING can use
    * the master workbench.
@@ -2274,6 +2281,12 @@ function ZohoItemsPage() {
   const [generatedHistoryOpen, setGeneratedHistoryOpen] = useState(false);
   const [masterWorkbenchOpen, setMasterWorkbenchOpen] = useState(false);
   const [generatedHistoryRows, setGeneratedHistoryRows] = useState([]);
+  const [generatedHistoryRequestSelection, setGeneratedHistoryRequestSelection] = useState([]);
+  const [historyLifecycleRequestOpen, setHistoryLifecycleRequestOpen] = useState(false);
+  const [historyLifecycleRequestRows, setHistoryLifecycleRequestRows] = useState([]);
+  const [historyLifecycleRequestReason, setHistoryLifecycleRequestReason] = useState("");
+  const [historyLifecycleRequestSubmitting, setHistoryLifecycleRequestSubmitting] = useState(false);
+  const [historyLifecycleRequestError, setHistoryLifecycleRequestError] = useState("");
   const [generatedHistoryLoading, setGeneratedHistoryLoading] = useState(false);
   const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
   const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
@@ -4353,6 +4366,7 @@ function ZohoItemsPage() {
     setGeneratedHistoryUserFilter("ALL");
     setGeneratedHistoryRows([]);
     setGeneratedHistoryUsers([]);
+    setGeneratedHistoryRequestSelection([]);
 
     if (historyPdfPreview?.url) {
       URL.revokeObjectURL(historyPdfPreview.url);
@@ -4484,7 +4498,135 @@ function ZohoItemsPage() {
 
   const closeGeneratedHistoryModal = () => {
     setGeneratedHistoryOpen(false);
+    setGeneratedHistoryRequestSelection([]);
     closeHistoryPdfPreview();
+  };
+
+  const openGeneratedHistoryLifecycleRequest = (targetRows) => {
+    if (!canRequestLifecycleFromGeneratedHistory) {
+      showUiAlert(
+        "error",
+        "Only a Packing user can request a packet lifecycle change from Generated History."
+      );
+      return;
+    }
+
+    const uniqueRows = [];
+    const seen = new Set();
+
+    (Array.isArray(targetRows) ? targetRows : [])
+      .forEach((row) => {
+        const historyId =
+          String(row?.historyId || "").trim();
+
+        if (!historyId || seen.has(historyId)) {
+          return;
+        }
+
+        seen.add(historyId);
+        uniqueRows.push(row);
+      });
+
+    if (uniqueRows.length === 0) {
+      showUiAlert(
+        "error",
+        "Select at least one Generated History record."
+      );
+      return;
+    }
+
+    setHistoryLifecycleRequestRows(uniqueRows);
+    setHistoryLifecycleRequestReason("");
+    setHistoryLifecycleRequestError("");
+    setHistoryLifecycleRequestOpen(true);
+  };
+
+  const closeGeneratedHistoryLifecycleRequest = () => {
+    if (historyLifecycleRequestSubmitting) {
+      return;
+    }
+
+    setHistoryLifecycleRequestOpen(false);
+    setHistoryLifecycleRequestRows([]);
+    setHistoryLifecycleRequestReason("");
+    setHistoryLifecycleRequestError("");
+  };
+
+  const submitGeneratedHistoryLifecycleRequest = async () => {
+    if (historyLifecycleRequestSubmitting) {
+      return;
+    }
+
+    const reason =
+      String(historyLifecycleRequestReason || "").trim();
+
+    if (reason.length < 5) {
+      setHistoryLifecycleRequestError(
+        "Please enter a clear reason of at least 5 characters."
+      );
+      return;
+    }
+
+    if (reason.length > 1000) {
+      setHistoryLifecycleRequestError(
+        "Reason cannot exceed 1000 characters."
+      );
+      return;
+    }
+
+    const targetIds =
+      historyLifecycleRequestRows
+        .map((row) => String(row?.historyId || "").trim())
+        .filter(Boolean);
+
+    if (targetIds.length === 0) {
+      setHistoryLifecycleRequestError(
+        "No valid Generated History records are selected."
+      );
+      return;
+    }
+
+    try {
+      setHistoryLifecycleRequestSubmitting(true);
+      setHistoryLifecycleRequestError("");
+
+      const result =
+        await submitPacketLifecycleRequests({
+          targetIds,
+          reason,
+          source: "INVENTORY_HISTORY",
+        });
+
+      const submitted = new Set(targetIds);
+
+      setGeneratedHistoryRequestSelection((previous) =>
+        (previous || []).filter(
+          (historyId) => !submitted.has(String(historyId || "").trim())
+        )
+      );
+
+      setHistoryLifecycleRequestOpen(false);
+      setHistoryLifecycleRequestRows([]);
+      setHistoryLifecycleRequestReason("");
+
+      showUiAlert(
+        "success",
+        result?.message ||
+        "State-change request sent to Admin for approval."
+      );
+    } catch (error) {
+      console.error(
+        "Generated History lifecycle request failed:",
+        error
+      );
+
+      setHistoryLifecycleRequestError(
+        error?.message ||
+        "Unable to send state-change request."
+      );
+    } finally {
+      setHistoryLifecycleRequestSubmitting(false);
+    }
   };
 
   const getStickerStatusKey = (row) => {
@@ -5622,6 +5764,89 @@ function ZohoItemsPage() {
     generatedHistoryPageNo,
     generatedHistoryTotalPages,
   ]);
+
+  const generatedHistoryRequestSelectionSet =
+    useMemo(
+      () => new Set(generatedHistoryRequestSelection),
+      [generatedHistoryRequestSelection]
+    );
+
+  const selectableGeneratedHistoryPageRows =
+    canRequestLifecycleFromGeneratedHistory &&
+      generatedHistoryReportMode === "DETAILED"
+      ? paginatedGeneratedHistoryRows.filter(
+        (row) => Boolean(row?.historyId)
+      )
+      : [];
+
+  const allGeneratedHistoryPageSelected =
+    selectableGeneratedHistoryPageRows.length > 0 &&
+    selectableGeneratedHistoryPageRows.every((row) =>
+      generatedHistoryRequestSelectionSet.has(row.historyId)
+    );
+
+  const someGeneratedHistoryPageSelected =
+    selectableGeneratedHistoryPageRows.some((row) =>
+      generatedHistoryRequestSelectionSet.has(row.historyId)
+    );
+
+  const selectedGeneratedHistoryRequestRows =
+    useMemo(() => {
+      const selected = new Set(
+        generatedHistoryRequestSelection
+      );
+
+      return (Array.isArray(generatedHistoryRows)
+        ? generatedHistoryRows
+        : []
+      ).filter(
+        (row) => row?.historyId && selected.has(row.historyId)
+      );
+    }, [
+      generatedHistoryRequestSelection,
+      generatedHistoryRows,
+    ]);
+
+  const toggleGeneratedHistoryPageSelection = (checked) => {
+    const visibleIds =
+      selectableGeneratedHistoryPageRows
+        .map((row) => row.historyId)
+        .filter(Boolean);
+
+    setGeneratedHistoryRequestSelection((previous) => {
+      const next = new Set(previous || []);
+
+      visibleIds.forEach((historyId) => {
+        if (checked) {
+          next.add(historyId);
+        } else {
+          next.delete(historyId);
+        }
+      });
+
+      return Array.from(next);
+    });
+  };
+
+  const toggleGeneratedHistoryRowSelection = (
+    historyId,
+    checked
+  ) => {
+    if (!historyId) return;
+
+    setGeneratedHistoryRequestSelection((previous) => {
+      const next = new Set(previous || []);
+
+      if (checked) {
+        next.add(historyId);
+      } else {
+        next.delete(historyId);
+      }
+
+      return Array.from(next);
+    });
+  };
+
 
   const isLastPacket = (
     row
@@ -11598,6 +11823,61 @@ function ZohoItemsPage() {
                     : historyMainContentSx
                 }
               >
+                {canRequestLifecycleFromGeneratedHistory &&
+                  generatedHistoryReportMode === "DETAILED" && (
+                    <Box
+                      sx={{
+                        mb: 1.2,
+                        p: 1.1,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
+                        borderRadius: "12px",
+                        background: "rgba(124,58,237,.06)",
+                        border: "1px solid rgba(167,139,250,.16)",
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          mr: "auto",
+                          color: "var(--pf-text)",
+                          fontSize: 11,
+                          fontWeight: 900,
+                        }}
+                      >
+                        {generatedHistoryRequestSelection.length}{" "}
+                        history record
+                        {generatedHistoryRequestSelection.length === 1 ? "" : "s"}{" "}
+                        selected
+                      </Box>
+
+                      <Button
+                        size="small"
+                        disabled={
+                          selectedGeneratedHistoryRequestRows.length === 0 ||
+                          historyLifecycleRequestSubmitting
+                        }
+                        onClick={() =>
+                          openGeneratedHistoryLifecycleRequest(
+                            selectedGeneratedHistoryRequestRows
+                          )
+                        }
+                        sx={{
+                          ...modalSecondaryButtonSx,
+                          background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                          color: "#fff",
+                          "&:disabled": {
+                            opacity: 0.42,
+                            color: "#fff",
+                          },
+                        }}
+                      >
+                        Request Previous State
+                      </Button>
+                    </Box>
+                  )}
+
                 <Box sx={historyTablePanelSx}>
                   {generatedHistoryReportMode !== "DETAILED" ? (
                     <Box sx={historyTableViewportSx}>
@@ -11697,6 +11977,31 @@ function ZohoItemsPage() {
                   ) : (
                     <Box sx={historyTableViewportSx}>
                       <div style={historyTableHeader}>
+                        <div>
+                          {canRequestLifecycleFromGeneratedHistory && (
+                            <input
+                              type="checkbox"
+                              ref={(element) => {
+                                if (element) {
+                                  element.indeterminate =
+                                    someGeneratedHistoryPageSelected &&
+                                    !allGeneratedHistoryPageSelected;
+                                }
+                              }}
+                              checked={allGeneratedHistoryPageSelected}
+                              disabled={
+                                selectableGeneratedHistoryPageRows.length === 0 ||
+                                historyLifecycleRequestSubmitting
+                              }
+                              title="Select current history page"
+                              onChange={(event) =>
+                                toggleGeneratedHistoryPageSelection(
+                                  event.target.checked
+                                )
+                              }
+                            />
+                          )}
+                        </div>
                         <div>Date / Time</div>
                         <div>Generated By</div>
                         <div>Item</div>
@@ -11728,6 +12033,26 @@ function ZohoItemsPage() {
                             key={row.historyId}
                             style={historyTableRow}
                           >
+                            <div style={historyCellWrap}>
+                              {canRequestLifecycleFromGeneratedHistory && (
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    generatedHistoryRequestSelectionSet.has(
+                                      row.historyId
+                                    )
+                                  }
+                                  disabled={historyLifecycleRequestSubmitting}
+                                  onChange={(event) =>
+                                    toggleGeneratedHistoryRowSelection(
+                                      row.historyId,
+                                      event.target.checked
+                                    )
+                                  }
+                                />
+                              )}
+                            </div>
+
                             <div style={historyCellWrap}>
                               <span style={historyDateText}>
                                 {formatHistoryDateTime(row.generatedAt)}
@@ -11820,7 +12145,13 @@ function ZohoItemsPage() {
                               />
                             </div>
 
-                            <div style={historyCellWrap}>
+                            <div
+                              style={{
+                                ...historyCellWrap,
+                                gap: 6,
+                                flexWrap: "wrap",
+                              }}
+                            >
                               <Button
                                 size="small"
                                 onClick={() => openHistoryPdf(row.historyId)}
@@ -11828,6 +12159,24 @@ function ZohoItemsPage() {
                               >
                                 View PDF
                               </Button>
+
+                              {canRequestLifecycleFromGeneratedHistory && (
+                                <Button
+                                  size="small"
+                                  disabled={historyLifecycleRequestSubmitting}
+                                  onClick={() =>
+                                    openGeneratedHistoryLifecycleRequest([row])
+                                  }
+                                  sx={{
+                                    ...historyViewButtonSx,
+                                    color: "#a78bfa",
+                                    borderColor: "rgba(167,139,250,.24)",
+                                    background: "rgba(124,58,237,.07)",
+                                  }}
+                                >
+                                  Request Change
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -11968,6 +12317,144 @@ function ZohoItemsPage() {
             </Box>
           </InventoryModal>
         )}
+        <InventoryModal
+          open={historyLifecycleRequestOpen}
+          onClose={closeGeneratedHistoryLifecycleRequest}
+          icon="↩"
+          title="Request Previous Packet State"
+          subtitle="The request is reviewed in Dashboard → Admin Center before any packet state changes."
+          width={680}
+          footer={
+            <>
+              <Button
+                disabled={historyLifecycleRequestSubmitting}
+                onClick={closeGeneratedHistoryLifecycleRequest}
+                sx={modalSecondaryButtonSx}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                disabled={
+                  historyLifecycleRequestSubmitting ||
+                  String(historyLifecycleRequestReason || "").trim().length < 5
+                }
+                onClick={submitGeneratedHistoryLifecycleRequest}
+                sx={{
+                  ...premiumButton,
+                  background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                }}
+              >
+                {historyLifecycleRequestSubmitting
+                  ? "Sending Request..."
+                  : "Send to Admin"}
+              </Button>
+            </>
+          }
+        >
+          <Box
+            sx={{
+              p: 1.5,
+              mb: 1.5,
+              borderRadius: "12px",
+              background: "rgba(124,58,237,.07)",
+              border: "1px solid rgba(167,139,250,.18)",
+              color: "var(--pf-text)",
+              fontSize: 12,
+              lineHeight: 1.55,
+            }}
+          >
+            <strong>{historyLifecycleRequestRows.length}</strong>{" "}
+            selected Generated History record
+            {historyLifecycleRequestRows.length === 1 ? "" : "s"}. Reprints for the same packet are deduplicated by the backend, and ownership plus plant access are verified again before the request is accepted.
+          </Box>
+
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.8,
+              maxHeight: 210,
+              overflowY: "auto",
+              mb: 1.5,
+            }}
+          >
+            {historyLifecycleRequestRows.map((row) => (
+              <Box
+                key={row.historyId}
+                sx={{
+                  p: 1.15,
+                  borderRadius: "10px",
+                  background: "var(--pf-surface-alt)",
+                  border: "1px solid var(--pf-border-soft)",
+                }}
+              >
+                <Box sx={{ fontSize: 12, fontWeight: 900 }}>
+                  {row.itemName || "Packet"}
+                </Box>
+
+                <Box
+                  sx={{
+                    mt: 0.35,
+                    color: "var(--pf-text-muted)",
+                    fontSize: 10.5,
+                  }}
+                >
+                  {row.packetNumber || "No packet no."} · {row.sku || "No SKU"} · {row.stickerNumber || "No sticker no."}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={4}
+            maxRows={8}
+            label="Reason for state-change request"
+            placeholder="Explain why the packet should be moved back one lifecycle state..."
+            value={historyLifecycleRequestReason}
+            disabled={historyLifecycleRequestSubmitting}
+            inputProps={{ maxLength: 1000 }}
+            onChange={(event) => {
+              setHistoryLifecycleRequestReason(event.target.value);
+
+              if (historyLifecycleRequestError) {
+                setHistoryLifecycleRequestError("");
+              }
+            }}
+            sx={formFieldSx(darkMode)}
+          />
+
+          <Box
+            sx={{
+              mt: 0.65,
+              textAlign: "right",
+              color: "var(--pf-text-muted)",
+              fontSize: 10,
+            }}
+          >
+            {historyLifecycleRequestReason.length}/1000
+          </Box>
+
+          {historyLifecycleRequestError && (
+            <Box
+              sx={{
+                mt: 1.2,
+                p: 1.2,
+                borderRadius: "10px",
+                background: "rgba(239,68,68,.08)",
+                border: "1px solid rgba(248,113,113,.18)",
+                color: "#ef4444",
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              {historyLifecycleRequestError}
+            </Box>
+          )}
+        </InventoryModal>
+
         {(isHardwarePacking || isAdmin) && (
           <InventoryModal
             open={hardwarePacketOpen}
@@ -15376,7 +15863,7 @@ const historyMiniFilterFieldSx = {
 };
 
 const historyDetailedGrid =
-  "150px 130px 260px 280px 210px 120px 110px 190px 125px 125px";
+  "56px 150px 130px 260px 280px 210px 120px 110px 190px 125px 190px";
 
 const historyReportGrid =
   "300px 90px 90px 90px 230px 240px 230px 170px 170px";
@@ -15384,7 +15871,7 @@ const historyReportGrid =
 const historyTableHeader = {
   display: "grid",
   gridTemplateColumns: historyDetailedGrid,
-  minWidth: 1790,
+  minWidth: 1920,
   position: "sticky",
   top: 0,
   zIndex: 5,
@@ -15401,7 +15888,7 @@ const historyTableHeader = {
 const historyTableRow = {
   display: "grid",
   gridTemplateColumns: historyDetailedGrid,
-  minWidth: 1790,
+  minWidth: 1920,
   padding: "12px 14px",
   alignItems: "center",
   borderBottom: "1px solid rgba(var(--pf-fg-rgb),.055)",
