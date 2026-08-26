@@ -1457,7 +1457,7 @@ function ClientNameAutocomplete({
             error
               ? helperText
               : helperText ||
-                "Search Client Master as you type. Free-text client names are still allowed."
+              "Search Client Master as you type. Free-text client names are still allowed."
           }
           sx={formFieldSx()}
           InputProps={{
@@ -2062,7 +2062,7 @@ function ZohoItemsPage() {
       canOpenHardwareInventory
       ? "hardware"
       : requestedInventoryView === "normal" &&
-          canOpenNormalInventory
+        canOpenNormalInventory
         ? "normal"
         : canOpenNormalInventory
           ? "normal"
@@ -12636,7 +12636,7 @@ function ZohoItemsPage() {
                           : previous.clientAddress,
                     }))
                   }
-                        />
+                />
 
                 <TextField
                   label="Client Address"
