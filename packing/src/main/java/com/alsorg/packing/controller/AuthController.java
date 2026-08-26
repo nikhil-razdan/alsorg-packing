@@ -11,6 +11,7 @@ import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.security.JwtAuthenticationFilter;
 import com.alsorg.packing.security.JwtUtil;
 import com.alsorg.packing.security.LoginAttemptService;
+import com.alsorg.packing.security.SpaCsrfTokenRequestHandler;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -352,14 +353,25 @@ public class AuthController {
 
     @GetMapping("/csrf")
     public ResponseEntity<?> csrf(
+            HttpServletRequest request,
             CsrfToken csrfToken) {
 
         /*
-         * Accessing the deferred token forces CookieCsrfTokenRepository to
-         * create its expected cookie when one does not already exist.
+         * SpaCsrfTokenRequestHandler exposes the repository/raw token through
+         * an internal request attribute. The normal CsrfToken request
+         * attribute can be XOR/BREACH-masked, and returning that masked value
+         * while validating X-XSRF-TOKEN as a plain/raw header causes every
+         * protected POST/PUT/PATCH/DELETE request to fail with
+         * InvalidCsrfTokenException.
          */
-        String token =
-                csrfToken.getToken();
+        Object rawAttribute = request.getAttribute(
+                SpaCsrfTokenRequestHandler.RAW_CSRF_ATTRIBUTE);
+
+        CsrfToken responseToken = rawAttribute instanceof CsrfToken rawToken
+                ? rawToken
+                : csrfToken;
+
+        String token = responseToken.getToken();
 
         return noStore(
                 ResponseEntity.ok(
@@ -367,7 +379,7 @@ public class AuthController {
                                 "token",
                                 token,
                                 "headerName",
-                                csrfToken.getHeaderName())));
+                                responseToken.getHeaderName())));
     }
 
     @PostMapping("/logout")

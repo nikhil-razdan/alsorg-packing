@@ -255,28 +255,31 @@ const resetCsrfToken = () => {
   csrfToken = "";
   csrfHeaderName =
     CSRF_HEADER;
-  csrfLoadPromise = null;
 };
 
 const loadCsrfToken = async (
   force = false
 ) => {
-  if (
-    csrfToken &&
-    !force
-  ) {
+  /*
+   * A forced refresh invalidates only the cached token. Never discard an
+   * in-flight refresh promise: concurrent 403 responses must converge on the
+   * same /auth/csrf request, otherwise multiple token-generation responses can
+   * race their Set-Cookie headers and make an otherwise-correct retry stale.
+   */
+  if (force) {
+    resetCsrfToken();
+  }
+
+  if (csrfLoadPromise) {
+    return csrfLoadPromise;
+  }
+
+  if (csrfToken) {
     return {
       token: csrfToken,
       headerName:
         csrfHeaderName,
     };
-  }
-
-  if (
-    csrfLoadPromise &&
-    !force
-  ) {
-    return csrfLoadPromise;
   }
 
   csrfLoadPromise =
