@@ -26,6 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -110,6 +111,12 @@ public class AuthController {
                     ResponseEntity
                             .status(
                                     HttpStatus.TOO_MANY_REQUESTS)
+                            .header(
+                                    HttpHeaders.RETRY_AFTER,
+                                    String.valueOf(
+                                            Math.max(
+                                                    1L,
+                                                    decision.retryAfterSeconds())))
                             .body(
                                     Map.of(
                                             "message",
@@ -226,11 +233,28 @@ public class AuthController {
                 clientIp,
                 username);
 
+        /*
+         * Transparently upgrade older/lower-cost password hashes only after a
+         * successful credential check. The actual password does not change, so
+         * existing sessions are not revoked merely for a hash-cost upgrade.
+         */
+        if (passwordEncoder.upgradeEncoding(
+                user.getPassword())) {
+
+            user.setPassword(
+                    passwordEncoder.encode(
+                            password));
+
+            userRepository.save(
+                    user);
+        }
+
         String token =
                 jwtUtil.generateToken(
                         user.getUsername(),
                         normalizeRole(
-                                user.getRole()));
+                                user.getRole()),
+                        user.getSecurityVersion());
 
         ResponseCookie cookie =
                 buildAccessCookie(
@@ -326,6 +350,26 @@ public class AuthController {
                                 user)));
     }
 
+    @GetMapping("/csrf")
+    public ResponseEntity<?> csrf(
+            CsrfToken csrfToken) {
+
+        /*
+         * Accessing the deferred token forces CookieCsrfTokenRepository to
+         * create its expected cookie when one does not already exist.
+         */
+        String token =
+                csrfToken.getToken();
+
+        return noStore(
+                ResponseEntity.ok(
+                        Map.of(
+                                "token",
+                                token,
+                                "headerName",
+                                csrfToken.getHeaderName())));
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
             HttpServletRequest request) {
@@ -337,12 +381,17 @@ public class AuthController {
                 clearAccessCookie(
                         request);
 
+        ResponseCookie csrfCookie =
+                clearCsrfCookie(
+                        request);
+
         return noStore(
                 ResponseEntity
                         .ok()
                         .header(
                                 HttpHeaders.SET_COOKIE,
-                                cookie.toString())
+                                cookie.toString(),
+                                csrfCookie.toString())
                         .body(
                                 Map.of(
                                         "message",
@@ -470,6 +519,29 @@ public class AuthController {
         return ResponseCookie
                 .from(
                         JwtAuthenticationFilter.ACCESS_COOKIE,
+                        "")
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(
+                        secure
+                                ? cookieSameSite
+                                : "Lax")
+                .path("/")
+                .maxAge(0)
+                .build();
+    }
+
+    private ResponseCookie clearCsrfCookie(
+            HttpServletRequest request) {
+
+        boolean secure =
+                forceSecureCookie
+                        || isSecureRequest(
+                                request);
+
+        return ResponseCookie
+                .from(
+                        "XSRF-TOKEN",
                         "")
                 .httpOnly(true)
                 .secure(secure)

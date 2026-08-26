@@ -40,7 +40,8 @@ public class CorsConfig {
                         "Authorization",
                         "X-Username",
                         "X-Client-Type",
-                        "X-Request-ID"));
+                        "X-Request-ID",
+                        "X-XSRF-TOKEN"));
 
         config.setAllowedMethods(
                 List.of(
@@ -63,7 +64,8 @@ public class CorsConfig {
                         "X-Page-Size",
                         "X-Has-Next",
                         "X-Dispatch-Count-Reused",
-                        "X-Request-ID"));
+                        "X-Request-ID",
+                        "Retry-After"));
 
         config.setMaxAge(3600L);
 

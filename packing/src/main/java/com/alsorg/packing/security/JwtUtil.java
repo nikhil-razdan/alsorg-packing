@@ -36,13 +36,15 @@ public class JwtUtil {
     private static long CLOCK_SKEW_SECONDS;
     private static String ISSUER;
     private static String AUDIENCE;
+    private static boolean ACCEPT_LEGACY_TOKENS;
 
     public JwtUtil(
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expiry-ms:28800000}") long expiryMillis,
             @Value("${app.jwt.clock-skew-seconds:30}") long clockSkewSeconds,
             @Value("${app.jwt.issuer:flowsuite}") String issuer,
-            @Value("${app.jwt.audience:flowsuite-clients}") String audience) {
+            @Value("${app.jwt.audience:flowsuite-clients}") String audience,
+            @Value("${app.jwt.accept-legacy-tokens:true}") boolean acceptLegacyTokens) {
 
         String cleanSecret = secret == null
                 ? null
@@ -88,11 +90,23 @@ public class JwtUtil {
 
         ISSUER = cleanIssuer;
         AUDIENCE = cleanAudience;
+        ACCEPT_LEGACY_TOKENS = acceptLegacyTokens;
     }
 
     public static String generateToken(
             String username,
             String role) {
+
+        return generateToken(
+                username,
+                role,
+                0L);
+    }
+
+    public static String generateToken(
+            String username,
+            String role,
+            long securityVersion) {
 
         ensureKeyReady();
 
@@ -107,13 +121,21 @@ public class JwtUtil {
                         .toUpperCase(
                                 Locale.ROOT);
 
+        long safeSecurityVersion =
+                Math.max(
+                        0L,
+                        securityVersion);
+
         Instant now = Instant.now();
 
         return Jwts.builder()
                 .subject(cleanUsername)
                 .claim("role", cleanRole)
+                .claim("sv", safeSecurityVersion)
                 .issuer(ISSUER)
-                .claim("aud", AUDIENCE)
+                .audience()
+                        .add(AUDIENCE)
+                        .and()
                 .id(UUID.randomUUID().toString())
                 .issuedAt(Date.from(now))
                 .expiration(
@@ -170,14 +192,106 @@ public class JwtUtil {
                     "JWT token is missing");
         }
 
-        return Jwts.parser()
-                .verifyWith(KEY)
-                .clockSkewSeconds(
-                        CLOCK_SKEW_SECONDS)
-                .build()
-                .parseSignedClaims(
-                        cleanToken)
-                .getPayload();
+        Claims claims =
+                Jwts.parser()
+                        .verifyWith(KEY)
+                        .clockSkewSeconds(
+                                CLOCK_SKEW_SECONDS)
+                        .build()
+                        .parseSignedClaims(
+                                cleanToken)
+                        .getPayload();
+
+        if (claims.getSubject() == null
+                || claims.getSubject().isBlank()
+                || claims.getIssuedAt() == null
+                || claims.getExpiration() == null) {
+
+            throw new IllegalArgumentException(
+                    "JWT required claims are missing");
+        }
+
+        boolean hardenedToken =
+                hasText(claims.getIssuer())
+                        || claims.get("aud") != null
+                        || hasText(claims.getId())
+                        || claims.get("sv") != null;
+
+        if (!hardenedToken) {
+            if (!ACCEPT_LEGACY_TOKENS) {
+                throw new IllegalArgumentException(
+                        "Legacy JWT is no longer accepted");
+            }
+
+            /*
+             * Migration-only compatibility for JWTs issued by the pre-hardening
+             * FlowSuite backend. Signature, expiration, subject and issued-at are
+             * still verified. New tokens always use issuer/audience/jti/sv.
+             */
+            return claims;
+        }
+
+        if (!ISSUER.equals(
+                claims.getIssuer())) {
+            throw new IllegalArgumentException(
+                    "JWT issuer is invalid");
+        }
+
+        if (!audienceContains(
+                claims.get("aud"),
+                AUDIENCE)) {
+            throw new IllegalArgumentException(
+                    "JWT audience is invalid");
+        }
+
+        if (!hasText(
+                claims.getId())) {
+            throw new IllegalArgumentException(
+                    "JWT id is missing");
+        }
+
+        return claims;
+    }
+
+    public static long getSecurityVersion(
+            Claims claims) {
+
+        if (claims == null) {
+            return 0L;
+        }
+
+        Object value =
+                claims.get("sv");
+
+        if (value instanceof Number number) {
+            return Math.max(
+                    0L,
+                    number.longValue());
+        }
+
+        if (value instanceof String text) {
+            try {
+                return Math.max(
+                        0L,
+                        Long.parseLong(
+                                text.trim()));
+            } catch (NumberFormatException ignored) {
+                return 0L;
+            }
+        }
+
+        /*
+         * Backward compatibility:
+         * tokens issued before security-version support are version 0.
+         */
+        return 0L;
+    }
+
+    public static long getSecurityVersion(
+            String token) {
+
+        return getSecurityVersion(
+                getClaims(token));
     }
 
     public static long getExpiryMillis() {
@@ -264,6 +378,40 @@ public class JwtUtil {
                                         Locale.ROOT))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private static boolean audienceContains(
+            Object audienceClaim,
+            String expectedAudience) {
+
+        if (audienceClaim == null
+                || expectedAudience == null) {
+            return false;
+        }
+
+        if (audienceClaim instanceof String text) {
+            return expectedAudience.equals(
+                    text.trim());
+        }
+
+        if (audienceClaim instanceof Iterable<?> values) {
+            for (Object value : values) {
+                if (value != null
+                        && expectedAudience.equals(
+                                value.toString().trim())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean hasText(
+            String value) {
+
+        return value != null
+                && !value.trim().isBlank();
     }
 
     private static String requireText(

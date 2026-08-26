@@ -92,11 +92,26 @@ app:
     clock-skew-seconds: ${JWT_CLOCK_SKEW_SECONDS:30}
     issuer: ${JWT_ISSUER:flowsuite}
     audience: ${JWT_AUDIENCE:flowsuite-clients}
+    # Keep true for the first rollout so currently-issued JWTs remain valid.
+    # After the old JWT lifetime has elapsed, set JWT_ACCEPT_LEGACY_TOKENS=false.
+    accept-legacy-tokens: ${JWT_ACCEPT_LEGACY_TOKENS:true}
 
   security:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,https://alsorg-packing-frontend.onrender.com}
     cookie-secure: ${APP_AUTH_COOKIE_SECURE:false}
     cookie-same-site: ${APP_AUTH_COOKIE_SAME_SITE:Lax}
+
+    csrf:
+      # Staged rollout: deploy backend with false, deploy the new frontend,
+      # verify /api/auth/csrf, then switch CSRF_ENABLED=true in Render.
+      enabled: ${CSRF_ENABLED:false}
+
+    password:
+      # Compatibility minimum remains 8. For 8-11 character passwords,
+      # UserService applies an additional short-password strength gate.
+      # Existing passwords are never forcibly changed merely by deployment.
+      min-length: ${PASSWORD_MIN_LENGTH:8}
+      bcrypt-strength: ${BCRYPT_STRENGTH:12}
 
     login:
       max-failures-per-principal: ${LOGIN_MAX_FAILURES_PER_PRINCIPAL:8}

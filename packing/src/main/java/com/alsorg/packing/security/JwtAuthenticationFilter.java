@@ -3,6 +3,7 @@ package com.alsorg.packing.security;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 
@@ -55,7 +56,8 @@ public class JwtAuthenticationFilter
         }
 
         return "/api/auth/login".equals(path)
-                || "/api/auth/logout".equals(path);
+                || "/api/auth/logout".equals(path)
+                || "/api/auth/csrf".equals(path);
     }
 
     @Override
@@ -90,9 +92,16 @@ public class JwtAuthenticationFilter
         }
 
         try {
-            String username =
-                    JwtUtil.getUsername(
+            Claims claims =
+                    JwtUtil.getClaims(
                             token);
+
+            String username =
+                    claims.getSubject();
+
+            long tokenSecurityVersion =
+                    JwtUtil.getSecurityVersion(
+                            claims);
 
             if (username == null
                     || username.isBlank()) {
@@ -123,10 +132,40 @@ public class JwtAuthenticationFilter
                 SecurityContextHolder
                         .clearContext();
 
+                if (isMeRequest(request)) {
+                    filterChain.doFilter(
+                            request,
+                            response);
+
+                    return;
+                }
+
                 writeJsonError(
                         response,
-                        HttpServletResponse.SC_FORBIDDEN,
-                        "User is disabled");
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "Session is no longer valid. Please login again.");
+
+                return;
+            }
+
+            if (tokenSecurityVersion
+                    != user.getSecurityVersion()) {
+
+                SecurityContextHolder
+                        .clearContext();
+
+                if (isMeRequest(request)) {
+                    filterChain.doFilter(
+                            request,
+                            response);
+
+                    return;
+                }
+
+                writeJsonError(
+                        response,
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "Session is no longer valid. Please login again.");
 
                 return;
             }

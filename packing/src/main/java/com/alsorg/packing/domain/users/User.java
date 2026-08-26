@@ -94,6 +94,13 @@ public class User {
         @Column(name = "warehouse_access", nullable = false)
         private boolean warehouseAccess = false;
 
+        /*
+         * Increments whenever credentials or account access are changed.
+         * JWTs carry the version that existed when they were issued.
+         */
+        @Column(name = "security_version", nullable = false)
+        private long securityVersion = 0L;
+
         public Long getId() {
                 return id;
         }
@@ -247,6 +254,7 @@ public class User {
                                 effective.add("PACKFLOW");
                                 effective.add("BOMFLOW");
                                 effective.add("MATFLOW");
+                                effective.add("ASSETFLOW");
 
                                 return effective;
                         }
@@ -261,6 +269,12 @@ public class User {
 
                         if (effectiveRole.startsWith("MATFLOW_")) {
                                 effective.add("MATFLOW");
+                        }
+
+                        if (effectiveRole.startsWith("ASSETFLOW_")
+                                        && !"ASSETFLOW_REQUESTER".equals(
+                                                        effectiveRole)) {
+                                effective.add("ASSETFLOW");
                         }
                 }
 
@@ -310,6 +324,30 @@ public class User {
         public void setWarehouseAccess(
                         boolean warehouseAccess) {
                 this.warehouseAccess = warehouseAccess;
+        }
+
+        public long getSecurityVersion() {
+                return Math.max(
+                                0L,
+                                securityVersion);
+        }
+
+        public void setSecurityVersion(
+                        long securityVersion) {
+                this.securityVersion = Math.max(
+                                0L,
+                                securityVersion);
+        }
+
+        public void bumpSecurityVersion() {
+                if (securityVersion == Long.MAX_VALUE) {
+                        securityVersion = 1L;
+                        return;
+                }
+
+                securityVersion = Math.max(
+                                0L,
+                                securityVersion) + 1L;
         }
 
         private static boolean isPackFlowRole(

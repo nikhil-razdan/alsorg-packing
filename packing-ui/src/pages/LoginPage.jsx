@@ -31,11 +31,29 @@ function LoginPageContent() {
 
 		navigate("/modules", { replace: true });
 	} catch (err) {
-		console.error("Login failed", err);
-		setError(
-			err?.response?.data?.message ||
-			"Invalid username or password"
-		);
+		const status = err?.response?.status;
+
+		if (status === 429) {
+			const retryAfter = Number(
+				err?.response?.headers?.["retry-after"] || 0
+			);
+
+			const minutes =
+				Number.isFinite(retryAfter) && retryAfter > 0
+					? Math.max(1, Math.ceil(retryAfter / 60))
+					: null;
+
+			setError(
+				minutes
+					? `Too many login attempts. Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`
+					: "Too many login attempts. Try again later."
+			);
+		} else {
+			setError(
+				err?.response?.data?.message ||
+				"Invalid username or password"
+			);
+		}
 	} finally {
 		setLoading(false);
 	}
@@ -106,6 +124,11 @@ function LoginPageContent() {
 
           <form onSubmit={submit}>
             <input
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={180}
               placeholder="Username"
               value={username}
               onChange={(e) =>
@@ -127,6 +150,9 @@ function LoginPageContent() {
 
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
+              maxLength={512}
               placeholder="Password"
               value={password}
               onChange={(e) =>
@@ -146,7 +172,15 @@ function LoginPageContent() {
               style={glassInput}
             />
 
-            {error && <p style={errorText}>{error}</p>}
+            {error && (
+              <p
+                style={errorText}
+                role="alert"
+                aria-live="polite"
+              >
+                {error}
+              </p>
+            )}
 
             <button
               type="submit"

@@ -1,13 +1,16 @@
 package com.alsorg.packing.service;
 
 import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.repository.DriverRepository;
 import com.alsorg.packing.repository.UserRepository;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,42 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
+
+        private static final int MIN_USERNAME_LENGTH = 3;
+        private static final int MAX_USERNAME_LENGTH = 180;
+
+        private static final Set<String> BLOCKED_PASSWORDS = Set.of(
+                        "password",
+                        "password1",
+                        "password123",
+                        "password1234",
+                        "12345678",
+                        "123456789",
+                        "1234567890",
+                        "123456789012345",
+                        "87654321",
+                        "qwerty12",
+                        "qwerty123",
+                        "qwertyui",
+                        "qwertyuiop",
+                        "qwertyuiopasdfgh",
+                        "admin123",
+                        "admin1234",
+                        "adminadmin",
+                        "adminadminadmin",
+                        "administrator",
+                        "letmein12",
+                        "letmeinletmein",
+                        "welcome1",
+                        "welcome123",
+                        "welcome123456789",
+                        "1q2w3e4r",
+                        "abcd1234",
+                        "flowsuite",
+                        "flowsuite123",
+                        "flowsuite123456",
+                        "alsorg123",
+                        "alsorg123456789");
 
         private static final Set<String> ALLOWED_ROLES = Set.of(
                         "ADMIN",
@@ -70,14 +109,25 @@ public class UserService {
         private final UserRepository repo;
         private final PasswordEncoder encoder;
         private final PlantLocationService plantLocationService;
+        private final DriverRepository driverRepository;
+        private final int minimumPasswordLength;
 
         public UserService(
                         UserRepository repo,
                         PasswordEncoder encoder,
-                        PlantLocationService plantLocationService) {
+                        PlantLocationService plantLocationService,
+                        DriverRepository driverRepository,
+                        @Value("${app.security.password.min-length:8}")
+                        int minimumPasswordLength) {
                 this.repo = repo;
                 this.encoder = encoder;
                 this.plantLocationService = plantLocationService;
+                this.driverRepository = driverRepository;
+                this.minimumPasswordLength = Math.max(
+                                8,
+                                Math.min(
+                                                64,
+                                                minimumPasswordLength));
         }
 
         @Transactional
@@ -90,15 +140,16 @@ public class UserService {
                         UUID driverId,
                         boolean warehouseAccess,
                         Set<String> modules) {
-                String cleanUsername = cleanRequired(
-                                username,
-                                "Username is required.");
+                String cleanUsername = cleanUsername(
+                                username);
 
-                String cleanPassword = cleanRequired(
+                String cleanPassword = requirePassword(
                                 password,
                                 "Password is required.");
 
-                validatePassword(cleanPassword);
+                validatePassword(
+                                cleanPassword,
+                                cleanUsername);
 
                 RoleAssignment roleAssignment = normalizeRoleAssignment(
                                 primaryRole,
@@ -121,6 +172,7 @@ public class UserService {
                 user.setRoles(
                                 roleAssignment.roles());
                 user.setEnabled(true);
+                user.setSecurityVersion(0L);
 
                 applyAccessFields(
                                 user,
@@ -133,6 +185,7 @@ public class UserService {
                 return repo.save(user);
         }
 
+        @Transactional(readOnly = true)
         public List<User> getAllUsers() {
                 return repo.findAll(
                                 Sort.by(
@@ -155,13 +208,28 @@ public class UserService {
                                                 () -> new RuntimeException(
                                                                 "User not found"));
 
-                String cleanUsername = cleanRequired(
-                                username,
-                                "Username is required.");
+                boolean wasActiveAdmin =
+                                user.isEnabled()
+                                                && hasRole(
+                                                                user,
+                                                                "ADMIN");
+
+                String cleanUsername = cleanUsername(
+                                username);
 
                 RoleAssignment roleAssignment = normalizeRoleAssignment(
                                 primaryRole,
                                 roles);
+
+                if (wasActiveAdmin
+                                && !containsRole(
+                                                roleAssignment.roles(),
+                                                "ADMIN")
+                                && repo.countActiveAdmins() <= 1L) {
+
+                        throw new RuntimeException(
+                                        "Cannot remove ADMIN access from the last active ADMIN user");
+                }
 
                 if (repo.existsByUsernameIgnoreCaseAndIdNot(
                                 cleanUsername,
@@ -185,6 +253,8 @@ public class UserService {
                                 warehouseAccess,
                                 modules);
 
+                user.bumpSecurityVersion();
+
                 return repo.save(user);
         }
 
@@ -196,22 +266,16 @@ public class UserService {
                                                 () -> new RuntimeException(
                                                                 "User not found"));
 
-                if (hasRole(user, "ADMIN")) {
-                        long activeAdminCount = repo.findAll()
-                                        .stream()
-                                        .filter(User::isEnabled)
-                                        .filter(existing -> hasRole(
-                                                        existing,
-                                                        "ADMIN"))
-                                        .count();
+                if (hasRole(user, "ADMIN")
+                                && user.isEnabled()
+                                && repo.countActiveAdmins() <= 1L) {
 
-                        if (activeAdminCount <= 1) {
-                                throw new RuntimeException(
-                                                "Cannot disable the last active ADMIN user");
-                        }
+                        throw new RuntimeException(
+                                        "Cannot disable the last active ADMIN user");
                 }
 
                 user.setEnabled(false);
+                user.bumpSecurityVersion();
 
                 repo.save(user);
         }
@@ -220,19 +284,45 @@ public class UserService {
         public void resetPassword(
                         Long id,
                         String newPassword) {
-                String cleanPassword = cleanRequired(
+                String cleanPassword = requirePassword(
                                 newPassword,
                                 "Password cannot be empty");
-
-                validatePassword(cleanPassword);
 
                 User user = repo.findById(id)
                                 .orElseThrow(
                                                 () -> new RuntimeException(
                                                                 "User not found"));
 
+                validatePassword(
+                                cleanPassword,
+                                user.getUsername());
+
+                if (encoder.matches(
+                                cleanPassword,
+                                user.getPassword())) {
+
+                        throw new RuntimeException(
+                                        "New password must be different from the current password");
+                }
+
                 user.setPassword(
                                 encoder.encode(cleanPassword));
+
+                user.bumpSecurityVersion();
+
+                repo.save(user);
+        }
+
+        @Transactional
+        public void revokeSessions(
+                        Long id) {
+
+                User user = repo.findById(id)
+                                .orElseThrow(
+                                                () -> new RuntimeException(
+                                                                "User not found"));
+
+                user.bumpSecurityVersion();
 
                 repo.save(user);
         }
@@ -290,6 +380,12 @@ public class UserService {
                         if (driverId == null) {
                                 throw new RuntimeException(
                                                 "Driver profile required when DRIVER role is assigned");
+                        }
+
+                        if (!driverRepository.existsById(
+                                        driverId)) {
+                                throw new RuntimeException(
+                                                "Selected driver profile does not exist");
                         }
 
                         user.setDriverId(driverId);
@@ -599,16 +695,194 @@ public class UserService {
         }
 
         private void validatePassword(
-                        String password) {
-                if (password.length() < 8) {
+                        String password,
+                        String username) {
+
+                if (password == null) {
                         throw new RuntimeException(
-                                        "Password must be at least 8 characters");
+                                        "Password is required");
                 }
 
-                if (password.length() > 128) {
+                int codePointLength =
+                                password.codePointCount(
+                                                0,
+                                                password.length());
+
+                if (codePointLength < minimumPasswordLength) {
+                        throw new RuntimeException(
+                                        "Password must be at least "
+                                                        + minimumPasswordLength
+                                                        + " characters");
+                }
+
+                if (codePointLength > 128) {
                         throw new RuntimeException(
                                         "Password is too long");
                 }
+
+                String normalized =
+                                password
+                                                .toLowerCase(
+                                                                Locale.ROOT)
+                                                .trim();
+
+                if (BLOCKED_PASSWORDS.contains(
+                                normalized)) {
+                        throw new RuntimeException(
+                                        "Choose a less predictable password");
+                }
+
+                String cleanUsername =
+                                username == null
+                                                ? ""
+                                                : username
+                                                                .trim()
+                                                                .toLowerCase(
+                                                                                Locale.ROOT);
+
+                if (cleanUsername.length() >= 4
+                                && normalized.contains(
+                                                cleanUsername)) {
+
+                        throw new RuntimeException(
+                                        "Password must not contain the username");
+                }
+
+                boolean allSame = password.codePoints()
+                                .distinct()
+                                .limit(2)
+                                .count() <= 1;
+
+                if (allSame) {
+                        throw new RuntimeException(
+                                        "Choose a less predictable password");
+                }
+
+                if (containsPredictableSequence(normalized)) {
+                        throw new RuntimeException(
+                                        "Password contains a predictable sequence");
+                }
+
+                /*
+                 * Eight characters remains the minimum for compatibility with the
+                 * factory's current user policy. Short passwords need stronger
+                 * character diversity because they have substantially less raw
+                 * entropy than a longer passphrase. Passwords of 12+ characters
+                 * are allowed to be passphrases and do not get this composition
+                 * requirement.
+                 */
+                if (codePointLength < 12
+                                && passwordCharacterClassCount(password) < 3) {
+                        throw new RuntimeException(
+                                        "Passwords shorter than 12 characters must use at least three of: uppercase letters, lowercase letters, numbers, and symbols");
+                }
+        }
+
+        private int passwordCharacterClassCount(
+                        String password) {
+
+                boolean lower = false;
+                boolean upper = false;
+                boolean digit = false;
+                boolean symbol = false;
+
+                for (int offset = 0; offset < password.length();) {
+                        int codePoint = password.codePointAt(offset);
+
+                        if (Character.isLowerCase(codePoint)) {
+                                lower = true;
+                        } else if (Character.isUpperCase(codePoint)) {
+                                upper = true;
+                        } else if (Character.isDigit(codePoint)) {
+                                digit = true;
+                        } else if (!Character.isWhitespace(codePoint)) {
+                                symbol = true;
+                        }
+
+                        offset += Character.charCount(codePoint);
+                }
+
+                int count = 0;
+                count += lower ? 1 : 0;
+                count += upper ? 1 : 0;
+                count += digit ? 1 : 0;
+                count += symbol ? 1 : 0;
+
+                return count;
+        }
+
+        private boolean containsPredictableSequence(
+                        String normalizedPassword) {
+
+                if (normalizedPassword == null
+                                || normalizedPassword.isBlank()) {
+                        return false;
+                }
+
+                String compact = normalizedPassword
+                                .replaceAll("\\s+", "");
+
+                return compact.contains("12345678")
+                                || compact.contains("87654321")
+                                || compact.contains("abcdefgh")
+                                || compact.contains("hgfedcba")
+                                || compact.contains("qwertyui")
+                                || compact.contains("asdfghjk")
+                                || compact.contains("zxcvbnm")
+                                || compact.contains("1q2w3e4r");
+        }
+
+        private String requirePassword(
+                        String value,
+                        String message) {
+
+                if (value == null
+                                || value.isBlank()) {
+                        throw new RuntimeException(
+                                        message);
+                }
+
+                /*
+                 * Do not trim passwords. Leading/trailing spaces are valid
+                 * password characters and must hash exactly as entered.
+                 */
+                return value;
+        }
+
+
+        private String cleanUsername(
+                        String value) {
+
+                String clean = cleanRequired(
+                                value,
+                                "Username is required.");
+
+                int length = clean.codePointCount(
+                                0,
+                                clean.length());
+
+                if (length < MIN_USERNAME_LENGTH
+                                || length > MAX_USERNAME_LENGTH) {
+
+                        throw new RuntimeException(
+                                        "Username must be between "
+                                                        + MIN_USERNAME_LENGTH
+                                                        + " and "
+                                                        + MAX_USERNAME_LENGTH
+                                                        + " characters");
+                }
+
+                boolean hasControlCharacter =
+                                clean.codePoints()
+                                                .anyMatch(
+                                                                Character::isISOControl);
+
+                if (hasControlCharacter) {
+                        throw new RuntimeException(
+                                        "Username contains invalid characters");
+                }
+
+                return clean;
         }
 
         private String cleanRequired(

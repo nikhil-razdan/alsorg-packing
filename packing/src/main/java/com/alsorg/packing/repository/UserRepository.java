@@ -41,4 +41,17 @@ public interface UserRepository
         boolean existsByUsernameIgnoreCaseAndIdNot(
                         String username,
                         Long id);
+
+
+        @Query("""
+                        select count(distinct user.id)
+                        from User user
+                        left join user.roles assignedRole
+                        where user.enabled = true
+                          and (
+                                upper(user.role) = 'ADMIN'
+                                or upper(assignedRole) = 'ADMIN'
+                              )
+                        """)
+        long countActiveAdmins();
 }

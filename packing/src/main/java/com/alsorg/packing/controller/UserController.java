@@ -90,6 +90,18 @@ public class UserController {
                                                 "Password updated successfully"));
         }
 
+        @PutMapping("/{id}/revoke-sessions")
+        public ResponseEntity<?> revokeSessions(
+                        @PathVariable Long id) {
+
+                service.revokeSessions(id);
+
+                return ResponseEntity.ok(
+                                Map.of(
+                                                "message",
+                                                "All existing sessions revoked"));
+        }
+
         private UserResponse toResponse(
                         User user) {
                 return new UserResponse(

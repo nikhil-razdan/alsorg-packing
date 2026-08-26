@@ -1,7 +1,10 @@
 package com.alsorg.packing.config;
 
+import com.alsorg.packing.security.CookieCsrfProtectionMatcher;
+import com.alsorg.packing.security.FlowSuitePasswordEncoder;
 import com.alsorg.packing.security.JwtAuthenticationFilter;
 import com.alsorg.packing.security.RequestCorrelationFilter;
+import com.alsorg.packing.security.SpaCsrfTokenRequestHandler;
 import com.alsorg.packing.security.TrustedOriginFilter;
 
 import jakarta.servlet.DispatcherType;
@@ -18,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -28,12 +32,12 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
@@ -70,8 +74,33 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            CorsConfigurationSource corsConfigurationSource)
+            CorsConfigurationSource corsConfigurationSource,
+            @Value("${app.security.cookie-secure:false}") boolean forceSecureCookie,
+            @Value("${app.security.cookie-same-site:Lax}") String configuredSameSite,
+            @Value("${app.security.csrf.enabled:false}") boolean csrfEnabled)
             throws Exception {
+
+        String csrfSameSite =
+                normalizeSameSite(
+                        configuredSameSite);
+
+        CookieCsrfTokenRepository csrfRepository =
+                new CookieCsrfTokenRepository();
+
+        /*
+         * The SPA obtains the token through GET /api/auth/csrf, therefore
+         * JavaScript never needs to read the CSRF cookie itself.
+         */
+        csrfRepository.setCookieCustomizer(
+                cookie ->
+                        cookie
+                                .httpOnly(true)
+                                .secure(forceSecureCookie)
+                                .sameSite(csrfSameSite)
+                                .path("/"));
+
+        SpaCsrfTokenRequestHandler csrfRequestHandler =
+                new SpaCsrfTokenRequestHandler();
 
         http
                 .cors(
@@ -80,22 +109,25 @@ public class SecurityConfig {
                                         corsConfigurationSource))
 
                 /*
-                 * FlowSuite currently has two auth transports:
+                 * Real CSRF protection for the browser HttpOnly-cookie path.
                  *
-                 * 1. Browser -> HttpOnly cookie
-                 * 2. ShipTrack/mobile -> Authorization Bearer token
-                 *
-                 * Unsafe cookie-authenticated requests are protected by the
-                 * exact-origin TrustedOriginFilter. This is deliberately kept
-                 * separate from Bearer requests so ShipTrack is not broken.
-                 *
-                 * A synchronizer CSRF token can be added later when the shared
-                 * frontend API interceptor is supplied, but unsafe browser
-                 * requests are no longer accepted from arbitrary origins.
+                 * - Web FlowSuite: access cookie + X-XSRF-TOKEN on unsafe calls.
+                 * - ShipTrack/mobile: Bearer-only requests remain stateless and are
+                 *   not forced through browser CSRF semantics.
+                 * - Login is excluded because no authenticated browser session is
+                 *   required yet; TrustedOriginFilter still enforces exact origins.
                  */
                 .csrf(
                         csrf ->
-                                csrf.disable())
+                                csrf
+                                        .csrfTokenRepository(
+                                                csrfRepository)
+                                        .csrfTokenRequestHandler(
+                                                csrfRequestHandler)
+                                        .requireCsrfProtectionMatcher(
+                                                new CookieCsrfProtectionMatcher(
+                                                        csrfEnabled)))
+
 
                 .httpBasic(
                         httpBasic ->
@@ -201,7 +233,8 @@ public class SecurityConfig {
                                         .requestMatchers(
                                                 "/api/auth/login",
                                                 "/api/auth/logout",
-                                                "/api/auth/me")
+                                                "/api/auth/me",
+                                                "/api/auth/csrf")
                                         .permitAll()
 
                                         .requestMatchers(
@@ -255,15 +288,15 @@ public class SecurityConfig {
                  */
                 .addFilterBefore(
                         requestCorrelationFilter,
-                        UsernamePasswordAuthenticationFilter.class)
+                        SecurityContextHolderFilter.class)
 
                 .addFilterAfter(
                         trustedOriginFilter,
                         RequestCorrelationFilter.class)
 
-                .addFilterAfter(
+                .addFilterBefore(
                         jwtAuthenticationFilter,
-                        TrustedOriginFilter.class);
+                        UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -368,30 +401,50 @@ public class SecurityConfig {
         response.setCharacterEncoding(
                 StandardCharsets.UTF_8.name());
 
+        boolean csrfFailure =
+                exception instanceof CsrfException;
+
+        String body;
+
+        if (status == HttpServletResponse.SC_UNAUTHORIZED) {
+            body = "{\"message\":\"Unauthorized\"}";
+        } else if (csrfFailure) {
+            body = "{\"message\":\"Security token expired. Please retry.\","
+                    + "\"code\":\"CSRF_INVALID\"}";
+        } else {
+            body = "{\"message\":\"Forbidden\"}";
+        }
+
         response.getWriter()
-                .write(
-                        status == HttpServletResponse.SC_UNAUTHORIZED
-                                ? "{\"message\":\"Unauthorized\"}"
-                                : "{\"message\":\"Forbidden\"}");
+                .write(body);
 
         response.flushBuffer();
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
+    public PasswordEncoder passwordEncoder(
+            @Value("${app.security.password.bcrypt-strength:12}")
+            int bcryptStrength) {
 
-        DelegatingPasswordEncoder encoder =
-                (DelegatingPasswordEncoder)
-                        PasswordEncoderFactories
-                                .createDelegatingPasswordEncoder();
+        return new FlowSuitePasswordEncoder(
+                bcryptStrength);
+    }
 
-        /*
-         * Keeps compatibility with older bcrypt hashes that were stored
-         * without a {bcrypt} prefix.
-         */
-        encoder.setDefaultPasswordEncoderForMatches(
-                new BCryptPasswordEncoder());
+    private String normalizeSameSite(
+            String value) {
 
-        return encoder;
+        String clean = value == null
+                ? "Lax"
+                : value.trim();
+
+        if ("None".equalsIgnoreCase(clean)) {
+            return "None";
+        }
+
+        if ("Strict".equalsIgnoreCase(clean)) {
+            return "Strict";
+        }
+
+        return "Lax";
     }
 }
