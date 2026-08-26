@@ -412,6 +412,89 @@ public class AdminPacketLifecycleService {
                         + finalState.getLabel());
     }
 
+    /**
+     * Executes an approved user lifecycle-change request.
+     *
+     * The PacketItem is locked before the expected state is compared with the
+     * live state. This prevents an old/stale approval request from accidentally
+     * rolling back a newer packet state.
+     */
+    @Transactional
+    public AdminPacketRollbackResultResponse rollbackOneStepForApprovedRequest(
+            UUID packetItemId,
+            String reason,
+            String changedBy,
+            String expectedFromState,
+            String expectedToState) {
+        String cleanReason = reason == null
+                ? ""
+                : reason.trim();
+
+        if (cleanReason.length() < 5) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Reason must contain at least 5 characters");
+        }
+
+        if (cleanReason.length() > 1000) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Reason cannot exceed 1000 characters");
+        }
+
+        PacketItem packetItem = packetItemRepository
+                .findByIdForAdminRollback(packetItemId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Packet item not found"));
+
+        DispatchedItem dispatchedItem = findDispatchedItemForUpdate(packetItem)
+                .orElse(null);
+
+        AdminPacketLifecycleState liveFromState = resolveLifecycleState(
+                packetItem,
+                dispatchedItem);
+
+        AdminPacketLifecycleState liveToState = previousStateOf(liveFromState);
+
+        String expectedFrom = expectedFromState == null
+                ? ""
+                : expectedFromState.trim();
+
+        String expectedTo = expectedToState == null
+                ? ""
+                : expectedToState.trim();
+
+        if (!liveFromState.name().equals(expectedFrom)
+                || liveToState == null
+                || !liveToState.name().equals(expectedTo)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This request is stale because the packet lifecycle changed after the request was submitted. "
+                            + "Requested "
+                            + expectedFrom
+                            + " -> "
+                            + expectedTo
+                            + ", but the live packet is now "
+                            + liveFromState.name()
+                            + " -> "
+                            + (liveToState == null ? "NONE" : liveToState.name())
+                            + ". Refresh the queue and reject this old request if it is no longer required.");
+        }
+
+        /*
+         * The same transaction still owns the pessimistic PacketItem lock.
+         * Reuse the existing, already-audited rollback implementation instead of
+         * duplicating any operational state-transition logic.
+         */
+        return rollbackOneStep(
+                packetItemId,
+                new AdminPacketRollbackRequest(
+                        buildConfirmation(packetItem),
+                        cleanReason),
+                changedBy);
+    }
+
     @Transactional(readOnly = true)
     public Page<AdminPacketRollbackHistoryResponse> getHistory(
             Pageable pageable) {
