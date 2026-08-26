@@ -17,7 +17,7 @@ import API from "../../services/api";
  * 4. ADMIN can approve or reject one or many requests.
  *
  * 5. Actual packet rollback continues to be executed securely
- *    by the backend lifecycle service.
+ *    by the backend lifecycle service
  *
  * IMPORTANT:
  *
