@@ -342,6 +342,7 @@ export default function DailyThroughputDrilldown({ asMetricCard = false }) {
                           <span>SKU <b>{row?.sku || row?.codeSku || "—"}</b></span>
                           <span>PD <b>{row?.pdNo || "—"}</b></span>
                           <span>DWG <b>{row?.drawingNo || row?.dwgNo || "—"}</b></span>
+                          <span>Description <b>{row?.description || row?.itemDescription || "—"}</b></span>
                           <span>Client <b>{row?.clientName || row?.client || "—"}</b></span>
                           <span>Plant <b>{row?.plantCode || row?.plant || "—"}</b></span>
                           <span>Sticker <b>{row?.stickerNumber || "—"}</b></span>

@@ -376,8 +376,13 @@ public class CurrentUserService {
     }
 
     public boolean canViewAllWarehouseData(User user) {
-        return isAdmin(user)
-                || isDispatch(user);
+        /*
+         * Company-wide Warehouse visibility is ADMIN-only.
+         * Operational hand-off roles continue to see the complete queue for
+         * their assigned plant(s), so Warehouse/Dispatch workflows are not
+         * broken while cross-plant data stays isolated.
+         */
+        return isAdmin(user);
     }
 
     public boolean canGenerateWarehouseGatePass(User user) {

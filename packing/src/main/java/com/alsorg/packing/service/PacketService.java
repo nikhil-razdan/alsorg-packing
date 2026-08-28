@@ -42,6 +42,7 @@ import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.PacketRepository;
 import com.alsorg.packing.service.pdf.PdfStickerService;
+import com.alsorg.packing.service.pdf.ProductQrPdfService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.repository.StickerHistoryRepository;
@@ -63,6 +64,7 @@ public class PacketService {
         private final CompanyRepository companyRepository;
         private final StickerSequenceService stickerSequenceService;
         private final PdfStickerService pdfService;
+        private final ProductQrPdfService productQrPdfService;
         private final DispatchedItemService dispatchedItemService;
         private final DispatchedItemRepository dispatchedRepo;
         private final MasterItemRepository masterItemRepository;
@@ -86,6 +88,45 @@ public class PacketService {
         @Value("${sticker.storage.path}")
         private String stickerStoragePath;
 
+        @org.springframework.beans.factory.annotation.Autowired
+        public PacketService(
+                        PacketRepository packetRepository,
+                        PacketItemRepository packetItemRepository,
+                        CurrentUserService currentUserService,
+                        CompanyRepository companyRepository,
+                        StickerSequenceService stickerSequenceService,
+                        PdfStickerService pdfService,
+                        ProductQrPdfService productQrPdfService,
+                        DispatchedItemService dispatchedItemService,
+                        DispatchedItemRepository dispatchedRepo,
+                        MasterItemRepository masterItemRepository,
+                        StickerHistoryRepository stickerHistoryRepository,
+                        StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService,
+                        ActivityLogService activityLogService,
+                        PlantLocationService plantLocationService) {
+                this.packetRepository = packetRepository;
+                this.packetItemRepository = packetItemRepository;
+                this.companyRepository = companyRepository;
+                this.stickerSequenceService = stickerSequenceService;
+                this.pdfService = pdfService;
+                this.productQrPdfService = productQrPdfService;
+                this.dispatchedItemService = dispatchedItemService;
+                this.dispatchedRepo = dispatchedRepo;
+                this.masterItemRepository = masterItemRepository;
+                this.stickerHistoryRepository = stickerHistoryRepository;
+                this.stickerHistoryPdfRefreshService = stickerHistoryPdfRefreshService;
+                this.plantLocationService = plantLocationService;
+                this.activityLogService = activityLogService;
+                this.currentUserService = currentUserService;
+        }
+
+        /**
+         * Source-compatible constructor retained for older tests/tools that
+         * instantiate PacketService directly with the pre-WR-38 argument list.
+         * Spring uses the @Autowired constructor above in production. The QR
+         * renderer is stateless, so a local instance is safe for this legacy path.
+         */
+        @Deprecated(forRemoval = false)
         public PacketService(
                         PacketRepository packetRepository,
                         PacketItemRepository packetItemRepository,
@@ -100,19 +141,22 @@ public class PacketService {
                         StickerHistoryPdfRefreshService stickerHistoryPdfRefreshService,
                         ActivityLogService activityLogService,
                         PlantLocationService plantLocationService) {
-                this.packetRepository = packetRepository;
-                this.packetItemRepository = packetItemRepository;
-                this.companyRepository = companyRepository;
-                this.stickerSequenceService = stickerSequenceService;
-                this.pdfService = pdfService;
-                this.dispatchedItemService = dispatchedItemService;
-                this.dispatchedRepo = dispatchedRepo;
-                this.masterItemRepository = masterItemRepository;
-                this.stickerHistoryRepository = stickerHistoryRepository;
-                this.stickerHistoryPdfRefreshService = stickerHistoryPdfRefreshService;
-                this.plantLocationService = plantLocationService;
-                this.activityLogService = activityLogService;
-                this.currentUserService = currentUserService;
+
+                this(
+                                packetRepository,
+                                packetItemRepository,
+                                currentUserService,
+                                companyRepository,
+                                stickerSequenceService,
+                                pdfService,
+                                new ProductQrPdfService(),
+                                dispatchedItemService,
+                                dispatchedRepo,
+                                masterItemRepository,
+                                stickerHistoryRepository,
+                                stickerHistoryPdfRefreshService,
+                                activityLogService,
+                                plantLocationService);
         }
 
         private StickerPdfData buildStickerPdfData(
@@ -1622,21 +1666,41 @@ public class PacketService {
 
                 if (dispatchedItem.getCreatedBy() == null ||
                                 dispatchedItem.getCreatedBy().isBlank()) {
-                        dispatchedItem.setCreatedBy(actor);
+                        dispatchedItem.setCreatedBy(
+                                        firstNonBlankValue(
+                                                        item.getCreatedBy(),
+                                                        item.getPackedBy(),
+                                                        actor));
                 }
 
                 dispatchedRepo.save(
                                 dispatchedItem);
 
-                StickerPdfData pdf = buildStickerPdfData(
-                                item,
-                                stickerNumber,
-                                factoryFloor,
-                                showCompanyHeader,
-                                iteration,
-                                false);
+                byte[] pdfBytes;
 
-                byte[] pdfBytes = pdfService.generateSticker(pdf);
+                if (isWr38Item(item)) {
+                        /*
+                         * WR-38 keeps its approved Illustrator artwork. Only the
+                         * PackFlow QR identity artifact changes; all lifecycle,
+                         * history, audit and dispatch synchronization above remains
+                         * exactly the same as normal sticker generation.
+                         */
+                        pdfBytes = productQrPdfService.generate(
+                                        item,
+                                        stickerNumber,
+                                        iteration,
+                                        false);
+                } else {
+                        StickerPdfData pdf = buildStickerPdfData(
+                                        item,
+                                        stickerNumber,
+                                        factoryFloor,
+                                        showCompanyHeader,
+                                        iteration,
+                                        false);
+
+                        pdfBytes = pdfService.generateSticker(pdf);
+                }
 
                 StickerHistory history = new StickerHistory();
 
@@ -2105,7 +2169,13 @@ public class PacketService {
                 List<StickerHistory> histories = stickerHistoryRepository
                                 .findByPacketItem_IdOrderByGeneratedAtDesc(itemId);
 
-                if (histories != null && !histories.isEmpty()) {
+                if (histories != null && !histories.isEmpty() && !isWr38Item(saved)) {
+                        /*
+                         * A WR-38 history PDF is an opaque QR identity artifact, so
+                         * product/date edits do not require rewriting it. The scan
+                         * resolves the current database values. All other plants keep
+                         * the existing self-refreshing sticker-history behavior.
+                         */
                         for (StickerHistory history : histories) {
                                 if (history == null) {
                                         continue;
@@ -4319,6 +4389,57 @@ public class PacketService {
                                 showCompanyHeader);
         }
 
+        @Transactional(readOnly = true)
+        public byte[] previewWr38Qr(
+                        UUID itemId,
+                        User user,
+                        Set<String> allowedPlants) {
+
+                PacketItem item = packetItemRepository.findById(itemId)
+                                .orElseThrow(() -> new RuntimeException("Packet item not found"));
+
+                assertWr38NormalItem(
+                                item,
+                                user,
+                                allowedPlants);
+
+                return previewStickerInternal(
+                                item,
+                                item.getFloor(),
+                                true);
+        }
+
+        @Transactional
+        public byte[] generateWr38Qr(
+                        UUID itemId,
+                        User user,
+                        Set<String> allowedPlants) {
+
+                /*
+                 * Take the same row lock used by normal sticker generation before
+                 * validating plant identity. generateStickerInternal runs in this
+                 * same transaction and therefore keeps the lock through the full
+                 * state/history/dispatch update.
+                 */
+                PacketItem item = packetItemRepository
+                                .findByIdForStickerGeneration(itemId)
+                                .orElseThrow(() -> new RuntimeException("Packet item not found"));
+
+                assertWr38NormalItem(
+                                item,
+                                user,
+                                allowedPlants);
+
+                return generateStickerInternal(
+                                itemId,
+                                item.getFloor(),
+                                true,
+                                user,
+                                allowedPlants,
+                                PacketItemType.NORMAL,
+                                null);
+        }
+
         private byte[] previewStickerInternal(
                         PacketItem item,
                         String factoryFloor,
@@ -4330,6 +4451,14 @@ public class PacketService {
                 String previewStickerNumber = item.getStickerNumber() != null
                                 ? item.getStickerNumber()
                                 : "PREVIEW";
+
+                if (isWr38Item(item)) {
+                        return productQrPdfService.generate(
+                                        item,
+                                        previewStickerNumber,
+                                        iteration,
+                                        true);
+                }
 
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
@@ -4388,6 +4517,14 @@ public class PacketService {
                                 || item.getPrintIteration() <= 0
                                                 ? 1L
                                                 : item.getPrintIteration();
+
+                if (isWr38Item(item)) {
+                        return productQrPdfService.generate(
+                                        item,
+                                        activeStickerNumber,
+                                        iteration,
+                                        false);
+                }
 
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
@@ -4553,6 +4690,14 @@ public class PacketService {
                                                 ? 1L
                                                 : history.getPrintIteration();
 
+                if (isWr38Item(item)) {
+                        return productQrPdfService.generate(
+                                        item,
+                                        stickerNumber,
+                                        iteration,
+                                        false);
+                }
+
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
                                 stickerNumber,
@@ -4562,6 +4707,35 @@ public class PacketService {
                                 false);
 
                 return pdfService.generateSticker(pdf);
+        }
+
+        private boolean isWr38Item(PacketItem item) {
+                return productQrPdfService.isWr38(item);
+        }
+
+        private void assertWr38NormalItem(
+                        PacketItem item,
+                        User user,
+                        Set<String> allowedPlants) {
+
+                if (item == null) {
+                        throw new RuntimeException("Packet item not found");
+                }
+
+                if (effectiveItemType(item) == PacketItemType.HARDWARE) {
+                        throw new AccessDeniedException(
+                                        "WR-38 QR is available only for normal product packets");
+                }
+
+                assertNormalPacketAccess(
+                                item,
+                                user,
+                                allowedPlants);
+
+                if (!isWr38Item(item)) {
+                        throw new IllegalArgumentException(
+                                        "WR-38 QR endpoint can only be used for plant WR-38");
+                }
         }
 
         private PacketItemType effectiveItemType(

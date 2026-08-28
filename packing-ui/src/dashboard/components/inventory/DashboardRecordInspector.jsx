@@ -222,7 +222,7 @@ export default function DashboardRecordInspector({ config, onClose }) {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search item, packet, PD, SKU, sticker, challan, user, client, plant..."
+              placeholder="Search item, description, packet, PD, SKU, sticker, challan, user, client, plant..."
               style={searchInput}
             />
             <div style={countBadge(accent)}>
@@ -258,6 +258,7 @@ export default function DashboardRecordInspector({ config, onClose }) {
                       <span>SKU <b>{clean(row?.sku || row?.codeSku) || "—"}</b></span>
                       <span>PD <b>{clean(row?.pdNo) || "—"}</b></span>
                       <span>DWG <b>{clean(row?.drawingNo || row?.dwgNo) || "—"}</b></span>
+                      <span>Description <b>{clean(row?.description || row?.itemDescription) || "—"}</b></span>
                       <span>Client <b>{clean(row?.clientName || row?.client) || "—"}</b></span>
                       <span>Plant <b>{clean(row?.plantCode || row?.plant) || "—"}</b></span>
                       <span>Sticker <b>{clean(row?.stickerNumber) || "—"}</b></span>

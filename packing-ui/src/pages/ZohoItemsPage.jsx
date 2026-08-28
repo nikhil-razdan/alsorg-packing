@@ -2558,6 +2558,16 @@ function ZohoItemsPage() {
     );
   };
 
+  const WR38_PLANT_CODE = "WR-38";
+
+  const isWr38PlantCode = (value) =>
+    String(value || "")
+      .trim()
+      .toUpperCase() === WR38_PLANT_CODE;
+
+  const isWr38Row = (row) =>
+    isWr38PlantCode(row?.plantCode);
+
   const hardwarePacketBasePath =
     "/api/hardware-packets";
 
@@ -2575,6 +2585,12 @@ function ZohoItemsPage() {
       return `${hardwarePacketBasePath}/${encodeURIComponent(
         itemId
       )}/preview-sticker`;
+    }
+
+    if (isWr38Row(row)) {
+      return `/api/packets/items/${encodeURIComponent(
+        itemId
+      )}/preview-wr38-qr`;
     }
 
     return `/api/packets/items/${encodeURIComponent(
@@ -2596,6 +2612,12 @@ function ZohoItemsPage() {
       return `${hardwarePacketBasePath}/${encodeURIComponent(
         itemId
       )}/generate-sticker`;
+    }
+
+    if (isWr38Row(row)) {
+      return `/api/packets/items/${encodeURIComponent(
+        itemId
+      )}/generate-wr38-qr`;
     }
 
     return `/api/packets/items/${encodeURIComponent(
@@ -2926,21 +2948,37 @@ function ZohoItemsPage() {
     setErrors({});
   };
 
+  const wr38CreateMode =
+    isWr38PlantCode(form?.plantCode);
+
+  const formatPacketDimensionValue = (
+    dimension,
+    useMillimetres = wr38CreateMode
+  ) => {
+    if (!dimension?.l || !dimension?.b || !dimension?.h) {
+      return "";
+    }
+
+    const unit = useMillimetres ? "mm" : "inches";
+
+    return `${dimension.l} L x ${dimension.b} B x ${dimension.h} H ${unit}`;
+  };
+
   const itemInfoFields = [
     {
       key: "itemName",
-      label: "Item Name",
-      placeholder: "Enter item/product name",
+      label: wr38CreateMode ? "Product / Package Content" : "Item Name",
+      placeholder: wr38CreateMode ? "Example: Aero Chair" : "Enter item/product name",
     },
     {
       key: "pdNo",
-      label: "PD No.",
-      placeholder: "Enter production/design number",
+      label: wr38CreateMode ? "Product Code" : "PD No.",
+      placeholder: wr38CreateMode ? "Example: WR/PRIMO2/5067" : "Enter production/design number",
     },
     {
       key: "drawingNo",
-      label: "Drawing No.",
-      placeholder: "Enter drawing reference number",
+      label: wr38CreateMode ? "Drawing / Variant Ref." : "Drawing No.",
+      placeholder: wr38CreateMode ? "Optional drawing or variant reference" : "Enter drawing/reference number",
     },
     {
       key: "clientName",
@@ -2960,9 +2998,9 @@ function ZohoItemsPage() {
   ];
 
   const packetDetailLabels = {
-    description: "Packet Description",
-    weight: "Packet Weight",
-    remarks: "Packet Remarks",
+    description: wr38CreateMode ? "Package Content / Description" : "Packet Description",
+    weight: wr38CreateMode ? "Weight (optional for WR-38)" : "Packet Weight",
+    remarks: wr38CreateMode ? "Wriver / Handling Notes" : "Packet Remarks",
     length: "Length",
     breadth: "Breadth",
     height: "Height",
@@ -6454,7 +6492,7 @@ function ZohoItemsPage() {
     const count = normalizePacketCount(form.numberOfPackets);
 
     for (let i = 0; i < count; i++) {
-      if (!weights[i]) {
+      if (!wr38CreateMode && !weights[i]) {
         err[`weight-${i}`] = "Required";
         valid = false;
       }
@@ -6508,7 +6546,9 @@ function ZohoItemsPage() {
       row?.id ||
       "packet";
 
-    return `STICKER_${safeFileName(sku)}.pdf`;
+    return isWr38Row(row)
+      ? `WR38_QR_${safeFileName(sku)}.pdf`
+      : `STICKER_${safeFileName(sku)}.pdf`;
   };
 
   const triggerDownloadFromUrl = (url, filename) => {
@@ -9875,8 +9915,12 @@ function ZohoItemsPage() {
           open={stickerReviewOpen}
           onClose={closeStickerReviewModal}
           icon="👁️"
-          title="Preview Sticker"
-          subtitle="Check sticker details before final generation"
+          title={isWr38Row(selectedItem) ? "Preview WR-38 QR" : "Preview Sticker"}
+          subtitle={
+            isWr38Row(selectedItem)
+              ? "Check the PackFlow QR before placing it on the approved Wriver Illustrator label"
+              : "Check sticker details before final generation"
+          }
           width={920}
           height="92vh"
           footer={
@@ -10569,8 +10613,12 @@ function ZohoItemsPage() {
           open={drawerOpen}
           onClose={closeGenerateStickerDrawer}
           icon="🏷️"
-          title="Sticker Generation"
-          subtitle="Generate, download and preview packet sticker"
+          title={isWr38Row(selectedItem) ? "WR-38 QR Generation" : "Sticker Generation"}
+          subtitle={
+            isWr38Row(selectedItem)
+              ? "Generate the PackFlow tracking QR for the existing Wriver Illustrator label"
+              : "Generate, download and preview packet sticker"
+          }
         >
           <Box sx={stickerHeroCardSx}>
             <Box sx={stickerHeroTopSx}>
@@ -10678,30 +10726,38 @@ function ZohoItemsPage() {
 
           <Box sx={drawerSectionCardSx}>
             <Box sx={drawerSectionTitleSx}>
-              Sticker Appearance
+              {isWr38Row(selectedItem) ? "QR Tracking" : "Sticker Appearance"}
             </Box>
 
-            <Box sx={stickerOptionRowSx}>
-              <Box>
-                <Box sx={optionMainTextSx}>
-                  Company Header
-                </Box>
-
-                <Box sx={optionSubTextSx}>
-                  Show ALSORG company header on sticker PDF
-                </Box>
+            {isWr38Row(selectedItem) ? (
+              <Box sx={optionSubTextSx}>
+                The QR contains only the PackFlow packet identity. Product Code,
+                dimensions, package content and customer data stay in PackFlow and
+                are resolved after scanning; the approved Illustrator label remains unchanged.
               </Box>
+            ) : (
+              <Box sx={stickerOptionRowSx}>
+                <Box>
+                  <Box sx={optionMainTextSx}>
+                    Company Header
+                  </Box>
 
-              <Switch
-                checked={form.showCompanyHeader}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    showCompanyHeader: e.target.checked,
-                  }))
-                }
-              />
-            </Box>
+                  <Box sx={optionSubTextSx}>
+                    Show ALSORG company header on sticker PDF
+                  </Box>
+                </Box>
+
+                <Switch
+                  checked={form.showCompanyHeader}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      showCompanyHeader: e.target.checked,
+                    }))
+                  }
+                />
+              </Box>
+            )}
           </Box>
 
           <Button
@@ -10723,7 +10779,7 @@ function ZohoItemsPage() {
                 if (!generatePath) {
                   showUiAlert(
                     "error",
-                    "Sticker generation endpoint missing"
+                    isWr38Row(selectedItem) ? "WR-38 QR generation endpoint missing" : "Sticker generation endpoint missing"
                   );
 
                   return;
@@ -10754,7 +10810,7 @@ function ZohoItemsPage() {
 
                   showUiAlert(
                     "error",
-                    message || "Failed to generate sticker"
+                    message || (isWr38Row(selectedItem) ? "Failed to generate WR-38 QR" : "Failed to generate sticker")
                   );
 
                   return;
@@ -10778,7 +10834,7 @@ function ZohoItemsPage() {
 
                 showUiAlert(
                   "success",
-                  "Sticker generated and downloaded successfully"
+                  isWr38Row(selectedItem) ? "WR-38 QR generated and downloaded successfully" : "Sticker generated and downloaded successfully"
                 );
 
                 await fetchItems();
@@ -10793,7 +10849,7 @@ function ZohoItemsPage() {
 
                 showUiAlert(
                   "error",
-                  "Failed to generate sticker"
+                  isWr38Row(selectedItem) ? "Failed to generate WR-38 QR" : "Failed to generate sticker"
                 );
               } finally {
                 setGenerating(false);
@@ -10802,14 +10858,16 @@ function ZohoItemsPage() {
             sx={generateStickerMainButtonSx}
           >
             {generating
-              ? "Generating Sticker..."
+              ? (isWr38Row(selectedItem) ? "Generating QR..." : "Generating Sticker...")
               : selectedItem?.stickerNumber && isAdmin
-                ? "Reprint & Download Sticker"
-                : "Generate & Download Sticker"}
+                ? (isWr38Row(selectedItem) ? "Reprint & Download QR" : "Reprint & Download Sticker")
+                : (isWr38Row(selectedItem) ? "Generate & Download QR" : "Generate & Download Sticker")}
           </Button>
 
           <Box sx={autoDownloadHintSx}>
-            Sticker PDF will automatically download after generation.
+            {isWr38Row(selectedItem)
+              ? "QR PDF will automatically download. Place it into the approved Illustrator label or print it as a small tracking mark."
+              : "Sticker PDF will automatically download after generation."}
           </Box>
 
           {pdfUrl && (
@@ -10906,12 +10964,29 @@ function ZohoItemsPage() {
 
             {renderPlantSelect()}
 
+            {wr38CreateMode && (
+              <Box sx={{
+                mb: 2,
+                p: 1.5,
+                borderRadius: 2,
+                border: "1px solid rgba(37,99,235,.22)",
+                background: "rgba(37,99,235,.06)",
+                color: "var(--pf-text-muted)",
+                fontSize: 12,
+                lineHeight: 1.55,
+              }}>
+                WR-38 uses the existing Wriver Illustrator product label. Store its
+                Product Code, dimensions, package content and customer details here;
+                after creation use <b>Generate QR</b> to attach PackFlow tracking.
+              </Box>
+            )}
+
             <Box sx={formSectionHeaderSx}>
-              Packet Setup
+              {wr38CreateMode ? "Package / Packet Setup" : "Packet Setup"}
             </Box>
 
             <TextField
-              label="Number of Packets"
+              label={wr38CreateMode ? "Number of Packages / Packets" : "Number of Packets"}
               placeholder="Enter total packet count"
               fullWidth
               type="number"
@@ -10951,8 +11026,12 @@ function ZohoItemsPage() {
             open={detailsPopup}
             onClose={() => setDetailsPopup(false)}
             icon="📋"
-            title="Packet Details"
-            subtitle="Add packet-wise description, weight, dimensions and remarks"
+            title={wr38CreateMode ? "WR-38 Package Details" : "Packet Details"}
+            subtitle={
+              wr38CreateMode
+                ? "Store the Wriver label/package data in PackFlow before generating the QR"
+                : "Add packet-wise description, weight, dimensions and remarks"
+            }
             width={720}
             footer={
               <>
@@ -11003,9 +11082,7 @@ function ZohoItemsPage() {
                         descriptions,
                         weights,
                         dimensionsList: dimensionsList.map((d) =>
-                          d?.l && d?.b && d?.h
-                            ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                            : ""
+                          formatPacketDimensionValue(d, wr38CreateMode)
                         ),
                         remarksList,
                       }),
@@ -11048,7 +11125,7 @@ function ZohoItemsPage() {
                     </Box>
 
                     <TextField
-                      label="Description"
+                      label={packetDetailLabels.description}
                       fullWidth
                       value={descriptions[i]}
                       onChange={(e) => {
@@ -11060,7 +11137,7 @@ function ZohoItemsPage() {
                     />
 
                     <TextField
-                      label="Weight"
+                      label={packetDetailLabels.weight}
                       fullWidth
                       value={weights[i]}
                       onChange={(e) => {
@@ -11094,12 +11171,12 @@ function ZohoItemsPage() {
                       ))}
 
                       <span style={{ color: "var(--pf-text-muted)", fontWeight: 700 }}>
-                        inches
+                        {wr38CreateMode ? "mm" : "inches"}
                       </span>
                     </Box>
 
                     <TextField
-                      label="Remarks"
+                      label={packetDetailLabels.remarks}
                       fullWidth
                       value={remarksList[i]}
                       onChange={(e) => {
@@ -11185,9 +11262,7 @@ function ZohoItemsPage() {
                           descriptions,
                           weights,
                           dimensionsList: dimensionsList.map((d) =>
-                            d?.l && d?.b && d?.h
-                              ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                              : ""
+                            formatPacketDimensionValue(d, wr38CreateMode)
                           ),
                           remarksList,
                         }),
@@ -11296,7 +11371,7 @@ function ZohoItemsPage() {
                   ))}
 
                   <span style={dimensionUnitText}>
-                    inches
+                    {wr38CreateMode ? "mm" : "inches"}
                   </span>
                 </Box>
 
@@ -11349,9 +11424,10 @@ function ZohoItemsPage() {
                             descriptions,
                             weights,
                             dimensionsList: dimensionsList.map((d) =>
-                              d?.l && d?.b && d?.h
-                                ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                                : ""
+                              formatPacketDimensionValue(
+                                d,
+                                isWr38Row(selectedItem)
+                              )
                             ),
                             remarksList,
                           }),
@@ -11473,7 +11549,7 @@ function ZohoItemsPage() {
                       ))}
 
                       <span style={dimensionUnitText}>
-                        inches
+                        {isWr38Row(selectedItem) ? "mm" : "inches"}
                       </span>
                     </Box>
 
@@ -11531,9 +11607,10 @@ function ZohoItemsPage() {
                             descriptions,
                             weights,
                             dimensionsList: dimensionsList.map((d) =>
-                              d?.l && d?.b && d?.h
-                                ? `${d.l} L x ${d.b} B x ${d.h} H inches`
-                                : ""
+                              formatPacketDimensionValue(
+                                d,
+                                isWr38Row(selectedItem)
+                              )
                             ),
                             remarksList,
                           }),
@@ -11631,7 +11708,7 @@ function ZohoItemsPage() {
                   ))}
 
                   <span style={dimensionUnitText}>
-                    inches
+                    {isWr38Row(selectedItem) ? "mm" : "inches"}
                   </span>
                 </Box>
 

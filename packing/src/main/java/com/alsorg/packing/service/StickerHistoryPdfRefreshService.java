@@ -20,15 +20,15 @@ import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
 /**
- * Rebuilds the PDF snapshot stored inside StickerHistory from the CURRENT
- * PacketItem values while preserving every history/audit field.
- *
- * This service exists separately from PacketService so Dispatch Admin Edit can
- * refresh sticker PDFs without introducing a PacketService <->
- * DispatchedItemService circular dependency.
+ * Rebuilds normal/hardware sticker snapshots from CURRENT PacketItem values.
+ * WR-38 is deliberately different: its stored PDF is an opaque QR identity
+ * artifact. Product data is resolved from PackFlow after scan, so the QR bytes
+ * remain valid and must not be converted into the normal ALSORG sticker layout.
  */
 @Service
 public class StickerHistoryPdfRefreshService {
+
+    private static final String WR38_PLANT_CODE = "WR-38";
 
     private final StickerHistoryRepository stickerHistoryRepository;
     private final PdfStickerService pdfStickerService;
@@ -40,131 +40,69 @@ public class StickerHistoryPdfRefreshService {
         this.pdfStickerService = pdfStickerService;
     }
 
-    /**
-     * Rebuild every stored history PDF for the supplied packet items.
-     *
-     * Nothing except StickerHistory.pdfData is changed. Sticker number, print
-     * iteration, generatedBy, generatedAt and reason remain untouched.
-     */
     @Transactional
-    public int refreshAllForPacketItems(
-            Collection<PacketItem> packetItems) {
-
-        if (packetItems == null || packetItems.isEmpty()) {
-            return 0;
-        }
+    public int refreshAllForPacketItems(Collection<PacketItem> packetItems) {
+        if (packetItems == null || packetItems.isEmpty()) return 0;
 
         Map<UUID, PacketItem> currentItems = new LinkedHashMap<>();
-
         for (PacketItem item : packetItems) {
-            if (item == null || item.getId() == null) {
-                continue;
-            }
-
-            currentItems.put(item.getId(), item);
+            if (item != null && item.getId() != null) currentItems.put(item.getId(), item);
         }
-
-        if (currentItems.isEmpty()) {
-            return 0;
-        }
+        if (currentItems.isEmpty()) return 0;
 
         List<StickerHistory> histories = stickerHistoryRepository
-                .findAllWithPacketItemsByPacketItemIds(
-                        currentItems.keySet());
-
-        if (histories == null || histories.isEmpty()) {
-            return 0;
-        }
+                .findAllWithPacketItemsByPacketItemIds(currentItems.keySet());
+        if (histories == null || histories.isEmpty()) return 0;
 
         List<StickerHistory> changed = new ArrayList<>();
-
         for (StickerHistory history : histories) {
-            if (history == null) {
-                continue;
-            }
+            if (history == null || history.getPacketItem() == null || history.getPacketItem().getId() == null) continue;
+            PacketItem currentItem = currentItems.get(history.getPacketItem().getId());
+            if (currentItem == null || isWr38(currentItem)) continue;
 
-            PacketItem historyItem = history.getPacketItem();
-
-            if (historyItem == null || historyItem.getId() == null) {
-                continue;
-            }
-
-            PacketItem currentItem = currentItems.get(
-                    historyItem.getId());
-
-            if (currentItem == null) {
-                continue;
-            }
-
-            byte[] rebuiltPdf = generateCurrentPdf(
-                    currentItem,
-                    history);
-
-            if (rebuiltPdf == null || rebuiltPdf.length == 0) {
-                continue;
-            }
-
+            byte[] rebuiltPdf = generateCurrentPdf(currentItem, history);
+            if (rebuiltPdf == null || rebuiltPdf.length == 0) continue;
             history.setPdfData(rebuiltPdf);
             changed.add(history);
         }
 
-        if (!changed.isEmpty()) {
-            stickerHistoryRepository.saveAll(changed);
-        }
-
+        if (!changed.isEmpty()) stickerHistoryRepository.saveAll(changed);
         return changed.size();
     }
 
-    /**
-     * Rebuild one history PDF from its currently linked PacketItem.
-     * Useful as a self-healing download path for records edited before the
-     * dispatch-history synchronization fix was deployed.
-     */
     @Transactional
-    public byte[] refreshHistory(
-            StickerHistory history) {
-
-        if (history == null) {
-            return null;
-        }
-
+    public byte[] refreshHistory(StickerHistory history) {
+        if (history == null) return null;
         PacketItem item = history.getPacketItem();
+        if (item == null || item.getId() == null) return history.getPdfData();
 
-        if (item == null || item.getId() == null) {
+        if (isWr38(item)) {
+            /* Keep the QR artifact byte-for-byte; current product data lives in DB. */
             return history.getPdfData();
         }
 
-        byte[] rebuiltPdf = generateCurrentPdf(
-                item,
-                history);
-
+        byte[] rebuiltPdf = generateCurrentPdf(item, history);
         if (rebuiltPdf != null && rebuiltPdf.length > 0) {
             history.setPdfData(rebuiltPdf);
             stickerHistoryRepository.save(history);
             return rebuiltPdf;
         }
-
         return history.getPdfData();
     }
 
-    private byte[] generateCurrentPdf(
-            PacketItem item,
-            StickerHistory history) {
+    private boolean isWr38(PacketItem item) {
+        return item != null && item.getPlantCode() != null
+                && WR38_PLANT_CODE.equalsIgnoreCase(item.getPlantCode().trim());
+    }
 
+    private byte[] generateCurrentPdf(PacketItem item, StickerHistory history) {
         String stickerNumber = firstNonBlank(
-                history == null
-                        ? null
-                        : history.getStickerNumber(),
+                history == null ? null : history.getStickerNumber(),
                 item.getStickerNumber());
-
-        if (stickerNumber == null) {
-            return null;
-        }
+        if (stickerNumber == null) return null;
 
         long iteration = positiveLong(
-                history == null
-                        ? null
-                        : history.getPrintIteration(),
+                history == null ? null : history.getPrintIteration(),
                 item.getPrintIteration(),
                 1L);
 
@@ -174,14 +112,9 @@ public class StickerHistoryPdfRefreshService {
                 item.getFloor(),
                 true,
                 iteration);
-
         return pdfStickerService.generateSticker(pdf);
     }
 
-    /**
-     * Mirrors PacketService's current sticker-data mapping so refreshed history
-     * PDFs render exactly like a normal generated sticker.
-     */
     private StickerPdfData buildStickerPdfData(
             PacketItem item,
             String stickerNumber,
@@ -190,7 +123,6 @@ public class StickerHistoryPdfRefreshService {
             long iteration) {
 
         StickerPdfData pdf = new StickerPdfData();
-
         PacketItemType itemType = effectiveItemType(item);
         boolean hardwareSticker = itemType == PacketItemType.HARDWARE;
 
@@ -198,60 +130,24 @@ public class StickerHistoryPdfRefreshService {
         pdf.setStickerNumber(stickerNumber);
         pdf.setBarcodeText(stickerNumber);
         pdf.setPacketItemId(item.getId().toString());
-
-        pdf.setQrPayload(
-                "ALSORG|TYPE="
-                        + itemType
-                        + "|PI="
-                        + item.getId()
-                        + "|SN="
-                        + stickerNumber);
-
+        pdf.setQrPayload("ALSORG|TYPE=" + itemType + "|PI=" + item.getId() + "|SN=" + stickerNumber);
         pdf.setShowCompanyHeader(showCompanyHeader);
-
-        pdf.setItemName(
-                safeForPdf(item.getItemName())
-                        + " ("
-                        + safeForPdf(item.getSku())
-                        + ")");
-
-        /*
-         * These two fields are the important identity fields for this fix.
-         * PdfStickerService uses packetNo for the Packet badge and sku for the
-         * CODE / SKU card.
-         */
-        /*
-         * The badge must match the current CODE / SKU even for historical
-         * synthetic PacketItems that were once reconstructed as Pkt-1.
-         */
-        pdf.setPacketNo(
-                resolveStickerPacketNumber(
-                        item.getPacketNumber(),
-                        item.getSku()));
+        pdf.setItemName(safeForPdf(item.getItemName()) + " (" + safeForPdf(item.getSku()) + ")");
+        pdf.setPacketNo(resolveStickerPacketNumber(item.getPacketNumber(), item.getSku()));
         pdf.setSku(item.getSku());
-
         pdf.setDescription(item.getDescription());
         pdf.setLocation(item.getLocation());
-
-        pdf.setFloor(
-                factoryFloor != null && !factoryFloor.isBlank()
-                        ? factoryFloor.trim()
-                        : item.getFloor());
-
+        pdf.setFloor(factoryFloor != null && !factoryFloor.isBlank() ? factoryFloor.trim() : item.getFloor());
         pdf.setClientName(item.getClientName());
         pdf.setClientAddress(item.getClientAddress());
         pdf.setPdNo(item.getPdNo());
         pdf.setDrawingNo(item.getDrawingNo());
-        pdf.setPrintIteration(
-                iteration > Integer.MAX_VALUE
-                        ? Integer.MAX_VALUE
-                        : (int) iteration);
+        pdf.setPrintIteration(iteration > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) iteration);
         pdf.setQuantity(1);
 
         LocalDate packingDate = item.getPackedAt() != null
                 ? item.getPackedAt().toLocalDate()
                 : LocalDate.now(TimeZoneConfig.APP_ZONE);
-
         pdf.setDate(packingDate.toString());
 
         if (hardwareSticker) {
@@ -259,190 +155,78 @@ public class StickerHistoryPdfRefreshService {
             pdf.setWeight(null);
             pdf.setRemarks(null);
         } else {
-            pdf.setDimensions(
-                    formatDimensionWithVolume(
-                            item.getDimensions()));
-
-            pdf.setWeight(
-                    formatWeight(
-                            item.getWeight()));
-
+            pdf.setDimensions(formatDimensionWithVolume(item.getDimensions()));
+            pdf.setWeight(formatWeight(item.getWeight()));
             pdf.setRemarks(item.getRemarks());
         }
-
         return pdf;
     }
 
-    private String resolveStickerPacketNumber(
-            String packetNumber,
-            String sku) {
-
-        String fromSku = packetNumberFromSku(
-                sku);
-
-        if (fromSku != null) {
-            return fromSku;
-        }
-
-        if (packetNumber != null && !packetNumber.trim().isBlank()) {
-            return packetNumber.trim();
-        }
-
+    private String resolveStickerPacketNumber(String packetNumber, String sku) {
+        String fromSku = packetNumberFromSku(sku);
+        if (fromSku != null) return fromSku;
+        if (packetNumber != null && !packetNumber.trim().isBlank()) return packetNumber.trim();
         return packetNumber;
     }
 
-    private String packetNumberFromSku(
-            String sku) {
-
-        if (sku == null || sku.trim().isBlank()) {
-            return null;
-        }
-
+    private String packetNumberFromSku(String sku) {
+        if (sku == null || sku.trim().isBlank()) return null;
         String value = sku.trim();
-        String lower = value.toLowerCase(
-                java.util.Locale.ROOT);
-
-        int marker = lower.lastIndexOf(
-                "pkt-");
-
-        if (marker < 0) {
-            return null;
-        }
-
-        String suffix = value.substring(
-                marker + 4);
-
-        String digits = suffix.replaceAll(
-                "[^0-9].*$",
-                "")
-                .replaceAll(
-                        "[^0-9]",
-                        "");
-
-        if (digits.isBlank()) {
-            return null;
-        }
-
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        int marker = lower.lastIndexOf("pkt-");
+        if (marker < 0) return null;
+        String suffix = value.substring(marker + 4);
+        String digits = suffix.replaceAll("[^0-9].*$", "").replaceAll("[^0-9]", "");
+        if (digits.isBlank()) return null;
         try {
-            int number = Integer.parseInt(
-                    digits);
-
-            return number > 0
-                    ? "Pkt-" + number
-                    : null;
+            int number = Integer.parseInt(digits);
+            return number > 0 ? "Pkt-" + number : null;
         } catch (NumberFormatException ignored) {
             return null;
         }
     }
 
-    private PacketItemType effectiveItemType(
-            PacketItem item) {
-
-        if (item == null || item.getItemType() == null) {
-            return PacketItemType.NORMAL;
-        }
-
-        return item.getItemType();
+    private PacketItemType effectiveItemType(PacketItem item) {
+        return item == null || item.getItemType() == null ? PacketItemType.NORMAL : item.getItemType();
     }
 
-    private String safeForPdf(
-            String value) {
-
-        return value == null || value.isBlank()
-                ? "-"
-                : value.trim();
+    private String safeForPdf(String value) {
+        return value == null || value.isBlank() ? "-" : value.trim();
     }
 
-    private String firstNonBlank(
-            String... values) {
-
-        if (values == null) {
-            return null;
-        }
-
+    private String firstNonBlank(String... values) {
+        if (values == null) return null;
         for (String value : values) {
-            if (value != null && !value.trim().isBlank()) {
-                return value.trim();
-            }
+            if (value != null && !value.trim().isBlank()) return value.trim();
         }
-
         return null;
     }
 
-    private long positiveLong(
-            Long first,
-            Long second,
-            long fallback) {
-
-        if (first != null && first.longValue() > 0L) {
-            return first.longValue();
-        }
-
-        if (second != null && second.longValue() > 0L) {
-            return second.longValue();
-        }
-
+    private long positiveLong(Long first, Long second, long fallback) {
+        if (first != null && first > 0L) return first;
+        if (second != null && second > 0L) return second;
         return fallback;
     }
 
-    private String formatDimensionWithVolume(
-            String dimensions) {
-
-        if (dimensions == null || dimensions.isBlank()) {
-            return dimensions;
-        }
-
+    private String formatDimensionWithVolume(String dimensions) {
+        if (dimensions == null || dimensions.isBlank()) return dimensions;
         try {
             String[] parts = dimensions.split("x");
-
-            if (parts.length < 3) {
-                return dimensions;
-            }
-
-            double length = Double.parseDouble(
-                    parts[0]
-                            .replaceAll("[^0-9.]", "")
-                            .trim());
-
-            double breadth = Double.parseDouble(
-                    parts[1]
-                            .replaceAll("[^0-9.]", "")
-                            .trim());
-
-            double height = Double.parseDouble(
-                    parts[2]
-                            .replaceAll("[^0-9.]", "")
-                            .trim());
-
-            double volume = (length * breadth * height)
-                    / Math.pow(39.3701, 3);
-
-            return dimensions
-                    + " ("
-                    + String.format(
-                            java.util.Locale.ROOT,
-                            "%.3f",
-                            volume)
-                    + " m³)";
-
+            if (parts.length < 3) return dimensions;
+            double length = Double.parseDouble(parts[0].replaceAll("[^0-9.]", "").trim());
+            double breadth = Double.parseDouble(parts[1].replaceAll("[^0-9.]", "").trim());
+            double height = Double.parseDouble(parts[2].replaceAll("[^0-9.]", "").trim());
+            double volume = (length * breadth * height) / Math.pow(39.3701, 3);
+            return dimensions + " (" + String.format(java.util.Locale.ROOT, "%.3f", volume) + " m³)";
         } catch (Exception ignored) {
             return dimensions;
         }
     }
 
-    private String formatWeight(
-            String weight) {
-
-        if (weight == null || weight.trim().isEmpty()) {
-            return "-";
-        }
-
+    private String formatWeight(String weight) {
+        if (weight == null || weight.trim().isEmpty()) return "-";
         String clean = weight.trim().toLowerCase();
-
-        if (clean.contains("kg")) {
-            return weight;
-        }
-
+        if (clean.contains("kg")) return weight;
         return weight + " kg";
     }
 }

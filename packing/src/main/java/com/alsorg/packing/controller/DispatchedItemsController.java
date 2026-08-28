@@ -148,16 +148,16 @@ public class DispatchedItemsController {
                 boolean admin = currentUserService.isAdmin(
                                 user);
 
-                boolean dispatchUser = currentUserService.isDispatch(
-                                user);
-
-                boolean completeRegisterAccess = admin ||
-                                dispatchUser;
+                boolean completeRegisterAccess = admin;
 
                 Set<String> allowedPlants = completeRegisterAccess
                                 ? Set.of()
                                 : currentUserService.allowedPlants(
                                                 user);
+
+                String ownerUsername = shouldRestrictDispatchReadToOwner(user)
+                                ? user.getUsername()
+                                : null;
 
                 DispatchedItemService.DispatchRegisterWindow result = dispatchedItemService
                                 .searchDispatchRegisterWindow(
@@ -173,6 +173,7 @@ public class DispatchedItemsController {
                                                 timeTo,
                                                 completeRegisterAccess,
                                                 allowedPlants,
+                                                ownerUsername,
                                                 includeTotal,
                                                 knownTotalElements);
 
@@ -357,11 +358,7 @@ public class DispatchedItemsController {
                                 safeSize,
                                 stableSort);
 
-                boolean admin = currentUserService.isAdmin(user);
-
-                boolean dispatchUser = currentUserService.isDispatch(user);
-
-                boolean canViewCompleteDispatchRegister = admin || dispatchUser;
+                boolean canViewCompleteDispatchRegister = currentUserService.isAdmin(user);
 
                 Set<String> allowedPlants = canViewCompleteDispatchRegister
                                 ? Set.of()
@@ -370,21 +367,23 @@ public class DispatchedItemsController {
                 Page<DispatchedItem> result;
 
                 if (canViewCompleteDispatchRegister) {
-
-                        result = repository.findAll(
-                                        pageable);
-
-                } else if (allowedPlants == null ||
-                                allowedPlants.isEmpty()) {
-
-                        result = repository.findLegacyVisiblePage(
-                                        pageable);
-
+                        result = repository.findAll(pageable);
                 } else {
-
-                        result = repository.findVisiblePageByPlantsIncludingLegacy(
+                        result = dispatchedItemService.searchDispatchRegister(
+                                        pageable,
+                                        "",
+                                        List.of(),
+                                        "ALL",
+                                        "ACTIVITY",
+                                        "",
+                                        "",
+                                        "",
+                                        "",
+                                        false,
                                         allowedPlants,
-                                        pageable);
+                                        shouldRestrictDispatchReadToOwner(user)
+                                                        ? user.getUsername()
+                                                        : null);
                 }
 
                 return ResponseEntity
@@ -416,6 +415,26 @@ public class DispatchedItemsController {
                                                                 result.hasNext()))
                                 .body(
                                                 result.getContent());
+        }
+
+        private boolean shouldRestrictDispatchReadToOwner(User user) {
+                if (user == null || currentUserService.isAdmin(user)) {
+                        return false;
+                }
+
+                /*
+                 * Personal PACKING users keep the same ownership privacy as the
+                 * Inventory page. Dedicated WAREHOUSE/DISPATCH/LOGISTICS roles are
+                 * operational hand-off roles: they must see the assigned-plant queue
+                 * irrespective of who originally packed the item, otherwise the
+                 * existing Ready -> Warehouse/FG -> Dispatch workflow would break.
+                 */
+                return currentUserService.isPacking(user)
+                                && !currentUserService.hasAnyRole(
+                                                user,
+                                                "WAREHOUSE",
+                                                "DISPATCH",
+                                                "LOGISTICS");
         }
 
         @PostMapping("/{zohoItemId:.+}/move-to-fg")

@@ -51,6 +51,14 @@ public class PlantLocationService {
                     "FG-4",
                     List.of(),
                     List.of("BLS-WH-1", "RTP-WH-2")
+            ),
+            "WR-38", new PlantConfig(
+                    "WR-38",
+                    "Wriver Standard Products",
+                    "PKD-38",
+                    "FG-38",
+                    List.of(),
+                    List.of("BLS-WH-1", "RTP-WH-2", "WR-38")
             )
     );
 
@@ -140,9 +148,8 @@ public class PlantLocationService {
 
         return fgAreaCode + "-" + cleanZone;
     }
-    private String normalizeCode(
-            String value) {
 
+    private String normalizeCode(String value) {
         if (value == null) {
             return null;
         }
@@ -155,5 +162,4 @@ public class PlantLocationService {
                 ? null
                 : clean;
     }
-
 }

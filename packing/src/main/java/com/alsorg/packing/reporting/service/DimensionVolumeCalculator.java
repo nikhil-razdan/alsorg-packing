@@ -2,6 +2,7 @@ package com.alsorg.packing.reporting.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -10,17 +11,21 @@ import org.springframework.stereotype.Component;
 /**
  * Converts the packet dimension string used by PackFlow into cubic metres.
  *
- * Current Inventory UI stores dimensions in the format:
+ * Existing AL plant records keep their established format, for example:
  *     48 L x 24 B x 12 H inches
  *
- * This class deliberately uses the same inches -> metres conversion already
- * used by PacketService for the printed sticker, then rounds each packet to
- * three decimals so report values remain consistent with the sticker value.
+ * WR-38 product/package labels commonly use millimetres, for example:
+ *     650 L x 530 B x 760 H mm
+ *
+ * The unit check below is deliberately additive: every existing value without
+ * an explicit millimetre marker continues through the original inches -> metres
+ * calculation unchanged.
  */
 @Component
 public class DimensionVolumeCalculator {
 
     private static final double INCHES_PER_METRE = 39.3701d;
+    private static final double MILLIMETRES_PER_METRE = 1000d;
 
     private static final Pattern NUMBER_PATTERN = Pattern.compile(
             "[-+]?[0-9]+(?:\\.[0-9]+)?");
@@ -63,21 +68,34 @@ public class DimensionVolumeCalculator {
             return null;
         }
 
-        Double lengthInches = firstNumber(parts[0]);
-        Double breadthInches = firstNumber(parts[1]);
-        Double heightInches = firstNumber(parts[2]);
+        Double length = firstNumber(parts[0]);
+        Double breadth = firstNumber(parts[1]);
+        Double height = firstNumber(parts[2]);
 
-        if (lengthInches == null
-                || breadthInches == null
-                || heightInches == null
-                || lengthInches <= 0d
-                || breadthInches <= 0d
-                || heightInches <= 0d) {
+        if (length == null
+                || breadth == null
+                || height == null
+                || length <= 0d
+                || breadth <= 0d
+                || height <= 0d) {
             return null;
         }
 
-        double cubicMetres = (lengthInches * breadthInches * heightInches)
-                / Math.pow(INCHES_PER_METRE, 3d);
+        String unitText = text.toLowerCase(Locale.ROOT);
+
+        double cubicMetres;
+
+        if (containsMillimetreUnit(unitText)) {
+            cubicMetres = (length * breadth * height)
+                    / Math.pow(MILLIMETRES_PER_METRE, 3d);
+        } else {
+            /*
+             * Backward compatibility: the existing PackFlow dimension contract
+             * is inches when no explicit mm marker is present.
+             */
+            cubicMetres = (length * breadth * height)
+                    / Math.pow(INCHES_PER_METRE, 3d);
+        }
 
         if (!Double.isFinite(cubicMetres) || cubicMetres < 0d) {
             return null;
@@ -89,6 +107,18 @@ public class DimensionVolumeCalculator {
     public double calculateCbmOrZero(String dimensions) {
         Double value = calculateCbm(dimensions);
         return value == null ? 0d : value;
+    }
+
+    private boolean containsMillimetreUnit(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+
+        return Pattern.compile("(^|[^a-z])mm([^a-z]|$)")
+                .matcher(value)
+                .find()
+                || value.contains("millimetre")
+                || value.contains("millimeter");
     }
 
     private Double firstNumber(String value) {

@@ -4532,6 +4532,7 @@ const WAREHOUSE_OPTIONS = [
 	"AL-P2",
 	"AL-P3",
 	"AL-P4",
+	"WR-38",
 ];
 
 const FROM_LOCATION_OPTIONS = [
@@ -4549,6 +4550,9 @@ const FROM_LOCATION_OPTIONS = [
 	"AL-P2-PKD-2",
 	"AL-P3-PKD-3",
 	"AL-P4-PKD-4",
+	"WR-38-FG-38",
+	"WR-38",
+	"WR-38-PKD-38",
 ];
 
 const DISPATCH_EXPORT_STATUS_OPTIONS = [
@@ -5438,7 +5442,7 @@ const normalizeDispatchPlantCode = (
 	 */
 	const exactPlantMatch =
 		text.match(
-			/\bAL-P\d+\b/
+			/\b(?:AL-P\d+|WR-38)\b/
 		);
 
 	if (exactPlantMatch) {
@@ -5448,6 +5452,13 @@ const normalizeDispatchPlantCode = (
 	return text
 		.split(/\s+/)[0]
 		.trim();
+};
+
+const getDispatchPlantDisplayLabel = (value) => {
+	const plantCode = normalizeDispatchPlantCode(value);
+	return plantCode === "WR-38"
+		? "WR-38 • WRIVER"
+		: (plantCode || "—");
 };
 
 const dispatchPlantMatches = (
@@ -8780,9 +8791,11 @@ export default function DispatchedItemsPage() {
 			width: 15,
 
 			getValue: (row) =>
-				firstDispatchExportValue(
-					row?.plantCode,
-					row?.plant
+				getDispatchPlantDisplayLabel(
+					firstDispatchExportValue(
+						row?.plantCode,
+						row?.plant
+					)
 				),
 		},
 		{
@@ -13818,13 +13831,16 @@ export default function DispatchedItemsPage() {
 		{
 			field: "plantCode",
 			headerName: "Plant",
-			width: 120,
+			width: 140,
 
 			renderHeader: () => <span>Plant</span>,
 
 			renderCell: (params) => (
-				<span style={simpleMutedText} title={params.value}>
-					{params.value || "—"}
+				<span
+					style={simpleMutedText}
+					title={getDispatchPlantDisplayLabel(params.value)}
+				>
+					{getDispatchPlantDisplayLabel(params.value)}
 				</span>
 			),
 		},
@@ -14362,7 +14378,7 @@ export default function DispatchedItemsPage() {
 				{
 					title: "Plant & Location",
 					fields: [
-						{ label: "Plant", value: textValue(row?.plantCode) },
+						{ label: "Plant", value: getDispatchPlantDisplayLabel(row?.plantCode) },
 						{ label: "Current Location", value: textValue(row?.currentLocationCode, row?.location) },
 						{ label: "Packed Area", value: textValue(row?.packedAreaCode) },
 						{ label: "FG Area", value: textValue(row?.fgAreaCode) },
@@ -14745,6 +14761,13 @@ export default function DispatchedItemsPage() {
 			plantCode: "AL-P4",
 			packedAreaCode: "PKD-4",
 			fgAreaCode: "FG-4",
+			fgZones: [],
+		},
+		"WR-38": {
+			plantCode: "WR-38",
+			plantName: "Wriver Standard Products",
+			packedAreaCode: "PKD-38",
+			fgAreaCode: "FG-38",
 			fgZones: [],
 		},
 	};

@@ -124,6 +124,7 @@ function WarehousePage() {
 		"AL-P2",
 		"AL-P3",
 		"AL-P4",
+		"WR-38",
 	];
 
 	const FROM_LOCATION_OPTIONS = [
@@ -141,6 +142,9 @@ function WarehousePage() {
 		"AL-P2-PKD-2",
 		"AL-P3-PKD-3",
 		"AL-P4-PKD-4",
+		"WR-38-FG-38",
+		"WR-38",
+		"WR-38-PKD-38",
 	];
 	const [importMode, setImportMode] = useState("");
 	const [previewRows, setPreviewRows] = useState([]);
@@ -580,6 +584,10 @@ function WarehousePage() {
 
 	const getPlantLabel = (plantCode) => {
 		if (!plantCode) return "Not Assigned";
+
+		if (String(plantCode).trim().toUpperCase() === "WR-38") {
+			return "WR-38 • WRIVER";
+		}
 
 		const plant = plants.find((p) => p.plantCode === plantCode);
 
@@ -2138,7 +2146,9 @@ function WarehousePage() {
 
 				return (
 					<span style={simpleMutedText} title={getPlantLabel(row.plantCode)}>
-						{row.plantCode || "—"}
+						{row.plantCode
+							? getPlantLabel(row.plantCode)
+							: "—"}
 					</span>
 				);
 			},

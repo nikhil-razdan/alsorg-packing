@@ -360,6 +360,21 @@ public class PacketController {
         return pdfResponse(pdf, "STICKER_" + itemId + ".pdf", false);
     }
 
+    @PostMapping("/items/{itemId}/generate-wr38-qr")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    public ResponseEntity<byte[]> generateWr38Qr(
+            @PathVariable UUID itemId) {
+
+        User user = normalInventoryUser();
+
+        byte[] pdf = packetService.generateWr38Qr(
+                itemId,
+                user,
+                currentUserService.allowedPlants(user));
+
+        return pdfResponse(pdf, "WR38_QR_" + itemId + ".pdf", false);
+    }
+
     @PutMapping("/items/{itemId}")
     @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
     public PacketItem updateItem(
@@ -455,6 +470,21 @@ public class PacketController {
                 currentUserService.allowedPlants(user));
 
         return pdfResponse(pdf, "PREVIEW_STICKER_" + itemId + ".pdf", false);
+    }
+
+    @PostMapping("/items/{itemId}/preview-wr38-qr")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    public ResponseEntity<byte[]> previewWr38Qr(
+            @PathVariable UUID itemId) {
+
+        User user = normalInventoryUser();
+
+        byte[] pdf = packetService.previewWr38Qr(
+                itemId,
+                user,
+                currentUserService.allowedPlants(user));
+
+        return pdfResponse(pdf, "PREVIEW_WR38_QR_" + itemId + ".pdf", false);
     }
 
     @PutMapping("/items/{itemId}/admin-sticker-details")

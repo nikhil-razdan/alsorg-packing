@@ -77,7 +77,8 @@ public class DispatchedItemService {
                         "AL-P1",
                         "AL-P2",
                         "AL-P3",
-                        "AL-P4");
+                        "AL-P4",
+                        "WR-38");
 
         private static final Set<String> FIXED_FROM_LOCATION_CODES = Set.of(
                         "AL-P1-FG-1-A",
@@ -93,7 +94,10 @@ public class DispatchedItemService {
                         "AL-P1-PKD-1",
                         "AL-P2-PKD-2",
                         "AL-P3-PKD-3",
-                        "AL-P4-PKD-4");
+                        "AL-P4-PKD-4",
+                        "WR-38-FG-38",
+                        "WR-38",
+                        "WR-38-PKD-38");
 
         private final DispatchedItemRepository dispatchedRepo;
         private final AuditLogService auditLogService;
@@ -176,6 +180,35 @@ public class DispatchedItemService {
                         boolean completeRegisterAccess,
                         Set<String> allowedPlants) {
 
+                return searchDispatchRegister(
+                                pageable,
+                                search,
+                                statuses,
+                                plantFilter,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                completeRegisterAccess,
+                                allowedPlants,
+                                null);
+        }
+
+        public Page<DispatchedItem> searchDispatchRegister(
+                        Pageable pageable,
+                        String search,
+                        Collection<ItemDispatchStatus> statuses,
+                        String plantFilter,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants,
+                        String ownerUsername) {
+
                 if (pageable == null) {
                         throw new ResponseStatusException(
                                         HttpStatus.BAD_REQUEST,
@@ -194,7 +227,8 @@ public class DispatchedItemService {
                                 timeFrom,
                                 timeTo,
                                 completeRegisterAccess,
-                                allowedPlants);
+                                allowedPlants,
+                                ownerUsername);
 
                 return dispatchedRepo.findAll(
                                 specification,
@@ -225,6 +259,39 @@ public class DispatchedItemService {
                         boolean includeTotal,
                         Long knownTotalElements) {
 
+                return searchDispatchRegisterWindow(
+                                pageable,
+                                search,
+                                statuses,
+                                plantFilter,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                completeRegisterAccess,
+                                allowedPlants,
+                                null,
+                                includeTotal,
+                                knownTotalElements);
+        }
+
+        public DispatchRegisterWindow searchDispatchRegisterWindow(
+                        Pageable pageable,
+                        String search,
+                        Collection<ItemDispatchStatus> statuses,
+                        String plantFilter,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants,
+                        String ownerUsername,
+                        boolean includeTotal,
+                        Long knownTotalElements) {
+
                 if (pageable == null) {
                         throw new ResponseStatusException(
                                         HttpStatus.BAD_REQUEST,
@@ -243,7 +310,8 @@ public class DispatchedItemService {
                                 timeFrom,
                                 timeTo,
                                 completeRegisterAccess,
-                                allowedPlants);
+                                allowedPlants,
+                                ownerUsername);
 
                 boolean requestedTotalReuse = !includeTotal
                                 && knownTotalElements != null
@@ -351,7 +419,8 @@ public class DispatchedItemService {
                         String timeFrom,
                         String timeTo,
                         boolean completeRegisterAccess,
-                        Set<String> allowedPlants) {
+                        Set<String> allowedPlants,
+                        String ownerUsername) {
 
                 return (root, query, cb) -> {
                         List<Predicate> predicates = new ArrayList<>();
@@ -361,7 +430,8 @@ public class DispatchedItemService {
                                         root,
                                         cb,
                                         completeRegisterAccess,
-                                        allowedPlants);
+                                        allowedPlants,
+                                        ownerUsername);
 
                         appendDispatchStatusPredicate(
                                         predicates,
@@ -512,7 +582,8 @@ public class DispatchedItemService {
                         Root<DispatchedItem> root,
                         CriteriaBuilder cb,
                         boolean completeRegisterAccess,
-                        Set<String> allowedPlants) {
+                        Set<String> allowedPlants,
+                        String ownerUsername) {
 
                 if (completeRegisterAccess) {
                         return;
@@ -526,6 +597,11 @@ public class DispatchedItemService {
 
                 if (allowedPlants == null || allowedPlants.isEmpty()) {
                         predicates.add(legacyRow);
+                        appendDispatchOwnerPredicate(
+                                        predicates,
+                                        root,
+                                        cb,
+                                        ownerUsername);
                         return;
                 }
 
@@ -533,6 +609,64 @@ public class DispatchedItemService {
                                 cb.or(
                                                 plant.in(allowedPlants),
                                                 legacyRow));
+
+                appendDispatchOwnerPredicate(
+                                predicates,
+                                root,
+                                cb,
+                                ownerUsername);
+        }
+
+        private void appendDispatchOwnerPredicate(
+                        List<Predicate> predicates,
+                        Root<DispatchedItem> root,
+                        CriteriaBuilder cb,
+                        String ownerUsername) {
+
+                String owner = ownerUsername == null
+                                ? ""
+                                : ownerUsername.trim().toLowerCase(Locale.ROOT);
+
+                if (owner.isBlank()) {
+                        /*
+                         * Plant-scoped operational hand-off roles (WAREHOUSE /
+                         * DISPATCH) intentionally see the plant queue independent of
+                         * who packed it. Owner-scoping is applied only to personal
+                         * packing views by the controller.
+                         */
+                        return;
+                }
+
+                Expression<String> createdBy = cb.lower(
+                                cb.trim(
+                                                cb.coalesce(
+                                                                root.<String>get("createdBy"),
+                                                                "")));
+                Expression<String> packedBy = cb.lower(
+                                cb.trim(
+                                                cb.coalesce(
+                                                                root.<String>get("packedBy"),
+                                                                "")));
+                Expression<String> dispatchedBy = cb.lower(
+                                cb.trim(
+                                                cb.coalesce(
+                                                                root.<String>get("dispatchedBy"),
+                                                                "")));
+
+                Predicate createdOwner = cb.equal(createdBy, owner);
+                Predicate packedOwner = cb.and(
+                                cb.equal(createdBy, ""),
+                                cb.equal(packedBy, owner));
+                Predicate legacyDispatchOwner = cb.and(
+                                cb.equal(createdBy, ""),
+                                cb.equal(packedBy, ""),
+                                cb.equal(dispatchedBy, owner));
+
+                predicates.add(
+                                cb.or(
+                                                createdOwner,
+                                                packedOwner,
+                                                legacyDispatchOwner));
         }
 
         private void appendDispatchStatusPredicate(
@@ -3063,6 +3197,20 @@ public class DispatchedItemService {
                                 item.getChalaanNumber());
         }
 
+        private String firstNonBlankDispatchOwner(String... values) {
+                if (values == null) {
+                        return null;
+                }
+
+                for (String value : values) {
+                        if (value != null && !value.trim().isBlank()) {
+                                return value.trim();
+                        }
+                }
+
+                return null;
+        }
+
         /*
          * ============================================================
          * CREATE DISPATCH RECORD
@@ -3151,6 +3299,17 @@ public class DispatchedItemService {
 
                 dispatched.setPackedAt(
                                 item.getPackedAt());
+
+                /*
+                 * Preserve the original Inventory owner through downstream
+                 * Warehouse/Dispatch records. Later packing/warehouse actions must
+                 * not silently become the owner of the physical packet.
+                 */
+                dispatched.setCreatedBy(
+                                firstNonBlankDispatchOwner(
+                                                item.getCreatedBy(),
+                                                item.getPackedBy()));
+                dispatched.setPackedBy(item.getPackedBy());
 
                 dispatched.setWarehouseCode(null);
                 dispatched.setGatePassNumber(null);
