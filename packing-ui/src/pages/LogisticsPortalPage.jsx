@@ -13,10 +13,11 @@ import LogisticsOperationsHub from "../dashboard/components/logistics/LogisticsO
 import ShiftReports from "../dashboard/components/logistics/ShiftReports";
 import DriverManagement from "../dashboard/components/logistics/DriverManagement";
 import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
+import LogisticsDashboard from "../dashboard/components/logistics/LogisticsDashboard";
 
 function LogisticsPortalPage() {
   const [tab, setTab] =
-    useState("operations");
+    useState("management");
 
   const [livePulse, setLivePulse] =
     useState(0);
@@ -89,6 +90,16 @@ function LogisticsPortalPage() {
         <div style={tabsRow}>
           <SidebarButton
             active={
+              tab === "management"
+            }
+            onClick={() =>
+              setTab("management")
+            }
+            label="Management Dashboard"
+          />
+
+          <SidebarButton
+            active={
               tab === "operations"
             }
             onClick={() =>
@@ -127,6 +138,12 @@ function LogisticsPortalPage() {
             label="Operations Reports"
           />
         </div>
+
+        {tab === "management" && (
+          <LogisticsDashboard
+            liveRefreshToken={livePulse}
+          />
+        )}
 
         {tab === "operations" && (
           <LogisticsOperationsHub

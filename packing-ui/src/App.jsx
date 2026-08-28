@@ -26,53 +26,93 @@ import BOMFlowRoutes from "./modules/bomflow/BOMFlowRoutes";
 import useViewportHeight from "./useViewportHeight";
 import { PackFlowThemeProvider } from "./theme/PackFlowThemeContext";
 
+const cleanRole = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^ROLE_/i, "")
+    .toUpperCase();
+
+function resolvePackFlowLanding(user, hasRole) {
+  if (hasRole("ADMIN") || hasRole("PACKFLOW_DIRECTOR")) {
+    return "/packflow/dashboard";
+  }
+
+  const routeForRole = (role) => {
+    switch (cleanRole(role)) {
+      case "PACKING":
+        return "/packflow/zoho-items?view=normal";
+      case "HARDWARE_PACKING":
+        return "/packflow/zoho-items?view=hardware";
+      case "WAREHOUSE":
+        return "/packflow/warehouse";
+      case "DISPATCH":
+        return "/packflow/dispatched-items";
+      case "LOGISTICS":
+        return "/packflow/logistics";
+      default:
+        return null;
+    }
+  };
+
+  const primaryRoute = routeForRole(user?.role);
+  if (primaryRoute) {
+    return primaryRoute;
+  }
+
+  for (const role of [
+    "PACKING",
+    "HARDWARE_PACKING",
+    "WAREHOUSE",
+    "DISPATCH",
+    "LOGISTICS",
+  ]) {
+    if (hasRole(role)) {
+      return routeForRole(role);
+    }
+  }
+
+  return "/modules";
+}
+
 function PackFlowDefaultRedirect() {
-  const { hasRole, hasAnyRole, authLoading } = useAuth();
+  const {
+    user,
+    hasRole,
+    authLoading,
+  } = useAuth();
 
   if (authLoading) return null;
 
-  const isHardwareOnly =
-    hasRole("HARDWARE_PACKING") &&
-    !hasAnyRole(
-      "ADMIN",
-      "PACKING",
-      "WAREHOUSE",
-      "DISPATCH",
-      "LOGISTICS"
-    );
-
   return (
     <Navigate
-      to={
-        isHardwareOnly
-          ? "/packflow/zoho-items"
-          : "/packflow/dashboard"
-      }
+      to={resolvePackFlowLanding(user, hasRole)}
       replace
     />
   );
 }
 
 function PackFlowDashboardAccess({ children }) {
-  const { hasRole, hasAnyRole, authLoading } = useAuth();
+  const {
+    user,
+    hasRole,
+    authLoading,
+  } = useAuth();
 
   if (authLoading) return null;
 
-  const isHardwareOnly =
-    hasRole("HARDWARE_PACKING") &&
-    !hasAnyRole(
-      "ADMIN",
-      "PACKING",
-      "WAREHOUSE",
-      "DISPATCH",
-      "LOGISTICS"
-    );
-
-  if (isHardwareOnly) {
-    return <Navigate to="/packflow/zoho-items" replace />;
+  if (
+    hasRole("ADMIN") ||
+    hasRole("PACKFLOW_DIRECTOR")
+  ) {
+    return children;
   }
 
-  return children;
+  return (
+    <Navigate
+      to={resolvePackFlowLanding(user, hasRole)}
+      replace
+    />
+  );
 }
 
 function App() {
@@ -83,9 +123,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           {/*
-           * Explicit public routes keep SPA navigation working in addition to
-           * AuthContext's direct-page-load interception. Token/reporter-pass
-           * validation remains inside the corresponding backend flows.
+           * Explicit public routes preserve the hardened HRFlow / AssetFlow
+           * direct-link behavior from the current application.
            */}
           <Route path="/hr/apply/:token" element={<HrFlowPublicEntry />} />
           <Route path="/hr/onboarding/:token" element={<HrFlowPublicEntry />} />
@@ -102,6 +141,10 @@ function App() {
             }
           />
 
+          {/*
+           * User Administration intentionally remains a separate FlowSuite
+           * module/page. It does not inherit the PackFlow workspace shell.
+           */}
           <Route
             path="/users"
             element={
@@ -126,6 +169,7 @@ function App() {
             }
           >
             <Route index element={<PackFlowDefaultRedirect />} />
+
             <Route
               path="dashboard"
               element={
@@ -134,14 +178,22 @@ function App() {
                 </PackFlowDashboardAccess>
               }
             />
+
             <Route
               path="zoho-items"
               element={
-                <RequireRole allowed={["ADMIN", "PACKING", "HARDWARE_PACKING"]}>
+                <RequireRole
+                  allowed={[
+                    "ADMIN",
+                    "PACKING",
+                    "HARDWARE_PACKING",
+                  ]}
+                >
                   <ZohoItemsPage />
                 </RequireRole>
               }
             />
+
             <Route
               path="warehouse"
               element={
@@ -150,14 +202,40 @@ function App() {
                 </RequireWarehouseAccess>
               }
             />
+
             <Route
               path="dispatched-items"
               element={
-                <RequireRole allowed={["ADMIN", "PACKING", "DISPATCH", "WAREHOUSE"]}>
+                <RequireRole
+                  allowed={[
+                    "ADMIN",
+                    "PACKING",
+                    "DISPATCH",
+                    "WAREHOUSE",
+                  ]}
+                >
                   <DispatchedItemsPage />
                 </RequireRole>
               }
             />
+
+            {/* Legacy PackFlow bookmark kept under the same guard. */}
+            <Route
+              path="dispatch"
+              element={
+                <RequireRole
+                  allowed={[
+                    "ADMIN",
+                    "PACKING",
+                    "DISPATCH",
+                    "WAREHOUSE",
+                  ]}
+                >
+                  <DispatchedItemsPage />
+                </RequireRole>
+              }
+            />
+
             <Route
               path="logistics"
               element={
@@ -166,7 +244,17 @@ function App() {
                 </RequireRole>
               }
             />
+
             <Route path="users" element={<Navigate to="/users" replace />} />
+            <Route
+              path="client-master"
+              element={
+                <Navigate
+                  to="/modules?module=client-master"
+                  replace
+                />
+              }
+            />
             <Route path="*" element={<PackFlowDefaultRedirect />} />
           </Route>
 
@@ -197,6 +285,7 @@ function App() {
           <Route path="/zoho-items" element={<Navigate to="/packflow/zoho-items" replace />} />
           <Route path="/warehouse" element={<Navigate to="/packflow/warehouse" replace />} />
           <Route path="/dispatched-items" element={<Navigate to="/packflow/dispatched-items" replace />} />
+          <Route path="/dispatch" element={<Navigate to="/packflow/dispatched-items" replace />} />
           <Route path="/logistics" element={<Navigate to="/packflow/logistics" replace />} />
           <Route path="*" element={<Navigate to="/modules" replace />} />
         </Routes>

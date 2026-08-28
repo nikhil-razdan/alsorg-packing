@@ -1,8 +1,6 @@
 const safeNumber = (value) => {
   const parsed = Number(value);
-  return Number.isFinite(parsed)
-    ? parsed
-    : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 function StatCard({
@@ -10,167 +8,158 @@ function StatCard({
   value,
   subtitle,
   accent,
-  icon,
+  signal,
 }) {
   return (
     <div style={statCard(accent)}>
-      <div style={topAccent(accent)} />
-
-      <div style={cardHeader}>
-        <div style={iconBox(accent)}>
-          {icon}
-        </div>
-
-        <div style={liveBadge}>
-          <span style={liveDot(accent)} />
-          LIVE
-        </div>
+      <div style={topLine(accent)} />
+      <div style={headerRow}>
+        <span style={signalPill(accent)}>{signal}</span>
+        <span style={liveLabel}>LIVE</span>
       </div>
-
-      <div style={statTitle}>
-        {title}
-      </div>
-
-      <div style={statValue}>
-        {value}
-      </div>
-
-      <div style={statSubtitle}>
-        {subtitle}
-      </div>
+      <div style={titleStyle}>{title}</div>
+      <div style={valueStyle}>{value}</div>
+      <div style={subtitleStyle}>{subtitle}</div>
     </div>
   );
 }
 
-function StatsCards({
-  stats = {},
-}) {
+function StatsCards({ stats = {} }) {
+  const exceptions =
+    safeNumber(stats.masterItemsWithoutPackets) +
+    safeNumber(stats.packetsWithoutPacketItems) +
+    safeNumber(stats.packetItemsWithoutMaster) +
+    safeNumber(stats.duplicateCurrentStickers) +
+    safeNumber(stats.readyItemsStillInPkd) +
+    safeNumber(stats.dispatchedWithoutPacketItem) +
+    safeNumber(stats.dispatchedWithoutChallan) +
+    safeNumber(stats.dispatchedWithoutDriver);
+
+  const packingBacklog = safeNumber(
+    stats.packetItemsPendingSticker ?? stats.pendingItems
+  );
+
   return (
-    <div style={statsRow}>
+    <div style={grid}>
       <StatCard
-        title="Dispatch Warehouse Inventory"
-        value={safeNumber(
-          stats.totalItems
-        )}
-        subtitle="Current tracked inventory"
-        accent="#60a5fa"
-        icon="▣"
+        title="Control Exceptions"
+        value={exceptions}
+        subtitle="Current + legacy linkage/control exceptions"
+        accent={exceptions > 0 ? "#dc2626" : "#16a34a"}
+        signal={exceptions > 0 ? "ACTION" : "CLEAR"}
       />
 
       <StatCard
-        title="Stickers Generated"
-        value={safeNumber(
-          stats.stickersGenerated
-        )}
-        subtitle="Sticker history records"
-        accent="#22c55e"
-        icon="◇"
+        title="Packing Backlog"
+        value={packingBacklog}
+        subtitle="Packet items still awaiting sticker completion"
+        accent="#d97706"
+        signal={packingBacklog > 0 ? "OPEN" : "CLEAR"}
       />
 
       <StatCard
-        title="Pending Stickers"
-        value={safeNumber(
-          stats.pendingItems
-        )}
-        subtitle="Items awaiting sticker generation"
-        accent="#f59e0b"
-        icon="◷"
+        title="Ready To Dispatch"
+        value={safeNumber(stats.readyToDispatchItems)}
+        subtitle="Finished-goods items available for outbound conversion"
+        accent="#2563eb"
+        signal="FG"
+      />
+
+      <StatCard
+        title="Today Throughput"
+        value={
+          safeNumber(stats.todayStickerGenerated) +
+          safeNumber(stats.todayDispatchChallans)
+        }
+        subtitle={`${safeNumber(stats.todayStickerGenerated)} stickers • ${safeNumber(stats.todayDispatchChallans)} dispatch challans`}
+        accent="#0f766e"
+        signal="TODAY"
       />
     </div>
   );
 }
 
-const statsRow = {
+const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))",
+  gap: 10,
 };
 
 const statCard = (accent) => ({
   position: "relative",
   minWidth: 0,
-  minHeight: 132,
+  minHeight: 128,
   overflow: "hidden",
   padding: 14,
-  borderRadius: 15,
+  borderRadius: 12,
   color: "var(--pf-text-strong)",
   background:
-    `radial-gradient(circle at 100% 0%,${accent}0F,transparent 42%),linear-gradient(160deg,var(--pf-surface),var(--pf-surface-alt))`,
+    `radial-gradient(circle at 100% 0%,${accent}0D,transparent 44%),linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))`,
   border: "1px solid var(--pf-border)",
-  boxShadow: "0 8px 20px rgba(var(--pf-shadow-rgb),.06)",
+  boxShadow: "0 8px 20px rgba(var(--pf-shadow-rgb),.055)",
 });
 
-const topAccent = (accent) => ({
+const topLine = (accent) => ({
   position: "absolute",
-  top: 0,
-  left: 18,
-  right: 18,
+  inset: "0 14px auto 14px",
   height: 2,
   borderRadius: "0 0 999px 999px",
-  background: `linear-gradient(90deg,transparent,${accent},transparent)`,
+  background: accent,
+  opacity: .8,
 });
 
-const cardHeader = {
+const headerRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  gap: 8,
 };
 
-const iconBox = (accent) => ({
-  width: 31,
-  height: 31,
-  borderRadius: 9,
-  display: "grid",
-  placeItems: "center",
-  color: accent,
-  background: `${accent}10`,
-  border: `1px solid ${accent}20`,
-  fontSize: 11,
-  fontWeight: 950,
-});
-
-const liveBadge = {
+const signalPill = (accent) => ({
   display: "inline-flex",
+  minHeight: 21,
   alignItems: "center",
-  gap: 4,
-  color: "var(--pf-text-muted)",
-  fontSize: 7,
+  padding: "0 8px",
+  borderRadius: 999,
+  color: accent,
+  background: `${accent}0D`,
+  border: `1px solid ${accent}22`,
+  fontSize: 7.5,
   fontWeight: 950,
-  letterSpacing: ".05em",
-};
-
-const liveDot = (accent) => ({
-  width: 5,
-  height: 5,
-  borderRadius: "50%",
-  background: accent,
-  boxShadow: `0 0 7px ${accent}55`,
+  letterSpacing: ".08em",
 });
 
-const statTitle = {
-  marginTop: 12,
-  color: "var(--pf-text-muted)",
-  fontSize: 8.8,
+const liveLabel = {
+  color: "var(--pf-text-dim)",
+  fontSize: 7.5,
   fontWeight: 950,
-  textTransform: "uppercase",
-  letterSpacing: ".05em",
+  letterSpacing: ".08em",
 };
 
-const statValue = {
+const titleStyle = {
+  marginTop: 11,
+  color: "var(--pf-text-muted)",
+  fontSize: 8.7,
+  fontWeight: 950,
+  letterSpacing: ".055em",
+  textTransform: "uppercase",
+};
+
+const valueStyle = {
   marginTop: 6,
   color: "var(--pf-text-strong)",
-  fontSize: 27,
+  fontSize: 29,
   lineHeight: 1,
   fontWeight: 950,
   letterSpacing: "-.035em",
 };
 
-const statSubtitle = {
+const subtitleStyle = {
   marginTop: 7,
   color: "var(--pf-text-muted)",
-  fontSize: 8.5,
+  fontSize: 9.2,
   fontWeight: 700,
-  lineHeight: 1.4,
+  lineHeight: 1.45,
 };
 
 export default StatsCards;

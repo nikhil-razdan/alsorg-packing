@@ -15,6 +15,64 @@ import RequireRole from "../../auth/RequireRole";
 import RequireWarehouseAccess from "../../auth/RequireWarehouseAccess";
 import { useAuth } from "../../auth/AuthContext";
 
+const cleanRole = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^ROLE_/i, "")
+    .toUpperCase();
+
+const routeForPackFlowRole = (role) => {
+  switch (cleanRole(role)) {
+    case "PACKING":
+      return "/packflow/zoho-items?view=normal";
+    case "HARDWARE_PACKING":
+      return "/packflow/zoho-items?view=hardware";
+    case "WAREHOUSE":
+      return "/packflow/warehouse";
+    case "DISPATCH":
+      return "/packflow/dispatched-items";
+    case "LOGISTICS":
+      return "/packflow/logistics";
+    default:
+      return null;
+  }
+};
+
+const resolvePackFlowLanding = (
+  user,
+  hasRole
+) => {
+  if (
+    hasRole("ADMIN") ||
+    hasRole("PACKFLOW_DIRECTOR")
+  ) {
+    return "/packflow/dashboard";
+  }
+
+  const primary =
+    routeForPackFlowRole(
+      user?.role
+    );
+
+  if (primary) {
+    return primary;
+  }
+
+  for (const role of [
+    "PACKING",
+    "HARDWARE_PACKING",
+    "WAREHOUSE",
+    "DISPATCH",
+    "LOGISTICS",
+  ]) {
+    if (hasRole(role)) {
+      return routeForPackFlowRole(role);
+    }
+  }
+
+  return "/modules";
+};
+
 const dispatchElement = (
   <RequireRole
     allowed={[
@@ -30,8 +88,8 @@ const dispatchElement = (
 
 function PackFlowDefaultRedirect() {
   const {
+    user,
     hasRole,
-    hasAnyRole,
     authLoading,
   } = useAuth();
 
@@ -39,23 +97,12 @@ function PackFlowDefaultRedirect() {
     return null;
   }
 
-  const isHardwareOnly =
-    hasRole("HARDWARE_PACKING") &&
-    !hasAnyRole(
-      "ADMIN",
-      "PACKING",
-      "WAREHOUSE",
-      "DISPATCH",
-      "LOGISTICS"
-    );
-
   return (
     <Navigate
-      to={
-        isHardwareOnly
-          ? "/packflow/zoho-items"
-          : "/packflow/dashboard"
-      }
+      to={resolvePackFlowLanding(
+        user,
+        hasRole
+      )}
       replace
     />
   );
@@ -65,8 +112,8 @@ function PackFlowDashboardAccess({
   children,
 }) {
   const {
+    user,
     hasRole,
-    hasAnyRole,
     authLoading,
   } = useAuth();
 
@@ -74,35 +121,30 @@ function PackFlowDashboardAccess({
     return null;
   }
 
-  const isHardwareOnly =
-    hasRole("HARDWARE_PACKING") &&
-    !hasAnyRole(
-      "ADMIN",
-      "PACKING",
-      "WAREHOUSE",
-      "DISPATCH",
-      "LOGISTICS"
-    );
-
-  if (isHardwareOnly) {
-    return (
-      <Navigate
-        to="/packflow/zoho-items"
-        replace
-      />
-    );
+  if (
+    hasRole("ADMIN") ||
+    hasRole("PACKFLOW_DIRECTOR")
+  ) {
+    return children;
   }
 
-  return children;
+  return (
+    <Navigate
+      to={resolvePackFlowLanding(
+        user,
+        hasRole
+      )}
+      replace
+    />
+  );
 }
 
 /**
  * PackFlow route compatibility module.
  *
- * App.jsx currently hosts the primary /packflow route tree. This module is
- * retained because older builds/imports may still mount PackFlowRoutes
- * directly. Keep its access rules aligned with the primary route tree so an
- * older route registration cannot silently bypass the current guards.
+ * App.jsx owns the primary nested /packflow route tree. This component is
+ * retained for older imports/builds, so its role guards and landing behavior
+ * intentionally mirror App.jsx. It must never become a weaker alternate path.
  */
 export default function PackFlowRoutes() {
   return (
@@ -130,10 +172,6 @@ export default function PackFlowRoutes() {
         element={dispatchElement}
       />
 
-      {/*
-       * Legacy compatibility path. Keep existing bookmarks working while the
-       * same role guard is applied as /dispatched-items.
-       */}
       <Route
         path="dispatch"
         element={dispatchElement}
@@ -153,10 +191,6 @@ export default function PackFlowRoutes() {
         }
       />
 
-      {/*
-       * User Management is a top-level FlowSuite route. Redirect instead of
-       * rendering it inside a nested PackFlow shell.
-       */}
       <Route
         path="users"
         element={
@@ -167,10 +201,6 @@ export default function PackFlowRoutes() {
         }
       />
 
-      {/*
-       * Client Master is shared FlowSuite master data and is hosted by
-       * /modules. Keep the legacy PackFlow URL only as a redirect.
-       */}
       <Route
         path="client-master"
         element={

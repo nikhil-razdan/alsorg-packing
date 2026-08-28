@@ -181,6 +181,87 @@ public class DashboardService {
         return response;
     }
 
+    /**
+     * Director-safe logistics view.
+     *
+     * This query path intentionally never loads driver names, vehicle numbers,
+     * overtime, individual performance or shift-status detail. The executive
+     * response contains only aggregate capacity and trend information required
+     * by the Director dashboard.
+     */
+    @Transactional(readOnly = true)
+    public DashboardResponse getExecutiveDashboard() {
+
+        Object[] totals = entityManager.createQuery(
+                        """
+                        select coalesce(sum(s.totalTrips), 0),
+                               coalesce(sum(s.totalLoaders), 0)
+                        from LogisticsShift s
+                        """,
+                        Object[].class)
+                .getSingleResult();
+
+        int totalTrips = safeInt(totals[0]);
+        int totalLoaders = safeInt(totals[1]);
+
+        int activeDrivers = Math.toIntExact(
+                driverRepository.count());
+
+        int activeVehicles = Math.toIntExact(
+                vehicleRepository.count());
+
+        double avgTripsPerDriver = activeDrivers == 0
+                ? 0D
+                : (double) totalTrips / activeDrivers;
+
+        double avgTripsPerVehicle = activeVehicles == 0
+                ? 0D
+                : (double) totalTrips / activeVehicles;
+
+        Map<String, Integer> tripsOverTime = intMap(
+                entityManager.createQuery(
+                                """
+                                select function('date', s.shiftStart),
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                where s.shiftStart is not null
+                                group by function('date', s.shiftStart)
+                                order by function('date', s.shiftStart)
+                                """,
+                                Object[].class)
+                        .getResultList());
+
+        Map<String, Integer> tripsByLocation = intMap(
+                entityManager.createQuery(
+                                """
+                                select coalesce(s.routeCategory, 'UNKNOWN'),
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                group by coalesce(s.routeCategory, 'UNKNOWN')
+                                """,
+                                Object[].class)
+                        .getResultList());
+
+        DashboardResponse response = new DashboardResponse();
+
+        response.setTotalTrips(totalTrips);
+        response.setTotalLoaders(totalLoaders);
+        response.setEfficiency(0D);
+        response.setActiveDrivers(activeDrivers);
+        response.setActiveVehicles(activeVehicles);
+        response.setAverageTripsPerDriver(avgTripsPerDriver);
+        response.setAverageTripsPerVehicle(avgTripsPerVehicle);
+        response.setTripsOverTime(tripsOverTime);
+        response.setTripsByLocation(tripsByLocation);
+        response.setDriverTrips(new LinkedHashMap<>());
+        response.setDriverPerformance(new LinkedHashMap<>());
+        response.setVehicleUtilization(new LinkedHashMap<>());
+        response.setOvertimeAnalytics(new LinkedHashMap<>());
+        response.setShiftPerformance(new LinkedHashMap<>());
+
+        return response;
+    }
+
     private Map<String, Integer> intMap(
             List<Object[]> rows) {
 

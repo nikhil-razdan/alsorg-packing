@@ -105,11 +105,17 @@ const ACCESS_GROUPS = [
 		label: "PackFlow",
 		shortLabel: "PackFlow",
 		description:
-			"Packing, hardware packets, warehouse, dispatch and logistics operations.",
+			"Executive oversight plus packing, hardware packets, warehouse, dispatch and logistics operations.",
 		accent: "#3b82f6",
 		icon: <InventoryIcon />,
 		defaultRole: "PACKING",
 		roles: [
+			{
+				value: "PACKFLOW_DIRECTOR",
+				label: "PackFlow Director",
+				description:
+					"Read-only executive PackFlow dashboard. No packing, warehouse, dispatch, logistics or user-administration operations.",
+			},
 			{
 				value: "PACKING",
 				label: "Packing",
@@ -465,6 +471,7 @@ const isAllowedRoleCombination = (roles) => {
 
 	if (cleanRoles.length <= 1) return true;
 	if (cleanRoles.includes("ADMIN")) return false;
+	if (cleanRoles.includes("PACKFLOW_DIRECTOR")) return false;
 
 	const packRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW);
 	const assetFlowRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW);
@@ -492,7 +499,10 @@ const rolesRequirePlantAccess = (roles) => {
 	const cleanRoles =
 		normalizeArray(roles);
 
-	if (cleanRoles.includes("ADMIN")) {
+	if (
+		cleanRoles.includes("ADMIN") ||
+		cleanRoles.includes("PACKFLOW_DIRECTOR")
+	) {
 		return false;
 	}
 
@@ -689,6 +699,7 @@ const roleRequiresPlantAccess = (role) => {
 
 	if (
 		cleanRole === "ADMIN" ||
+		cleanRole === "PACKFLOW_DIRECTOR" ||
 		cleanRole === "DRIVER"
 	) {
 		return false;
@@ -1060,8 +1071,10 @@ const getPackFlowAccessMatrix = (user) => {
 	return [
 		{
 			key: "DASHBOARD",
-			label: "Dashboard",
-			granted: has("ADMIN", "DISPATCH", "PACKING", "WAREHOUSE", "LOGISTICS"),
+			label: roles.includes("PACKFLOW_DIRECTOR")
+				? "Executive Dashboard"
+				: "Dashboard",
+			granted: has("ADMIN", "PACKFLOW_DIRECTOR"),
 		},
 		{
 			key: "NORMAL_INVENTORY",
@@ -1792,6 +1805,14 @@ function UsersPageContent() {
 		}
 
 		/*
+		 * PACKFLOW_DIRECTOR is a least-privilege executive identity and is
+		 * intentionally exclusive. Backend UserService enforces the same rule.
+		 */
+		if (cleanRoles.includes("PACKFLOW_DIRECTOR")) {
+			cleanRoles = ["PACKFLOW_DIRECTOR"];
+		}
+
+		/*
 		 * Keep the old PackFlow multi-role behaviour and allow one AssetFlow
 		 * role to coexist with an existing operational profile. Invalid
 		 * combinations remain visible temporarily so validation can explain
@@ -1881,6 +1902,13 @@ function UsersPageContent() {
 			roles.length > 1
 		) {
 			return "Administrator cannot be combined with another role.";
+		}
+
+		if (
+			roles.includes("PACKFLOW_DIRECTOR") &&
+			roles.length > 1
+		) {
+			return "PackFlow Director cannot be combined with another role.";
 		}
 
 		if (!isAllowedRoleCombination(roles)) {
@@ -4459,6 +4487,17 @@ function UserEditorDrawer({
 							as the other selected PackFlow responsibilities.
 						</Alert>
 					)}
+
+				{selectedRoles.includes("PACKFLOW_DIRECTOR") && (
+					<Alert
+						severity="info"
+						sx={infoAlertSx}
+					>
+						PackFlow Director is a read-only executive identity. It receives
+						only the PackFlow management dashboard and cannot be combined
+						with packing, warehouse, dispatch, logistics or other roles.
+					</Alert>
+				)}
 
 				{selectedRoles.includes("ADMIN") && (
 					<Alert

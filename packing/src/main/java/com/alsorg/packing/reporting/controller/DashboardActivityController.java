@@ -13,7 +13,7 @@ import com.alsorg.packing.reporting.service.DashboardActivityService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard/activity")
-@PreAuthorize("isAuthenticated()")
+@PreAuthorize("hasAuthority('ADMIN')")
 public class DashboardActivityController {
 
     private final DashboardActivityService service;
@@ -27,8 +27,11 @@ public class DashboardActivityController {
     public List<DashboardActivityRow> getActivity(
             @RequestParam(defaultValue = "12") int limit,
             @RequestParam(defaultValue = "0") int offset) {
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        int safeOffset = Math.max(offset, 0);
+
         return service.getRecentActivity(
-                Math.min(Math.max(limit, 1), 50),
-                Math.max(offset, 0));
+                safeLimit,
+                safeOffset);
     }
 }

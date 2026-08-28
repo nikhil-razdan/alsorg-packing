@@ -149,6 +149,25 @@ public class CurrentUserService {
         return hasRole(user, "ADMIN");
     }
 
+    public boolean isPackFlowDirector(User user) {
+        return hasRole(user, "PACKFLOW_DIRECTOR");
+    }
+
+    public boolean canViewPackFlowDashboard(User user) {
+        return isAdmin(user) || isPackFlowDirector(user);
+    }
+
+    public User requirePackFlowDashboardUser() {
+        User user = requireCurrentUser();
+
+        if (!canViewPackFlowDashboard(user)) {
+            throw new AccessDeniedException(
+                    "PackFlow dashboard access requires ADMIN or PACKFLOW_DIRECTOR");
+        }
+
+        return user;
+    }
+
     public boolean isPacking(User user) {
         return hasRole(user, "PACKING");
     }

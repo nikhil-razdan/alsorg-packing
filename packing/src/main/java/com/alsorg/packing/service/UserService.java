@@ -58,6 +58,7 @@ public class UserService {
         private static final Set<String> ALLOWED_ROLES = Set.of(
                         "ADMIN",
 
+                        "PACKFLOW_DIRECTOR",
                         "PACKING",
                         "HARDWARE_PACKING",
                         "WAREHOUSE",
@@ -334,6 +335,20 @@ public class UserService {
                         UUID driverId,
                         boolean requestedWarehouseAccess,
                         Set<String> modules) {
+                /*
+                 * PACKFLOW_DIRECTOR is a dedicated least-privilege identity.
+                 * Ignore any broader access fields submitted by an old/stale UI so
+                 * the backend itself guarantees dashboard-only module access.
+                 */
+                if (containsRole(roles, "PACKFLOW_DIRECTOR")) {
+                        user.setModules(new LinkedHashSet<>(Set.of("PACKFLOW")));
+                        user.setWarehouseAccess(false);
+                        user.setDriverId(null);
+                        user.setPlantCodes(new LinkedHashSet<>());
+                        user.setPlantCode(null);
+                        return;
+                }
+
                 Set<String> cleanModules = cleanModules(
                                 modules,
                                 roles);
@@ -454,6 +469,16 @@ public class UserService {
                                 cleanRoles.size() > 1) {
                         throw new RuntimeException(
                                         "ADMIN cannot be combined with another role");
+                }
+
+                /*
+                 * PACKFLOW_DIRECTOR is deliberately read-only/executive and must
+                 * never inherit operational permissions through a second PackFlow role.
+                 */
+                if (cleanRoles.contains("PACKFLOW_DIRECTOR") &&
+                                cleanRoles.size() > 1) {
+                        throw new RuntimeException(
+                                        "PACKFLOW_DIRECTOR cannot be combined with another role");
                 }
 
                 /*
@@ -588,6 +613,7 @@ public class UserService {
         private boolean roleRequiresPlantAccess(
                         String role) {
                 return !"ADMIN".equals(role) &&
+                                !"PACKFLOW_DIRECTOR".equals(role) &&
                                 !"DRIVER".equals(role) &&
                                 !role.startsWith("BOMFLOW_");
         }
@@ -669,7 +695,8 @@ public class UserService {
 
         private boolean isPackFlowRole(
                         String role) {
-                return "PACKING".equals(role) ||
+                return "PACKFLOW_DIRECTOR".equals(role) ||
+                                "PACKING".equals(role) ||
                                 "HARDWARE_PACKING".equals(role) ||
                                 "WAREHOUSE".equals(role) ||
                                 "DISPATCH".equals(role) ||
