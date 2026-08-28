@@ -4,6 +4,7 @@ import ActivityFeed from "./ActivityFeed";
 import StatusCorporateChart from "./StatusCorporateChart";
 import InventoryCommandCenter from "./inventory/InventoryCommandCenter";
 import InventoryReports from "./inventory/InventoryReports";
+import DailyThroughputDrilldown from "./inventory/DailyThroughputDrilldown";
 import ScheduledReports from "./ScheduledReports";
 import LogisticsDashboard from "./logistics/LogisticsDashboard";
 import AdminCenter from "./admin/AdminCenter";
@@ -19,9 +20,9 @@ const percent = (numerator, denominator, empty = 0) => {
   return Math.max(0, Math.min(100, (number(numerator) / base) * 100));
 };
 
-function MetricCard({ label, value, detail, accent = "#2563eb", signal }) {
-  return (
-    <div style={metricCard(accent)}>
+function MetricCard({ label, value, detail, accent = "#2563eb", signal, onClick }) {
+  const content = (
+    <>
       <div style={metricAccent(accent)} />
       <div style={metricTop}>
         <div style={metricLabel}>{label}</div>
@@ -29,8 +30,18 @@ function MetricCard({ label, value, detail, accent = "#2563eb", signal }) {
       </div>
       <div style={metricValue}>{value}</div>
       <div style={metricDetail}>{detail}</div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} style={{ ...metricCard(accent), ...metricButton }}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div style={metricCard(accent)}>{content}</div>;
 }
 
 function LegacyStatCard({
@@ -106,15 +117,14 @@ function SectionHeader({ eyebrow, title, subtitle, action }) {
   );
 }
 
-export default function AdminOperationsDashboard({
-  stats = {},
-  logistics,
-  activityLogs = [],
+function InventoryDashboard({
+  stats,
+  activityLogs,
   refreshing,
   onRefresh,
+  onOpenAdminCenter,
 }) {
-  const [workspace, setWorkspace] = useState("control");
-  const [adminCenterOpen, setAdminCenterOpen] = useState(false);
+  const [workspace, setWorkspace] = useState("overview");
 
   const currentExceptions =
     number(stats.masterItemsWithoutPackets) +
@@ -132,17 +142,12 @@ export default function AdminOperationsDashboard({
     number(stats.exceptionsCount),
     currentExceptions + legacyDispatchExceptions
   );
+
   const movementQueue =
     number(stats.warehouseRequestedItems) +
     number(stats.returnRequestedItems) +
     number(stats.queuedItems) +
     number(stats.readyToStoreItems);
-  const complianceFlags =
-    number(stats.expiredFitness) +
-    number(stats.expiredInsurance) +
-    number(stats.expiredPucc);
-  const todayThroughput =
-    number(stats.todayStickerGenerated) + number(stats.todayChallanGenerated);
 
   const packingCompletion = percent(stats.packetItemsWithSticker, stats.packetItems, 0);
   const masterCompletion = percent(stats.fullyPackedMasterItems, stats.masterItems, 0);
@@ -151,113 +156,80 @@ export default function AdminOperationsDashboard({
     number(stats.endedTrips) + number(stats.runningTrips),
     100
   );
+
   const inventoryBase =
     number(stats.warehouseItems) +
     number(stats.readyToDispatchItems) +
     number(stats.readyItems);
+
   const dispatchReadyShare = percent(stats.readyToDispatchItems, inventoryBase, 0);
 
   const actionSignals = useMemo(() => {
     const rows = [];
+
     if (totalExceptions > 0) {
       rows.push({
         tone: "critical",
         title: `${totalExceptions} data-integrity exception${totalExceptions === 1 ? "" : "s"}`,
-        text: "Reconcile broken packet/master/sticker/dispatch links before relying on downstream counts.",
+        text: "Reconcile broken packet/master/sticker/dispatch links before relying on downstream operational counts.",
       });
     }
+
     if (number(stats.readyToDispatchItems) > 0) {
       rows.push({
         tone: "info",
-        title: `${number(stats.readyToDispatchItems)} items waiting for outbound conversion`,
-        text: "This is the current finished-goods dispatch-ready queue and should be watched for dwell accumulation.",
+        title: `${number(stats.readyToDispatchItems)} finished-goods items ready for dispatch`,
+        text: "Watch this outbound-ready queue for dwell and challan conversion delay.",
       });
     }
+
     if (number(stats.packetItemsPendingSticker) > 0) {
       rows.push({
         tone: "warning",
         title: `${number(stats.packetItemsPendingSticker)} packet items still need sticker completion`,
-        text: "Open packing work remains in the packet-level execution queue.",
+        text: "This is current packing work that has not reached complete packet identity readiness.",
       });
     }
-    if (complianceFlags > 0) {
+
+    if (number(stats.warehouseRequestedItems) + number(stats.returnRequestedItems) > 0) {
       rows.push({
         tone: "warning",
-        title: `${complianceFlags} fleet-document compliance flag${complianceFlags === 1 ? "" : "s"}`,
-        text: "Fitness, insurance and/or PUCC expiry records require administrative review before vehicle assignment.",
+        title: `${number(stats.warehouseRequestedItems) + number(stats.returnRequestedItems)} warehouse decisions pending`,
+        text: "Includes inbound warehouse approvals and return-to-dispatch requests awaiting action.",
       });
     }
+
     if (rows.length === 0) {
       rows.push({
         tone: "good",
-        title: "No priority control exception in the current snapshot",
-        text: "Continue monitoring packing completion, dispatch-ready dwell and warehouse handoff queues.",
+        title: "No priority Inventory/Dispatch control exception in the current snapshot",
+        text: "Continue monitoring packing completion, FG readiness, warehouse handoff and dispatch conversion.",
       });
     }
+
     return rows.slice(0, 4);
-  }, [complianceFlags, stats, totalExceptions]);
+  }, [stats, totalExceptions]);
 
   const exceptionRows = [
-    {
-      label: "Master items without packets",
-      value: stats.masterItemsWithoutPackets,
-      severity: "high",
-      detail: "Parent manufacturing items missing packet structure.",
-    },
-    {
-      label: "Packets without packet items",
-      value: stats.packetsWithoutPacketItems,
-      severity: "high",
-      detail: "Packet shells that cannot represent physical packed contents.",
-    },
-    {
-      label: "Packet items without master link",
-      value: stats.packetItemsWithoutMaster,
-      severity: "high",
-      detail: "Orphan packet rows weaken project/product traceability.",
-    },
-    {
-      label: "Duplicate current stickers",
-      value: stats.duplicateCurrentStickers,
-      severity: "high",
-      detail: "Current sticker identity collision requiring reconciliation.",
-    },
-    {
-      label: "Ready items still in PKD",
-      value: stats.readyItemsStillInPkd,
-      severity: "medium",
-      detail: "Status/location mismatch between readiness and physical flow.",
-    },
-    {
-      label: "Dispatched without packet item",
-      value: stats.dispatchedWithoutPacketItem,
-      severity: "medium",
-      detail: "Legacy dispatch rows missing packet-level lineage.",
-    },
-    {
-      label: "Dispatched without challan",
-      value: stats.dispatchedWithoutChallan,
-      severity: "high",
-      detail: "Outbound record without the expected dispatch document link.",
-    },
-    {
-      label: "Dispatched without driver / vehicle",
-      value: stats.dispatchedWithoutDriver,
-      severity: "medium",
-      detail: "Transport attribution is incomplete on dispatched records.",
-    },
+    ["Master items without packets", stats.masterItemsWithoutPackets, "high", "Parent manufacturing items missing packet structure."],
+    ["Packets without packet items", stats.packetsWithoutPacketItems, "high", "Packet shells that cannot represent physical packed contents."],
+    ["Packet items without master link", stats.packetItemsWithoutMaster, "high", "Orphan packet rows weaken item traceability."],
+    ["Duplicate current stickers", stats.duplicateCurrentStickers, "high", "Current sticker identity collision requiring reconciliation."],
+    ["Ready items still in PKD", stats.readyItemsStillInPkd, "medium", "Status/location mismatch between readiness and physical flow."],
+    ["Dispatched without packet item", stats.dispatchedWithoutPacketItem, "medium", "Legacy dispatch rows missing packet-level lineage."],
+    ["Dispatched without challan", stats.dispatchedWithoutChallan, "high", "Outbound record without expected dispatch document linkage."],
+    ["Dispatched without driver / vehicle", stats.dispatchedWithoutDriver, "medium", "Transport attribution is incomplete on dispatched records."],
   ];
 
   return (
     <>
       <section style={hero}>
         <div style={heroCopy}>
-          <div style={heroEyebrow}>ADMIN • OPERATIONAL CONTROL TOWER</div>
-          <h1 style={heroTitle}>Exceptions first. Throughput second.</h1>
+          <div style={heroEyebrow}>ADMIN • INVENTORY & DISPATCH CONTROL TOWER</div>
+          <h1 style={heroTitle}>Packing → FG → Warehouse → Dispatch.</h1>
           <p style={heroText}>
-            Control-focused PackFlow view for custom interior manufacturing: data integrity,
-            packing backlog, finished-goods readiness, warehouse handoff, dispatch execution and
-            fleet compliance in one management surface.
+            One operational view of physical packet execution, sticker completion, finished-goods readiness,
+            warehouse movement, outbound conversion, challans and data-integrity exceptions for custom interior manufacturing.
           </p>
         </div>
 
@@ -267,55 +239,30 @@ export default function AdminOperationsDashboard({
             <strong>{totalExceptions === 0 ? "CLEAR" : "ACTION"}</strong>
             <small>{totalExceptions} integrity exceptions</small>
           </div>
-          <button type="button" style={dangerAction} onClick={() => setAdminCenterOpen(true)}>
+          <button type="button" style={dangerAction} onClick={onOpenAdminCenter}>
             Admin Center
           </button>
         </div>
       </section>
 
       <section style={metricGrid}>
-        <MetricCard
-          label="Integrity exceptions"
-          value={totalExceptions}
-          detail={`${currentExceptions} current • ${legacyDispatchExceptions} legacy dispatch`}
-          accent={totalExceptions > 0 ? "#dc2626" : "#16a34a"}
-          signal={totalExceptions > 0 ? "ACTION" : "CLEAR"}
+        <MetricCard label="Inventory Items" value={number(stats.totalItems)} detail="Warehouse + Ready to Dispatch + Ready" accent="#2563eb" signal="LIVE" />
+        <MetricCard label="Master Items" value={number(stats.masterItems)} detail={`${number(stats.fullyPackedMasterItems)} fully packed`} accent="#7c3aed" signal={`${Math.round(masterCompletion)}%`} />
+        <MetricCard label="Packet Items" value={number(stats.packetItems)} detail={`${number(stats.packetItemsWithSticker)} sticker-ready • ${number(stats.packetItemsPendingSticker)} pending`} accent="#0284c7" signal={`${Math.round(packingCompletion)}%`} />
+        <MetricCard label="Warehouse" value={number(stats.warehouseItems)} detail={`${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests`} accent="#9333ea" signal="STOCK" />
+        <MetricCard label="Ready to Dispatch" value={number(stats.readyToDispatchItems)} detail={`${Math.round(dispatchReadyShare)}% of current FG inventory position`} accent="#059669" signal="FG" />
+        <MetricCard label="Dispatch Challans" value={number(stats.normalDispatchChallans)} detail={`${number(stats.todayDispatchChallans)} distinct challans today • ${number(stats.runningTrips)} running trips`} accent="#0f766e" signal="OUTBOUND" />
+        <MetricCard label="Custom Challans" value={number(stats.customChallans)} detail={`${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} item rows`} accent="#ca8a04" signal="CUSTOM" />
+        <MetricCard label="Exceptions" value={totalExceptions} detail={`${currentExceptions} current-chain • ${legacyDispatchExceptions} legacy outbound`} accent={totalExceptions ? "#dc2626" : "#16a34a"} signal={totalExceptions ? "ACTION" : "CLEAR"} />
+      </section>
+
+      <section style={throughputPanel}>
+        <SectionHeader
+          eyebrow="DAILY ACCOUNTABILITY"
+          title="User-wise output with exact record inspection"
+          subtitle="Restored from the earlier Admin dashboard and upgraded: click a daily metric, then click a user to inspect the records behind the count."
         />
-        <MetricCard
-          label="Packing backlog"
-          value={number(stats.packetItemsPendingSticker || stats.pendingItems)}
-          detail={`${Math.round(packingCompletion)}% packet-item sticker completion`}
-          accent="#d97706"
-          signal="WIP"
-        />
-        <MetricCard
-          label="Dispatch-ready FG"
-          value={number(stats.readyToDispatchItems)}
-          detail={`${Math.round(dispatchReadyShare)}% of live finished-goods position`}
-          accent="#2563eb"
-          signal="OUTBOUND"
-        />
-        <MetricCard
-          label="Movement / approval queue"
-          value={movementQueue}
-          detail={`${number(stats.warehouseRequestedItems)} warehouse • ${number(stats.returnRequestedItems)} return requests`}
-          accent="#7c3aed"
-          signal="QUEUE"
-        />
-        <MetricCard
-          label="Fleet compliance flags"
-          value={complianceFlags}
-          detail={`${number(stats.expiredFitness)} fitness • ${number(stats.expiredInsurance)} insurance • ${number(stats.expiredPucc)} PUCC`}
-          accent={complianceFlags > 0 ? "#dc2626" : "#16a34a"}
-          signal="DOCUMENTS"
-        />
-        <MetricCard
-          label="Today throughput"
-          value={todayThroughput}
-          detail={`${number(stats.todayStickerGenerated)} stickers • ${number(stats.todayChallanGenerated)} challans`}
-          accent="#0f766e"
-          signal="TODAY"
-        />
+        <DailyThroughputDrilldown />
       </section>
 
       <section style={overviewGrid}>
@@ -323,7 +270,7 @@ export default function AdminOperationsDashboard({
           <SectionHeader
             eyebrow="PRIORITY ACTIONS"
             title="Management attention queue"
-            subtitle="Data-backed control signals only; no invented thresholds or external benchmarks."
+            subtitle="Exception-first signals grounded in current PackFlow state."
           />
           <div style={signalList}>
             {actionSignals.map((row) => {
@@ -345,27 +292,13 @@ export default function AdminOperationsDashboard({
           <SectionHeader
             eyebrow="CONTROL RATIOS"
             title="Execution quality gates"
-            subtitle="Completion and closure ratios calculated directly from PackFlow counts."
+            subtitle="Completion and conversion ratios calculated directly from PackFlow counts."
           />
           <div style={progressList}>
-            <ProgressRow
-              label="Packet sticker completion"
-              value={packingCompletion}
-              accent="#2563eb"
-              detail={`${number(stats.packetItemsWithSticker)} of ${number(stats.packetItems)} packet items`}
-            />
-            <ProgressRow
-              label="Fully packed master items"
-              value={masterCompletion}
-              accent="#7c3aed"
-              detail={`${number(stats.fullyPackedMasterItems)} of ${number(stats.masterItems)} manufacturing items`}
-            />
-            <ProgressRow
-              label="Trip closure"
-              value={tripClosure}
-              accent="#0f766e"
-              detail={`${number(stats.endedTrips)} ended • ${number(stats.runningTrips)} running`}
-            />
+            <ProgressRow label="Packet sticker completion" value={packingCompletion} accent="#2563eb" detail={`${number(stats.packetItemsWithSticker)} of ${number(stats.packetItems)} packet items`} />
+            <ProgressRow label="Fully packed master items" value={masterCompletion} accent="#7c3aed" detail={`${number(stats.fullyPackedMasterItems)} of ${number(stats.masterItems)} master items`} />
+            <ProgressRow label="Dispatch-ready share" value={dispatchReadyShare} accent="#059669" detail={`${number(stats.readyToDispatchItems)} of ${inventoryBase} current FG-position items`} />
+            <ProgressRow label="Trip closure" value={tripClosure} accent="#0f766e" detail={`${number(stats.endedTrips)} ended • ${number(stats.runningTrips)} running`} />
           </div>
         </div>
       </section>
@@ -375,14 +308,10 @@ export default function AdminOperationsDashboard({
           <SectionHeader
             eyebrow="FINISHED GOODS POSITION"
             title="Live warehouse & dispatch composition"
-            subtitle="Current tracked inventory only."
+            subtitle="Current tracked inventory position only."
           />
           <div style={chartBody}>
-            <StatusCorporateChart
-              warehouse={stats.warehouseItems}
-              readyToDispatch={stats.readyToDispatchItems}
-              ready={stats.readyItems}
-            />
+            <StatusCorporateChart warehouse={stats.warehouseItems} readyToDispatch={stats.readyToDispatchItems} ready={stats.readyItems} />
           </div>
         </div>
 
@@ -390,11 +319,11 @@ export default function AdminOperationsDashboard({
           <SectionHeader
             eyebrow="EXCEPTION REGISTER"
             title="Where the data chain can break"
-            subtitle="These controls are intentionally more prominent on the ADMIN dashboard."
+            subtitle="ADMIN-only control detail; Director receives only aggregate risk indicators."
           />
           <div style={exceptionList}>
-            {exceptionRows.map((row) => (
-              <ExceptionRow key={row.label} {...row} />
+            {exceptionRows.map(([label, value, severity, detail]) => (
+              <ExceptionRow key={label} label={label} value={value} severity={severity} detail={detail} />
             ))}
           </div>
         </div>
@@ -403,35 +332,28 @@ export default function AdminOperationsDashboard({
       <section style={workspacePanel}>
         <div style={workspaceHeader}>
           <div>
-            <div style={sectionEyebrow}>ADMIN WORKSPACE</div>
-            <div style={sectionTitle}>Investigate, report and control</div>
+            <div style={sectionEyebrow}>INVENTORY ADMIN WORKSPACE</div>
+            <div style={sectionTitle}>Investigate, trace and report</div>
           </div>
-
           <div style={tabs}>
             {[
-              ["control", "Activity"],
+              ["overview", "Activity"],
               ["trace", "Traceability"],
               ["reports", "Reports"],
-              ["logistics", "Logistics"],
             ].map(([key, label]) => (
-              <button
-                type="button"
-                key={key}
-                style={tabButton(workspace === key)}
-                onClick={() => setWorkspace(key)}
-              >
+              <button type="button" key={key} style={tabButton(workspace === key)} onClick={() => setWorkspace(key)}>
                 {label}
               </button>
             ))}
           </div>
         </div>
 
-        {workspace === "control" && (
+        {workspace === "overview" && (
           <div>
             <SectionHeader
               eyebrow="AUDIT STREAM"
               title="Recent PackFlow activity"
-              subtitle="Raw activity is intentionally ADMIN-only and is not exposed to the Director dashboard."
+              subtitle="Raw activity is ADMIN-only and is never sent to the Director dashboard."
               action={
                 <button type="button" style={secondaryButton} onClick={onRefresh} disabled={refreshing}>
                   {refreshing ? "Refreshing…" : "Refresh events"}
@@ -450,11 +372,54 @@ export default function AdminOperationsDashboard({
             <ScheduledReports />
           </div>
         )}
-
-        {workspace === "logistics" && (
-          <LogisticsDashboard StatCard={LegacyStatCard} initialData={logistics} />
-        )}
       </section>
+    </>
+  );
+}
+
+export default function AdminOperationsDashboard({
+  stats = {},
+  logistics,
+  activityLogs = [],
+  refreshing,
+  onRefresh,
+}) {
+  const [mode, setMode] = useState("inventory");
+  const [adminCenterOpen, setAdminCenterOpen] = useState(false);
+
+  return (
+    <>
+      <section style={modeBar}>
+        <div>
+          <div style={sectionEyebrow}>ADMIN DASHBOARD MODE</div>
+          <div style={modeTitle}>One management dashboard. Two operating lenses.</div>
+          <div style={modeSub}>
+            Inventory mode covers packing, FG, warehouse and dispatch. Logistics mode covers trips, drivers, vehicles and route/resource analytics.
+          </div>
+        </div>
+        <div style={modeSwitch}>
+          <button type="button" style={modeButton(mode === "inventory")} onClick={() => setMode("inventory")}>
+            Inventory & Dispatch
+          </button>
+          <button type="button" style={modeButton(mode === "logistics")} onClick={() => setMode("logistics")}>
+            Logistics
+          </button>
+        </div>
+      </section>
+
+      {mode === "inventory" ? (
+        <InventoryDashboard
+          stats={stats}
+          activityLogs={activityLogs}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onOpenAdminCenter={() => setAdminCenterOpen(true)}
+        />
+      ) : (
+        <section style={logisticsShell}>
+          <LogisticsDashboard StatCard={LegacyStatCard} initialData={logistics} />
+        </section>
+      )}
 
       <AdminCenter
         open={adminCenterOpen}
@@ -481,78 +446,69 @@ const actionTone = {
   good: { accent: "#16a34a", soft: "rgba(22,163,74,.08)", border: "rgba(22,163,74,.18)" },
 };
 
-const hero = {
-  display: "flex",
-  alignItems: "stretch",
-  justifyContent: "space-between",
-  gap: 18,
-  padding: "22px clamp(18px,2.5vw,32px)",
-  border: "1px solid var(--pf-border)",
-  borderRadius: 14,
-  background:
-    "linear-gradient(120deg,var(--pf-surface) 0%,var(--pf-surface) 68%,color-mix(in srgb,#2563eb 7%,var(--pf-surface-alt)) 100%)",
-  boxShadow: "0 12px 34px rgba(var(--pf-shadow-rgb),.07)",
-  flexWrap: "wrap",
-};
-
+const modeBar = { marginBottom: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", borderRadius: 13, background: "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.05)" };
+const modeTitle = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 17, fontWeight: 950 };
+const modeSub = { maxWidth: 760, marginTop: 4, color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 650, lineHeight: 1.5 };
+const modeSwitch = { display: "flex", gap: 5, padding: 4, borderRadius: 11, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
+const modeButton = (active) => ({ minHeight: 38, padding: "0 14px", borderRadius: 8, border: active ? "1px solid rgba(37,99,235,.28)" : "1px solid transparent", background: active ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "transparent", color: active ? "#fff" : "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900 });
+const logisticsShell = { minWidth: 0 };
+const hero = { display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 18, padding: "22px clamp(18px,2.5vw,32px)", border: "1px solid var(--pf-border)", borderRadius: 14, background: "linear-gradient(120deg,var(--pf-surface) 0%,var(--pf-surface) 68%,color-mix(in srgb,#2563eb 7%,var(--pf-surface-alt)) 100%)", boxShadow: "0 12px 34px rgba(var(--pf-shadow-rgb),.07)", flexWrap: "wrap" };
 const heroCopy = { flex: "1 1 680px", minWidth: 0 };
 const heroEyebrow = { color: "#2563eb", fontSize: 9, fontWeight: 950, letterSpacing: ".14em" };
 const heroTitle = { margin: "7px 0 0", fontSize: "clamp(26px,3vw,42px)", lineHeight: 1.02, letterSpacing: "-.045em", fontWeight: 950, color: "var(--pf-text-strong)" };
-const heroText = { maxWidth: 890, margin: "10px 0 0", color: "var(--pf-text-muted)", fontSize: 12, fontWeight: 650, lineHeight: 1.65 };
+const heroText = { maxWidth: 900, margin: "10px 0 0", color: "var(--pf-text-muted)", fontSize: 12, fontWeight: 650, lineHeight: 1.65 };
 const heroActions = { display: "flex", alignItems: "stretch", gap: 9, flexWrap: "wrap" };
 const healthBlock = (exceptions) => ({ minWidth: 150, padding: "11px 13px", borderRadius: 10, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", background: exceptions > 0 ? "rgba(220,38,38,.07)" : "rgba(22,163,74,.07)", border: `1px solid ${exceptions > 0 ? "rgba(220,38,38,.18)" : "rgba(22,163,74,.18)"}` });
 const healthLabel = { fontSize: 8, fontWeight: 950, letterSpacing: ".1em", color: "var(--pf-text-muted)" };
 const dangerAction = { minHeight: 46, alignSelf: "center", padding: "0 15px", borderRadius: 9, border: "1px solid rgba(220,38,38,.25)", background: "linear-gradient(135deg,#b91c1c,#dc2626)", color: "#fff", fontSize: 10.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" };
-
-const metricGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(185px,1fr))", gap: 10 };
-const metricCard = (accent) => ({ position: "relative", overflow: "hidden", minHeight: 122, padding: 14, borderRadius: 12, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 6px 20px rgba(var(--pf-shadow-rgb),.05)" });
+const metricGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 10 };
+const metricCard = (accent) => ({ position: "relative", overflow: "hidden", minHeight: 118, padding: 14, borderRadius: 12, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 6px 20px rgba(var(--pf-shadow-rgb),.05)", textAlign: "left", color: "var(--pf-text-strong)", fontFamily: "inherit" });
+const metricButton = { width: "100%", cursor: "pointer" };
 const metricAccent = (accent) => ({ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: accent });
 const metricTop = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 };
 const metricLabel = { color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase" };
 const metricSignal = (accent) => ({ padding: "3px 6px", borderRadius: 6, color: accent, background: `${accent}10`, border: `1px solid ${accent}20`, fontSize: 7.5, fontWeight: 950, letterSpacing: ".05em" });
 const metricValue = { marginTop: 10, fontSize: 28, lineHeight: 1, fontWeight: 950, letterSpacing: "-.04em", color: "var(--pf-text-strong)" };
 const metricDetail = { marginTop: 8, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700, lineHeight: 1.45 };
-
+const throughputPanel = { marginTop: 12, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
 const overviewGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 12 };
 const twoColumn = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(390px,1fr))", gap: 12 };
 const panel = { minWidth: 0, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
 const sectionHeader = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 13, flexWrap: "wrap" };
 const sectionEyebrow = { color: "#2563eb", fontSize: 8, fontWeight: 950, letterSpacing: ".12em" };
 const sectionTitle = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 16, fontWeight: 950, letterSpacing: "-.02em" };
-const sectionSubtitle = { marginTop: 4, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 650, lineHeight: 1.5 };
-const signalList = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(225px,1fr))", gap: 8 };
-const signalCard = (tone) => ({ padding: 11, borderRadius: 9, background: tone.soft, border: `1px solid ${tone.border}` });
-const signalCardTop = { display: "flex", alignItems: "center", gap: 7, color: "var(--pf-text-strong)", fontSize: 10.5 };
-const signalText = { marginTop: 6, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 650, lineHeight: 1.5 };
+const sectionSubtitle = { maxWidth: 720, marginTop: 4, color: "var(--pf-text-muted)", fontSize: 10, fontWeight: 650, lineHeight: 1.5 };
+const signalList = { display: "grid", gap: 8 };
+const signalCard = (tone) => ({ padding: 11, borderRadius: 10, background: tone.soft, border: `1px solid ${tone.border}` });
+const signalCardTop = { display: "flex", alignItems: "center", gap: 8, color: "var(--pf-text-strong)", fontSize: 10.5 };
+const signalText = { marginTop: 5, paddingLeft: 15, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 650, lineHeight: 1.45 };
 const severityDot = { width: 7, height: 7, flexShrink: 0, borderRadius: "50%" };
-const progressList = { display: "flex", flexDirection: "column", gap: 12 };
-const progressRow = { paddingBottom: 10, borderBottom: "1px solid var(--pf-border-soft)" };
-const progressHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 };
+const progressList = { display: "grid", gap: 13 };
+const progressRow = {};
+const progressHeader = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" };
 const progressLabel = { color: "var(--pf-text-strong)", fontSize: 10.5, fontWeight: 900 };
-const progressDetail = { marginTop: 2, color: "var(--pf-text-muted)", fontSize: 8.7, fontWeight: 650 };
+const progressDetail = { marginTop: 3, color: "var(--pf-text-muted)", fontSize: 9, fontWeight: 650 };
 const progressValue = { color: "var(--pf-text-strong)", fontSize: 12 };
-const progressTrack = { height: 5, marginTop: 8, borderRadius: 999, overflow: "hidden", background: "rgba(var(--pf-fg-rgb),.07)" };
+const progressTrack = { height: 6, marginTop: 8, overflow: "hidden", borderRadius: 999, background: "var(--pf-surface-alt)" };
 const progressFill = { height: "100%", borderRadius: 999 };
-const chartBody = { minHeight: 325 };
-const exceptionList = { display: "flex", flexDirection: "column", gap: 2 };
-const exceptionRow = { minHeight: 52, padding: "8px 3px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, borderBottom: "1px solid var(--pf-border-soft)" };
-const exceptionIdentity = { display: "flex", alignItems: "center", gap: 9, minWidth: 0 };
-const exceptionLabel = { color: "var(--pf-text-strong)", fontSize: 9.8, fontWeight: 900 };
-const exceptionDetail = { marginTop: 2, color: "var(--pf-text-muted)", fontSize: 8.4, fontWeight: 650, lineHeight: 1.35 };
-const exceptionValue = (tone) => ({ minWidth: 34, height: 28, padding: "0 7px", display: "grid", placeItems: "center", borderRadius: 7, color: tone.accent, background: tone.soft, border: `1px solid ${tone.border}`, fontSize: 11, fontWeight: 950 });
-
-const workspacePanel = { marginTop: 12, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 10px 28px rgba(var(--pf-shadow-rgb),.06)" };
-const workspaceHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, marginBottom: 14, flexWrap: "wrap" };
-const tabs = { display: "flex", gap: 4, padding: 3, borderRadius: 9, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border)", flexWrap: "wrap" };
-const tabButton = (active) => ({ minHeight: 31, padding: "0 10px", borderRadius: 6, border: active ? "1px solid rgba(37,99,235,.2)" : "1px solid transparent", background: active ? "var(--pf-surface)" : "transparent", color: active ? "#2563eb" : "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" });
-const secondaryButton = { minHeight: 34, padding: "0 11px", borderRadius: 8, border: "1px solid var(--pf-border)", background: "var(--pf-surface-alt)", color: "var(--pf-text-strong)", fontSize: 9.5, fontWeight: 850, cursor: "pointer", fontFamily: "inherit" };
-const stack = { display: "flex", flexDirection: "column", gap: 12 };
-
-const legacyCard = (accent, clickable) => ({ minWidth: 0, minHeight: 110, padding: 13, textAlign: "left", borderRadius: 11, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", color: "var(--pf-text-strong)", cursor: clickable ? "pointer" : "default", fontFamily: "inherit" });
+const chartBody = { minHeight: 250 };
+const exceptionList = { display: "grid", gap: 7 };
+const exceptionRow = { minHeight: 52, padding: "8px 9px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 9, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
+const exceptionIdentity = { display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 };
+const exceptionLabel = { color: "var(--pf-text-strong)", fontSize: 9.5, fontWeight: 900 };
+const exceptionDetail = { marginTop: 3, color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 650, lineHeight: 1.35 };
+const exceptionValue = (tone) => ({ minWidth: 34, height: 28, padding: "0 8px", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", color: tone.accent, background: tone.soft, border: `1px solid ${tone.border}`, fontSize: 12, fontWeight: 950 });
+const workspacePanel = { marginTop: 12, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
+const workspaceHeader = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" };
+const tabs = { display: "flex", gap: 5, flexWrap: "wrap" };
+const tabButton = (active) => ({ minHeight: 34, padding: "0 11px", borderRadius: 8, border: active ? "1px solid rgba(37,99,235,.25)" : "1px solid var(--pf-border-soft)", background: active ? "rgba(37,99,235,.09)" : "var(--pf-surface-alt)", color: active ? "#2563eb" : "var(--pf-text)", cursor: "pointer", fontFamily: "inherit", fontSize: 9.5, fontWeight: 900 });
+const secondaryButton = { minHeight: 34, padding: "0 11px", borderRadius: 8, border: "1px solid var(--pf-border)", background: "var(--pf-surface-alt)", color: "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit", fontSize: 9.5, fontWeight: 850 };
+const stack = { display: "grid", gap: 14 };
+const legacyCard = (accent, clickable) => ({ minWidth: 0, padding: 13, borderRadius: 12, border: "1px solid var(--pf-border)", background: "var(--pf-surface)", color: "var(--pf-text-strong)", textAlign: "left", fontFamily: "inherit", cursor: clickable ? "pointer" : "default" });
 const legacyHead = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 };
-const legacyIcon = (accent) => ({ width: 28, height: 28, display: "grid", placeItems: "center", borderRadius: 8, color: accent, background: `${accent}10`, border: `1px solid ${accent}20`, fontSize: 10, fontWeight: 950 });
-const legacyTrend = (accent) => ({ color: accent, fontSize: 9, fontWeight: 900 });
-const legacyTitle = { marginTop: 9, color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".06em" };
-const legacyValue = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 24, fontWeight: 950 };
-const legacySubtle = { marginTop: 4, color: "var(--pf-text-muted)", fontSize: 8.7, fontWeight: 650 };
-const legacyTrendLabel = { marginTop: 4, color: "var(--pf-text-dim)", fontSize: 8.2, fontWeight: 650 };
+const legacyIcon = (accent) => ({ color: accent, fontWeight: 950 });
+const legacyTrend = (accent) => ({ color: accent, fontSize: 8.5, fontWeight: 900 });
+const legacyTitle = { marginTop: 8, color: "var(--pf-text-muted)", fontSize: 9, fontWeight: 850 };
+const legacyValue = { marginTop: 5, fontSize: 24, fontWeight: 950 };
+const legacySubtle = { marginTop: 5, color: "var(--pf-text-muted)", fontSize: 9 };
+const legacyTrendLabel = { marginTop: 3, color: "var(--pf-text-dim)", fontSize: 8.5 };

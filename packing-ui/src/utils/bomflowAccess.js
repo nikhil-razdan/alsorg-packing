@@ -35,85 +35,83 @@ const rolesFromUser = (user) => {
 	);
 };
 
-const resolveBomFlowRole = (value) => {
-	if (typeof value === "string") {
-		return normalizeRole(value);
+const resolveBomFlowRoles = (value) => {
+	if (Array.isArray(value)) {
+		return Array.from(new Set(value.map(normalizeRole).filter((role) => BOMFLOW_ROLES.includes(role))));
 	}
 
-	const roles = rolesFromUser(value);
+	if (value && typeof value === "object") {
+		return rolesFromUser(value).filter((role) => BOMFLOW_ROLES.includes(role));
+	}
 
-	return (
-		BOMFLOW_ROLES.find((role) =>
-			roles.includes(role)
-		) || ""
-	);
+	const scalar = normalizeRole(value);
+	const runtimeRoles = rolesFromUser(getRuntimeAuthUser())
+		.filter((role) => BOMFLOW_ROLES.includes(role));
+
+	/*
+	 * Legacy callers often pass getBomFlowRole(), which is a single string.
+	 * If that scalar is one of the current user's effective BOMFlow roles,
+	 * evaluate permissions against the complete role union so a user such as
+	 * EDITOR + APPROVER does not lose either capability in the UI.
+	 */
+	if (scalar && runtimeRoles.includes(scalar)) {
+		return runtimeRoles;
+	}
+
+	if (scalar && BOMFLOW_ROLES.includes(scalar)) {
+		return [scalar];
+	}
+
+	return runtimeRoles;
 };
 
-/*
- * Compatibility function retained for existing BOMFlow callers, but the role
- * now comes from the current in-memory AuthContext snapshot rather than
- * localStorage. Backend authorization remains authoritative.
- */
-export const getBomFlowRole = () => {
-	return resolveBomFlowRole(
-		getRuntimeAuthUser()
-	);
-};
+const resolveBomFlowRole = (value) =>
+	resolveBomFlowRoles(value)[0] || "";
+
+const hasAnyBomFlowRole = (value, allowed) =>
+	resolveBomFlowRoles(value).some((role) => allowed.includes(role));
+
+export const getBomFlowRole = () =>
+	resolveBomFlowRole(getRuntimeAuthUser());
+
+export const getBomFlowRoles = () =>
+	resolveBomFlowRoles(getRuntimeAuthUser());
 
 export const hasBomFlowAccess = (
-	role = getBomFlowRole()
-) => {
-	return BOMFLOW_ROLES.includes(
-		resolveBomFlowRole(role)
-	);
-};
+	role = getRuntimeAuthUser()
+) => resolveBomFlowRoles(role).length > 0;
 
 export const canEditBomFlowRevision = (
-	role = getBomFlowRole()
-) => {
-	const normalized =
-		resolveBomFlowRole(role);
-
-	return [
-		"ADMIN",
-		"BOMFLOW_MANAGER",
-		"BOMFLOW_EDITOR",
-	].includes(normalized);
-};
+	role = getRuntimeAuthUser()
+) => hasAnyBomFlowRole(role, [
+	"ADMIN",
+	"BOMFLOW_MANAGER",
+	"BOMFLOW_EDITOR",
+]);
 
 export const canSubmitBomFlowRevision =
 	canEditBomFlowRevision;
 
 export const canReviewBomFlowRevision = (
-	role = getBomFlowRole()
-) => {
-	const normalized =
-		resolveBomFlowRole(role);
-
-	return [
-		"ADMIN",
-		"BOMFLOW_MANAGER",
-		"BOMFLOW_REVIEWER",
-		"BOMFLOW_APPROVER",
-	].includes(normalized);
-};
+	role = getRuntimeAuthUser()
+) => hasAnyBomFlowRole(role, [
+	"ADMIN",
+	"BOMFLOW_MANAGER",
+	"BOMFLOW_REVIEWER",
+	"BOMFLOW_APPROVER",
+]);
 
 export const canApproveBomFlowRevision = (
-	role = getBomFlowRole()
-) => {
-	const normalized =
-		resolveBomFlowRole(role);
-
-	return [
-		"ADMIN",
-		"BOMFLOW_MANAGER",
-		"BOMFLOW_APPROVER",
-	].includes(normalized);
-};
+	role = getRuntimeAuthUser()
+) => hasAnyBomFlowRole(role, [
+	"ADMIN",
+	"BOMFLOW_MANAGER",
+	"BOMFLOW_APPROVER",
+]);
 
 export const canAccessBomFlowScreen = (
 	screen,
-	role = getBomFlowRole()
+	role = getRuntimeAuthUser()
 ) => {
 	if (!hasBomFlowAccess(role)) {
 		return false;
@@ -142,11 +140,9 @@ export const canAccessBomFlowScreen = (
 };
 
 export const defaultBomFlowPathForRole = (
-	role = getBomFlowRole()
-) => {
-	return hasBomFlowAccess(role)
-		? "/bomflow/dashboard"
-		: "/modules";
-};
+	role = getRuntimeAuthUser()
+) => hasBomFlowAccess(role)
+	? "/bomflow/dashboard"
+	: "/modules";
 
 export { BOMFLOW_ROLES };

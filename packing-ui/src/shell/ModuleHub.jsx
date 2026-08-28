@@ -366,6 +366,34 @@ function ModuleHubContent() {
 			"LOGISTICS"
 		);
 
+	const packFlowLanding = (() => {
+		if (hasAnyRole("ADMIN", "PACKFLOW_DIRECTOR")) {
+			return "/packflow/dashboard";
+		}
+
+		const pathForRole = (value) => {
+			switch (String(value || "").replace(/^ROLE_/i, "").trim().toUpperCase()) {
+				case "PACKING": return "/packflow/zoho-items?view=normal";
+				case "HARDWARE_PACKING": return "/packflow/zoho-items?view=hardware";
+				case "WAREHOUSE": return "/packflow/warehouse";
+				case "DISPATCH": return "/packflow/dispatched-items";
+				case "LOGISTICS": return "/packflow/logistics";
+				default: return "";
+			}
+		};
+
+		const primaryPath = pathForRole(role || user?.role);
+		if (primaryPath) return primaryPath;
+
+		for (const candidate of ["PACKING", "HARDWARE_PACKING", "WAREHOUSE", "DISPATCH", "LOGISTICS"]) {
+			if (hasRole(candidate)) return pathForRole(candidate);
+		}
+
+		return isHardwareOnly
+			? "/packflow/zoho-items?view=hardware"
+			: "/modules";
+	})();
+
 	const canAccess = (moduleKey) => {
 		return hasModuleAccessFromUser(
 			accessUser,
@@ -384,10 +412,7 @@ function ModuleHubContent() {
 					fontSize="large"
 				/>
 			),
-			path:
-				isHardwareOnly
-					? "/packflow/zoho-items"
-					: "/packflow/dashboard",
+			path: packFlowLanding,
 			tags: [
 				"Inventory",
 				"Warehouse",

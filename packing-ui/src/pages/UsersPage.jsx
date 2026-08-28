@@ -470,22 +470,27 @@ const isAllowedRoleCombination = (roles) => {
 	const cleanRoles = normalizeArray(roles);
 
 	if (cleanRoles.length <= 1) return true;
+
+	/*
+	 * ADMIN already represents complete FlowSuite authority and remains a
+	 * dedicated profile. Every other recognised role can participate in a
+	 * multi-module profile.
+	 *
+	 * PACKFLOW_DIRECTOR may coexist with roles from other modules, but never
+	 * with an operational PackFlow role. This preserves the Director's
+	 * read-only PackFlow boundary while still allowing the same person to have
+	 * a legitimate BOMFlow / MatFlow / AssetFlow responsibility.
+	 */
 	if (cleanRoles.includes("ADMIN")) return false;
-	if (cleanRoles.includes("PACKFLOW_DIRECTOR")) return false;
 
-	const packRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW);
-	const assetFlowRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW);
-	const bomRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.BOMFLOW);
-	const matRoles = cleanRoles.filter((role) => roleMeta(role).groupKey === MODULE_KEYS.MATFLOW);
-
-	if (assetFlowRoles.length === 0) {
-		return packRoles.length === cleanRoles.length;
+	if (cleanRoles.includes("PACKFLOW_DIRECTOR")) {
+		return !cleanRoles.some((role) =>
+			role !== "PACKFLOW_DIRECTOR" &&
+			roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW
+		);
 	}
 
-	if (assetFlowRoles.length !== 1 || bomRoles.length > 1 || matRoles.length > 1) return false;
-	if (bomRoles.length && matRoles.length) return false;
-
-	return packRoles.length + assetFlowRoles.length + bomRoles.length + matRoles.length === cleanRoles.length;
+	return cleanRoles.every((role) => Boolean(ROLE_META[role]));
 };
 
 const rolesRequireDriver = (roles) => {
@@ -496,22 +501,16 @@ const rolesRequireDriver = (roles) => {
 };
 
 const rolesRequirePlantAccess = (roles) => {
-	const cleanRoles =
-		normalizeArray(roles);
+	const cleanRoles = normalizeArray(roles);
 
-	if (
-		cleanRoles.includes("ADMIN") ||
-		cleanRoles.includes("PACKFLOW_DIRECTOR")
-	) {
+	if (cleanRoles.includes("ADMIN")) {
 		return false;
 	}
 
 	return cleanRoles.some((role) => {
-		if (role === "DRIVER") {
-			return false;
-		}
-
 		if (
+			role === "PACKFLOW_DIRECTOR" ||
+			role === "DRIVER" ||
 			role.startsWith("BOMFLOW_")
 		) {
 			return false;
@@ -638,6 +637,33 @@ const passwordPolicyError = (
 		)
 	) {
 		return "Password must not contain the username.";
+	}
+
+	const compactPassword = value
+		.toLowerCase()
+		.replace(/\s+/g, "");
+
+	const predictableSequences = [
+		"12345678",
+		"87654321",
+		"abcdefgh",
+		"hgfedcba",
+		"qwertyui",
+		"asdfghjk",
+		"zxcvbnm",
+		"1q2w3e4r",
+	];
+
+	if (
+		predictableSequences.some((sequence) =>
+			compactPassword.includes(sequence)
+		)
+	) {
+		return "Password contains a predictable sequence. Avoid number, alphabet and keyboard runs such as 12345678 or qwertyui.";
+	}
+
+	if (/^(.)\1{7,}$/.test(compactPassword)) {
+		return "Password cannot be a repeated character sequence.";
 	}
 
 	return "";
@@ -1805,18 +1831,10 @@ function UsersPageContent() {
 		}
 
 		/*
-		 * PACKFLOW_DIRECTOR is a least-privilege executive identity and is
-		 * intentionally exclusive. Backend UserService enforces the same rule.
-		 */
-		if (cleanRoles.includes("PACKFLOW_DIRECTOR")) {
-			cleanRoles = ["PACKFLOW_DIRECTOR"];
-		}
-
-		/*
-		 * Keep the old PackFlow multi-role behaviour and allow one AssetFlow
-		 * role to coexist with an existing operational profile. Invalid
-		 * combinations remain visible temporarily so validation can explain
-		 * exactly what must be changed instead of silently deleting a role.
+		 * Multi-profile assignments are kept exactly as selected. The only
+		 * special compatibility rule here is ADMIN exclusivity above. Director
+		 * + operational PackFlow conflicts remain visible so validation can
+		 * explain the security boundary instead of silently deleting a role.
 		 */
 
 		setForm((previous) => {
@@ -1904,15 +1922,16 @@ function UsersPageContent() {
 			return "Administrator cannot be combined with another role.";
 		}
 
-		if (
-			roles.includes("PACKFLOW_DIRECTOR") &&
-			roles.length > 1
-		) {
-			return "PackFlow Director cannot be combined with another role.";
+		if (!isAllowedRoleCombination(roles)) {
+			if (roles.includes("PACKFLOW_DIRECTOR")) {
+				return "PackFlow Director can be combined with other FlowSuite modules, but cannot be combined with Packing, Hardware Packing, Warehouse, Dispatch, Logistics or Driver access.";
+			}
+
+			return "Invalid role combination.";
 		}
 
-		if (!isAllowedRoleCombination(roles)) {
-			return "Invalid role combination. PackFlow roles can be combined as before; add only one AssetFlow role alongside PackFlow or one BOMFlow/MatFlow role.";
+		if (!roles.includes(normalizeRole(form.role))) {
+			return "Primary role must be one of the assigned profiles.";
 		}
 
 		if (
@@ -4130,8 +4149,7 @@ function UserEditorDrawer({
 					</Typography>
 
 					<Typography sx={drawerSubSx}>
-						Assign a controlled module-role
-						access profile.
+						Assign one account multiple FlowSuite module profiles without duplicating the user.
 					</Typography>
 				</Box>
 
@@ -4184,7 +4202,7 @@ function UserEditorDrawer({
 							inputProps={{
 								maxLength: 128,
 							}}
-							helperText="Minimum 8 characters. If shorter than 12, use at least 3 of uppercase, lowercase, number and symbol."
+							helperText="Minimum 8 characters. If shorter than 12, use at least 3 character classes. Avoid username, common passwords and predictable sequences such as 12345678 or qwertyui."
 							sx={fieldSx}
 						/>
 					)}
@@ -4201,9 +4219,7 @@ function UserEditorDrawer({
 						<Typography
 							sx={sectionDescriptionSx}
 						>
-							Choose the module first, then
-							select the user’s responsibility
-							inside that module.
+							Enable every module the person actually works in and assign one or more profiles inside each module. FlowSuite derives module access from these profiles automatically.
 						</Typography>
 					</Box>
 
@@ -4214,35 +4230,25 @@ function UserEditorDrawer({
 						}
 					/>
 
-					{selectedMeta.groupKey !== "ADMIN" &&
-						selectedMeta.groupKey !== MODULE_KEYS.ASSETFLOW && (
-						<Box sx={{ mt: 1.5 }}>
-							<TextField
-								select
-								fullWidth
-								size="small"
-								label="Additional AssetFlow Access"
-								value={selectedRoles.find((role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW) || ""}
-								onChange={(event) => {
-									const baseRoles = selectedRoles.filter((role) => roleMeta(role).groupKey !== MODULE_KEYS.ASSETFLOW);
-									const assetFlowRole = event.target.value;
-									onRolesChange(assetFlowRole ? [...baseRoles, assetFlowRole] : baseRoles);
-								}}
-								helperText="Keep the user's existing FlowSuite responsibility and add one AssetFlow responsibility. This avoids duplicate complainant accounts."
-								sx={fieldSx}
-							>
-								<MenuItem value="">No additional AssetFlow access</MenuItem>
-								{ACCESS_GROUPS.find((group) => group.key === MODULE_KEYS.ASSETFLOW)?.roles.map((roleOption) => (
-									<MenuItem key={roleOption.value} value={roleOption.value}>
-										<Box>
-											<Typography sx={{ fontWeight: 850, fontSize: 13 }}>{roleOption.label}</Typography>
-											<Typography sx={{ color: "var(--pf-text-dim)", fontSize: 11 }}>{roleOption.description}</Typography>
-										</Box>
-									</MenuItem>
-								))}
-							</TextField>
-						</Box>
+					{selectedRoles.length > 1 && !selectedRoles.includes("ADMIN") && (
+						<TextField
+							select
+							fullWidth
+							size="small"
+							label="Primary / Default Profile"
+							value={primaryRole}
+							onChange={(event) => onUpdate("role", event.target.value)}
+							helperText="This only controls the legacy/default role and landing preference. All selected profiles remain active."
+							sx={{ ...fieldSx, mt: 1.5 }}
+						>
+							{selectedRoles.map((assignedRole) => (
+								<MenuItem key={assignedRole} value={assignedRole}>
+									{roleMeta(assignedRole).groupLabel} • {roleMeta(assignedRole).label}
+								</MenuItem>
+							))}
+						</TextField>
 					)}
+
 				</Box>
 
 				<Box sx={accessSummarySx}>
@@ -4266,7 +4272,7 @@ function UserEditorDrawer({
 						<Typography sx={summaryDescriptionSx}>
 							{selectedRoles.length === 1
 								? selectedMeta.description
-								: "Combined access keeps the existing operational role profile and adds only the selected AssetFlow responsibility."}
+								: "One FlowSuite account can carry all selected module responsibilities. Permissions are the union of these profiles; the backend remains authoritative for every action."}
 						</Typography>
 
 						<Box sx={chipWrapSx}>
@@ -4545,129 +4551,108 @@ function AccessProfileSelector({
 	roles,
 	onRolesChange,
 }) {
-	const selectedRoles =
-		normalizeArray(roles)
-			.filter((role) => ROLE_META[role]);
+	const selectedRoles = normalizeArray(roles)
+		.filter((role) => ROLE_META[role]);
 
-	const primaryRole =
-		primaryRoleFor(selectedRoles);
-
-	const selectedGroupKey =
-		roleMeta(primaryRole).groupKey;
-
-	const selectedMachRoles = selectedRoles.filter(
-		(role) => roleMeta(role).groupKey === MODULE_KEYS.ASSETFLOW
-	);
-
-	const selectedPackRoles = selectedRoles.filter(
-		(role) => roleMeta(role).groupKey === MODULE_KEYS.PACKFLOW
-	);
-
-	const switchPrimaryGroup = (group) => {
-		if (group.key === "ADMIN" || group.key === MODULE_KEYS.ASSETFLOW) {
-			onRolesChange([group.defaultRole]);
+	const toggleGroup = (group) => {
+		if (group.key === "ADMIN") {
+			onRolesChange(
+				selectedRoles.includes("ADMIN")
+					? ["PACKING"]
+					: ["ADMIN"]
+			);
 			return;
 		}
 
-		/* Preserve optional AssetFlow responsibility while changing the user's
-		 * ordinary operational profile. Other cross-module combinations stay
-		 * intentionally blocked by validation. */
-		onRolesChange([group.defaultRole, ...selectedMachRoles]);
+		const currentGroupRoles = selectedRoles.filter(
+			(role) => roleMeta(role).groupKey === group.key
+		);
+
+		if (currentGroupRoles.length > 0) {
+			const remaining = selectedRoles.filter(
+				(role) => roleMeta(role).groupKey !== group.key
+			);
+			onRolesChange(remaining.length > 0 ? remaining : ["PACKING"]);
+			return;
+		}
+
+		const withoutAdmin = selectedRoles.filter((role) => role !== "ADMIN");
+		onRolesChange([...withoutAdmin, group.defaultRole]);
+	};
+
+	const updateGroupRoles = (group, values) => {
+		const nextGroupRoles = normalizeArray(
+			typeof values === "string" ? values.split(",") : values
+		).filter((role) => roleMeta(role).groupKey === group.key);
+
+		const outsideGroup = selectedRoles.filter(
+			(role) => roleMeta(role).groupKey !== group.key && role !== "ADMIN"
+		);
+
+		const next = [...outsideGroup, ...nextGroupRoles];
+		onRolesChange(next.length > 0 ? next : ["PACKING"]);
 	};
 
 	return (
 		<Box sx={accessGridSx}>
 			{ACCESS_GROUPS.map((group) => {
-				const selected = selectedGroupKey === group.key;
-				const isPackFlow = group.key === MODULE_KEYS.PACKFLOW;
-				const groupRole = selectedRoles.find(
+				const groupRoles = selectedRoles.filter(
 					(role) => roleMeta(role).groupKey === group.key
-				) || group.defaultRole;
+				);
+				const selected = groupRoles.length > 0;
+				const isAdminGroup = group.key === "ADMIN";
 
 				return (
 					<Box
 						key={group.key}
-						role="button"
-						tabIndex={0}
-						onClick={() => {
-							if (!selected) switchPrimaryGroup(group);
-						}}
-						onKeyDown={(event) => {
-							if ((event.key === "Enter" || event.key === " ") && !selected) {
-								switchPrimaryGroup(group);
-							}
-						}}
 						sx={accessCardSx(group.accent, selected)}
 					>
 						<Box sx={accessCardHeaderSx}>
 							<Box sx={accessCardIconSx(group.accent)}>{group.icon}</Box>
-
-							<Box sx={{ minWidth: 0 }}>
+							<Box sx={{ minWidth: 0, flex: 1 }}>
 								<Typography sx={accessCardTitleSx}>{group.label}</Typography>
 								<Typography sx={accessCardSubSx}>{group.description}</Typography>
 							</Box>
-
-							<Box sx={selectionDotSx(group.accent, selected)}>{selected ? "✓" : ""}</Box>
+							<Switch
+								checked={selected}
+								onChange={() => toggleGroup(group)}
+								disabled={selectedRoles.includes("ADMIN") && !isAdminGroup}
+								inputProps={{ "aria-label": `${group.label} access` }}
+							/>
 						</Box>
 
-						{selected && isPackFlow && (
+						{selected && !isAdminGroup && (
 							<TextField
 								select
 								fullWidth
 								size="small"
-								label="PackFlow Roles"
-								value={selectedPackRoles}
-								onClick={(event) => event.stopPropagation()}
-								onChange={(event) => {
-									const value = event.target.value;
-									const nextPackRoles = typeof value === "string" ? value.split(",") : value;
-									onRolesChange([...nextPackRoles, ...selectedMachRoles]);
-								}}
+								label={`${group.shortLabel} Profiles`}
+								value={groupRoles}
+								onChange={(event) => updateGroupRoles(group, event.target.value)}
 								SelectProps={{
 									multiple: true,
 									renderValue: (selectedValues) =>
 										selectedValues.map((value) => roleMeta(value).label).join(", "),
 								}}
+								helperText={
+									group.key === MODULE_KEYS.PACKFLOW
+										? "Multiple operational PackFlow profiles may be combined. PackFlow Director cannot be combined with an operational PackFlow profile."
+										: "Select every responsibility this account should hold in this module."
+								}
 								sx={{ ...fieldSx, mt: 1.5 }}
 							>
 								{group.roles.map((roleOption) => {
-									const checked = selectedPackRoles.includes(roleOption.value);
+									const checked = groupRoles.includes(roleOption.value);
 									return (
 										<MenuItem key={roleOption.value} value={roleOption.value}>
 											<Checkbox checked={checked} />
-											<ListItemText primary={roleOption.label} secondary={roleOption.description} />
+											<ListItemText
+												primary={roleOption.label}
+												secondary={roleOption.description}
+											/>
 										</MenuItem>
 									);
 								})}
-							</TextField>
-						)}
-
-						{selected && !isPackFlow && (
-							<TextField
-								select
-								fullWidth
-								size="small"
-								label="Role"
-								value={groupRole}
-								onClick={(event) => event.stopPropagation()}
-								onChange={(event) => {
-									const nextRole = event.target.value;
-									onRolesChange(
-										group.key === MODULE_KEYS.ASSETFLOW
-											? [nextRole]
-											: [nextRole, ...selectedMachRoles]
-									);
-								}}
-								sx={{ ...fieldSx, mt: 1.5 }}
-							>
-								{group.roles.map((roleOption) => (
-									<MenuItem key={roleOption.value} value={roleOption.value}>
-										<Box>
-											<Typography sx={{ fontWeight: 850, fontSize: 13 }}>{roleOption.label}</Typography>
-											<Typography sx={{ color: "var(--pf-text-dim)", fontSize: 11 }}>{roleOption.description}</Typography>
-										</Box>
-									</MenuItem>
-								))}
 							</TextField>
 						)}
 					</Box>

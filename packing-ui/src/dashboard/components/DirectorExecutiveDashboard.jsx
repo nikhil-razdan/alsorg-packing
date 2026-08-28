@@ -337,9 +337,9 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           progress={dispatchReadyShare}
         />
         <KpiCard
-          label="Today movement"
+          label="Today execution"
           value={compact(todayThroughput)}
-          detail={`${compact(stats.todayStickerGenerated)} sticker events • ${compact(stats.todayChallanGenerated)} challans`}
+          detail={`${compact(stats.todayStickerGenerated)} sticker events • ${compact(stats.todayChallanGenerated)} dispatched items`}
           accent="#7c3aed"
           tag="TODAY"
         />

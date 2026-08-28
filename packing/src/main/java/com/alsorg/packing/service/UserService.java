@@ -336,19 +336,11 @@ public class UserService {
                         boolean requestedWarehouseAccess,
                         Set<String> modules) {
                 /*
-                 * PACKFLOW_DIRECTOR is a dedicated least-privilege identity.
-                 * Ignore any broader access fields submitted by an old/stale UI so
-                 * the backend itself guarantees dashboard-only module access.
+                 * Access is now role-union based. PACKFLOW_DIRECTOR remains
+                 * read-only inside PackFlow, but may carry responsibilities in
+                 * another FlowSuite module. The role-combination validator below
+                 * prevents it from ever inheriting an operational PackFlow role.
                  */
-                if (containsRole(roles, "PACKFLOW_DIRECTOR")) {
-                        user.setModules(new LinkedHashSet<>(Set.of("PACKFLOW")));
-                        user.setWarehouseAccess(false);
-                        user.setDriverId(null);
-                        user.setPlantCodes(new LinkedHashSet<>());
-                        user.setPlantCode(null);
-                        return;
-                }
-
                 Set<String> cleanModules = cleanModules(
                                 modules,
                                 roles);
@@ -472,29 +464,14 @@ public class UserService {
                 }
 
                 /*
-                 * PACKFLOW_DIRECTOR is deliberately read-only/executive and must
-                 * never inherit operational permissions through a second PackFlow role.
-                 */
-                if (cleanRoles.contains("PACKFLOW_DIRECTOR") &&
-                                cleanRoles.size() > 1) {
-                        throw new RuntimeException(
-                                        "PACKFLOW_DIRECTOR cannot be combined with another role");
-                }
-
-                /*
-                 * Preserve the existing PackFlow multi-role behaviour, but allow exactly
-                 * one AssetFlow role to be added to an existing user profile. This is
-                 * important for real factory complainants: an Engineering/Store/Production
-                 * user can also raise a machine complaint without creating a duplicate user.
-                 *
-                 * We deliberately do NOT open unrestricted cross-module role mixing.
-                 * BOMFlow + MatFlow still cannot be combined, and a user may have only one
-                 * AssetFlow role because Head/Technician/Requester already express the
-                 * complete AssetFlow responsibility.
+                 * Multi-module / multi-profile assignment. Every selected role
+                 * has already been normalized against ALLOWED_ROLES. ADMIN remains
+                 * exclusive above. PACKFLOW_DIRECTOR may be combined with other
+                 * modules, but never with an operational PackFlow authority.
                  */
                 if (!isAllowedRoleCombination(cleanRoles)) {
                         throw new RuntimeException(
-                                        "Invalid role combination. PackFlow roles may be combined as before; one AssetFlow role may additionally be combined with PackFlow or one BOMFlow/MatFlow role.");
+                                        "Invalid role combination. PACKFLOW_DIRECTOR cannot be combined with an operational PackFlow role.");
                 }
 
                 return new RoleAssignment(
@@ -664,33 +641,18 @@ public class UserService {
                         return true;
                 }
 
-                if (roles.stream().allMatch(this::isPackFlowRole)) {
-                        return true;
-                }
-
-                long assetFlowCount = roles.stream()
-                                .filter(role -> role != null && role.startsWith("ASSETFLOW_"))
-                                .count();
-
-                if (assetFlowCount != 1) {
+                if (containsRole(roles, "ADMIN")) {
                         return false;
                 }
 
-                Set<String> nonAssetFlowRoles = roles.stream()
-                                .filter(role -> role != null && !role.startsWith("ASSETFLOW_"))
-                                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-
-                if (nonAssetFlowRoles.isEmpty()) {
+                if (!containsRole(roles, "PACKFLOW_DIRECTOR")) {
                         return true;
                 }
 
-                if (nonAssetFlowRoles.stream().allMatch(this::isPackFlowRole)) {
-                        return true;
-                }
-
-                return nonAssetFlowRoles.size() == 1
-                                && (nonAssetFlowRoles.iterator().next().startsWith("BOMFLOW_")
-                                                || nonAssetFlowRoles.iterator().next().startsWith("MATFLOW_"));
+                return roles.stream()
+                                .noneMatch(role -> role != null
+                                                && !"PACKFLOW_DIRECTOR".equals(role)
+                                                && isPackFlowRole(role));
         }
 
         private boolean isPackFlowRole(

@@ -91,6 +91,7 @@ const modulesForRoles = (roles) => {
 	cleanRoles.forEach((role) => {
 		if (
 			[
+				"PACKFLOW_DIRECTOR",
 				"PACKING",
 				"HARDWARE_PACKING",
 				"WAREHOUSE",
