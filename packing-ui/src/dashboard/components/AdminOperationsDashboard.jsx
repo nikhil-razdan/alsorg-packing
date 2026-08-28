@@ -5,6 +5,7 @@ import StatusCorporateChart from "./StatusCorporateChart";
 import InventoryCommandCenter from "./inventory/InventoryCommandCenter";
 import InventoryReports from "./inventory/InventoryReports";
 import DailyThroughputDrilldown from "./inventory/DailyThroughputDrilldown";
+import DashboardRecordInspector from "./inventory/DashboardRecordInspector";
 import ScheduledReports from "./ScheduledReports";
 import LogisticsDashboard from "./logistics/LogisticsDashboard";
 import AdminCenter from "./admin/AdminCenter";
@@ -30,6 +31,7 @@ function MetricCard({ label, value, detail, accent = "#2563eb", signal, onClick 
       </div>
       <div style={metricValue}>{value}</div>
       <div style={metricDetail}>{detail}</div>
+      {onClick && <div style={metricInspectHint}>Inspect records →</div>}
     </>
   );
 
@@ -122,7 +124,7 @@ function InventoryDashboard({
   activityLogs,
   refreshing,
   onRefresh,
-  onOpenAdminCenter,
+  onInspectMetric,
 }) {
   const [workspace, setWorkspace] = useState("overview");
 
@@ -142,12 +144,6 @@ function InventoryDashboard({
     number(stats.exceptionsCount),
     currentExceptions + legacyDispatchExceptions
   );
-
-  const movementQueue =
-    number(stats.warehouseRequestedItems) +
-    number(stats.returnRequestedItems) +
-    number(stats.queuedItems) +
-    number(stats.readyToStoreItems);
 
   const packingCompletion = percent(stats.packetItemsWithSticker, stats.packetItems, 0);
   const masterCompletion = percent(stats.fullyPackedMasterItems, stats.masterItems, 0);
@@ -223,46 +219,148 @@ function InventoryDashboard({
 
   return (
     <>
-      <section style={hero}>
-        <div style={heroCopy}>
-          <div style={heroEyebrow}>ADMIN • INVENTORY & DISPATCH CONTROL TOWER</div>
-          <h1 style={heroTitle}>Packing → FG → Warehouse → Dispatch.</h1>
-          <p style={heroText}>
-            One operational view of physical packet execution, sticker completion, finished-goods readiness,
-            warehouse movement, outbound conversion, challans and data-integrity exceptions for custom interior manufacturing.
-          </p>
-        </div>
-
-        <div style={heroActions}>
-          <div style={healthBlock(totalExceptions)}>
-            <span style={healthLabel}>CONTROL HEALTH</span>
-            <strong>{totalExceptions === 0 ? "CLEAR" : "ACTION"}</strong>
-            <small>{totalExceptions} integrity exceptions</small>
-          </div>
-          <button type="button" style={dangerAction} onClick={onOpenAdminCenter}>
-            Admin Center
-          </button>
-        </div>
-      </section>
-
       <section style={metricGrid}>
-        <MetricCard label="Inventory Items" value={number(stats.totalItems)} detail="Warehouse + Ready to Dispatch + Ready" accent="#2563eb" signal="LIVE" />
-        <MetricCard label="Master Items" value={number(stats.masterItems)} detail={`${number(stats.fullyPackedMasterItems)} fully packed`} accent="#7c3aed" signal={`${Math.round(masterCompletion)}%`} />
-        <MetricCard label="Packet Items" value={number(stats.packetItems)} detail={`${number(stats.packetItemsWithSticker)} sticker-ready • ${number(stats.packetItemsPendingSticker)} pending`} accent="#0284c7" signal={`${Math.round(packingCompletion)}%`} />
-        <MetricCard label="Warehouse" value={number(stats.warehouseItems)} detail={`${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests`} accent="#9333ea" signal="STOCK" />
-        <MetricCard label="Ready to Dispatch" value={number(stats.readyToDispatchItems)} detail={`${Math.round(dispatchReadyShare)}% of current FG inventory position`} accent="#059669" signal="FG" />
-        <MetricCard label="Dispatch Challans" value={number(stats.normalDispatchChallans)} detail={`${number(stats.todayDispatchChallans)} distinct challans today • ${number(stats.runningTrips)} running trips`} accent="#0f766e" signal="OUTBOUND" />
-        <MetricCard label="Custom Challans" value={number(stats.customChallans)} detail={`${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} item rows`} accent="#ca8a04" signal="CUSTOM" />
-        <MetricCard label="Exceptions" value={totalExceptions} detail={`${currentExceptions} current-chain • ${legacyDispatchExceptions} legacy outbound`} accent={totalExceptions ? "#dc2626" : "#16a34a"} signal={totalExceptions ? "ACTION" : "CLEAR"} />
-      </section>
-
-      <section style={throughputPanel}>
-        <SectionHeader
-          eyebrow="DAILY ACCOUNTABILITY"
-          title="User-wise output with exact record inspection"
-          subtitle="Restored from the earlier Admin dashboard and upgraded: click a daily metric, then click a user to inspect the records behind the count."
+        <MetricCard
+          label="Inventory Items"
+          value={number(stats.totalItems)}
+          detail="Warehouse + Ready to Dispatch + Ready"
+          accent="#2563eb"
+          signal="LIVE"
+          onClick={() =>
+            onInspectMetric?.({
+              key: "inventory-items",
+              title: "Inventory items",
+              subtitle: `${number(stats.warehouseItems)} warehouse • ${number(stats.readyToDispatchItems)} ready to dispatch • ${number(stats.readyItems)} ready. Inspect the current tracked inventory records behind these buckets.`,
+              accent: "#2563eb",
+              type: "all",
+              statuses: ["WAREHOUSE", "READY_TO_DISPATCH", "READY"],
+              limit: 1000,
+            })
+          }
         />
-        <DailyThroughputDrilldown />
+        <MetricCard
+          label="Master Items"
+          value={number(stats.masterItems)}
+          detail={`${number(stats.fullyPackedMasterItems)} fully packed • ${number(stats.partiallyPackedMasterItems)} partial • ${number(stats.unpackedMasterItems)} unpacked`}
+          accent="#7c3aed"
+          signal={`${Math.round(masterCompletion)}%`}
+          onClick={() =>
+            onInspectMetric?.({
+              key: "master-items",
+              title: "Master item execution",
+              subtitle: `${number(stats.fullyPackedMasterItems)} fully packed • ${number(stats.partiallyPackedMasterItems)} partially packed • ${number(stats.unpackedMasterItems)} unpacked.`,
+              accent: "#7c3aed",
+              source: "master",
+              packingStatus: "ALL",
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Packet Items"
+          value={number(stats.packetItems)}
+          detail={`${number(stats.packetItemsWithSticker)} sticker-ready • ${number(stats.packetItemsPendingSticker)} pending`}
+          accent="#0284c7"
+          signal={`${Math.round(packingCompletion)}%`}
+          onClick={() =>
+            onInspectMetric?.({
+              key: "packet-items",
+              title: "Packet item execution",
+              subtitle: `${number(stats.packetItemsWithSticker)} sticker-complete packet items and ${number(stats.packetItemsPendingSticker)} still pending sticker completion.`,
+              accent: "#0284c7",
+              type: "all",
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Warehouse"
+          value={number(stats.warehouseItems)}
+          detail={`${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests`}
+          accent="#9333ea"
+          signal="STOCK"
+          onClick={() =>
+            onInspectMetric?.({
+              key: "warehouse-items",
+              title: "Warehouse stock",
+              subtitle: `${number(stats.warehouseItems)} currently stored items • ${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests.`,
+              accent: "#9333ea",
+              type: "all",
+              statuses: ["WAREHOUSE"],
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Ready to Dispatch"
+          value={number(stats.readyToDispatchItems)}
+          detail={`${Math.round(dispatchReadyShare)}% of current FG inventory position`}
+          accent="#059669"
+          signal="FG"
+          onClick={() =>
+            onInspectMetric?.({
+              key: "ready-to-dispatch",
+              title: "Ready-to-dispatch finished goods",
+              subtitle: `${number(stats.readyToDispatchItems)} items are currently available for outbound conversion, representing ${Math.round(dispatchReadyShare)}% of the tracked FG position.`,
+              accent: "#059669",
+              type: "all",
+              statuses: ["READY_TO_DISPATCH"],
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Dispatch Challans"
+          value={number(stats.normalDispatchChallans)}
+          detail={`${number(stats.todayDispatchChallans)} distinct challans today • ${number(stats.runningTrips)} running trips`}
+          accent="#0f766e"
+          signal="OUTBOUND"
+          onClick={() =>
+            onInspectMetric?.({
+              key: "dispatch-challans",
+              title: "Dispatch challan execution",
+              subtitle: `${number(stats.normalDispatchChallans)} normal dispatch challans • ${number(stats.todayDispatchChallans)} today • ${number(stats.runningTrips)} running trips • ${number(stats.endedTrips)} ended trips.`,
+              accent: "#0f766e",
+              type: "challaned",
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Custom Challans"
+          value={number(stats.customChallans)}
+          detail={`${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} item rows`}
+          accent="#ca8a04"
+          signal="CUSTOM"
+          onClick={() =>
+            onInspectMetric?.({
+              key: "custom-challans",
+              title: "Custom challans",
+              subtitle: `${number(stats.customChallans)} custom challans • ${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} linked item rows.`,
+              accent: "#ca8a04",
+              type: "custom",
+              limit: 1000,
+            })
+          }
+        />
+        <MetricCard
+          label="Exceptions"
+          value={totalExceptions}
+          detail={`${currentExceptions} current-chain • ${legacyDispatchExceptions} legacy outbound`}
+          accent={totalExceptions ? "#dc2626" : "#16a34a"}
+          signal={totalExceptions ? "ACTION" : "CLEAR"}
+          onClick={() =>
+            onInspectMetric?.({
+              key: "exceptions",
+              title: "PackFlow integrity exceptions",
+              subtitle: `${currentExceptions} current-chain exceptions • ${legacyDispatchExceptions} legacy outbound exceptions. Inspect exact exception records exposed by the ADMIN trace endpoint.`,
+              accent: totalExceptions ? "#dc2626" : "#16a34a",
+              type: "errored",
+              limit: 1000,
+            })
+          }
+        />
+        <DailyThroughputDrilldown asMetricCard />
       </section>
 
       <section style={overviewGrid}>
@@ -386,6 +484,7 @@ export default function AdminOperationsDashboard({
 }) {
   const [mode, setMode] = useState("inventory");
   const [adminCenterOpen, setAdminCenterOpen] = useState(false);
+  const [metricInspector, setMetricInspector] = useState(null);
 
   return (
     <>
@@ -397,12 +496,17 @@ export default function AdminOperationsDashboard({
             Inventory mode covers packing, FG, warehouse and dispatch. Logistics mode covers trips, drivers, vehicles and route/resource analytics.
           </div>
         </div>
-        <div style={modeSwitch}>
-          <button type="button" style={modeButton(mode === "inventory")} onClick={() => setMode("inventory")}>
-            Inventory & Dispatch
-          </button>
-          <button type="button" style={modeButton(mode === "logistics")} onClick={() => setMode("logistics")}>
-            Logistics
+        <div style={modeActions}>
+          <div style={modeSwitch}>
+            <button type="button" style={modeButton(mode === "inventory")} onClick={() => setMode("inventory")}>
+              Inventory & Dispatch
+            </button>
+            <button type="button" style={modeButton(mode === "logistics")} onClick={() => setMode("logistics")}>
+              Logistics
+            </button>
+          </div>
+          <button type="button" style={adminCenterButton} onClick={() => setAdminCenterOpen(true)}>
+            Admin Center
           </button>
         </div>
       </section>
@@ -413,13 +517,19 @@ export default function AdminOperationsDashboard({
           activityLogs={activityLogs}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          onOpenAdminCenter={() => setAdminCenterOpen(true)}
+          onInspectMetric={(config) => setMetricInspector({ open: true, ...config })}
         />
       ) : (
         <section style={logisticsShell}>
           <LogisticsDashboard StatCard={LegacyStatCard} initialData={logistics} />
         </section>
       )}
+
+
+      <DashboardRecordInspector
+        config={metricInspector}
+        onClose={() => setMetricInspector(null)}
+      />
 
       <AdminCenter
         open={adminCenterOpen}
@@ -451,18 +561,11 @@ const actionTone = {
 const modeBar = { marginBottom: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", borderRadius: 13, background: "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.05)" };
 const modeTitle = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 17, fontWeight: 950 };
 const modeSub = { maxWidth: 760, marginTop: 4, color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 650, lineHeight: 1.5 };
+const modeActions = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
 const modeSwitch = { display: "flex", gap: 5, padding: 4, borderRadius: 11, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
 const modeButton = (active) => ({ minHeight: 38, padding: "0 14px", borderRadius: 8, border: active ? "1px solid rgba(37,99,235,.28)" : "1px solid transparent", background: active ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "transparent", color: active ? "#fff" : "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900 });
+const adminCenterButton = { minHeight: 46, padding: "0 15px", borderRadius: 10, border: "1px solid rgba(220,38,38,.25)", background: "linear-gradient(135deg,#b91c1c,#dc2626)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900, boxShadow: "0 7px 16px rgba(185,28,28,.14)" };
 const logisticsShell = { minWidth: 0 };
-const hero = { display: "flex", alignItems: "stretch", justifyContent: "space-between", gap: 18, padding: "22px clamp(18px,2.5vw,32px)", border: "1px solid var(--pf-border)", borderRadius: 14, background: "linear-gradient(120deg,var(--pf-surface) 0%,var(--pf-surface) 68%,color-mix(in srgb,#2563eb 7%,var(--pf-surface-alt)) 100%)", boxShadow: "0 12px 34px rgba(var(--pf-shadow-rgb),.07)", flexWrap: "wrap" };
-const heroCopy = { flex: "1 1 680px", minWidth: 0 };
-const heroEyebrow = { color: "#2563eb", fontSize: 9, fontWeight: 950, letterSpacing: ".14em" };
-const heroTitle = { margin: "7px 0 0", fontSize: "clamp(26px,3vw,42px)", lineHeight: 1.02, letterSpacing: "-.045em", fontWeight: 950, color: "var(--pf-text-strong)" };
-const heroText = { maxWidth: 900, margin: "10px 0 0", color: "var(--pf-text-muted)", fontSize: 12, fontWeight: 650, lineHeight: 1.65 };
-const heroActions = { display: "flex", alignItems: "stretch", gap: 9, flexWrap: "wrap" };
-const healthBlock = (exceptions) => ({ minWidth: 150, padding: "11px 13px", borderRadius: 10, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "center", background: exceptions > 0 ? "rgba(220,38,38,.07)" : "rgba(22,163,74,.07)", border: `1px solid ${exceptions > 0 ? "rgba(220,38,38,.18)" : "rgba(22,163,74,.18)"}` });
-const healthLabel = { fontSize: 8, fontWeight: 950, letterSpacing: ".1em", color: "var(--pf-text-muted)" };
-const dangerAction = { minHeight: 46, alignSelf: "center", padding: "0 15px", borderRadius: 9, border: "1px solid rgba(220,38,38,.25)", background: "linear-gradient(135deg,#b91c1c,#dc2626)", color: "#fff", fontSize: 10.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" };
 const metricGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 10 };
 const metricCard = (accent) => ({ position: "relative", overflow: "hidden", minHeight: 118, padding: 14, borderRadius: 12, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 6px 20px rgba(var(--pf-shadow-rgb),.05)", textAlign: "left", color: "var(--pf-text-strong)", fontFamily: "inherit" });
 const metricButton = { width: "100%", cursor: "pointer" };
@@ -472,7 +575,7 @@ const metricLabel = { color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 
 const metricSignal = (accent) => ({ padding: "3px 6px", borderRadius: 6, color: accent, background: `${accent}10`, border: `1px solid ${accent}20`, fontSize: 7.5, fontWeight: 950, letterSpacing: ".05em" });
 const metricValue = { marginTop: 10, fontSize: 28, lineHeight: 1, fontWeight: 950, letterSpacing: "-.04em", color: "var(--pf-text-strong)" };
 const metricDetail = { marginTop: 8, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700, lineHeight: 1.45 };
-const throughputPanel = { marginTop: 12, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
+const metricInspectHint = { marginTop: 7, color: "#2563eb", fontSize: 8.4, fontWeight: 900 };
 const overviewGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 12 };
 const twoColumn = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(390px,1fr))", gap: 12 };
 const panel = { minWidth: 0, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
