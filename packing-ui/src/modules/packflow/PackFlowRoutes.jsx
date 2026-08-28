@@ -30,8 +30,52 @@ const dispatchElement = (
   </RequireRole>
 );
 
+const normalizeRole = (value) =>
+  String(value || "")
+    .replace(/^ROLE_/i, "")
+    .trim()
+    .toUpperCase();
+
+const resolveUtlLanding = ({
+  primaryRole,
+  hasRole,
+}) => {
+  const cleanPrimaryRole = normalizeRole(primaryRole);
+
+  /*
+   * UTL_PACKING + UTL_DISPATCH may be assigned together. Respect the Admin
+   * selected primary/default profile first so a dual-profile user lands on the
+   * intended workspace instead of always being forced into packing.
+   */
+  if (
+    cleanPrimaryRole === "UTL_DISPATCH" &&
+    hasRole("UTL_DISPATCH")
+  ) {
+    return "/packflow/dispatched-items";
+  }
+
+  if (
+    cleanPrimaryRole === "UTL_PACKING" &&
+    hasRole("UTL_PACKING")
+  ) {
+    return "/packflow/zoho-items?view=normal";
+  }
+
+  if (hasRole("UTL_PACKING")) {
+    return "/packflow/zoho-items?view=normal";
+  }
+
+  if (hasRole("UTL_DISPATCH")) {
+    return "/packflow/dispatched-items";
+  }
+
+  return "";
+};
+
 function PackFlowDefaultRedirect() {
   const {
+    role,
+    user,
     hasRole,
     hasAnyRole,
     authLoading,
@@ -53,19 +97,18 @@ function PackFlowDefaultRedirect() {
       "LOGISTICS"
     );
 
-  const isUtlPacking = hasRole("UTL_PACKING");
-  const isUtlDispatch = hasRole("UTL_DISPATCH");
+  const utlLanding = resolveUtlLanding({
+    primaryRole: role || user?.role,
+    hasRole,
+  });
 
   return (
     <Navigate
       to={
-        isUtlPacking
-          ? "/packflow/zoho-items?view=normal"
-          : isUtlDispatch
-            ? "/packflow/dispatched-items"
-            : isHardwareOnly
-              ? "/packflow/zoho-items"
-              : "/packflow/dashboard"
+        utlLanding ||
+        (isHardwareOnly
+          ? "/packflow/zoho-items"
+          : "/packflow/dashboard")
       }
       replace
     />
@@ -76,6 +119,8 @@ function PackFlowDashboardAccess({
   children,
 }) {
   const {
+    role,
+    user,
     hasRole,
     hasAnyRole,
     authLoading,
@@ -97,12 +142,13 @@ function PackFlowDashboardAccess({
       "LOGISTICS"
     );
 
-  if (hasRole("UTL_PACKING")) {
-    return <Navigate to="/packflow/zoho-items?view=normal" replace />;
-  }
+  const utlLanding = resolveUtlLanding({
+    primaryRole: role || user?.role,
+    hasRole,
+  });
 
-  if (hasRole("UTL_DISPATCH")) {
-    return <Navigate to="/packflow/dispatched-items" replace />;
+  if (utlLanding) {
+    return <Navigate to={utlLanding} replace />;
   }
 
   if (isHardwareOnly) {

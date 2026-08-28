@@ -133,6 +133,17 @@ function ModuleHubContent() {
 	);
 
 	/*
+	 * UTL users are intentionally isolated PackFlow identities. UserService
+	 * allows them only PACKFLOW + UTL_PACKING/UTL_DISPATCH and exactly one of
+	 * AL-P3 / WR-38. Do not probe unrelated HRFlow/AssetFlow grant endpoints
+	 * from the Module Hub for these users: those expected 403 responses were
+	 * being promoted by the shared API security interceptor as a visible
+	 * forbidden error even though the PackFlow session itself was valid.
+	 */
+	const isUtlIdentity =
+		hasAnyRole("UTL_PACKING", "UTL_DISPATCH");
+
+	/*
 	 * HRFlow uses its own backend access grants instead of the ordinary
 	 * FlowSuite user.modules list.  Verify that grant independently so an
 	 * HR_EXECUTIVE / HR_HEAD / RECRUITER / HOD user can see HRFlow even if
@@ -171,6 +182,18 @@ function ModuleHubContent() {
 
 	React.useEffect(() => {
 		let active = true;
+
+		if (isUtlIdentity) {
+			setHrFlowGrant({
+				sessionKey: authSessionKey,
+				loading: false,
+				allowed: false,
+			});
+
+			return () => {
+				active = false;
+			};
+		}
 
 		if (hasRole("ADMIN")) {
 			setHrFlowGrant({
@@ -215,10 +238,21 @@ function ModuleHubContent() {
 		return () => {
 			active = false;
 		};
-	}, [authSessionKey, hasRole]);
+	}, [authSessionKey, hasRole, isUtlIdentity]);
 
 	React.useEffect(() => {
 		let active = true;
+
+		if (isUtlIdentity) {
+			setAssetFlowRequestGrant({
+				sessionKey: authSessionKey,
+				allowed: false,
+			});
+
+			return () => {
+				active = false;
+			};
+		}
 
 		assetFlowApi.requesterContext()
 			.then((payload) => {
@@ -237,7 +271,7 @@ function ModuleHubContent() {
 			});
 
 		return () => { active = false; };
-	}, [authSessionKey, role, roles]);
+	}, [authSessionKey, role, roles, isUtlIdentity]);
 
 	/*
 	 * Shared FlowSuite module hosting.
@@ -361,8 +395,10 @@ function ModuleHubContent() {
 		!hasAnyRole(
 			"ADMIN",
 			"PACKING",
+			"UTL_PACKING",
 			"WAREHOUSE",
 			"DISPATCH",
+			"UTL_DISPATCH",
 			"LOGISTICS"
 		);
 
@@ -373,19 +409,35 @@ function ModuleHubContent() {
 
 		const pathForRole = (value) => {
 			switch (String(value || "").replace(/^ROLE_/i, "").trim().toUpperCase()) {
-				case "PACKING": return "/packflow/zoho-items?view=normal";
-				case "HARDWARE_PACKING": return "/packflow/zoho-items?view=hardware";
-				case "WAREHOUSE": return "/packflow/warehouse";
-				case "DISPATCH": return "/packflow/dispatched-items";
-				case "LOGISTICS": return "/packflow/logistics";
-				default: return "";
+				case "PACKING":
+				case "UTL_PACKING":
+					return "/packflow/zoho-items?view=normal";
+				case "HARDWARE_PACKING":
+					return "/packflow/zoho-items?view=hardware";
+				case "WAREHOUSE":
+					return "/packflow/warehouse";
+				case "DISPATCH":
+				case "UTL_DISPATCH":
+					return "/packflow/dispatched-items";
+				case "LOGISTICS":
+					return "/packflow/logistics";
+				default:
+					return "";
 			}
 		};
 
 		const primaryPath = pathForRole(role || user?.role);
 		if (primaryPath) return primaryPath;
 
-		for (const candidate of ["PACKING", "HARDWARE_PACKING", "WAREHOUSE", "DISPATCH", "LOGISTICS"]) {
+		for (const candidate of [
+			"UTL_PACKING",
+			"UTL_DISPATCH",
+			"PACKING",
+			"HARDWARE_PACKING",
+			"WAREHOUSE",
+			"DISPATCH",
+			"LOGISTICS",
+		]) {
 			if (hasRole(candidate)) return pathForRole(candidate);
 		}
 
