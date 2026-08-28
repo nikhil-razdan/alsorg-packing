@@ -96,6 +96,45 @@ const getInventoryRoleList = (
   );
 };
 
+/*
+ * Generated History is a high-growth audit/read model. Never request the
+ * complete history table in one browser/backend round trip. The backend clamps
+ * this again, so this frontend value is a UX batch size rather than a security
+ * or memory boundary.
+ */
+const GENERATED_HISTORY_SERVER_BATCH_SIZE = 250;
+
+const mergeGeneratedHistoryRows = (currentRows, incomingRows) => {
+  const merged = [];
+  const seen = new Set();
+
+  [...(Array.isArray(currentRows) ? currentRows : []),
+   ...(Array.isArray(incomingRows) ? incomingRows : [])]
+    .forEach((row) => {
+      const key = String(
+        row?.historyId ||
+        [
+          row?.stickerNumber,
+          row?.generatedAt,
+          row?.packetItemId,
+          row?.printIteration,
+        ].filter(Boolean).join("|")
+      ).trim();
+
+      if (key && seen.has(key)) {
+        return;
+      }
+
+      if (key) {
+        seen.add(key);
+      }
+
+      merged.push(row);
+    });
+
+  return merged;
+};
+
 function InventoryModal({
   open,
   onClose,
@@ -1842,11 +1881,6 @@ function ZohoItemsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [utlDispatchTargets, setUtlDispatchTargets] = useState([]);
-  const [utlDispatchTargetsLoading, setUtlDispatchTargetsLoading] = useState(false);
-  const [utlDispatchTargetsError, setUtlDispatchTargetsError] = useState("");
-  const [utlDispatchMode, setUtlDispatchMode] = useState("");
-  const [utlDispatchTargetKey, setUtlDispatchTargetKey] = useState("");
   const [detailsPopup, setDetailsPopup] = useState(false);
 
   const [
@@ -2026,9 +2060,6 @@ function ZohoItemsPage() {
   const isPacking =
     hasRole("PACKING");
 
-  const isUtlPacking =
-    hasRole("UTL_PACKING");
-
   const isHardwarePacking =
     hasRole("HARDWARE_PACKING");
 
@@ -2045,8 +2076,7 @@ function ZohoItemsPage() {
    */
   const canOpenNormalInventory =
     isAdmin ||
-    isPacking ||
-    isUtlPacking;
+    isPacking;
 
   const canOpenHardwareInventory =
     isAdmin ||
@@ -2093,8 +2123,7 @@ function ZohoItemsPage() {
    */
   const canCreateNormalPackets =
     isAdmin ||
-    isPacking ||
-    isUtlPacking;
+    isPacking;
 
   /*
    * Hardware inventory write operations:
@@ -2134,15 +2163,14 @@ function ZohoItemsPage() {
    */
   const canViewGeneratedHistory =
     isAdmin ||
-    isPacking ||
-    isUtlPacking;
+    isPacking;
 
   const canRequestLifecycleFromGeneratedHistory =
-    (isPacking || isUtlPacking) &&
+    isPacking &&
     !isAdmin;
 
   const canRequestDeletionFromGeneratedHistory =
-    (isPacking || isUtlPacking) &&
+    isPacking &&
     !isAdmin;
 
   /*
@@ -2311,6 +2339,10 @@ function ZohoItemsPage() {
   const [historyDeletionRequestSubmitting, setHistoryDeletionRequestSubmitting] = useState(false);
   const [historyDeletionRequestError, setHistoryDeletionRequestError] = useState("");
   const [generatedHistoryLoading, setGeneratedHistoryLoading] = useState(false);
+  const [generatedHistoryLoadingMore, setGeneratedHistoryLoadingMore] = useState(false);
+  const [generatedHistoryServerPage, setGeneratedHistoryServerPage] = useState(0);
+  const [generatedHistoryServerTotal, setGeneratedHistoryServerTotal] = useState(0);
+  const [generatedHistoryHasMore, setGeneratedHistoryHasMore] = useState(false);
   const [generatedHistoryUsers, setGeneratedHistoryUsers] = useState([]);
   const [generatedHistoryUserFilter, setGeneratedHistoryUserFilter] = useState("ALL");
   const [generatedHistorySearch, setGeneratedHistorySearch] = useState("");
@@ -2695,39 +2727,7 @@ function ZohoItemsPage() {
       }
 
       const data = await res.json();
-      const rawList = Array.isArray(data) ? data.filter(Boolean) : [];
-
-      const assignedPlantCodes = new Set(
-        [
-          ...(Array.isArray(currentUser?.plantCodes) ? currentUser.plantCodes : []),
-          currentUser?.plantCode,
-        ]
-          .map((value) => String(value || "").trim().toUpperCase())
-          .filter(Boolean)
-      );
-
-      const shouldExposeWr38 =
-        isAdmin ||
-        assignedPlantCodes.has("WR-38") ||
-        rawList.some((plant) =>
-          String(plant?.plantCode || "").trim().toUpperCase() === "WR-38"
-        );
-
-      const list = shouldExposeWr38 && !rawList.some((plant) =>
-        String(plant?.plantCode || "").trim().toUpperCase() === "WR-38"
-      )
-        ? [
-            ...rawList,
-            {
-              plantCode: "WR-38",
-              plantName: "Wriver Standard Products",
-              packedAreaCode: "PKD-38",
-              fgAreaCode: "FG-38",
-              fgZones: [],
-              warehouseCodes: ["BLS-WH-1", "RTP-WH-2", "WR-38"],
-            },
-          ]
-        : rawList;
+      const list = Array.isArray(data) ? data : [];
 
       setMyPlants(list);
 
@@ -4473,6 +4473,9 @@ function ZohoItemsPage() {
     setGeneratedHistoryRows([]);
     setGeneratedHistoryUsers([]);
     setGeneratedHistoryRequestSelection([]);
+    setGeneratedHistoryServerPage(0);
+    setGeneratedHistoryServerTotal(0);
+    setGeneratedHistoryHasMore(false);
 
     if (historyPdfPreview?.url) {
       URL.revokeObjectURL(historyPdfPreview.url);
@@ -4512,11 +4515,32 @@ function ZohoItemsPage() {
     }
   }
 
-  async function fetchGeneratedHistory(userFilter = generatedHistoryUserFilter) {
-    try {
-      setGeneratedHistoryLoading(true);
+  async function fetchGeneratedHistory(
+    userFilter = generatedHistoryUserFilter,
+    options = {}
+  ) {
+    const append = Boolean(options?.append);
+    const requestedPage = Math.max(
+      0,
+      Number(
+        options?.page ??
+        (append
+          ? generatedHistoryServerPage + 1
+          : 0)
+      ) || 0
+    );
 
-      const params = {};
+    try {
+      if (append) {
+        setGeneratedHistoryLoadingMore(true);
+      } else {
+        setGeneratedHistoryLoading(true);
+      }
+
+      const params = {
+        page: requestedPage,
+        size: GENERATED_HISTORY_SERVER_BATCH_SIZE,
+      };
 
       if (userFilter && userFilter !== "ALL") {
         params.generatedBy = userFilter;
@@ -4524,34 +4548,109 @@ function ZohoItemsPage() {
 
       const res = await API.get(
         "/stickers/generated-history",
-        {
-          params,
-        }
+        { params }
       );
 
-      const data = res.data;
+      const incomingRows =
+        Array.isArray(res.data)
+          ? res.data
+          : [];
 
-      setGeneratedHistoryRows(
-        Array.isArray(data)
-          ? data
-          : []
+      const nextRows = append
+        ? mergeGeneratedHistoryRows(
+            generatedHistoryRows,
+            incomingRows
+          )
+        : incomingRows;
+
+      const headerPage = Number(
+        res?.headers?.["x-page-number"]
       );
+      const headerTotal = Number(
+        res?.headers?.["x-total-elements"]
+      );
+      const hasNextHeader =
+        res?.headers?.["x-has-next"];
+
+      const resolvedPage =
+        Number.isFinite(headerPage) && headerPage >= 0
+          ? headerPage
+          : requestedPage;
+
+      const resolvedTotal =
+        Number.isFinite(headerTotal) && headerTotal >= 0
+          ? headerTotal
+          : nextRows.length;
+
+      const headerHasNextKnown =
+        hasNextHeader !== undefined &&
+        hasNextHeader !== null &&
+        String(hasNextHeader).trim() !== "";
+
+      const resolvedHasMore = headerHasNextKnown
+        ? String(hasNextHeader).toLowerCase() === "true"
+        : nextRows.length < resolvedTotal ||
+          incomingRows.length >=
+            GENERATED_HISTORY_SERVER_BATCH_SIZE;
+
+      setGeneratedHistoryRows(nextRows);
+      setGeneratedHistoryServerPage(resolvedPage);
+      setGeneratedHistoryServerTotal(resolvedTotal);
+      setGeneratedHistoryHasMore(resolvedHasMore);
+
+      if (!append) {
+        setGeneratedHistoryPageNo(1);
+      }
     } catch (e) {
       console.error("Generated history failed:", e);
 
-      setGeneratedHistoryRows([]);
+      /*
+       * A failed Load Older request must not destroy records already visible to
+       * the operator. A failed first-page request keeps the previous historical
+       * behavior of clearing the working set.
+       */
+      if (!append) {
+        setGeneratedHistoryRows([]);
+        setGeneratedHistoryServerPage(0);
+        setGeneratedHistoryServerTotal(0);
+        setGeneratedHistoryHasMore(false);
+      }
 
       showUiAlert(
         "error",
         e?.response?.data?.message ||
         e?.response?.data?.error ||
         e?.message ||
-        "Failed to load generated history"
+        (append
+          ? "Failed to load older generated history"
+          : "Failed to load generated history")
       );
     } finally {
-      setGeneratedHistoryLoading(false);
+      if (append) {
+        setGeneratedHistoryLoadingMore(false);
+      } else {
+        setGeneratedHistoryLoading(false);
+      }
     }
   }
+
+  const loadOlderGeneratedHistory = async () => {
+    if (
+      generatedHistoryLoading ||
+      generatedHistoryLoadingMore ||
+      !generatedHistoryHasMore
+    ) {
+      return;
+    }
+
+    await fetchGeneratedHistory(
+      generatedHistoryUserFilter,
+      {
+        append: true,
+        page: generatedHistoryServerPage + 1,
+      }
+    );
+  };
 
   const openHistoryPdf = async (historyId) => {
     if (!historyId) {
@@ -6833,71 +6932,9 @@ function ZohoItemsPage() {
     setPdfUrl(null);
     setDrawerOpen(false);
     setGenerating(false);
-    setUtlDispatchTargets([]);
-    setUtlDispatchTargetsLoading(false);
-    setUtlDispatchTargetsError("");
-    setUtlDispatchMode("");
-    setUtlDispatchTargetKey("");
   };
 
-  const loadUtlDispatchTargets = async (row) => {
-    if (!isUtlPacking || !row) {
-      setUtlDispatchTargets([]);
-      setUtlDispatchTargetsError("");
-      return [];
-    }
-
-    const sourcePlant = String(
-      row?.plantCode || row?.plant || ""
-    ).trim().toUpperCase();
-
-    if (!["AL-P3", "WR-38"].includes(sourcePlant)) {
-      setUtlDispatchTargets([]);
-      setUtlDispatchTargetsError(
-        "UTL packing is allowed only at AL-P3 K&W or WR-38."
-      );
-      return [];
-    }
-
-    try {
-      setUtlDispatchTargetsLoading(true);
-      setUtlDispatchTargetsError("");
-
-      const response = await authFetch(
-        `${API_BASE_URL}/api/packets/utl-dispatch-targets?plantCode=${encodeURIComponent(sourcePlant)}`,
-        { method: "GET" }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          (await readApiErrorMessage(response)) ||
-          "Unable to load eligible UTL dispatch users"
-        );
-      }
-
-      const data = await response.json();
-      const list = Array.isArray(data) ? data : [];
-      setUtlDispatchTargets(list);
-
-      const modes = Array.from(new Set(list.map((target) => target?.dispatchMode).filter(Boolean)));
-      if (modes.length === 1) {
-        setUtlDispatchMode(modes[0]);
-      }
-
-      return list;
-    } catch (error) {
-      console.error("UTL dispatch target load failed", error);
-      setUtlDispatchTargets([]);
-      setUtlDispatchTargetsError(
-        error?.message || "Unable to load eligible UTL dispatch users"
-      );
-      return [];
-    } finally {
-      setUtlDispatchTargetsLoading(false);
-    }
-  };
-
-  const openGenerateStickerDrawer = async (row = selectedItem) => {
+  const openGenerateStickerDrawer = (row = selectedItem) => {
     if (!row) return;
 
     closeStickerReviewModal();
@@ -6909,15 +6946,7 @@ function ZohoItemsPage() {
     setGenerating(false);
     setSelectedItem(row);
     setPdfUrl(null);
-    setUtlDispatchTargets([]);
-    setUtlDispatchTargetsError("");
-    setUtlDispatchMode("");
-    setUtlDispatchTargetKey("");
     setDrawerOpen(true);
-
-    if (isUtlPacking) {
-      await loadUtlDispatchTargets(row);
-    }
   };
 
   const openStickerReviewModal = async (row) => {
@@ -6953,7 +6982,7 @@ function ZohoItemsPage() {
           row.floor || ""
         )}` +
         `&showCompanyHeader=${encodeURIComponent(
-          isUtlPacking ? false : form.showCompanyHeader
+          form.showCompanyHeader
         )}`;
 
       const res = await authFetch(
@@ -10844,13 +10873,9 @@ function ZohoItemsPage() {
 
             {isWr38Row(selectedItem) ? (
               <Box sx={optionSubTextSx}>
-                WR-38 prints only the PackFlow QR and its independent WR sticker number.
-                Product/customer data stays in PackFlow and resolves after scanning.
-              </Box>
-            ) : isUtlPacking ? (
-              <Box sx={optionSubTextSx}>
-                UTL external-team sticker uses the normal PackFlow sticker layout with
-                the ALSORG / company-name header forcibly removed.
+                The QR contains only the PackFlow packet identity. Product Code,
+                dimensions, package content and customer data stay in PackFlow and
+                are resolved after scanning; the approved Illustrator label remains unchanged.
               </Box>
             ) : (
               <Box sx={stickerOptionRowSx}>
@@ -10877,108 +10902,13 @@ function ZohoItemsPage() {
             )}
           </Box>
 
-          {isUtlPacking && (
-            <Box sx={{ ...drawerSectionCardSx, borderColor: "rgba(14,165,233,.28)" }}>
-              <Box sx={drawerSectionTitleSx}>
-                Dispatch Assignment
-              </Box>
-
-              <Box sx={{ ...optionSubTextSx, mb: 1.5 }}>
-                This assignment is locked to the UTL packet at final sticker generation.
-                Only the selected dispatch username can operate that UTL packet afterwards.
-              </Box>
-
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Dispatch Route"
-                value={utlDispatchMode}
-                onChange={(event) => {
-                  setUtlDispatchMode(event.target.value);
-                  setUtlDispatchTargetKey("");
-                }}
-                disabled={utlDispatchTargetsLoading}
-                sx={{ ...formFieldSx(), mb: 1.25 }}
-                SelectProps={{ MenuProps: selectMenuSlotProps.select.MenuProps }}
-              >
-                {Array.from(
-                  new Set(
-                    utlDispatchTargets
-                      .map((target) => target?.dispatchMode)
-                      .filter(Boolean)
-                  )
-                ).map((mode) => (
-                  <MenuItem key={mode} value={mode}>
-                    {mode === "UTL" ? "UTL Dispatch Team" : "Internal Plant Dispatch"}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Dispatch User / Plant"
-                value={utlDispatchTargetKey}
-                onChange={(event) => setUtlDispatchTargetKey(event.target.value)}
-                disabled={utlDispatchTargetsLoading || !utlDispatchMode}
-                sx={formFieldSx()}
-                SelectProps={{ MenuProps: selectMenuSlotProps.select.MenuProps }}
-                helperText={
-                  utlDispatchTargetsLoading
-                    ? "Loading eligible dispatch users..."
-                    : utlDispatchTargetsError ||
-                      (!utlDispatchMode
-                        ? "Select the dispatch route first."
-                        : "Choose the exact user who will receive this UTL packet in Dispatch.")
-                }
-                error={Boolean(utlDispatchTargetsError)}
-              >
-                {utlDispatchTargets
-                  .filter((target) => target?.dispatchMode === utlDispatchMode)
-                  .map((target) => {
-                    const key = `${target.dispatchMode}|${target.plantCode}|${target.username}`;
-                    return (
-                      <MenuItem key={key} value={key}>
-                        {target.label || target.plantCode} • {target.username}
-                      </MenuItem>
-                    );
-                  })}
-              </TextField>
-            </Box>
-          )}
-
           <Button
-            disabled={
-              generating ||
-              (isUtlPacking && (
-                utlDispatchTargetsLoading ||
-                !utlDispatchMode ||
-                !utlDispatchTargetKey ||
-                Boolean(utlDispatchTargetsError)
-              ))
-            }
+            disabled={generating}
             onClick={async () => {
               const itemId = getPacketItemId(selectedItem);
 
               if (!itemId) {
                 showUiAlert("error", "Packet item id missing");
-                return;
-              }
-
-              const selectedUtlTarget = isUtlPacking
-                ? utlDispatchTargets.find((target) => {
-                    const key = `${target?.dispatchMode}|${target?.plantCode}|${target?.username}`;
-                    return key === utlDispatchTargetKey;
-                  })
-                : null;
-
-              if (isUtlPacking && !selectedUtlTarget) {
-                showUiAlert(
-                  "error",
-                  "Select the exact UTL/Internal dispatch user before generating the sticker."
-                );
                 return;
               }
 
@@ -10997,20 +10927,13 @@ function ZohoItemsPage() {
                   return;
                 }
 
-                const baseQuery =
+                const query =
                   `factoryFloor=${encodeURIComponent(
                     selectedItem?.floor || ""
                   )}` +
                   `&showCompanyHeader=${encodeURIComponent(
-                    isUtlPacking ? false : form.showCompanyHeader
+                    form.showCompanyHeader
                   )}`;
-
-                const query = selectedUtlTarget
-                  ? baseQuery +
-                    `&dispatchMode=${encodeURIComponent(selectedUtlTarget.dispatchMode)}` +
-                    `&dispatchTargetUsername=${encodeURIComponent(selectedUtlTarget.username)}` +
-                    `&dispatchTargetPlantCode=${encodeURIComponent(selectedUtlTarget.plantCode)}`
-                  : baseQuery;
 
                 const genRes =
                   await authFetch(
@@ -11053,11 +10976,7 @@ function ZohoItemsPage() {
 
                 showUiAlert(
                   "success",
-                  isWr38Row(selectedItem)
-                    ? "WR-38 QR generated and downloaded successfully"
-                    : isUtlPacking
-                      ? "UTL sticker generated without company header and assigned to the selected dispatch user"
-                      : "Sticker generated and downloaded successfully"
+                  isWr38Row(selectedItem) ? "WR-38 QR generated and downloaded successfully" : "Sticker generated and downloaded successfully"
                 );
 
                 await fetchItems();
@@ -12062,11 +11981,39 @@ function ZohoItemsPage() {
             height="92vh"
             footer={
               <>
+                {generatedHistoryHasMore && (
+                  <Button
+                    onClick={loadOlderGeneratedHistory}
+                    disabled={
+                      generatedHistoryLoading ||
+                      generatedHistoryLoadingMore
+                    }
+                    sx={modalSecondaryButtonSx}
+                  >
+                    {generatedHistoryLoadingMore
+                      ? "Loading Older..."
+                      : generatedHistoryServerTotal > 0
+                        ? `Load Older (${generatedHistoryRows.length.toLocaleString("en-IN")} / ${generatedHistoryServerTotal.toLocaleString("en-IN")})`
+                        : "Load Older"}
+                  </Button>
+                )}
+
                 <Button
-                  onClick={() => fetchGeneratedHistory(generatedHistoryUserFilter)}
+                  onClick={() =>
+                    fetchGeneratedHistory(
+                      generatedHistoryUserFilter,
+                      { page: 0 }
+                    )
+                  }
+                  disabled={
+                    generatedHistoryLoading ||
+                    generatedHistoryLoadingMore
+                  }
                   sx={modalSecondaryButtonSx}
                 >
-                  Refresh
+                  {generatedHistoryLoading
+                    ? "Refreshing..."
+                    : "Refresh"}
                 </Button>
 
                 <Button
@@ -12098,7 +12045,11 @@ function ZohoItemsPage() {
                     onChange={async (e) => {
                       const value = e.target.value;
                       setGeneratedHistoryUserFilter(value);
-                      await fetchGeneratedHistory(value);
+                      setGeneratedHistoryRequestSelection([]);
+                      await fetchGeneratedHistory(
+                        value,
+                        { page: 0 }
+                      );
                     }}
                     sx={historyMiniFilterFieldSx}
                     slotProps={selectMenuSlotProps}
@@ -12133,6 +12084,28 @@ function ZohoItemsPage() {
                     ))}
                   </TextField>
                 </Box>
+
+                {generatedHistoryServerTotal > generatedHistoryRows.length && (
+                  <Box
+                    sx={{
+                      px: 1.5,
+                      py: 1.05,
+                      borderRadius: "10px",
+                      border: "1px solid rgba(59,130,246,.22)",
+                      background: "rgba(59,130,246,.08)",
+                      color: "var(--pf-text-muted, #64748b)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Loaded the latest {generatedHistoryRows.length.toLocaleString("en-IN")} of{" "}
+                    {generatedHistoryServerTotal.toLocaleString("en-IN")} matching history records.
+                    Search, report grouping and export use the records currently loaded in this
+                    workbench. Use <b>Load Older</b> to extend the working set without loading the
+                    entire history table into server memory at once.
+                  </Box>
+                )}
 
                 <Box sx={historyFilterGridSx}>
                   <TextField
@@ -14165,23 +14138,19 @@ const selectMenuSlotProps = {
       PaperProps: {
         sx: {
           mt: 1,
-          borderRadius: "10px",
+          borderRadius: "14px",
           background:
             "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
           color: "var(--pf-text-strong)",
           border:
-            "1px solid rgba(59,130,246,.18)",
-          boxShadow:
-            "0 18px 46px rgba(2,6,23,.22)",
+            "1px solid rgba(var(--pf-fg-rgb),.06)",
           backdropFilter: "blur(20px)",
           zIndex: 8000,
 
           "& .MuiMenuItem-root": {
             fontSize: 14,
-            fontWeight: 650,
+            fontWeight: 500,
             color: "var(--pf-text-strong)",
-            margin: "2px 6px",
-            borderRadius: "7px",
           },
 
           "& .MuiMenuItem-root:hover": {

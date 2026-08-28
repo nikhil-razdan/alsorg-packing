@@ -87,7 +87,6 @@ const bumpSecuritySessionEpoch = () => {
   securitySessionEpoch += 1;
 };
 
-
 export const getSecurityCacheNamespace = () =>
   `browser-session:${securitySessionEpoch}`;
 
@@ -109,15 +108,20 @@ const deleteHeader = (headers, name) => {
   }
 
   const target = String(name).toLowerCase();
+
   Object.keys(headers).forEach((key) => {
-    if (String(key).toLowerCase() === target) {
+    if (
+      String(key)
+        .toLowerCase() === target
+    ) {
       delete headers[key];
     }
   });
 };
 
 const isBadAuthorization = (value) => {
-  const clean = String(value || "").trim();
+  const clean =
+    String(value || "").trim();
 
   if (!clean) {
     return false;
@@ -132,7 +136,9 @@ const isBadAuthorization = (value) => {
   ].includes(clean);
 };
 
-const sanitizeLegacyIdentityHeaders = (headers) => {
+const sanitizeLegacyIdentityHeaders = (
+  headers
+) => {
   if (!headers) {
     return;
   }
@@ -143,16 +149,31 @@ const sanitizeLegacyIdentityHeaders = (headers) => {
    * override an otherwise valid cookie-authenticated request. A deliberately
    * supplied valid Authorization header is preserved for specialized clients.
    */
-  deleteHeader(headers, "X-Username");
+  deleteHeader(
+    headers,
+    "X-Username"
+  );
 
   const authorization =
     typeof headers.get === "function"
       ? headers.get("Authorization")
-      : headers.Authorization || headers.authorization;
+      : headers.Authorization ||
+        headers.authorization;
 
-  if (isBadAuthorization(authorization)) {
-    deleteHeader(headers, "Authorization");
-    deleteHeader(headers, "authorization");
+  if (
+    isBadAuthorization(
+      authorization
+    )
+  ) {
+    deleteHeader(
+      headers,
+      "Authorization"
+    );
+
+    deleteHeader(
+      headers,
+      "authorization"
+    );
   }
 };
 
@@ -185,7 +206,6 @@ const normalizeRequestPath = (
   }
 };
 
-
 const normalizeAxiosApiPath = (
   value
 ) => {
@@ -208,7 +228,11 @@ const normalizeAxiosApiPath = (
     return "/";
   }
 
-  if (raw.startsWith("/api/")) {
+  if (
+    raw.startsWith(
+      "/api/"
+    )
+  ) {
     return raw.slice(4);
   }
 
@@ -237,7 +261,9 @@ const resolveSecureFetchUrl = (
     );
   }
 
-  if (/^https?:\/\//i.test(raw)) {
+  if (
+    /^https?:\/\//i.test(raw)
+  ) {
     return raw;
   }
 
@@ -245,11 +271,17 @@ const resolveSecureFetchUrl = (
     return `${backendRootUrl}/api`;
   }
 
-  if (raw.startsWith("/api/")) {
+  if (
+    raw.startsWith(
+      "/api/"
+    )
+  ) {
     return `${backendRootUrl}${raw}`;
   }
 
-  if (raw.startsWith("/")) {
+  if (
+    raw.startsWith("/")
+  ) {
     return `${apiBaseUrl}${raw}`;
   }
 
@@ -269,35 +301,65 @@ const getBackendOrigin = () => {
   }
 };
 
-export const isFlowSuiteApiRequest = (input) => {
+export const isFlowSuiteApiRequest = (
+  input
+) => {
   const raw =
     typeof input === "string"
       ? input.trim()
-      : String(input?.url || "").trim();
+      : String(
+          input?.url || ""
+        ).trim();
 
   if (!raw) {
     return false;
   }
 
-  if (raw === "/api" || raw.startsWith("/api/")) {
+  if (
+    raw === "/api" ||
+    raw.startsWith(
+      "/api/"
+    )
+  ) {
     return true;
   }
 
   try {
     const origin =
-      typeof window !== "undefined"
+      typeof window !==
+      "undefined"
         ? window.location.origin
         : "http://localhost";
 
-    const target = new URL(raw, origin);
-    const apiBase = new URL(apiBaseUrl, origin);
-    const apiPath = apiBase.pathname.replace(/\/+$/, "") || "/api";
+    const target =
+      new URL(
+        raw,
+        origin
+      );
+
+    const apiBase =
+      new URL(
+        apiBaseUrl,
+        origin
+      );
+
+    const apiPath =
+      apiBase.pathname
+        .replace(
+          /\/+$/,
+          ""
+        ) ||
+      "/api";
 
     return (
-      target.origin === apiBase.origin &&
+      target.origin ===
+        apiBase.origin &&
       (
-        target.pathname === apiPath ||
-        target.pathname.startsWith(`${apiPath}/`)
+        target.pathname ===
+          apiPath ||
+        target.pathname.startsWith(
+          `${apiPath}/`
+        )
       )
     );
   } catch {
@@ -312,7 +374,8 @@ const isBackendUrl = (
     const target =
       new URL(
         value,
-        typeof window !== "undefined"
+        typeof window !==
+          "undefined"
           ? window.location.origin
           : "http://localhost"
       );
@@ -335,7 +398,8 @@ const isLoginRequest = (
     );
 
   return (
-    path === "/auth/login" ||
+    path ===
+      "/auth/login" ||
     path.endsWith(
       "/api/auth/login"
     )
@@ -351,7 +415,8 @@ const isCsrfRequest = (
     );
 
   return (
-    path === CSRF_ENDPOINT ||
+    path ===
+      CSRF_ENDPOINT ||
     path.endsWith(
       "/api/auth/csrf"
     )
@@ -367,7 +432,9 @@ const shouldAttachCsrf = (
     );
 
   if (
-    SAFE_METHODS.has(method)
+    SAFE_METHODS.has(
+      method
+    )
   ) {
     return false;
   }
@@ -377,7 +444,9 @@ const shouldAttachCsrf = (
    * Exact-origin protection still applies to browser login.
    */
   if (
-    isLoginRequest(config)
+    isLoginRequest(
+      config
+    )
   ) {
     return false;
   }
@@ -407,13 +476,13 @@ const setHeader = (
       name,
       value
     );
+
     return;
   }
 
   headers[name] =
     value;
 };
-
 
 const createRequestId = () => {
   try {
@@ -438,6 +507,7 @@ const createRequestId = () => {
 
 const resetCsrfToken = () => {
   csrfToken = "";
+
   csrfHeaderName =
     CSRF_HEADER;
 };
@@ -461,7 +531,9 @@ const loadCsrfToken = async (
 
   if (csrfToken) {
     return {
-      token: csrfToken,
+      token:
+        csrfToken,
+
       headerName:
         csrfHeaderName,
     };
@@ -469,46 +541,53 @@ const loadCsrfToken = async (
 
   csrfLoadPromise =
     csrfClient
-      .get(CSRF_ENDPOINT, {
-        headers: {
-          "X-Request-ID":
-            createRequestId(),
-        },
-      })
-      .then((response) => {
-        const token =
-          String(
-            response?.data
-              ?.token || ""
-          ).trim();
-
-        const headerName =
-          String(
-            response?.data
-              ?.headerName ||
-              CSRF_HEADER
-          ).trim();
-
-        if (!token) {
-          throw new Error(
-            "CSRF token was not returned by the server"
-          );
+      .get(
+        CSRF_ENDPOINT,
+        {
+          headers: {
+            "X-Request-ID":
+              createRequestId(),
+          },
         }
+      )
+      .then(
+        (response) => {
+          const token =
+            String(
+              response?.data
+                ?.token ||
+              ""
+            ).trim();
 
-        csrfToken =
-          token;
+          const headerName =
+            String(
+              response?.data
+                ?.headerName ||
+              CSRF_HEADER
+            ).trim();
 
-        csrfHeaderName =
-          headerName ||
-          CSRF_HEADER;
+          if (!token) {
+            throw new Error(
+              "CSRF token was not returned by the server"
+            );
+          }
 
-        return {
-          token:
-            csrfToken,
-          headerName:
-            csrfHeaderName,
-        };
-      })
+          csrfToken =
+            token;
+
+          csrfHeaderName =
+            headerName ||
+            CSRF_HEADER;
+
+          return {
+            token:
+              csrfToken,
+
+            headerName:
+              csrfHeaderName,
+          };
+        }
+      )
       .finally(() => {
         csrfLoadPromise =
           null;
@@ -516,7 +595,6 @@ const loadCsrfToken = async (
 
   return csrfLoadPromise;
 };
-
 
 const readCsrfErrorCode = async (
   response
@@ -575,15 +653,23 @@ const dispatchSecurityEvent = (
         detail: {
           status:
             response?.status,
+
           url:
-            String(url || ""),
+            String(
+              url || ""
+            ),
+
           requestId:
-            response?.headers?.get(
-              "X-Request-ID"
-            ) ||
-            response?.headers?.get(
-              "x-request-id"
-            ) ||
+            response
+              ?.headers
+              ?.get(
+                "X-Request-ID"
+              ) ||
+            response
+              ?.headers
+              ?.get(
+                "x-request-id"
+              ) ||
             "",
         },
       }
@@ -602,10 +688,13 @@ const performSecureFetch = async (
     );
 
   const backendRequest =
-    isBackendUrl(url);
+    isBackendUrl(
+      url
+    );
 
   const requestInput =
-    typeof Request !== "undefined" &&
+    typeof Request !==
+      "undefined" &&
     input instanceof Request
       ? input
       : null;
@@ -618,19 +707,30 @@ const performSecureFetch = async (
 
   const headers =
     new Headers(
-      requestInput?.headers || {}
+      requestInput?.headers ||
+      {}
     );
 
   if (init?.headers) {
-    new Headers(init.headers).forEach(
-      (value, name) => {
-        headers.set(name, value);
+    new Headers(
+      init.headers
+    ).forEach(
+      (
+        value,
+        name
+      ) => {
+        headers.set(
+          name,
+          value
+        );
       }
     );
   }
 
   if (backendRequest) {
-    sanitizeLegacyIdentityHeaders(headers);
+    sanitizeLegacyIdentityHeaders(
+      headers
+    );
 
     if (
       !headers.has(
@@ -642,7 +742,6 @@ const performSecureFetch = async (
         createRequestId()
       );
     }
-
 
     const requestConfig = {
       method,
@@ -670,16 +769,20 @@ const performSecureFetch = async (
     headers.delete(
       "Authorization"
     );
+
     headers.delete(
       CSRF_HEADER
     );
+
     headers.delete(
       "X-Request-ID"
     );
   }
 
   if (!nativeFetch) {
-    throw new Error("Browser fetch is unavailable");
+    throw new Error(
+      "Browser fetch is unavailable"
+    );
   }
 
   const credentials =
@@ -741,6 +844,7 @@ const performSecureFetch = async (
     )
   ) {
     resetCsrfToken();
+
     bumpSecuritySessionEpoch();
   }
 
@@ -763,7 +867,9 @@ const performSecureFetch = async (
         );
 
       const retryHeaders =
-        new Headers(headers);
+        new Headers(
+          headers
+        );
 
       retryHeaders.set(
         csrf.headerName,
@@ -771,7 +877,8 @@ const performSecureFetch = async (
       );
 
       return performSecureFetch(
-        retryRequestInput || url,
+        retryRequestInput ||
+          url,
         {
           ...init,
           method,
@@ -798,7 +905,9 @@ const performSecureFetch = async (
     );
   }
 
-  if (response.status === 403) {
+  if (
+    response.status === 403
+  ) {
     dispatchSecurityEvent(
       "app:forbidden",
       response,
@@ -851,8 +960,12 @@ export const publicApiFetch = async (
     );
 
   if (
-    !isBackendUrl(url) ||
-    !isFlowSuiteApiRequest(url)
+    !isBackendUrl(
+      url
+    ) ||
+    !isFlowSuiteApiRequest(
+      url
+    )
   ) {
     throw new Error(
       "Public API transport only supports FlowSuite /api endpoints"
@@ -860,20 +973,30 @@ export const publicApiFetch = async (
   }
 
   const requestInput =
-    typeof Request !== "undefined" &&
+    typeof Request !==
+      "undefined" &&
     input instanceof Request
       ? input
       : null;
 
   const headers =
     new Headers(
-      requestInput?.headers || {}
+      requestInput?.headers ||
+      {}
     );
 
   if (init?.headers) {
-    new Headers(init.headers).forEach(
-      (value, name) => {
-        headers.set(name, value);
+    new Headers(
+      init.headers
+    ).forEach(
+      (
+        value,
+        name
+      ) => {
+        headers.set(
+          name,
+          value
+        );
       }
     );
   }
@@ -882,14 +1005,17 @@ export const publicApiFetch = async (
     headers,
     "Authorization"
   );
+
   deleteHeader(
     headers,
     "authorization"
   );
+
   deleteHeader(
     headers,
     "X-Username"
   );
+
   deleteHeader(
     headers,
     CSRF_HEADER
@@ -921,9 +1047,14 @@ export const publicApiFetch = async (
 
   const requestInit = {
     ...init,
+
     method,
+
     headers,
-    credentials: "omit",
+
+    credentials:
+      "omit",
+
     cache:
       init?.cache ||
       "no-store",
@@ -953,7 +1084,8 @@ API.interceptors.request.use(
       true;
 
     config.headers =
-      config.headers || {};
+      config.headers ||
+      {};
 
     sanitizeLegacyIdentityHeaders(
       config.headers
@@ -978,7 +1110,6 @@ API.interceptors.request.use(
       );
     }
 
-
     if (
       shouldAttachCsrf(
         config
@@ -997,7 +1128,9 @@ API.interceptors.request.use(
     return config;
   },
   (error) =>
-    Promise.reject(error)
+    Promise.reject(
+      error
+    )
 );
 
 API.interceptors.response.use(
@@ -1022,14 +1155,17 @@ API.interceptors.response.use(
       )
     ) {
       resetCsrfToken();
+
       bumpSecuritySessionEpoch();
     }
 
     return response;
   },
+
   async (error) => {
     const status =
-      error?.response?.status;
+      error?.response
+        ?.status;
 
     const requestUrl =
       String(
@@ -1039,8 +1175,9 @@ API.interceptors.response.use(
 
     const errorCode =
       String(
-        error?.response?.data
-          ?.code || ""
+        error?.response
+          ?.data?.code ||
+        ""
       )
         .trim()
         .toUpperCase();
@@ -1093,37 +1230,54 @@ API.interceptors.response.use(
     ) {
       bumpSecuritySessionEpoch();
 
-      window.dispatchEvent(
-        new CustomEvent(
-          "app:unauthorized",
-          {
-            detail: {
-              status,
-              url: requestUrl,
-              requestId:
-                error?.response
-                  ?.headers?.[
-                  "x-request-id"
-                ] || "",
-            },
-          }
-        )
-      );
+      if (
+        typeof window !==
+        "undefined"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(
+            "app:unauthorized",
+            {
+              detail: {
+                status,
+
+                url:
+                  requestUrl,
+
+                requestId:
+                  error?.response
+                    ?.headers?.[
+                      "x-request-id"
+                    ] ||
+                  "",
+              },
+            }
+          )
+        );
+      }
     }
 
-    if (status === 403) {
+    if (
+      status === 403 &&
+      typeof window !==
+        "undefined"
+    ) {
       window.dispatchEvent(
         new CustomEvent(
           "app:forbidden",
           {
             detail: {
               status,
-              url: requestUrl,
+
+              url:
+                requestUrl,
+
               requestId:
                 error?.response
                   ?.headers?.[
-                  "x-request-id"
-                ] || "",
+                    "x-request-id"
+                  ] ||
+                "",
             },
           }
         )
@@ -1136,10 +1290,25 @@ API.interceptors.response.use(
   }
 );
 
+/*
+ * Explicit CSRF refresh entry point.
+ *
+ * AuthContext uses this before logout so POST /auth/logout is submitted with
+ * a newly synchronized CSRF cookie/header pair rather than depending on a
+ * potentially stale token from an older browser session state.
+ */
 export const refreshCsrfToken =
   () =>
-    loadCsrfToken(true);
+    loadCsrfToken(
+      true
+    );
 
+/*
+ * Clears only the browser-side in-memory CSRF cache.
+ *
+ * It does not alter the backend cookie. The next unsafe request automatically
+ * obtains a fresh token through /auth/csrf.
+ */
 export const clearCsrfToken =
   resetCsrfToken;
 

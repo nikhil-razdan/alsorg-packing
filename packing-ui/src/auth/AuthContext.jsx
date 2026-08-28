@@ -7,7 +7,7 @@ import {
 	useState,
 } from "react";
 
-import API from "../services/api";
+import API, { refreshCsrfToken } from "../services/api";
 import { normalizeRole } from "../utils/permissions";
 import {
 	clearRuntimeAuthUser,
@@ -92,11 +92,9 @@ const modulesForRoles = (roles) => {
 		if (
 			[
 				"PACKING",
-				"UTL_PACKING",
 				"HARDWARE_PACKING",
 				"WAREHOUSE",
 				"DISPATCH",
-				"UTL_DISPATCH",
 				"LOGISTICS",
 				"DRIVER",
 			].includes(role)
@@ -659,6 +657,17 @@ export function AuthProvider({
 	const logout = useCallback(
 		async () => {
 			try {
+				/*
+				 * Logout remains CSRF-protected. Force a fresh token first so a
+				 * long-lived tab, backend restart or previous server-memory failure
+				 * cannot leave the browser holding a stale in-memory CSRF token and
+				 * prevent the server from expiring the HttpOnly auth cookie.
+				 *
+				 * API still performs its normal one-time CSRF retry as a second line
+				 * of defense. No business mutation endpoint is exempted from CSRF.
+				 */
+				await refreshCsrfToken();
+
 				await API.post(
 					"/auth/logout"
 				);
