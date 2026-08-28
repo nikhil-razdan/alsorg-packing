@@ -4227,6 +4227,18 @@ function LogisticsDashboard({
   const CardComponent =
     StatCard || DashboardStatCard;
 
+  const cardInspectionTarget = (title) => {
+    const key = String(title || "").toLowerCase();
+    if (key.includes("driver")) return "drivers";
+    if (key.includes("vehicle") || key.includes("fleet")) return "vehicles";
+    if (key.includes("alert") || key.includes("attention") || key.includes("missing") || key.includes("long running")) return "alerts";
+    if (key.includes("manual") || key.includes("helper") || key.includes("fuel") || key.includes("distance") || key.includes("shift")) return "manual";
+    if (key.includes("route") || key.includes("factory") || key.includes("residential") || key.includes("warehouse") || key.includes("mall")) return "routes";
+    if (key.includes("report")) return "reports";
+    if (key.includes("challan") || key.includes("dispatch") || key.includes("running") || key.includes("completion") || key.includes("live operation")) return "dispatch";
+    return section;
+  };
+
   const showDriverPanel =
     section === "summary" ||
     section === "drivers";
@@ -4356,6 +4368,7 @@ function LogisticsDashboard({
                   title={card.title}
                   value={card.value}
                   subtle={card.subtle}
+                  onClick={() => setSection(cardInspectionTarget(card.title))}
                 />
               ))}
             </div>
@@ -6222,18 +6235,27 @@ function DashboardStatCard({
   value,
   subtle,
   accent = "#60a5fa",
+  onClick,
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       style={{
         ...fallbackCard,
+        width: "100%",
+        textAlign: "left",
+        cursor: onClick ? "pointer" : "default",
+        fontFamily: "inherit",
+        color: "inherit",
         borderTop: `3px solid ${accent}`,
       }}
     >
       <div style={fallbackCardTitle}>{title}</div>
       <div style={fallbackCardValue}>{value}</div>
       <div style={fallbackCardSubtle}>{subtle}</div>
-    </div>
+      {onClick && <div style={{ marginTop: 7, color: accent, fontSize: 8.5, fontWeight: 900 }}>Inspect records →</div>}
+    </button>
   );
 }
 

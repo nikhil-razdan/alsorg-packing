@@ -9,9 +9,11 @@ function StatCard({
   subtitle,
   accent,
   signal,
+  onClick,
 }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={statCard(accent)}>
+    <Tag type={onClick ? "button" : undefined} onClick={onClick} style={{ ...statCard(accent), ...(onClick ? clickableCard : {}) }}>
       <div style={topLine(accent)} />
       <div style={headerRow}>
         <span style={signalPill(accent)}>{signal}</span>
@@ -20,11 +22,12 @@ function StatCard({
       <div style={titleStyle}>{title}</div>
       <div style={valueStyle}>{value}</div>
       <div style={subtitleStyle}>{subtitle}</div>
-    </div>
+      {onClick && <div style={inspectHint}>Inspect →</div>}
+    </Tag>
   );
 }
 
-function StatsCards({ stats = {} }) {
+function StatsCards({ stats = {}, onInspectMetric }) {
   const exceptions =
     safeNumber(stats.masterItemsWithoutPackets) +
     safeNumber(stats.packetsWithoutPacketItems) +
@@ -47,6 +50,7 @@ function StatsCards({ stats = {} }) {
         subtitle="Current + legacy linkage/control exceptions"
         accent={exceptions > 0 ? "#dc2626" : "#16a34a"}
         signal={exceptions > 0 ? "ACTION" : "CLEAR"}
+        onClick={onInspectMetric ? () => onInspectMetric("exceptions") : undefined}
       />
 
       <StatCard
@@ -55,6 +59,7 @@ function StatsCards({ stats = {} }) {
         subtitle="Packet items still awaiting sticker completion"
         accent="#d97706"
         signal={packingBacklog > 0 ? "OPEN" : "CLEAR"}
+        onClick={onInspectMetric ? () => onInspectMetric("pending") : undefined}
       />
 
       <StatCard
@@ -63,6 +68,7 @@ function StatsCards({ stats = {} }) {
         subtitle="Finished-goods items available for outbound conversion"
         accent="#2563eb"
         signal="FG"
+        onClick={onInspectMetric ? () => onInspectMetric("readyToDispatch") : undefined}
       />
 
       <StatCard
@@ -74,6 +80,7 @@ function StatsCards({ stats = {} }) {
         subtitle={`${safeNumber(stats.todayStickerGenerated)} stickers • ${safeNumber(stats.todayDispatchChallans)} dispatch challans`}
         accent="#0f766e"
         signal="TODAY"
+        onClick={onInspectMetric ? () => onInspectMetric("dailyThroughput") : undefined}
       />
     </div>
   );
@@ -163,3 +170,6 @@ const subtitleStyle = {
 };
 
 export default StatsCards;
+
+const clickableCard = { width: "100%", textAlign: "left", cursor: "pointer", fontFamily: "inherit" };
+const inspectHint = { marginTop: 7, color: "#2563eb", fontSize: 8.2, fontWeight: 900 };

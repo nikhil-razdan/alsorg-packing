@@ -105,7 +105,7 @@ const requestJson = async (
 		if (res.status === 403) {
 			throw new Error(
 				message ||
-				"Only ADMIN can perform this action."
+				"Access denied for this request."
 			);
 		}
 

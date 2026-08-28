@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import StatusDonutChart from "./StatusDonutChart";
 
@@ -19,13 +19,15 @@ const compact = (value, maximumFractionDigits = 1) =>
     maximumFractionDigits,
   }).format(number(value));
 
-function KpiCard({ label, value, detail, accent = "#2563eb", tag, progress }) {
+function KpiCard({ label, value, detail, accent = "#2563eb", tag, progress, onClick }) {
   const safeProgress = Number.isFinite(Number(progress))
     ? Math.max(0, Math.min(100, Number(progress)))
     : null;
 
+  const Tag = onClick ? "button" : "div";
+
   return (
-    <div style={kpiCard}>
+    <Tag type={onClick ? "button" : undefined} onClick={onClick} style={{ ...kpiCard, ...(onClick ? kpiButton : {}) }}>
       <div style={kpiTop}>
         <div style={kpiLabel}>{label}</div>
         {tag && <div style={kpiTag(accent)}>{tag}</div>}
@@ -43,7 +45,8 @@ function KpiCard({ label, value, detail, accent = "#2563eb", tag, progress }) {
           />
         </div>
       )}
-    </div>
+      {onClick && <div style={kpiInspectHint}>View aggregate breakdown →</div>}
+    </Tag>
   );
 }
 
@@ -60,13 +63,19 @@ function Insight({ index, title, text, tone = "info" }) {
   );
 }
 
-function MiniMetric({ label, value, detail }) {
+function MiniMetric({ label, value, detail, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={miniMetric}>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      style={{ ...miniMetric, ...(onClick ? miniMetricButton : {}) }}
+    >
       <div style={miniLabel}>{label}</div>
       <div style={miniValue}>{value}</div>
       <div style={miniDetail}>{detail}</div>
-    </div>
+      {onClick && <div style={miniInspectHint}>View breakdown →</div>}
+    </Tag>
   );
 }
 
@@ -182,7 +191,39 @@ function RouteMix({ data = {} }) {
   );
 }
 
+function DirectorMetricModal({ detail, onClose }) {
+  if (!detail) return null;
+
+  return (
+    <div style={directorModalOverlay} onMouseDown={(event) => event.target === event.currentTarget && onClose?.()}>
+      <div style={directorModal} role="dialog" aria-modal="true" aria-label={detail.title}>
+        <div style={directorModalHeader}>
+          <div>
+            <div style={sectionEyebrow}>DIRECTOR • AGGREGATE BREAKDOWN</div>
+            <div style={directorModalTitle}>{detail.title}</div>
+            <div style={directorModalSubtitle}>{detail.subtitle}</div>
+          </div>
+          <button type="button" style={directorModalClose} onClick={onClose}>×</button>
+        </div>
+        <div style={directorBreakdownGrid}>
+          {(detail.rows || []).map((row) => (
+            <div key={row.label} style={directorBreakdownCard}>
+              <div style={miniLabel}>{row.label}</div>
+              <div style={miniValue}>{row.value}</div>
+              {row.detail && <div style={miniDetail}>{row.detail}</div>}
+            </div>
+          ))}
+        </div>
+        <div style={directorPrivacyNote}>
+          Aggregate-only executive inspection. User identities, item-level trace rows, deletion/admin records and raw activity remain excluded.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} }) {
+  const [metricDetail, setMetricDetail] = useState(null);
   const inventoryTotal =
     number(stats.warehouseItems) +
       number(stats.readyToDispatchItems) +
@@ -294,30 +335,6 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
 
   return (
     <>
-      <section style={hero}>
-        <div style={heroContent}>
-          <div style={heroEyebrow}>DIRECTOR • EXECUTIVE OPERATIONS BRIEF</div>
-          <h1 style={heroTitle}>PackFlow at a glance.</h1>
-          <p style={heroText}>
-            A concise owner/director view of packing completion, finished-goods readiness,
-            dispatch conversion, warehouse position, control exceptions and logistics capacity
-            for a project-led interior manufacturing operation.
-          </p>
-        </div>
-        <div style={heroScorecard}>
-          <div style={heroScoreLabel}>OPERATING SIGNAL</div>
-          <div style={heroScoreValue}>
-            {totalExceptions > 0 || complianceFlags > 0
-              ? "Attention"
-              : number(stats.packetItemsPendingSticker || stats.pendingItems) > 0
-                ? "Watch WIP"
-                : "Controlled"}
-          </div>
-          <div style={heroScoreDetail}>
-            {totalExceptions} integrity exceptions • {complianceFlags} fleet-document flags
-          </div>
-        </div>
-      </section>
 
       <section style={kpiGrid}>
         <KpiCard
@@ -327,6 +344,17 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           accent="#2563eb"
           tag="EXECUTION"
           progress={packingCompletion}
+          onClick={() => setMetricDetail({
+            title: "Packing completion",
+            subtitle: "Aggregate packet/master completion without exposing user-level production records.",
+            rows: [
+              { label: "Packet items", value: compact(stats.packetItems), detail: "Total operational packet rows" },
+              { label: "Sticker-complete", value: compact(stats.packetItemsWithSticker), detail: `${Math.round(packingCompletion)}% completion` },
+              { label: "Pending sticker", value: compact(stats.packetItemsPendingSticker), detail: "Open packing identity work" },
+              { label: "Sticker reprints", value: compact(stats.stickerReprints), detail: "Reprint events" },
+              { label: "Fully packed masters", value: compact(stats.fullyPackedMasterItems), detail: `${Math.round(masterCompletion)}% of master items` },
+            ],
+          })}
         />
         <KpiCard
           label="Dispatch-ready FG"
@@ -335,6 +363,17 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           accent="#0f766e"
           tag="OUTBOUND"
           progress={dispatchReadyShare}
+          onClick={() => setMetricDetail({
+            title: "Finished-goods readiness",
+            subtitle: "Current aggregate stock position and outbound queue.",
+            rows: [
+              { label: "Warehouse", value: compact(stats.warehouseItems), detail: "Stored finished goods" },
+              { label: "Ready", value: compact(stats.readyItems), detail: "Processed / ready stock" },
+              { label: "Ready to Dispatch", value: compact(stats.readyToDispatchItems), detail: `${Math.round(dispatchReadyShare)}% of current FG position` },
+              { label: "Warehouse requests", value: compact(stats.warehouseRequestedItems), detail: "Inbound approvals pending" },
+              { label: "Return requests", value: compact(stats.returnRequestedItems), detail: "Return-to-dispatch requests" },
+            ],
+          })}
         />
         <KpiCard
           label="Today execution"
@@ -342,6 +381,16 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           detail={`${compact(stats.todayStickerGenerated)} sticker events • ${compact(stats.todayChallanGenerated)} dispatched items`}
           accent="#7c3aed"
           tag="TODAY"
+          onClick={() => setMetricDetail({
+            title: "Today execution",
+            subtitle: "Today's PackFlow aggregate execution counts; dispatched item rows and distinct challans are kept separate.",
+            rows: [
+              { label: "Sticker events", value: compact(stats.todayStickerGenerated), detail: "Generated/reprint events recorded today" },
+              { label: "Dispatched items", value: compact(stats.todayChallanGenerated), detail: "Outbound item rows today" },
+              { label: "Distinct challans", value: compact(stats.todayDispatchChallans), detail: "Normal dispatch challans today" },
+              { label: "Custom challans", value: compact(stats.todayCustomChallans), detail: "Custom movement challans today" },
+            ],
+          })}
         />
         <KpiCard
           label="Control exceptions"
@@ -349,6 +398,20 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           detail={`${compact(currentExceptions)} current linkage • ${compact(legacyExceptions)} legacy dispatch`}
           accent={totalExceptions > 0 ? "#dc2626" : "#16a34a"}
           tag="RISK"
+          onClick={() => setMetricDetail({
+            title: "Control exceptions",
+            subtitle: "Aggregate integrity-control counts only. Exact records remain ADMIN-only.",
+            rows: [
+              { label: "Master without packets", value: compact(stats.masterItemsWithoutPackets) },
+              { label: "Packets without items", value: compact(stats.packetsWithoutPacketItems) },
+              { label: "Packet items without master", value: compact(stats.packetItemsWithoutMaster) },
+              { label: "Duplicate stickers", value: compact(stats.duplicateCurrentStickers) },
+              { label: "Ready still in PKD", value: compact(stats.readyItemsStillInPkd) },
+              { label: "Dispatch without packet", value: compact(stats.dispatchedWithoutPacketItem) },
+              { label: "Dispatch without challan", value: compact(stats.dispatchedWithoutChallan) },
+              { label: "Dispatch without driver / vehicle", value: compact(stats.dispatchedWithoutDriver) },
+            ],
+          })}
         />
         <KpiCard
           label="Fleet document flags"
@@ -356,6 +419,17 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           detail={`${compact(stats.expiredFitness)} fitness • ${compact(stats.expiredInsurance)} insurance • ${compact(stats.expiredPucc)} PUCC`}
           accent={complianceFlags > 0 ? "#d97706" : "#16a34a"}
           tag="COMPLIANCE"
+          onClick={() => setMetricDetail({
+            title: "Fleet compliance flags",
+            subtitle: "Aggregate fleet-document readiness. Counts can overlap on the same vehicle.",
+            rows: [
+              { label: "Active vehicles", value: compact(stats.activeVehicles), detail: "Vehicle master records" },
+              { label: "Active drivers", value: compact(stats.activeDrivers), detail: "Driver master records" },
+              { label: "Expired fitness", value: compact(stats.expiredFitness) },
+              { label: "Expired insurance", value: compact(stats.expiredInsurance) },
+              { label: "Expired PUCC", value: compact(stats.expiredPucc) },
+            ],
+          })}
         />
       </section>
 
@@ -441,31 +515,90 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
               label="Master items"
               value={compact(stats.masterItems)}
               detail={`${Math.round(masterCompletion)}% fully packed`}
+              onClick={() => setMetricDetail({
+                title: "Master item execution",
+                subtitle: "Aggregate parent-item packing position.",
+                rows: [
+                  { label: "Master items", value: compact(stats.masterItems) },
+                  { label: "Fully packed", value: compact(stats.fullyPackedMasterItems) },
+                  { label: "Partially packed", value: compact(stats.partiallyPackedMasterItems) },
+                  { label: "Unpacked", value: compact(stats.unpackedMasterItems) },
+                ],
+              })}
             />
             <MiniMetric
               label="Packets"
               value={compact(stats.totalPackets)}
               detail={`${compact(stats.pendingPackets)} pending`}
+              onClick={() => setMetricDetail({
+                title: "Packet execution",
+                subtitle: "Aggregate packet and packet-item completion.",
+                rows: [
+                  { label: "Packets", value: compact(stats.totalPackets) },
+                  { label: "Packed packets", value: compact(stats.packedPackets) },
+                  { label: "Pending packets", value: compact(stats.pendingPackets) },
+                  { label: "Packet items", value: compact(stats.packetItems) },
+                  { label: "Pending sticker", value: compact(stats.packetItemsPendingSticker) },
+                ],
+              })}
             />
             <MiniMetric
               label="Normal challans"
               value={compact(stats.normalDispatchChallans)}
               detail={`${compact(stats.todayDispatchChallans)} today`}
+              onClick={() => setMetricDetail({
+                title: "Normal dispatch challans",
+                subtitle: "Aggregate outbound-document and trip status.",
+                rows: [
+                  { label: "Normal challans", value: compact(stats.normalDispatchChallans) },
+                  { label: "Today challans", value: compact(stats.todayDispatchChallans) },
+                  { label: "Running trips", value: compact(stats.runningTrips) },
+                  { label: "Ended trips", value: compact(stats.endedTrips) },
+                ],
+              })}
             />
             <MiniMetric
               label="Custom challans"
               value={compact(stats.customChallans)}
               detail={`${compact(stats.customChallanItems)} manual items`}
+              onClick={() => setMetricDetail({
+                title: "Custom challans",
+                subtitle: "Aggregate manual/site movement documentation.",
+                rows: [
+                  { label: "Custom challans", value: compact(stats.customChallans) },
+                  { label: "Today custom challans", value: compact(stats.todayCustomChallans) },
+                  { label: "Custom challan items", value: compact(stats.customChallanItems) },
+                ],
+              })}
             />
             <MiniMetric
               label="Running trips"
               value={compact(stats.runningTrips)}
               detail={`${compact(stats.endedTrips)} ended`}
+              onClick={() => setMetricDetail({
+                title: "Trip status",
+                subtitle: "Aggregate current trip lifecycle.",
+                rows: [
+                  { label: "Running trips", value: compact(stats.runningTrips) },
+                  { label: "Ended trips", value: compact(stats.endedTrips) },
+                  { label: "Closure rate", value: `${Math.round(percent(stats.endedTrips, number(stats.endedTrips) + number(stats.runningTrips), 100))}%` },
+                ],
+              })}
             />
             <MiniMetric
               label="Warehouse requests"
               value={compact(stats.warehouseRequestedItems)}
               detail={`${compact(stats.returnRequestedItems)} return requests`}
+              onClick={() => setMetricDetail({
+                title: "Warehouse movement queue",
+                subtitle: "Aggregate warehouse approvals and return movement position.",
+                rows: [
+                  { label: "Warehouse stock", value: compact(stats.warehouseItems) },
+                  { label: "Inbound requests", value: compact(stats.warehouseRequestedItems) },
+                  { label: "Return requests", value: compact(stats.returnRequestedItems) },
+                  { label: "Ready to store", value: compact(stats.readyToStoreItems) },
+                ],
+              })}
             />
           </div>
         </div>
@@ -476,13 +609,62 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
           <div style={sectionEyebrow}>LOGISTICS TREND</div>
           <div style={sectionTitle}>Trips over recorded shift history</div>
           <div style={logisticsMetaRow}>
-            <MiniMetric label="Trips" value={compact(logistics?.totalTrips)} detail="Recorded aggregate" />
-            <MiniMetric label="Drivers" value={compact(logistics?.activeDrivers)} detail="Driver records" />
-            <MiniMetric label="Vehicles" value={compact(logistics?.activeVehicles)} detail="Vehicle records" />
+            <MiniMetric
+              label="Trips"
+              value={compact(logistics?.totalTrips)}
+              detail="Recorded aggregate"
+              onClick={() => setMetricDetail({
+                title: "Logistics trip volume",
+                subtitle: "Aggregate logistics activity from the existing analytics endpoint.",
+                rows: [
+                  { label: "Trips", value: compact(logistics?.totalTrips) },
+                  { label: "Loaders", value: compact(logistics?.totalLoaders) },
+                  { label: "Drivers", value: compact(logistics?.activeDrivers) },
+                  { label: "Vehicles", value: compact(logistics?.activeVehicles) },
+                ],
+              })}
+            />
+            <MiniMetric
+              label="Drivers"
+              value={compact(logistics?.activeDrivers)}
+              detail="Driver records"
+              onClick={() => setMetricDetail({
+                title: "Driver capacity",
+                subtitle: "Aggregate driver capacity; identities remain excluded.",
+                rows: [
+                  { label: "Drivers", value: compact(logistics?.activeDrivers) },
+                  { label: "Trips / driver", value: number(logistics?.averageTripsPerDriver).toFixed(1) },
+                  { label: "Trips", value: compact(logistics?.totalTrips) },
+                ],
+              })}
+            />
+            <MiniMetric
+              label="Vehicles"
+              value={compact(logistics?.activeVehicles)}
+              detail="Vehicle records"
+              onClick={() => setMetricDetail({
+                title: "Fleet capacity",
+                subtitle: "Aggregate fleet capacity; vehicle-level compliance records remain outside Director scope.",
+                rows: [
+                  { label: "Vehicles", value: compact(logistics?.activeVehicles) },
+                  { label: "Trips / vehicle", value: number(logistics?.averageTripsPerVehicle).toFixed(1) },
+                  { label: "Fleet document flags", value: compact(complianceFlags) },
+                ],
+              })}
+            />
             <MiniMetric
               label="Trips / driver"
               value={number(logistics?.averageTripsPerDriver).toFixed(1)}
               detail="Aggregate average"
+              onClick={() => setMetricDetail({
+                title: "Trips per driver",
+                subtitle: "Historical aggregate ratio, not an individual productivity score.",
+                rows: [
+                  { label: "Trips / driver", value: number(logistics?.averageTripsPerDriver).toFixed(1) },
+                  { label: "Trips", value: compact(logistics?.totalTrips) },
+                  { label: "Drivers", value: compact(logistics?.activeDrivers) },
+                ],
+              })}
             />
           </div>
           <TripsTrend data={logistics?.tripsOverTime} />
@@ -500,6 +682,8 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
         Director dashboard intentionally excludes raw activity logs, user-wise performance,
         trace-level records, admin correction/deletion tools and scheduled-report administration.
       </div>
+
+      <DirectorMetricModal detail={metricDetail} onClose={() => setMetricDetail(null)} />
     </>
   );
 }
@@ -536,6 +720,8 @@ const heroScoreValue = { marginTop: 6, color: "var(--pf-text-strong)", fontSize:
 const heroScoreDetail = { marginTop: 6, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700, lineHeight: 1.45 };
 
 const kpiGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(205px,1fr))", gap: 10 };
+const kpiButton = { width: "100%", textAlign: "left", color: "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit" };
+const kpiInspectHint = { marginTop: 8, color: "#2563eb", fontSize: 8.2, fontWeight: 900 };
 const kpiCard = { minWidth: 0, minHeight: 138, padding: 15, borderRadius: 12, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 7px 22px rgba(var(--pf-shadow-rgb),.05)" };
 const kpiTop = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 };
 const kpiLabel = { color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".08em" };
@@ -570,7 +756,9 @@ const horizontalFill = { height: "100%", borderRadius: 999 };
 
 const miniGrid = { marginTop: 13, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 };
 const logisticsMetaRow = { marginTop: 12, marginBottom: 6, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 7 };
-const miniMetric = { minWidth: 0, padding: 10, borderRadius: 9, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
+const miniMetric = { minWidth: 0, padding: 10, borderRadius: 9, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)", textAlign: "left", color: "var(--pf-text-strong)", fontFamily: "inherit" };
+const miniMetricButton = { width: "100%", cursor: "pointer" };
+const miniInspectHint = { marginTop: 6, color: "#2563eb", fontSize: 7.5, fontWeight: 900 };
 const miniLabel = { color: "var(--pf-text-muted)", fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".055em" };
 const miniValue = { marginTop: 5, color: "var(--pf-text-strong)", fontSize: 20, fontWeight: 950, letterSpacing: "-.035em" };
 const miniDetail = { marginTop: 3, color: "var(--pf-text-muted)", fontSize: 8.2, fontWeight: 650, lineHeight: 1.35 };
@@ -588,3 +776,14 @@ const routeTrack = { height: 4, marginTop: 5, overflow: "hidden", borderRadius: 
 const routeFill = { height: "100%", borderRadius: 999, background: "#2563eb" };
 
 const directorBoundaryNote = { marginTop: 12, padding: "10px 12px", borderRadius: 9, border: "1px solid var(--pf-border)", background: "var(--pf-surface-alt)", color: "var(--pf-text-muted)", fontSize: 9, fontWeight: 700, lineHeight: 1.5 };
+
+
+const directorModalOverlay = { position: "fixed", inset: 0, zIndex: 17000, padding: 20, boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(2,6,23,.72)", backdropFilter: "blur(8px)" };
+const directorModal = { width: "min(900px,calc(100vw - 40px))", maxHeight: "min(84vh,760px)", overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 16, background: "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))", border: "1px solid var(--pf-border)", boxShadow: "0 32px 90px rgba(2,6,23,.42)", color: "var(--pf-text-strong)" };
+const directorModalHeader = { flexShrink: 0, padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, borderBottom: "1px solid var(--pf-border-soft)" };
+const directorModalTitle = { marginTop: 5, fontSize: 22, fontWeight: 950, letterSpacing: "-.025em" };
+const directorModalSubtitle = { maxWidth: 680, marginTop: 5, color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 650, lineHeight: 1.5 };
+const directorModalClose = { width: 36, height: 36, borderRadius: 10, border: "1px solid var(--pf-border)", background: "var(--pf-surface-alt)", color: "var(--pf-text-strong)", cursor: "pointer", fontSize: 22 };
+const directorBreakdownGrid = { minHeight: 0, overflow: "auto", padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 9 };
+const directorBreakdownCard = { minWidth: 0, padding: 12, borderRadius: 10, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
+const directorPrivacyNote = { flexShrink: 0, margin: "0 16px 16px", padding: "9px 11px", borderRadius: 9, color: "var(--pf-text-muted)", background: "rgba(37,99,235,.055)", border: "1px solid rgba(37,99,235,.14)", fontSize: 9, fontWeight: 700, lineHeight: 1.5 };

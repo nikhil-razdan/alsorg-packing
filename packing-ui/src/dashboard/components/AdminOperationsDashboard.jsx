@@ -5,6 +5,7 @@ import StatusCorporateChart from "./StatusCorporateChart";
 import InventoryCommandCenter from "./inventory/InventoryCommandCenter";
 import InventoryReports from "./inventory/InventoryReports";
 import DailyThroughputDrilldown from "./inventory/DailyThroughputDrilldown";
+import DashboardRecordInspector from "./inventory/DashboardRecordInspector";
 import ScheduledReports from "./ScheduledReports";
 import LogisticsDashboard from "./logistics/LogisticsDashboard";
 import AdminCenter from "./admin/AdminCenter";
@@ -30,6 +31,7 @@ function MetricCard({ label, value, detail, accent = "#2563eb", signal, onClick 
       </div>
       <div style={metricValue}>{value}</div>
       <div style={metricDetail}>{detail}</div>
+      {onClick && <div style={metricInspectHint}>Inspect records →</div>}
     </>
   );
 
@@ -70,10 +72,11 @@ function LegacyStatCard({
   );
 }
 
-function ExceptionRow({ label, value, severity = "medium", detail }) {
+function ExceptionRow({ label, value, severity = "medium", detail, onClick }) {
   const tone = severityTone[severity] || severityTone.medium;
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={exceptionRow}>
+    <Tag type={onClick ? "button" : undefined} onClick={onClick} style={{ ...exceptionRow, ...(onClick ? exceptionButton : {}) }}>
       <div style={exceptionIdentity}>
         <span style={{ ...severityDot, background: tone.accent }} />
         <div>
@@ -82,7 +85,7 @@ function ExceptionRow({ label, value, severity = "medium", detail }) {
         </div>
       </div>
       <div style={exceptionValue(tone)}>{number(value)}</div>
-    </div>
+    </Tag>
   );
 }
 
@@ -121,10 +124,14 @@ function InventoryDashboard({
   stats,
   activityLogs,
   refreshing,
-  onRefresh,
-  onOpenAdminCenter,
+  onRefresh
 }) {
   const [workspace, setWorkspace] = useState("overview");
+  const [inspector, setInspector] = useState({ open: false });
+
+  const openInspector = (config) => {
+    setInspector({ open: true, ...config });
+  };
 
   const currentExceptions =
     number(stats.masterItemsWithoutPackets) +
@@ -211,58 +218,84 @@ function InventoryDashboard({
   }, [stats, totalExceptions]);
 
   const exceptionRows = [
-    ["Master items without packets", stats.masterItemsWithoutPackets, "high", "Parent manufacturing items missing packet structure."],
-    ["Packets without packet items", stats.packetsWithoutPacketItems, "high", "Packet shells that cannot represent physical packed contents."],
-    ["Packet items without master link", stats.packetItemsWithoutMaster, "high", "Orphan packet rows weaken item traceability."],
-    ["Duplicate current stickers", stats.duplicateCurrentStickers, "high", "Current sticker identity collision requiring reconciliation."],
-    ["Ready items still in PKD", stats.readyItemsStillInPkd, "medium", "Status/location mismatch between readiness and physical flow."],
-    ["Dispatched without packet item", stats.dispatchedWithoutPacketItem, "medium", "Legacy dispatch rows missing packet-level lineage."],
-    ["Dispatched without challan", stats.dispatchedWithoutChallan, "high", "Outbound record without expected dispatch document linkage."],
-    ["Dispatched without driver / vehicle", stats.dispatchedWithoutDriver, "medium", "Transport attribution is incomplete on dispatched records."],
+    { label: "Master items without packets", value: stats.masterItemsWithoutPackets, severity: "high", detail: "Parent manufacturing items missing packet structure." },
+    { label: "Packets without packet items", value: stats.packetsWithoutPacketItems, severity: "high", detail: "Packet shells that cannot represent physical packed contents." },
+    { label: "Packet items without master link", value: stats.packetItemsWithoutMaster, severity: "high", detail: "Orphan packet rows weaken item traceability." },
+    { label: "Duplicate current stickers", value: stats.duplicateCurrentStickers, severity: "high", detail: "Current sticker identity collision requiring reconciliation." },
+    { label: "Ready items still in PKD", value: stats.readyItemsStillInPkd, severity: "medium", detail: "Status/location mismatch between readiness and physical flow." },
+    { label: "Dispatched without packet item", value: stats.dispatchedWithoutPacketItem, severity: "medium", detail: "Legacy dispatch rows missing packet-level lineage." },
+    { label: "Dispatched without challan", value: stats.dispatchedWithoutChallan, severity: "high", detail: "Outbound record without expected dispatch document linkage." },
+    { label: "Dispatched without driver / vehicle", value: stats.dispatchedWithoutDriver, severity: "medium", detail: "Transport attribution is incomplete on dispatched records." },
   ];
 
   return (
     <>
-      <section style={hero}>
-        <div style={heroCopy}>
-          <div style={heroEyebrow}>ADMIN • INVENTORY & DISPATCH CONTROL TOWER</div>
-          <h1 style={heroTitle}>Packing → FG → Warehouse → Dispatch.</h1>
-          <p style={heroText}>
-            One operational view of physical packet execution, sticker completion, finished-goods readiness,
-            warehouse movement, outbound conversion, challans and data-integrity exceptions for custom interior manufacturing.
-          </p>
-        </div>
-
-        <div style={heroActions}>
-          <div style={healthBlock(totalExceptions)}>
-            <span style={healthLabel}>CONTROL HEALTH</span>
-            <strong>{totalExceptions === 0 ? "CLEAR" : "ACTION"}</strong>
-            <small>{totalExceptions} integrity exceptions</small>
-          </div>
-          <button type="button" style={dangerAction} onClick={onOpenAdminCenter}>
-            Admin Center
-          </button>
-        </div>
-      </section>
-
       <section style={metricGrid}>
-        <MetricCard label="Inventory Items" value={number(stats.totalItems)} detail="Warehouse + Ready to Dispatch + Ready" accent="#2563eb" signal="LIVE" />
-        <MetricCard label="Master Items" value={number(stats.masterItems)} detail={`${number(stats.fullyPackedMasterItems)} fully packed`} accent="#7c3aed" signal={`${Math.round(masterCompletion)}%`} />
-        <MetricCard label="Packet Items" value={number(stats.packetItems)} detail={`${number(stats.packetItemsWithSticker)} sticker-ready • ${number(stats.packetItemsPendingSticker)} pending`} accent="#0284c7" signal={`${Math.round(packingCompletion)}%`} />
-        <MetricCard label="Warehouse" value={number(stats.warehouseItems)} detail={`${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests`} accent="#9333ea" signal="STOCK" />
-        <MetricCard label="Ready to Dispatch" value={number(stats.readyToDispatchItems)} detail={`${Math.round(dispatchReadyShare)}% of current FG inventory position`} accent="#059669" signal="FG" />
-        <MetricCard label="Dispatch Challans" value={number(stats.normalDispatchChallans)} detail={`${number(stats.todayDispatchChallans)} distinct challans today • ${number(stats.runningTrips)} running trips`} accent="#0f766e" signal="OUTBOUND" />
-        <MetricCard label="Custom Challans" value={number(stats.customChallans)} detail={`${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} item rows`} accent="#ca8a04" signal="CUSTOM" />
-        <MetricCard label="Exceptions" value={totalExceptions} detail={`${currentExceptions} current-chain • ${legacyDispatchExceptions} legacy outbound`} accent={totalExceptions ? "#dc2626" : "#16a34a"} signal={totalExceptions ? "ACTION" : "CLEAR"} />
-      </section>
-
-      <section style={throughputPanel}>
-        <SectionHeader
-          eyebrow="DAILY ACCOUNTABILITY"
-          title="User-wise output with exact record inspection"
-          subtitle="Restored from the earlier Admin dashboard and upgraded: click a daily metric, then click a user to inspect the records behind the count."
+        <MetricCard
+          label="Inventory Items"
+          value={number(stats.totalItems)}
+          detail="Warehouse + Ready to Dispatch + Ready"
+          accent="#2563eb"
+          signal="LIVE"
+          onClick={() => openInspector({ key: "inventory", title: "Current Inventory Records", subtitle: "Exact current Warehouse, Ready-to-Dispatch and Ready rows.", type: "all", statuses: ["IN_WAREHOUSE", "READY_TO_DISPATCH", "READY"], accent: "#2563eb" })}
         />
-        <DailyThroughputDrilldown />
+        <MetricCard
+          label="Master Items"
+          value={number(stats.masterItems)}
+          detail={`${number(stats.fullyPackedMasterItems)} fully packed`}
+          accent="#7c3aed"
+          signal={`${Math.round(masterCompletion)}%`}
+          onClick={() => openInspector({ key: "masters", title: "Master Item Register", subtitle: "Parent product records with packing progress and project/client identity.", source: "master", accent: "#7c3aed" })}
+        />
+        <MetricCard
+          label="Packet Items"
+          value={number(stats.packetItems)}
+          detail={`${number(stats.packetItemsWithSticker)} sticker-ready • ${number(stats.packetItemsPendingSticker)} pending`}
+          accent="#0284c7"
+          signal={`${Math.round(packingCompletion)}%`}
+          onClick={() => openInspector({ key: "packetItems", title: "Packet Item Records", subtitle: "Operational packet-level rows with sticker, PD, client and lifecycle actor details.", type: "all", accent: "#0284c7" })}
+        />
+        <MetricCard
+          label="Warehouse"
+          value={number(stats.warehouseItems)}
+          detail={`${number(stats.warehouseRequestedItems)} inbound approvals • ${number(stats.returnRequestedItems)} return requests`}
+          accent="#9333ea"
+          signal="STOCK"
+          onClick={() => openInspector({ key: "warehouse", title: "Warehouse Inventory Records", subtitle: "Exact records currently represented as stored warehouse stock.", type: "all", statuses: ["IN_WAREHOUSE"], accent: "#9333ea" })}
+        />
+        <MetricCard
+          label="Ready to Dispatch"
+          value={number(stats.readyToDispatchItems)}
+          detail={`${Math.round(dispatchReadyShare)}% of current FG inventory position`}
+          accent="#059669"
+          signal="FG"
+          onClick={() => openInspector({ key: "readyToDispatch", title: "Ready to Dispatch Queue", subtitle: "Exact finished-goods rows waiting for outbound action.", type: "all", statuses: ["READY_TO_DISPATCH"], accent: "#059669" })}
+        />
+        <MetricCard
+          label="Dispatch Challans"
+          value={number(stats.normalDispatchChallans)}
+          detail={`${number(stats.todayDispatchChallans)} distinct challans today • ${number(stats.runningTrips)} running trips`}
+          accent="#0f766e"
+          signal="OUTBOUND"
+          onClick={() => openInspector({ key: "challans", title: "Dispatch Challan Records", subtitle: "Exact challaned records including dispatch, driver, vehicle and trip linkage where available.", type: "challaned", accent: "#0f766e" })}
+        />
+        <MetricCard
+          label="Custom Challans"
+          value={number(stats.customChallans)}
+          detail={`${number(stats.todayCustomChallans)} generated today • ${number(stats.customChallanItems)} item rows`}
+          accent="#ca8a04"
+          signal="CUSTOM"
+          onClick={() => openInspector({ key: "custom", title: "Custom Challan Records", subtitle: "Manual/site/customer-care movement challan records returned by the existing dashboard trace endpoint.", type: "custom", accent: "#ca8a04" })}
+        />
+        <MetricCard
+          label="Exceptions"
+          value={totalExceptions}
+          detail={`${currentExceptions} current-chain • ${legacyDispatchExceptions} legacy outbound`}
+          accent={totalExceptions ? "#dc2626" : "#16a34a"}
+          signal={totalExceptions ? "ACTION" : "CLEAR"}
+          onClick={() => openInspector({ key: "exceptions", title: "Data Exception Records", subtitle: "Exact packet, sticker, master and dispatch-link exceptions exposed by the ADMIN trace endpoint.", type: "errored", accent: totalExceptions ? "#dc2626" : "#16a34a" })}
+        />
+        <DailyThroughputDrilldown asMetricCard />
       </section>
 
       <section style={overviewGrid}>
@@ -322,8 +355,19 @@ function InventoryDashboard({
             subtitle="ADMIN-only control detail; Director receives only aggregate risk indicators."
           />
           <div style={exceptionList}>
-            {exceptionRows.map(([label, value, severity, detail]) => (
-              <ExceptionRow key={label} label={label} value={value} severity={severity} detail={detail} />
+            {exceptionRows.map((row) => (
+              <ExceptionRow
+                key={row.label}
+                {...row}
+                onClick={() => openInspector({
+                  key: `exception-${row.label}`,
+                  title: row.label,
+                  subtitle: `${row.detail} Opens the backend exception trace; use its search controls to narrow further when needed.`,
+                  type: "errored",
+                  search: "",
+                  accent: row.severity === "high" ? "#dc2626" : "#d97706",
+                })}
+              />
             ))}
           </div>
         </div>
@@ -360,7 +404,7 @@ function InventoryDashboard({
                 </button>
               }
             />
-            <ActivityFeed logs={activityLogs} />
+            <ActivityFeed logs={activityLogs} onInspectRecord={(config) => openInspector({ open: true, key: config?.title || "activity-trace", ...config, accent: "#2563eb" })} />
           </div>
         )}
 
@@ -373,6 +417,11 @@ function InventoryDashboard({
           </div>
         )}
       </section>
+
+      <DashboardRecordInspector
+        config={inspector}
+        onClose={() => setInspector({ open: false })}
+      />
     </>
   );
 }
@@ -397,12 +446,17 @@ export default function AdminOperationsDashboard({
             Inventory mode covers packing, FG, warehouse and dispatch. Logistics mode covers trips, drivers, vehicles and route/resource analytics.
           </div>
         </div>
-        <div style={modeSwitch}>
-          <button type="button" style={modeButton(mode === "inventory")} onClick={() => setMode("inventory")}>
-            Inventory & Dispatch
-          </button>
-          <button type="button" style={modeButton(mode === "logistics")} onClick={() => setMode("logistics")}>
-            Logistics
+        <div style={modeControls}>
+          <div style={modeSwitch}>
+            <button type="button" style={modeButton(mode === "inventory")} onClick={() => setMode("inventory")}>
+              Inventory & Dispatch
+            </button>
+            <button type="button" style={modeButton(mode === "logistics")} onClick={() => setMode("logistics")}>
+              Logistics
+            </button>
+          </div>
+          <button type="button" style={adminCenterButton} onClick={() => setAdminCenterOpen(true)}>
+            Admin Center
           </button>
         </div>
       </section>
@@ -413,7 +467,6 @@ export default function AdminOperationsDashboard({
           activityLogs={activityLogs}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          onOpenAdminCenter={() => setAdminCenterOpen(true)}
         />
       ) : (
         <section style={logisticsShell}>
@@ -449,6 +502,8 @@ const actionTone = {
 const modeBar = { marginBottom: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", borderRadius: 13, background: "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.05)" };
 const modeTitle = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 17, fontWeight: 950 };
 const modeSub = { maxWidth: 760, marginTop: 4, color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 650, lineHeight: 1.5 };
+const modeControls = { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" };
+const adminCenterButton = { minHeight: 42, padding: "0 14px", borderRadius: 9, border: "1px solid rgba(220,38,38,.25)", background: "linear-gradient(135deg,#b91c1c,#dc2626)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900, boxShadow: "0 7px 18px rgba(220,38,38,.14)" };
 const modeSwitch = { display: "flex", gap: 5, padding: 4, borderRadius: 11, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
 const modeButton = (active) => ({ minHeight: 38, padding: "0 14px", borderRadius: 8, border: active ? "1px solid rgba(37,99,235,.28)" : "1px solid transparent", background: active ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "transparent", color: active ? "#fff" : "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900 });
 const logisticsShell = { minWidth: 0 };
@@ -470,6 +525,7 @@ const metricLabel = { color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 
 const metricSignal = (accent) => ({ padding: "3px 6px", borderRadius: 6, color: accent, background: `${accent}10`, border: `1px solid ${accent}20`, fontSize: 7.5, fontWeight: 950, letterSpacing: ".05em" });
 const metricValue = { marginTop: 10, fontSize: 28, lineHeight: 1, fontWeight: 950, letterSpacing: "-.04em", color: "var(--pf-text-strong)" };
 const metricDetail = { marginTop: 8, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700, lineHeight: 1.45 };
+const metricInspectHint = { marginTop: 8, color: "#2563eb", fontSize: 8.2, fontWeight: 900, letterSpacing: ".02em" };
 const throughputPanel = { marginTop: 12, padding: 16, borderRadius: 13, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.055)" };
 const overviewGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 12 };
 const twoColumn = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(390px,1fr))", gap: 12 };
@@ -494,6 +550,7 @@ const progressFill = { height: "100%", borderRadius: 999 };
 const chartBody = { minHeight: 250 };
 const exceptionList = { display: "grid", gap: 7 };
 const exceptionRow = { minHeight: 52, padding: "8px 9px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 9, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
+const exceptionButton = { width: "100%", cursor: "pointer", color: "inherit", textAlign: "left", fontFamily: "inherit" };
 const exceptionIdentity = { display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 };
 const exceptionLabel = { color: "var(--pf-text-strong)", fontSize: 9.5, fontWeight: 900 };
 const exceptionDetail = { marginTop: 3, color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 650, lineHeight: 1.35 };

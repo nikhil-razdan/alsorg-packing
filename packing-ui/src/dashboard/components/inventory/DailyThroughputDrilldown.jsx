@@ -58,6 +58,7 @@ const formatDateTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -67,34 +68,45 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
-function DailyCard({ title, value, detail, accent, onClick, loading }) {
+function DailyMetricCard({ packing, dispatch, loading, onClick }) {
+  const total = n(packing) + n(dispatch);
+
   return (
-    <button type="button" onClick={onClick} style={card(accent)}>
-      <div style={cardTop}>
-        <span style={cardLabel}>{title}</span>
-        <span style={cardAction}>Inspect →</span>
+    <button type="button" onClick={onClick} style={metricCard}>
+      <div style={metricAccent} />
+      <div style={metricTop}>
+        <div style={metricLabel}>Daily User Throughput</div>
+        <div style={metricSignal}>TODAY</div>
       </div>
-      <div style={cardValue}>{loading ? "…" : value}</div>
-      <div style={cardDetail}>{detail}</div>
+      <div style={metricValue}>{loading ? "…" : total}</div>
+      <div style={metricDetail}>
+        {loading
+          ? "Loading user-wise packing and dispatch output"
+          : `${n(packing)} packing • ${n(dispatch)} dispatched items • inspect by user`}
+      </div>
+      <div style={inspectHint}>Inspect users & records →</div>
     </button>
   );
 }
 
-export default function DailyThroughputDrilldown() {
-  const [type, setType] = useState("");
+export default function DailyThroughputDrilldown({ asMetricCard = false }) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState("packing");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedUser, setSelectedUser] = useState("");
   const [traceRows, setTraceRows] = useState([]);
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceError, setTraceError] = useState("");
 
-  const [totals, setTotals] = useState({ packing: null, dispatch: null });
+  const [totals, setTotals] = useState({ packing: 0, dispatch: 0 });
   const [cachedRows, setCachedRows] = useState({ packing: [], dispatch: [] });
 
   useEffect(() => {
     let active = true;
+    setInitialLoading(true);
 
     Promise.allSettled([
       fetchDailyThroughputUsers("packing"),
@@ -102,21 +114,26 @@ export default function DailyThroughputDrilldown() {
     ]).then(([packingResult, dispatchResult]) => {
       if (!active) return;
 
-      const packingRows = packingResult.status === "fulfilled" && Array.isArray(packingResult.value)
-        ? packingResult.value
-        : [];
-      const dispatchRows = dispatchResult.status === "fulfilled" && Array.isArray(dispatchResult.value)
-        ? dispatchResult.value
-        : [];
+      const packingRows =
+        packingResult.status === "fulfilled" && Array.isArray(packingResult.value)
+          ? packingResult.value
+          : [];
+      const dispatchRows =
+        dispatchResult.status === "fulfilled" && Array.isArray(dispatchResult.value)
+          ? dispatchResult.value
+          : [];
 
       setCachedRows({ packing: packingRows, dispatch: dispatchRows });
       setTotals({
         packing: packingRows.reduce((sum, row) => sum + actorCount(row), 0),
         dispatch: dispatchRows.reduce((sum, row) => sum + actorCount(row), 0),
       });
+      setInitialLoading(false);
     });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   const sortedRows = useMemo(
@@ -127,22 +144,22 @@ export default function DailyThroughputDrilldown() {
     [rows]
   );
 
-  const openType = async (nextType) => {
+  const chooseType = async (nextType) => {
     setType(nextType);
-    setRows([]);
     setSelectedUser("");
     setTraceRows([]);
     setTraceError("");
     setError("");
-    const alreadyLoaded = totals[nextType] !== null;
-    if (alreadyLoaded) {
-      setRows(cachedRows[nextType] || []);
+
+    const cached = cachedRows[nextType] || [];
+    setRows(cached);
+
+    if (cached.length > 0 || totals[nextType] === 0) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
-
     try {
       const data = await fetchDailyThroughputUsers(nextType);
       const nextRows = Array.isArray(data) ? data : [];
@@ -155,6 +172,11 @@ export default function DailyThroughputDrilldown() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openModal = async () => {
+    setOpen(true);
+    await chooseType("packing");
   };
 
   const inspectUser = async (row) => {
@@ -173,37 +195,34 @@ export default function DailyThroughputDrilldown() {
         from: range.from,
         to: range.to,
         search: username,
-        limit: 300,
+        limit: 500,
         offset: 0,
       });
 
-      const candidates = [
-        data,
-        data?.rows,
-        data?.content,
-        data?.data,
-        data?.items,
-      ];
+      const candidates = [data, data?.rows, data?.content, data?.data, data?.items];
       const found = candidates.find(Array.isArray) || [];
       const usernameKey = username.trim().toLowerCase();
       const exactRows = found.filter((record) => {
-        const actors = type === "packing"
-          ? [record?.packedBy, record?.generatedBy, record?.createdBy, record?.username, record?.actor]
-          : [record?.dispatchedBy, record?.generatedBy, record?.createdBy, record?.username, record?.actor];
+        const actors =
+          type === "packing"
+            ? [record?.packedBy, record?.generatedBy, record?.createdBy, record?.username, record?.actor]
+            : [record?.dispatchedBy, record?.generatedBy, record?.createdBy, record?.username, record?.actor];
 
-        return actors.some((value) => String(value || "").trim().toLowerCase() === usernameKey);
+        return actors.some(
+          (value) => String(value || "").trim().toLowerCase() === usernameKey
+        );
       });
 
       setTraceRows(exactRows);
     } catch (requestError) {
-      setTraceError(requestError?.message || "Unable to load the exact records for this user.");
+      setTraceError(requestError?.message || "Unable to load exact records for this user.");
     } finally {
       setTraceLoading(false);
     }
   };
 
   const close = () => {
-    setType("");
+    setOpen(false);
     setRows([]);
     setSelectedUser("");
     setTraceRows([]);
@@ -213,39 +232,56 @@ export default function DailyThroughputDrilldown() {
 
   return (
     <>
-      <div style={grid}>
-        <DailyCard
-          title="Packing Today"
-          value={totals.packing ?? "View"}
-          detail="User-wise packet/sticker execution • click to inspect"
-          accent="#2563eb"
-          onClick={() => openType("packing")}
-          loading={loading && type === "packing"}
+      {asMetricCard ? (
+        <DailyMetricCard
+          packing={totals.packing}
+          dispatch={totals.dispatch}
+          loading={initialLoading}
+          onClick={openModal}
         />
-        <DailyCard
-          title="Dispatch Items Today"
-          value={totals.dispatch ?? "View"}
-          detail="User-wise dispatched item output • click to inspect"
-          accent="#0f766e"
-          onClick={() => openType("dispatch")}
-          loading={loading && type === "dispatch"}
-        />
-      </div>
+      ) : (
+        <div style={legacyGrid}>
+          <DailyMetricCard
+            packing={totals.packing}
+            dispatch={totals.dispatch}
+            loading={initialLoading}
+            onClick={openModal}
+          />
+        </div>
+      )}
 
-      {type && (
-        <div style={overlay} onMouseDown={(event) => event.target === event.currentTarget && close()}>
-          <div style={modal}>
+      {open && (
+        <div
+          style={overlay}
+          onMouseDown={(event) => event.target === event.currentTarget && close()}
+        >
+          <div style={modal} role="dialog" aria-modal="true" aria-label="Daily user throughput">
             <div style={modalHeader}>
               <div>
-                <div style={eyebrow}>ADMIN • DAILY THROUGHPUT</div>
-                <div style={modalTitle}>
-                  {type === "packing" ? "Packing Today" : "Dispatch Items Today"}
-                </div>
+                <div style={eyebrow}>ADMIN • DAILY USER THROUGHPUT</div>
+                <div style={modalTitle}>Today’s accountable output</div>
                 <div style={modalSubtitle}>
-                  Click a person to inspect the exact records contributing to today’s output.
+                  Choose Packing or Dispatch, then click a user to inspect the exact records behind the count.
                 </div>
               </div>
-              <button type="button" onClick={close} style={closeButton}>×</button>
+              <button type="button" onClick={close} style={closeButton} aria-label="Close">×</button>
+            </div>
+
+            <div style={typeSwitch}>
+              <button
+                type="button"
+                style={typeButton(type === "packing", "#2563eb")}
+                onClick={() => chooseType("packing")}
+              >
+                Packing Today <strong>{n(totals.packing)}</strong>
+              </button>
+              <button
+                type="button"
+                style={typeButton(type === "dispatch", "#0f766e")}
+                onClick={() => chooseType("dispatch")}
+              >
+                Dispatch Items Today <strong>{n(totals.dispatch)}</strong>
+              </button>
             </div>
 
             {error && <div style={errorBox}>{error}</div>}
@@ -257,24 +293,25 @@ export default function DailyThroughputDrilldown() {
                 {!loading && !error && sortedRows.length === 0 && (
                   <div style={empty}>No user throughput recorded today.</div>
                 )}
-                {!loading && sortedRows.map((row) => {
-                  const username = actorName(row);
-                  const active = selectedUser === username;
-                  return (
-                    <button
-                      key={`${username}-${actorCount(row)}`}
-                      type="button"
-                      onClick={() => inspectUser(row)}
-                      style={userRow(active)}
-                    >
-                      <div>
-                        <div style={userName}>{username}</div>
-                        <div style={userHint}>Inspect exact records</div>
-                      </div>
-                      <strong style={userCount}>{actorCount(row)}</strong>
-                    </button>
-                  );
-                })}
+                {!loading &&
+                  sortedRows.map((row) => {
+                    const username = actorName(row);
+                    const active = selectedUser === username;
+                    return (
+                      <button
+                        key={`${username}-${actorCount(row)}`}
+                        type="button"
+                        onClick={() => inspectUser(row)}
+                        style={userRow(active)}
+                      >
+                        <div>
+                          <div style={userName}>{username}</div>
+                          <div style={userHint}>Inspect exact records</div>
+                        </div>
+                        <strong style={userCount}>{actorCount(row)}</strong>
+                      </button>
+                    );
+                  })}
               </div>
 
               <div style={traceColumn}>
@@ -290,9 +327,14 @@ export default function DailyThroughputDrilldown() {
                 {!traceLoading && traceRows.length > 0 && (
                   <div style={traceList}>
                     {traceRows.map((row, index) => (
-                      <div key={row?.id || row?.packetItemId || `${selectedUser}-${index}`} style={traceCard}>
+                      <div
+                        key={row?.id || row?.packetItemId || `${selectedUser}-${index}`}
+                        style={traceCard}
+                      >
                         <div style={traceHead}>
-                          <strong>{row?.itemName || row?.name || row?.description || "Operational record"}</strong>
+                          <strong>
+                            {row?.itemName || row?.name || row?.description || "Operational record"}
+                          </strong>
                           <span>{row?.status || row?.action || row?.eventType || "—"}</span>
                         </div>
                         <div style={traceMeta}>
@@ -306,7 +348,9 @@ export default function DailyThroughputDrilldown() {
                           <span>Challan <b>{row?.challanNumber || row?.chalaanNumber || "—"}</b></span>
                         </div>
                         <div style={traceFooter}>
-                          <span>{row?.packedBy || row?.dispatchedBy || row?.generatedBy || row?.createdBy || selectedUser}</span>
+                          <span>
+                            {row?.packedBy || row?.dispatchedBy || row?.generatedBy || row?.createdBy || selectedUser}
+                          </span>
                           <span>{formatDateTime(traceTimestamp(row))}</span>
                         </div>
                       </div>
@@ -322,21 +366,52 @@ export default function DailyThroughputDrilldown() {
   );
 }
 
-const grid = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 };
-const card = (accent) => ({ minHeight: 110, padding: 14, textAlign: "left", borderRadius: 12, border: `1px solid ${accent}28`, background: `linear-gradient(135deg,${accent}0D,var(--pf-surface))`, color: "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit" });
-const cardTop = { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" };
-const cardLabel = { fontSize: 10, fontWeight: 950, letterSpacing: ".06em", textTransform: "uppercase" };
-const cardAction = { fontSize: 9, fontWeight: 900, color: "#2563eb" };
-const cardValue = { marginTop: 12, fontSize: 28, fontWeight: 950, lineHeight: 1 };
-const cardDetail = { marginTop: 8, fontSize: 9.5, color: "var(--pf-text-muted)", fontWeight: 700, lineHeight: 1.45 };
-const overlay = { position: "fixed", inset: 0, zIndex: 1800, display: "flex", alignItems: "center", justifyContent: "center", padding: 18, background: "rgba(2,6,23,.68)", backdropFilter: "blur(6px)" };
-const modal = { width: "min(1180px,96vw)", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 16, background: "var(--pf-surface)", color: "var(--pf-text-strong)", border: "1px solid var(--pf-border)", boxShadow: "0 30px 80px rgba(2,6,23,.38)" };
+const legacyGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 10,
+};
+
+const metricCard = {
+  position: "relative",
+  width: "100%",
+  minWidth: 0,
+  minHeight: 118,
+  padding: 14,
+  overflow: "hidden",
+  borderRadius: 12,
+  border: "1px solid var(--pf-border)",
+  background: "var(--pf-surface)",
+  boxShadow: "0 6px 20px rgba(var(--pf-shadow-rgb),.05)",
+  color: "var(--pf-text-strong)",
+  textAlign: "left",
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const metricAccent = {
+  position: "absolute",
+  inset: "0 auto 0 0",
+  width: 3,
+  background: "#06b6d4",
+};
+const metricTop = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 };
+const metricLabel = { color: "var(--pf-text-muted)", fontSize: 8.5, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase" };
+const metricSignal = { padding: "3px 6px", borderRadius: 6, color: "#0891b2", background: "rgba(6,182,212,.08)", border: "1px solid rgba(6,182,212,.18)", fontSize: 7.5, fontWeight: 950, letterSpacing: ".05em" };
+const metricValue = { marginTop: 10, fontSize: 28, lineHeight: 1, fontWeight: 950, letterSpacing: "-.04em" };
+const metricDetail = { marginTop: 8, color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 700, lineHeight: 1.45 };
+const inspectHint = { marginTop: 7, color: "#0891b2", fontSize: 8.5, fontWeight: 900 };
+
+const overlay = { position: "fixed", inset: 0, zIndex: 18000, display: "flex", alignItems: "center", justifyContent: "center", padding: 18, background: "rgba(2,6,23,.72)", backdropFilter: "blur(8px)" };
+const modal = { width: "min(1180px,96vw)", height: "min(86vh,820px)", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 16, background: "var(--pf-surface)", color: "var(--pf-text-strong)", border: "1px solid var(--pf-border)", boxShadow: "0 30px 80px rgba(2,6,23,.42)" };
 const modalHeader = { padding: "18px 20px", display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start", borderBottom: "1px solid var(--pf-border-soft)" };
 const eyebrow = { color: "#2563eb", fontSize: 8, fontWeight: 950, letterSpacing: ".13em" };
 const modalTitle = { marginTop: 5, fontSize: 22, fontWeight: 950 };
-const modalSubtitle = { marginTop: 5, color: "var(--pf-text-muted)", fontSize: 11, fontWeight: 650 };
+const modalSubtitle = { maxWidth: 760, marginTop: 5, color: "var(--pf-text-muted)", fontSize: 11, fontWeight: 650, lineHeight: 1.45 };
 const closeButton = { width: 36, height: 36, borderRadius: 10, border: "1px solid var(--pf-border)", background: "var(--pf-surface-alt)", color: "var(--pf-text-strong)", cursor: "pointer", fontSize: 22 };
-const modalBody = { minHeight: 0, flex: 1, display: "grid", gridTemplateColumns: "minmax(250px,330px) minmax(0,1fr)", gap: 0, overflow: "hidden" };
+const typeSwitch = { flexShrink: 0, display: "flex", gap: 7, padding: "10px 14px", borderBottom: "1px solid var(--pf-border-soft)", background: "var(--pf-surface-alt)", flexWrap: "wrap" };
+const typeButton = (active, accent) => ({ minHeight: 36, padding: "0 12px", borderRadius: 9, border: active ? `1px solid ${accent}55` : "1px solid var(--pf-border-soft)", background: active ? `${accent}12` : "var(--pf-surface)", color: active ? accent : "var(--pf-text)", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 850, display: "flex", alignItems: "center", gap: 8 });
+const modalBody = { minHeight: 0, flex: 1, display: "grid", gridTemplateColumns: "minmax(250px,330px) minmax(0,1fr)", overflow: "hidden" };
 const userColumn = { minHeight: 0, overflow: "auto", padding: 14, borderRight: "1px solid var(--pf-border-soft)" };
 const traceColumn = { minHeight: 0, overflow: "auto", padding: 14 };
 const columnTitle = { marginBottom: 10, color: "var(--pf-text-muted)", fontSize: 9, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase" };
