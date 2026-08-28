@@ -28,6 +28,12 @@ function LogisticsPortalPage() {
    * stable, non-remounting live-refresh signal to those workspaces.  Updated
    * workspaces can consume it without losing filters, open dialogs or pagination.
    */
+  /*
+   * The shared PackFlow refresh hook is event-driven in the current project.
+   * Keep one portal-level pulse and let the active Logistics workspace own its
+   * authoritative fetch.  This avoids a second independent polling loop and
+   * prevents Management Dashboard from repeatedly walking challan history.
+   */
   usePackFlowDataRefresh(
     "logistics",
     async () => {
@@ -35,9 +41,6 @@ function LogisticsPortalPage() {
         (current) =>
           current + 1
       );
-    },
-    {
-      intervalMs: 6000,
     }
   );
 

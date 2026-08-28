@@ -14,7 +14,7 @@ import StatusDistributionChart from "./charts/StatusDistributionChart";
 import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
-  fetchDispatchChallans,
+  fetchDispatchChallansPage,
   fetchDrivers,
   fetchShifts,
   fetchVehicles,
@@ -210,6 +210,162 @@ const periodStartDate = (period) => {
   }
 
   return start;
+};
+
+/*
+ * Management Dashboard challan loader.
+ *
+ * The generic fetchDispatchChallans() helper intentionally reconstructs the
+ * complete challan history for screens/reports that require it.  Using that
+ * helper for the default 7-day executive dashboard made first paint depend on
+ * every historical server page.  Read the already-existing paged backend
+ * contract directly and stop once the selected period boundary is covered.
+ *
+ * ALL remains exact and deliberately walks all pages only when the user asks
+ * for All Time.  TODAY / 7D / 30D remain exact for their selected period while
+ * loading only the required pages (plus the boundary page).
+ */
+const DASHBOARD_CHALLAN_PAGE_SIZE = 100;
+const DASHBOARD_CHALLAN_SAFETY_MAX_PAGES = 1000;
+const DASHBOARD_SOURCE_TIMEOUT_MS = 20000;
+
+const withDashboardSourceTimeout = (
+  promise,
+  sourceLabel
+) => {
+  let timeoutId;
+
+  const timeoutPromise =
+    new Promise((_, reject) => {
+      timeoutId = window.setTimeout(
+        () => {
+          reject(
+            new Error(
+              `${sourceLabel} did not respond within ${Math.round(
+                DASHBOARD_SOURCE_TIMEOUT_MS / 1000
+              )} seconds`
+            )
+          );
+        },
+        DASHBOARD_SOURCE_TIMEOUT_MS
+      );
+    });
+
+  return Promise.race([
+    Promise.resolve(promise),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+};
+
+const getChallanPagingTimestamp = (challan) =>
+  challan?.dispatchedAt ||
+  challan?.tripStartedAt ||
+  challan?.generatedAt ||
+  challan?.createdAt ||
+  null;
+
+const fetchDashboardChallanWindow = async (
+  period
+) => {
+  const boundary = periodStartDate(period);
+  const rows = [];
+
+  let page = 0;
+  let totalElements = 0;
+  let totalPages = 0;
+  let hasNext = false;
+  let stoppedAtBoundary = false;
+
+  while (
+    page <
+    DASHBOARD_CHALLAN_SAFETY_MAX_PAGES
+  ) {
+    const result =
+      await fetchDispatchChallansPage({
+        page,
+        size: DASHBOARD_CHALLAN_PAGE_SIZE,
+      });
+
+    const pageRows =
+      Array.isArray(result?.rows)
+        ? result.rows
+        : [];
+
+    rows.push(...pageRows);
+
+    totalElements = Math.max(
+      totalElements,
+      Number(result?.totalElements || 0)
+    );
+
+    totalPages = Math.max(
+      totalPages,
+      Number(result?.totalPages || 0)
+    );
+
+    hasNext = Boolean(result?.hasNext);
+
+    if (!hasNext) {
+      break;
+    }
+
+    if (boundary) {
+      const pageTimes = pageRows
+        .map((challan) =>
+          parseBusinessDateTime(
+            getChallanPagingTimestamp(
+              challan
+            )
+          )
+        )
+        .filter(Boolean)
+        .map((date) => date.getTime());
+
+      if (pageTimes.length > 0) {
+        const oldestPageTime =
+          Math.min(...pageTimes);
+
+        if (
+          oldestPageTime <
+          boundary.getTime()
+        ) {
+          stoppedAtBoundary = true;
+          break;
+        }
+      }
+    }
+
+    if (pageRows.length === 0) {
+      throw new Error(
+        "Dispatch challan paging returned an empty page while more history was indicated"
+      );
+    }
+
+    page += 1;
+  }
+
+  if (
+    page >=
+      DASHBOARD_CHALLAN_SAFETY_MAX_PAGES &&
+    hasNext
+  ) {
+    throw new Error(
+      "Dispatch challan history exceeded the dashboard safety paging limit"
+    );
+  }
+
+  return {
+    rows,
+    totalElements,
+    totalPages,
+    loadedPages: page + 1,
+    complete: !hasNext,
+    stoppedAtBoundary,
+  };
 };
 
 const isInPeriod = (value, period) => {
@@ -1559,6 +1715,7 @@ function LogisticsDashboard({
 
   const mountedRef = useRef(true);
   const latestRequestRef = useRef(0);
+  const foregroundLoadCountRef = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -1571,9 +1728,26 @@ function LogisticsDashboard({
       refresh = false,
       background = false,
     } = {}) => {
+      /*
+       * Never let a live/background refresh invalidate the foreground request
+       * that owns the loading state.  The old request-id-only approach could
+       * leave `loading` true forever when a refresh signal arrived before the
+       * initial all-source load finished.
+       */
+      if (
+        background &&
+        foregroundLoadCountRef.current > 0
+      ) {
+        return;
+      }
+
       const requestId =
         latestRequestRef.current + 1;
       latestRequestRef.current = requestId;
+
+      if (!background) {
+        foregroundLoadCountRef.current += 1;
+      }
 
       try {
         if (!background) {
@@ -1587,10 +1761,22 @@ function LogisticsDashboard({
         }
 
         const results = await Promise.allSettled([
-          fetchDispatchChallans(),
-          fetchShifts(),
-          fetchDrivers(),
-          fetchVehicles(),
+          withDashboardSourceTimeout(
+            fetchDashboardChallanWindow(period),
+            "Dispatch challans"
+          ),
+          withDashboardSourceTimeout(
+            fetchShifts(),
+            "Manual operations"
+          ),
+          withDashboardSourceTimeout(
+            fetchDrivers(),
+            "Driver master"
+          ),
+          withDashboardSourceTimeout(
+            fetchVehicles(),
+            "Vehicle master"
+          ),
         ]);
 
         if (
@@ -1611,11 +1797,17 @@ function LogisticsDashboard({
 
         if (challanResult.status === "fulfilled") {
           setChallans(
-            Array.isArray(challanResult.value)
-              ? challanResult.value
+            Array.isArray(
+              challanResult.value?.rows
+            )
+              ? challanResult.value.rows
               : []
           );
         } else {
+          console.error(
+            "Dispatch challan dashboard load failed",
+            challanResult.reason
+          );
           failedSources.push("dispatch challans");
         }
 
@@ -1626,6 +1818,10 @@ function LogisticsDashboard({
               : []
           );
         } else {
+          console.error(
+            "Manual operation dashboard load failed",
+            shiftResult.reason
+          );
           failedSources.push("manual operations");
         }
 
@@ -1636,6 +1832,10 @@ function LogisticsDashboard({
               : []
           );
         } else {
+          console.error(
+            "Driver dashboard load failed",
+            driverResult.reason
+          );
           failedSources.push("drivers");
         }
 
@@ -1646,6 +1846,10 @@ function LogisticsDashboard({
               : []
           );
         } else {
+          console.error(
+            "Vehicle dashboard load failed",
+            vehicleResult.reason
+          );
           failedSources.push("vehicles");
         }
 
@@ -1679,6 +1883,14 @@ function LogisticsDashboard({
           );
         }
       } finally {
+        if (!background) {
+          foregroundLoadCountRef.current =
+            Math.max(
+              0,
+              foregroundLoadCountRef.current - 1
+            );
+        }
+
         if (
           !background &&
           mountedRef.current &&
@@ -1689,7 +1901,7 @@ function LogisticsDashboard({
         }
       }
     },
-    []
+    [period]
   );
 
   useLogisticsLiveRefresh(

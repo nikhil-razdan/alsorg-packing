@@ -27,7 +27,6 @@ const requestJson = async (
   const res = await secureFetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    cache: "no-store",
     headers: buildAuthHeaders(finalHeaders),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
@@ -68,7 +67,6 @@ const requestBlob = async (
   const res = await secureFetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    cache: "no-store",
     headers: buildAuthHeaders(finalHeaders),
     body: hasBody ? JSON.stringify(body) : undefined,
   });
