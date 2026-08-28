@@ -128,7 +128,6 @@ public class SecurityConfig {
                                                 new CookieCsrfProtectionMatcher(
                                                         csrfEnabled)))
 
-
                 .httpBasic(
                         httpBasic ->
                                 httpBasic.disable())
@@ -150,11 +149,6 @@ public class SecurityConfig {
                                 session.sessionCreationPolicy(
                                         SessionCreationPolicy.STATELESS))
 
-                /*
-                 * Safe baseline headers for an API service.
-                 *
-                 * HSTS is written only for secure requests by Spring Security.
-                 */
                 .headers(
                         headers ->
                                 headers
@@ -211,31 +205,16 @@ public class SecurityConfig {
                                                 "/**")
                                         .permitAll()
 
-                                        /*
-                                         * Render readiness/liveness endpoint.
-                                         * Only health is publicly exposed by
-                                         * management configuration.
-                                         */
                                         .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/actuator/health",
                                                 "/actuator/health/**")
                                         .permitAll()
 
-                                        /*
-                                         * AssetFlow reporter gateway retains
-                                         * its own Reporter Code + PIN gate.
-                                         */
                                         .requestMatchers(
                                                 "/api/assetflow/public/**")
                                         .permitAll()
 
-                                        /*
-                                         * HRFlow candidate/application and onboarding links are
-                                         * authenticated by their HRFlow public token. They
-                                         * must remain reachable without a FlowSuite JWT/cookie.
-                                         * Controller/service token validation remains authoritative.
-                                         */
                                         .requestMatchers(
                                                 "/api/hrflow/public/**")
                                         .permitAll()
@@ -258,7 +237,8 @@ public class SecurityConfig {
                                                 "/api/stickers/dispatched/*/ensure-history")
                                         .hasAnyAuthority(
                                                 "ADMIN",
-                                                "DISPATCH")
+                                                "DISPATCH",
+                                                "UTL_DISPATCH")
 
                                         .requestMatchers(
                                                 HttpMethod.GET,
@@ -267,7 +247,9 @@ public class SecurityConfig {
                                         .hasAnyAuthority(
                                                 "ADMIN",
                                                 "DISPATCH",
+                                                "UTL_DISPATCH",
                                                 "PACKING",
+                                                "UTL_PACKING",
                                                 "HARDWARE_PACKING")
 
                                         .requestMatchers(
@@ -279,10 +261,6 @@ public class SecurityConfig {
                                                 "/api/hardware-packets/**")
                                         .authenticated()
 
-                                        /*
-                                         * Any future actuator endpoint that is
-                                         * deliberately exposed must still be ADMIN.
-                                         */
                                         .requestMatchers(
                                                 "/actuator/**")
                                         .hasAuthority(
@@ -291,11 +269,6 @@ public class SecurityConfig {
                                         .anyRequest()
                                         .authenticated())
 
-                /*
-                 * Request id first, origin/CSRF defense second, authentication
-                 * third. This ensures even rejected security requests receive a
-                 * correlation id in logs and responses.
-                 */
                 .addFilterBefore(
                         requestCorrelationFilter,
                         SecurityContextHolderFilter.class)
@@ -311,11 +284,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Prevent Spring Boot from also registering these filter beans directly in
-     * the servlet container. They are intentionally owned by the Spring
-     * Security chain above.
-     */
     @Bean
     public FilterRegistrationBean<RequestCorrelationFilter>
             requestCorrelationFilterRegistration(

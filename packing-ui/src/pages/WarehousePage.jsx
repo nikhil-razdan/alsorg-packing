@@ -2856,6 +2856,28 @@ function WarehousePage() {
 						select
 						size="small"
 						value={statusFilter}
+						SelectProps={{
+							MenuProps: {
+								PaperProps: {
+									sx: {
+										mt: 0.75,
+										borderRadius: "14px",
+										border: "1px solid rgba(59,130,246,.18)",
+										background: "var(--pf-surface)",
+										boxShadow: "0 18px 48px rgba(15,23,42,.18)",
+										"& .MuiMenuItem-root": {
+											minHeight: 40,
+											fontWeight: 700,
+											borderRadius: "9px",
+											mx: 0.75,
+											my: 0.25,
+											"&:hover": { background: "rgba(59,130,246,.10)" },
+											"&.Mui-selected": { background: "rgba(59,130,246,.14)" },
+										},
+									},
+								},
+							},
+						}}
 						onChange={(e) => {
 							setStatusFilter(
 								e.target.value
@@ -2870,7 +2892,7 @@ function WarehousePage() {
 							"& .MuiOutlinedInput-root": {
 								height: 44,
 								borderRadius: "14px",
-								background: "rgba(var(--pf-fg-rgb),.04)",
+								background: "linear-gradient(180deg,color-mix(in srgb,var(--pf-surface-alt) 93%,#3b82f6 7%),var(--pf-surface-alt))",
 								color: "var(--pf-text-strong)",
 
 								"& fieldset": {
@@ -2888,7 +2910,7 @@ function WarehousePage() {
 
 							"& .MuiSelect-select": {
 								color: "var(--pf-text-strong)",
-								fontWeight: 500,
+								fontWeight: 800,
 							},
 
 							"& .MuiSvgIcon-root": {

@@ -66,6 +66,9 @@ public class LogisticsDispatchTripService {
         private final CurrentUserService currentUserService;
         private final LogisticsTripLocationRepository tripLocationRepository;
 
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private UtlWorkflowService utlWorkflowService;
+
         @PersistenceContext
         private EntityManager entityManager;
 
@@ -156,6 +159,10 @@ public class LogisticsDispatchTripService {
                 }
 
                 for (DispatchedItem item : items) {
+                        if (utlWorkflowService != null) {
+                                utlWorkflowService.assertCurrentUserCanOperate(item);
+                        }
+
                         ItemDispatchStatus status = item.getStatus();
 
                         if (status == ItemDispatchStatus.LOADED ||

@@ -5420,6 +5420,12 @@ const PLANT_LOCATION_MAP = {
 		fgAreaCode: "FG-4",
 		fgZones: [],
 	},
+	"WR-38": {
+		label: "WR-38 (Wriver)",
+		packedAreaCode: "PKD-38",
+		fgAreaCode: "FG-38",
+		fgZones: [],
+	},
 };
 
 const normalizeDispatchPlantCode = (
@@ -5765,6 +5771,20 @@ export default function DispatchedItemsPage() {
 
 	const isDispatch =
 		hasRole("DISPATCH");
+
+	const isUtlDispatch =
+		hasRole("UTL_DISPATCH");
+
+	const isUtlPacking =
+		hasRole("UTL_PACKING");
+
+	/*
+	 * UTL_PACKING may open this register read-only so the creator keeps
+	 * visibility after an internal AL/WR dispatcher completes the dispatch.
+	 * Only DISPATCH / UTL_DISPATCH receive operational controls.
+	 */
+	const canDispatchOperate =
+		isDispatch || isUtlDispatch;
 
 	const isPacking =
 		hasRole("PACKING");
@@ -7946,7 +7966,7 @@ export default function DispatchedItemsPage() {
 
 	const canMoveToFg = (row) => {
 		return (
-			isDispatch &&
+			canDispatchOperate &&
 			row?.status === "READY" &&
 			!isLegacyLocationMissing(row) &&
 			isPkdLocation(row)
@@ -7955,7 +7975,7 @@ export default function DispatchedItemsPage() {
 
 	const canChangeReadyStatus = (row) => {
 		return (
-			isDispatch &&
+			canDispatchOperate &&
 			row?.status === "READY" &&
 			(
 				isLegacyLocationMissing(row) || isFgLocation(row)
@@ -14076,7 +14096,7 @@ export default function DispatchedItemsPage() {
 						{showMoveToFg && (
 							<Button
 								size="small"
-								disabled={!isDispatch}
+								disabled={!canDispatchOperate}
 								onClick={() => openMoveToFgModal(row)}
 								sx={moveToFgButtonSx}
 							>
@@ -14809,8 +14829,8 @@ export default function DispatchedItemsPage() {
 		}
 
 		if (
-			normalizedRole ===
-			"DISPATCH"
+			normalizedRole === "DISPATCH" ||
+			normalizedRole === "UTL_DISPATCH"
 		) {
 			return {
 				bg: "#065f46",
@@ -14819,8 +14839,8 @@ export default function DispatchedItemsPage() {
 		}
 
 		if (
-			normalizedRole ===
-			"PACKING" ||
+			normalizedRole === "PACKING" ||
+			normalizedRole === "UTL_PACKING" ||
 			normalizedRole === "USER"
 		) {
 			return {
@@ -14893,7 +14913,7 @@ export default function DispatchedItemsPage() {
 	  Bulk bar will use this same function.
 	*/
 	const getDispatchRowAction = (row) => {
-		if (!isDispatch || !row) {
+		if (!canDispatchOperate || !row) {
 			return "NONE";
 		}
 
@@ -15071,7 +15091,7 @@ export default function DispatchedItemsPage() {
 
 	const selectedActionList = useMemo(() => {
 		return selectedItems.map((row) => getDispatchRowAction(row));
-	}, [selectedItems, isDispatch]);
+	}, [selectedItems, canDispatchOperate]);
 
 	const selectedActionSet = useMemo(() => {
 		return new Set(selectedActionList);
@@ -20062,7 +20082,7 @@ export default function DispatchedItemsPage() {
 							📄 Challan History
 						</Button>
 
-						{isDispatch && (
+						{canDispatchOperate && (
 							<>
 								<Button
 									onClick={() => {
@@ -20750,6 +20770,11 @@ export default function DispatchedItemsPage() {
 
 							setPageNo(1);
 						}}
+						slotProps={{
+							select: {
+								MenuProps: modalSelectMenuProps,
+							},
+						}}
 						sx={{
 							width: "100%",
 							minWidth: 0,
@@ -20761,7 +20786,7 @@ export default function DispatchedItemsPage() {
 								borderRadius: "14px",
 
 								background:
-									"var(--pf-surface-alt)",
+									"linear-gradient(180deg,color-mix(in srgb,var(--pf-surface-alt) 92%,#10b981 8%),var(--pf-surface-alt))",
 
 								color: "var(--pf-text-strong)",
 
@@ -21963,7 +21988,7 @@ export default function DispatchedItemsPage() {
 				</div>
 				{Array.isArray(selectionModel) &&
 					selectionModel.length > 0 &&
-					(isDispatch || isAdmin) && (
+					(canDispatchOperate || isAdmin) && (
 						<div style={bulkBar}>
 							<Box
 								sx={{
@@ -22008,7 +22033,7 @@ export default function DispatchedItemsPage() {
 											border: "1px solid rgba(245,158,11,.28)",
 										}}
 									/>
-								) : isAdmin && !isDispatch ? (
+								) : isAdmin && !canDispatchOperate ? (
 									<Chip
 										size="small"
 										label="Admin Bulk Edit"
@@ -22259,7 +22284,7 @@ export default function DispatchedItemsPage() {
 			 * ADMIN-only users must not see Move to FG,
 			 * Change Status, Challan or Gate Pass buttons.
 			 */}
-							{isDispatch && (
+							{canDispatchOperate && (
 								<>
 									{canBulkMoveToFg && (
 										<Button

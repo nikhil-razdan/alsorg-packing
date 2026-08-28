@@ -48,6 +48,7 @@ import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.PacketService;
 import com.alsorg.packing.service.ZohoItemCacheService;
 import com.alsorg.packing.service.ZohoStickerService;
+import com.alsorg.packing.service.UtlWorkflowService;
 
 @RestController
 @RequestMapping("/api/packets")
@@ -56,6 +57,7 @@ import com.alsorg.packing.service.ZohoStickerService;
         hasAnyAuthority(
             'ADMIN',
             'PACKING',
+            'UTL_PACKING',
             'WAREHOUSE',
             'DISPATCH',
             'LOGISTICS'
@@ -77,6 +79,7 @@ public class PacketController {
     private final ZohoInventoryClient zohoInventoryClient;
     private final ZohoItemCacheService zohoItemCacheService;
     private final CurrentUserService currentUserService;
+    private final UtlWorkflowService utlWorkflowService;
 
     public PacketController(
             PacketService packetService,
@@ -84,12 +87,14 @@ public class PacketController {
             ZohoItemCacheService zohoItemCacheService,
             ZohoStickerService zohoStickerService,
             PacketItemRepository packetItemRepository,
-            CurrentUserService currentUserService) {
+            CurrentUserService currentUserService,
+            UtlWorkflowService utlWorkflowService) {
         this.packetService = packetService;
         this.zohoInventoryClient = zohoInventoryClient;
         this.zohoItemCacheService = zohoItemCacheService;
         this.zohoStickerService = zohoStickerService;
         this.currentUserService = currentUserService;
+        this.utlWorkflowService = utlWorkflowService;
         /*
          * PacketItemRepository is retained in the constructor for source/binary
          * compatibility with older wiring/tests; this controller no longer reads
@@ -98,7 +103,7 @@ public class PacketController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<PacketCreateResponse> createPacket(
             @RequestBody(required = false) PacketCreateRequest request) {
 
@@ -149,7 +154,7 @@ public class PacketController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public Page<PacketListResponse> getAllPackets(
             @RequestParam(required = false) UUID companyId,
             @RequestParam(required = false) PacketStatus status,
@@ -198,7 +203,7 @@ public class PacketController {
     @RequestMapping(
             value = "/zoho/sync",
             method = {RequestMethod.GET, RequestMethod.POST})
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<String> syncZohoItems() {
         normalInventoryUser();
         zohoItemCacheService.refreshCache();
@@ -206,7 +211,7 @@ public class PacketController {
     }
 
     @GetMapping("/zoho/items/paged")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<Map<String, Object>> fetchZohoItemsPaged(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "25") int perPage,
@@ -220,7 +225,7 @@ public class PacketController {
     }
 
     @GetMapping("/zoho/items/{zohoItemId}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<ZohoItemDTO> getZohoItemDetails(
             @PathVariable String zohoItemId) {
         normalInventoryUser();
@@ -249,7 +254,7 @@ public class PacketController {
     }
 
     @PostMapping("/create")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<?> createItem(
             @RequestBody CreateItemRequest req) {
 
@@ -267,7 +272,7 @@ public class PacketController {
     }
 
     @GetMapping(value = "/items/search", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<Map<String, Object>> searchInventoryItems(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
@@ -311,7 +316,7 @@ public class PacketController {
     }
 
     @GetMapping("/items")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<List<PacketItemResponse>> getAllItems() {
         User user = normalInventoryUser();
 
@@ -322,7 +327,7 @@ public class PacketController {
     }
 
     @PostMapping("/add-more/{masterItemId}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<?> addMorePackets(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req) {
@@ -342,41 +347,59 @@ public class PacketController {
     }
 
     @PostMapping("/items/{itemId}/generate-sticker")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<byte[]> generateStickerForItem(
             @PathVariable UUID itemId,
             @RequestParam String factoryFloor,
-            @RequestParam(defaultValue = "true") boolean showCompanyHeader) {
+            @RequestParam(defaultValue = "true") boolean showCompanyHeader,
+            @RequestParam(required = false) String dispatchMode,
+            @RequestParam(required = false) String dispatchTargetUsername,
+            @RequestParam(required = false) String dispatchTargetPlantCode) {
 
         User user = normalInventoryUser();
 
-        byte[] pdf = packetService.generateNormalSticker(
-                itemId,
-                factoryFloor,
-                showCompanyHeader,
-                user,
-                currentUserService.allowedPlants(user));
+        byte[] pdf = currentUserService.isUtlPacking(user)
+                ? packetService.generateUtlNormalSticker(
+                        itemId,
+                        factoryFloor,
+                        user,
+                        currentUserService.allowedPlants(user),
+                        dispatchMode,
+                        dispatchTargetUsername,
+                        dispatchTargetPlantCode)
+                : packetService.generateNormalSticker(
+                        itemId,
+                        factoryFloor,
+                        showCompanyHeader,
+                        user,
+                        currentUserService.allowedPlants(user));
 
         return pdfResponse(pdf, "STICKER_" + itemId + ".pdf", false);
     }
 
     @PostMapping("/items/{itemId}/generate-wr38-qr")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<byte[]> generateWr38Qr(
-            @PathVariable UUID itemId) {
+            @PathVariable UUID itemId,
+            @RequestParam(required = false) String dispatchMode,
+            @RequestParam(required = false) String dispatchTargetUsername,
+            @RequestParam(required = false) String dispatchTargetPlantCode) {
 
         User user = normalInventoryUser();
 
         byte[] pdf = packetService.generateWr38Qr(
                 itemId,
                 user,
-                currentUserService.allowedPlants(user));
+                currentUserService.allowedPlants(user),
+                dispatchMode,
+                dispatchTargetUsername,
+                dispatchTargetPlantCode);
 
         return pdfResponse(pdf, "WR38_QR_" + itemId + ".pdf", false);
     }
 
     @PutMapping("/items/{itemId}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public PacketItem updateItem(
             @PathVariable UUID itemId,
             @RequestBody UpdatePacketItemRequest req) {
@@ -391,7 +414,7 @@ public class PacketController {
     }
 
     @PostMapping("/create-custom")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<?> createCustom(
             @RequestBody CreateItemRequest req) {
 
@@ -405,7 +428,7 @@ public class PacketController {
     }
 
     @PostMapping("/add-custom/{masterItemId}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<?> addCustom(
             @PathVariable UUID masterItemId,
             @RequestBody CreateItemRequest req) {
@@ -421,7 +444,7 @@ public class PacketController {
     }
 
     @DeleteMapping("/items/{itemId}")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<Map<String, String>> deleteItem(
             @PathVariable UUID itemId) {
 
@@ -454,7 +477,7 @@ public class PacketController {
     }
 
     @PostMapping("/items/{itemId}/preview-sticker")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<byte[]> previewStickerForItem(
             @PathVariable UUID itemId,
             @RequestParam(required = false) String factoryFloor,
@@ -473,7 +496,7 @@ public class PacketController {
     }
 
     @PostMapping("/items/{itemId}/preview-wr38-qr")
-    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING')")
+    @PreAuthorize("hasAnyAuthority('ADMIN','PACKING','UTL_PACKING')")
     public ResponseEntity<byte[]> previewWr38Qr(
             @PathVariable UUID itemId) {
 
@@ -485,6 +508,18 @@ public class PacketController {
                 currentUserService.allowedPlants(user));
 
         return pdfResponse(pdf, "PREVIEW_WR38_QR_" + itemId + ".pdf", false);
+    }
+
+    @GetMapping("/utl-dispatch-targets")
+    @PreAuthorize("hasAnyAuthority('ADMIN','UTL_PACKING')")
+    public ResponseEntity<List<UtlWorkflowService.DispatchTarget>> getUtlDispatchTargets(
+            @RequestParam String plantCode) {
+
+        User user = normalInventoryUser();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .body(utlWorkflowService.getEligibleDispatchTargets(user, plantCode));
     }
 
     @PutMapping("/items/{itemId}/admin-sticker-details")

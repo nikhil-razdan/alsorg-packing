@@ -63,12 +63,14 @@ const resolvePackFlowHomePath = (
   const routeForRole = (role) => {
     switch (cleanRole(role)) {
       case "PACKING":
+      case "UTL_PACKING":
         return "/packflow/zoho-items?view=normal";
       case "HARDWARE_PACKING":
         return "/packflow/zoho-items?view=hardware";
       case "WAREHOUSE":
         return "/packflow/warehouse";
       case "DISPATCH":
+      case "UTL_DISPATCH":
         return "/packflow/dispatched-items";
       case "LOGISTICS":
         return "/packflow/logistics";
@@ -82,9 +84,11 @@ const resolvePackFlowHomePath = (
 
   for (const role of [
     "PACKING",
+    "UTL_PACKING",
     "HARDWARE_PACKING",
     "WAREHOUSE",
     "DISPATCH",
+    "UTL_DISPATCH",
     "LOGISTICS",
   ]) {
     if (hasRole(role)) {
@@ -289,7 +293,8 @@ function Header() {
         icon: <InventoryIcon />,
         visible: hasAnyRole(
           "ADMIN",
-          "PACKING"
+          "PACKING",
+          "UTL_PACKING"
         ),
       },
       {
@@ -325,6 +330,7 @@ function Header() {
         visible: hasAnyRole(
           "ADMIN",
           "DISPATCH",
+          "UTL_DISPATCH",
           "WAREHOUSE",
           "PACKING"
         ),
@@ -371,22 +377,16 @@ function Header() {
     ).length;
 
   const healthLabel =
-    canViewFleetCompliance
-      ? criticalNotificationCount > 0
-        ? "● FLEET ACTION NEEDED"
-        : warningNotificationCount > 0
-          ? "● FLEET ATTENTION"
-          : "● FLEET DOCS CLEAR"
-      : isDirector
-        ? "● EXECUTIVE ACCESS"
-        : "● SESSION ACTIVE";
+    criticalNotificationCount > 0
+      ? "● ACTION NEEDED"
+      : warningNotificationCount > 0
+        ? "● FLEET ATTENTION"
+        : "● SYSTEM HEALTHY";
 
   const healthSeverity =
-    canViewFleetCompliance &&
     criticalNotificationCount > 0
       ? "error"
-      : canViewFleetCompliance &&
-          warningNotificationCount > 0
+      : warningNotificationCount > 0
         ? "warning"
         : "ok";
 
@@ -788,22 +788,27 @@ function Header() {
         }}
       >
         <Box sx={popoverTitle}>
-          Access & Compliance
+          System Health
         </Box>
 
         <Divider sx={dividerSx} />
 
         <Box sx={healthRow}>
           <HealthAndSafetyIcon fontSize="small" />
-          Signed in as {username}
+          API Connected
         </Box>
 
         <Box sx={healthRow}>
           <HealthAndSafetyIcon fontSize="small" />
-          PackFlow role access active
+          Auth Session Active
         </Box>
 
-        {canViewFleetCompliance ? (
+        <Box sx={healthRow}>
+          <HealthAndSafetyIcon fontSize="small" />
+          Secure Cookie Mode
+        </Box>
+
+        {canViewFleetCompliance && (
           <>
             <Box sx={healthDivider} />
             <Box
@@ -811,14 +816,7 @@ function Header() {
                 healthSeverity
               )}
             >
-              Fleet document alerts: {criticalNotificationCount} critical • {warningNotificationCount} warning
-            </Box>
-          </>
-        ) : (
-          <>
-            <Box sx={healthDivider} />
-            <Box sx={healthRoleNote}>
-              Vehicle-level compliance data is not loaded for this role.
+              Fleet Compliance: {criticalNotificationCount} critical • {warningNotificationCount} warning
             </Box>
           </>
         )}
@@ -1322,15 +1320,6 @@ const healthDivider = {
   background:
     "rgba(var(--pf-fg-rgb),.08)",
   my: 1,
-};
-
-const healthRoleNote = {
-  minWidth: 260,
-  py: 1,
-  color: "var(--pf-text-muted)",
-  fontSize: 11.5,
-  fontWeight: 750,
-  lineHeight: 1.5,
 };
 
 const fleetHealthRow =

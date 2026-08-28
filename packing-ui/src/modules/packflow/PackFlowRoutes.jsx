@@ -15,71 +15,15 @@ import RequireRole from "../../auth/RequireRole";
 import RequireWarehouseAccess from "../../auth/RequireWarehouseAccess";
 import { useAuth } from "../../auth/AuthContext";
 
-const cleanRole = (value) =>
-  String(value || "")
-    .trim()
-    .replace(/^ROLE_/i, "")
-    .toUpperCase();
-
-const routeForPackFlowRole = (role) => {
-  switch (cleanRole(role)) {
-    case "PACKING":
-      return "/packflow/zoho-items?view=normal";
-    case "HARDWARE_PACKING":
-      return "/packflow/zoho-items?view=hardware";
-    case "WAREHOUSE":
-      return "/packflow/warehouse";
-    case "DISPATCH":
-      return "/packflow/dispatched-items";
-    case "LOGISTICS":
-      return "/packflow/logistics";
-    default:
-      return null;
-  }
-};
-
-const resolvePackFlowLanding = (
-  user,
-  hasRole
-) => {
-  if (
-    hasRole("ADMIN") ||
-    hasRole("PACKFLOW_DIRECTOR")
-  ) {
-    return "/packflow/dashboard";
-  }
-
-  const primary =
-    routeForPackFlowRole(
-      user?.role
-    );
-
-  if (primary) {
-    return primary;
-  }
-
-  for (const role of [
-    "PACKING",
-    "HARDWARE_PACKING",
-    "WAREHOUSE",
-    "DISPATCH",
-    "LOGISTICS",
-  ]) {
-    if (hasRole(role)) {
-      return routeForPackFlowRole(role);
-    }
-  }
-
-  return "/modules";
-};
-
 const dispatchElement = (
   <RequireRole
     allowed={[
       "ADMIN",
       "DISPATCH",
+      "UTL_DISPATCH",
       "WAREHOUSE",
       "PACKING",
+      "UTL_PACKING",
     ]}
   >
     <DispatchedItemsPage />
@@ -88,8 +32,8 @@ const dispatchElement = (
 
 function PackFlowDefaultRedirect() {
   const {
-    user,
     hasRole,
+    hasAnyRole,
     authLoading,
   } = useAuth();
 
@@ -97,12 +41,32 @@ function PackFlowDefaultRedirect() {
     return null;
   }
 
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "UTL_PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "UTL_DISPATCH",
+      "LOGISTICS"
+    );
+
+  const isUtlPacking = hasRole("UTL_PACKING");
+  const isUtlDispatch = hasRole("UTL_DISPATCH");
+
   return (
     <Navigate
-      to={resolvePackFlowLanding(
-        user,
-        hasRole
-      )}
+      to={
+        isUtlPacking
+          ? "/packflow/zoho-items?view=normal"
+          : isUtlDispatch
+            ? "/packflow/dispatched-items"
+            : isHardwareOnly
+              ? "/packflow/zoho-items"
+              : "/packflow/dashboard"
+      }
       replace
     />
   );
@@ -112,8 +76,8 @@ function PackFlowDashboardAccess({
   children,
 }) {
   const {
-    user,
     hasRole,
+    hasAnyRole,
     authLoading,
   } = useAuth();
 
@@ -121,30 +85,45 @@ function PackFlowDashboardAccess({
     return null;
   }
 
-  if (
-    hasRole("ADMIN") ||
-    hasRole("PACKFLOW_DIRECTOR")
-  ) {
-    return children;
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "UTL_PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "UTL_DISPATCH",
+      "LOGISTICS"
+    );
+
+  if (hasRole("UTL_PACKING")) {
+    return <Navigate to="/packflow/zoho-items?view=normal" replace />;
   }
 
-  return (
-    <Navigate
-      to={resolvePackFlowLanding(
-        user,
-        hasRole
-      )}
-      replace
-    />
-  );
+  if (hasRole("UTL_DISPATCH")) {
+    return <Navigate to="/packflow/dispatched-items" replace />;
+  }
+
+  if (isHardwareOnly) {
+    return (
+      <Navigate
+        to="/packflow/zoho-items"
+        replace
+      />
+    );
+  }
+
+  return children;
 }
 
 /**
  * PackFlow route compatibility module.
  *
- * App.jsx owns the primary nested /packflow route tree. This component is
- * retained for older imports/builds, so its role guards and landing behavior
- * intentionally mirror App.jsx. It must never become a weaker alternate path.
+ * App.jsx currently hosts the primary /packflow route tree. This module is
+ * retained because older builds/imports may still mount PackFlowRoutes
+ * directly. Keep its access rules aligned with the primary route tree so an
+ * older route registration cannot silently bypass the current guards.
  */
 export default function PackFlowRoutes() {
   return (
@@ -172,6 +151,10 @@ export default function PackFlowRoutes() {
         element={dispatchElement}
       />
 
+      {/*
+       * Legacy compatibility path. Keep existing bookmarks working while the
+       * same role guard is applied as /dispatched-items.
+       */}
       <Route
         path="dispatch"
         element={dispatchElement}
@@ -191,6 +174,10 @@ export default function PackFlowRoutes() {
         }
       />
 
+      {/*
+       * User Management is a top-level FlowSuite route. Redirect instead of
+       * rendering it inside a nested PackFlow shell.
+       */}
       <Route
         path="users"
         element={
@@ -201,6 +188,10 @@ export default function PackFlowRoutes() {
         }
       />
 
+      {/*
+       * Client Master is shared FlowSuite master data and is hosted by
+       * /modules. Keep the legacy PackFlow URL only as a redirect.
+       */}
       <Route
         path="client-master"
         element={
@@ -218,6 +209,7 @@ export default function PackFlowRoutes() {
             allowed={[
               "ADMIN",
               "PACKING",
+              "UTL_PACKING",
               "HARDWARE_PACKING",
             ]}
           >

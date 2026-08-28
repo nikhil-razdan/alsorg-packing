@@ -1842,6 +1842,11 @@ function ZohoItemsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [utlDispatchTargets, setUtlDispatchTargets] = useState([]);
+  const [utlDispatchTargetsLoading, setUtlDispatchTargetsLoading] = useState(false);
+  const [utlDispatchTargetsError, setUtlDispatchTargetsError] = useState("");
+  const [utlDispatchMode, setUtlDispatchMode] = useState("");
+  const [utlDispatchTargetKey, setUtlDispatchTargetKey] = useState("");
   const [detailsPopup, setDetailsPopup] = useState(false);
 
   const [
@@ -2021,6 +2026,9 @@ function ZohoItemsPage() {
   const isPacking =
     hasRole("PACKING");
 
+  const isUtlPacking =
+    hasRole("UTL_PACKING");
+
   const isHardwarePacking =
     hasRole("HARDWARE_PACKING");
 
@@ -2037,7 +2045,8 @@ function ZohoItemsPage() {
    */
   const canOpenNormalInventory =
     isAdmin ||
-    isPacking;
+    isPacking ||
+    isUtlPacking;
 
   const canOpenHardwareInventory =
     isAdmin ||
@@ -2084,7 +2093,8 @@ function ZohoItemsPage() {
    */
   const canCreateNormalPackets =
     isAdmin ||
-    isPacking;
+    isPacking ||
+    isUtlPacking;
 
   /*
    * Hardware inventory write operations:
@@ -2124,14 +2134,15 @@ function ZohoItemsPage() {
    */
   const canViewGeneratedHistory =
     isAdmin ||
-    isPacking;
+    isPacking ||
+    isUtlPacking;
 
   const canRequestLifecycleFromGeneratedHistory =
-    isPacking &&
+    (isPacking || isUtlPacking) &&
     !isAdmin;
 
   const canRequestDeletionFromGeneratedHistory =
-    isPacking &&
+    (isPacking || isUtlPacking) &&
     !isAdmin;
 
   /*
@@ -2684,7 +2695,39 @@ function ZohoItemsPage() {
       }
 
       const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
+      const rawList = Array.isArray(data) ? data.filter(Boolean) : [];
+
+      const assignedPlantCodes = new Set(
+        [
+          ...(Array.isArray(currentUser?.plantCodes) ? currentUser.plantCodes : []),
+          currentUser?.plantCode,
+        ]
+          .map((value) => String(value || "").trim().toUpperCase())
+          .filter(Boolean)
+      );
+
+      const shouldExposeWr38 =
+        isAdmin ||
+        assignedPlantCodes.has("WR-38") ||
+        rawList.some((plant) =>
+          String(plant?.plantCode || "").trim().toUpperCase() === "WR-38"
+        );
+
+      const list = shouldExposeWr38 && !rawList.some((plant) =>
+        String(plant?.plantCode || "").trim().toUpperCase() === "WR-38"
+      )
+        ? [
+            ...rawList,
+            {
+              plantCode: "WR-38",
+              plantName: "Wriver Standard Products",
+              packedAreaCode: "PKD-38",
+              fgAreaCode: "FG-38",
+              fgZones: [],
+              warehouseCodes: ["BLS-WH-1", "RTP-WH-2", "WR-38"],
+            },
+          ]
+        : rawList;
 
       setMyPlants(list);
 
@@ -6790,9 +6833,71 @@ function ZohoItemsPage() {
     setPdfUrl(null);
     setDrawerOpen(false);
     setGenerating(false);
+    setUtlDispatchTargets([]);
+    setUtlDispatchTargetsLoading(false);
+    setUtlDispatchTargetsError("");
+    setUtlDispatchMode("");
+    setUtlDispatchTargetKey("");
   };
 
-  const openGenerateStickerDrawer = (row = selectedItem) => {
+  const loadUtlDispatchTargets = async (row) => {
+    if (!isUtlPacking || !row) {
+      setUtlDispatchTargets([]);
+      setUtlDispatchTargetsError("");
+      return [];
+    }
+
+    const sourcePlant = String(
+      row?.plantCode || row?.plant || ""
+    ).trim().toUpperCase();
+
+    if (!["AL-P3", "WR-38"].includes(sourcePlant)) {
+      setUtlDispatchTargets([]);
+      setUtlDispatchTargetsError(
+        "UTL packing is allowed only at AL-P3 K&W or WR-38."
+      );
+      return [];
+    }
+
+    try {
+      setUtlDispatchTargetsLoading(true);
+      setUtlDispatchTargetsError("");
+
+      const response = await authFetch(
+        `${API_BASE_URL}/api/packets/utl-dispatch-targets?plantCode=${encodeURIComponent(sourcePlant)}`,
+        { method: "GET" }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          (await readApiErrorMessage(response)) ||
+          "Unable to load eligible UTL dispatch users"
+        );
+      }
+
+      const data = await response.json();
+      const list = Array.isArray(data) ? data : [];
+      setUtlDispatchTargets(list);
+
+      const modes = Array.from(new Set(list.map((target) => target?.dispatchMode).filter(Boolean)));
+      if (modes.length === 1) {
+        setUtlDispatchMode(modes[0]);
+      }
+
+      return list;
+    } catch (error) {
+      console.error("UTL dispatch target load failed", error);
+      setUtlDispatchTargets([]);
+      setUtlDispatchTargetsError(
+        error?.message || "Unable to load eligible UTL dispatch users"
+      );
+      return [];
+    } finally {
+      setUtlDispatchTargetsLoading(false);
+    }
+  };
+
+  const openGenerateStickerDrawer = async (row = selectedItem) => {
     if (!row) return;
 
     closeStickerReviewModal();
@@ -6804,7 +6909,15 @@ function ZohoItemsPage() {
     setGenerating(false);
     setSelectedItem(row);
     setPdfUrl(null);
+    setUtlDispatchTargets([]);
+    setUtlDispatchTargetsError("");
+    setUtlDispatchMode("");
+    setUtlDispatchTargetKey("");
     setDrawerOpen(true);
+
+    if (isUtlPacking) {
+      await loadUtlDispatchTargets(row);
+    }
   };
 
   const openStickerReviewModal = async (row) => {
@@ -6840,7 +6953,7 @@ function ZohoItemsPage() {
           row.floor || ""
         )}` +
         `&showCompanyHeader=${encodeURIComponent(
-          form.showCompanyHeader
+          isUtlPacking ? false : form.showCompanyHeader
         )}`;
 
       const res = await authFetch(
@@ -10731,9 +10844,13 @@ function ZohoItemsPage() {
 
             {isWr38Row(selectedItem) ? (
               <Box sx={optionSubTextSx}>
-                The QR contains only the PackFlow packet identity. Product Code,
-                dimensions, package content and customer data stay in PackFlow and
-                are resolved after scanning; the approved Illustrator label remains unchanged.
+                WR-38 prints only the PackFlow QR and its independent WR sticker number.
+                Product/customer data stays in PackFlow and resolves after scanning.
+              </Box>
+            ) : isUtlPacking ? (
+              <Box sx={optionSubTextSx}>
+                UTL external-team sticker uses the normal PackFlow sticker layout with
+                the ALSORG / company-name header forcibly removed.
               </Box>
             ) : (
               <Box sx={stickerOptionRowSx}>
@@ -10760,13 +10877,108 @@ function ZohoItemsPage() {
             )}
           </Box>
 
+          {isUtlPacking && (
+            <Box sx={{ ...drawerSectionCardSx, borderColor: "rgba(14,165,233,.28)" }}>
+              <Box sx={drawerSectionTitleSx}>
+                Dispatch Assignment
+              </Box>
+
+              <Box sx={{ ...optionSubTextSx, mb: 1.5 }}>
+                This assignment is locked to the UTL packet at final sticker generation.
+                Only the selected dispatch username can operate that UTL packet afterwards.
+              </Box>
+
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Dispatch Route"
+                value={utlDispatchMode}
+                onChange={(event) => {
+                  setUtlDispatchMode(event.target.value);
+                  setUtlDispatchTargetKey("");
+                }}
+                disabled={utlDispatchTargetsLoading}
+                sx={{ ...formFieldSx(), mb: 1.25 }}
+                SelectProps={{ MenuProps: selectMenuSlotProps.select.MenuProps }}
+              >
+                {Array.from(
+                  new Set(
+                    utlDispatchTargets
+                      .map((target) => target?.dispatchMode)
+                      .filter(Boolean)
+                  )
+                ).map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode === "UTL" ? "UTL Dispatch Team" : "Internal Plant Dispatch"}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Dispatch User / Plant"
+                value={utlDispatchTargetKey}
+                onChange={(event) => setUtlDispatchTargetKey(event.target.value)}
+                disabled={utlDispatchTargetsLoading || !utlDispatchMode}
+                sx={formFieldSx()}
+                SelectProps={{ MenuProps: selectMenuSlotProps.select.MenuProps }}
+                helperText={
+                  utlDispatchTargetsLoading
+                    ? "Loading eligible dispatch users..."
+                    : utlDispatchTargetsError ||
+                      (!utlDispatchMode
+                        ? "Select the dispatch route first."
+                        : "Choose the exact user who will receive this UTL packet in Dispatch.")
+                }
+                error={Boolean(utlDispatchTargetsError)}
+              >
+                {utlDispatchTargets
+                  .filter((target) => target?.dispatchMode === utlDispatchMode)
+                  .map((target) => {
+                    const key = `${target.dispatchMode}|${target.plantCode}|${target.username}`;
+                    return (
+                      <MenuItem key={key} value={key}>
+                        {target.label || target.plantCode} • {target.username}
+                      </MenuItem>
+                    );
+                  })}
+              </TextField>
+            </Box>
+          )}
+
           <Button
-            disabled={generating}
+            disabled={
+              generating ||
+              (isUtlPacking && (
+                utlDispatchTargetsLoading ||
+                !utlDispatchMode ||
+                !utlDispatchTargetKey ||
+                Boolean(utlDispatchTargetsError)
+              ))
+            }
             onClick={async () => {
               const itemId = getPacketItemId(selectedItem);
 
               if (!itemId) {
                 showUiAlert("error", "Packet item id missing");
+                return;
+              }
+
+              const selectedUtlTarget = isUtlPacking
+                ? utlDispatchTargets.find((target) => {
+                    const key = `${target?.dispatchMode}|${target?.plantCode}|${target?.username}`;
+                    return key === utlDispatchTargetKey;
+                  })
+                : null;
+
+              if (isUtlPacking && !selectedUtlTarget) {
+                showUiAlert(
+                  "error",
+                  "Select the exact UTL/Internal dispatch user before generating the sticker."
+                );
                 return;
               }
 
@@ -10785,13 +10997,20 @@ function ZohoItemsPage() {
                   return;
                 }
 
-                const query =
+                const baseQuery =
                   `factoryFloor=${encodeURIComponent(
                     selectedItem?.floor || ""
                   )}` +
                   `&showCompanyHeader=${encodeURIComponent(
-                    form.showCompanyHeader
+                    isUtlPacking ? false : form.showCompanyHeader
                   )}`;
+
+                const query = selectedUtlTarget
+                  ? baseQuery +
+                    `&dispatchMode=${encodeURIComponent(selectedUtlTarget.dispatchMode)}` +
+                    `&dispatchTargetUsername=${encodeURIComponent(selectedUtlTarget.username)}` +
+                    `&dispatchTargetPlantCode=${encodeURIComponent(selectedUtlTarget.plantCode)}`
+                  : baseQuery;
 
                 const genRes =
                   await authFetch(
@@ -10834,7 +11053,11 @@ function ZohoItemsPage() {
 
                 showUiAlert(
                   "success",
-                  isWr38Row(selectedItem) ? "WR-38 QR generated and downloaded successfully" : "Sticker generated and downloaded successfully"
+                  isWr38Row(selectedItem)
+                    ? "WR-38 QR generated and downloaded successfully"
+                    : isUtlPacking
+                      ? "UTL sticker generated without company header and assigned to the selected dispatch user"
+                      : "Sticker generated and downloaded successfully"
                 );
 
                 await fetchItems();
@@ -13942,19 +14165,23 @@ const selectMenuSlotProps = {
       PaperProps: {
         sx: {
           mt: 1,
-          borderRadius: "14px",
+          borderRadius: "10px",
           background:
             "linear-gradient(180deg,var(--pf-surface),var(--pf-surface-alt))",
           color: "var(--pf-text-strong)",
           border:
-            "1px solid rgba(var(--pf-fg-rgb),.06)",
+            "1px solid rgba(59,130,246,.18)",
+          boxShadow:
+            "0 18px 46px rgba(2,6,23,.22)",
           backdropFilter: "blur(20px)",
           zIndex: 8000,
 
           "& .MuiMenuItem-root": {
             fontSize: 14,
-            fontWeight: 500,
+            fontWeight: 650,
             color: "var(--pf-text-strong)",
+            margin: "2px 6px",
+            borderRadius: "7px",
           },
 
           "& .MuiMenuItem-root:hover": {

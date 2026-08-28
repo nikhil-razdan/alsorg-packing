@@ -61,8 +61,10 @@ public class UserService {
                         "PACKFLOW_DIRECTOR",
                         "PACKING",
                         "HARDWARE_PACKING",
+                        "UTL_PACKING",
                         "WAREHOUSE",
                         "DISPATCH",
+                        "UTL_DISPATCH",
                         "LOGISTICS",
                         "DRIVER",
 
@@ -376,6 +378,11 @@ public class UserService {
                         finalWarehouseAccess = requestedWarehouseAccess;
                 }
 
+                if (containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_DISPATCH")) {
+                        finalWarehouseAccess = false;
+                }
+
                 user.setWarehouseAccess(
                                 finalWarehouseAccess);
 
@@ -401,6 +408,27 @@ public class UserService {
                 }
 
                 Set<String> cleanPlants = cleanPlantCodes(plantCodes);
+
+                boolean utlIdentity = containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_DISPATCH");
+
+                if (utlIdentity) {
+                        if (cleanPlants.size() != 1) {
+                                throw new RuntimeException(
+                                                "UTL users must be assigned to exactly one plant: AL-P3 or WR-38");
+                        }
+
+                        String utlPlant = cleanPlants.iterator().next();
+                        if (!"AL-P3".equals(utlPlant) && !"WR-38".equals(utlPlant)) {
+                                throw new RuntimeException(
+                                                "UTL users can operate only in AL-P3 (K&W) or WR-38");
+                        }
+
+                        if (cleanModules.size() != 1 || !cleanModules.contains("PACKFLOW")) {
+                                throw new RuntimeException(
+                                                "UTL users are isolated PackFlow profiles and cannot be assigned other modules");
+                        }
+                }
 
                 boolean plantRequired = roles.stream()
                                 .anyMatch(
@@ -471,7 +499,7 @@ public class UserService {
                  */
                 if (!isAllowedRoleCombination(cleanRoles)) {
                         throw new RuntimeException(
-                                        "Invalid role combination. PACKFLOW_DIRECTOR cannot be combined with an operational PackFlow role.");
+                                        "Invalid role combination. PACKFLOW_DIRECTOR cannot be combined with an operational PackFlow role, and UTL roles can only be combined with other UTL roles.");
                 }
 
                 return new RoleAssignment(
@@ -645,6 +673,15 @@ public class UserService {
                         return false;
                 }
 
+                boolean hasUtlRole = containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_DISPATCH");
+
+                if (hasUtlRole) {
+                        return roles.stream()
+                                        .allMatch(role -> "UTL_PACKING".equals(role)
+                                                        || "UTL_DISPATCH".equals(role));
+                }
+
                 if (!containsRole(roles, "PACKFLOW_DIRECTOR")) {
                         return true;
                 }
@@ -660,8 +697,10 @@ public class UserService {
                 return "PACKFLOW_DIRECTOR".equals(role) ||
                                 "PACKING".equals(role) ||
                                 "HARDWARE_PACKING".equals(role) ||
+                                "UTL_PACKING".equals(role) ||
                                 "WAREHOUSE".equals(role) ||
                                 "DISPATCH".equals(role) ||
+                                "UTL_DISPATCH".equals(role) ||
                                 "LOGISTICS".equals(role) ||
                                 "DRIVER".equals(role);
         }

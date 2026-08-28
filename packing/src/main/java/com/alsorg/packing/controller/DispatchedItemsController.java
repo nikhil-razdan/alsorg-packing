@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.List;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
+import com.alsorg.packing.service.UtlWorkflowService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -48,6 +49,9 @@ public class DispatchedItemsController {
         private final DispatchedItemRepository repository;
         private final DispatchedItemService dispatchedItemService;
         private final CurrentUserService currentUserService;
+
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private UtlWorkflowService utlWorkflowService;
 
         public DispatchedItemsController(
                         DispatchedItemRepository repository,
@@ -174,6 +178,7 @@ public class DispatchedItemsController {
                                                 completeRegisterAccess,
                                                 allowedPlants,
                                                 ownerUsername,
+                                                buildUtlReadContext(user),
                                                 includeTotal,
                                                 knownTotalElements);
 
@@ -383,7 +388,8 @@ public class DispatchedItemsController {
                                         allowedPlants,
                                         shouldRestrictDispatchReadToOwner(user)
                                                         ? user.getUsername()
-                                                        : null);
+                                                        : null,
+                                        buildUtlReadContext(user));
                 }
 
                 return ResponseEntity
@@ -417,6 +423,27 @@ public class DispatchedItemsController {
                                                 result.getContent());
         }
 
+        private DispatchedItemService.UtlReadContext buildUtlReadContext(User user) {
+                if (user == null || currentUserService.isAdmin(user)) {
+                        return null;
+                }
+
+                boolean utlPacking = currentUserService.isUtlPacking(user);
+                boolean utlDispatch = currentUserService.isUtlDispatch(user);
+                boolean internalDispatch = currentUserService.isDispatch(user);
+
+                return new DispatchedItemService.UtlReadContext(
+                                user.getUsername(),
+                                utlPacking,
+                                internalDispatch || utlDispatch,
+                                currentUserService.isWarehouse(user)
+                                                || currentUserService.isLogistics(user),
+                                (utlPacking || utlDispatch)
+                                                && !internalDispatch
+                                                && !currentUserService.isWarehouse(user)
+                                                && !currentUserService.isLogistics(user));
+        }
+
         private boolean shouldRestrictDispatchReadToOwner(User user) {
                 if (user == null || currentUserService.isAdmin(user)) {
                         return false;
@@ -429,11 +456,13 @@ public class DispatchedItemsController {
                  * irrespective of who originally packed the item, otherwise the
                  * existing Ready -> Warehouse/FG -> Dispatch workflow would break.
                  */
-                return currentUserService.isPacking(user)
+                return (currentUserService.isPacking(user)
+                                || currentUserService.isUtlPacking(user))
                                 && !currentUserService.hasAnyRole(
                                                 user,
                                                 "WAREHOUSE",
                                                 "DISPATCH",
+                                                "UTL_DISPATCH",
                                                 "LOGISTICS");
         }
 
@@ -444,10 +473,11 @@ public class DispatchedItemsController {
                 User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)
+                                && !currentUserService.isUtlDispatch(user)
                                 && !currentUserService.isAdmin(user)) {
                         return ResponseEntity
                                         .status(403)
-                                        .body("Only DISPATCH / ADMIN user can move item to FG");
+                                        .body("Only DISPATCH / UTL_DISPATCH / ADMIN user can move item to FG");
                 }
 
                 dispatchedItemService.movePackedItemToFg(
@@ -563,7 +593,8 @@ public class DispatchedItemsController {
                         @RequestParam String status) {
                 User user = currentUserService.requireCurrentUser();
 
-                if (!currentUserService.isDispatch(user)) {
+                if (!currentUserService.isDispatch(user)
+                                && !currentUserService.isUtlDispatch(user)) {
                         return ResponseEntity.status(403).build();
                 }
                 ItemDispatchStatus parsedStatus;
@@ -649,7 +680,8 @@ public class DispatchedItemsController {
                         @RequestParam String status) {
                 User user = currentUserService.requireCurrentUser();
 
-                if (!currentUserService.isDispatch(user)) {
+                if (!currentUserService.isDispatch(user)
+                                && !currentUserService.isUtlDispatch(user)) {
                         return ResponseEntity.status(403).build();
                 }
 
@@ -765,6 +797,15 @@ public class DispatchedItemsController {
                         challanNumbersPage = repository.findChallanNumbersPage(
                                         ItemDispatchStatus.DISPATCHED,
                                         pageable);
+                } else if (currentUserService.isUtlUser(user)) {
+                        challanNumbersPage = dispatchedItemService.searchUtlVisibleChallanNumbers(
+                                        user.getUsername(),
+                                        pageable);
+                } else if (currentUserService.isLogistics(user)) {
+                        /* Logistics reads the plant-visible operational history, not dispatch ownership. */
+                        challanNumbersPage = dispatchedItemService.searchPlantVisibleChallanNumbers(
+                                        currentUserService.allowedPlants(user),
+                                        pageable);
                 } else {
                         challanNumbersPage = repository.findVisibleChallanNumbersPageForUser(
                                         ItemDispatchStatus.DISPATCHED,
@@ -819,14 +860,23 @@ public class DispatchedItemsController {
                         }
 
                         if (!currentUserService.isAdmin(user)) {
-                                if (!cleanLower(item.getDispatchedBy()).equals(currentUsername)) {
-                                        continue;
-                                }
+                                if (currentUserService.isUtlUser(user)) {
+                                        if (utlWorkflowService == null
+                                                        || !utlWorkflowService.canCurrentUserRead(item)) {
+                                                continue;
+                                        }
+                                } else if (currentUserService.isLogistics(user)) {
+                                        if (!isVisiblePlant(item.getPlantCode(), allowedPlants)) {
+                                                continue;
+                                        }
+                                } else {
+                                        if (!cleanLower(item.getDispatchedBy()).equals(currentUsername)) {
+                                                continue;
+                                        }
 
-                                if (!isVisiblePlant(
-                                                item.getPlantCode(),
-                                                allowedPlants)) {
-                                        continue;
+                                        if (!isVisiblePlant(item.getPlantCode(), allowedPlants)) {
+                                                continue;
+                                        }
                                 }
                         }
 
@@ -902,6 +952,30 @@ public class DispatchedItemsController {
                         items = repository.findByStatusAndChalaanNumber(
                                         ItemDispatchStatus.DISPATCHED,
                                         cleanChallanNumber);
+                } else if (currentUserService.isUtlUser(user)) {
+                        /*
+                         * UTL packets may be routed from AL-P3 / WR-38 to another exact
+                         * dispatcher.  The creator therefore cannot be constrained by the
+                         * final target plant or by dispatchedBy.  Load this one challan and
+                         * apply the persisted UTL row-level visibility contract instead.
+                         */
+                        items = repository.findByStatusAndChalaanNumber(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber)
+                                        .stream()
+                                        .filter(item -> utlWorkflowService != null
+                                                        && utlWorkflowService.canCurrentUserRead(item))
+                                        .toList();
+                } else if (currentUserService.isLogistics(user)) {
+                        /*
+                         * Logistics visibility is plant-operational, not dispatchedBy-owner
+                         * visibility.  This keeps downstream trip handling aligned with the
+                         * same plant scope already used by end-trip and dashboard reads.
+                         */
+                        items = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
+                                        ItemDispatchStatus.DISPATCHED,
+                                        cleanChallanNumber,
+                                        currentUserService.allowedPlants(user));
                 } else {
                         items = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
                                         ItemDispatchStatus.DISPATCHED,
@@ -938,7 +1012,13 @@ public class DispatchedItemsController {
 
                 List<DispatchedItem> sourceItems;
 
-                if (currentUserService.isAdmin(user)) {
+                if (currentUserService.isAdmin(user)
+                                || currentUserService.isUtlUser(user)) {
+                        /*
+                         * UTL creator visibility can cross the physical source/target plant
+                         * boundary, so legacy all-challans reads must start from dispatched
+                         * rows and then apply the persisted UTL routing predicate.
+                         */
                         sourceItems = repository.findByStatusIn(statuses);
                 } else {
                         sourceItems = repository.findVisibleByStatusesAndPlantsIncludingLegacy(
@@ -954,6 +1034,15 @@ public class DispatchedItemsController {
                                                 && !item.getChalaanNumber().isBlank())
                                 .filter(item -> {
                                         if (currentUserService.isAdmin(user)) {
+                                                return true;
+                                        }
+
+                                        if (currentUserService.isUtlUser(user)) {
+                                                return utlWorkflowService != null
+                                                                && utlWorkflowService.canCurrentUserRead(item);
+                                        }
+
+                                        if (currentUserService.isLogistics(user)) {
                                                 return true;
                                         }
 
@@ -1199,13 +1288,14 @@ public class DispatchedItemsController {
 
                 boolean permitted = currentUserService.isAdmin(user) ||
                                 currentUserService.isDispatch(user) ||
+                                currentUserService.isUtlDispatch(user) ||
                                 currentUserService.isLogistics(user);
 
                 if (!permitted) {
                         return ResponseEntity
                                         .status(403)
                                         .body(
-                                                        "Only DISPATCH / LOGISTICS / ADMIN can update helpers/loaders");
+                                                        "Only DISPATCH / UTL_DISPATCH / LOGISTICS / ADMIN can update helpers/loaders");
                 }
 
                 String cleanChallanNumber = challanNumber == null

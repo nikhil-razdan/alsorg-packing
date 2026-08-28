@@ -40,12 +40,14 @@ function resolvePackFlowLanding(user, hasRole) {
   const routeForRole = (role) => {
     switch (cleanRole(role)) {
       case "PACKING":
+      case "UTL_PACKING":
         return "/packflow/zoho-items?view=normal";
       case "HARDWARE_PACKING":
         return "/packflow/zoho-items?view=hardware";
       case "WAREHOUSE":
         return "/packflow/warehouse";
       case "DISPATCH":
+      case "UTL_DISPATCH":
         return "/packflow/dispatched-items";
       case "LOGISTICS":
         return "/packflow/logistics";
@@ -61,9 +63,11 @@ function resolvePackFlowLanding(user, hasRole) {
 
   for (const role of [
     "PACKING",
+    "UTL_PACKING",
     "HARDWARE_PACKING",
     "WAREHOUSE",
     "DISPATCH",
+    "UTL_DISPATCH",
     "LOGISTICS",
   ]) {
     if (hasRole(role)) {
@@ -186,6 +190,7 @@ function App() {
                   allowed={[
                     "ADMIN",
                     "PACKING",
+                    "UTL_PACKING",
                     "HARDWARE_PACKING",
                   ]}
                 >
@@ -210,24 +215,9 @@ function App() {
                   allowed={[
                     "ADMIN",
                     "PACKING",
+                    "UTL_PACKING",
                     "DISPATCH",
-                    "WAREHOUSE",
-                  ]}
-                >
-                  <DispatchedItemsPage />
-                </RequireRole>
-              }
-            />
-
-            {/* Legacy PackFlow bookmark kept under the same guard. */}
-            <Route
-              path="dispatch"
-              element={
-                <RequireRole
-                  allowed={[
-                    "ADMIN",
-                    "PACKING",
-                    "DISPATCH",
+                    "UTL_DISPATCH",
                     "WAREHOUSE",
                   ]}
                 >
@@ -246,15 +236,6 @@ function App() {
             />
 
             <Route path="users" element={<Navigate to="/users" replace />} />
-            <Route
-              path="client-master"
-              element={
-                <Navigate
-                  to="/modules?module=client-master"
-                  replace
-                />
-              }
-            />
             <Route path="*" element={<PackFlowDefaultRedirect />} />
           </Route>
 
@@ -285,7 +266,6 @@ function App() {
           <Route path="/zoho-items" element={<Navigate to="/packflow/zoho-items" replace />} />
           <Route path="/warehouse" element={<Navigate to="/packflow/warehouse" replace />} />
           <Route path="/dispatched-items" element={<Navigate to="/packflow/dispatched-items" replace />} />
-          <Route path="/dispatch" element={<Navigate to="/packflow/dispatched-items" replace />} />
           <Route path="/logistics" element={<Navigate to="/packflow/logistics" replace />} />
           <Route path="*" element={<Navigate to="/modules" replace />} />
         </Routes>

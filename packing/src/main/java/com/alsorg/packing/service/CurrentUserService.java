@@ -172,8 +172,20 @@ public class CurrentUserService {
         return hasRole(user, "PACKING");
     }
 
+    public boolean isUtlPacking(User user) {
+        return hasRole(user, UtlWorkflowService.ROLE_UTL_PACKING);
+    }
+
     public boolean isDispatch(User user) {
         return hasRole(user, "DISPATCH");
+    }
+
+    public boolean isUtlDispatch(User user) {
+        return hasRole(user, UtlWorkflowService.ROLE_UTL_DISPATCH);
+    }
+
+    public boolean isUtlUser(User user) {
+        return isUtlPacking(user) || isUtlDispatch(user);
     }
 
     public boolean isLogistics(User user) {
@@ -252,6 +264,18 @@ public class CurrentUserService {
             if (hasRole(user, role)) {
                 return true;
             }
+
+            /*
+             * UTL_DISPATCH is a constrained dispatch subtype. Generic helpers
+             * such as the normal challan controller ask for DISPATCH through
+             * hasAnyRole(...), while row-level UTL routing remains enforced by
+             * UtlWorkflowService. Keep isDispatch(user) exact so UTL never
+             * silently inherits ordinary plant-wide Dispatch visibility.
+             */
+            String requested = normalizeRoleKey(role);
+            if ("DISPATCH".equals(requested) && isUtlDispatch(user)) {
+                return true;
+            }
         }
 
         return false;
@@ -281,6 +305,7 @@ public class CurrentUserService {
     public boolean canViewTrips(User user) {
         return isAdmin(user)
                 || isDispatch(user)
+                || isUtlDispatch(user)
                 || isLogistics(user)
                 || isDriver(user);
     }
@@ -386,7 +411,7 @@ public class CurrentUserService {
     }
 
     public boolean canGenerateWarehouseGatePass(User user) {
-        return isAdmin(user) || isDispatch(user);
+        return isAdmin(user) || isDispatch(user) || isUtlDispatch(user);
     }
 
     public boolean canApproveWarehouseMove(User user) {
@@ -404,9 +429,8 @@ public class CurrentUserService {
 
     public boolean isNormalPacking(
             User user) {
-        return hasRole(
-                user,
-                "PACKING");
+        return hasRole(user, "PACKING")
+                || isUtlPacking(user);
     }
 
     public boolean isHardwareOnlyPackingUser(
@@ -417,8 +441,10 @@ public class CurrentUserService {
                 && !hasAnyRole(
                         user,
                         "PACKING",
+                        "UTL_PACKING",
                         "WAREHOUSE",
                         "DISPATCH",
+                        "UTL_DISPATCH",
                         "LOGISTICS");
     }
 

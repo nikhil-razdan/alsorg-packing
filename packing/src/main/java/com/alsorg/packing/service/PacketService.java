@@ -45,6 +45,7 @@ import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.ProductQrPdfService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 import com.alsorg.packing.domain.sticker.StickerHistory;
+import com.alsorg.packing.domain.utl.UtlPacketRouting;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 import java.util.Set;
 import java.util.Objects;
@@ -65,6 +66,13 @@ public class PacketService {
         private final StickerSequenceService stickerSequenceService;
         private final PdfStickerService pdfService;
         private final ProductQrPdfService productQrPdfService;
+
+        /*
+         * Optional field injection keeps the existing constructor signatures
+         * source-compatible while enabling the additive UTL routing module.
+         */
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private UtlWorkflowService utlWorkflowService;
         private final DispatchedItemService dispatchedItemService;
         private final DispatchedItemRepository dispatchedRepo;
         private final MasterItemRepository masterItemRepository;
@@ -304,7 +312,10 @@ public class PacketService {
                 Packet packet = new Packet();
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
-                packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+                packet.setStickerNumber(
+                                packetContainerStickerNumber(
+                                                firstPacketPlant(items),
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(createdBy);
                 packet.setCreatedAt(LocalDateTime.now(APP_ZONE));
@@ -1288,8 +1299,9 @@ public class PacketService {
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
                 packet.setStickerNumber(
-                                stickerSequenceService
-                                                .generateNextStickerNumber());
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -1422,6 +1434,30 @@ public class PacketService {
                         Set<String> allowedPlants,
                         PacketItemType expectedType,
                         String actorOverride) {
+                return generateStickerInternalWithRouting(
+                                itemId,
+                                factoryFloor,
+                                showCompanyHeader,
+                                user,
+                                allowedPlants,
+                                expectedType,
+                                actorOverride,
+                                null,
+                                null,
+                                null);
+        }
+
+        private byte[] generateStickerInternalWithRouting(
+                        UUID itemId,
+                        String factoryFloor,
+                        boolean showCompanyHeader,
+                        User user,
+                        Set<String> allowedPlants,
+                        PacketItemType expectedType,
+                        String actorOverride,
+                        String utlDispatchMode,
+                        String utlDispatchTargetUsername,
+                        String utlDispatchTargetPlantCode) {
                 /*
                  * Lock this PacketItem for the complete sticker-generation
                  * transaction.
@@ -1475,6 +1511,25 @@ public class PacketService {
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
+
+                java.util.Optional<UtlPacketRouting> utlRouting = java.util.Optional.empty();
+
+                if (user != null && currentUserService.isUtlPacking(user)) {
+                        if (utlWorkflowService == null) {
+                                throw new IllegalStateException(
+                                                "UTL workflow service is not available");
+                        }
+
+                        utlRouting = utlWorkflowService.applyRoutingForSticker(
+                                        item,
+                                        user,
+                                        utlDispatchMode,
+                                        utlDispatchTargetUsername,
+                                        utlDispatchTargetPlantCode);
+
+                        /* UTL full stickers must never render the ALSORG header. */
+                        showCompanyHeader = false;
+                }
 
                 String authenticatedUsername = user != null
                                 && user.getUsername() != null
@@ -1539,7 +1594,7 @@ public class PacketService {
                  * Generate a new unique sticker number for every print.
                  */
                 String stickerNumber = stickerSequenceService
-                                .generateNextStickerNumber();
+                                .generateNextStickerNumberForPlant(plantCode);
 
                 item.setStickerNumber(
                                 stickerNumber);
@@ -1671,6 +1726,12 @@ public class PacketService {
                                                         item.getCreatedBy(),
                                                         item.getPackedBy(),
                                                         actor));
+                }
+
+                if (utlRouting.isPresent()) {
+                        utlWorkflowService.applyOperationalDispatchProjection(
+                                        dispatchedItem,
+                                        utlRouting.get());
                 }
 
                 dispatchedRepo.save(
@@ -2363,7 +2424,10 @@ public class PacketService {
                 Packet packet = new Packet();
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
-                packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+                packet.setStickerNumber(
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -2653,8 +2717,9 @@ public class PacketService {
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
                 packet.setStickerNumber(
-                                stickerSequenceService
-                                                .generateNextStickerNumber());
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -2888,8 +2953,9 @@ public class PacketService {
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
                 packet.setStickerNumber(
-                                stickerSequenceService
-                                                .generateNextStickerNumber());
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -3005,7 +3071,10 @@ public class PacketService {
                 Packet packet = new Packet();
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
-                packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
+                packet.setStickerNumber(
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -3136,8 +3205,9 @@ public class PacketService {
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
                 packet.setStickerNumber(
-                                stickerSequenceService
-                                                .generateNextStickerNumber());
+                                packetContainerStickerNumber(
+                                                plantCode,
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(now);
@@ -3424,6 +3494,28 @@ public class PacketService {
                                 allowedPlants,
                                 PacketItemType.NORMAL,
                                 null);
+        }
+
+        @Transactional
+        public byte[] generateUtlNormalSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        User user,
+                        Set<String> allowedPlants,
+                        String dispatchMode,
+                        String dispatchTargetUsername,
+                        String dispatchTargetPlantCode) {
+                return generateStickerInternalWithRouting(
+                                itemId,
+                                factoryFloor,
+                                false,
+                                user,
+                                allowedPlants,
+                                PacketItemType.NORMAL,
+                                null,
+                                dispatchMode,
+                                dispatchTargetUsername,
+                                dispatchTargetPlantCode);
         }
 
         @Transactional
@@ -3825,7 +3917,9 @@ public class PacketService {
                                 dispatchedItem.getStickerNumber());
 
                 if (stickerNumber == null || stickerNumber.isBlank()) {
-                        stickerNumber = stickerSequenceService.generateNextStickerNumber();
+                        stickerNumber = stickerSequenceService
+                                        .generateNextStickerNumberForPlant(
+                                                        packetItem.getPlantCode());
                 }
 
                 long iteration = packetItem.getPrintIteration() == null ||
@@ -3871,15 +3965,29 @@ public class PacketService {
                         }
                 }
 
-                StickerPdfData pdf = buildStickerPdfData(
-                                packetItem,
-                                stickerNumber,
-                                packetItem.getFloor(),
-                                true,
-                                iteration,
-                                false);
+                boolean utlPacket = utlWorkflowService != null
+                                && utlWorkflowService.findRoutingByPacketItemId(packetItem.getId()).isPresent();
 
-                byte[] pdfBytes = pdfService.generateSticker(pdf);
+                byte[] pdfBytes;
+
+                if (isWr38Item(packetItem)) {
+                        /* WR-38 history must remain the QR-only artifact. */
+                        pdfBytes = productQrPdfService.generate(
+                                        packetItem,
+                                        stickerNumber,
+                                        iteration,
+                                        false);
+                } else {
+                        StickerPdfData pdf = buildStickerPdfData(
+                                        packetItem,
+                                        stickerNumber,
+                                        packetItem.getFloor(),
+                                        !utlPacket,
+                                        iteration,
+                                        false);
+
+                        pdfBytes = pdfService.generateSticker(pdf);
+                }
 
                 StickerHistory rebuiltHistory = new StickerHistory();
 
@@ -4118,7 +4226,9 @@ public class PacketService {
                 packet.setId(UUID.randomUUID());
                 packet.setCompany(company);
                 packet.setStickerNumber(
-                                stickerSequenceService.generateNextStickerNumber());
+                                packetContainerStickerNumber(
+                                                dispatchedItem.getPlantCode(),
+                                                packet.getId()));
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
                 packet.setCreatedAt(LocalDateTime.now(APP_ZONE));
@@ -4365,7 +4475,9 @@ public class PacketService {
                 return previewStickerInternal(
                                 item,
                                 factoryFloor,
-                                showCompanyHeader);
+                                currentUserService.isUtlPacking(user)
+                                                ? false
+                                                : showCompanyHeader);
         }
 
         @Transactional(readOnly = true)
@@ -4414,13 +4526,24 @@ public class PacketService {
                         UUID itemId,
                         User user,
                         Set<String> allowedPlants) {
+                return generateWr38Qr(
+                                itemId,
+                                user,
+                                allowedPlants,
+                                null,
+                                null,
+                                null);
+        }
 
-                /*
-                 * Take the same row lock used by normal sticker generation before
-                 * validating plant identity. generateStickerInternal runs in this
-                 * same transaction and therefore keeps the lock through the full
-                 * state/history/dispatch update.
-                 */
+        @Transactional
+        public byte[] generateWr38Qr(
+                        UUID itemId,
+                        User user,
+                        Set<String> allowedPlants,
+                        String dispatchMode,
+                        String dispatchTargetUsername,
+                        String dispatchTargetPlantCode) {
+
                 PacketItem item = packetItemRepository
                                 .findByIdForStickerGeneration(itemId)
                                 .orElseThrow(() -> new RuntimeException("Packet item not found"));
@@ -4430,14 +4553,17 @@ public class PacketService {
                                 user,
                                 allowedPlants);
 
-                return generateStickerInternal(
+                return generateStickerInternalWithRouting(
                                 itemId,
                                 item.getFloor(),
-                                true,
+                                false,
                                 user,
                                 allowedPlants,
                                 PacketItemType.NORMAL,
-                                null);
+                                null,
+                                dispatchMode,
+                                dispatchTargetUsername,
+                                dispatchTargetPlantCode);
         }
 
         private byte[] previewStickerInternal(
@@ -4630,6 +4756,22 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException(
                                                 "Packet item not found"));
 
+                /*
+                 * UTL routing is intentionally allowed to cross the physical
+                 * source-plant / selected-dispatch-plant boundary. The UTL
+                 * creator and the exact selected dispatcher must both be able to
+                 * open the same sticker history even when their plant codes differ.
+                 */
+                if (utlWorkflowService != null
+                                && utlWorkflowService.findRoutingByPacketItemId(packetItemId).isPresent()) {
+                        if (utlWorkflowService.canUserReadPacketItem(item, user)) {
+                                return item;
+                        }
+
+                        throw new AccessDeniedException(
+                                        "This UTL sticker is not assigned to this user");
+                }
+
                 if (effectiveItemType(item) == PacketItemType.HARDWARE) {
                         /*
                          * ADMIN:
@@ -4698,11 +4840,14 @@ public class PacketService {
                                         false);
                 }
 
+                boolean showCompanyHeader = utlWorkflowService == null
+                                || utlWorkflowService.findRoutingByPacketItemId(item.getId()).isEmpty();
+
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
                                 stickerNumber,
                                 item.getFloor(),
-                                true,
+                                showCompanyHeader,
                                 iteration,
                                 false);
 
@@ -4736,6 +4881,37 @@ public class PacketService {
                         throw new IllegalArgumentException(
                                         "WR-38 QR endpoint can only be used for plant WR-38");
                 }
+        }
+
+        private String packetContainerStickerNumber(
+                        String plantCode,
+                        UUID packetId) {
+                if (plantCode != null
+                                && "WR-38".equalsIgnoreCase(plantCode.trim())) {
+                        String id = packetId == null
+                                        ? UUID.randomUUID().toString()
+                                        : packetId.toString();
+                        return "WR-PKT-"
+                                        + id.substring(0, Math.min(8, id.length()))
+                                                        .toUpperCase(Locale.ROOT);
+                }
+
+                /* Existing AL packet-container counter behavior is unchanged. */
+                return stickerSequenceService.generateNextStickerNumber();
+        }
+
+        private String firstPacketPlant(List<PacketItem> items) {
+                if (items == null) {
+                        return null;
+                }
+                for (PacketItem item : items) {
+                        if (item != null
+                                        && item.getPlantCode() != null
+                                        && !item.getPlantCode().isBlank()) {
+                                return item.getPlantCode();
+                        }
+                }
+                return null;
         }
 
         private PacketItemType effectiveItemType(

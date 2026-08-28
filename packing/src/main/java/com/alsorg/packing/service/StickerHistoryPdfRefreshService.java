@@ -16,6 +16,7 @@ import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.sticker.StickerHistory;
 import com.alsorg.packing.repository.StickerHistoryRepository;
+import com.alsorg.packing.repository.UtlPacketRoutingRepository;
 import com.alsorg.packing.service.pdf.PdfStickerService;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
@@ -32,6 +33,9 @@ public class StickerHistoryPdfRefreshService {
 
     private final StickerHistoryRepository stickerHistoryRepository;
     private final PdfStickerService pdfStickerService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private UtlPacketRoutingRepository utlPacketRoutingRepository;
 
     public StickerHistoryPdfRefreshService(
             StickerHistoryRepository stickerHistoryRepository,
@@ -90,6 +94,13 @@ public class StickerHistoryPdfRefreshService {
         return history.getPdfData();
     }
 
+    private boolean isUtlPacket(PacketItem item) {
+        return item != null
+                && item.getId() != null
+                && utlPacketRoutingRepository != null
+                && utlPacketRoutingRepository.existsById(item.getId());
+    }
+
     private boolean isWr38(PacketItem item) {
         return item != null && item.getPlantCode() != null
                 && WR38_PLANT_CODE.equalsIgnoreCase(item.getPlantCode().trim());
@@ -110,7 +121,7 @@ public class StickerHistoryPdfRefreshService {
                 item,
                 stickerNumber,
                 item.getFloor(),
-                true,
+                !isUtlPacket(item),
                 iteration);
         return pdfStickerService.generateSticker(pdf);
     }

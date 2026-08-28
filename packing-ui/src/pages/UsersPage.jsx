@@ -123,6 +123,12 @@ const ACCESS_GROUPS = [
 					"Create and manage normal packing records and stickers.",
 			},
 			{
+				value: "UTL_PACKING",
+				label: "UTL Packing",
+				description:
+					"External UTL packing at AL-P3 K&W or WR-38. Must assign each packed packet to one eligible dispatch user before final sticker generation.",
+			},
+			{
 				value: "HARDWARE_PACKING",
 				label: "Hardware Packing",
 				description:
@@ -139,6 +145,12 @@ const ACCESS_GROUPS = [
 				label: "Dispatch",
 				description:
 					"Manage dispatch preparation, challans and trip operations.",
+			},
+			{
+				value: "UTL_DISPATCH",
+				label: "UTL Dispatch",
+				description:
+					"External UTL dispatch restricted to UTL packets explicitly assigned to this username at AL-P3 K&W or WR-38.",
 			},
 			{
 				value: "LOGISTICS",
@@ -482,6 +494,21 @@ const isAllowedRoleCombination = (roles) => {
 	 * a legitimate BOMFlow / MatFlow / AssetFlow responsibility.
 	 */
 	if (cleanRoles.includes("ADMIN")) return false;
+
+	const hasUtlRole =
+		cleanRoles.includes("UTL_PACKING") ||
+		cleanRoles.includes("UTL_DISPATCH");
+
+	if (hasUtlRole) {
+		/*
+		 * UTL is an external-team security boundary. A UTL identity may carry
+		 * UTL_PACKING + UTL_DISPATCH together, but cannot be mixed with normal
+		 * Alsorg/FlowSuite operational roles or another module.
+		 */
+		return cleanRoles.every((role) =>
+			role === "UTL_PACKING" || role === "UTL_DISPATCH"
+		);
+	}
 
 	if (cleanRoles.includes("PACKFLOW_DIRECTOR")) {
 		return !cleanRoles.some((role) =>
@@ -1105,7 +1132,7 @@ const getPackFlowAccessMatrix = (user) => {
 		{
 			key: "NORMAL_INVENTORY",
 			label: "Inventory Items",
-			granted: has("ADMIN", "PACKING"),
+			granted: has("ADMIN", "PACKING", "UTL_PACKING"),
 		},
 		{
 			key: "HARDWARE_INVENTORY",
@@ -1120,7 +1147,7 @@ const getPackFlowAccessMatrix = (user) => {
 		{
 			key: "DISPATCH",
 			label: "Dispatched Items",
-			granted: has("ADMIN", "DISPATCH", "WAREHOUSE", "PACKING"),
+			granted: has("ADMIN", "DISPATCH", "UTL_DISPATCH", "WAREHOUSE", "PACKING"),
 		},
 		{
 			key: "LOGISTICS",
@@ -1207,6 +1234,8 @@ const getUserAccessHealth = (user) => {
 				"WAREHOUSE",
 				"DISPATCH",
 				"LOGISTICS",
+				"UTL_PACKING",
+				"UTL_DISPATCH",
 			].includes(role)
 		);
 
@@ -1219,6 +1248,22 @@ const getUserAccessHealth = (user) => {
 		);
 	}
 
+	const utlIdentity =
+		roles.includes("UTL_PACKING") ||
+		roles.includes("UTL_DISPATCH");
+
+	if (utlIdentity) {
+		if (plants.length !== 1) {
+			issues.push("UTL profile must be assigned to exactly one plant.");
+		} else if (!["AL-P3", "WR-38"].includes(plants[0])) {
+			issues.push("UTL profile may operate only at AL-P3 K&W or WR-38.");
+		}
+
+		if (readWarehouseAccess(user)) {
+			issues.push("UTL profile must not have Warehouse page access.");
+		}
+	}
+
 	return {
 		status:
 			issues.length === 0
@@ -1226,6 +1271,50 @@ const getUserAccessHealth = (user) => {
 				: "REVIEW",
 		issues,
 	};
+};
+
+const WR38_PLANT = {
+	plantCode: "WR-38",
+	plantName: "Wriver Standard Products",
+	packedAreaCode: "PKD-38",
+	fgAreaCode: "FG-38",
+	fgZones: [],
+	warehouseCodes: ["BLS-WH-1", "RTP-WH-2", "WR-38"],
+};
+
+const ensureWr38PlantOption = (source) => {
+	const list = Array.isArray(source) ? source.filter(Boolean) : [];
+	const hasWr38 = list.some((plant) =>
+		String(plant?.plantCode || "").trim().toUpperCase() === "WR-38"
+	);
+
+	return hasWr38 ? list : [...list, WR38_PLANT];
+};
+
+const filterMenuProps = {
+	PaperProps: {
+		sx: {
+			mt: 0.75,
+			borderRadius: 2,
+			border: "1px solid rgba(37,99,235,.18)",
+			background: "var(--pf-surface-elevated, var(--pf-surface, #fff))",
+			color: "var(--pf-text-strong, #0f172a)",
+			boxShadow: "0 18px 46px rgba(15,23,42,.18)",
+			maxHeight: 420,
+			"& .MuiMenuItem-root": {
+				mx: 0.75,
+				my: 0.25,
+				borderRadius: 1.5,
+				fontWeight: 750,
+				"&:hover": { background: "rgba(37,99,235,.08)" },
+				"&.Mui-selected": {
+					background: "rgba(37,99,235,.13)",
+					color: "#2563eb",
+				},
+				"&.Mui-selected:hover": { background: "rgba(37,99,235,.19)" },
+			},
+		},
+	},
 };
 
 /* =========================================================
@@ -1455,11 +1544,13 @@ function UsersPageContent() {
 				"fulfilled"
 			) {
 				setPlants(
-					Array.isArray(
-						plantsResult.value.data
+					ensureWr38PlantOption(
+						Array.isArray(
+							plantsResult.value.data
+						)
+							? plantsResult.value.data
+							: []
 					)
-						? plantsResult.value.data
-						: []
 				);
 			} else if (!background) {
 				setPlants([]);
@@ -1866,11 +1957,26 @@ function UsersPageContent() {
 				next.plantCodes = [];
 			}
 
-			next.warehouseAccess =
-				resolveWarehouseAccessForRoles(
-					cleanRoles,
-					previous.warehouseAccess
+			const utlIdentity =
+				cleanRoles.includes("UTL_PACKING") ||
+				cleanRoles.includes("UTL_DISPATCH");
+
+			if (utlIdentity) {
+				next.warehouseAccess = false;
+				next.driverId = "";
+
+				const allowedUtlPlant = (previous.plantCodes || []).find((plant) =>
+					["AL-P3", "WR-38"].includes(String(plant || "").trim().toUpperCase())
 				);
+
+				next.plantCodes = allowedUtlPlant ? [String(allowedUtlPlant).trim().toUpperCase()] : [];
+			} else {
+				next.warehouseAccess =
+					resolveWarehouseAccessForRoles(
+						cleanRoles,
+						previous.warehouseAccess
+					);
+			}
 
 			return next;
 		});
@@ -1927,6 +2033,10 @@ function UsersPageContent() {
 				return "PackFlow Director can be combined with other FlowSuite modules, but cannot be combined with Packing, Hardware Packing, Warehouse, Dispatch, Logistics or Driver access.";
 			}
 
+			if (roles.includes("UTL_PACKING") || roles.includes("UTL_DISPATCH")) {
+				return "UTL is an external-team profile. UTL Packing and UTL Dispatch may be combined with each other, but not with normal Alsorg/FlowSuite roles.";
+			}
+
 			return "Invalid role combination.";
 		}
 
@@ -1946,6 +2056,17 @@ function UsersPageContent() {
 			form.plantCodes.length === 0
 		) {
 			return "Select at least one plant.";
+		}
+
+		const utlIdentity = roles.includes("UTL_PACKING") || roles.includes("UTL_DISPATCH");
+		if (utlIdentity) {
+			const utlPlants = normalizeArray(form.plantCodes);
+			if (utlPlants.length !== 1) {
+				return "UTL users must be assigned to exactly one plant.";
+			}
+			if (!["AL-P3", "WR-38"].includes(utlPlants[0])) {
+				return "UTL users can be assigned only to AL-P3 K&W or WR-38.";
+			}
 		}
 
 		return "";
@@ -4336,6 +4457,7 @@ function UserEditorDrawer({
 								)
 							}
 							sx={fieldSx}
+							SelectProps={{ MenuProps: filterMenuProps }}
 						>
 							{drivers.map(
 								(driver) => (
@@ -4355,66 +4477,57 @@ function UserEditorDrawer({
 
 				{requiresPlants && (
 					<Box sx={sectionSx}>
-						<Typography
-							sx={sectionTitleSx}
-						>
+						<Typography sx={sectionTitleSx}>
 							Plant Access
 						</Typography>
 
-						<TextField
-							select
-							fullWidth
-							label="Allowed Plants"
-							value={form.plantCodes}
-							onChange={(event) => {
-								const value =
-									event.target.value;
-
-								onUpdate(
-									"plantCodes",
-									typeof value ===
-										"string"
-										? value.split(",")
-										: value
-								);
-							}}
-							sx={fieldSx}
-							SelectProps={{
-								multiple: true,
-								renderValue: (
-									selected
-								) =>
-									selected.length
-										? selected.join(
-											", "
-										)
-										: "Select plants",
-							}}
-						>
-							{plants.map((plant) => {
-								const code =
-									plant.plantCode;
-
-								return (
-									<MenuItem
-										key={code}
-										value={code}
-									>
-										<Checkbox
-											checked={form.plantCodes.includes(
-												code
-											)}
-										/>
-
-										<ListItemText
-											primary={plantName(
-												code
-											)}
-										/>
-									</MenuItem>
-								);
-							})}
-						</TextField>
+						{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) ? (
+							<TextField
+								select
+								fullWidth
+								label="UTL Plant"
+								value={form.plantCodes[0] || ""}
+								onChange={(event) => onUpdate("plantCodes", event.target.value ? [event.target.value] : [])}
+								sx={fieldSx}
+								SelectProps={{ MenuProps: filterMenuProps }}
+								helperText="UTL is isolated to one source plant: AL-P3 K&W or WR-38."
+							>
+								{plants
+									.filter((plant) => ["AL-P3", "WR-38"].includes(String(plant?.plantCode || "").trim().toUpperCase()))
+									.map((plant) => (
+										<MenuItem key={plant.plantCode} value={plant.plantCode}>
+											{plantName(plant.plantCode)}
+										</MenuItem>
+									))}
+							</TextField>
+						) : (
+							<TextField
+								select
+								fullWidth
+								label="Allowed Plants"
+								value={form.plantCodes}
+								onChange={(event) => {
+									const value = event.target.value;
+									onUpdate("plantCodes", typeof value === "string" ? value.split(",") : value);
+								}}
+								sx={fieldSx}
+								SelectProps={{
+									multiple: true,
+									MenuProps: filterMenuProps,
+									renderValue: (selected) => selected.length ? selected.join(", ") : "Select plants",
+								}}
+							>
+								{plants.map((plant) => {
+									const code = plant.plantCode;
+									return (
+										<MenuItem key={code} value={code}>
+											<Checkbox checked={form.plantCodes.includes(code)} />
+											<ListItemText primary={plantName(code)} />
+										</MenuItem>
+									);
+								})}
+							</TextField>
+						)}
 					</Box>
 				)}
 
@@ -4493,6 +4606,12 @@ function UserEditorDrawer({
 							as the other selected PackFlow responsibilities.
 						</Alert>
 					)}
+
+				{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) && (
+					<Alert severity="warning" sx={infoAlertSx}>
+						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38, receives no Warehouse access, and sees/acts only on UTL work assigned to its role.
+					</Alert>
+				)}
 
 				{selectedRoles.includes("PACKFLOW_DIRECTOR") && (
 					<Alert
@@ -4631,6 +4750,7 @@ function AccessProfileSelector({
 								onChange={(event) => updateGroupRoles(group, event.target.value)}
 								SelectProps={{
 									multiple: true,
+									MenuProps: filterMenuProps,
 									renderValue: (selectedValues) =>
 										selectedValues.map((value) => roleMeta(value).label).join(", "),
 								}}
@@ -4680,6 +4800,7 @@ function SmartFilterSelect({
 				)
 			}
 			sx={fieldSx}
+			SelectProps={{ MenuProps: filterMenuProps }}
 		>
 			{options.map(
 				([optionValue, optionLabel]) => (

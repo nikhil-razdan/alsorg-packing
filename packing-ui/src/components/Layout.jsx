@@ -86,7 +86,7 @@ function PackFlowNavigation({
     );
 
   const canOpenNormalInventory =
-    hasAnyRole("ADMIN", "PACKING");
+    hasAnyRole("ADMIN", "PACKING", "UTL_PACKING");
 
   const canOpenHardwareInventory =
     hasAnyRole(
@@ -102,7 +102,9 @@ function PackFlowNavigation({
       "ADMIN",
       "DISPATCH",
       "WAREHOUSE",
-      "PACKING"
+      "PACKING",
+      "UTL_PACKING",
+      "UTL_DISPATCH"
     );
 
   const canOpenLogistics =
@@ -434,7 +436,6 @@ const shell = (collapsed) => ({
   overflow: "hidden",
   transition:
     "grid-template-columns .22s cubic-bezier(.2,.8,.2,1)",
-  willChange: "grid-template-columns",
 });
 
 const main = {

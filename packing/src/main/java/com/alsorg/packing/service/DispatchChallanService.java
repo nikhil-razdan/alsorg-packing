@@ -45,6 +45,9 @@ public class DispatchChallanService {
         private final VehicleRepository vehicleRepository;
         private final DispatchedItemService dispatchedItemService;
 
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private UtlWorkflowService utlWorkflowService;
+
         public DispatchChallanService(
                         ChalaanPdfService pdfService,
                         DispatchedItemRepository dispatchedRepo,
@@ -931,6 +934,10 @@ public class DispatchChallanService {
         private void assertPlantAccess(
                         DispatchedItem item,
                         Set<String> allowedPlants) {
+                if (utlWorkflowService != null) {
+                        utlWorkflowService.assertCurrentUserCanOperate(item);
+                }
+
                 if (allowedPlants == null || allowedPlants.isEmpty()) {
                         return;
                 }

@@ -45,6 +45,9 @@ public class ScannerDispatchService {
     private final PlantLocationService plantLocationService;
     private final DispatchChallanService dispatchChallanService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private UtlWorkflowService utlWorkflowService;
+
     public ScannerDispatchService(
             PacketItemRepository packetItemRepository,
             StickerHistoryRepository stickerHistoryRepository,
@@ -465,6 +468,10 @@ public class ScannerDispatchService {
             Set<String> allowedPlants) {
         if (item == null) {
             throw new RuntimeException("Dispatch item missing");
+        }
+
+        if (utlWorkflowService != null) {
+            utlWorkflowService.assertCurrentUserCanOperate(item);
         }
 
         if (allowedPlants == null || allowedPlants.isEmpty()) {
