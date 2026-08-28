@@ -2,19 +2,22 @@ package com.alsorg.packing.controller.dto.logistics;
 
 import java.util.UUID;
 
+/**
+ * Service result for a generated logistics trip/challan PDF.
+ *
+ * The existing mutable byte[] contract is intentionally retained to avoid
+ * doubling large PDF buffers on every response.
+ */
 public class DispatchTripPdfResult {
 
-    private UUID tripId;
-
-    private String challanNumber;
-
-    private byte[] pdfBytes;
+    private final UUID tripId;
+    private final String challanNumber;
+    private final byte[] pdfBytes;
 
     public DispatchTripPdfResult(
             UUID tripId,
             String challanNumber,
-            byte[] pdfBytes
-    ) {
+            byte[] pdfBytes) {
         this.tripId = tripId;
         this.challanNumber = challanNumber;
         this.pdfBytes = pdfBytes;

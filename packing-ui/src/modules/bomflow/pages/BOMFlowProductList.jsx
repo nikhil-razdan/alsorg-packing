@@ -84,12 +84,34 @@ const statusStyle = (status) => {
 	};
 };
 
+const parseBomDateTime = (value) => {
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+	const raw = String(value || "").trim();
+	if (!raw) return null;
+	const local = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/);
+	if (local) {
+		const ms = Number(String(local[7] || "").padEnd(3, "0").slice(0, 3) || 0);
+		const parsed = new Date(
+			Number(local[1]),
+			Number(local[2]) - 1,
+			Number(local[3]),
+			Number(local[4]),
+			Number(local[5]),
+			Number(local[6] || 0),
+			ms
+		);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const formatDate = (value) => {
 	if (!value) return "-";
-
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "-";
-
+	const date = parseBomDateTime(value);
+	if (!date) return "-";
 	return date.toLocaleString("en-IN", {
 		day: "2-digit",
 		month: "short",

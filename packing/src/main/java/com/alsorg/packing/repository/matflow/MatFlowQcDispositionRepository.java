@@ -5,6 +5,8 @@ import com.alsorg.packing.domain.matflow.MatFlowQcDisposition;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowQcDispositionRepository
@@ -12,6 +14,7 @@ public interface MatFlowQcDispositionRepository
 
     List<MatFlowQcDisposition> findAllByOrderByCreatedAtDesc();
 
-    List<MatFlowQcDisposition> findByQcInspection_IdOrderByCreatedAtAsc(
-            UUID inspectionId);
+    Page<MatFlowQcDisposition> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    List<MatFlowQcDisposition> findByQcInspection_IdOrderByCreatedAtAsc(UUID inspectionId);
 }

@@ -25,7 +25,7 @@ import { Stepper, Step, StepLabel } from "@mui/material";
 import { motion } from "framer-motion";
 import { Switch } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
-import API from "../services/api";
+import API, { secureFetch } from "../services/api";
 import ExcelJS from "exceljs";
 import usePackFlowDataRefresh
   from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -2164,7 +2164,7 @@ function ZohoItemsPage() {
       delete finalOptions.headers;
     }
 
-    return fetch(url, finalOptions);
+    return secureFetch(url, finalOptions);
   };
 
   const [customPacketNo, setCustomPacketNo] = useState("");
@@ -3860,11 +3860,11 @@ function ZohoItemsPage() {
       ) {
         try {
           setLoading(
-            true
+            !preferCache
           );
 
           setInventoryFullModeLoading(
-            true
+            !preferCache
           );
 
           const fullRows =
@@ -3906,11 +3906,13 @@ function ZohoItemsPage() {
               error
             );
 
-            showUiAlert(
-              "error",
-              error?.message ||
-              "Failed to load inventory"
-            );
+            if (!preferCache) {
+              showUiAlert(
+                "error",
+                error?.message ||
+                "Failed to load inventory"
+              );
+            }
           }
 
           return [];
@@ -3979,11 +3981,13 @@ function ZohoItemsPage() {
                 error
               );
 
-              showUiAlert(
-                "error",
-                error?.message ||
-                "Hardware inventory could not be loaded"
-              );
+              if (!preferCache) {
+                showUiAlert(
+                  "error",
+                  error?.message ||
+                  "Hardware inventory could not be loaded"
+                );
+              }
             }
           }
         );
@@ -4204,11 +4208,13 @@ function ZohoItemsPage() {
           );
         }
 
-        showUiAlert(
-          "error",
-          error?.message ||
-          "Failed to load inventory"
-        );
+        if (!preferCache) {
+          showUiAlert(
+            "error",
+            error?.message ||
+            "Failed to load inventory"
+          );
+        }
 
         return (
           cached?.items ||
@@ -4244,9 +4250,16 @@ function ZohoItemsPage() {
 
   usePackFlowDataRefresh(
     "inventory",
-    async () => {
+    async (detail) => {
+      const background =
+        Boolean(detail?.background);
+
       await fetchItems({
-        preferCache: false,
+        /*
+         * Cached rows stay painted during background synchronization while the
+         * authoritative server page is still re-fetched underneath.
+         */
+        preferCache: background,
         refreshHardware: true,
       });
 

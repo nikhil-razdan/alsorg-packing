@@ -1,7 +1,6 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -12,12 +11,14 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackHistoryResponse;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackPreviewResponse;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackRequest;
@@ -43,7 +44,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 public class AdminPacketLifecycleService {
 
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final int DEFAULT_HISTORY_PAGE_SIZE = 25;
+    private static final int MAX_HISTORY_PAGE_SIZE = 100;
 
     private final PacketItemRepository packetItemRepository;
     private final DispatchedItemRepository dispatchedItemRepository;
@@ -333,7 +335,7 @@ public class AdminPacketLifecycleService {
                 finalDispatchedItem,
                 finalState);
 
-        LocalDateTime now = LocalDateTime.now(APP_ZONE);
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
         AdminPacketRollbackAudit audit = new AdminPacketRollbackAudit();
 
@@ -498,8 +500,12 @@ public class AdminPacketLifecycleService {
     @Transactional(readOnly = true)
     public Page<AdminPacketRollbackHistoryResponse> getHistory(
             Pageable pageable) {
+        Pageable safePageable = boundedHistoryPageable(
+                pageable);
+
         return rollbackAuditRepository
-                .findAllByOrderByChangedAtDesc(pageable)
+                .findAllByOrderByChangedAtDesc(
+                        safePageable)
                 .map(audit -> new AdminPacketRollbackHistoryResponse(
                         audit.getId(),
                         audit.getPacketItemId(),
@@ -510,6 +516,32 @@ public class AdminPacketLifecycleService {
                         audit.getChangedBy(),
                         audit.getChangedAt(),
                         audit.getChangeSummaryJson()));
+    }
+
+    private Pageable boundedHistoryPageable(
+            Pageable pageable) {
+
+        if (pageable == null
+                || pageable.isUnpaged()) {
+            return PageRequest.of(
+                    0,
+                    DEFAULT_HISTORY_PAGE_SIZE);
+        }
+
+        int pageNumber = Math.max(
+                0,
+                pageable.getPageNumber());
+
+        int pageSize = Math.max(
+                1,
+                Math.min(
+                        MAX_HISTORY_PAGE_SIZE,
+                        pageable.getPageSize()));
+
+        return PageRequest.of(
+                pageNumber,
+                pageSize,
+                pageable.getSort());
     }
 
     private void rollbackDispatchedToReadyToDispatch(
@@ -970,7 +1002,7 @@ public class AdminPacketLifecycleService {
                                 Math.toIntExact(
                                         remainingCount));
                         trip.setUpdatedAt(
-                                LocalDateTime.now(APP_ZONE));
+                                LocalDateTime.now(TimeZoneConfig.APP_ZONE));
 
                         logisticsTripRepository.save(
                                 trip);

@@ -7,20 +7,20 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
 
 /**
- * Dedicated security chain for the token-secured HRFlow public portal APIs.
+ * Dedicated security chain for HRFlow candidate/onboarding token APIs.
  *
- * IMPORTANT:
- * - This chain matches ONLY /api/hrflow/public/**
- * - It does not alter PackFlow, BOMFlow, MatFlow, Materials, Clients,
- *   Users, or the authenticated HRFlow workspace.
- * - Candidate/onboarding access is authenticated by the opaque HRFlow token
- *   carried in the URL and validated inside HrCandidateTokenService.
+ * This chain deliberately matches ONLY /api/hrflow/public/**. It therefore does
+ * not change PackFlow, BOMFlow, MatFlow, Materials, Clients, Users, or the
+ * authenticated HRFlow workspace.
  *
- * The public portal is a stateless JSON API. CSRF protection is therefore
- * disabled ONLY for this matcher. Without this, GET can work while POST/PUT
- * submissions are rejected by Spring Security's CSRF filter.
+ * Public HRFlow requests are authorized by a high-entropy opaque token that is
+ * validated in HrCandidateTokenService. They are not authenticated by the
+ * FlowSuite browser session/cookie, so CSRF is disabled only for this isolated,
+ * stateless matcher. The authenticated application remains governed by the main
+ * FlowSuite security chain and its staged CSRF policy.
  */
 @Configuration
 public class HrFlowPublicSecurityConfig {
@@ -32,40 +32,45 @@ public class HrFlowPublicSecurityConfig {
                 .securityMatcher("/api/hrflow/public/**")
 
                 /*
-                 * The token itself is the authorization secret for these
-                 * stateless endpoints. They do not use a browser login session.
+                 * Opaque HRFlow token endpoints are stateless and do not rely on
+                 * automatically submitted browser credentials. Keep the CSRF
+                 * exception scoped strictly to this matcher.
                  */
                 .csrf(csrf -> csrf.disable())
 
-                /*
-                 * Preserve the application's existing CORS configuration.
-                 * This is required when the frontend and backend are deployed
-                 * on different origins.
-                 */
+                /* Preserve the application's central CORS configuration. */
                 .cors(Customizer.withDefaults())
 
-                /*
-                 * Never create/use an authenticated FlowSuite HTTP session for
-                 * a candidate or joinee portal request.
-                 */
+                /* Never create or reuse a FlowSuite login session here. */
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 /*
-                 * The controller/service layer validates the HRFlow token.
-                 * Spring Security must allow the request to reach that layer.
+                 * Do not load/save a FlowSuite SecurityContext for token portal
+                 * requests. Authorization is performed by HrCandidateTokenService.
                  */
-                .authorizeHttpRequests(auth ->
-                        auth.anyRequest().permitAll()
-                )
+                .securityContext(context -> context.disable())
 
-                /*
-                 * Public token endpoints do not need login redirects, saved
-                 * requests, or server-side security-context persistence.
-                 */
+                /* Public APIs do not need saved-request or logout machinery. */
                 .requestCache(cache -> cache.disable())
-                .securityContext(context -> context.requireExplicitSave(false));
+                .logout(logout -> logout.disable())
+
+                /* Allow the request to reach the opaque-token validation layer. */
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+
+                /*
+                 * Tokens currently remain in the URL for frontend compatibility.
+                 * Prevent token-bearing URLs from being sent as referrers or indexed.
+                 * Spring Security's normal cache-control/content-type/frame headers
+                 * remain enabled as well.
+                 */
+                .headers(headers -> headers
+                        .addHeaderWriter(new StaticHeadersWriter(
+                                "Referrer-Policy",
+                                "no-referrer"))
+                        .addHeaderWriter(new StaticHeadersWriter(
+                                "X-Robots-Tag",
+                                "noindex, nofollow, noarchive, nosnippet")));
 
         return http.build();
     }

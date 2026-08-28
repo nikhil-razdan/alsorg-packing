@@ -25,8 +25,7 @@ import java.util.UUID;
         @Index(name = "idx_mf_transfer_to", columnList = "to_location_id"),
         @Index(name = "idx_mf_transfer_requisition", columnList = "requisition_id")
 })
-public class MatFlowTransferOrder
-        extends MatFlowBaseEntity {
+public class MatFlowTransferOrder extends MatFlowBaseEntity {
 
     @Column(name = "transfer_number", nullable = false, length = 120)
     public String transferNumber;
@@ -50,10 +49,6 @@ public class MatFlowTransferOrder
     @Column(name = "route_sequence_no", nullable = false)
     public Integer routeSequenceNo;
 
-    /**
-     * Downstream transfer order in a process chain can reference
-     * the previous planned transfer.
-     */
     @Column(name = "predecessor_transfer_id")
     public UUID predecessorTransferId;
 

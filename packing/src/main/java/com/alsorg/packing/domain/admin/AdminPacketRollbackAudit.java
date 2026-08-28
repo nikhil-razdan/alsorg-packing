@@ -41,24 +41,21 @@ public class AdminPacketRollbackAudit {
     @Column(
             name = "before_snapshot_json",
             nullable = false,
-            columnDefinition = "TEXT"
-    )
+            columnDefinition = "TEXT")
     private String beforeSnapshotJson;
 
     @Lob
     @Column(
             name = "after_snapshot_json",
             nullable = false,
-            columnDefinition = "TEXT"
-    )
+            columnDefinition = "TEXT")
     private String afterSnapshotJson;
 
     @Lob
     @Column(
             name = "change_summary_json",
             nullable = false,
-            columnDefinition = "TEXT"
-    )
+            columnDefinition = "TEXT")
     private String changeSummaryJson;
 
     public UUID getId() {

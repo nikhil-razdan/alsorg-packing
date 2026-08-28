@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +22,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.qrcodegenerator.QRCodeGenerator;
 import com.alsorg.packing.service.pdf.dto.StickerPdfData;
 
@@ -36,6 +36,10 @@ public class PdfStickerService {
     private static final Color WHITE = Color.WHITE;
 
     public byte[] generateSticker(StickerPdfData data) {
+
+        if (data == null) {
+            throw new IllegalArgumentException("Sticker PDF data is required");
+        }
 
         PDFont regular = PDType1Font.HELVETICA;
         PDFont bold = PDType1Font.HELVETICA_BOLD;
@@ -1206,7 +1210,7 @@ public class PdfStickerService {
     }
 
     private String todayIndia() {
-        return LocalDateTime.now(ZoneId.of("Asia/Kolkata"))
+        return LocalDateTime.now(TimeZoneConfig.APP_ZONE)
                 .format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
     }
 

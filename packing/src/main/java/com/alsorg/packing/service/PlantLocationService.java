@@ -1,8 +1,9 @@
 package com.alsorg.packing.service;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
@@ -54,21 +55,31 @@ public class PlantLocationService {
     );
 
     public PlantConfig getPlantConfig(String plantCode) {
-        PlantConfig config = PLANTS.get(plantCode);
+        String cleanPlant = normalizeCode(plantCode);
+
+        PlantConfig config = PLANTS.get(cleanPlant);
 
         if (config == null) {
-            throw new RuntimeException("Invalid plant code: " + plantCode);
+            throw new IllegalArgumentException(
+                    "Invalid plant code: " + plantCode);
         }
 
         return config;
     }
 
     public List<PlantConfig> getAllPlants() {
-        return PLANTS.values().stream().toList();
+        return PLANTS.values()
+                .stream()
+                .sorted(Comparator.comparing(
+                        PlantConfig::plantCode))
+                .toList();
     }
 
     public boolean isValidPlant(String plantCode) {
-        return PLANTS.containsKey(plantCode);
+        String cleanPlant = normalizeCode(plantCode);
+
+        return cleanPlant != null
+                && PLANTS.containsKey(cleanPlant);
     }
 
     public boolean isValidFgZone(String plantCode, String fgZoneCode) {
@@ -78,17 +89,30 @@ public class PlantLocationService {
             return fgZoneCode == null || fgZoneCode.isBlank();
         }
 
-        return fgZoneCode != null && config.fgZones().contains(fgZoneCode);
+        String cleanZone = normalizeCode(fgZoneCode);
+
+        return cleanZone != null
+                && config.fgZones().stream()
+                        .anyMatch(zone -> zone.equalsIgnoreCase(cleanZone));
     }
 
     public boolean isWarehouseAllowed(String plantCode, String warehouseCode) {
-        return getPlantConfig(plantCode)
-                .warehouseCodes()
-                .contains(warehouseCode);
+        String cleanWarehouse = normalizeCode(warehouseCode);
+
+        return cleanWarehouse != null
+                && getPlantConfig(plantCode)
+                        .warehouseCodes()
+                        .stream()
+                        .anyMatch(value -> value.equalsIgnoreCase(cleanWarehouse));
     }
 
     public java.util.Set<String> getAllPlantCodes() {
-        return new java.util.LinkedHashSet<>(PLANTS.keySet());
+        return PLANTS.keySet()
+                .stream()
+                .sorted()
+                .collect(
+                        java.util.stream.Collectors.toCollection(
+                                java.util.LinkedHashSet::new));
     }
 
     public String buildFgLocation(String plantCode, String fgZoneCode) {
@@ -104,9 +128,11 @@ public class PlantLocationService {
             throw new RuntimeException("FG zone required for plant: " + plantCode);
         }
 
-        String cleanZone = fgZoneCode.trim();
+        String cleanZone = normalizeCode(fgZoneCode);
 
-        if (!config.fgZones().contains(cleanZone)) {
+        if (cleanZone == null ||
+                config.fgZones().stream()
+                        .noneMatch(zone -> zone.equalsIgnoreCase(cleanZone))) {
             throw new RuntimeException(
                     "Invalid FG zone " + cleanZone + " for plant " + plantCode
             );
@@ -114,4 +140,20 @@ public class PlantLocationService {
 
         return fgAreaCode + "-" + cleanZone;
     }
+    private String normalizeCode(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value
+                .trim()
+                .toUpperCase(Locale.ROOT);
+
+        return clean.isBlank()
+                ? null
+                : clean;
+    }
+
 }

@@ -1,16 +1,20 @@
 package com.alsorg.packing.domain.activity;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
-import jakarta.persistence.*;
+import com.alsorg.packing.config.TimeZoneConfig;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "activity_logs")
 public class ActivityLog {
-
-    private static final ZoneId APP_ZONE =
-            ZoneId.of("Asia/Kolkata");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,8 +40,7 @@ public class ActivityLog {
     @PrePersist
     public void beforeSave() {
         if (createdAt == null) {
-            createdAt =
-                    LocalDateTime.now(APP_ZONE);
+            createdAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
         }
     }
 
@@ -49,9 +52,7 @@ public class ActivityLog {
         return zohoItemId;
     }
 
-    public void setZohoItemId(
-            String zohoItemId
-    ) {
+    public void setZohoItemId(String zohoItemId) {
         this.zohoItemId = zohoItemId;
     }
 
@@ -59,9 +60,7 @@ public class ActivityLog {
         return action;
     }
 
-    public void setAction(
-            String action
-    ) {
+    public void setAction(String action) {
         this.action = action;
     }
 
@@ -69,9 +68,7 @@ public class ActivityLog {
         return performedBy;
     }
 
-    public void setPerformedBy(
-            String performedBy
-    ) {
+    public void setPerformedBy(String performedBy) {
         this.performedBy = performedBy;
     }
 
@@ -79,9 +76,7 @@ public class ActivityLog {
         return role;
     }
 
-    public void setRole(
-            String role
-    ) {
+    public void setRole(String role) {
         this.role = role;
     }
 
@@ -89,9 +84,7 @@ public class ActivityLog {
         return fromStatus;
     }
 
-    public void setFromStatus(
-            String fromStatus
-    ) {
+    public void setFromStatus(String fromStatus) {
         this.fromStatus = fromStatus;
     }
 
@@ -99,9 +92,7 @@ public class ActivityLog {
         return toStatus;
     }
 
-    public void setToStatus(
-            String toStatus
-    ) {
+    public void setToStatus(String toStatus) {
         this.toStatus = toStatus;
     }
 
@@ -109,9 +100,7 @@ public class ActivityLog {
         return remarks;
     }
 
-    public void setRemarks(
-            String remarks
-    ) {
+    public void setRemarks(String remarks) {
         this.remarks = remarks;
     }
 
@@ -119,9 +108,7 @@ public class ActivityLog {
         return createdAt;
     }
 
-    public void setCreatedAt(
-            LocalDateTime createdAt
-    ) {
+    public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
 }

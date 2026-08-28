@@ -28,6 +28,8 @@ public class LoginAttemptService {
     private static final int MAX_PRINCIPAL_WINDOWS = 10_000;
     private static final int MAX_IP_WINDOWS = 5_000;
 
+    private static final String OVERFLOW_KEY = "\u0000flowsuite-overflow";
+
     private final Map<String, AttemptWindow> principalWindows = new ConcurrentHashMap<>();
     private final Map<String, AttemptWindow> ipWindows = new ConcurrentHashMap<>();
 
@@ -62,11 +64,17 @@ public class LoginAttemptService {
         String principalKey = principalKey(username);
 
         long ipRetry = retryAfterSeconds(
-                ipWindows.get(ipKey),
+                windowForLookup(
+                        ipWindows,
+                        ipKey,
+                        MAX_IP_WINDOWS),
                 now);
 
         long principalRetry = retryAfterSeconds(
-                principalWindows.get(principalKey),
+                windowForLookup(
+                        principalWindows,
+                        principalKey,
+                        MAX_PRINCIPAL_WINDOWS),
                 now);
 
         long retryAfter = Math.max(
@@ -89,20 +97,22 @@ public class LoginAttemptService {
         String ipKey = normalizeIp(clientIp);
         String principalKey = principalKey(username);
 
-        ipWindows
-                .computeIfAbsent(
-                        ipKey,
-                        ignored -> new AttemptWindow())
+        windowForFailure(
+                ipWindows,
+                ipKey,
+                MAX_IP_WINDOWS,
+                now)
                 .recordFailure(
                         now,
                         windowDuration,
                         blockDuration,
                         maxFailuresPerIp);
 
-        principalWindows
-                .computeIfAbsent(
-                        principalKey,
-                        ignored -> new AttemptWindow())
+        windowForFailure(
+                principalWindows,
+                principalKey,
+                MAX_PRINCIPAL_WINDOWS,
+                now)
                 .recordFailure(
                         now,
                         windowDuration,
@@ -180,9 +190,7 @@ public class LoginAttemptService {
 
         long operation = operations.incrementAndGet();
 
-        if ((operation & 0xFFL) != 0L
-                && principalWindows.size() < MAX_PRINCIPAL_WINDOWS
-                && ipWindows.size() < MAX_IP_WINDOWS) {
+        if ((operation & 0xFFL) != 0L) {
             return;
         }
 
@@ -190,19 +198,16 @@ public class LoginAttemptService {
 
         cleanupMap(
                 principalWindows,
-                now,
-                MAX_PRINCIPAL_WINDOWS);
+                now);
 
         cleanupMap(
                 ipWindows,
-                now,
-                MAX_IP_WINDOWS);
+                now);
     }
 
     private void cleanupMap(
             Map<String, AttemptWindow> map,
-            Instant now,
-            int maxEntries) {
+            Instant now) {
 
         for (Map.Entry<String, AttemptWindow> entry : map.entrySet()) {
             AttemptWindow window = entry.getValue();
@@ -219,23 +224,53 @@ public class LoginAttemptService {
             }
         }
 
-        if (map.size() <= maxEntries) {
-            return;
+    }
+
+    private AttemptWindow windowForLookup(
+            Map<String, AttemptWindow> map,
+            String key,
+            int maxEntries) {
+
+        AttemptWindow direct = map.get(key);
+
+        if (direct != null) {
+            return direct;
         }
 
-        int target = Math.max(
-                1,
-                (int) (maxEntries * 0.9));
+        if (map.size() >= maxEntries) {
+            return map.get(OVERFLOW_KEY);
+        }
 
-        for (Map.Entry<String, AttemptWindow> entry : map.entrySet()) {
-            if (map.size() <= target) {
-                break;
+        return null;
+    }
+
+    private AttemptWindow windowForFailure(
+            Map<String, AttemptWindow> map,
+            String key,
+            int maxEntries,
+            Instant now) {
+
+        AttemptWindow direct = map.get(key);
+
+        if (direct != null) {
+            return direct;
+        }
+
+        if (map.size() >= maxEntries) {
+            cleanupMap(
+                    map,
+                    now);
+
+            if (map.size() >= maxEntries) {
+                return map.computeIfAbsent(
+                        OVERFLOW_KEY,
+                        ignored -> new AttemptWindow());
             }
-
-            map.remove(
-                    entry.getKey(),
-                    entry.getValue());
         }
+
+        return map.computeIfAbsent(
+                key,
+                ignored -> new AttemptWindow());
     }
 
     public record Decision(

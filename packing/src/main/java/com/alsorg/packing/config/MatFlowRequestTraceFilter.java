@@ -8,8 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
-import java.util.UUID;
-
 import org.slf4j.MDC;
 
 import org.springframework.core.Ordered;
@@ -18,6 +16,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.alsorg.packing.security.RequestCorrelationFilter;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -29,7 +29,7 @@ public class MatFlowRequestTraceFilter
     @Override
     protected boolean shouldNotFilter(
             HttpServletRequest request) {
-        String path = request.getRequestURI();
+        String path = request.getServletPath();
 
         return path == null ||
                 !path.startsWith(
@@ -42,17 +42,29 @@ public class MatFlowRequestTraceFilter
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
 
-        String requestId = clean(
-                request.getHeader(
-                        REQUEST_ID_HEADER));
+        Object existing =
+                request.getAttribute(
+                        RequestCorrelationFilter.REQUEST_ATTRIBUTE);
+
+        String requestId =
+                existing instanceof String text
+                        ? RequestCorrelationFilter.resolveOrCreate(
+                                text)
+                        : null;
 
         if (requestId == null) {
-            requestId = UUID.randomUUID()
-                    .toString();
+            requestId = RequestCorrelationFilter
+                    .resolveOrCreate(
+                            request.getHeader(
+                                    REQUEST_ID_HEADER));
+
+            request.setAttribute(
+                    RequestCorrelationFilter.REQUEST_ATTRIBUTE,
+                    requestId);
         }
 
         response.setHeader(
-                REQUEST_ID_HEADER,
+                RequestCorrelationFilter.HEADER,
                 requestId);
 
         MDC.put(

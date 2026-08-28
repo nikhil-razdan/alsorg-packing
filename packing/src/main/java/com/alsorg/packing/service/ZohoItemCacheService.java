@@ -2,14 +2,21 @@ package com.alsorg.packing.service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import jakarta.annotation.PostConstruct;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.ZohoItemUIResponse;
+import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.integration.zoho.ZohoInventoryClient;
 import com.alsorg.packing.integration.zoho.dto.ZohoItemDTO;
 import com.alsorg.packing.repository.DispatchedItemRepository;
@@ -17,185 +24,133 @@ import com.alsorg.packing.repository.DispatchedItemRepository;
 @Service
 public class ZohoItemCacheService {
 
+    private static final Logger log = LoggerFactory.getLogger(ZohoItemCacheService.class);
+
+    private static final int MAX_PAGE_SIZE = 200;
+    private static final int MAX_SEARCH_LENGTH = 200;
+    private static final int DISPATCH_LOOKUP_CHUNK = 500;
+
     private final ZohoInventoryClient zohoInventoryClient;
     private final DispatchedItemRepository dispatchedItemRepository;
 
-    private List<ZohoItemDTO> cachedItems = new ArrayList<>();
-    private LocalDate cacheLoadedDate;
+    private volatile List<ZohoItemDTO> cachedItems = List.of();
+    private volatile LocalDate cacheLoadedDate;
 
-    /**
-     * Controlled via application-*.yml
-     * Default = true (safe)
-     */
     @Value("${zoho.enabled:true}")
     private boolean zohoEnabled;
 
     public ZohoItemCacheService(
             ZohoInventoryClient zohoInventoryClient,
-            DispatchedItemRepository dispatchedItemRepository
-    ) {
+            DispatchedItemRepository dispatchedItemRepository) {
         this.zohoInventoryClient = zohoInventoryClient;
         this.dispatchedItemRepository = dispatchedItemRepository;
     }
 
-    /* ===============================
-       CACHE LOAD
-       =============================== */
+    public synchronized void load(
+            List<ZohoItemDTO> items) {
+        List<ZohoItemDTO> safeItems = items == null
+                ? List.of()
+                : items.stream()
+                        .filter(item -> item != null)
+                        .toList();
 
-    public void load(List<ZohoItemDTO> items) {
-        this.cachedItems = items;
-        this.cacheLoadedDate = LocalDate.now();
-        System.out.println(">>> CACHE LOADED WITH " + items.size() + " ITEMS");
+        this.cachedItems = List.copyOf(safeItems);
+        this.cacheLoadedDate = LocalDate.now(TimeZoneConfig.APP_ZONE);
+
+        log.info("Zoho cache loaded: items={}", safeItems.size());
     }
-
-    /* ===============================
-       STARTUP INITIALIZATION
-       =============================== */
 
     @PostConstruct
     public void init() {
-
         if (!zohoEnabled) {
-            System.out.println("Zoho integration disabled via config. Skipping cache load.");
+            log.info("Zoho integration disabled; startup cache load skipped");
             return;
         }
 
         try {
-            System.out.println("Loading Zoho items on startup...");
-            List<ZohoItemDTO> items = zohoInventoryClient.fetchAllItems();
-            load(items);
-            System.out.println("Zoho cache loaded on startup. Total: " + items.size());
-        } catch (Exception ex) {
-            System.err.println("⚠ Zoho cache failed to load. Application will continue.");
-            ex.printStackTrace();
+            load(zohoInventoryClient.fetchAllItems());
+        } catch (Exception exception) {
+            /*
+             * Zoho is an optional integration. Startup must remain available when
+             * the external provider is down; the cache can be refreshed later.
+             */
+            log.warn(
+                    "Zoho cache failed to load during startup; application will continue",
+                    exception);
         }
     }
 
-    /* ===============================
-       PAGINATION (BACKEND)
-       =============================== */
+    public List<ZohoItemDTO> getPage(
+            int page,
+            int pageSize) {
+        List<ZohoItemDTO> snapshot = cachedItems;
 
-    public List<ZohoItemDTO> getPage(int page, int pageSize) {
-
-        if (cachedItems.isEmpty()) {
+        if (snapshot.isEmpty()) {
             return List.of();
         }
 
-        int fromIndex = Math.max((page - 1) * pageSize, 0);
+        int safePage = Math.max(page, 1);
+        int safePageSize = clampPageSize(pageSize);
+        long fromLong = (long) (safePage - 1) * safePageSize;
 
-        if (fromIndex >= cachedItems.size()) {
+        if (fromLong >= snapshot.size() || fromLong > Integer.MAX_VALUE) {
             return List.of();
         }
 
-        int toIndex = Math.min(fromIndex + pageSize, cachedItems.size());
-        return cachedItems.subList(fromIndex, toIndex);
+        int fromIndex = (int) fromLong;
+        int toIndex = Math.min(fromIndex + safePageSize, snapshot.size());
+
+        return List.copyOf(snapshot.subList(fromIndex, toIndex));
     }
 
-    /* ===============================
-       PAGINATION (UI)
-       =============================== */
+    public List<ZohoItemUIResponse> getPageForUI(
+            int page,
+            int perPage,
+            String search) {
+        List<ZohoItemDTO> snapshot = cachedItems;
+        String cleanSearch = normalizeSearch(search);
+        Set<String> dispatchedIds = dispatchedIdsSnapshot(snapshot);
 
-    public List<ZohoItemUIResponse> getPageForUI(int page, int perPage, String search) {
-
-        // 🔥 STEP 1: REMOVE DISPATCHED ITEMS
-        List<ZohoItemDTO> filtered = cachedItems.stream()
-            .filter(item ->
-                !dispatchedItemRepository.existsByZohoItemId(
-                    item.getZohoItemId()
-                )
-            )
-            .toList();
-
-        // 🔥 STEP 2: APPLY SEARCH (NEW)
-        if (search != null && !search.isBlank()) {
-            String s = search.toLowerCase();
-
-            filtered = filtered.stream()
-                .filter(item ->
-                    (item.getName() != null && item.getName().toLowerCase().contains(s)) ||
-                    (item.getSku() != null && item.getSku().toLowerCase().contains(s))
-                )
+        List<ZohoItemDTO> filtered = snapshot.stream()
+                .filter(item -> !dispatchedIds.contains(item.getZohoItemId()))
+                .filter(item -> matchesSearch(item, cleanSearch))
                 .toList();
-        }
 
-        // 🔥 STEP 3: PAGINATION (FIXED VARIABLE BUG HERE)
-        int fromIndex = Math.max((page - 1) * perPage, 0);
+        int safePage = Math.max(page, 1);
+        int safePerPage = clampPageSize(perPage);
+        long fromLong = (long) (safePage - 1) * safePerPage;
 
-        if (fromIndex >= filtered.size()) {
+        if (fromLong >= filtered.size() || fromLong > Integer.MAX_VALUE) {
             return List.of();
         }
 
-        int toIndex = Math.min(fromIndex + perPage, filtered.size());
+        int fromIndex = (int) fromLong;
+        int toIndex = Math.min(fromIndex + safePerPage, filtered.size());
 
-        // 🔥 STEP 4: MAP TO UI RESPONSE
-        return filtered.subList(fromIndex, toIndex).stream()
-            .map(item -> {
-                ZohoItemUIResponse ui = new ZohoItemUIResponse();
-
-                ui.setZohoItemId(item.getZohoItemId());
-                ui.setName(item.getName());
-                ui.setSku(item.getSku());
-
-                ui.setLocation(
-                    item.getLocation() != null && !item.getLocation().isBlank()
-                        ? item.getLocation()
-                        : "-"
-                );
-
-                ui.setClientName(
-                    item.getClientName() != null && !item.getClientName().isBlank()
-                        ? item.getClientName()
-                        : "-"
-                );
-
-                ui.setClientAddress(
-                    item.getClientAddress() != null && !item.getClientAddress().isBlank()
-                        ? item.getClientAddress()
-                        : "-"
-                );
-
-                ui.setDimensions(item.getDimensions());
-                ui.setWeight(item.getWeight());
-
-                ui.setStock(1);
-                ui.setPacked(false);
-
-                return ui;
-            })
-            .toList();
-    }
-
-    /* ===============================
-       HELPERS
-       =============================== */
-
-    public int totalCount(String search) {
-
-        List<ZohoItemDTO> filtered = cachedItems.stream()
-            .filter(item ->
-                !dispatchedItemRepository.existsByZohoItemId(
-                    item.getZohoItemId()
-                )
-            )
-            .toList();
-
-        // 🔥 APPLY SEARCH
-        if (search != null && !search.isBlank()) {
-            String s = search.toLowerCase();
-
-            filtered = filtered.stream()
-                .filter(item ->
-                    (item.getName() != null && item.getName().toLowerCase().contains(s)) ||
-                    (item.getSku() != null && item.getSku().toLowerCase().contains(s))
-                )
+        return filtered.subList(fromIndex, toIndex)
+                .stream()
+                .map(this::toUiResponse)
                 .toList();
-        }
-
-        return filtered.size();
     }
-    
+
+    public int totalCount(
+            String search) {
+        List<ZohoItemDTO> snapshot = cachedItems;
+        String cleanSearch = normalizeSearch(search);
+        Set<String> dispatchedIds = dispatchedIdsSnapshot(snapshot);
+
+        long count = snapshot.stream()
+                .filter(item -> !dispatchedIds.contains(item.getZohoItemId()))
+                .filter(item -> matchesSearch(item, cleanSearch))
+                .count();
+
+        return count > Integer.MAX_VALUE
+                ? Integer.MAX_VALUE
+                : (int) count;
+    }
+
     public int totalCount() {
-        return totalCount(null); // 🔥 default = no search
+        return totalCount(null);
     }
 
     public boolean isEmpty() {
@@ -206,33 +161,133 @@ public class ZohoItemCacheService {
         return cacheLoadedDate;
     }
 
-    public ZohoItemDTO findByZohoItemId(String zohoItemId) {
-        return cachedItems.stream()
-                .filter(item ->
-                        zohoItemId != null
-                                && item.getZohoItemId() != null
-                                && item.getZohoItemId().equals(zohoItemId)
-                )
-                .findFirst()
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Zoho item not found in cache: " + zohoItemId
-                        )
-                );
-    }
-    
-    public synchronized void refreshCache() {
-        try {
-            System.out.println("🔄 Refreshing Zoho cache...");
+    public ZohoItemDTO findByZohoItemId(
+            String zohoItemId) {
+        String cleanId = zohoItemId == null
+                ? ""
+                : zohoItemId.trim();
 
+        if (cleanId.isBlank() || cleanId.length() > 300) {
+            throw new IllegalArgumentException("Invalid Zoho item id");
+        }
+
+        return cachedItems.stream()
+                .filter(item -> cleanId.equals(item.getZohoItemId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Zoho item not found in cache: " + cleanId));
+    }
+
+    public synchronized void refreshCache() {
+        if (!zohoEnabled) {
+            log.info("Zoho integration disabled; cache refresh skipped");
+            return;
+        }
+
+        try {
             List<ZohoItemDTO> items = zohoInventoryClient.fetchAllItems();
             load(items);
-
-            System.out.println("✅ Zoho cache refreshed: " + items.size());
-
-        } catch (Exception ex) {
-            System.err.println("❌ Zoho cache refresh failed");
-            ex.printStackTrace();
+            log.info("Zoho cache refreshed: items={}", items == null ? 0 : items.size());
+        } catch (Exception exception) {
+            /* Preserve the previous good cache when a refresh fails. */
+            log.warn("Zoho cache refresh failed; previous cache retained", exception);
         }
+    }
+
+    private Set<String> dispatchedIdsSnapshot(
+            List<ZohoItemDTO> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) {
+            return Set.of();
+        }
+
+        List<String> ids = snapshot.stream()
+                .map(ZohoItemDTO::getZohoItemId)
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<String> result = new LinkedHashSet<>();
+
+        for (int start = 0; start < ids.size(); start += DISPATCH_LOOKUP_CHUNK) {
+            int end = Math.min(start + DISPATCH_LOOKUP_CHUNK, ids.size());
+
+            for (DispatchedItem item : dispatchedItemRepository.findAllById(
+                    ids.subList(start, end))) {
+                if (item != null
+                        && item.getZohoItemId() != null
+                        && !item.getZohoItemId().isBlank()) {
+                    result.add(item.getZohoItemId());
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private ZohoItemUIResponse toUiResponse(
+            ZohoItemDTO item) {
+        ZohoItemUIResponse ui = new ZohoItemUIResponse();
+
+        ui.setZohoItemId(item.getZohoItemId());
+        ui.setName(item.getName());
+        ui.setSku(item.getSku());
+        ui.setLocation(nonBlankOrDash(item.getLocation()));
+        ui.setClientName(nonBlankOrDash(item.getClientName()));
+        ui.setClientAddress(nonBlankOrDash(item.getClientAddress()));
+        ui.setDimensions(item.getDimensions());
+        ui.setWeight(item.getWeight());
+        ui.setStock(1);
+        ui.setPacked(false);
+
+        return ui;
+    }
+
+    private boolean matchesSearch(
+            ZohoItemDTO item,
+            String cleanSearch) {
+        if (cleanSearch.isBlank()) {
+            return true;
+        }
+
+        return containsIgnoreCase(item.getName(), cleanSearch)
+                || containsIgnoreCase(item.getSku(), cleanSearch);
+    }
+
+    private boolean containsIgnoreCase(
+            String value,
+            String lowerNeedle) {
+        return value != null
+                && value.toLowerCase(Locale.ROOT).contains(lowerNeedle);
+    }
+
+    private String normalizeSearch(
+            String search) {
+        if (search == null || search.isBlank()) {
+            return "";
+        }
+
+        String clean = search.trim();
+
+        if (clean.length() > MAX_SEARCH_LENGTH) {
+            clean = clean.substring(0, MAX_SEARCH_LENGTH);
+        }
+
+        return clean.toLowerCase(Locale.ROOT);
+    }
+
+    private int clampPageSize(
+            int requested) {
+        return Math.max(1, Math.min(requested, MAX_PAGE_SIZE));
+    }
+
+    private String nonBlankOrDash(
+            String value) {
+        return value != null && !value.isBlank()
+                ? value
+                : "-";
     }
 }

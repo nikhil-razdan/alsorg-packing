@@ -17,6 +17,8 @@ import java.util.UUID;
 @Table(name = "hr_candidate",
         indexes = {
                 @Index(name = "idx_hr_candidate_stage", columnList = "stage"),
+                @Index(name = "idx_hr_candidate_stage_updated", columnList = "stage,updated_at"),
+                @Index(name = "idx_hr_candidate_updated", columnList = "updated_at"),
                 @Index(name = "idx_hr_candidate_mobile", columnList = "mobile_no"),
                 @Index(name = "idx_hr_candidate_name", columnList = "full_name")
         },

@@ -2,11 +2,11 @@ package com.alsorg.packing.reporting.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.reporting.dto.DailyThroughputUserDTO;
 import com.alsorg.packing.reporting.dto.DashboardStatsDTO;
 import com.alsorg.packing.reporting.repository.DashboardReportRepository;
@@ -14,7 +14,7 @@ import com.alsorg.packing.reporting.repository.DashboardReportRepository;
 @Service
 public class DashboardReportService {
 
-        private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId ZONE = TimeZoneConfig.APP_ZONE;
 
         private final DashboardReportRepository repo;
 

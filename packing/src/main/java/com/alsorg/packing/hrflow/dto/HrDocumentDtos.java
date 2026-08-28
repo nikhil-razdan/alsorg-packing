@@ -7,7 +7,8 @@ import java.util.UUID;
 
 public final class HrDocumentDtos {
 
-    private HrDocumentDtos() {}
+    private HrDocumentDtos() {
+    }
 
     public record DocumentResponse(
             UUID id,
@@ -23,7 +24,8 @@ public final class HrDocumentDtos {
             LocalDateTime uploadedAt,
             String archivedBy,
             LocalDateTime archivedAt
-    ) {}
+    ) {
+    }
 
     public record DocumentCompletenessResponse(
             UUID candidateId,
@@ -32,5 +34,6 @@ public final class HrDocumentDtos {
             boolean hasAadhaar,
             boolean hasPan,
             long activeDocumentCount
-    ) {}
+    ) {
+    }
 }

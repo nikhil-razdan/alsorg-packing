@@ -1,7 +1,10 @@
 package com.alsorg.packing.reporting.service;
 
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -10,6 +13,15 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class EmailService {
+
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
+    private static final String XLSX_CONTENT_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    private static final int MAX_SUBJECT_LENGTH = 240;
+    private static final int MAX_FILENAME_LENGTH = 180;
+    private static final int MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 
     private final JavaMailSender mailSender;
 
@@ -27,33 +39,38 @@ public class EmailService {
             String to,
             String subject,
             byte[] file,
-            String filename
-    ) {
+            String filename) {
+
+        String cleanTo = requireMailbox(to, "Recipient email");
+        String cleanFrom = requireMailbox(from, "Configured sender email");
+        String cleanReplyTo = optionalMailbox(replyTo);
+        String cleanSubject = cleanHeaderValue(subject, "Alsorg Scheduled Report", MAX_SUBJECT_LENGTH);
+        String cleanFilename = cleanAttachmentFilename(filename);
+
+        if (file == null || file.length == 0) {
+            throw new IllegalArgumentException("Excel attachment is empty");
+        }
+
+        if (file.length > MAX_ATTACHMENT_BYTES) {
+            throw new IllegalArgumentException("Excel attachment exceeds the maximum email size");
+        }
+
         try {
-            if (to == null || to.isBlank()) {
-                throw new IllegalArgumentException("Recipient email is required");
-            }
-
-            if (file == null || file.length == 0) {
-                throw new IllegalArgumentException("Excel attachment is empty");
-            }
-
             MimeMessage message = mailSender.createMimeMessage();
 
             MimeMessageHelper helper = new MimeMessageHelper(
                     message,
                     true,
-                    "UTF-8"
-            );
+                    "UTF-8");
 
-            helper.setFrom(from);
-            helper.setTo(to.trim());
+            helper.setFrom(cleanFrom);
+            helper.setTo(cleanTo);
 
-            if (replyTo != null && !replyTo.isBlank()) {
-                helper.setReplyTo(replyTo);
+            if (cleanReplyTo != null) {
+                helper.setReplyTo(cleanReplyTo);
             }
 
-            helper.setSubject(subject);
+            helper.setSubject(cleanSubject);
 
             helper.setText(
                     """
@@ -65,22 +82,107 @@ public class EmailService {
                         </p>
                     </div>
                     """,
-                    true
-            );
+                    true);
 
             helper.addAttachment(
-                    filename,
+                    cleanFilename,
                     new ByteArrayResource(file),
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            );
+                    XLSX_CONTENT_TYPE);
 
             mailSender.send(message);
 
-            System.out.println("✅ SMTP email sent successfully to: " + to);
+            log.info(
+                    "Scheduled report email sent successfully: recipient={}, bytes={}",
+                    maskEmail(cleanTo),
+                    file.length);
 
-        } catch (Exception e) {
-            System.out.println("❌ SMTP email sending failed for: " + to);
-            throw new RuntimeException("Email sending failed for: " + to, e);
+        } catch (Exception exception) {
+            log.error(
+                    "Scheduled report email failed: recipient={}",
+                    maskEmail(cleanTo),
+                    exception);
+
+            throw new IllegalStateException("Email sending failed", exception);
         }
+    }
+
+    private String requireMailbox(
+            String value,
+            String fieldName) {
+        String clean = value == null ? "" : value.trim();
+
+        if (clean.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " is required");
+        }
+
+        try {
+            InternetAddress address = new InternetAddress(clean, true);
+            address.validate();
+
+            if (!clean.equals(address.getAddress())) {
+                throw new IllegalArgumentException(fieldName + " is invalid");
+            }
+
+            return clean;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException(fieldName + " is invalid", exception);
+        }
+    }
+
+    private String optionalMailbox(String value) {
+        if (value == null || value.trim().isBlank()) {
+            return null;
+        }
+
+        return requireMailbox(value, "Configured reply-to email");
+    }
+
+    private String cleanHeaderValue(
+            String value,
+            String fallback,
+            int maxLength) {
+        String clean = value == null ? "" : value
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .trim();
+
+        if (clean.isBlank()) {
+            clean = fallback;
+        }
+
+        if (clean.length() > maxLength) {
+            clean = clean.substring(0, maxLength);
+        }
+
+        return clean;
+    }
+
+    private String cleanAttachmentFilename(String value) {
+        String clean = cleanHeaderValue(
+                value,
+                "alsorg-report.xlsx",
+                MAX_FILENAME_LENGTH)
+                .replaceAll("[\\\\/:*?\"<>|]", "_");
+
+        if (!clean.toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx")) {
+            clean = clean + ".xlsx";
+        }
+
+        return clean;
+    }
+
+    private String maskEmail(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+
+        int at = value.indexOf('@');
+        if (at <= 1) {
+            return "***" + (at >= 0 ? value.substring(at) : "");
+        }
+
+        return value.substring(0, 1)
+                + "***"
+                + value.substring(at);
     }
 }

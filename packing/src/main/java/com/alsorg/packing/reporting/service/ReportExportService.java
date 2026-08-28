@@ -175,13 +175,36 @@ public class ReportExportService {
         text = text
                 .replace("\r", " ")
                 .replace("\n", " ")
+                .replace("\u0000", "")
                 .trim();
+
+        /*
+         * Spreadsheet applications may execute CSV cells beginning with
+         * =, +, -, or @ as formulas. Prefix only textual cells with an
+         * apostrophe; the visible value remains unchanged in Excel.
+         */
+        if (!"-".equals(text) && startsWithSpreadsheetFormulaPrefix(text)) {
+            text = "'" + text;
+        }
 
         return "\""
                 + text.replace(
                         "\"",
                         "\"\"")
                 + "\"";
+    }
+
+    private boolean startsWithSpreadsheetFormulaPrefix(
+            String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+
+        char first = value.charAt(0);
+        return first == '='
+                || first == '+'
+                || first == '-'
+                || first == '@';
     }
 
     private String formatDateTime(

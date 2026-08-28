@@ -1,5 +1,7 @@
 package com.alsorg.packing.domain.client;
 
+import com.alsorg.packing.config.TimeZoneConfig;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -18,8 +20,7 @@ import jakarta.persistence.Table;
                 @Index(name = "idx_client_master_name", columnList = "name"),
                 @Index(name = "idx_client_master_active", columnList = "active"),
                 @Index(name = "idx_client_master_normalized_name", columnList = "normalized_name")
-        }
-)
+        })
 public class ClientMaster {
 
     @Id
@@ -55,101 +56,35 @@ public class ClientMaster {
 
     @PrePersist
     public void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
-        if (createdAt == null) {
-            createdAt = now;
-        }
-
-        updatedAt = now;
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
     }
 
     @PreUpdate
     public void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getNormalizedName() {
-        return normalizedName;
-    }
-
-    public void setNormalizedName(String normalizedName) {
-        this.normalizedName = normalizedName;
-    }
-
-    public String getAddress() {
-        return address;
-    }
-
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public void setSource(String source) {
-        this.source = source;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public String getUpdatedBy() {
-        return updatedBy;
-    }
-
-    public void setUpdatedBy(String updatedBy) {
-        this.updatedBy = updatedBy;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getNormalizedName() { return normalizedName; }
+    public void setNormalizedName(String normalizedName) { this.normalizedName = normalizedName; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

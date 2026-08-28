@@ -9,18 +9,13 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowBomLineRepository
-                extends JpaRepository<MatFlowBomLine, UUID> {
+        extends JpaRepository<MatFlowBomLine, UUID> {
 
-        List<MatFlowBomLine> findByBom_IdOrderByLineNoAsc(
-                        UUID bomId);
+    List<MatFlowBomLine> findByBom_IdOrderByLineNoAsc(UUID bomId);
 
-        boolean existsByBom_IdAndMaterial_Id(
-                        UUID bomId,
-                        UUID materialId);
+    boolean existsByBom_IdAndMaterial_Id(UUID bomId, UUID materialId);
 
-        void deleteByBom_Id(UUID bomId);
+    void deleteByBom_Id(UUID bomId);
 
-        Optional<MatFlowBomLine> findByIdAndBom_Id(
-                        UUID id,
-                        UUID bomId);
+    Optional<MatFlowBomLine> findByIdAndBom_Id(UUID id, UUID bomId);
 }

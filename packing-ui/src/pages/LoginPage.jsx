@@ -27,7 +27,14 @@ function LoginPageContent() {
 			password,
 		});
 
-		await loadMe();
+		const session =
+			await loadMe();
+
+		if (!session) {
+			throw new Error(
+				"Login succeeded but the authenticated session could not be established."
+			);
+		}
 
 		navigate("/modules", { replace: true });
 	} catch (err) {

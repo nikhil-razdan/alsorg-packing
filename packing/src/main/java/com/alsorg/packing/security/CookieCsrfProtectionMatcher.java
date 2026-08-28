@@ -46,13 +46,25 @@ public final class CookieCsrfProtectionMatcher
          * exists, including when an old/stale cookie is still present.
          * TrustedOriginFilter still validates the browser origin.
          */
-        if ("/api/auth/login".equals(
-                request.getServletPath())) {
+        String path = request.getServletPath();
+
+        if ("/api/auth/login".equals(path)
+                || isCredentialFreePublicPath(path)) {
             return false;
         }
 
         return hasAccessCookie(
                 request);
+    }
+
+    private boolean isCredentialFreePublicPath(
+            String path) {
+
+        return path != null
+                && (path.startsWith(
+                                "/api/assetflow/public/")
+                        || path.startsWith(
+                                "/api/hrflow/public/"));
     }
 
     private boolean hasAccessCookie(

@@ -230,6 +230,16 @@ public class SecurityConfig {
                                                 "/api/assetflow/public/**")
                                         .permitAll()
 
+                                        /*
+                                         * HRFlow candidate/application and onboarding links are
+                                         * authenticated by their HRFlow public token. They
+                                         * must remain reachable without a FlowSuite JWT/cookie.
+                                         * Controller/service token validation remains authoritative.
+                                         */
+                                        .requestMatchers(
+                                                "/api/hrflow/public/**")
+                                        .permitAll()
+
                                         .requestMatchers(
                                                 "/api/auth/login",
                                                 "/api/auth/logout",

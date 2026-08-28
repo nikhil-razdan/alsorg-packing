@@ -1,6 +1,12 @@
 package com.alsorg.packing.domain.matflow;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 
@@ -9,8 +15,7 @@ import java.math.BigDecimal;
         @Index(name = "idx_mf_consumption_line_header", columnList = "consumption_id"),
         @Index(name = "idx_mf_consumption_line_material", columnList = "material_id")
 })
-public class MatFlowProductionConsumptionLine
-        extends MatFlowBaseEntity {
+public class MatFlowProductionConsumptionLine extends MatFlowBaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "consumption_id", nullable = false)

@@ -2,7 +2,11 @@ package com.alsorg.packing.controller.dto.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.*;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -32,13 +36,19 @@ public final class MatFlowPlanningDtos {
         /* =========================== PROCESSING =========================== */
 
         public record ProcessingUnitRequest(
-                        @NotNull(message = "Processing Unit code is required.") String processingUnitCode,
-                        @NotNull(message = "Processing Unit name is required.") String processingUnitName,
-                        @NotNull(message = "Plant code is required.") String plantCode,
+                        @NotBlank(message = "Processing Unit code is required.")
+                        @Size(max = 100, message = "Processing Unit code cannot exceed 100 characters.")
+                        String processingUnitCode,
+                        @NotBlank(message = "Processing Unit name is required.")
+                        @Size(max = 250, message = "Processing Unit name cannot exceed 250 characters.")
+                        String processingUnitName,
+                        @NotBlank(message = "Plant code is required.")
+                        @Size(max = 100, message = "Plant code cannot exceed 100 characters.")
+                        String plantCode,
                         Boolean external,
-                        String address,
-                        String contactPerson,
-                        String contactPhone,
+                        @Size(max = 2000, message = "Address cannot exceed 2000 characters.") String address,
+                        @Size(max = 200, message = "Contact person cannot exceed 200 characters.") String contactPerson,
+                        @Size(max = 50, message = "Contact phone cannot exceed 50 characters.") String contactPhone,
                         Boolean active,
                         Long rowVersion) {
         }
@@ -57,12 +67,16 @@ public final class MatFlowPlanningDtos {
         }
 
         public record RouteStepRequest(
+                        @Min(value = 1, message = "Route sequence must be at least 1.")
+                        @Max(value = 10000, message = "Route sequence is too large.")
                         Integer sequenceNo,
                         RouteStepType stepType,
                         @NotNull(message = "Processing Unit is required.") UUID processingUnitId,
-                        String processCode,
+                        @Size(max = 120, message = "Process code cannot exceed 120 characters.") String processCode,
+                        @DecimalMin(value = "0.0", inclusive = true, message = "Expected yield cannot be negative.")
+                        @DecimalMax(value = "100.0", inclusive = true, message = "Expected yield cannot exceed 100 percent.")
                         BigDecimal expectedYieldPercent,
-                        String remarks,
+                        @Size(max = 1000, message = "Route remarks cannot exceed 1000 characters.") String remarks,
                         Long rowVersion) {
         }
 
@@ -100,7 +114,9 @@ public final class MatFlowPlanningDtos {
                         @NotNull(message = "Project product ID is required.") UUID projectDrawingId,
                         @NotNull(message = "Operational BOM ID is required.") UUID bomId,
                         @Size(max = 2000, message = "Requisition remarks cannot exceed 2000 characters.") String remarks,
-                        @NotEmpty(message = "At least one material line is required.") List<@Valid RequisitionLineRequest> lines) {
+                        @NotEmpty(message = "At least one material line is required.")
+                        @Size(max = 500, message = "A maximum of 500 requisition lines is allowed.")
+                        List<@Valid RequisitionLineRequest> lines) {
         }
 
         public record RequisitionActionRequest(
@@ -235,7 +251,9 @@ public final class MatFlowPlanningDtos {
 
         public record StoreReviewRequest(
                         @NotNull(message = "Requisition row version is required.") Long rowVersion,
-                        @NotEmpty(message = "At least one Store review line is required.") List<@Valid StoreLineReviewRequest> lines,
+                        @NotEmpty(message = "At least one Store review line is required.")
+                        @Size(max = 500, message = "A maximum of 500 Store review lines is allowed.")
+                        List<@Valid StoreLineReviewRequest> lines,
                         @Size(max = 2000, message = "Store review remarks cannot exceed 2000 characters.") String remarks) {
         }
 

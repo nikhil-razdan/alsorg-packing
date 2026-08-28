@@ -3,7 +3,6 @@ package com.alsorg.packing.controller;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,13 +28,8 @@ public class PacketLifecycleChangeRequestController {
 
     @PostMapping
     public ResponseEntity<SubmitResponse> submit(
-            @RequestBody SubmitRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
-
-        return ResponseEntity.ok(
-                requestService.submit(
-                        request,
-                        user));
+            @RequestBody SubmitRequest request) {
+        User user = currentUserService.requireCurrentUser();
+        return ResponseEntity.ok(requestService.submit(request, user));
     }
 }

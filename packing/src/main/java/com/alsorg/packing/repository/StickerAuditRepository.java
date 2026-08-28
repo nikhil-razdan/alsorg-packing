@@ -1,9 +1,10 @@
 package com.alsorg.packing.repository;
 
-import com.alsorg.packing.domain.audit.StickerAudit;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.UUID;
+import com.alsorg.packing.domain.audit.StickerAudit;
 
 public interface StickerAuditRepository extends JpaRepository<StickerAudit, UUID> {
 }

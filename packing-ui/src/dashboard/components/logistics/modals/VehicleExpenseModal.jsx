@@ -25,17 +25,34 @@ import {
   getBackendMessage,
 } from "../logisticsAlertUtils";
 
+import useLogisticsLiveRefresh
+  from "../useLogisticsLiveRefresh";
+
 const emptyField = {
   fieldName: "",
   fieldType: "NUMBER",
   fieldValue: "",
 };
 
+const defaultExpenseFields = () => ([
+  {
+    fieldName: "Fuel",
+    fieldType: "NUMBER",
+    fieldValue: "",
+  },
+  {
+    fieldName: "Maintenance",
+    fieldType: "NUMBER",
+    fieldValue: "",
+  },
+]);
+
 function VehicleExpenseModal({
   open,
   onClose,
   vehicle,
   showAlert = () => {},
+  liveRefreshToken = null,
 }) {
   const [expenseMonth, setExpenseMonth] =
     useState(getCurrentMonth());
@@ -44,18 +61,7 @@ function VehicleExpenseModal({
     useState("");
 
   const [fields, setFields] =
-    useState([
-      {
-        fieldName: "Fuel",
-        fieldType: "NUMBER",
-        fieldValue: "",
-      },
-      {
-        fieldName: "Maintenance",
-        fieldType: "NUMBER",
-        fieldValue: "",
-      },
-    ]);
+    useState(defaultExpenseFields);
 
   const [history, setHistory] =
     useState([]);
@@ -81,11 +87,15 @@ function VehicleExpenseModal({
     }, 0);
   }, [fields]);
 
-  const loadExpenses = async () => {
+  const loadExpenses = async ({
+    background = false,
+  } = {}) => {
     if (!vehicle?.id) return;
 
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
 
       const data =
         await fetchVehicleExpenses(vehicle.id);
@@ -94,17 +104,19 @@ function VehicleExpenseModal({
         Array.isArray(data) ? data : []
       );
     } catch (e) {
-      console.error(e);
-
-      showAlert(
-        getBackendMessage(
-          e,
-          "Failed to load vehicle expenses"
-        ),
-        "error"
-      );
+      if (!background) {
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load vehicle expenses"
+          ),
+          "error"
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   };
 
@@ -113,21 +125,29 @@ function VehicleExpenseModal({
 
     setExpenseMonth(getCurrentMonth());
     setNotes("");
-    setFields([
-      {
-        fieldName: "Fuel",
-        fieldType: "NUMBER",
-        fieldValue: "",
-      },
-      {
-        fieldName: "Maintenance",
-        fieldType: "NUMBER",
-        fieldValue: "",
-      },
-    ]);
+    setFields(defaultExpenseFields());
 
-    loadExpenses();
+    void loadExpenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, vehicle?.id]);
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      if (!open || !vehicle?.id || saving) {
+        return;
+      }
+
+      await loadExpenses({
+        background: true,
+      });
+    },
+    {
+      enabled:
+        Boolean(open && vehicle?.id),
+      intervalMs: 10000,
+    }
+  );
 
   const updateField = (
     index,
@@ -203,23 +223,10 @@ function VehicleExpenseModal({
       );
 
       setNotes("");
-      setFields([
-        {
-          fieldName: "Fuel",
-          fieldType: "NUMBER",
-          fieldValue: "",
-        },
-        {
-          fieldName: "Maintenance",
-          fieldType: "NUMBER",
-          fieldValue: "",
-        },
-      ]);
+      setFields(defaultExpenseFields());
 
       await loadExpenses();
     } catch (e) {
-      console.error(e);
-
       showAlert(
         getBackendMessage(
           e,
@@ -611,13 +618,11 @@ const totalCardSx = {
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-
   "& span": {
     color: "var(--pf-text-muted)",
     fontSize: 11,
     fontWeight: 800,
   },
-
   "& b": {
     color: "#15803d",
     fontSize: 18,
@@ -633,47 +638,38 @@ const inputSx = {
     color: "var(--pf-text-strong)",
     colorScheme: "var(--pf-color-scheme)",
   },
-
   "& .MuiInputBase-input, & textarea": {
     color: "var(--pf-text-strong)",
     WebkitTextFillColor: "var(--pf-text-strong)",
     fontSize: 13,
     fontWeight: 650,
   },
-
   "& .MuiInputBase-input::placeholder, & textarea::placeholder": {
     color: "var(--pf-text-dim)",
     WebkitTextFillColor: "var(--pf-text-dim)",
     opacity: 1,
   },
-
   "& .MuiInputLabel-root": {
     color: "var(--pf-text-muted)",
     fontWeight: 750,
   },
-
   "& .MuiInputLabel-root.Mui-focused": {
     color: "#2563eb",
   },
-
   "& .MuiOutlinedInput-notchedOutline": {
     borderColor: "var(--pf-border)",
   },
-
   "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
     borderColor: "rgba(37,99,235,.38)",
   },
-
   "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
     borderColor: "#2563eb",
     borderWidth: "1.5px",
   },
-
   "& .MuiSelect-select": {
     color: "var(--pf-text-strong)",
     WebkitTextFillColor: "var(--pf-text-strong)",
   },
-
   "& .MuiSelect-icon": {
     color: "var(--pf-text-muted)",
   },
@@ -686,7 +682,6 @@ const removeButtonSx = {
   color: "#b91c1c",
   background: "rgba(239,68,68,.10)",
   border: "1px solid rgba(220,38,38,.24)",
-
   "&:hover": {
     color: "#991b1b",
     background: "rgba(239,68,68,.16)",
@@ -701,7 +696,6 @@ const addFieldButtonSx = {
   color: "#1d4ed8",
   background: "rgba(37,99,235,.09)",
   border: "1px solid rgba(37,99,235,.20)",
-
   "&:hover": {
     background: "rgba(37,99,235,.14)",
     borderColor: "rgba(37,99,235,.30)",
@@ -760,13 +754,11 @@ const historyFieldChipSx = {
   borderRadius: "999px",
   background: "var(--pf-surface-alt)",
   border: "1px solid var(--pf-border-soft)",
-
   "& span": {
     color: "#2563eb",
     fontSize: 10.5,
     fontWeight: 900,
   },
-
   "& b": {
     color: "var(--pf-text-strong)",
     fontSize: 10.5,
@@ -806,7 +798,6 @@ const cancelButtonSx = {
   color: "var(--pf-text)",
   background: "var(--pf-surface-alt)",
   border: "1px solid var(--pf-border)",
-
   "&:hover": {
     color: "var(--pf-text-strong)",
     background: "var(--pf-surface-hover)",
@@ -824,12 +815,10 @@ const saveButtonSx = {
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   boxShadow:
     "0 8px 20px rgba(37,99,235,.24)",
-
   "&:hover": {
     background:
       "linear-gradient(135deg,#1d4ed8,#2563eb)",
   },
-
   "&.Mui-disabled": {
     color: "var(--pf-text-dim)",
     background: "var(--pf-surface-alt)",

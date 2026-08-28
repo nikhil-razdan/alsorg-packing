@@ -5,19 +5,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+
 import java.time.LocalDate;
 
-/**
- * Client-project aggregate root for MatFlow.
- *
- * A project is the commercial/manufacturing umbrella for one client and one
- * plant. One project can own one or many MatFlowProjectDrawing rows, where each
- * child row is an independently approved Product / Item / Drawing.
- *
- * Transactional execution entities intentionally continue referencing the
- * Product/Drawing child. This preserves exact material traceability per product
- * while adding the missing Project -> Products hierarchy.
- */
 @Entity
 @Table(
         name = "mf_projects",
@@ -60,31 +50,23 @@ public class MatFlowProject extends MatFlowBaseEntity {
 
     public String getProjectCode() { return projectCode; }
     public void setProjectCode(String value) { this.projectCode = cleanUpper(value); }
-
     public String getProjectName() { return projectName; }
     public void setProjectName(String value) { this.projectName = clean(value); }
-
     public String getClientName() { return clientName; }
     public void setClientName(String value) { this.clientName = clean(value); }
-
     public String getPlantCode() { return plantCode; }
     public void setPlantCode(String value) { this.plantCode = cleanUpper(value); }
-
     public LocalDate getRequiredDate() { return requiredDate; }
     public void setRequiredDate(LocalDate value) { this.requiredDate = value; }
-
     public String getPriority() { return priority; }
     public void setPriority(String value) {
         String next = cleanUpper(value);
         this.priority = next == null ? "NORMAL" : next;
     }
-
     public String getProjectManager() { return projectManager; }
     public void setProjectManager(String value) { this.projectManager = clean(value); }
-
     public String getRemarks() { return remarks; }
     public void setRemarks(String value) { this.remarks = clean(value); }
-
     public boolean isActive() { return active; }
     public void setActive(boolean value) { this.active = value; }
 }

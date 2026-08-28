@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.matflow;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -8,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
@@ -54,6 +56,14 @@ public class MatFlowBomApprovalHistory {
 
     @Column(name = "action_at", nullable = false)
     private LocalDateTime actionAt;
+
+
+    @PrePersist
+    private void initialiseActionAt() {
+        if (actionAt == null) {
+            actionAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        }
+    }
 
     public UUID getId() {
         return id;

@@ -24,8 +24,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_mf_qc_disposition_inspection", columnList = "qc_inspection_id"),
         @Index(name = "idx_mf_qc_disposition_status", columnList = "status")
 })
-public class MatFlowQcDisposition
-        extends MatFlowBaseEntity {
+public class MatFlowQcDisposition extends MatFlowBaseEntity {
 
     @Column(name = "disposition_number", nullable = false, length = 150)
     public String dispositionNumber;

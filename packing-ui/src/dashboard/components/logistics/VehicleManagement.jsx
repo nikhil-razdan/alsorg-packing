@@ -24,6 +24,7 @@ import {
 import VehicleExpenseModal from "./modals/VehicleExpenseModal";
 import CreateVehicleModal from "./modals/CreateVehicleModal";
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   getBackendMessage,
@@ -43,6 +44,7 @@ const normalizeText = (value) =>
 
 function VehicleManagement({
   showAlert = () => { },
+  liveRefreshToken = null,
 }) {
   const [vehicles, setVehicles] =
     useState([]);
@@ -74,9 +76,13 @@ function VehicleManagement({
   const [complianceFilter, setComplianceFilter] =
     useState("ALL");
 
-  async function loadVehicles() {
+  async function loadVehicles({
+    background = false,
+  } = {}) {
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
 
       const data = await fetchVehicles();
 
@@ -84,19 +90,30 @@ function VehicleManagement({
         Array.isArray(data) ? data : []
       );
     } catch (error) {
-      console.error(error);
-
-      showAlert(
-        getBackendMessage(
-          error,
-          "Failed to load vehicles"
-        ),
-        "error"
-      );
+      if (!background) {
+        showAlert(
+          getBackendMessage(
+            error,
+            "Failed to load vehicles"
+          ),
+          "error"
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   }
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await loadVehicles({
+        background: true,
+      });
+    }
+  );
 
   useEffect(() => {
     loadVehicles();
@@ -584,6 +601,7 @@ function VehicleManagement({
         onClose={closeExpense}
         vehicle={expenseVehicle}
         showAlert={showAlert}
+        liveRefreshToken={liveRefreshToken}
       />
 
       <Dialog

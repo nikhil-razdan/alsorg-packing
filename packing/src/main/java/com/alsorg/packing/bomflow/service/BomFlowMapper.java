@@ -4,11 +4,9 @@ import com.alsorg.packing.bomflow.dto.BomFlowProductDtos.ProductResponse;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.RevisionDetailResponse;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.RevisionItemResponse;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.RevisionSummaryResponse;
-
 import com.alsorg.packing.bomflow.domain.BomFlowProduct;
 import com.alsorg.packing.bomflow.domain.BomFlowRevision;
 import com.alsorg.packing.bomflow.domain.BomFlowRevisionItem;
-
 import com.alsorg.packing.bomflow.repository.BomFlowRevisionItemRepository;
 import com.alsorg.packing.bomflow.repository.BomFlowRevisionRepository;
 
@@ -26,20 +24,23 @@ public class BomFlowMapper {
     public BomFlowMapper(
             BomFlowRevisionRepository revisionRepository,
             BomFlowRevisionItemRepository itemRepository) {
-
         this.revisionRepository = revisionRepository;
         this.itemRepository = itemRepository;
     }
 
-    public ProductResponse toProductResponse(
-            BomFlowProduct product) {
-
+    public ProductResponse toProductResponse(BomFlowProduct product) {
         BomFlowRevision latest = revisionRepository
                 .findTopByProductIdOrderByRevisionNoDesc(product.id)
                 .orElse(null);
 
-        long revisionCount = revisionRepository
-                .countByProductId(product.id);
+        long revisionCount = revisionRepository.countByProductId(product.id);
+        return toProductResponse(product, latest, revisionCount);
+    }
+
+    public ProductResponse toProductResponse(
+            BomFlowProduct product,
+            BomFlowRevision latest,
+            long revisionCount) {
 
         boolean hasProductImage = hasText(product.productImageStorageKey);
         boolean hasDrawingFile = hasText(product.drawingFileStorageKey);
@@ -61,9 +62,7 @@ public class BomFlowMapper {
                 revisionCount,
                 latest == null ? null : latest.id,
                 latest == null ? null : latest.revisionNo,
-                latest == null || latest.status == null
-                        ? null
-                        : latest.status.name(),
+                latest == null || latest.status == null ? null : latest.status.name(),
                 hasProductImage,
                 product.productImageOriginalName,
                 product.productImageContentType,
@@ -83,15 +82,20 @@ public class BomFlowMapper {
                 product.rowVersion);
     }
 
-    public RevisionSummaryResponse toRevisionSummary(
-            BomFlowRevision revision) {
-
-        List<BomFlowRevisionItem> items = itemRepository
-                .findByRevisionIdOrderByLineNoAsc(revision.id);
+    public RevisionSummaryResponse toRevisionSummary(BomFlowRevision revision) {
+        List<BomFlowRevisionItem> items = itemRepository.findByRevisionIdOrderByLineNoAsc(revision.id);
 
         BigDecimal total = items.stream()
                 .map(item -> zero(item.amount))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return toRevisionSummary(revision, items.size(), total);
+    }
+
+    public RevisionSummaryResponse toRevisionSummary(
+            BomFlowRevision revision,
+            long itemCount,
+            BigDecimal total) {
 
         return new RevisionSummaryResponse(
                 revision.id,
@@ -100,8 +104,8 @@ public class BomFlowMapper {
                 revision.revisionNo,
                 revision.status,
                 revision.remarks,
-                items.size(),
-                total,
+                Math.toIntExact(Math.min(Integer.MAX_VALUE, Math.max(0L, itemCount))),
+                zero(total),
                 revision.createdBy,
                 revision.createdAt,
                 revision.updatedBy,
@@ -109,9 +113,7 @@ public class BomFlowMapper {
                 revision.rowVersion);
     }
 
-    public RevisionDetailResponse toRevisionDetail(
-            BomFlowRevision revision) {
-
+    public RevisionDetailResponse toRevisionDetail(BomFlowRevision revision) {
         List<RevisionItemResponse> items = itemRepository
                 .findByRevisionIdOrderByLineNoAsc(revision.id)
                 .stream()
@@ -156,9 +158,7 @@ public class BomFlowMapper {
                 items);
     }
 
-    public RevisionItemResponse toRevisionItem(
-            BomFlowRevisionItem item) {
-
+    public RevisionItemResponse toRevisionItem(BomFlowRevisionItem item) {
         return new RevisionItemResponse(
                 item.id,
                 item.lineNo,
@@ -183,18 +183,11 @@ public class BomFlowMapper {
                 item.rowVersion);
     }
 
-    private BigDecimal zero(
-            BigDecimal value) {
-
-        return value == null
-                ? BigDecimal.ZERO
-                : value;
+    private BigDecimal zero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
-    private boolean hasText(
-            String value) {
-
-        return value != null
-                && !value.trim().isEmpty();
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }

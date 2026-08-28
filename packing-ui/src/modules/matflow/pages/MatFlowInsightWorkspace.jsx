@@ -50,6 +50,7 @@ import {
     formatDurationMinutes,
     formatQty,
     getMatFlowKanbanIdentity,
+    parseMatFlowDateTime,
     mainTextSx,
     matFlowKanbanCardSx,
     normalize,
@@ -230,8 +231,7 @@ const parseRequiredDate = (value) => {
         const parsed = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59, 999);
         return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
-    const parsed = new Date(raw);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return parseMatFlowDateTime(raw);
 };
 
 const formatRequiredDate = (value) => {
@@ -258,8 +258,14 @@ const deadlineSnapshot = (requiredDate, completedAt = null, completed = false) =
     const deadline = parseRequiredDate(requiredDate);
     if (!deadline) return { health: "NO_DEADLINE", requiredDate: null, deltaMinutes: null, label: "No deadline set", shortLabel: "No deadline", overdue: false, dueSoon: false };
 
-    const completedDate = completedAt ? new Date(completedAt) : null;
-    const useCompleted = completed === true && completedDate && !Number.isNaN(completedDate.getTime());
+    const completedDate =
+        completedAt
+            ? parseMatFlowDateTime(completedAt)
+            : null;
+
+    const useCompleted =
+        completed === true &&
+        Boolean(completedDate);
     const reference = useCompleted ? completedDate : new Date();
     const deltaMinutes = Math.round((deadline.getTime() - reference.getTime()) / MINUTE_MS);
     const distance = formatScheduleDelta(deltaMinutes);
@@ -347,8 +353,12 @@ const earliestRequiredDate = (values = []) => {
 
 const latestDateValue = (values = []) => {
     const valid = (Array.isArray(values) ? values : [])
-        .map((value) => value ? new Date(value) : null)
-        .filter((value) => value && !Number.isNaN(value.getTime()))
+        .map((value) =>
+            value
+                ? parseMatFlowDateTime(value)
+                : null
+        )
+        .filter(Boolean)
         .sort((a, b) => b.getTime() - a.getTime());
     return valid[0] ? valid[0].toISOString() : null;
 };

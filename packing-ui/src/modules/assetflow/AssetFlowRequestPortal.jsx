@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import assetFlowApi from "./assetFlowApi";
 import { AssetFlowThemeProvider } from "./assetflowUi";
 import "./assetflow.css";
@@ -94,10 +95,36 @@ const errorText = (error) =>
   error?.message ||
   "Request could not be completed.";
 
+const parseAssetFlowDateTime = (value) => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const local = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/);
+  if (local) {
+    const milliseconds = Number(String(local[7] || "").padEnd(3, "0").slice(0, 3) || 0);
+    const date = new Date(
+      Number(local[1]),
+      Number(local[2]) - 1,
+      Number(local[3]),
+      Number(local[4]),
+      Number(local[5]),
+      Number(local[6] || 0),
+      milliseconds
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const fmtDate = (value) => {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  const date = parseAssetFlowDateTime(value);
+  if (!date) return String(value);
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
@@ -396,7 +423,9 @@ function RequestForm({
 }
 
 function AssetFlowRequestPortalContent() {
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const assetToken = cleanUuid(params.get("asset"));
   const deskToken = cleanUuid(params.get("desk"));
 
@@ -416,6 +445,10 @@ function AssetFlowRequestPortalContent() {
   const load = useCallback(async () => {
     setLoading(true);
     setMessage(null);
+    setSessionUser("");
+    setFlowContext(null);
+    setReporterContext(null);
+    setRecentRequests([]);
     try {
       const [publicResult, meResult] = await Promise.allSettled([
         assetFlowApi.publicContext({ asset: assetToken, desk: deskToken }),
@@ -450,6 +483,31 @@ function AssetFlowRequestPortalContent() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const changeMode = useCallback((nextMode) => {
+    setMode(nextMode);
+    setMessage(null);
+    setResult(null);
+    setRecentRequests([]);
+
+    if (nextMode === "FLOW_SUITE") {
+      setReporterContext(null);
+      setCredentials({ reporterCode: "", accessPin: "" });
+      if (sessionUser) {
+        assetFlowApi.myRequests()
+          .then((mine) => setRecentRequests(Array.isArray(mine) ? mine : []))
+          .catch(() => {});
+      }
+      return;
+    }
+
+    /*
+     * A Reporter Pass is intentionally re-verified after changing identity
+     * modes. Never carry an already-authorised Reporter context across a
+     * FlowSuite/Reporter switch on a shared workstation.
+     */
+    setReporterContext(null);
+  }, [sessionUser]);
 
   const authorise = async (event) => {
     event.preventDefault();
@@ -563,7 +621,7 @@ function AssetFlowRequestPortalContent() {
           <div className="af-mark">A</div>
           <div><strong>AssetFlow Request Center</strong><span>ALSORG Maintenance & Service Support</span></div>
         </div>
-        <div className="af-request-header-actions"><span className="af-request-header-note">Approved employees only · Every request is traceable</span><a className="af-btn" href="/modules">FlowSuite Home</a></div>
+        <div className="af-request-header-actions"><span className="af-request-header-note">Approved employees only · Every request is traceable</span><button type="button" className="af-btn" onClick={() => navigate("/modules")}>FlowSuite Home</button></div>
       </header>
 
       <main className="af-request-main">
@@ -599,12 +657,18 @@ function AssetFlowRequestPortalContent() {
                 <div><span>IDENTITY</span><h2>Who is raising this request?</h2></div>
                 <small>No anonymous posting</small>
               </div>
-              <AccessChoice sessionUser={sessionUser} mode={mode} onMode={(next) => { setMode(next); setMessage(null); setRecentRequests([]); if (next === "FLOW_SUITE" && sessionUser) { assetFlowApi.myRequests().then((mine) => setRecentRequests(Array.isArray(mine) ? mine : [])).catch(() => {}); } }} />
+              <AccessChoice sessionUser={sessionUser} mode={mode} onMode={changeMode} />
 
               {mode === "FLOW_SUITE" && !sessionUser && (
                 <div className="af-request-login-box">
                   <div><strong>Use your existing FlowSuite account</strong><span>You do not need a AssetFlow role just to raise your own request.</span></div>
-                  <a className="af-btn af-btn-primary" href={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Open FlowSuite Login</a>
+                  <button
+                    type="button"
+                    className="af-btn af-btn-primary"
+                    onClick={() => navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`)}
+                  >
+                    Open FlowSuite Login
+                  </button>
                 </div>
               )}
 

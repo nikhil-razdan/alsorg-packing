@@ -1,6 +1,7 @@
 import {
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
@@ -28,8 +29,13 @@ import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
 
 import {
-    API_BASE_URL,
-} from "../../../config";
+    endDispatchChallanTrip,
+    fetchDispatchChallanPdf,
+    fetchDispatchChallansPage,
+    updateDispatchChallanHelpers,
+} from "../../api/logisticsApi";
+
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 
 function hasChallanEndTime(
@@ -514,13 +520,28 @@ function getChallanDateFilterSummary({
         .join(" • ");
 }
 
+const SERVER_CHALLAN_PAGE_SIZE = 50;
+
 function DispatchChallans({
     showAlert,
+    liveRefreshToken = null,
 }) {
     const [rows, setRows] =
         useState([]);
 
     const [loading, setLoading] =
+        useState(false);
+
+    const [loadingOlder, setLoadingOlder] =
+        useState(false);
+
+    const [serverPage, setServerPage] =
+        useState(0);
+
+    const [serverTotal, setServerTotal] =
+        useState(0);
+
+    const [serverHasNext, setServerHasNext] =
         useState(false);
 
     const [search, setSearch] =
@@ -592,62 +613,212 @@ function DispatchChallans({
             challanNumber: "",
         });
 
+    const firstPageKeysRef =
+        useRef(new Set());
+
     const canManageTripEnd =
         true;
 
-    async function loadData() {
+    async function loadData({
+        background = false,
+    } = {}) {
         try {
-            setLoading(true);
+            if (!background) {
+                setLoading(true);
+            }
 
-            const res =
-                await fetch(
-                    `${API_BASE_URL}/api/dispatched/challans`,
-                    {
-                        method: "GET",
-                        credentials:
-                            "include",
+            const result =
+                await fetchDispatchChallansPage({
+                    page: 0,
+                    size: SERVER_CHALLAN_PAGE_SIZE,
+                });
+
+            const freshRows =
+                Array.isArray(result?.rows)
+                    ? result.rows
+                    : [];
+
+            const rowKey = (row) =>
+                String(
+                    row?.challanNumber ||
+                    row?.chalaanNumber ||
+                    ""
+                ).trim();
+
+            const freshKeys =
+                new Set(
+                    freshRows
+                        .map(rowKey)
+                        .filter(Boolean)
+                );
+
+            setRows((current) => {
+                if (!background || serverPage <= 0) {
+                    return freshRows;
+                }
+
+                const previousFirstPageKeys =
+                    firstPageKeysRef.current;
+
+                const olderRows =
+                    (current || []).filter((row) => {
+                        const key = rowKey(row);
+
+                        if (!key) return false;
+
+                        return (
+                            !freshKeys.has(key) &&
+                            !previousFirstPageKeys.has(key)
+                        );
+                    });
+
+                return [
+                    ...freshRows,
+                    ...olderRows,
+                ];
+            });
+
+            firstPageKeysRef.current =
+                freshKeys;
+
+            if (!background) {
+                setServerPage(
+                    Number(result?.pageNumber || 0)
+                );
+            }
+
+            setServerTotal(
+                Number(result?.totalElements || 0)
+            );
+
+            if (!background || serverPage <= 0) {
+                setServerHasNext(
+                    result?.hasNext === true
+                );
+            }
+
+            if (!background) {
+                setPageNo(1);
+            }
+        } catch (error) {
+            if (!background) {
+                setRows([]);
+                setServerPage(0);
+                setServerTotal(0);
+                setServerHasNext(false);
+
+                const message =
+                    error?.message ||
+                    "Failed to load dispatched challans";
+
+                if (showAlert) {
+                    showAlert(
+                        message,
+                        "error"
+                    );
+                } else {
+                    alert(message);
+                }
+            }
+        } finally {
+            if (!background) {
+                setLoading(false);
+            }
+        }
+    }
+
+    useLogisticsLiveRefresh(
+        liveRefreshToken,
+        async () => {
+            await loadData({
+                background: true,
+            });
+        }
+    );
+
+    async function loadOlderHistory() {
+        if (
+            loadingOlder ||
+            !serverHasNext
+        ) {
+            return;
+        }
+
+        try {
+            setLoadingOlder(true);
+
+            const result =
+                await fetchDispatchChallansPage({
+                    page: serverPage + 1,
+                    size: SERVER_CHALLAN_PAGE_SIZE,
+                });
+
+            setRows((current) => {
+                const merged =
+                    new Map();
+
+                (current || []).forEach(
+                    (row) => {
+                        const key =
+                            String(
+                                row?.challanNumber ||
+                                row?.chalaanNumber ||
+                                ""
+                            ).trim();
+
+                        if (key) {
+                            merged.set(key, row);
+                        }
                     }
                 );
 
-            if (!res.ok) {
-                const text =
-                    await res.text();
+                (result?.rows || []).forEach(
+                    (row) => {
+                        const key =
+                            String(
+                                row?.challanNumber ||
+                                row?.chalaanNumber ||
+                                ""
+                            ).trim();
 
-                throw new Error(
-                    text ||
-                    "Failed to load dispatched challans"
+                        if (key) {
+                            merged.set(key, row);
+                        }
+                    }
                 );
-            }
 
-            const data =
-                await res.json();
+                return Array.from(
+                    merged.values()
+                );
+            });
 
-            setRows(
-                Array.isArray(data)
-                    ? data
-                    : []
+            setServerPage(
+                Number(
+                    result?.pageNumber ??
+                    serverPage + 1
+                )
+            );
+
+            setServerTotal(
+                Number(
+                    result?.totalElements ??
+                    serverTotal
+                )
+            );
+
+            setServerHasNext(
+                result?.hasNext === true
             );
         } catch (error) {
-            console.error(
-                error
-            );
+            console.error(error);
 
-            setRows([]);
-
-            const message =
+            showAlert?.(
                 error?.message ||
-                "Failed to load dispatched challans";
-
-            if (showAlert) {
-                showAlert(
-                    message,
-                    "error"
-                );
-            } else {
-                alert(message);
-            }
+                "Unable to load older challan history",
+                "error"
+            );
         } finally {
-            setLoading(false);
+            setLoadingOlder(false);
         }
     }
 
@@ -728,38 +899,10 @@ function DispatchChallans({
             try {
                 setSavingHelpers(true);
 
-                const res =
-                    await fetch(
-                        `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
-                            helperDialog
-                                .challanNumber
-                        )}/helpers`,
-                        {
-                            method: "POST",
-                            credentials:
-                                "include",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json",
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    helperLoaderCount,
-                                }),
-                        }
-                    );
-
-                if (!res.ok) {
-                    const text =
-                        await res.text();
-
-                    throw new Error(
-                        text ||
-                        "Failed to save helpers/loaders"
-                    );
-                }
+                await updateDispatchChallanHelpers(
+                    helperDialog.challanNumber,
+                    helperLoaderCount
+                );
 
                 showAlert?.(
                     helperLoaderCount
@@ -1167,33 +1310,14 @@ function DispatchChallans({
     const getChallanPdfBlob =
         async (challanNumber) => {
             if (!challanNumber) {
-                throw new Error("Challan number missing");
-            }
-
-            const res =
-                await fetch(
-                    `${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
-                        challanNumber
-                    )}/download`,
-                    {
-                        method: "GET",
-                        credentials: "include",
-                        headers: {
-                            Accept: "application/pdf",
-                        },
-                    }
-                );
-
-            if (!res.ok) {
-                const text =
-                    await res.text();
-
                 throw new Error(
-                    text || "Failed to load challan PDF"
+                    "Challan number missing"
                 );
             }
 
-            return await res.blob();
+            return await fetchDispatchChallanPdf(
+                challanNumber
+            );
         };
 
     const previewChallanPdf =
@@ -1318,37 +1442,10 @@ function DispatchChallans({
             try {
                 setEndingTrip(true);
 
-                const res =
-                    await fetch(
-                        `${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(
-                            endTripDialog.challanNumber
-                        )}/end-trip`,
-                        {
-                            method: "POST",
-                            credentials: "include",
-                            headers: {
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({
-                                /*
-                                 * Send LocalDateTime:
-                                 * 2026-07-03T18:30:00
-                                 *
-                                 * Never send UTC ISO here.
-                                 */
-                                tripEndedAt: finalEndTime,
-                            }),
-                        }
-                    );
-
-                if (!res.ok) {
-                    const text =
-                        await res.text();
-
-                    throw new Error(
-                        text || "Failed to save trip end time"
-                    );
-                }
+                await endDispatchChallanTrip(
+                    endTripDialog.challanNumber,
+                    finalEndTime
+                );
 
                 showAlert?.(
                     "Trip end time saved successfully",
@@ -1395,8 +1492,11 @@ function DispatchChallans({
 
             <Box sx={summaryRow}>
                 <SummaryCard
-                    label="Challans"
-                    value={filteredRows.length}
+                    label="Loaded / Total Challans"
+                    value={`${rows.length}/${Math.max(
+                        serverTotal,
+                        rows.length
+                    )}`}
                 />
 
                 <SummaryCard
@@ -1836,6 +1936,28 @@ function DispatchChallans({
                         totalItems={filteredRows.length}
                     />
                 )}
+
+            {!loading && serverHasNext && (
+                <Box sx={olderHistoryBarSx}>
+                    <Box sx={olderHistoryTextSx}>
+                        Loaded {rows.length} of {Math.max(
+                            serverTotal,
+                            rows.length
+                        )} challans. Search and date filters apply to the history loaded so far.
+                    </Box>
+
+                    <Button
+                        type="button"
+                        onClick={loadOlderHistory}
+                        disabled={loadingOlder}
+                        sx={olderHistoryButtonSx}
+                    >
+                        {loadingOlder
+                            ? "Loading Older..."
+                            : "Load Older History"}
+                    </Button>
+                </Box>
+            )}
 
             <Dialog
                 open={dateFilterOpen}
@@ -2647,47 +2769,50 @@ function getTripStartTime(challan) {
     );
 }
 
-function isLogisticsOrAdmin() {
-    const directRole =
-        String(
-            localStorage.getItem("role") ||
-            localStorage.getItem("userRole") ||
-            ""
-        )
-            .trim()
-            .toUpperCase();
-
-    if (
-        directRole === "LOGISTICS" ||
-        directRole === "ADMIN"
-    ) {
-        return true;
-    }
-
-    try {
-        const user =
-            JSON.parse(
-                localStorage.getItem("user") || "{}"
-            );
-
-        const role =
-            String(user.role || "")
-                .trim()
-                .toUpperCase();
-
-        return (
-            role === "LOGISTICS" ||
-            role === "ADMIN"
-        );
-    } catch {
-        return false;
-    }
-}
-
 function sanitizeFilename(value) {
     return String(value || "challan")
         .replace(/[^a-zA-Z0-9._-]/g, "_");
 }
+
+const olderHistoryBarSx = {
+    mt: 1.4,
+    p: 1.2,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 1.2,
+    flexWrap: "wrap",
+    borderRadius: "12px",
+    background: "var(--pf-surface-alt)",
+    border: "1px solid var(--pf-border-soft)",
+};
+
+const olderHistoryTextSx = {
+    color: "var(--pf-text-muted)",
+    fontSize: 10.5,
+    fontWeight: 750,
+    lineHeight: 1.45,
+};
+
+const olderHistoryButtonSx = {
+    height: 34,
+    px: 1.5,
+    borderRadius: "9px",
+    textTransform: "none",
+    color: "#fff",
+    fontSize: 10.5,
+    fontWeight: 900,
+    background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+    boxShadow: "0 7px 16px rgba(37,99,235,.15)",
+    "&:hover": {
+        background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+    },
+    "&.Mui-disabled": {
+        color: "var(--pf-text-dim)",
+        background: "var(--pf-surface)",
+        boxShadow: "none",
+    },
+};
 
 const wrap = {
     p: 2.5,

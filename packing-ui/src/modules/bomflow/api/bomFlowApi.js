@@ -15,10 +15,15 @@ const ENDPOINTS = Object.freeze({
 });
 
 const requireId = (value, label) => {
-	if (!value) {
+	const clean = String(value ?? "").trim();
+	if (!clean) {
 		throw new Error(`${label} is required.`);
 	}
+	return clean;
 };
+
+const pathId = (value, label = "ID") =>
+	encodeURIComponent(requireId(value, label));
 
 const fileForm = (file) => {
 	if (!file) {
@@ -44,7 +49,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.get(
-			`${ENDPOINTS.products}/${productId}`
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}`
 		);
 
 		return unwrap(response);
@@ -67,7 +72,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.put(
-			`${ENDPOINTS.products}/${productId}`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}`,
 			{
 				...payload,
 				rowVersion,
@@ -81,7 +86,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.post(
-			`${ENDPOINTS.products}/${productId}/image`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/image`,
 			fileForm(file)
 		);
 
@@ -92,7 +97,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.get(
-			`${ENDPOINTS.products}/${productId}/image`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/image`,
 			{
 				responseType: "blob",
 			}
@@ -105,7 +110,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.delete(
-			`${ENDPOINTS.products}/${productId}/image`
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/image`
 		);
 
 		return unwrap(response);
@@ -115,7 +120,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.post(
-			`${ENDPOINTS.products}/${productId}/drawing`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/drawing`,
 			fileForm(file)
 		);
 
@@ -126,7 +131,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.get(
-			`${ENDPOINTS.products}/${productId}/drawing`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/drawing`,
 			{
 				responseType: "blob",
 			}
@@ -139,7 +144,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.delete(
-			`${ENDPOINTS.products}/${productId}/drawing`
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/drawing`
 		);
 
 		return unwrap(response);
@@ -149,7 +154,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.get(
-			`${ENDPOINTS.products}/${productId}/revisions`
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/revisions`
 		);
 
 		return unwrap(response);
@@ -159,7 +164,7 @@ export const bomFlowApi = {
 		requireId(productId, "Product ID");
 
 		const response = await API.post(
-			`${ENDPOINTS.products}/${productId}/revisions`,
+			`${ENDPOINTS.products}/${pathId(productId, "Product ID")}/revisions`,
 			payload
 		);
 
@@ -170,7 +175,7 @@ export const bomFlowApi = {
 		requireId(revisionId, "Revision ID");
 
 		const response = await API.get(
-			`${ENDPOINTS.revisions}/${revisionId}`
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}`
 		);
 
 		return unwrap(response);
@@ -180,7 +185,7 @@ export const bomFlowApi = {
 		requireId(revisionId, "Revision ID");
 
 		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/items`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/items`,
 			payload
 		);
 
@@ -197,7 +202,7 @@ export const bomFlowApi = {
 		requireId(itemId, "Item ID");
 
 		const response = await API.put(
-			`${ENDPOINTS.revisions}/${revisionId}/items/${itemId}`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/items/${pathId(itemId, "Item ID")}`,
 			{
 				...payload,
 				rowVersion,
@@ -216,7 +221,7 @@ export const bomFlowApi = {
 		requireId(itemId, "Item ID");
 
 		const response = await API.delete(
-			`${ENDPOINTS.revisions}/${revisionId}/items/${itemId}`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/items/${pathId(itemId, "Item ID")}`,
 			{
 				data: {
 					rowVersion,
@@ -229,7 +234,7 @@ export const bomFlowApi = {
 
 	async submitRevision(revisionId, rowVersion) {
 		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/submit`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/submit`,
 			{
 				rowVersion,
 			}
@@ -244,7 +249,7 @@ export const bomFlowApi = {
 		rowVersion
 	) {
 		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/verify`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/verify`,
 			{
 				remarks: remarks || null,
 				rowVersion,
@@ -260,7 +265,7 @@ export const bomFlowApi = {
 		rowVersion
 	) {
 		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/return`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/return`,
 			{
 				remarks,
 				rowVersion,
@@ -276,7 +281,7 @@ export const bomFlowApi = {
 		rowVersion
 	) {
 		const response = await API.post(
-			`${ENDPOINTS.revisions}/${revisionId}/approve`,
+			`${ENDPOINTS.revisions}/${pathId(revisionId, "Revision ID")}/approve`,
 			{
 				remarks: remarks || null,
 				rowVersion,
@@ -307,7 +312,7 @@ export const bomFlowApi = {
 	async updateMaterialRate(rateId, payload) {
 		requireId(rateId, "Material Rate ID");
 		const response = await API.put(
-			`${ENDPOINTS.commercial}/rates/${rateId}`,
+			`${ENDPOINTS.commercial}/rates/${pathId(rateId, "Rate ID")}`,
 			payload
 		);
 		return unwrap(response);
@@ -316,7 +321,7 @@ export const bomFlowApi = {
 	async setMaterialRateActive(rateId, active, rowVersion) {
 		requireId(rateId, "Material Rate ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/rates/${rateId}/active`,
+			`${ENDPOINTS.commercial}/rates/${pathId(rateId, "Rate ID")}/active`,
 			null,
 			{ params: { active, rowVersion } }
 		);
@@ -326,7 +331,7 @@ export const bomFlowApi = {
 	async uploadMaterialRateEvidence(rateId, file) {
 		requireId(rateId, "Material rate ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/rates/${rateId}/evidence`,
+			`${ENDPOINTS.commercial}/rates/${pathId(rateId, "Rate ID")}/evidence`,
 			fileForm(file)
 		);
 		return unwrap(response);
@@ -335,7 +340,7 @@ export const bomFlowApi = {
 	async getMaterialRateEvidenceBlob(rateId) {
 		requireId(rateId, "Material rate ID");
 		const response = await API.get(
-			`${ENDPOINTS.commercial}/rates/${rateId}/evidence`,
+			`${ENDPOINTS.commercial}/rates/${pathId(rateId, "Rate ID")}/evidence`,
 			{ responseType: "blob" }
 		);
 		return response?.data || null;
@@ -344,7 +349,7 @@ export const bomFlowApi = {
 	async deleteMaterialRateEvidence(rateId) {
 		requireId(rateId, "Material rate ID");
 		const response = await API.delete(
-			`${ENDPOINTS.commercial}/rates/${rateId}/evidence`
+			`${ENDPOINTS.commercial}/rates/${pathId(rateId, "Rate ID")}/evidence`
 		);
 		return unwrap(response);
 	},
@@ -352,7 +357,7 @@ export const bomFlowApi = {
 	async applyMaterialRates(revisionId) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/rates/apply/${revisionId}`
+			`${ENDPOINTS.commercial}/rates/apply/${pathId(revisionId, "Revision ID")}`
 		);
 		return unwrap(response);
 	},
@@ -378,7 +383,7 @@ export const bomFlowApi = {
 	async updateLabourRate(rateId, payload) {
 		requireId(rateId, "Labour Rate ID");
 		const response = await API.put(
-			`${ENDPOINTS.commercial}/labour-rates/${rateId}`,
+			`${ENDPOINTS.commercial}/labour-rates/${pathId(rateId, "Rate ID")}`,
 			payload
 		);
 		return unwrap(response);
@@ -387,7 +392,7 @@ export const bomFlowApi = {
 	async setLabourRateActive(rateId, active, rowVersion) {
 		requireId(rateId, "Labour Rate ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/labour-rates/${rateId}/active`,
+			`${ENDPOINTS.commercial}/labour-rates/${pathId(rateId, "Rate ID")}/active`,
 			null,
 			{ params: { active, rowVersion } }
 		);
@@ -399,7 +404,7 @@ export const bomFlowApi = {
 	async getCosting(revisionId) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.get(
-			`${ENDPOINTS.commercial}/costing/${revisionId}`
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}`
 		);
 		return unwrap(response);
 	},
@@ -407,7 +412,7 @@ export const bomFlowApi = {
 	async saveCostingSettings(revisionId, payload) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.put(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/settings`,
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/settings`,
 			payload
 		);
 		return unwrap(response);
@@ -416,7 +421,7 @@ export const bomFlowApi = {
 	async getRevisionIntelligence(revisionId, compareToRevisionId = null) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.get(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/revision-intelligence`,
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/revision-intelligence`,
 			{
 				params: compareToRevisionId
 					? { compareToRevisionId }
@@ -429,7 +434,7 @@ export const bomFlowApi = {
 	async syncCostingLabourMaster(revisionId) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/labour-lines/sync`
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/labour-lines/sync`
 		);
 		return unwrap(response);
 	},
@@ -437,7 +442,7 @@ export const bomFlowApi = {
 	async addCostingLabourLine(revisionId, payload) {
 		requireId(revisionId, "Revision ID");
 		const response = await API.post(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/labour-lines`,
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/labour-lines`,
 			payload
 		);
 		return unwrap(response);
@@ -447,7 +452,7 @@ export const bomFlowApi = {
 		requireId(revisionId, "Revision ID");
 		requireId(lineId, "Labour Line ID");
 		const response = await API.put(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/labour-lines/${lineId}`,
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/labour-lines/${pathId(lineId, "Labour Line ID")}`,
 			payload
 		);
 		return unwrap(response);
@@ -457,7 +462,7 @@ export const bomFlowApi = {
 		requireId(revisionId, "Revision ID");
 		requireId(lineId, "Labour Line ID");
 		await API.delete(
-			`${ENDPOINTS.commercial}/costing/${revisionId}/labour-lines/${lineId}`,
+			`${ENDPOINTS.commercial}/costing/${pathId(revisionId, "Revision ID")}/labour-lines/${pathId(lineId, "Labour Line ID")}`,
 			{ params: { rowVersion } }
 		);
 	},
@@ -478,7 +483,7 @@ export const bomFlowApi = {
 			throw new Error("Unsupported report type.");
 		}
 		const response = await API.get(
-			`${ENDPOINTS.commercial}/reports/${revisionId}/${type}.${type === "workbook" ? "xlsx" : "csv"}`,
+			`${ENDPOINTS.commercial}/reports/${pathId(revisionId, "Revision ID")}/${encodeURIComponent(type)}.${type === "workbook" ? "xlsx" : "csv"}`,
 			{ responseType: "blob" }
 		);
 		return {

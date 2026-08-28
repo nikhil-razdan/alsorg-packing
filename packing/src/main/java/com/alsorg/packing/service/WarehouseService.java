@@ -1,26 +1,46 @@
 package com.alsorg.packing.service;
 
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.MonthDay;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import com.opencsv.CSVReader;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.alsorg.packing.domain.imports.ImportPreviewRow;
-import com.alsorg.packing.domain.imports.ImportRow;
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
+import com.alsorg.packing.domain.imports.ImportPreviewRow;
+import com.alsorg.packing.domain.imports.ImportRow;
 import com.alsorg.packing.repository.DispatchedItemRepository;
+import com.opencsv.CSVReader;
 
 @Service
 public class WarehouseService {
+
+    private static final Logger log = LoggerFactory.getLogger(WarehouseService.class);
+
+    private static final long MAX_IMPORT_BYTES = 10L * 1024L * 1024L;
+    private static final int MAX_IMPORT_ROWS = 5_000;
+    private static final int MAX_BULK_ITEMS = 200;
+    private static final int MAX_GATE_PASS_LENGTH = 120;
+    private static final int MAX_ITEM_ID_LENGTH = 300;
 
     private final DispatchedItemRepository repo;
     private final DispatchedItemService dispatchedItemService;
@@ -35,11 +55,16 @@ public class WarehouseService {
         this.plantLocationService = plantLocationService;
     }
 
+    @Transactional(readOnly = true)
     public List<DispatchedItem> getFloorItems(
-            java.util.Set<String> allowedPlants,
+            Set<String> allowedPlants,
             boolean viewallWarehouseData) {
         if (viewallWarehouseData) {
             return repo.findByStatus(ItemDispatchStatus.ON_FLOOR);
+        }
+
+        if (allowedPlants == null || allowedPlants.isEmpty()) {
+            return List.of();
         }
 
         return repo.findByStatusAndPlantCodeIn(
@@ -47,8 +72,9 @@ public class WarehouseService {
                 allowedPlants);
     }
 
+    @Transactional(readOnly = true)
     public List<DispatchedItem> getWarehouseItems(
-            java.util.Set<String> allowedPlants,
+            Set<String> allowedPlants,
             boolean viewallWarehouseData) {
         List<ItemDispatchStatus> statuses = List.of(
                 ItemDispatchStatus.WAREHOUSE_REQUESTED,
@@ -59,31 +85,48 @@ public class WarehouseService {
             return repo.findByStatusIn(statuses);
         }
 
+        if (allowedPlants == null || allowedPlants.isEmpty()) {
+            return List.of();
+        }
+
         return repo.findByStatusInAndPlantCodeIn(
                 statuses,
                 allowedPlants);
     }
 
+    @Transactional
     public void requestWarehouseMove(
             String id,
             String warehouseCode,
             String gatePass,
             String username) {
+        String cleanId = cleanRequired(
+                id,
+                MAX_ITEM_ID_LENGTH,
+                "Warehouse item id is required");
 
-        DispatchedItem item = repo.findById(id).orElseThrow();
+        DispatchedItem item = repo.findByIdForLifecycleUpdate(cleanId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Warehouse item not found: " + cleanId));
 
         if (item.getStatus() != ItemDispatchStatus.ON_FLOOR) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
                     "Only ON_FLOOR items can request warehouse move");
         }
 
-        if (gatePass == null || gatePass.isBlank()) {
-            throw new RuntimeException("Gate pass is required");
-        }
+        String cleanGatePass = cleanRequired(
+                gatePass,
+                MAX_GATE_PASS_LENGTH,
+                "Gate pass is required");
+
+        String cleanWarehouse = normalizeWarehouseCode(warehouseCode);
+        validateWarehouseForItem(item, cleanWarehouse);
 
         item.setStatus(ItemDispatchStatus.WAREHOUSE_REQUESTED);
-        item.setWarehouseCode(warehouseCode);
-        item.setGatePassNumber(gatePass);
+        item.setWarehouseCode(cleanWarehouse);
+        item.setGatePassNumber(cleanGatePass);
         item.setStoredAt(null);
 
         repo.save(item);
@@ -93,284 +136,263 @@ public class WarehouseService {
             MultipartFile file,
             String mode,
             String username) {
-        throw new RuntimeException("Plant code required for warehouse import");
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Plant code required for warehouse import");
     }
 
+    /**
+     * Warehouse import is applied atomically after the preview/confirm step.
+     * Every row is validated first; a malformed row cannot leave an import half
+     * applied without the caller knowing which rows were skipped.
+     */
+    @Transactional
     public void processImport(
             MultipartFile file,
             String mode,
             String username,
             String plantCode) {
-
-        if (plantCode == null || plantCode.isBlank()) {
-            throw new RuntimeException("Plant code required");
-        }
-
+        String cleanPlantCode = normalizePlantCode(plantCode);
+        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(cleanPlantCode);
         List<ImportRow> rows = parseCsv(file);
 
-        PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Warehouse import contains no data rows");
+        }
 
-        /*
-         * One generated gate pass per warehouse in this import.
-         * Example:
-         * BLS-WH-1 items get one GP.
-         * RTP-WH-2 items get another GP.
-         */
         Map<String, String> generatedGatePassByWarehouse = new HashMap<>();
+        List<DispatchedItem> pending = new ArrayList<>(rows.size());
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        String actor = safeActor(username);
+
+        int rowNumber = 1;
 
         for (ImportRow row : rows) {
+            rowNumber++;
 
-            try {
+            String itemName = cleanRequired(
+                    row.getName(),
+                    500,
+                    "Row " + rowNumber + ": Name required");
 
-                DispatchedItem newItem = new DispatchedItem();
+            String warehouseLocation = normalizeWarehouseCode(
+                    row.getWarehouseCode());
 
-                newItem.setZohoItemId(UUID.randomUUID().toString());
-
-                newItem.setName(clean(row.getName()));
-                newItem.setSku(clean(row.getSku()));
-                newItem.setPdNo(clean(row.getPdNo()));
-                newItem.setDrawingNo(normalizeDwg(clean(row.getDrawingNo())));
-                newItem.setDescription(clean(row.getDescription()));
-                newItem.setClientName(clean(row.getClientName()));
-
-                String warehouseLocation = cleanLocation(row.getWarehouseCode());
-
-                if (warehouseLocation == null || warehouseLocation.isBlank()) {
-                    throw new RuntimeException("Warehouse required");
-                }
-
-                newItem.setPlantCode(plantCode);
-                newItem.setPackedAreaCode(plant.packedAreaCode());
-                newItem.setFgAreaCode(plant.fgAreaCode());
-                newItem.setFgZoneCode(null);
-
-                newItem.setLocation(warehouseLocation);
-                newItem.setCurrentLocationCode(warehouseLocation);
-                newItem.setWarehouseCode(warehouseLocation);
-
-                String gatePass;
-
-                if (row.getGatePass() != null && !row.getGatePass().isBlank()) {
-                    gatePass = row.getGatePass().trim();
-                } else {
-                    gatePass = generatedGatePassByWarehouse.computeIfAbsent(
-                            warehouseLocation,
-                            dispatchedItemService::createGatePassNumber);
-                }
-
-                newItem.setGatePassNumber(gatePass);
-
-                newItem.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
-
-                newItem.setStock(1);
-
-                newItem.setCreatedBy(
-                        username != null && !username.isBlank()
-                                ? username
-                                : "SYSTEM");
-
-                newItem.setCreatedAt(LocalDateTime.now());
-                newItem.setStoredAt(LocalDateTime.now());
-
-                repo.save(newItem);
-
-            } catch (Exception e) {
-
-                System.out.println("Import failed for: " + row.getName());
-                e.printStackTrace();
+            if (!plantLocationService.isWarehouseAllowed(
+                    cleanPlantCode,
+                    warehouseLocation)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Row " + rowNumber
+                                + ": Warehouse " + warehouseLocation
+                                + " is not allowed for plant " + cleanPlantCode);
             }
+
+            String gatePass = cleanNullable(row.getGatePass());
+
+            if (gatePass != null && gatePass.length() > MAX_GATE_PASS_LENGTH) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Row " + rowNumber + ": Gate pass is too long");
+            }
+
+            if (gatePass == null) {
+                gatePass = generatedGatePassByWarehouse.computeIfAbsent(
+                        warehouseLocation,
+                        dispatchedItemService::createGatePassNumber);
+            }
+
+            DispatchedItem newItem = new DispatchedItem();
+            newItem.setZohoItemId(UUID.randomUUID().toString());
+            newItem.setName(itemName);
+            newItem.setSku(cleanLimited(row.getSku(), 300));
+            newItem.setPdNo(cleanLimited(row.getPdNo(), 300));
+            newItem.setDrawingNo(normalizeDwg(cleanLimited(row.getDrawingNo(), 300)));
+            newItem.setDescription(cleanLimited(row.getDescription(), 2_000));
+            newItem.setClientName(cleanLimited(row.getClientName(), 500));
+
+            newItem.setPlantCode(cleanPlantCode);
+            newItem.setPackedAreaCode(plant.packedAreaCode());
+            newItem.setFgAreaCode(plant.fgAreaCode());
+            newItem.setFgZoneCode(null);
+
+            newItem.setLocation(warehouseLocation);
+            newItem.setCurrentLocationCode(warehouseLocation);
+            newItem.setWarehouseCode(warehouseLocation);
+            newItem.setGatePassNumber(gatePass);
+            newItem.setStatus(ItemDispatchStatus.IN_WAREHOUSE);
+            newItem.setStock(1);
+            newItem.setCreatedBy(actor);
+            newItem.setCreatedAt(now);
+            newItem.setStoredAt(now);
+
+            pending.add(newItem);
         }
+
+        repo.saveAll(pending);
+        log.info(
+                "Warehouse import completed: plant={}, rows={}, actor={}",
+                cleanPlantCode,
+                pending.size(),
+                actor);
     }
 
-    private List<ImportRow> parseCsv(MultipartFile file) {
+    private List<ImportRow> parseCsv(
+            MultipartFile file) {
+        validateImportFile(file);
 
         List<ImportRow> list = new ArrayList<>();
 
         try (CSVReader reader = new CSVReader(
-                new InputStreamReader(file.getInputStream()))) {
+                new InputStreamReader(
+                        file.getInputStream(),
+                        StandardCharsets.UTF_8))) {
 
-            reader.readNext(); // skip header
+            reader.readNext(); // header
 
             String[] parts;
 
             while ((parts = reader.readNext()) != null) {
+                if (list.size() >= MAX_IMPORT_ROWS) {
+                    throw new ResponseStatusException(
+                            HttpStatus.PAYLOAD_TOO_LARGE,
+                            "Warehouse import cannot exceed "
+                                    + MAX_IMPORT_ROWS + " rows");
+                }
 
-                ImportRow r = new ImportRow();
-
-                r.setName(parts.length > 0 ? parts[0] : null);
-                r.setSku(parts.length > 1 ? parts[1] : null);
-                r.setPdNo(parts.length > 2 ? parts[2] : null);
-                r.setDrawingNo(normalizeDwg(parts.length > 3 ? parts[3] : null));
-                r.setDescription(parts.length > 4 ? parts[4] : null);
-                r.setClientName(parts.length > 5 ? parts[5] : null);
-                r.setLocation(parts.length > 6 ? parts[6] : null);
-                r.setWarehouseCode(parts.length > 7 ? parts[7] : null);
-                r.setGatePass(parts.length > 8 ? parts[8] : null);
-
-                list.add(r);
+                ImportRow row = new ImportRow();
+                row.setName(value(parts, 0));
+                row.setSku(value(parts, 1));
+                row.setPdNo(value(parts, 2));
+                row.setDrawingNo(normalizeDwg(value(parts, 3)));
+                row.setDescription(value(parts, 4));
+                row.setClientName(value(parts, 5));
+                row.setLocation(value(parts, 6));
+                row.setWarehouseCode(value(parts, 7));
+                row.setGatePass(value(parts, 8));
+                list.add(row);
             }
-
-        } catch (Exception e) {
-            throw new RuntimeException("CSV parse failed", e);
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "CSV parse failed",
+                    exception);
         }
 
         return list;
     }
 
+    @Transactional(readOnly = true)
     public List<ImportPreviewRow> previewImport(
             MultipartFile file,
             String mode) {
-
         List<ImportRow> rows = parseCsv(file);
-
-        List<ImportPreviewRow> result = new ArrayList<>();
+        List<ImportPreviewRow> result = new ArrayList<>(rows.size());
 
         for (ImportRow row : rows) {
-
             ImportPreviewRow preview = new ImportPreviewRow();
-
             preview.setZohoItemId(row.getName());
-
             preview.setLocation(row.getLocation());
-
-            preview.setWarehouseCode(
-                    cleanLocation(row.getWarehouseCode()));
-
-            preview.setGatePass(row.getGatePass());
+            preview.setWarehouseCode(cleanNullable(row.getWarehouseCode()));
+            preview.setGatePass(cleanNullable(row.getGatePass()));
 
             try {
+                cleanRequired(row.getName(), 500, "Name required");
+                normalizeWarehouseCode(row.getWarehouseCode());
 
-                // ✅ BASIC VALIDATION
-
-                if (row.getName() == null
-                        || row.getName().isBlank()) {
-                    throw new RuntimeException("Name required");
+                if (row.getGatePass() != null
+                        && row.getGatePass().trim().length() > MAX_GATE_PASS_LENGTH) {
+                    throw new IllegalArgumentException("Gate pass is too long");
                 }
-
-                if (row.getWarehouseCode() == null
-                        || row.getWarehouseCode().isBlank()) {
-                    throw new RuntimeException("Warehouse required");
-                }
-
-                // gate pass optional
 
                 preview.setValid(true);
-
-            } catch (Exception e) {
-
+            } catch (Exception exception) {
                 preview.setValid(false);
-                preview.setError(e.getMessage());
+                preview.setError(exception.getMessage());
             }
 
             result.add(preview);
         }
 
-        return result;
+        return List.copyOf(result);
     }
-
-    /* =========================================================
-     * ADMIN WAREHOUSE OPERATIONS
-     * ========================================================= */
 
     @Transactional
     public void adminRequestReturnToDispatch(
             String itemId,
             String username) {
+        String cleanId = cleanRequired(
+                itemId,
+                MAX_ITEM_ID_LENGTH,
+                "Warehouse item id is required");
 
-        DispatchedItem item = repo.findById(itemId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Warehouse item not found: " + itemId));
+        DispatchedItem item = repo.findByIdForLifecycleUpdate(cleanId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Warehouse item not found: " + cleanId));
 
         if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
-            throw new IllegalArgumentException(
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
                     "Only items currently stored in Warehouse can request Return to Dispatch");
         }
 
-        /*
-         * Preserve the ORIGINAL return workflow exactly:
-         * IN_WAREHOUSE -> WAREHOUSE_RETURN_REQUESTED.
-         * Approval remains a separate Admin action and is NOT auto-executed here.
-         */
         dispatchedItemService.requestReturnToDispatch(
-                itemId,
-                username);
+                cleanId,
+                safeActor(username));
     }
 
     @Transactional
     public int adminBulkRequestReturnToDispatch(
             List<String> itemIds,
             String username) {
-
         List<String> uniqueIds = cleanUniqueIds(itemIds);
+        List<DispatchedItem> locked = loadAndLockBatch(uniqueIds);
 
-        if (uniqueIds.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Select at least one warehouse item");
-        }
-
-        /* Validate the whole batch before the first state change. */
-        for (String itemId : uniqueIds) {
-            DispatchedItem item = repo.findById(itemId)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Warehouse item not found: " + itemId));
-
+        for (DispatchedItem item : locked) {
             if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
-                throw new IllegalArgumentException(
-                        "Bulk Return can only be requested for IN_WAREHOUSE items. " +
-                                "Item " + itemId + " is " + item.getStatus());
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Bulk Return can only be requested for IN_WAREHOUSE items. Item "
+                                + item.getZohoItemId() + " is " + item.getStatus());
             }
         }
 
+        String actor = safeActor(username);
         for (String itemId : uniqueIds) {
-            dispatchedItemService.requestReturnToDispatch(
-                    itemId,
-                    username);
+            dispatchedItemService.requestReturnToDispatch(itemId, actor);
         }
 
         return uniqueIds.size();
     }
 
-    /**
-     * ADMIN bulk decision for already-requested Warehouse -> Dispatch returns.
-     *
-     * All rows are validated before the first mutation.  Because this method is
-     * transactional, an invalid/missing row cannot leave the selection partially
-     * approved.
-     */
     @Transactional
     public int adminBulkApproveReturnRequests(
             List<String> itemIds,
             String username) {
-
-        List<String> pendingIds = requirePendingReturnRequestIds(
-                itemIds);
+        List<String> pendingIds = requirePendingReturnRequestIds(itemIds);
+        String actor = safeActor(username);
 
         for (String itemId : pendingIds) {
-            dispatchedItemService.approveReturnToDispatch(
-                    itemId,
-                    username);
+            dispatchedItemService.approveReturnToDispatch(itemId, actor);
         }
 
         return pendingIds.size();
     }
 
-    /**
-     * ADMIN bulk rejection for already-requested Warehouse -> Dispatch returns.
-     * Restores every validated row to IN_WAREHOUSE through the existing single
-     * item service so current audit/activity logging remains unchanged.
-     */
     @Transactional
     public int adminBulkRejectReturnRequests(
             List<String> itemIds,
             String username) {
-
-        List<String> pendingIds = requirePendingReturnRequestIds(
-                itemIds);
+        List<String> pendingIds = requirePendingReturnRequestIds(itemIds);
+        String actor = safeActor(username);
 
         for (String itemId : pendingIds) {
-            dispatchedItemService.rejectReturnToDispatch(
-                    itemId,
-                    username);
+            dispatchedItemService.rejectReturnToDispatch(itemId, actor);
         }
 
         return pendingIds.size();
@@ -378,28 +400,15 @@ public class WarehouseService {
 
     private List<String> requirePendingReturnRequestIds(
             List<String> itemIds) {
+        List<String> uniqueIds = cleanUniqueIds(itemIds);
+        List<DispatchedItem> locked = loadAndLockBatch(uniqueIds);
 
-        List<String> uniqueIds = cleanUniqueIds(
-                itemIds);
-
-        if (uniqueIds.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Select at least one return request");
-        }
-
-        /*
-         * Pre-validate the COMPLETE batch before changing anything.
-         */
-        for (String itemId : uniqueIds) {
-            DispatchedItem item = repo.findById(
-                    itemId)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Warehouse item not found: " + itemId));
-
+        for (DispatchedItem item : locked) {
             if (item.getStatus() != ItemDispatchStatus.WAREHOUSE_RETURN_REQUESTED) {
-                throw new IllegalArgumentException(
-                        "Only pending Return to Dispatch requests can be approved/rejected. "
-                                + "Item " + itemId + " is " + item.getStatus());
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Only pending Return to Dispatch requests can be approved/rejected. Item "
+                                + item.getZohoItemId() + " is " + item.getStatus());
             }
         }
 
@@ -414,14 +423,13 @@ public class WarehouseService {
             String fgZoneCode,
             String warehouseCode,
             String username) {
-
         return dispatchedItemService.assignPlantLocationToDispatchedItem(
-                itemId,
-                plantCode,
-                currentLocationCode,
-                fgZoneCode,
-                warehouseCode,
-                username);
+                cleanRequired(itemId, MAX_ITEM_ID_LENGTH, "Warehouse item id is required"),
+                normalizePlantCode(plantCode),
+                cleanNullable(currentLocationCode),
+                cleanNullable(fgZoneCode),
+                cleanNullable(warehouseCode),
+                safeActor(username));
     }
 
     @Transactional
@@ -432,23 +440,16 @@ public class WarehouseService {
             String fgZoneCode,
             String warehouseCode,
             String username) {
-
         List<String> uniqueIds = cleanUniqueIds(itemIds);
+        String cleanPlantCode = normalizePlantCode(plantCode);
 
-        if (uniqueIds.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Select at least one warehouse item");
-        }
-
-        if (plantCode == null || plantCode.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Plant code required");
-        }
+        /* Lock/verify all ids before the first mutation. */
+        loadAndLockBatch(uniqueIds);
 
         for (String itemId : uniqueIds) {
             adminEditLocation(
                     itemId,
-                    plantCode.trim(),
+                    cleanPlantCode,
                     cleanNullable(currentLocationCode),
                     cleanNullable(fgZoneCode),
                     cleanNullable(warehouseCode),
@@ -458,33 +459,9 @@ public class WarehouseService {
         return uniqueIds.size();
     }
 
-    private List<String> cleanUniqueIds(
-            List<String> itemIds) {
-
-        if (itemIds == null) {
-            return List.of();
-        }
-
-        return itemIds.stream()
-                .filter(id -> id != null && !id.trim().isBlank())
-                .map(String::trim)
-                .distinct()
-                .toList();
-    }
-
-    private String cleanNullable(
-            String value) {
-
-        if (value == null) {
-            return null;
-        }
-
-        String clean = value.trim();
-        return clean.isBlank() ? null : clean;
-    }
-
+    @Transactional
     public int generateMissingGatePassForStoredItems(
-            java.util.Set<String> allowedPlants,
+            Set<String> allowedPlants,
             boolean viewAllWarehouseData,
             String username) {
         List<DispatchedItem> warehouseItems = getWarehouseItems(
@@ -492,17 +469,17 @@ public class WarehouseService {
                 viewAllWarehouseData);
 
         Map<String, String> generatedGatePassByWarehouse = new HashMap<>();
-
         List<DispatchedItem> changedItems = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        String actor = safeActor(username);
 
         for (DispatchedItem item : warehouseItems) {
-
             if (item.getStatus() != ItemDispatchStatus.IN_WAREHOUSE) {
                 continue;
             }
 
-            if (item.getGatePassNumber() != null &&
-                    !item.getGatePassNumber().trim().isBlank()) {
+            if (item.getGatePassNumber() != null
+                    && !item.getGatePassNumber().trim().isBlank()) {
                 continue;
             }
 
@@ -519,14 +496,11 @@ public class WarehouseService {
             item.setGatePassNumber(gatePass);
 
             if (item.getCreatedBy() == null || item.getCreatedBy().isBlank()) {
-                item.setCreatedBy(
-                        username != null && !username.isBlank()
-                                ? username
-                                : "SYSTEM");
+                item.setCreatedBy(actor);
             }
 
             if (item.getStoredAt() == null) {
-                item.setStoredAt(LocalDateTime.now());
+                item.setStoredAt(now);
             }
 
             changedItems.add(item);
@@ -539,111 +513,280 @@ public class WarehouseService {
         return changedItems.size();
     }
 
-    // =========================================================
-    // HELPERS
-    // =========================================================
+    private List<DispatchedItem> loadAndLockBatch(
+            List<String> uniqueIds) {
+        if (uniqueIds == null || uniqueIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Select at least one warehouse item");
+        }
+
+        List<DispatchedItem> locked = repo.findAllByIdForDispatchUpdate(uniqueIds);
+
+        if (locked.size() != uniqueIds.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "One or more selected warehouse items no longer exist");
+        }
+
+        Map<String, DispatchedItem> byId = new LinkedHashMap<>();
+        for (DispatchedItem item : locked) {
+            if (item != null && item.getZohoItemId() != null) {
+                byId.put(item.getZohoItemId(), item);
+            }
+        }
+
+        List<DispatchedItem> ordered = new ArrayList<>(uniqueIds.size());
+        for (String id : uniqueIds) {
+            DispatchedItem item = byId.get(id);
+            if (item == null) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Warehouse item not found: " + id);
+            }
+            ordered.add(item);
+        }
+
+        return ordered;
+    }
+
+    private List<String> cleanUniqueIds(
+            List<String> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Select at least one warehouse item");
+        }
+
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+
+        for (String id : itemIds) {
+            if (id == null) {
+                continue;
+            }
+
+            String clean = id.trim();
+
+            if (clean.isBlank()) {
+                continue;
+            }
+
+            if (clean.length() > MAX_ITEM_ID_LENGTH) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Warehouse item id is too long");
+            }
+
+            unique.add(clean);
+        }
+
+        if (unique.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Select at least one warehouse item");
+        }
+
+        if (unique.size() > MAX_BULK_ITEMS) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "A maximum of " + MAX_BULK_ITEMS
+                            + " warehouse items can be processed at once");
+        }
+
+        return List.copyOf(unique);
+    }
+
+    private void validateWarehouseForItem(
+            DispatchedItem item,
+            String warehouseCode) {
+        String plantCode = item == null
+                ? null
+                : item.getPlantCode();
+
+        if (plantCode == null || plantCode.isBlank()) {
+            return; // legacy row compatibility
+        }
+
+        String cleanPlant = normalizePlantCode(plantCode);
+
+        if (!plantLocationService.isWarehouseAllowed(
+                cleanPlant,
+                warehouseCode)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Warehouse " + warehouseCode
+                            + " is not allowed for plant " + cleanPlant);
+        }
+    }
+
+    private void validateImportFile(
+            MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "CSV file is required");
+        }
+
+        if (file.getSize() > MAX_IMPORT_BYTES) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "CSV file cannot exceed 10 MB");
+        }
+    }
+
+    private String normalizePlantCode(
+            String value) {
+        String clean = cleanRequired(
+                value,
+                40,
+                "Plant code required")
+                .toUpperCase(Locale.ROOT);
+
+        if (!plantLocationService.isValidPlant(clean)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid plant code: " + clean);
+        }
+
+        return clean;
+    }
+
+    private String normalizeWarehouseCode(
+            String value) {
+        String clean = cleanRequired(
+                value,
+                60,
+                "Warehouse required")
+                .toUpperCase(Locale.ROOT);
+
+        return clean;
+    }
+
+    private String value(
+            String[] parts,
+            int index) {
+        return parts != null && index >= 0 && index < parts.length
+                ? parts[index]
+                : null;
+    }
 
     private String firstNonBlank(
             String... values) {
-        if (values == null) {
-            return "WH";
-        }
-
-        for (String value : values) {
-            if (value != null && !value.trim().isBlank()) {
-                return value.trim();
+        if (values != null) {
+            for (String value : values) {
+                if (value != null && !value.trim().isBlank()) {
+                    return value.trim();
+                }
             }
         }
 
         return "WH";
     }
 
-    private String clean(String value) {
+    private String cleanRequired(
+            String value,
+            int maxLength,
+            String message) {
+        String clean = cleanNullable(value);
 
+        if (clean == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    message);
+        }
+
+        if (clean.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    message + " (maximum " + maxLength + " characters)");
+        }
+
+        return clean;
+    }
+
+    private String cleanLimited(
+            String value,
+            int maxLength) {
+        String clean = cleanNullable(value);
+
+        if (clean == null) {
+            return null;
+        }
+
+        if (clean.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Import value is too long");
+        }
+
+        return clean;
+    }
+
+    private String cleanNullable(
+            String value) {
         if (value == null) {
             return null;
         }
 
-        value = value.trim();
+        String clean = value.trim();
 
-        if (value.startsWith("\"")
-                && value.endsWith("\"")
-                && value.length() >= 2) {
-            value = value.substring(1, value.length() - 1);
+        if (clean.startsWith("\"")
+                && clean.endsWith("\"")
+                && clean.length() >= 2) {
+            clean = clean.substring(1, clean.length() - 1).trim();
         }
 
-        return value.trim();
+        return clean.isBlank() ? null : clean;
     }
 
-    private String cleanLocation(String location) {
-
-        if (location == null) {
-            return null;
-        }
-
-        location = location.trim();
-
-        // ✅ Prevent accidental wrong mappings
-        // if client name/description somehow entered
-        // only keep short warehouse-like values
-
-        if (location.length() > 20) {
-            return location.substring(0, 20);
-        }
-
-        return location;
+    private String safeActor(
+            String username) {
+        String actor = cleanNullable(username);
+        return actor == null ? "SYSTEM" : actor;
     }
 
-    private String normalizeDwg(String value) {
-
-        if (value == null || value.isBlank())
+    private String normalizeDwg(
+            String value) {
+        if (value == null || value.isBlank()) {
             return value;
-
-        value = value.trim();
-
-        // 🔥 REMOVE leading ' (Excel forced text)
-        if (value.startsWith("'")) {
-            value = value.substring(1).trim();
         }
 
-        // 🔥 ALSO handle cases like "' 04/13"
-        if (value.startsWith("'")) {
-            value = value.replaceFirst("^'+", "").trim();
-        }
+        String clean = value.trim().replaceFirst("^'+", "").trim();
 
         try {
-            // Convert "01-Jan" → "01/01"
-            if (value.matches("\\d{2}-[A-Za-z]{3}")) {
+            if (clean.matches("\\d{2}-[A-Za-z]{3}")) {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(
+                        "dd-MMM",
+                        Locale.ENGLISH);
+                MonthDay monthDay = MonthDay.parse(clean, formatter);
 
-                java.time.format.DateTimeFormatter f = java.time.format.DateTimeFormatter.ofPattern("dd-MMM");
+                return String.format(
+                        Locale.ROOT,
+                        "%02d/%02d",
+                        monthDay.getDayOfMonth(),
+                        monthDay.getMonthValue());
+            }
 
-                java.time.LocalDate date = java.time.LocalDate.parse(value, f);
+            if (clean.matches("\\d{5}")) {
+                long serial = Long.parseLong(clean);
+                java.time.LocalDate date = java.time.LocalDate
+                        .of(1899, 12, 30)
+                        .plusDays(serial);
 
-                return String.format("%02d/%02d",
+                return String.format(
+                        Locale.ROOT,
+                        "%02d/%02d",
                         date.getDayOfMonth(),
                         date.getMonthValue());
             }
 
-            // 🔥 HANDLE EXCEL SERIAL NUMBER (like 46023)
-            if (value.matches("\\d{5}")) {
-
-                long serial = Long.parseLong(value);
-
-                java.time.LocalDate date = java.time.LocalDate.of(1899, 12, 30).plusDays(serial);
-
-                return String.format("%02d/%02d",
-                        date.getDayOfMonth(),
-                        date.getMonthValue());
+            if (clean.matches("\\d{2}-\\d{2}")) {
+                return clean.replace("-", "/");
             }
-
-            // 🔥 Convert 04-13 → 04/13 (common Excel behavior)
-            if (value.matches("\\d{2}-\\d{2}")) {
-                return value.replace("-", "/");
-            }
-
         } catch (Exception ignored) {
+            /* Keep the original drawing text if an Excel coercion cannot be decoded. */
         }
 
-        return value;
+        return clean;
     }
 }

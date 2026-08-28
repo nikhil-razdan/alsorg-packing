@@ -57,13 +57,32 @@ function Guard({ screen, children }) {
 
     if (authLoading) return null;
     if (!isLoggedIn) {
-        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+        return (
+            <Navigate
+                to="/login"
+                replace
+                state={{
+                    from:
+                        location.pathname +
+                        location.search,
+                }}
+            />
+        );
     }
 
     const accessUser = {
         ...(user || {}),
         role: role || user?.role || "",
-        modules: Array.isArray(modules) ? modules : user?.modules || [],
+        roles: Array.isArray(roles)
+            ? roles
+            : Array.isArray(user?.roles)
+                ? user.roles
+                : [],
+        modules: Array.isArray(modules)
+            ? modules
+            : Array.isArray(user?.modules)
+                ? user.modules
+                : [],
     };
     if (!hasModuleAccessFromUser(accessUser, MODULE_KEYS.MATFLOW)) {
         return <Navigate to="/modules" replace />;
@@ -83,14 +102,45 @@ function Guard({ screen, children }) {
 }
 
 function HomeRedirect() {
-    const { role, roles, user, authLoading } = useAuth();
-    if (authLoading) return null;
-    return <Navigate to={defaultMatFlowPathForRole([
-        ...(Array.isArray(roles) ? roles : []),
-        ...(Array.isArray(user?.roles) ? user.roles : []),
+    const location = useLocation();
+
+    const {
         role,
-        user?.role,
-    ])} replace />;
+        roles,
+        user,
+        authLoading,
+        isLoggedIn,
+    } = useAuth();
+
+    if (authLoading) {
+        return null;
+    }
+
+    if (!isLoggedIn) {
+        return (
+            <Navigate
+                to="/login"
+                replace
+                state={{
+                    from:
+                        location.pathname +
+                        location.search,
+                }}
+            />
+        );
+    }
+
+    return (
+        <Navigate
+            to={defaultMatFlowPathForRole([
+                ...(Array.isArray(roles) ? roles : []),
+                ...(Array.isArray(user?.roles) ? user.roles : []),
+                role,
+                user?.role,
+            ])}
+            replace
+        />
+    );
 }
 
 function LegacyMaterialTrackerRedirect() {

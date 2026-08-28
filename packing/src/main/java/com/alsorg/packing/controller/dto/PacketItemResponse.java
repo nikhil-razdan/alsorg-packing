@@ -28,7 +28,7 @@ public class PacketItemResponse {
     private String currentLocationCode;
     private String fgAreaCode;
     private String fgZoneCode;
-    
+
     public PacketItemResponse() {
     }
 
@@ -128,99 +128,99 @@ public class PacketItemResponse {
         this.clientAddress = clientAddress;
     }
 
-	public String getStickerNumber() {
-		return stickerNumber;
-	}
+    public String getStickerNumber() {
+        return stickerNumber;
+    }
 
-	public void setStickerNumber(String stickerNumber) {
-		this.stickerNumber = stickerNumber;
-	}
+    public void setStickerNumber(String stickerNumber) {
+        this.stickerNumber = stickerNumber;
+    }
 
-	public String getDimensions() {
-		return dimensions;
-	}
+    public String getDimensions() {
+        return dimensions;
+    }
 
-	public void setDimensions(String dimensions) {
-		this.dimensions = dimensions;
-	}
+    public void setDimensions(String dimensions) {
+        this.dimensions = dimensions;
+    }
 
-	public String getWeight() {
-		return weight;
-	}
+    public String getWeight() {
+        return weight;
+    }
 
-	public void setWeight(String weight) {
-		this.weight = weight;
-	}
+    public void setWeight(String weight) {
+        this.weight = weight;
+    }
 
-	public String getRemarks() {
-		return remarks;
-	}
+    public String getRemarks() {
+        return remarks;
+    }
 
-	public void setRemarks(String remarks) {
-		this.remarks = remarks;
-	}
-	
-	 public UUID getMasterItemId() {
-	        return masterItemId;
-	    }
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
+    }
 
-	    public void setMasterItemId(UUID masterItemId) {
-	        this.masterItemId = masterItemId;
-	    }
+    public UUID getMasterItemId() {
+        return masterItemId;
+    }
 
-		public int getTotalPackets() {
-			return totalPackets;
-		}
+    public void setMasterItemId(UUID masterItemId) {
+        this.masterItemId = masterItemId;
+    }
 
-		public void setTotalPackets(int totalPackets) {
-			this.totalPackets = totalPackets;
-		}
+    public int getTotalPackets() {
+        return totalPackets;
+    }
 
-		public String getCreatedBy() {
-			return createdBy;
-		}
+    public void setTotalPackets(int totalPackets) {
+        this.totalPackets = totalPackets;
+    }
 
-		public void setCreatedBy(String createdBy) {
-			this.createdBy = createdBy;
-		}
+    public String getCreatedBy() {
+        return createdBy;
+    }
 
-		public String getPlantCode() {
-			return plantCode;
-		}
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
 
-		public void setPlantCode(String plantCode) {
-			this.plantCode = plantCode;
-		}
+    public String getPlantCode() {
+        return plantCode;
+    }
 
-		public String getPackedAreaCode() {
-			return packedAreaCode;
-		}
+    public void setPlantCode(String plantCode) {
+        this.plantCode = plantCode;
+    }
 
-		public void setPackedAreaCode(String packedAreaCode) {
-			this.packedAreaCode = packedAreaCode;
-		}
+    public String getPackedAreaCode() {
+        return packedAreaCode;
+    }
 
-		public String getCurrentLocationCode() {
-			return currentLocationCode;
-		}
+    public void setPackedAreaCode(String packedAreaCode) {
+        this.packedAreaCode = packedAreaCode;
+    }
 
-		public void setCurrentLocationCode(String currentLocationCode) {
-			this.currentLocationCode = currentLocationCode;
-		}
+    public String getCurrentLocationCode() {
+        return currentLocationCode;
+    }
 
-		public String getFgAreaCode() {
-			return fgAreaCode;
-		}
+    public void setCurrentLocationCode(String currentLocationCode) {
+        this.currentLocationCode = currentLocationCode;
+    }
 
-		public void setFgAreaCode(String fgAreaCode) {
-			this.fgAreaCode = fgAreaCode;
-		}
+    public String getFgAreaCode() {
+        return fgAreaCode;
+    }
 
-		public String getFgZoneCode() {
-			return fgZoneCode;
-		}
+    public void setFgAreaCode(String fgAreaCode) {
+        this.fgAreaCode = fgAreaCode;
+    }
 
-		public void setFgZoneCode(String fgZoneCode) {
-			this.fgZoneCode = fgZoneCode;
-		}
+    public String getFgZoneCode() {
+        return fgZoneCode;
+    }
+
+    public void setFgZoneCode(String fgZoneCode) {
+        this.fgZoneCode = fgZoneCode;
+    }
 }

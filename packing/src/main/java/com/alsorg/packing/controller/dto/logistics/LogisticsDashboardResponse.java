@@ -5,30 +5,16 @@ import java.util.Map;
 public class LogisticsDashboardResponse {
 
     private int totalTrips;
-
     private int totalLoaders;
-
     private double efficiency;
-
     private int activeDrivers;
-
     private int activeVehicles;
-
     private double totalWorkingHours;
-
     private Map<String, Integer> tripsOverTime;
-
     private Map<String, Integer> tripsByVehicle;
-
     private Map<String, Integer> tripsByDriver;
-
     private Map<String, Double> driverPerformance;
-
     private Map<String, Double> vehicleUtilization;
-
-    // =========================
-    // GETTERS & SETTERS
-    // =========================
 
     public int getTotalTrips() {
         return totalTrips;
@@ -106,9 +92,7 @@ public class LogisticsDashboardResponse {
         return driverPerformance;
     }
 
-    public void setDriverPerformance(
-            Map<String, Double> driverPerformance
-    ) {
+    public void setDriverPerformance(Map<String, Double> driverPerformance) {
         this.driverPerformance = driverPerformance;
     }
 
@@ -116,9 +100,7 @@ public class LogisticsDashboardResponse {
         return vehicleUtilization;
     }
 
-    public void setVehicleUtilization(
-            Map<String, Double> vehicleUtilization
-    ) {
+    public void setVehicleUtilization(Map<String, Double> vehicleUtilization) {
         this.vehicleUtilization = vehicleUtilization;
     }
 }

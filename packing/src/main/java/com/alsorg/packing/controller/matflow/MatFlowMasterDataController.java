@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * MatFlow master/reference controller.
@@ -50,6 +52,7 @@ public class MatFlowMasterDataController {
     public List<MaterialResponse> materials(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active) {
+        validateText(search, 300, "Search");
         return service.listMaterials(search, active);
     }
 
@@ -76,6 +79,7 @@ public class MatFlowMasterDataController {
     public List<ProcessingUnitResponse> processingUnits(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active) {
+        validateText(search, 300, "Search");
         return service.listProcessingUnits(search, active);
     }
 
@@ -106,6 +110,7 @@ public class MatFlowMasterDataController {
     public List<VendorResponse> vendors(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active) {
+        validateText(search, 300, "Search");
         return service.listVendors(search, active);
     }
 
@@ -127,4 +132,12 @@ public class MatFlowMasterDataController {
     public MetadataResponse metadata() {
         return service.metadata();
     }
+    private void validateText(String value, int maxLength, String fieldName) {
+        if (value != null && value.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " cannot exceed " + maxLength + " characters");
+        }
+    }
+
 }

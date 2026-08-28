@@ -3,6 +3,9 @@ import {
   useState,
 } from "react";
 
+import usePackFlowDataRefresh
+  from "../dashboard/hooks/usePackFlowDataRefresh";
+
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 
@@ -14,6 +17,28 @@ import VehicleManagement from "../dashboard/components/logistics/VehicleManageme
 function LogisticsPortalPage() {
   const [tab, setTab] =
     useState("operations");
+
+  const [livePulse, setLivePulse] =
+    useState(0);
+
+  /*
+   * The portal shell owns no logistics records itself; its imported workspaces
+   * remain the authoritative data owners.  Incrementing this token provides a
+   * stable, non-remounting live-refresh signal to those workspaces.  Updated
+   * workspaces can consume it without losing filters, open dialogs or pagination.
+   */
+  usePackFlowDataRefresh(
+    "logistics",
+    async () => {
+      setLivePulse(
+        (current) =>
+          current + 1
+      );
+    },
+    {
+      intervalMs: 6000,
+    }
+  );
 
   const [snackOpen, setSnackOpen] =
     useState(false);
@@ -106,18 +131,21 @@ function LogisticsPortalPage() {
         {tab === "operations" && (
           <LogisticsOperationsHub
             showAlert={showAlert}
+            liveRefreshToken={livePulse}
           />
         )}
 
         {tab === "drivers" && (
           <DriverManagement
             showAlert={showAlert}
+            liveRefreshToken={livePulse}
           />
         )}
 
         {tab === "vehicles" && (
           <VehicleManagement
             showAlert={showAlert}
+            liveRefreshToken={livePulse}
           />
         )}
 
@@ -142,6 +170,7 @@ function LogisticsPortalPage() {
 
             <ShiftReports
               showAlert={showAlert}
+              liveRefreshToken={livePulse}
             />
           </>
         )}

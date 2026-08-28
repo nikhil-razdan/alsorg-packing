@@ -3,6 +3,7 @@ package com.alsorg.packing.hrflow.dto;
 import com.alsorg.packing.hrflow.domain.HrAccessRole;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,9 +15,14 @@ public final class HrAccessDtos {
     }
 
     public record GrantAccessRequest(
-            @NotBlank String principalName,
-            @NotNull HrAccessRole role
-    ) {}
+            @NotBlank
+            @Size(max = 200)
+            String principalName,
+
+            @NotNull
+            HrAccessRole role
+    ) {
+    }
 
     public record AccessGrantResponse(
             UUID id,
@@ -27,12 +33,14 @@ public final class HrAccessDtos {
             LocalDateTime createdAt,
             String updatedBy,
             LocalDateTime updatedAt
-    ) {}
+    ) {
+    }
 
     public record MyAccessResponse(
             String principalName,
             boolean globalAdmin,
             boolean allowed,
             List<HrAccessRole> roles
-    ) {}
+    ) {
+    }
 }

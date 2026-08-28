@@ -103,14 +103,27 @@ function Header() {
 		);
 
 	useEffect(() => {
-		if (!canViewFleetCompliance) {
+		if (!canViewFleetCompliance || !user?.id) {
 			setNotifications([]);
 			return undefined;
 		}
 
+		/*
+		 * Notification read-state belongs to the current authenticated browser
+		 * session. Never carry it across a user switch on a shared workstation.
+		 */
+		setNotifications([]);
+
 		let active = true;
 
 		async function loadFleetNotifications() {
+			if (
+				typeof document !== "undefined" &&
+				document.visibilityState === "hidden"
+			) {
+				return;
+			}
+
 			try {
 				setNotificationsLoading(true);
 
@@ -167,13 +180,29 @@ function Header() {
 				5 * 60 * 1000
 			);
 
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === "visible") {
+				loadFleetNotifications();
+			}
+		};
+
+		document.addEventListener(
+			"visibilitychange",
+			handleVisibilityChange
+		);
+
 		return () => {
 			active = false;
 			window.clearInterval(
 				intervalId
 			);
+
+			document.removeEventListener(
+				"visibilitychange",
+				handleVisibilityChange
+			);
 		};
-	}, [canViewFleetCompliance]);
+	}, [canViewFleetCompliance, user?.id]);
 
 	const moduleLinks = useMemo(
 		() => [

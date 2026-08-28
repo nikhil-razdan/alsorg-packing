@@ -6,7 +6,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public final class HrAuditDtos {
-    private HrAuditDtos() {}
+
+    private HrAuditDtos() {
+    }
 
     public record AuditResponse(
             UUID id,
@@ -17,5 +19,6 @@ public final class HrAuditDtos {
             String message,
             String metadataJson,
             LocalDateTime createdAt
-    ) {}
+    ) {
+    }
 }

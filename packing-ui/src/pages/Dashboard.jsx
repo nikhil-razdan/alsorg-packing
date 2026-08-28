@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import usePackFlowDataRefresh from "../dashboard/hooks/usePackFlowDataRefresh";
 import StatusDonutChart from "../dashboard/components/StatusDonutChart";
 import StatusBarChart from "../dashboard/components/StatusBarChart";
 import ActivityFeed from "../dashboard/components/ActivityFeed";
@@ -2742,6 +2743,23 @@ function DashboardPage() {
   }, [
     loadInventoryDashboard,
   ]);
+
+  /*
+   * Keep the management dashboard continuously synchronized with the backend.
+   * Browser-originated PackFlow changes refresh immediately through the existing
+   * event bus; the interval catches ShipTrack/other-workstation/backend changes.
+   */
+  usePackFlowDataRefresh(
+    "dashboard",
+    async () => {
+      await loadInventoryDashboard({
+        showRefreshing: false,
+      });
+    },
+    {
+      intervalMs: 6000,
+    }
+  );
 
   const toggleStatCard = (key) => {
     setActiveStatCard((current) =>

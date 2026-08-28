@@ -19,17 +19,14 @@ public class PackingReportRepository {
 
     public List<PackingReportRow> fetchPackingReport(
             LocalDateTime from,
-            LocalDateTime to
-    ) {
+            LocalDateTime to) {
         StringBuilder jpql = new StringBuilder("""
             select new com.alsorg.packing.reporting.dto.PackingReportRow(
                 d.zohoItemId,
                 d.name,
                 d.clientName,
-
                 d.zohoItemId,
                 d.name,
-
                 d.packedAt,
                 coalesce(d.packedBy, d.createdBy, 'SYSTEM')
             )
@@ -45,13 +42,11 @@ public class PackingReportRepository {
             jpql.append(" and d.packedAt <= :to ");
         }
 
-        jpql.append(" order by d.packedAt desc ");
+        jpql.append(" order by d.packedAt desc, d.zohoItemId asc ");
 
-        TypedQuery<PackingReportRow> query =
-                em.createQuery(
-                        jpql.toString(),
-                        PackingReportRow.class
-                );
+        TypedQuery<PackingReportRow> query = em.createQuery(
+                jpql.toString(),
+                PackingReportRow.class);
 
         if (from != null) {
             query.setParameter("from", from);

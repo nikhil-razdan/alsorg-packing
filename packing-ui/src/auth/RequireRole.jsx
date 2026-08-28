@@ -34,7 +34,8 @@ function RequireRole({
 				state={{
 					from:
 						location.pathname +
-						location.search,
+						location.search +
+						location.hash,
 				}}
 			/>
 		);
@@ -65,7 +66,8 @@ function RequireRole({
 						normalizedAllowed,
 					from:
 						location.pathname +
-						location.search,
+						location.search +
+						location.hash,
 				}}
 			/>
 		);

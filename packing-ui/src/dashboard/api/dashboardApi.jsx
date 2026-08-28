@@ -1,46 +1,7 @@
 import { API_BASE_URL } from "../../config";
+import { secureFetch } from "../../services/api";
 
-const getStoredToken = () => {
-	const possibleKeys = [
-		"token",
-		"authToken",
-		"jwt",
-		"accessToken",
-	];
-
-	for (const key of possibleKeys) {
-		const value =
-			localStorage.getItem(key);
-
-		if (value && value.trim()) {
-			const token =
-				value.trim();
-
-			return token.startsWith("Bearer ")
-				? token
-				: `Bearer ${token}`;
-		}
-	}
-
-	return "";
-};
-
-const buildAuthHeaders = (
-	extra = {}
-) => {
-	const headers = {
-		...extra,
-	};
-
-	const token =
-		getStoredToken();
-
-	if (token) {
-		headers.Authorization = token;
-	}
-
-	return headers;
-};
+const buildAuthHeaders = (extra = {}) => ({ ...extra });
 
 const readResponsePayload = async (res) => {
 	const contentType =
@@ -101,7 +62,7 @@ const requestJson = async (
 		body !== null;
 
 	const res =
-		await fetch(`${API_BASE_URL}${path}`, {
+		await secureFetch(`${API_BASE_URL}${path}`, {
 			method,
 			credentials: "include",
 			cache: "no-store",
@@ -403,20 +364,8 @@ export function buildDashboardFileUrl(path) {
 	return `${API_BASE_URL}${path}`;
 }
 
-export function openDashboardPdf(path) {
-	const url =
-		buildDashboardFileUrl(path);
-
-	if (!url) {
-		alert("PDF is not available.");
-		return;
-	}
-
-	window.open(
-		url,
-		"_blank",
-		"noopener,noreferrer"
-	);
+export async function openDashboardPdf(path) {
+	return openProtectedDashboardPdf(path);
 }
 
 export async function downloadDashboardPdf(
@@ -433,7 +382,7 @@ export async function downloadDashboardPdf(
 
 	try {
 		const res =
-			await fetch(url, {
+			await secureFetch(url, {
 				credentials: "include",
 			});
 
@@ -482,7 +431,7 @@ export async function fetchProtectedDashboardPdfBlob(path) {
 	}
 
 	const res =
-		await fetch(url, {
+		await secureFetch(url, {
 			method: "GET",
 			credentials: "include",
 			cache: "no-store",

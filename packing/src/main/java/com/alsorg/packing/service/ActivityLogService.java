@@ -1,10 +1,9 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.activity.ActivityLog;
 import com.alsorg.packing.repository.ActivityLogRepository;
 
@@ -13,9 +12,6 @@ import jakarta.transaction.Transactional;
 @Service
 @Transactional
 public class ActivityLogService {
-
-    private static final ZoneId APP_ZONE =
-            ZoneId.of("Asia/Kolkata");
 
     private final ActivityLogRepository activityRepo;
 
@@ -51,7 +47,7 @@ public class ActivityLogService {
          * Do not depend on Render server timezone.
          */
         log.setCreatedAt(
-                LocalDateTime.now(APP_ZONE)
+                LocalDateTime.now(TimeZoneConfig.APP_ZONE)
         );
 
         activityRepo.save(log);

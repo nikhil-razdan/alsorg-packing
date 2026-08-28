@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.matflow;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
@@ -50,7 +51,7 @@ public class MatFlowAuditLog
     @PrePersist
     private void initialiseAuditTimestamp() {
         if (actionAt == null) {
-            actionAt = LocalDateTime.now();
+            actionAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
         }
     }
 

@@ -11,13 +11,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface MatFlowPurchaseOrderLineRepository
         extends JpaRepository<MatFlowPurchaseOrderLine, UUID> {
 
-    List<MatFlowPurchaseOrderLine> findByPurchaseOrder_IdOrderByCreatedAtAsc(
-            UUID purchaseOrderId);
+    List<MatFlowPurchaseOrderLine> findByPurchaseOrder_IdOrderByCreatedAtAsc(UUID purchaseOrderId);
 
-    Optional<MatFlowPurchaseOrderLine> findByIdAndPurchaseOrder_Id(
-            UUID id,
-            UUID purchaseOrderId);
+    Optional<MatFlowPurchaseOrderLine> findByIdAndPurchaseOrder_Id(UUID id, UUID purchaseOrderId);
 
-    List<MatFlowPurchaseOrderLine> findByIndentLine_Id(
-            UUID indentLineId);
+    List<MatFlowPurchaseOrderLine> findByIndentLine_Id(UUID indentLineId);
 }

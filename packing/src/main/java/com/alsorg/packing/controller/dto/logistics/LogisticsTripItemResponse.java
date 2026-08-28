@@ -6,10 +6,8 @@ public class LogisticsTripItemResponse {
 
     private UUID id;
     private UUID tripId;
-
     private String zohoItemId;
     private UUID packetItemId;
-
     private String itemName;
     private String sku;
     private String pdNo;

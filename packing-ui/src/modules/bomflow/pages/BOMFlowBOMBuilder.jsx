@@ -534,6 +534,9 @@ export default function BOMFlowBOMBuilder() {
 	};
 
 	const handleVerify = async () => {
+		if (!canReviewBomFlowRevision(role) || !revision?.id) {
+			return;
+		}
 		setWorking(true);
 		setError("");
 
@@ -558,6 +561,9 @@ export default function BOMFlowBOMBuilder() {
 	};
 
 	const handleApprove = async () => {
+		if (!canApproveBomFlowRevision(role) || !revision?.id) {
+			return;
+		}
 		setWorking(true);
 		setError("");
 

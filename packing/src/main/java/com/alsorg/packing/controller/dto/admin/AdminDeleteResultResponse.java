@@ -12,6 +12,5 @@ public record AdminDeleteResultResponse(
         String deletedBy,
         LocalDateTime deletedAt,
         Map<String, Long> deletedRows,
-        String message
-) {
+        String message) {
 }

@@ -18,22 +18,16 @@ public record AdminUpdatedDispatchRow(
         String remarks,
         String location,
         String currentLocationCode,
-
         UUID driverId,
         String driverName,
-
         UUID vehicleId,
         String vehicleNumber,
-
         Integer helperLoaderCount,
-
         String chalaanNumber,
         String status,
-
         LocalDateTime dispatchedAt,
         LocalDateTime tripStartedAt,
         LocalDateTime tripEndedAt,
         LocalDateTime deliveredAt,
-
         LocalDateTime updatedAt) {
 }

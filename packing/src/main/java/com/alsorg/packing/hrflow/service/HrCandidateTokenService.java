@@ -20,6 +20,9 @@ import java.util.HexFormat;
 @Service
 public class HrCandidateTokenService {
 
+    private static final int TOKEN_BYTES = 32;
+    private static final int TOKEN_BASE64URL_LENGTH = 43;
+
     private final HrCandidateAccessTokenRepository tokenRepository;
     private final HrFlowProperties properties;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -87,11 +90,12 @@ public class HrCandidateTokenService {
      */
     @Transactional
     public HrCandidate resolvePublicCandidateToken(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw HrFlowException.notFound("Candidate link is invalid.");
-        }
+        String token = requireValidRawToken(
+                rawToken,
+                "Candidate link is invalid."
+        );
 
-        String tokenHash = hash(rawToken);
+        String tokenHash = hash(token);
 
         var onboarding = tokenRepository
                 .findByTokenHashAndPurpose(tokenHash, HrTokenPurpose.ONBOARDING_PORTAL);
@@ -128,17 +132,17 @@ public class HrCandidateTokenService {
 
         revokeActiveTokens(candidate, purpose);
 
-        byte[] raw = new byte[32];
+        byte[] raw = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-        LocalDateTime expiresAt = LocalDateTime.now().plusDays(expiryDays);
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(Math.max(1, expiryDays));
 
         HrCandidateAccessToken entity = new HrCandidateAccessToken();
         entity.setCandidate(candidate);
         entity.setPurpose(purpose);
         entity.setTokenHash(hash(token));
         entity.setExpiresAt(expiresAt);
-        entity.setCreatedBy(actor == null || actor.isBlank() ? "SYSTEM" : actor);
+        entity.setCreatedBy(actor == null || actor.isBlank() ? "SYSTEM" : actor.trim());
         tokenRepository.save(entity);
 
         return new IssuedToken(token, expiresAt);
@@ -159,12 +163,10 @@ public class HrCandidateTokenService {
             String revokedMessage,
             String expiredMessage
     ) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw HrFlowException.notFound(invalidMessage);
-        }
+        String normalizedToken = requireValidRawToken(rawToken, invalidMessage);
 
         HrCandidateAccessToken token = tokenRepository
-                .findByTokenHashAndPurpose(hash(rawToken), purpose)
+                .findByTokenHashAndPurpose(hash(normalizedToken), purpose)
                 .orElseThrow(() -> HrFlowException.notFound(invalidMessage));
 
         return validateAndResolve(token, revokedMessage, expiredMessage);
@@ -175,14 +177,16 @@ public class HrCandidateTokenService {
             String revokedMessage,
             String expiredMessage
     ) {
+        LocalDateTime now = LocalDateTime.now();
+
         if (token.getRevokedAt() != null) {
             throw HrFlowException.forbidden(revokedMessage);
         }
-        if (token.getExpiresAt() == null || token.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (token.getExpiresAt() == null || !token.getExpiresAt().isAfter(now)) {
             throw HrFlowException.forbidden(expiredMessage);
         }
 
-        token.setLastUsedAt(LocalDateTime.now());
+        token.setLastUsedAt(now);
 
         /*
          * The token -> candidate association is LAZY. Some public controllers
@@ -200,6 +204,34 @@ public class HrCandidateTokenService {
         }
         candidate.getStage();
         return candidate;
+    }
+
+    private String requireValidRawToken(String rawToken, String invalidMessage) {
+        String token = rawToken == null ? "" : rawToken.trim();
+
+        /*
+         * HRFlow issues 32 random bytes encoded as unpadded Base64URL, which is
+         * exactly 43 characters. Reject malformed/oversized input before hashing
+         * or querying the database. Existing valid links keep the same format.
+         */
+        if (token.length() != TOKEN_BASE64URL_LENGTH) {
+            throw HrFlowException.notFound(invalidMessage);
+        }
+
+        for (int i = 0; i < token.length(); i++) {
+            char ch = token.charAt(i);
+            boolean allowed = (ch >= 'A' && ch <= 'Z')
+                    || (ch >= 'a' && ch <= 'z')
+                    || (ch >= '0' && ch <= '9')
+                    || ch == '-'
+                    || ch == '_';
+
+            if (!allowed) {
+                throw HrFlowException.notFound(invalidMessage);
+            }
+        }
+
+        return token;
     }
 
     private String hash(String value) {

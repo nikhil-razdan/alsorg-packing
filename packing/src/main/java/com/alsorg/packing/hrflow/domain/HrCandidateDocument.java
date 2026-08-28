@@ -11,7 +11,9 @@ import java.util.UUID;
         indexes = {
                 @Index(name = "idx_hr_candidate_document_candidate", columnList = "candidate_id"),
                 @Index(name = "idx_hr_candidate_document_type", columnList = "document_type"),
-                @Index(name = "idx_hr_candidate_document_active", columnList = "active")
+                @Index(name = "idx_hr_candidate_document_active", columnList = "active"),
+                @Index(name = "idx_hr_candidate_document_candidate_active_uploaded", columnList = "candidate_id,active,uploaded_at"),
+                @Index(name = "idx_hr_candidate_document_candidate_type_active_uploaded", columnList = "candidate_id,document_type,active,uploaded_at")
         }
 )
 public class HrCandidateDocument {
@@ -120,11 +122,11 @@ public class HrCandidateDocument {
     }
 
     public byte[] getContent() {
-        return content;
+        return content == null ? null : java.util.Arrays.copyOf(content, content.length);
     }
 
     public void setContent(byte[] content) {
-        this.content = content;
+        this.content = content == null ? null : java.util.Arrays.copyOf(content, content.length);
     }
 
     public String getRemarks() {

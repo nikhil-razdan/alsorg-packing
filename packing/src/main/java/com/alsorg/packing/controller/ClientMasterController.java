@@ -34,15 +34,10 @@ public class ClientMasterController {
         this.clientMasterService = clientMasterService;
     }
 
-    /**
-     * Lightweight lookup used by PackFlow autocomplete.
-     * It intentionally returns nothing until q has at least two characters.
-     */
     @GetMapping("/search")
     public ResponseEntity<List<ClientMasterResponse>> search(
             @RequestParam(defaultValue = "") String q,
             @RequestParam(defaultValue = "12") Integer limit) {
-
         return ResponseEntity.ok(
                 clientMasterService.searchSuggestions(
                         q,
@@ -56,7 +51,6 @@ public class ClientMasterController {
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "ALL") String status) {
-
         return clientMasterService.list(
                 search,
                 status,
@@ -75,7 +69,6 @@ public class ClientMasterController {
     public ClientMasterResponse create(
             @RequestBody ClientMasterRequest request,
             Authentication authentication) {
-
         return clientMasterService.create(
                 request,
                 actor(authentication));
@@ -87,7 +80,6 @@ public class ClientMasterController {
             @PathVariable UUID id,
             @RequestBody ClientMasterRequest request,
             Authentication authentication) {
-
         return clientMasterService.update(
                 id,
                 request,
@@ -100,7 +92,6 @@ public class ClientMasterController {
             @PathVariable UUID id,
             @RequestParam boolean active,
             Authentication authentication) {
-
         return clientMasterService.setActive(
                 id,
                 active,
@@ -109,10 +100,11 @@ public class ClientMasterController {
 
     private String actor(
             Authentication authentication) {
-        if (authentication == null ||
-                authentication.getName() == null ||
-                authentication.getName().isBlank()) {
-            return "SYSTEM";
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Authentication required");
         }
 
         return authentication.getName().trim();

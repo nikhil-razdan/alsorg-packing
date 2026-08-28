@@ -1,6 +1,14 @@
 package com.alsorg.packing.domain.audit;
 
-import jakarta.persistence.*;
+import com.alsorg.packing.config.TimeZoneConfig;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -9,7 +17,7 @@ import java.util.UUID;
 public class AuditLog {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(nullable = false)
@@ -27,53 +35,23 @@ public class AuditLog {
     @Column(nullable = false)
     private LocalDateTime performedAt;
 
-    /* ================= GETTERS / SETTERS ================= */
-
-    public UUID getId() {
-        return id;
+    @PrePersist
+    private void initialiseTimestamp() {
+        if (performedAt == null) {
+            performedAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        }
     }
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getZohoItemId() {
-        return zohoItemId;
-    }
-
-    public void setZohoItemId(String zohoItemId) {
-        this.zohoItemId = zohoItemId;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
-    }
-
-    public String getPerformedBy() {
-        return performedBy;
-    }
-
-    public void setPerformedBy(String performedBy) {
-        this.performedBy = performedBy;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public LocalDateTime getPerformedAt() {
-        return performedAt;
-    }
-
-    public void setPerformedAt(LocalDateTime performedAt) {
-        this.performedAt = performedAt;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public String getZohoItemId() { return zohoItemId; }
+    public void setZohoItemId(String zohoItemId) { this.zohoItemId = zohoItemId; }
+    public String getAction() { return action; }
+    public void setAction(String action) { this.action = action; }
+    public String getPerformedBy() { return performedBy; }
+    public void setPerformedBy(String performedBy) { this.performedBy = performedBy; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public LocalDateTime getPerformedAt() { return performedAt; }
+    public void setPerformedAt(LocalDateTime performedAt) { this.performedAt = performedAt; }
 }

@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.matflow;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,6 +11,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Version;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @MappedSuperclass
@@ -53,7 +55,7 @@ public abstract class MatFlowBaseEntity {
 
     @PrePersist
     protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
         if (createdAt == null) {
             createdAt = now;
@@ -74,7 +76,7 @@ public abstract class MatFlowBaseEntity {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
         if (updatedBy == null || updatedBy.isBlank()) {
             updatedBy = "SYSTEM";
@@ -130,6 +132,6 @@ public abstract class MatFlowBaseEntity {
 
         return normalized == null
                 ? null
-                : normalized.toUpperCase();
+                : normalized.toUpperCase(Locale.ROOT);
     }
 }

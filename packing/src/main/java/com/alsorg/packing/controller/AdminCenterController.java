@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,6 +33,8 @@ import com.alsorg.packing.service.PacketLifecycleChangeRequestService;
 @RequestMapping("/api/admin/center")
 public class AdminCenterController {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final AdminPacketLifecycleService lifecycleService;
     private final PacketLifecycleChangeRequestService lifecycleRequestService;
     private final PacketDeletionRequestService deletionRequestService;
@@ -50,15 +51,10 @@ public class AdminCenterController {
         this.currentUserService = currentUserService;
     }
 
-    /* =====================================================
-     * EXISTING DIRECT ADMIN PACKET ROLLBACK
-     * ===================================================== */
-
     @GetMapping("/packet-items/{packetItemId}/rollback-preview")
     public ResponseEntity<AdminPacketRollbackPreviewResponse> previewRollback(
-            @PathVariable UUID packetItemId,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        requireAdmin(auth);
+            @PathVariable UUID packetItemId) {
+        requireAdmin();
 
         return ResponseEntity.ok(
                 lifecycleService.previewRollback(packetItemId));
@@ -67,9 +63,8 @@ public class AdminCenterController {
     @PostMapping("/packet-items/{packetItemId}/rollback")
     public ResponseEntity<AdminPacketRollbackResultResponse> rollbackOneStep(
             @PathVariable UUID packetItemId,
-            @RequestBody AdminPacketRollbackRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestBody AdminPacketRollbackRequest request) {
+        User user = requireAdmin();
 
         return ResponseEntity.ok(
                 lifecycleService.rollbackOneStep(
@@ -81,35 +76,27 @@ public class AdminCenterController {
     @GetMapping("/rollback-history")
     public ResponseEntity<Page<AdminPacketRollbackHistoryResponse>> rollbackHistory(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        requireAdmin(auth);
+            @RequestParam(defaultValue = "20") int size) {
+        requireAdmin();
 
         Pageable pageable = PageRequest.of(
                 Math.max(page, 0),
                 normalizePageSize(size),
-                Sort.by(
-                        Sort.Direction.DESC,
-                        "changedAt"));
+                Sort.by(Sort.Direction.DESC, "changedAt"));
 
         return ResponseEntity.ok(
                 lifecycleService.getHistory(pageable));
     }
 
-    /* =====================================================
-     * USER-REQUESTED PACKET LIFECYCLE CHANGES
-     * ===================================================== */
-
     @GetMapping("/lifecycle-requests")
     public ResponseEntity<Page<RequestResponse>> pendingLifecycleRequests(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestParam(defaultValue = "50") int size) {
+        User user = requireAdmin();
 
         Pageable pageable = PageRequest.of(
                 Math.max(page, 0),
-                normalizeRequestPageSize(size));
+                normalizePageSize(size));
 
         return ResponseEntity.ok(
                 lifecycleRequestService.getPending(
@@ -119,9 +106,8 @@ public class AdminCenterController {
 
     @PostMapping("/lifecycle-requests/approve")
     public ResponseEntity<DecisionResponse> approveLifecycleRequests(
-            @RequestBody DecisionRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestBody DecisionRequest request) {
+        User user = requireAdmin();
 
         return ResponseEntity.ok(
                 lifecycleRequestService.approve(
@@ -131,9 +117,8 @@ public class AdminCenterController {
 
     @PostMapping("/lifecycle-requests/reject")
     public ResponseEntity<DecisionResponse> rejectLifecycleRequests(
-            @RequestBody DecisionRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestBody DecisionRequest request) {
+        User user = requireAdmin();
 
         return ResponseEntity.ok(
                 lifecycleRequestService.reject(
@@ -141,20 +126,15 @@ public class AdminCenterController {
                         user));
     }
 
-    /* =====================================================
-     * USER-REQUESTED PERMANENT DELETIONS
-     * ===================================================== */
-
     @GetMapping("/deletion-requests")
     public ResponseEntity<Page<PacketDeletionRequestDtos.RequestResponse>> pendingDeletionRequests(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestParam(defaultValue = "50") int size) {
+        User user = requireAdmin();
 
         Pageable pageable = PageRequest.of(
                 Math.max(page, 0),
-                normalizeRequestPageSize(size));
+                normalizePageSize(size));
 
         return ResponseEntity.ok(
                 deletionRequestService.getPending(
@@ -164,9 +144,8 @@ public class AdminCenterController {
 
     @PostMapping("/deletion-requests/approve")
     public ResponseEntity<PacketDeletionRequestDtos.DecisionResponse> approveDeletionRequests(
-            @RequestBody PacketDeletionRequestDtos.DecisionRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestBody PacketDeletionRequestDtos.DecisionRequest request) {
+        User user = requireAdmin();
 
         return ResponseEntity.ok(
                 deletionRequestService.approve(
@@ -176,9 +155,8 @@ public class AdminCenterController {
 
     @PostMapping("/deletion-requests/reject")
     public ResponseEntity<PacketDeletionRequestDtos.DecisionResponse> rejectDeletionRequests(
-            @RequestBody PacketDeletionRequestDtos.DecisionRequest request,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = requireAdmin(auth);
+            @RequestBody PacketDeletionRequestDtos.DecisionRequest request) {
+        User user = requireAdmin();
 
         return ResponseEntity.ok(
                 deletionRequestService.reject(
@@ -186,26 +164,25 @@ public class AdminCenterController {
                         user));
     }
 
-    private User requireAdmin(
-            String auth) {
-        return currentUserService.requireAdminUser(auth);
+    private User requireAdmin() {
+        /*
+         * Authentication is established centrally by JwtAuthenticationFilter.
+         * Do not re-parse a user-controlled Authorization header inside controllers.
+         */
+        User user = currentUserService.requireCurrentUser();
+
+        if (!currentUserService.isAdmin(user)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Only ADMIN can perform this action");
+        }
+
+        return user;
     }
 
     private int normalizePageSize(
             int size) {
         return Math.max(
                 1,
-                Math.min(
-                        size,
-                        100));
-    }
-
-    private int normalizeRequestPageSize(
-            int size) {
-        return Math.max(
-                1,
-                Math.min(
-                        size,
-                        200));
+                Math.min(size, MAX_PAGE_SIZE));
     }
 }

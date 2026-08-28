@@ -14,15 +14,13 @@ import java.math.BigDecimal;
 @Entity
 @Table(name = "mf_purchase_order_lines", uniqueConstraints = {
         @UniqueConstraint(name = "uk_mf_po_indent_line", columnNames = {
-                "purchase_order_id",
-                "indent_line_id"
+                "purchase_order_id", "indent_line_id"
         })
 }, indexes = {
         @Index(name = "idx_mf_po_line_order", columnList = "purchase_order_id"),
         @Index(name = "idx_mf_po_line_material", columnList = "material_id")
 })
-public class MatFlowPurchaseOrderLine
-        extends MatFlowBaseEntity {
+public class MatFlowPurchaseOrderLine extends MatFlowBaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "purchase_order_id", nullable = false)

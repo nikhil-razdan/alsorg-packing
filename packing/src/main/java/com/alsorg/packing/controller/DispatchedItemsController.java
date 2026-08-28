@@ -16,6 +16,7 @@ import com.alsorg.packing.service.DispatchedItemService.DispatchImportVerificati
 
 import jakarta.validation.Valid;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
 import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditRequest;
 import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditResponse;
@@ -26,6 +27,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.Set;
 import java.util.List;
@@ -34,13 +36,13 @@ import com.alsorg.packing.service.CurrentUserService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 
 import org.springframework.http.MediaType;
 
 @RestController
 @RequestMapping("/api/dispatched")
+@PreAuthorize("isAuthenticated()")
 public class DispatchedItemsController {
 
         private final DispatchedItemRepository repository;
@@ -63,6 +65,9 @@ public class DispatchedItemsController {
         private static final int MAX_DISPATCH_PAGE_SIZE = 200;
         private static final int DEFAULT_CHALLAN_PAGE_SIZE = 50;
         private static final int MAX_CHALLAN_PAGE_SIZE = 100;
+        private static final int MAX_SEARCH_LENGTH = 300;
+        private static final int MAX_FILTER_LENGTH = 200;
+        private static final int MAX_ITEM_IDS_PER_MUTATION = 1000;
 
         /*
          * ============================================================
@@ -110,12 +115,19 @@ public class DispatchedItemsController {
                          */
                         @RequestParam(defaultValue = "true") boolean includeTotal,
 
-                        @RequestParam(required = false) Long knownTotalElements,
+                        @RequestParam(required = false) Long knownTotalElements) {
 
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                validateQueryText(search, MAX_SEARCH_LENGTH, "Search");
+                validateQueryText(statuses, MAX_FILTER_LENGTH, "Status filter");
+                validateQueryText(plant, 64, "Plant filter");
+                validateQueryText(dateMode, 32, "Date mode");
+                validateQueryText(dateFrom, 40, "Date from");
+                validateQueryText(dateTo, 40, "Date to");
+                validateQueryText(timeFrom, 20, "Time from");
+                validateQueryText(timeTo, 20, "Time to");
+                validateQueryText(groupBy, 32, "Group by");
 
-                User user = currentUserService.getCurrentUserFromAuth(
-                                auth);
+                User user = currentUserService.requireCurrentUser();
 
                 int safePage = Math.max(
                                 page,
@@ -322,12 +334,9 @@ public class DispatchedItemsController {
 
                         @RequestParam(defaultValue = "0") int page,
 
-                        @RequestParam(defaultValue = "" + DEFAULT_DISPATCH_PAGE_SIZE) int size,
+                        @RequestParam(defaultValue = "" + DEFAULT_DISPATCH_PAGE_SIZE) int size) {
 
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-
-                User user = currentUserService.getCurrentUserFromAuth(
-                                auth);
+                User user = currentUserService.requireCurrentUser();
 
                 int safePage = Math.max(page, 0);
 
@@ -412,9 +421,8 @@ public class DispatchedItemsController {
         @PostMapping("/{zohoItemId:.+}/move-to-fg")
         public ResponseEntity<?> moveToFg(
                         @PathVariable String zohoItemId,
-                        @RequestParam(required = false) String fgZoneCode,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(required = false) String fgZoneCode) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)
                                 && !currentUserService.isAdmin(user)) {
@@ -440,9 +448,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/request-restore")
         public ResponseEntity<?> requestRestore(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 dispatchedItemService.requestRestore(
                                 zohoItemId,
@@ -456,9 +463,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/approve-restore")
         public ResponseEntity<?> approveRestore(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -475,9 +481,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/reject-restore")
         public ResponseEntity<?> rejectRestore(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -501,10 +506,9 @@ public class DispatchedItemsController {
 
         @PostMapping(value = "/import/verify", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<DispatchImportVerificationResponse> verifyDispatchImport(
-                        @RequestBody List<DispatchImportRow> rows,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestBody List<DispatchImportRow> rows) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)
                                 && !currentUserService.isAdmin(user)) {
@@ -517,10 +521,9 @@ public class DispatchedItemsController {
 
         @PostMapping(value = "/import/apply", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<DispatchImportApplyResponse> applyDispatchImport(
-                        @RequestBody DispatchImportApplyRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestBody DispatchImportApplyRequest request) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)
                                 && !currentUserService.isAdmin(user)) {
@@ -538,9 +541,8 @@ public class DispatchedItemsController {
         @PostMapping("/{zohoItemId:.+}/dispatch")
         public ResponseEntity<?> updateDispatchStatus(
                         @PathVariable String zohoItemId,
-                        @RequestParam String status,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam String status) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)) {
                         return ResponseEntity.status(403).build();
@@ -568,9 +570,8 @@ public class DispatchedItemsController {
         public ResponseEntity<?> moveToWarehouse(
                         @PathVariable String zohoItemId,
                         @RequestParam String warehouseCode,
-                        @RequestHeader(value = "Authorization", required = false) String auth,
                         @RequestParam(required = false) String fromLocation) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.canGenerateWarehouseGatePass(user)) {
                         return ResponseEntity
@@ -600,9 +601,8 @@ public class DispatchedItemsController {
         public ResponseEntity<?> bulkMoveToWarehouse(
                         @RequestBody List<String> itemIds,
                         @RequestParam String warehouseCode,
-                        @RequestParam(required = false) String fromLocation,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(required = false) String fromLocation) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.canGenerateWarehouseGatePass(user)) {
                         return ResponseEntity
@@ -627,9 +627,8 @@ public class DispatchedItemsController {
         @PostMapping("/bulk/status")
         public ResponseEntity<?> bulkStatusUpdate(
                         @RequestBody List<String> ids,
-                        @RequestParam String status,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam String status) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)) {
                         return ResponseEntity.status(403).build();
@@ -646,9 +645,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/request-return")
         public ResponseEntity<?> requestReturn(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)) {
                         return ResponseEntity.status(403).build();
@@ -663,9 +661,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/approve-return")
         public ResponseEntity<?> approveReturn(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -680,9 +677,8 @@ public class DispatchedItemsController {
 
         @PostMapping("/{zohoItemId:.+}/reject-return")
         public ResponseEntity<?> rejectReturn(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @PathVariable String zohoItemId) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -698,9 +694,8 @@ public class DispatchedItemsController {
         @PatchMapping("/{zohoItemId:.+}/plant-location")
         public ResponseEntity<?> assignPlantLocation(
                         @PathVariable String zohoItemId,
-                        @RequestBody PlantAssignmentRequest req,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestBody PlantAssignmentRequest req) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403)
@@ -732,10 +727,9 @@ public class DispatchedItemsController {
         @GetMapping("/challans/search")
         public ResponseEntity<List<DispatchedChallanResponse>> searchDispatchedChallans(
                         @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "" + DEFAULT_CHALLAN_PAGE_SIZE) int size,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestParam(defaultValue = "" + DEFAULT_CHALLAN_PAGE_SIZE) int size) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 int safePage = Math.max(page, 0);
                 int safeSize = Math.min(
@@ -867,14 +861,15 @@ public class DispatchedItemsController {
 
         @GetMapping("/challans/{challanNumber:.+}")
         public ResponseEntity<DispatchedChallanResponse> getDispatchedChallan(
-                        @PathVariable String challanNumber,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @PathVariable String challanNumber) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 String cleanChallanNumber = challanNumber == null
                                 ? ""
                                 : challanNumber.trim();
+
+                validateChallanNumber(cleanChallanNumber);
 
                 if (cleanChallanNumber.isBlank()) {
                         throw new ResponseStatusException(
@@ -917,8 +912,8 @@ public class DispatchedItemsController {
 
         @GetMapping("/challans")
         public ResponseEntity<List<DispatchedChallanResponse>> getDispatchedChallans(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        ) {
+                User user = currentUserService.requireCurrentUser();
 
                 List<ItemDispatchStatus> statuses = List.of(ItemDispatchStatus.DISPATCHED);
 
@@ -990,8 +985,7 @@ public class DispatchedItemsController {
 
                         LocalDateTime durationEnd = tripEndedAt != null
                                         ? tripEndedAt
-                                        : LocalDateTime.now(
-                                                        ZoneId.of("Asia/Kolkata"));
+                                        : LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
                         Long tripDurationMinutes = tripStartedAt == null
                                         ? null
@@ -1051,10 +1045,9 @@ public class DispatchedItemsController {
         @PostMapping("/challans/{challanNumber:.+}/end-trip")
         public ResponseEntity<?> endDispatchedChallanTrip(
                         @PathVariable String challanNumber,
-                        @RequestBody(required = false) EndTripRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestBody(required = false) EndTripRequest request) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isLogistics(user)
                                 && !currentUserService.isAdmin(user)) {
@@ -1066,6 +1059,8 @@ public class DispatchedItemsController {
                 String cleanChallanNumber = challanNumber == null
                                 ? ""
                                 : challanNumber.trim();
+
+                validateChallanNumber(cleanChallanNumber);
 
                 if (cleanChallanNumber.isBlank()) {
                         return ResponseEntity
@@ -1114,8 +1109,9 @@ public class DispatchedItemsController {
                                         .body("No dispatched items found for challan: " + challanNumber);
                 }
 
-                LocalDateTime nowIst = LocalDateTime.now(
-                                ZoneId.of("Asia/Kolkata"));
+                items = lockDispatchItemsForMutation(items);
+
+                LocalDateTime nowIst = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
                 LocalDateTime selectedEndTime = firstNonNull(
                                 request == null ? null : request.tripEndedAt(),
@@ -1178,11 +1174,9 @@ public class DispatchedItemsController {
         @PostMapping("/challans/{challanNumber:.+}/helpers")
         public ResponseEntity<?> updateChallanHelpers(
                         @PathVariable String challanNumber,
-                        @RequestBody(required = false) UpdateHelpersRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestBody(required = false) UpdateHelpersRequest request) {
 
-                User user = currentUserService
-                                .getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 boolean permitted = currentUserService.isAdmin(user) ||
                                 currentUserService.isDispatch(user) ||
@@ -1198,6 +1192,8 @@ public class DispatchedItemsController {
                 String cleanChallanNumber = challanNumber == null
                                 ? ""
                                 : challanNumber.trim();
+
+                validateChallanNumber(cleanChallanNumber);
 
                 if (cleanChallanNumber.isBlank()) {
                         return ResponseEntity
@@ -1255,6 +1251,8 @@ public class DispatchedItemsController {
                                                         "No accessible dispatched items found for challan: "
                                                                         + cleanChallanNumber);
                 }
+
+                challanItems = lockDispatchItemsForMutation(challanItems);
 
                 for (DispatchedItem item : challanItems) {
                         item.setHelperLoaderCount(
@@ -1346,8 +1344,7 @@ public class DispatchedItemsController {
 
                 LocalDateTime durationEnd = tripEndedAt != null
                                 ? tripEndedAt
-                                : LocalDateTime.now(
-                                                ZoneId.of("Asia/Kolkata"));
+                                : LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
                 Long tripDurationMinutes = tripStartedAt == null
                                 ? null
@@ -1427,12 +1424,8 @@ public class DispatchedItemsController {
 
         @PutMapping("/admin/bulk-edit")
         public ResponseEntity<AdminBulkDispatchEditResponse> adminBulkEdit(
-                        @Valid @RequestBody AdminBulkDispatchEditRequest request,
-
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService
-                                .getCurrentUserFromAuth(
-                                                auth);
+                        @Valid @RequestBody AdminBulkDispatchEditRequest request) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         throw new ResponseStatusException(
@@ -1444,6 +1437,73 @@ public class DispatchedItemsController {
                                 dispatchedItemService.adminBulkEdit(
                                                 request,
                                                 user.getUsername()));
+        }
+
+        private List<DispatchedItem> lockDispatchItemsForMutation(
+                        List<DispatchedItem> visibleItems) {
+
+                if (visibleItems == null || visibleItems.isEmpty()) {
+                        return List.of();
+                }
+
+                java.util.LinkedHashSet<String> ids = visibleItems.stream()
+                                .map(DispatchedItem::getZohoItemId)
+                                .filter(java.util.Objects::nonNull)
+                                .map(String::trim)
+                                .filter(value -> !value.isBlank())
+                                .collect(java.util.stream.Collectors.toCollection(
+                                                java.util.LinkedHashSet::new));
+
+                if (ids.isEmpty() || ids.size() != visibleItems.size()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "One or more dispatch rows no longer has a valid ID");
+                }
+
+                if (ids.size() > MAX_ITEM_IDS_PER_MUTATION) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.PAYLOAD_TOO_LARGE,
+                                        "A challan cannot update more than "
+                                                        + MAX_ITEM_IDS_PER_MUTATION
+                                                        + " dispatch rows at once");
+                }
+
+                List<DispatchedItem> locked = repository.findAllByIdForDispatchUpdate(ids);
+
+                if (locked.size() != ids.size()) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.CONFLICT,
+                                        "One or more dispatch rows changed while the challan was being updated. Refresh and try again.");
+                }
+
+                Map<String, DispatchedItem> byId = locked.stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                                DispatchedItem::getZohoItemId,
+                                                java.util.function.Function.identity(),
+                                                (first, ignored) -> first,
+                                                java.util.LinkedHashMap::new));
+
+                return ids.stream()
+                                .map(byId::get)
+                                .toList();
+        }
+
+        private void validateQueryText(
+                        String value,
+                        int maxLength,
+                        String fieldName) {
+
+                if (value != null && value.length() > maxLength) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        fieldName + " cannot exceed " + maxLength + " characters");
+                }
+        }
+
+        private void validateChallanNumber(
+                        String value) {
+
+                validateQueryText(value, 220, "Challan number");
         }
 
         private String firstNonBlank(

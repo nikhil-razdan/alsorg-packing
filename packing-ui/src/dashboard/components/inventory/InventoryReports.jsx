@@ -18,6 +18,10 @@ import {
   fetchPackingVolumeReport,
 } from "../../api/packingReportApi";
 
+import {
+  getSecurityCacheNamespace,
+} from "../../../services/api";
+
 const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
 const reportSnapshotCache = new Map();
 
@@ -25,7 +29,7 @@ const DEFAULT_TABLE_PAGE_SIZE = 50;
 const TABLE_PAGE_SIZE_OPTIONS = [50, 100, 250];
 
 const getReportRangeCacheKey = (from, to) =>
-  `${from || ""}|${to || ""}`;
+  `${getSecurityCacheNamespace()}::${from || ""}|${to || ""}`;
 
 const readReportSnapshot = (key) => {
   const entry = reportSnapshotCache.get(key);

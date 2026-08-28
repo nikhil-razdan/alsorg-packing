@@ -81,8 +81,6 @@ function CreateDriverModal({
       onClose();
 
     } catch (e) {
-      console.error(e);
-
       showAlert(
         getBackendMessage(
           e,

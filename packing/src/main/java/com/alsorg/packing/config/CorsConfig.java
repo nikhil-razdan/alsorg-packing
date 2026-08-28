@@ -89,8 +89,7 @@ public class CorsConfig {
                             configuredOrigins.split(","))
                     .map(String::trim)
                     .filter(value -> !value.isBlank())
-                    .map(this::normalizeOrigin)
-                    .filter(value -> value != null)
+                    .map(this::normalizeConfiguredOrigin)
                     .forEach(values::add);
         }
 
@@ -102,7 +101,7 @@ public class CorsConfig {
         return new ArrayList<>(values);
     }
 
-    private String normalizeOrigin(
+    private String normalizeConfiguredOrigin(
             String value) {
 
         try {
@@ -112,8 +111,23 @@ public class CorsConfig {
             String host = uri.getHost();
 
             if (scheme == null
-                    || host == null) {
-                return null;
+                    || host == null
+                    || uri.getUserInfo() != null
+                    || uri.getQuery() != null
+                    || uri.getFragment() != null) {
+                throw new IllegalStateException(
+                        "Invalid app.security.allowed-origins entry: "
+                                + value);
+            }
+
+            String path = uri.getPath();
+
+            if (path != null
+                    && !path.isBlank()
+                    && !"/".equals(path)) {
+                throw new IllegalStateException(
+                        "CORS origins must not contain a path: "
+                                + value);
             }
 
             scheme = scheme.toLowerCase(
@@ -124,7 +138,9 @@ public class CorsConfig {
 
             if (!"http".equals(scheme)
                     && !"https".equals(scheme)) {
-                return null;
+                throw new IllegalStateException(
+                        "CORS origins must use http or https: "
+                                + value);
             }
 
             int port = uri.getPort();
@@ -142,8 +158,11 @@ public class CorsConfig {
                             ? ""
                             : ":" + port);
 
-        } catch (IllegalArgumentException ignored) {
-            return null;
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "Invalid app.security.allowed-origins entry: "
+                            + value,
+                    exception);
         }
     }
 }

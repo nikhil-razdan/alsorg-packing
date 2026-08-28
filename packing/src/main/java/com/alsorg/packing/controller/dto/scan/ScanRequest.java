@@ -3,6 +3,11 @@ package com.alsorg.packing.controller.dto.scan;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 /**
  * Request used by the scanner resolve / single-dispatch flow.
  *
@@ -13,58 +18,65 @@ import java.util.UUID;
  */
 public class ScanRequest {
 
-	private String scanText;
-	private UUID driverId;
-	private UUID vehicleId;
-	private Integer helperLoaderCount;
-	private LocalDateTime dispatchTime;
-	private LocalDateTime tripStart;
+    @NotBlank(message = "Scan text is required.")
+    @Size(max = 1000, message = "Scan text is too long.")
+    private String scanText;
 
-	public String getScanText() {
-		return scanText;
-	}
+    private UUID driverId;
+    private UUID vehicleId;
 
-	public void setScanText(String scanText) {
-		this.scanText = scanText;
-	}
+    @Min(value = 0, message = "Helper/loader count cannot be negative.")
+    @Max(value = 10000, message = "Helper/loader count is too large.")
+    private Integer helperLoaderCount;
 
-	public UUID getDriverId() {
-		return driverId;
-	}
+    private LocalDateTime dispatchTime;
+    private LocalDateTime tripStart;
 
-	public void setDriverId(UUID driverId) {
-		this.driverId = driverId;
-	}
+    public String getScanText() {
+        return scanText;
+    }
 
-	public UUID getVehicleId() {
-		return vehicleId;
-	}
+    public void setScanText(String scanText) {
+        this.scanText = scanText;
+    }
 
-	public void setVehicleId(UUID vehicleId) {
-		this.vehicleId = vehicleId;
-	}
+    public UUID getDriverId() {
+        return driverId;
+    }
 
-	public Integer getHelperLoaderCount() {
-		return helperLoaderCount;
-	}
+    public void setDriverId(UUID driverId) {
+        this.driverId = driverId;
+    }
 
-	public void setHelperLoaderCount(Integer helperLoaderCount) {
-		this.helperLoaderCount = helperLoaderCount;
-	}
+    public UUID getVehicleId() {
+        return vehicleId;
+    }
 
-	public LocalDateTime getDispatchTime() {
-		return dispatchTime;
-	}
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
+    }
 
-	public void setDispatchTime(LocalDateTime dispatchTime) {
-		this.dispatchTime = dispatchTime;
-	}
+    public Integer getHelperLoaderCount() {
+        return helperLoaderCount;
+    }
 
-	public LocalDateTime getTripStart() {
-		return tripStart;
-	}
+    public void setHelperLoaderCount(Integer helperLoaderCount) {
+        this.helperLoaderCount = helperLoaderCount;
+    }
 
-	public void setTripStart(LocalDateTime tripStart) {
-		this.tripStart = tripStart;
-	}
+    public LocalDateTime getDispatchTime() {
+        return dispatchTime;
+    }
+
+    public void setDispatchTime(LocalDateTime dispatchTime) {
+        this.dispatchTime = dispatchTime;
+    }
+
+    public LocalDateTime getTripStart() {
+        return tripStart;
+    }
+
+    public void setTripStart(LocalDateTime tripStart) {
+        this.tripStart = tripStart;
+    }
 }

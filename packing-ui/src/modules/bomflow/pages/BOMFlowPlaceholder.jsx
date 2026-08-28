@@ -58,7 +58,68 @@ import {
 	getBomFlowRole,
 } from "../../../utils/bomflowAccess.js";
 
-const MATERIAL_RATE_EMPTY = {
+const localBusinessDateKey = (date = new Date()) => {
+	const pad = (value) => String(value).padStart(2, "0");
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const parseBomDateTime = (value) => {
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+	const raw = String(value || "").trim();
+	if (!raw) return null;
+	const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+	if (dateOnly) {
+		const parsed = new Date(
+			Number(dateOnly[1]),
+			Number(dateOnly[2]) - 1,
+			Number(dateOnly[3]),
+			0, 0, 0, 0
+		);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+	const local = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?$/);
+	if (local) {
+		const ms = Number(String(local[7] || "").padEnd(3, "0").slice(0, 3) || 0);
+		const parsed = new Date(
+			Number(local[1]),
+			Number(local[2]) - 1,
+			Number(local[3]),
+			Number(local[4]),
+			Number(local[5]),
+			Number(local[6] || 0),
+			ms
+		);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const safeFileName = (value, fallback = "download") =>
+	String(value || fallback)
+		.replace(/[\/\\?%*:|"<>\u0000-\u001f]/g, "_")
+		.replace(/\s+/g, " ")
+		.trim()
+		.slice(0, 180) || fallback;
+
+const downloadBlob = (blob, fileName) => {
+	if (!(blob instanceof Blob) || blob.size <= 0) {
+		throw new Error("Downloaded file is empty.");
+	}
+	const url = URL.createObjectURL(blob);
+	const anchor = document.createElement("a");
+	anchor.href = url;
+	anchor.download = safeFileName(fileName);
+	anchor.rel = "noopener";
+	document.body.appendChild(anchor);
+	anchor.click();
+	anchor.remove();
+	window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+};
+
+const createMaterialRateEmpty = () => ({
 	category: "Metal",
 	itemName: "",
 	brand: "",
@@ -67,14 +128,14 @@ const MATERIAL_RATE_EMPTY = {
 	rateType: "PURCHASE",
 	rate: "",
 	gstPercent: "18",
-	effectiveFrom: new Date().toISOString().slice(0, 10),
+	effectiveFrom: localBusinessDateKey(),
 	effectiveTo: "",
 	sourceReference: "",
 	notes: "",
 	active: true,
-};
+});
 
-const LABOUR_RATE_EMPTY = {
+const createLabourRateEmpty = () => ({
 	department: "Metal",
 	processCode: "",
 	processName: "",
@@ -83,11 +144,11 @@ const LABOUR_RATE_EMPTY = {
 	rate: "",
 	defaultLabourCount: "1",
 	defaultWorkingHours: "0",
-	effectiveFrom: new Date().toISOString().slice(0, 10),
+	effectiveFrom: localBusinessDateKey(),
 	effectiveTo: "",
 	notes: "",
 	active: true,
-};
+});
 
 const LABOUR_LINE_EMPTY = {
 	labourRateId: "",
@@ -189,8 +250,8 @@ const labourBasisUnit = (basis, fallback = "UNIT") => {
 
 const formatDate = (value) => {
 	if (!value) return "-";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return String(value);
+	const date = parseBomDateTime(value);
+	if (!date) return String(value);
 	return date.toLocaleDateString("en-IN", {
 		day: "2-digit",
 		month: "short",
@@ -248,7 +309,7 @@ function RateMaster() {
 	const [dialog, setDialog] = useState({
 		open: false,
 		editing: null,
-		form: { ...MATERIAL_RATE_EMPTY },
+		form: createMaterialRateEmpty(),
 	});
 
 	const load = async () => {
@@ -304,7 +365,7 @@ function RateMaster() {
 	const openCreate = () => setDialog({
 		open: true,
 		editing: null,
-		form: { ...MATERIAL_RATE_EMPTY },
+		form: createMaterialRateEmpty(),
 	});
 
 	const openEdit = (row) => setDialog({
@@ -363,7 +424,7 @@ function RateMaster() {
 				await bomFlowApi.createMaterialRate(payload);
 			}
 
-			setDialog({ open: false, editing: null, form: { ...MATERIAL_RATE_EMPTY } });
+			setDialog({ open: false, editing: null, form: createMaterialRateEmpty() });
 			setMessage(dialog.editing ? "Material rate updated." : "Material rate created.");
 			await load();
 		} catch (requestError) {
@@ -414,15 +475,7 @@ function RateMaster() {
 		setWorking(true);
 		try {
 			const blob = await bomFlowApi.getMaterialRateEvidenceBlob(row.id);
-			if (!blob) return;
-			const url = URL.createObjectURL(blob);
-			const anchor = document.createElement("a");
-			anchor.href = url;
-			anchor.download = row.evidenceFileName || "rate-evidence";
-			document.body.appendChild(anchor);
-			anchor.click();
-			anchor.remove();
-			URL.revokeObjectURL(url);
+			downloadBlob(blob, row.evidenceFileName || "rate-evidence");
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to download rate evidence."));
 		} finally {
@@ -617,7 +670,7 @@ function MaterialRateDialog({ dialog, setDialog, working, onSave }) {
 	}));
 
 	return (
-		<Dialog open={dialog.open} onClose={() => !working && setDialog({ open: false, editing: null, form: { ...MATERIAL_RATE_EMPTY } })} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+		<Dialog open={dialog.open} onClose={() => !working && setDialog({ open: false, editing: null, form: createMaterialRateEmpty() })} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
 			<DialogTitle sx={dialogTitleSx}>{dialog.editing ? "Edit Material Rate" : "Add Material Rate"}</DialogTitle>
 			<DialogContent sx={dialogContentSx}>
 				<Box sx={formGrid2Sx}>
@@ -641,7 +694,7 @@ function MaterialRateDialog({ dialog, setDialog, working, onSave }) {
 				<FormControlLabel control={<Checkbox checked={form.active} onChange={(e) => update("active", e.target.checked)} />} label="Active rate" sx={switchLabelSx} />
 			</DialogContent>
 			<DialogActions sx={dialogActionsSx}>
-				<Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: { ...MATERIAL_RATE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button>
+				<Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: createMaterialRateEmpty() })} sx={secondaryBtnSx}>Cancel</Button>
 				<Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{working ? "Saving..." : "Save Rate"}</Button>
 			</DialogActions>
 		</Dialog>
@@ -662,7 +715,7 @@ function LabourMaster() {
 	const [working, setWorking] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
-	const [dialog, setDialog] = useState({ open: false, editing: null, form: { ...LABOUR_RATE_EMPTY } });
+	const [dialog, setDialog] = useState({ open: false, editing: null, form: createLabourRateEmpty() });
 
 	const load = async () => {
 		setLoading(true);
@@ -740,7 +793,7 @@ function LabourMaster() {
 				await bomFlowApi.createLabourRate(payload);
 			}
 			setMessage(dialog.editing ? "Labour rate updated." : "Labour rate created.");
-			setDialog({ open: false, editing: null, form: { ...LABOUR_RATE_EMPTY } });
+			setDialog({ open: false, editing: null, form: createLabourRateEmpty() });
 			await load();
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to save labour rate."));
@@ -769,7 +822,7 @@ function LabourMaster() {
 				title="Process & Labour Rate Control"
 				subtitle="Maintain department/process labour rates with effective dates and multiple charging bases. These masters feed revision-specific labour costing in the Costing Engine."
 				icon={<EngineeringOutlinedIcon />}
-				actions={canEdit ? <Button startIcon={<AddIcon />} onClick={() => setDialog({ open: true, editing: null, form: { ...LABOUR_RATE_EMPTY } })} sx={primaryBtnSx}>Add Labour Rate</Button> : null}
+				actions={canEdit ? <Button startIcon={<AddIcon />} onClick={() => setDialog({ open: true, editing: null, form: createLabourRateEmpty() })} sx={primaryBtnSx}>Add Labour Rate</Button> : null}
 			/>
 			<Feedback error={error} message={message} />
 
@@ -836,7 +889,7 @@ function LabourRateDialog({ dialog, setDialog, working, onSave }) {
 	const form = dialog.form;
 	const update = (key, value) => setDialog((prev) => ({ ...prev, form: { ...prev.form, [key]: value } }));
 	return (
-		<Dialog open={dialog.open} onClose={() => !working && setDialog({ open: false, editing: null, form: { ...LABOUR_RATE_EMPTY } })} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
+		<Dialog open={dialog.open} onClose={() => !working && setDialog({ open: false, editing: null, form: createLabourRateEmpty() })} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
 			<DialogTitle sx={dialogTitleSx}>{dialog.editing ? "Edit Labour Rate" : "Add Labour Rate"}</DialogTitle>
 			<DialogContent sx={dialogContentSx}>
 				<Box sx={formGrid2Sx}>
@@ -856,7 +909,7 @@ function LabourRateDialog({ dialog, setDialog, working, onSave }) {
 				<FormControlLabel control={<Checkbox checked={form.active} onChange={(e) => update("active", e.target.checked)} />} label="Active process rate" sx={switchLabelSx} />
 			</DialogContent>
 			<DialogActions sx={dialogActionsSx}>
-				<Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: { ...LABOUR_RATE_EMPTY } })} sx={secondaryBtnSx}>Cancel</Button>
+				<Button disabled={working} onClick={() => setDialog({ open: false, editing: null, form: createLabourRateEmpty() })} sx={secondaryBtnSx}>Cancel</Button>
 				<Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{working ? "Saving..." : "Save Labour Rate"}</Button>
 			</DialogActions>
 		</Dialog>
@@ -1632,15 +1685,7 @@ function ReportsWorkspace() {
 		setError("");
 		try {
 			const result = await bomFlowApi.downloadCommercialReport(revisionId, type);
-			if (!result?.blob) throw new Error("Report file was empty.");
-			const url = URL.createObjectURL(result.blob);
-			const anchor = document.createElement("a");
-			anchor.href = url;
-			anchor.download = fallback;
-			document.body.appendChild(anchor);
-			anchor.click();
-			anchor.remove();
-			URL.revokeObjectURL(url);
+			downloadBlob(result?.blob, fallback);
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to download report."));
 		} finally {

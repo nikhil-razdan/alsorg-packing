@@ -15,12 +15,12 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
 import com.alsorg.packing.controller.dto.challan.CustomChallanRequest;
 
@@ -45,6 +45,8 @@ public class ChalaanPdfService {
         private static final float FOOTER_TOP = 118;
         private static final float FOOTER_BOTTOM = 40;
         private static final int CUSTOM_ROWS_PER_PAGE = 16;
+        private static final int MAX_STANDARD_ITEMS = 1000;
+        private static final int MAX_CUSTOM_ITEMS = 500;
 
         public byte[] generateChalaan(
                         ChalaanPdfData data) {
@@ -52,6 +54,11 @@ public class ChalaanPdfService {
                 List<ChalaanItem> sourceItems = data != null && data.getItems() != null
                                 ? data.getItems()
                                 : Collections.emptyList();
+
+                if (sourceItems.size() > MAX_STANDARD_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A challan cannot contain more than " + MAX_STANDARD_ITEMS + " items");
+                }
 
                 /*
                  * Sort a copied list so rows having the same PD number are printed
@@ -244,6 +251,11 @@ public class ChalaanPdfService {
                 List<CustomChallanItemRequest> sourceItems = request != null && request.items() != null
                                 ? request.items()
                                 : Collections.emptyList();
+
+                if (sourceItems.size() > MAX_CUSTOM_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A custom challan cannot contain more than " + MAX_CUSTOM_ITEMS + " items");
+                }
 
                 java.util.List<CustomChallanItemRequest> items = new java.util.ArrayList<>();
 
@@ -1925,7 +1937,7 @@ public class ChalaanPdfService {
                         LocalDateTime value) {
                 LocalDateTime finalValue = value != null
                                 ? value
-                                : LocalDateTime.now(ZoneId.of("Asia/Kolkata"));
+                                : LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
                 return finalValue.format(
                                 DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"));

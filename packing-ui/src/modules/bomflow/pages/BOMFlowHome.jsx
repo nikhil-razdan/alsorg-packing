@@ -99,7 +99,7 @@ export default function BOMFlowHome() {
 
 	const username =
 		user?.username ||
-		localStorage.getItem("username") ||
+		user?.name ||
 		"User";
 
 	const handleLogout = async () => {

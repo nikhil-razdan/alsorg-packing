@@ -28,8 +28,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -47,6 +47,15 @@ public class BomFlowCommercialService {
     private static final long RATE_EVIDENCE_MAX_BYTES = 15L * 1024L * 1024L;
     private static final Set<String> RATE_EVIDENCE_EXTENSIONS = Set.of(
             "pdf", "png", "jpg", "jpeg", "webp", "xlsx", "xls", "csv");
+    private static final Map<String, String> RATE_EVIDENCE_CONTENT_TYPES = Map.ofEntries(
+            Map.entry("pdf", "application/pdf"),
+            Map.entry("png", "image/png"),
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            Map.entry("xls", "application/vnd.ms-excel"),
+            Map.entry("csv", "text/csv"));
 
     public record RateEvidenceDownload(
             String originalFileName,
@@ -73,10 +82,7 @@ public class BomFlowCommercialService {
        ===================================================================== */
 
     @Transactional(readOnly = true)
-    public List<MaterialRateResponse> listMaterialRates(
-            String search,
-            Boolean activeOnly) {
-
+    public List<MaterialRateResponse> listMaterialRates(String search, Boolean activeOnly) {
         access.requireBomFlowAccess();
 
         StringBuilder sql = new StringBuilder("""
@@ -86,11 +92,9 @@ public class BomFlowCommercialService {
                 """);
         List<Object> args = new ArrayList<>();
 
-        if (Boolean.TRUE.equals(activeOnly)) {
-            sql.append(" AND active = true ");
-        }
+        if (Boolean.TRUE.equals(activeOnly)) sql.append(" AND active = true ");
 
-        String query = clean(search);
+        String query = cleanLimited(search, 200, "Search");
         if (query != null) {
             sql.append("""
                      AND (
@@ -109,25 +113,17 @@ public class BomFlowCommercialService {
         }
 
         sql.append(" ORDER BY active DESC, updated_at DESC, item_name ASC ");
-
-        return jdbc.query(
-                sql.toString(),
-                this::mapMaterialRate,
-                args.toArray());
+        return jdbc.query(sql.toString(), this::mapMaterialRate, args.toArray());
     }
 
-    public MaterialRateResponse createMaterialRate(
-            MaterialRateRequest request) {
-
+    public MaterialRateResponse createMaterialRate(MaterialRateRequest request) {
         access.requireEditor();
         validateMaterialRate(request);
 
         UUID id = UUID.randomUUID();
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
-        LocalDate from = request.effectiveFrom() == null
-                ? LocalDate.now()
-                : request.effectiveFrom();
+        LocalDate from = request.effectiveFrom() == null ? LocalDate.now() : request.effectiveFrom();
 
         jdbc.update("""
                 INSERT INTO bom_flow_material_rates (
@@ -138,40 +134,29 @@ public class BomFlowCommercialService {
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
                 """,
                 id,
-                required(request.category(), "Category"),
-                required(request.itemName(), "Item name"),
-                clean(request.brand()),
-                clean(request.vendorName()),
-                upper(required(request.unit(), "Unit")),
+                requiredLimited(request.category(), 120, "Category"),
+                requiredLimited(request.itemName(), 500, "Item name"),
+                cleanLimited(request.brand(), 255, "Brand"),
+                cleanLimited(request.vendorName(), 220, "Vendor name"),
+                upper(requiredLimited(request.unit(), 60, "Unit")),
                 materialRateType(request.rateType()),
                 nonNegative(request.rate(), "Rate"),
-                nonNegative(defaultZero(request.gstPercent()), "GST percent"),
+                percentage(defaultZero(request.gstPercent()), "GST percent", new BigDecimal("100")),
                 Date.valueOf(from),
                 request.effectiveTo() == null ? null : Date.valueOf(request.effectiveTo()),
-                clean(request.sourceReference()),
-                clean(request.notes()),
+                cleanLimited(request.sourceReference(), 1000, "Source reference"),
+                cleanLimited(request.notes(), 3000, "Notes"),
                 request.active() == null || request.active(),
                 actor,
                 Timestamp.valueOf(now),
                 actor,
                 Timestamp.valueOf(now));
 
-        audit(
-                "MATERIAL_RATE",
-                id,
-                null,
-                "CREATE",
-                null,
-                materialRateAuditText(request),
-                actor);
-
+        audit("MATERIAL_RATE", id, null, "CREATE", null, materialRateAuditText(request), actor);
         return getMaterialRate(id);
     }
 
-    public MaterialRateResponse updateMaterialRate(
-            UUID id,
-            MaterialRateRequest request) {
-
+    public MaterialRateResponse updateMaterialRate(UUID id, MaterialRateRequest request) {
         access.requireEditor();
         requireId(id, "Material rate ID");
         validateMaterialRate(request);
@@ -180,9 +165,7 @@ public class BomFlowCommercialService {
         MaterialRateResponse old = getMaterialRate(id);
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
-        LocalDate from = request.effectiveFrom() == null
-                ? old.effectiveFrom()
-                : request.effectiveFrom();
+        LocalDate from = request.effectiveFrom() == null ? old.effectiveFrom() : request.effectiveFrom();
 
         int changed = jdbc.update("""
                 UPDATE bom_flow_material_rates
@@ -192,45 +175,31 @@ public class BomFlowCommercialService {
                     updated_by = ?, updated_at = ?, row_version = row_version + 1
                 WHERE id = ? AND row_version = ?
                 """,
-                required(request.category(), "Category"),
-                required(request.itemName(), "Item name"),
-                clean(request.brand()),
-                clean(request.vendorName()),
-                upper(required(request.unit(), "Unit")),
+                requiredLimited(request.category(), 120, "Category"),
+                requiredLimited(request.itemName(), 500, "Item name"),
+                cleanLimited(request.brand(), 255, "Brand"),
+                cleanLimited(request.vendorName(), 220, "Vendor name"),
+                upper(requiredLimited(request.unit(), 60, "Unit")),
                 materialRateType(request.rateType()),
                 nonNegative(request.rate(), "Rate"),
-                nonNegative(defaultZero(request.gstPercent()), "GST percent"),
+                percentage(defaultZero(request.gstPercent()), "GST percent", new BigDecimal("100")),
                 Date.valueOf(from == null ? LocalDate.now() : from),
                 request.effectiveTo() == null ? null : Date.valueOf(request.effectiveTo()),
-                clean(request.sourceReference()),
-                clean(request.notes()),
+                cleanLimited(request.sourceReference(), 1000, "Source reference"),
+                cleanLimited(request.notes(), 3000, "Notes"),
                 request.active() == null ? old.active() : request.active(),
                 actor,
                 Timestamp.valueOf(now),
                 id,
                 request.rowVersion());
 
-        if (changed == 0) {
-            throw conflict("Material rate was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Material rate was changed by another user. Refresh and try again.");
 
-        audit(
-                "MATERIAL_RATE",
-                id,
-                null,
-                "UPDATE",
-                materialRateAuditText(old),
-                materialRateAuditText(request),
-                actor);
-
+        audit("MATERIAL_RATE", id, null, "UPDATE", materialRateAuditText(old), materialRateAuditText(request), actor);
         return getMaterialRate(id);
     }
 
-    public MaterialRateResponse setMaterialRateActive(
-            UUID id,
-            boolean active,
-            Long rowVersion) {
-
+    public MaterialRateResponse setMaterialRateActive(UUID id, boolean active, Long rowVersion) {
         access.requireEditor();
         requireId(id, "Material rate ID");
         requireVersion(rowVersion, "Material rate");
@@ -243,33 +212,19 @@ public class BomFlowCommercialService {
                 SET active = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP,
                     row_version = row_version + 1
                 WHERE id = ? AND row_version = ?
-                """,
-                active,
-                actor,
-                id,
-                rowVersion);
+                """, active, actor, id, rowVersion);
 
-        if (changed == 0) {
-            throw conflict("Material rate was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Material rate was changed by another user. Refresh and try again.");
 
-        audit(
-                "MATERIAL_RATE",
-                id,
-                null,
-                active ? "ACTIVATE" : "DEACTIVATE",
-                "active=" + old.active(),
-                "active=" + active,
-                actor);
-
+        audit("MATERIAL_RATE", id, null, active ? "ACTIVATE" : "DEACTIVATE",
+                "active=" + old.active(), "active=" + active, actor);
         return getMaterialRate(id);
     }
 
-    public RateApplyResponse applyRatesToRevision(
-            UUID revisionId) {
-
+    public RateApplyResponse applyRatesToRevision(UUID revisionId) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
+        lockRevision(revisionId);
 
         RevisionContext context = revisionContext(revisionId);
         String status = upper(context.status());
@@ -285,10 +240,7 @@ public class BomFlowCommercialService {
                   AND effective_from <= ?
                   AND (effective_to IS NULL OR effective_to >= ?)
                 ORDER BY effective_from DESC, updated_at DESC
-                """,
-                this::mapMaterialRate,
-                Date.valueOf(today),
-                Date.valueOf(today));
+                """, this::mapMaterialRate, Date.valueOf(today), Date.valueOf(today));
 
         List<MaterialBomRow> items = jdbc.query("""
                 SELECT id, item_name, category, section_name, brand, vendor_name,
@@ -316,7 +268,6 @@ public class BomFlowCommercialService {
 
         for (MaterialBomRow item : items) {
             MaterialRateResponse best = findBestRate(item, rates);
-
             if (best == null) {
                 unmatched.add(item.itemName());
                 continue;
@@ -330,19 +281,10 @@ public class BomFlowCommercialService {
                     SET unit_rate = ?, material_amount = ?, total_amount = ?, gst_percent = ?,
                         rate_master_id = ?, rate_applied_by = ?, rate_applied_at = ?,
                         updated_by = ?, updated_at = ?, row_version = row_version + 1
-                    WHERE id = ?
+                    WHERE id = ? AND revision_id = ?
                     """,
-                    best.rate(),
-                    material,
-                    total,
-                    best.gstPercent(),
-                    best.id(),
-                    actor,
-                    Timestamp.valueOf(now),
-                    actor,
-                    Timestamp.valueOf(now),
-                    item.id());
-
+                    best.rate(), material, total, best.gstPercent(), best.id(), actor,
+                    Timestamp.valueOf(now), actor, Timestamp.valueOf(now), item.id(), revisionId);
             matched++;
         }
 
@@ -352,27 +294,17 @@ public class BomFlowCommercialService {
                     SET updated_by = ?, updated_at = CURRENT_TIMESTAMP,
                         row_version = row_version + 1
                     WHERE id = ?
-                    """,
-                    actor,
-                    revisionId);
+                    """, actor, revisionId);
         }
 
         BigDecimal total = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(total_amount),0)
                 FROM bom_flow_items
                 WHERE revision_id = ? AND active = true
-                """,
-                BigDecimal.class,
-                revisionId);
+                """, BigDecimal.class, revisionId);
 
-        audit(
-                "REVISION",
-                revisionId,
-                revisionId,
-                "RATE_MASTER_APPLY",
-                null,
-                "matched=" + matched + ", unmatched=" + unmatched.size(),
-                actor);
+        audit("REVISION", revisionId, revisionId, "RATE_MASTER_APPLY", null,
+                "matched=" + matched + ", unmatched=" + unmatched.size(), actor);
 
         return new RateApplyResponse(
                 revisionId,
@@ -383,15 +315,14 @@ public class BomFlowCommercialService {
                 money(total),
                 matched == 0
                         ? "No exact material names matched the active Rate Master."
-                        : "Rate Master applied to " + matched + " BOM row(s)." );
+                        : "Rate Master applied to " + matched + " BOM row(s).");
     }
 
-    public MaterialRateResponse uploadRateEvidence(
-            UUID rateId,
-            MultipartFile file) {
-
+    public MaterialRateResponse uploadRateEvidence(UUID rateId, MultipartFile file) {
         access.requireEditor();
         requireId(rateId, "Material rate ID");
+        lockMaterialRate(rateId);
+
         String extension = validateEvidence(file);
         MaterialRateResponse before = getMaterialRate(rateId);
         String oldKey = jdbc.queryForObject(
@@ -400,8 +331,14 @@ public class BomFlowCommercialService {
                 rateId);
 
         StoredFile stored = storage.store(rateId, FileSlot.RATE_EVIDENCE, file, extension);
+        if (stored.fileSize() > RATE_EVIDENCE_MAX_BYTES) {
+            storage.delete(stored.storageKey());
+            throw badRequest("Rate evidence must be 15 MB or smaller.");
+        }
+
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
+        String canonicalType = RATE_EVIDENCE_CONTENT_TYPES.getOrDefault(extension, "application/octet-stream");
 
         try {
             jdbc.update("""
@@ -415,7 +352,7 @@ public class BomFlowCommercialService {
                     cleanFileName(file.getOriginalFilename()),
                     stored.storedFileName(),
                     stored.storageKey(),
-                    clean(file.getContentType()),
+                    canonicalType,
                     stored.fileSize(),
                     actor,
                     Timestamp.valueOf(now),
@@ -427,9 +364,7 @@ public class BomFlowCommercialService {
             throw ex;
         }
 
-        if (hasText(oldKey) && !oldKey.equals(stored.storageKey())) {
-            storage.delete(oldKey);
-        }
+        if (hasText(oldKey) && !oldKey.equals(stored.storageKey())) storage.delete(oldKey);
 
         audit("MATERIAL_RATE", rateId, null, "EVIDENCE_UPLOAD",
                 before.evidenceFileName(), cleanFileName(file.getOriginalFilename()), actor);
@@ -440,32 +375,40 @@ public class BomFlowCommercialService {
     public RateEvidenceDownload downloadRateEvidence(UUID rateId) {
         access.requireBomFlowAccess();
         requireId(rateId, "Material rate ID");
-        return jdbc.queryForObject("""
-                SELECT evidence_original_name, evidence_storage_key,
-                       evidence_content_type, evidence_size
-                FROM bom_flow_material_rates
-                WHERE id = ?
-                """,
-                (rs, rowNum) -> {
-                    String key = rs.getString("evidence_storage_key");
-                    if (!hasText(key)) throw notFound("Rate evidence is not available.");
-                    return new RateEvidenceDownload(
-                            defaultText(rs.getString("evidence_original_name"), "rate-evidence"),
-                            rs.getString("evidence_content_type"),
-                            Math.max(0L, rs.getLong("evidence_size")),
-                            storage.load(key));
-                },
-                rateId);
+        try {
+            return jdbc.queryForObject("""
+                    SELECT evidence_original_name, evidence_storage_key,
+                           evidence_content_type, evidence_size
+                    FROM bom_flow_material_rates
+                    WHERE id = ?
+                    """,
+                    (rs, rowNum) -> {
+                        String key = rs.getString("evidence_storage_key");
+                        if (!hasText(key)) throw notFound("Rate evidence is not available.");
+                        return new RateEvidenceDownload(
+                                defaultText(rs.getString("evidence_original_name"), "rate-evidence"),
+                                safeContentType(rs.getString("evidence_content_type")),
+                                Math.max(0L, rs.getLong("evidence_size")),
+                                storage.load(key));
+                    },
+                    rateId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw notFound("Material rate not found: " + rateId);
+        }
     }
 
     public MaterialRateResponse deleteRateEvidence(UUID rateId) {
         access.requireEditor();
         requireId(rateId, "Material rate ID");
+        lockMaterialRate(rateId);
+        MaterialRateResponse before = getMaterialRate(rateId);
+
         String oldKey = jdbc.queryForObject(
                 "SELECT evidence_storage_key FROM bom_flow_material_rates WHERE id = ?",
                 String.class,
                 rateId);
         String actor = access.currentUsername();
+
         jdbc.update("""
                 UPDATE bom_flow_material_rates
                 SET evidence_original_name = NULL, evidence_stored_name = NULL,
@@ -474,8 +417,9 @@ public class BomFlowCommercialService {
                     updated_by = ?, updated_at = CURRENT_TIMESTAMP, row_version = row_version + 1
                 WHERE id = ?
                 """, actor, rateId);
+
         storage.delete(oldKey);
-        audit("MATERIAL_RATE", rateId, null, "EVIDENCE_DELETE", oldKey, null, actor);
+        audit("MATERIAL_RATE", rateId, null, "EVIDENCE_DELETE", before.evidenceFileName(), null, actor);
         return getMaterialRate(rateId);
     }
 
@@ -484,22 +428,14 @@ public class BomFlowCommercialService {
        ===================================================================== */
 
     @Transactional(readOnly = true)
-    public List<LabourRateResponse> listLabourRates(
-            String search,
-            Boolean activeOnly) {
-
+    public List<LabourRateResponse> listLabourRates(String search, Boolean activeOnly) {
         access.requireBomFlowAccess();
 
-        StringBuilder sql = new StringBuilder("""
-                SELECT * FROM bom_flow_labour_rates WHERE 1 = 1
-                """);
+        StringBuilder sql = new StringBuilder("SELECT * FROM bom_flow_labour_rates WHERE 1 = 1 ");
         List<Object> args = new ArrayList<>();
+        if (Boolean.TRUE.equals(activeOnly)) sql.append(" AND active = true ");
 
-        if (Boolean.TRUE.equals(activeOnly)) {
-            sql.append(" AND active = true ");
-        }
-
-        String query = clean(search);
+        String query = cleanLimited(search, 200, "Search");
         if (query != null) {
             sql.append("""
                     AND (
@@ -515,22 +451,17 @@ public class BomFlowCommercialService {
         }
 
         sql.append(" ORDER BY active DESC, department ASC, process_name ASC ");
-
         return jdbc.query(sql.toString(), this::mapLabourRate, args.toArray());
     }
 
-    public LabourRateResponse createLabourRate(
-            LabourRateRequest request) {
-
+    public LabourRateResponse createLabourRate(LabourRateRequest request) {
         access.requireEditor();
         validateLabourRate(request);
 
         UUID id = UUID.randomUUID();
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
-        LocalDate from = request.effectiveFrom() == null
-                ? LocalDate.now()
-                : request.effectiveFrom();
+        LocalDate from = request.effectiveFrom() == null ? LocalDate.now() : request.effectiveFrom();
 
         jdbc.update("""
                 INSERT INTO bom_flow_labour_rates (
@@ -540,9 +471,9 @@ public class BomFlowCommercialService {
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
                 """,
                 id,
-                required(request.department(), "Department"),
-                clean(request.processCode()),
-                required(request.processName(), "Process name"),
+                requiredLimited(request.department(), 160, "Department"),
+                cleanLimited(request.processCode(), 100, "Process code"),
+                requiredLimited(request.processName(), 220, "Process name"),
                 labourBasis(request.basis()),
                 upper(defaultText(request.unit(), "HOUR")),
                 nonNegative(request.rate(), "Labour rate"),
@@ -550,7 +481,7 @@ public class BomFlowCommercialService {
                 nonNegative(defaultZero(request.defaultWorkingHours()), "Default working hours"),
                 Date.valueOf(from),
                 request.effectiveTo() == null ? null : Date.valueOf(request.effectiveTo()),
-                clean(request.notes()),
+                cleanLimited(request.notes(), 3000, "Notes"),
                 request.active() == null || request.active(),
                 actor,
                 Timestamp.valueOf(now),
@@ -561,10 +492,7 @@ public class BomFlowCommercialService {
         return getLabourRate(id);
     }
 
-    public LabourRateResponse updateLabourRate(
-            UUID id,
-            LabourRateRequest request) {
-
+    public LabourRateResponse updateLabourRate(UUID id, LabourRateRequest request) {
         access.requireEditor();
         requireId(id, "Labour rate ID");
         validateLabourRate(request);
@@ -581,9 +509,9 @@ public class BomFlowCommercialService {
                     row_version = row_version + 1
                 WHERE id = ? AND row_version = ?
                 """,
-                required(request.department(), "Department"),
-                clean(request.processCode()),
-                required(request.processName(), "Process name"),
+                requiredLimited(request.department(), 160, "Department"),
+                cleanLimited(request.processCode(), 100, "Process code"),
+                requiredLimited(request.processName(), 220, "Process name"),
                 labourBasis(request.basis()),
                 upper(defaultText(request.unit(), "HOUR")),
                 nonNegative(request.rate(), "Labour rate"),
@@ -593,46 +521,33 @@ public class BomFlowCommercialService {
                         ? (old.effectiveFrom() == null ? LocalDate.now() : old.effectiveFrom())
                         : request.effectiveFrom()),
                 request.effectiveTo() == null ? null : Date.valueOf(request.effectiveTo()),
-                clean(request.notes()),
+                cleanLimited(request.notes(), 3000, "Notes"),
                 request.active() == null ? old.active() : request.active(),
                 actor,
                 id,
                 request.rowVersion());
 
-        if (changed == 0) {
-            throw conflict("Labour rate was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Labour rate was changed by another user. Refresh and try again.");
 
         audit("LABOUR_RATE", id, null, "UPDATE", labourRateAuditText(old), labourRateAuditText(request), actor);
         return getLabourRate(id);
     }
 
-    public LabourRateResponse setLabourRateActive(
-            UUID id,
-            boolean active,
-            Long rowVersion) {
-
+    public LabourRateResponse setLabourRateActive(UUID id, boolean active, Long rowVersion) {
         access.requireEditor();
         requireId(id, "Labour rate ID");
         requireVersion(rowVersion, "Labour rate");
 
         LabourRateResponse old = getLabourRate(id);
         String actor = access.currentUsername();
-
         int changed = jdbc.update("""
                 UPDATE bom_flow_labour_rates
                 SET active = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP,
                     row_version = row_version + 1
                 WHERE id = ? AND row_version = ?
-                """,
-                active,
-                actor,
-                id,
-                rowVersion);
+                """, active, actor, id, rowVersion);
 
-        if (changed == 0) {
-            throw conflict("Labour rate was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Labour rate was changed by another user. Refresh and try again.");
 
         audit("LABOUR_RATE", id, null, active ? "ACTIVATE" : "DEACTIVATE",
                 "active=" + old.active(), "active=" + active, actor);
@@ -644,9 +559,7 @@ public class BomFlowCommercialService {
        ===================================================================== */
 
     @Transactional(readOnly = true)
-    public CostingSummaryResponse getCosting(
-            UUID revisionId) {
-
+    public CostingSummaryResponse getCosting(UUID revisionId) {
         access.requireBomFlowAccess();
         requireId(revisionId, "Revision ID");
         RevisionContext context = revisionContext(revisionId);
@@ -681,9 +594,7 @@ public class BomFlowCommercialService {
         BigDecimal gst = percent(taxable, settings.gstPercent());
         BigDecimal mrp = taxable.add(gst);
 
-        if (settings.roundOff()) {
-            mrp = mrp.setScale(0, RoundingMode.HALF_UP);
-        }
+        if (settings.roundOff()) mrp = mrp.setScale(0, RoundingMode.HALF_UP);
 
         int missing = (int) materials.stream()
                 .filter(line -> defaultZero(line.rate()).compareTo(ZERO) <= 0)
@@ -724,36 +635,26 @@ public class BomFlowCommercialService {
     }
 
     @Transactional(readOnly = true)
-    public RevisionComparisonResponse getRevisionComparison(
-            UUID revisionId,
-            UUID compareToRevisionId) {
-
+    public RevisionComparisonResponse getRevisionComparison(UUID revisionId, UUID compareToRevisionId) {
         access.requireBomFlowAccess();
         requireId(revisionId, "Revision ID");
 
         RevisionContext currentContext = revisionContext(revisionId);
         CostingSummaryResponse current = getCosting(revisionId);
-
         UUID previousRevisionId = compareToRevisionId;
 
         if (previousRevisionId != null) {
-            if (previousRevisionId.equals(revisionId)) {
-                throw badRequest("Choose a different revision to compare.");
-            }
+            if (previousRevisionId.equals(revisionId)) throw badRequest("Choose a different revision to compare.");
 
             RevisionContext selectedPrevious = revisionContext(previousRevisionId);
-
-            if (!Objects.equals(
-                    currentContext.productId(),
-                    selectedPrevious.productId())) {
+            if (!Objects.equals(currentContext.productId(), selectedPrevious.productId())) {
                 throw badRequest("Revisions can only be compared within the same product.");
             }
         } else {
             previousRevisionId = findPreviousRevisionId(currentContext);
         }
 
-        List<RevisionCostPointResponse> history = revisionHistory(
-                currentContext.productId());
+        List<RevisionCostPointResponse> history = revisionHistory(currentContext.productId());
 
         if (previousRevisionId == null) {
             return new RevisionComparisonResponse(
@@ -786,33 +687,21 @@ public class BomFlowCommercialService {
 
         CostingSummaryResponse previous = getCosting(previousRevisionId);
 
-        BigDecimal materialDelta = money(
-                current.directMaterial().subtract(previous.directMaterial()));
-        BigDecimal labourDelta = money(
-                current.directLabour().subtract(previous.directLabour()));
-        BigDecimal directCostDelta = money(
-                current.directCost().subtract(previous.directCost()));
-        BigDecimal costPerProductDelta = money(
-                current.costPerProduct().subtract(previous.costPerProduct()));
-        BigDecimal configuredProfitDelta = money(
-                current.profitAmount().subtract(previous.profitAmount()));
-        BigDecimal exFactoryDelta = money(
-                current.exFactory().subtract(previous.exFactory()));
-        BigDecimal mrpDelta = money(
-                current.mrp().subtract(previous.mrp()));
+        BigDecimal materialDelta = money(current.directMaterial().subtract(previous.directMaterial()));
+        BigDecimal labourDelta = money(current.directLabour().subtract(previous.directLabour()));
+        BigDecimal directCostDelta = money(current.directCost().subtract(previous.directCost()));
+        BigDecimal costPerProductDelta = money(current.costPerProduct().subtract(previous.costPerProduct()));
+        BigDecimal configuredProfitDelta = money(current.profitAmount().subtract(previous.profitAmount()));
+        BigDecimal exFactoryDelta = money(current.exFactory().subtract(previous.exFactory()));
+        BigDecimal mrpDelta = money(current.mrp().subtract(previous.mrp()));
 
-        BigDecimal profitAtPreviousExFactory = money(
-                previous.exFactory().subtract(current.costPerProduct()));
-        BigDecimal profitImpactAtPreviousPrice = money(
-                profitAtPreviousExFactory.subtract(previous.profitAmount()));
-        BigDecimal requiredExFactoryIncrease = money(
-                current.exFactory().subtract(previous.exFactory()));
+        BigDecimal profitAtPreviousExFactory = money(previous.exFactory().subtract(current.costPerProduct()));
+        BigDecimal profitImpactAtPreviousPrice = money(profitAtPreviousExFactory.subtract(previous.profitAmount()));
+        BigDecimal requiredExFactoryIncrease = money(current.exFactory().subtract(previous.exFactory()));
 
         String direction = costPerProductDelta.compareTo(ZERO) > 0
                 ? "INCREASE"
-                : costPerProductDelta.compareTo(ZERO) < 0
-                        ? "DECREASE"
-                        : "UNCHANGED";
+                : costPerProductDelta.compareTo(ZERO) < 0 ? "DECREASE" : "UNCHANGED";
 
         return new RevisionComparisonResponse(
                 currentContext.productId(),
@@ -842,12 +731,11 @@ public class BomFlowCommercialService {
                 history);
     }
 
-    public CostingSettingsResponse saveCostingSettings(
-            UUID revisionId,
-            CostingSettingsRequest request) {
-
+    public CostingSettingsResponse saveCostingSettings(UUID revisionId, CostingSettingsRequest request) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
+        lockRevision(revisionId);
+
         RevisionContext context = revisionContext(revisionId);
         requireCommercialEditableRevision(context);
         if (request == null) throw badRequest("Costing settings are required.");
@@ -863,10 +751,8 @@ public class BomFlowCommercialService {
         BigDecimal selling = pctValue(request.sellingOverheadPercent(), existing == null ? ZERO : existing.sellingOverheadPercent());
         BigDecimal profit = pctValue(request.profitPercent(), existing == null ? ZERO : existing.profitPercent());
         BigDecimal franchise = pctValue(request.franchisePercent(), existing == null ? ZERO : existing.franchisePercent());
-        BigDecimal gst = pctValue(request.gstPercent(), existing == null ? new BigDecimal("18") : existing.gstPercent());
-        boolean roundOff = request.roundOff() != null
-                ? request.roundOff()
-                : existing != null && existing.roundOff();
+        BigDecimal gst = percentage(request.gstPercent() == null ? (existing == null ? new BigDecimal("18") : existing.gstPercent()) : request.gstPercent(), "GST percent", new BigDecimal("100"));
+        boolean roundOff = request.roundOff() != null ? request.roundOff() : existing != null && existing.roundOff();
 
         if (existing == null) {
             UUID id = UUID.randomUUID();
@@ -878,24 +764,10 @@ public class BomFlowCommercialService {
                         gst_percent, round_off, created_by, created_at, updated_by, updated_at, row_version
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
                     """,
-                    id,
-                    revisionId,
-                    markup,
-                    fixed,
-                    variable,
-                    admin,
-                    selling,
-                    profit,
-                    franchise,
-                    gst,
-                    roundOff,
-                    actor,
-                    Timestamp.valueOf(now),
-                    actor,
-                    Timestamp.valueOf(now));
+                    id, revisionId, markup, fixed, variable, admin, selling, profit, franchise, gst,
+                    roundOff, actor, Timestamp.valueOf(now), actor, Timestamp.valueOf(now));
 
-            audit("COSTING_SETTINGS", id, revisionId, "CREATE", null,
-                    "revision=" + revisionId, actor);
+            audit("COSTING_SETTINGS", id, revisionId, "CREATE", null, "revision=" + revisionId, actor);
         } else {
             requireVersion(request.rowVersion(), "Costing settings");
 
@@ -908,40 +780,24 @@ public class BomFlowCommercialService {
                         row_version = row_version + 1
                     WHERE revision_id = ? AND row_version = ?
                     """,
-                    markup,
-                    fixed,
-                    variable,
-                    admin,
-                    selling,
-                    profit,
-                    franchise,
-                    gst,
-                    roundOff,
-                    actor,
-                    revisionId,
-                    request.rowVersion());
+                    markup, fixed, variable, admin, selling, profit, franchise, gst, roundOff,
+                    actor, revisionId, request.rowVersion());
 
-            if (changed == 0) {
-                throw conflict("Costing settings were changed by another user. Refresh and try again.");
-            }
-
-            audit("COSTING_SETTINGS", existing.id(), revisionId, "UPDATE", null,
-                    "revision=" + revisionId, actor);
+            if (changed == 0) throw conflict("Costing settings were changed by another user. Refresh and try again.");
+            audit("COSTING_SETTINGS", existing.id(), revisionId, "UPDATE", null, "revision=" + revisionId, actor);
         }
 
         return getCostingSettings(revisionId);
     }
 
-    public LabourSyncResponse syncLabourMaster(
-            UUID revisionId) {
-
+    public LabourSyncResponse syncLabourMaster(UUID revisionId) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
+        lockRevision(revisionId);
         RevisionContext context = revisionContext(revisionId);
         requireCommercialEditableRevision(context);
 
         LocalDate today = LocalDate.now();
-
         List<LabourRateResponse> masters = jdbc.query("""
                 SELECT *
                 FROM bom_flow_labour_rates
@@ -949,10 +805,7 @@ public class BomFlowCommercialService {
                   AND effective_from <= ?
                   AND (effective_to IS NULL OR effective_to >= ?)
                 ORDER BY department, process_name, effective_from DESC, updated_at DESC
-                """,
-                this::mapLabourRate,
-                Date.valueOf(today),
-                Date.valueOf(today));
+                """, this::mapLabourRate, Date.valueOf(today), Date.valueOf(today));
 
         List<BomSection> sections = jdbc.query("""
                 SELECT section_name, category, COALESCE(SUM(required_qty),0) AS total_qty
@@ -981,13 +834,11 @@ public class BomFlowCommercialService {
         int incomplete = 0;
         List<String> matchedProcesses = new ArrayList<>();
         List<String> unmatchedProcesses = new ArrayList<>();
-
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
 
         for (LabourRateResponse master : masters) {
             BomSection section = findBestLabourSection(master, sections);
-
             if (section == null) {
                 unmatchedProcesses.add(master.department() + " • " + master.processName());
                 continue;
@@ -1001,43 +852,19 @@ public class BomFlowCommercialService {
                 continue;
             }
 
-            BigDecimal labourCount = nonNegative(
-                    defaultValue(master.defaultLabourCount(), BigDecimal.ONE),
-                    "Default labour count");
-
-            BigDecimal workingHours = nonNegative(
-                    defaultZero(master.defaultWorkingHours()),
-                    "Default working hours");
-
+            BigDecimal labourCount = nonNegative(defaultValue(master.defaultLabourCount(), BigDecimal.ONE), "Default labour count");
+            BigDecimal workingHours = nonNegative(defaultZero(master.defaultWorkingHours()), "Default working hours");
             String basis = labourBasis(master.basis());
-            BigDecimal quantity = "PER_ITEM".equals(basis)
-                    ? defaultZero(section.quantity())
-                    : ZERO;
-
+            BigDecimal quantity = "PER_ITEM".equals(basis) ? defaultZero(section.quantity()) : ZERO;
             BigDecimal rate = nonNegative(master.rate(), "Labour rate");
-            BigDecimal amount = labourAmountForSync(
-                    basis,
-                    labourCount,
-                    workingHours,
-                    quantity,
-                    rate);
-
-            boolean needsInput = labourInputIncomplete(
-                    basis,
-                    labourCount,
-                    workingHours,
-                    quantity);
-
-            if (needsInput) {
-                incomplete++;
-            }
+            BigDecimal amount = labourAmountForSync(basis, labourCount, workingHours, quantity, rate);
+            boolean needsInput = labourInputIncomplete(basis, labourCount, workingHours, quantity);
+            if (needsInput) incomplete++;
 
             UUID id = UUID.randomUUID();
             String remarks = "Synced from Labour Master for BOM section: "
                     + defaultText(section.section(), section.category())
-                    + (needsInput
-                            ? ". Enter the required working hours/quantity before final costing."
-                            : ".");
+                    + (needsInput ? ". Enter the required working hours/quantity before final costing." : ".");
 
             jdbc.update("""
                     INSERT INTO bom_flow_revision_labour (
@@ -1046,36 +873,14 @@ public class BomFlowCommercialService {
                         rate, amount, remarks, created_by, created_at, updated_by, updated_at, row_version
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
                     """,
-                    id,
-                    revisionId,
-                    master.id(),
-                    master.department(),
-                    master.processCode(),
-                    master.processName(),
-                    basis,
-                    master.unit(),
-                    labourCount,
-                    workingHours,
-                    quantity,
-                    rate,
-                    amount,
-                    remarks,
-                    actor,
-                    Timestamp.valueOf(now),
-                    actor,
-                    Timestamp.valueOf(now));
+                    id, revisionId, master.id(), master.department(), master.processCode(), master.processName(),
+                    basis, master.unit(), labourCount, workingHours, quantity, rate, amount,
+                    trim3000(remarks), actor, Timestamp.valueOf(now), actor, Timestamp.valueOf(now));
 
             existingRateIds.add(master.id());
             inserted++;
-
-            audit(
-                    "REVISION_LABOUR",
-                    id,
-                    revisionId,
-                    "LABOUR_MASTER_SYNC",
-                    null,
-                    master.department() + "|" + master.processName() + "|section=" + section.section(),
-                    actor);
+            audit("REVISION_LABOUR", id, revisionId, "LABOUR_MASTER_SYNC", null,
+                    master.department() + "|" + master.processName() + "|section=" + section.section(), actor);
         }
 
         String message;
@@ -1086,8 +891,8 @@ public class BomFlowCommercialService {
         } else if (inserted == 0) {
             message = "Applicable Labour Master processes are already linked to this revision.";
         } else if (incomplete > 0) {
-            message = inserted + " Labour Master process(es) synced. "
-                    + incomplete + " line(s) still need working hours or quantity before they contribute to Direct Labour.";
+            message = inserted + " Labour Master process(es) synced. " + incomplete
+                    + " line(s) still need working hours or quantity before they contribute to Direct Labour.";
         } else {
             message = inserted + " Labour Master process(es) synced and included in Direct Labour.";
         }
@@ -1105,22 +910,19 @@ public class BomFlowCommercialService {
                 message);
     }
 
-    public LabourLineResponse addLabourLine(
-            UUID revisionId,
-            LabourLineRequest request) {
-
+    public LabourLineResponse addLabourLine(UUID revisionId, LabourLineRequest request) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
+        lockRevision(revisionId);
         RevisionContext context = revisionContext(revisionId);
         requireCommercialEditableRevision(context);
+
         if (request == null || request.labourRateId() == null) {
             throw badRequest("Labour Master process is required.");
         }
 
         LabourRateResponse master = getLabourRate(request.labourRateId());
-        if (!master.active()) {
-            throw badRequest("Selected Labour Master process is inactive.");
-        }
+        if (!master.active()) throw badRequest("Selected Labour Master process is inactive.");
 
         String basis = labourBasis(firstText(request.basis(), master.basis()));
         String unit = upper(firstText(request.unit(), defaultUnitForBasis(basis, master.unit())));
@@ -1141,38 +943,19 @@ public class BomFlowCommercialService {
                     rate, amount, remarks, created_by, created_at, updated_by, updated_at, row_version
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
                 """,
-                id,
-                revisionId,
-                master.id(),
-                master.department(),
-                master.processCode(),
-                master.processName(),
-                basis,
-                unit,
-                labourCount,
-                hours,
-                quantity,
-                rate,
-                amount,
-                clean(request.remarks()),
-                actor,
-                Timestamp.valueOf(now),
-                actor,
-                Timestamp.valueOf(now));
+                id, revisionId, master.id(), master.department(), master.processCode(), master.processName(),
+                basis, unit, labourCount, hours, quantity, rate, amount,
+                cleanLimited(request.remarks(), 3000, "Remarks"), actor, Timestamp.valueOf(now), actor, Timestamp.valueOf(now));
 
-        audit("REVISION_LABOUR", id, revisionId, "CREATE", null,
-                master.processName() + "=" + amount, actor);
+        audit("REVISION_LABOUR", id, revisionId, "CREATE", null, master.processName() + "=" + amount, actor);
         return getLabourLine(id, revisionId);
     }
 
-    public LabourLineResponse updateLabourLine(
-            UUID revisionId,
-            UUID lineId,
-            LabourLineRequest request) {
-
+    public LabourLineResponse updateLabourLine(UUID revisionId, UUID lineId, LabourLineRequest request) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         requireId(lineId, "Labour line ID");
+        lockRevision(revisionId);
         requireCommercialEditableRevision(revisionContext(revisionId));
         if (request == null) throw badRequest("Labour line request is required.");
         requireVersion(request.rowVersion(), "Labour line");
@@ -1183,8 +966,7 @@ public class BomFlowCommercialService {
                 : getLabourRate(request.labourRateId());
 
         String basis = labourBasis(firstText(
-                request.basis(),
-                request.labourRateId() != null ? master.basis() : old.basis()));
+                request.basis(), request.labourRateId() != null ? master.basis() : old.basis()));
         String unit = upper(firstText(
                 request.unit(),
                 request.labourRateId() != null
@@ -1205,26 +987,12 @@ public class BomFlowCommercialService {
                     row_version = row_version + 1
                 WHERE id = ? AND revision_id = ? AND row_version = ?
                 """,
-                master.id(),
-                master.department(),
-                master.processCode(),
-                master.processName(),
-                basis,
-                unit,
-                labourCount,
-                hours,
-                quantity,
-                rate,
-                amount,
-                clean(request.remarks()),
-                actor,
-                lineId,
-                revisionId,
-                request.rowVersion());
+                master.id(), master.department(), master.processCode(), master.processName(),
+                basis, unit, labourCount, hours, quantity, rate, amount,
+                cleanLimited(request.remarks(), 3000, "Remarks"), actor,
+                lineId, revisionId, request.rowVersion());
 
-        if (changed == 0) {
-            throw conflict("Labour line was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Labour line was changed by another user. Refresh and try again.");
 
         audit("REVISION_LABOUR", lineId, revisionId, "UPDATE",
                 old.processName() + "|basis=" + old.basis() + "|amount=" + old.amount(),
@@ -1234,14 +1002,11 @@ public class BomFlowCommercialService {
         return getLabourLine(lineId, revisionId);
     }
 
-    public void deleteLabourLine(
-            UUID revisionId,
-            UUID lineId,
-            Long rowVersion) {
-
+    public void deleteLabourLine(UUID revisionId, UUID lineId, Long rowVersion) {
         access.requireEditor();
         requireId(revisionId, "Revision ID");
         requireId(lineId, "Labour line ID");
+        lockRevision(revisionId);
         requireCommercialEditableRevision(revisionContext(revisionId));
         requireVersion(rowVersion, "Labour line");
 
@@ -1249,14 +1014,9 @@ public class BomFlowCommercialService {
         int changed = jdbc.update("""
                 DELETE FROM bom_flow_revision_labour
                 WHERE id = ? AND revision_id = ? AND row_version = ?
-                """,
-                lineId,
-                revisionId,
-                rowVersion);
+                """, lineId, revisionId, rowVersion);
 
-        if (changed == 0) {
-            throw conflict("Labour line was changed by another user. Refresh and try again.");
-        }
+        if (changed == 0) throw conflict("Labour line was changed by another user. Refresh and try again.");
 
         audit("REVISION_LABOUR", lineId, revisionId, "DELETE",
                 old.processName() + "=" + old.amount(), null, access.currentUsername());
@@ -1422,15 +1182,13 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                (RowCallbackHandler) rs -> {
-                    csvRow(out,
-                            "BOM",
-                            rs.getString("action"),
-                            rs.getString("old_value"),
-                            rs.getString("new_value"),
-                            rs.getString("changed_by"),
-                            localDateTime(rs, "changed_at"));
-                },
+                (RowCallbackHandler) rs -> csvRow(out,
+                        "BOM",
+                        rs.getString("action"),
+                        rs.getString("old_value"),
+                        rs.getString("new_value"),
+                        rs.getString("changed_by"),
+                        localDateTime(rs, "changed_at")),
                 revisionId);
 
         jdbc.query("""
@@ -1439,15 +1197,13 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                (RowCallbackHandler) rs -> {
-                    csvRow(out,
-                            "COMMERCIAL",
-                            rs.getString("action"),
-                            rs.getString("old_value"),
-                            rs.getString("new_value"),
-                            rs.getString("changed_by"),
-                            localDateTime(rs, "changed_at"));
-                },
+                (RowCallbackHandler) rs -> csvRow(out,
+                        "COMMERCIAL",
+                        rs.getString("action"),
+                        rs.getString("old_value"),
+                        rs.getString("new_value"),
+                        rs.getString("changed_by"),
+                        localDateTime(rs, "changed_at")),
                 revisionId);
 
         return excelUtf8(out.toString());
@@ -1510,31 +1266,28 @@ public class BomFlowCommercialService {
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                (RowCallbackHandler) rs -> {
-                    auditRows.add(List.of(
-                            "BOM",
-                            safeObject(rs.getString("action")),
-                            safeObject(rs.getString("old_value")),
-                            safeObject(rs.getString("new_value")),
-                            safeObject(rs.getString("changed_by")),
-                            safeObject(localDateTime(rs, "changed_at"))));
-                },
+                (RowCallbackHandler) rs -> auditRows.add(List.of(
+                        "BOM",
+                        safeObject(rs.getString("action")),
+                        safeObject(rs.getString("old_value")),
+                        safeObject(rs.getString("new_value")),
+                        safeObject(rs.getString("changed_by")),
+                        safeObject(localDateTime(rs, "changed_at")))),
                 revisionId);
+
         jdbc.query("""
                 SELECT action, old_value, new_value, changed_by, changed_at
                 FROM bom_flow_master_audit_logs
                 WHERE revision_id = ?
                 ORDER BY changed_at DESC
                 """,
-                (RowCallbackHandler) rs -> {
-                    auditRows.add(List.of(
-                            "COMMERCIAL",
-                            safeObject(rs.getString("action")),
-                            safeObject(rs.getString("old_value")),
-                            safeObject(rs.getString("new_value")),
-                            safeObject(rs.getString("changed_by")),
-                            safeObject(localDateTime(rs, "changed_at"))));
-                },
+                (RowCallbackHandler) rs -> auditRows.add(List.of(
+                        "COMMERCIAL",
+                        safeObject(rs.getString("action")),
+                        safeObject(rs.getString("old_value")),
+                        safeObject(rs.getString("new_value")),
+                        safeObject(rs.getString("changed_by")),
+                        safeObject(localDateTime(rs, "changed_at")))),
                 revisionId);
 
         try {
@@ -1552,9 +1305,7 @@ public class BomFlowCommercialService {
             }
             return bytes.toByteArray();
         } catch (IOException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Unable to create BOMFlow Excel report.");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to create BOMFlow Excel report.");
         }
     }
 
@@ -1605,7 +1356,7 @@ public class BomFlowCommercialService {
                 rs.getString("notes"),
                 hasText(rs.getString("evidence_storage_key")),
                 rs.getString("evidence_original_name"),
-                rs.getString("evidence_content_type"),
+                safeContentType(rs.getString("evidence_content_type")),
                 rs.getObject("evidence_size") == null ? null : rs.getLong("evidence_size"),
                 rs.getString("evidence_uploaded_by"),
                 localDateTime(rs, "evidence_uploaded_at"),
@@ -1673,9 +1424,7 @@ public class BomFlowCommercialService {
                 SELECT * FROM bom_flow_revision_labour
                 WHERE revision_id = ?
                 ORDER BY created_at, process_name
-                """,
-                this::mapLabourLine,
-                revisionId);
+                """, this::mapLabourLine, revisionId);
     }
 
     private LabourLineResponse mapLabourLine(ResultSet rs, int rowNum) throws SQLException {
@@ -1738,9 +1487,7 @@ public class BomFlowCommercialService {
 
     private CostingSettingsResponse findCostingSettings(UUID revisionId) {
         try {
-            return jdbc.queryForObject("""
-                    SELECT * FROM bom_flow_costing_settings WHERE revision_id = ?
-                    """,
+            return jdbc.queryForObject("SELECT * FROM bom_flow_costing_settings WHERE revision_id = ?",
                     (rs, rowNum) -> new CostingSettingsResponse(
                             uuid(rs, "id"),
                             uuid(rs, "revision_id"),
@@ -1789,10 +1536,7 @@ public class BomFlowCommercialService {
         }
     }
 
-    private MaterialRateResponse findBestRate(
-            MaterialBomRow item,
-            List<MaterialRateResponse> rates) {
-
+    private MaterialRateResponse findBestRate(MaterialBomRow item, List<MaterialRateResponse> rates) {
         String itemName = normalize(item.itemName());
         if (itemName.isBlank()) return null;
 
@@ -1800,10 +1544,8 @@ public class BomFlowCommercialService {
                 .filter(rate -> normalize(rate.itemName()).equals(itemName))
                 .max(Comparator
                         .comparingInt((MaterialRateResponse rate) -> rateScore(item, rate))
-                        .thenComparing(MaterialRateResponse::effectiveFrom,
-                                Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(MaterialRateResponse::updatedAt,
-                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .thenComparing(MaterialRateResponse::effectiveFrom, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(MaterialRateResponse::updatedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .orElse(null);
     }
 
@@ -1841,28 +1583,18 @@ public class BomFlowCommercialService {
         };
     }
 
-    private BomSection findBestLabourSection(
-            LabourRateResponse master,
-            List<BomSection> sections) {
-
-        if (master == null || sections == null || sections.isEmpty()) {
-            return null;
-        }
+    private BomSection findBestLabourSection(LabourRateResponse master, List<BomSection> sections) {
+        if (master == null || sections == null || sections.isEmpty()) return null;
 
         return sections.stream()
-                .map(section -> new LabourSectionScore(
-                        section,
-                        labourSectionScore(master, section)))
+                .map(section -> new LabourSectionScore(section, labourSectionScore(master, section)))
                 .filter(item -> item.score() > 0)
                 .max(Comparator.comparingInt(LabourSectionScore::score))
                 .map(LabourSectionScore::section)
                 .orElse(null);
     }
 
-    private int labourSectionScore(
-            LabourRateResponse master,
-            BomSection section) {
-
+    private int labourSectionScore(LabourRateResponse master, BomSection section) {
         int score = 0;
 
         if (same(master.processName(), section.section())) score += 12;
@@ -1876,19 +1608,13 @@ public class BomFlowCommercialService {
         String category = normalize(section.category());
 
         if (!process.isBlank() && !sectionName.isBlank()
-                && (process.contains(sectionName) || sectionName.contains(process))) {
-            score += 4;
-        }
+                && (process.contains(sectionName) || sectionName.contains(process))) score += 4;
 
         if (!department.isBlank() && !sectionName.isBlank()
-                && (department.contains(sectionName) || sectionName.contains(department))) {
-            score += 3;
-        }
+                && (department.contains(sectionName) || sectionName.contains(department))) score += 3;
 
         if (!department.isBlank() && !category.isBlank()
-                && (department.contains(category) || category.contains(department))) {
-            score += 2;
-        }
+                && (department.contains(category) || category.contains(department))) score += 2;
 
         return score;
     }
@@ -1901,16 +1627,12 @@ public class BomFlowCommercialService {
             BigDecimal rate) {
 
         String value = labourBasis(basis);
-
         return switch (value) {
-            case "PER_HOUR" -> labourCount.compareTo(ZERO) > 0
-                    && workingHours.compareTo(ZERO) > 0
+            case "PER_HOUR" -> labourCount.compareTo(ZERO) > 0 && workingHours.compareTo(ZERO) > 0
                     ? money(labourCount.multiply(workingHours).multiply(rate))
                     : money(ZERO);
             case "FIXED" -> money(rate);
-            default -> quantity.compareTo(ZERO) > 0
-                    ? money(quantity.multiply(rate))
-                    : money(ZERO);
+            default -> quantity.compareTo(ZERO) > 0 ? money(quantity.multiply(rate)) : money(ZERO);
         };
     }
 
@@ -1921,18 +1643,14 @@ public class BomFlowCommercialService {
             BigDecimal quantity) {
 
         String value = labourBasis(basis);
-
         return switch (value) {
-            case "PER_HOUR" -> labourCount.compareTo(ZERO) <= 0
-                    || workingHours.compareTo(ZERO) <= 0;
+            case "PER_HOUR" -> labourCount.compareTo(ZERO) <= 0 || workingHours.compareTo(ZERO) <= 0;
             case "FIXED" -> false;
             default -> quantity.compareTo(ZERO) <= 0;
         };
     }
 
-    private UUID findPreviousRevisionId(
-            RevisionContext current) {
-
+    private UUID findPreviousRevisionId(RevisionContext current) {
         try {
             return jdbc.queryForObject("""
                     SELECT id
@@ -1941,18 +1659,13 @@ public class BomFlowCommercialService {
                       AND revision_no < ?
                     ORDER BY revision_no DESC
                     LIMIT 1
-                    """,
-                    UUID.class,
-                    current.productId(),
-                    current.revisionNo());
+                    """, UUID.class, current.productId(), current.revisionNo());
         } catch (EmptyResultDataAccessException ex) {
             return null;
         }
     }
 
-    private List<RevisionCostPointResponse> revisionHistory(
-            UUID productId) {
-
+    private List<RevisionCostPointResponse> revisionHistory(UUID productId) {
         List<RevisionHistorySeed> seeds = jdbc.query("""
                 SELECT id, revision_no, status, updated_at
                 FROM bom_flow_revisions
@@ -1967,7 +1680,6 @@ public class BomFlowCommercialService {
                 productId);
 
         List<RevisionCostPointResponse> result = new ArrayList<>();
-
         for (RevisionHistorySeed seed : seeds) {
             CostingSummaryResponse costing = getCosting(seed.revisionId());
             result.add(new RevisionCostPointResponse(
@@ -1982,7 +1694,6 @@ public class BomFlowCommercialService {
                     costing.mrp(),
                     seed.updatedAt()));
         }
-
         return result;
     }
 
@@ -2013,17 +1724,14 @@ public class BomFlowCommercialService {
             String changeType = oldValue == null
                     ? "ADDED"
                     : newValue == null
-                            ? "REMOVED"
-                            : delta.compareTo(ZERO) != 0
-                                    || oldQty.compareTo(newQty) != 0
-                                    || oldRate.compareTo(newRate) != 0
-                                            ? "CHANGED"
-                                            : "UNCHANGED";
+                    ? "REMOVED"
+                    : delta.compareTo(ZERO) != 0
+                    || oldQty.compareTo(newQty) != 0
+                    || oldRate.compareTo(newRate) != 0
+                    ? "CHANGED"
+                    : "UNCHANGED";
 
-            if ("UNCHANGED".equals(changeType)) {
-                continue;
-            }
-
+            if ("UNCHANGED".equals(changeType)) continue;
             MaterialAggregate display = newValue != null ? newValue : oldValue;
 
             result.add(new MaterialVarianceResponse(
@@ -2046,20 +1754,12 @@ public class BomFlowCommercialService {
         return result;
     }
 
-    private Map<String, MaterialAggregate> aggregateMaterials(
-            List<MaterialCostLineResponse> lines) {
-
+    private Map<String, MaterialAggregate> aggregateMaterials(List<MaterialCostLineResponse> lines) {
         Map<String, MaterialAggregate> result = new LinkedHashMap<>();
-
-        if (lines == null) {
-            return result;
-        }
+        if (lines == null) return result;
 
         for (MaterialCostLineResponse line : lines) {
-            String key = normalize(line.section()) + "|"
-                    + normalize(line.itemName()) + "|"
-                    + normalize(line.unit());
-
+            String key = normalize(line.section()) + "|" + normalize(line.itemName()) + "|" + normalize(line.unit());
             MaterialAggregate current = result.get(key);
             BigDecimal qty = defaultZero(line.quantity());
             BigDecimal material = defaultZero(line.materialAmount());
@@ -2067,12 +1767,7 @@ public class BomFlowCommercialService {
 
             if (current == null) {
                 result.put(key, new MaterialAggregate(
-                        line.itemName(),
-                        line.section(),
-                        line.unit(),
-                        qty,
-                        material,
-                        amount));
+                        line.itemName(), line.section(), line.unit(), qty, material, amount));
             } else {
                 result.put(key, new MaterialAggregate(
                         current.itemName(),
@@ -2083,7 +1778,6 @@ public class BomFlowCommercialService {
                         current.amount().add(amount)));
             }
         }
-
         return result;
     }
 
@@ -2111,18 +1805,16 @@ public class BomFlowCommercialService {
             String changeType = oldValue == null
                     ? "ADDED"
                     : newValue == null
-                            ? "REMOVED"
-                            : delta.compareTo(ZERO) != 0
-                                    || !Objects.equals(oldValue.basis(), newValue.basis())
-                                    || oldValue.quantity().compareTo(newValue.quantity()) != 0
-                                    || oldValue.workingHours().compareTo(newValue.workingHours()) != 0
-                                    || oldValue.rate().compareTo(newValue.rate()) != 0
-                                            ? "CHANGED"
-                                            : "UNCHANGED";
+                    ? "REMOVED"
+                    : delta.compareTo(ZERO) != 0
+                    || !Objects.equals(oldValue.basis(), newValue.basis())
+                    || oldValue.quantity().compareTo(newValue.quantity()) != 0
+                    || oldValue.workingHours().compareTo(newValue.workingHours()) != 0
+                    || oldValue.rate().compareTo(newValue.rate()) != 0
+                    ? "CHANGED"
+                    : "UNCHANGED";
 
-            if ("UNCHANGED".equals(changeType)) {
-                continue;
-            }
+            if ("UNCHANGED".equals(changeType)) continue;
 
             result.add(new LabourVarianceResponse(
                     key,
@@ -2149,14 +1841,9 @@ public class BomFlowCommercialService {
         return result;
     }
 
-    private Map<String, LabourAggregate> aggregateLabour(
-            List<LabourLineResponse> lines) {
-
+    private Map<String, LabourAggregate> aggregateLabour(List<LabourLineResponse> lines) {
         Map<String, LabourAggregate> result = new LinkedHashMap<>();
-
-        if (lines == null) {
-            return result;
-        }
+        if (lines == null) return result;
 
         for (LabourLineResponse line : lines) {
             String key = normalize(line.department()) + "|" + normalize(line.processName());
@@ -2184,54 +1871,35 @@ public class BomFlowCommercialService {
                         current.amount().add(defaultZero(line.amount()))));
             }
         }
-
         return result;
     }
 
-    private BigDecimal percentChange(
-            BigDecimal delta,
-            BigDecimal previousValue) {
-
+    private BigDecimal percentChange(BigDecimal delta, BigDecimal previousValue) {
         BigDecimal previous = defaultZero(previousValue);
-
         if (previous.compareTo(ZERO) == 0) {
-            return defaultZero(delta).compareTo(ZERO) == 0
-                    ? BigDecimal.ZERO.setScale(2)
-                    : null;
+            return defaultZero(delta).compareTo(ZERO) == 0 ? BigDecimal.ZERO.setScale(2) : null;
         }
-
         return defaultZero(delta)
                 .multiply(ONE_HUNDRED)
                 .divide(previous.abs(), 4, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal marginPercent(
-            BigDecimal profit,
-            BigDecimal sellingPrice) {
-
+    private BigDecimal marginPercent(BigDecimal profit, BigDecimal sellingPrice) {
         BigDecimal price = defaultZero(sellingPrice);
-
-        if (price.compareTo(ZERO) == 0) {
-            return null;
-        }
-
+        if (price.compareTo(ZERO) == 0) return null;
         return defaultZero(profit)
                 .multiply(ONE_HUNDRED)
                 .divide(price, 4, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private String firstText(
-            String first,
-            String second) {
+    private String firstText(String first, String second) {
         String value = clean(first);
         return value == null ? clean(second) : value;
     }
 
-    private String defaultUnitForBasis(
-            String basis,
-            String fallback) {
+    private String defaultUnitForBasis(String basis, String fallback) {
         return switch (labourBasis(basis)) {
             case "PER_HOUR" -> "HOUR";
             case "PER_ITEM" -> "NOS";
@@ -2246,19 +1914,19 @@ public class BomFlowCommercialService {
 
     private void validateMaterialRate(MaterialRateRequest request) {
         if (request == null) throw badRequest("Material rate request is required.");
-        required(request.category(), "Category");
-        required(request.itemName(), "Item name");
-        required(request.unit(), "Unit");
+        requiredLimited(request.category(), 120, "Category");
+        requiredLimited(request.itemName(), 500, "Item name");
+        requiredLimited(request.unit(), 60, "Unit");
         materialRateType(request.rateType());
         nonNegative(request.rate(), "Rate");
-        nonNegative(defaultZero(request.gstPercent()), "GST percent");
+        percentage(defaultZero(request.gstPercent()), "GST percent", new BigDecimal("100"));
         validateDates(request.effectiveFrom(), request.effectiveTo());
     }
 
     private void validateLabourRate(LabourRateRequest request) {
         if (request == null) throw badRequest("Labour rate request is required.");
-        required(request.department(), "Department");
-        required(request.processName(), "Process name");
+        requiredLimited(request.department(), 160, "Department");
+        requiredLimited(request.processName(), 220, "Process name");
         labourBasis(request.basis());
         nonNegative(request.rate(), "Labour rate");
         nonNegative(defaultValue(request.defaultLabourCount(), BigDecimal.ONE), "Default labour count");
@@ -2282,9 +1950,8 @@ public class BomFlowCommercialService {
 
     private String validateEvidence(MultipartFile file) {
         if (file == null || file.isEmpty()) throw badRequest("Rate evidence file is required.");
-        if (file.getSize() > RATE_EVIDENCE_MAX_BYTES) {
-            throw badRequest("Rate evidence must be 15 MB or smaller.");
-        }
+        if (file.getSize() > RATE_EVIDENCE_MAX_BYTES) throw badRequest("Rate evidence must be 15 MB or smaller.");
+
         String name = cleanFileName(file.getOriginalFilename());
         int dot = name.lastIndexOf('.');
         String extension = dot >= 0 && dot < name.length() - 1
@@ -2302,7 +1969,8 @@ public class BomFlowCommercialService {
         value = value.replace('\\', '/');
         int slash = value.lastIndexOf('/');
         if (slash >= 0) value = value.substring(slash + 1);
-        value = value.replaceAll("[\r\n\t]", "_");
+        value = value.replaceAll("[\\r\\n\\t]", "_").trim();
+        if (value.isBlank()) return "rate-evidence";
         return value.length() > 500 ? value.substring(value.length() - 500) : value;
     }
 
@@ -2330,13 +1998,35 @@ public class BomFlowCommercialService {
                 ) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                 """,
                 UUID.randomUUID(),
-                entityType,
+                cleanLimited(entityType, 100, "Audit entity type"),
                 entityId,
                 revisionId,
-                action,
+                cleanLimited(action, 100, "Audit action"),
                 trim4000(oldValue),
                 trim4000(newValue),
-                actor);
+                cleanLimited(actor, 150, "Audit actor"));
+    }
+
+    private void lockRevision(UUID revisionId) {
+        try {
+            jdbc.queryForObject(
+                    "SELECT id FROM bom_flow_revisions WHERE id = ? FOR UPDATE",
+                    UUID.class,
+                    revisionId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw notFound("BOM revision not found: " + revisionId);
+        }
+    }
+
+    private void lockMaterialRate(UUID rateId) {
+        try {
+            jdbc.queryForObject(
+                    "SELECT id FROM bom_flow_material_rates WHERE id = ? FOR UPDATE",
+                    UUID.class,
+                    rateId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw notFound("Material rate not found: " + rateId);
+        }
     }
 
     private long count(String sql) {
@@ -2351,7 +2041,15 @@ public class BomFlowCommercialService {
     }
 
     private BigDecimal pctValue(BigDecimal value, BigDecimal fallback) {
-        return nonNegative(value == null ? fallback : value, "Percentage");
+        BigDecimal safe = nonNegative(value == null ? fallback : value, "Percentage");
+        if (safe.compareTo(new BigDecimal("1000")) > 0) throw badRequest("Percentage is too large.");
+        return safe;
+    }
+
+    private BigDecimal percentage(BigDecimal value, String field, BigDecimal max) {
+        BigDecimal safe = nonNegative(value, field);
+        if (max != null && safe.compareTo(max) > 0) throw badRequest(field + " cannot exceed " + max.stripTrailingZeros().toPlainString() + ".");
+        return safe;
     }
 
     private BigDecimal money(BigDecimal value) {
@@ -2382,6 +2080,18 @@ public class BomFlowCommercialService {
         return cleaned;
     }
 
+    private String requiredLimited(String value, int maxLength, String field) {
+        String cleaned = required(value, field);
+        if (cleaned.length() > maxLength) throw badRequest(field + " is too long.");
+        return cleaned;
+    }
+
+    private String cleanLimited(String value, int maxLength, String field) {
+        String cleaned = clean(value);
+        if (cleaned != null && cleaned.length() > maxLength) throw badRequest(field + " is too long.");
+        return cleaned;
+    }
+
     private String clean(String value) {
         if (value == null) return null;
         String cleaned = value.trim();
@@ -2400,14 +2110,11 @@ public class BomFlowCommercialService {
 
     private void requireCommercialEditableRevision(RevisionContext context) {
         String status = upper(context == null ? null : context.status());
-
         if (status == null || status.isBlank()) {
             throw badRequest("BOM revision status is required for commercial costing changes.");
         }
-
         if ("CANCELLED".equals(status) || "SUPERSEDED".equals(status)) {
-            throw badRequest(
-                    "Cancelled or Superseded BOM revisions are read-only for commercial costing.");
+            throw badRequest("Cancelled or Superseded BOM revisions are read-only for commercial costing.");
         }
     }
 
@@ -2417,6 +2124,7 @@ public class BomFlowCommercialService {
 
     private void requireVersion(Long version, String label) {
         if (version == null) throw badRequest(label + " rowVersion is required.");
+        if (version < 0) throw badRequest(label + " rowVersion is invalid.");
     }
 
     private String normalize(String value) {
@@ -2438,6 +2146,19 @@ public class BomFlowCommercialService {
     private String trim4000(String value) {
         if (value == null) return null;
         return value.length() <= 4000 ? value : value.substring(0, 4000);
+    }
+
+    private String trim3000(String value) {
+        if (value == null) return null;
+        return value.length() <= 3000 ? value : value.substring(0, 3000);
+    }
+
+    private String safeContentType(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null || cleaned.length() > 255 || cleaned.contains("\r") || cleaned.contains("\n")) {
+            return "application/octet-stream";
+        }
+        return cleaned;
     }
 
     private String materialRateAuditText(MaterialRateRequest request) {
@@ -2472,9 +2193,21 @@ public class BomFlowCommercialService {
 
     private String csv(Object value) {
         String text = value == null ? "" : String.valueOf(value);
+        text = neutralizeSpreadsheetFormula(text);
         boolean quote = text.contains(",") || text.contains("\"") || text.contains("\n") || text.contains("\r");
         text = text.replace("\"", "\"\"");
         return quote ? "\"" + text + "\"" : text;
+    }
+
+    private String neutralizeSpreadsheetFormula(String value) {
+        if (value == null || value.isEmpty()) return "";
+        String probe = value.stripLeading();
+        if (!probe.isEmpty()) {
+            char first = probe.charAt(0);
+            if (first == '=' || first == '+' || first == '-' || first == '@') return "'" + value;
+        }
+        if (value.charAt(0) == '\t' || value.charAt(0) == '\r' || value.charAt(0) == '\n') return "'" + value;
+        return value;
     }
 
     private byte[] excelUtf8(String value) {
@@ -2639,7 +2372,17 @@ public class BomFlowCommercialService {
     }
 
     private String xmlEscape(String value) {
-        return value
+        if (value == null) return "";
+        StringBuilder clean = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '\t' || ch == '\n' || ch == '\r'
+                    || (ch >= 0x20 && ch <= 0xD7FF)
+                    || (ch >= 0xE000 && ch <= 0xFFFD)) {
+                clean.append(ch);
+            }
+        }
+        return clean.toString()
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")

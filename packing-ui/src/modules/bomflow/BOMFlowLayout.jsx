@@ -38,6 +38,10 @@ import AddIcon from "@mui/icons-material/Add";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 
 import { useAuth } from "../../auth/AuthContext";
+import {
+	canEditBomFlowRevision,
+	getBomFlowRole,
+} from "../../utils/bomflowAccess";
 
 const navItems = [
 	{
@@ -102,6 +106,7 @@ function BOMFlowSidebar() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [collapsed, setCollapsed] = useState(false);
+	const canCreate = canEditBomFlowRevision(getBomFlowRole());
 
 	const linkStyle = (active) => ({
 		display: "flex",
@@ -229,7 +234,7 @@ function BOMFlowSidebar() {
 
 			<div style={{ flexGrow: 1 }} />
 
-			{!collapsed && (
+			{!collapsed && canCreate && (
 				<button
 					type="button"
 					onClick={() => navigate("/bomflow/products/new")}
@@ -380,7 +385,7 @@ function BOMFlowHeader() {
 							setHealthAnchor(e.currentTarget)
 						}
 					>
-						● SYSTEM HEALTHY
+						● SESSION ACTIVE
 					</button>
 
 					<Tooltip title="Open modules">
@@ -643,24 +648,23 @@ function BOMFlowHeader() {
 				}}
 			>
 				<Box sx={popoverTitle}>
-					System Health
+					Session & Access
 				</Box>
 
 				<Divider sx={dividerSx} />
 
 				<Box sx={healthRow}>
 					<HealthAndSafetyIcon fontSize="small" />
-					API Connected
+					Signed in as {username}
 				</Box>
 
 				<Box sx={healthRow}>
 					<HealthAndSafetyIcon fontSize="small" />
-					Auth Session Active
+					BOMFlow access enabled
 				</Box>
 
-				<Box sx={healthRow}>
-					<HealthAndSafetyIcon fontSize="small" />
-					BOMFlow Module Ready
+				<Box sx={{ ...healthRow, color: "rgba(255,255,255,.56)" }}>
+					Live service health is monitored by the backend, not inferred by this header.
 				</Box>
 			</Popover>
 

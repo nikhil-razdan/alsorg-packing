@@ -9,9 +9,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import com.alsorg.packing.domain.logistics.Driver;
 import com.alsorg.packing.domain.users.User;
@@ -28,105 +29,41 @@ public class DriverController {
     public DriverController(
             DriverService service,
             CurrentUserService currentUserService) {
-
         this.service = service;
         this.currentUserService = currentUserService;
     }
 
-    /*
-     * ADMIN, DISPATCH and LOGISTICS need this endpoint
-     * because the challan dropdown loads the driver list.
-     */
     @GetMapping
-    public ResponseEntity<?> getAll(
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
-
-        if (!canViewDriverMaster(user)) {
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "You do not have permission to view drivers");
-        }
-
-        List<Driver> drivers = service.getAll();
-
-        return ResponseEntity.ok(drivers);
+    public ResponseEntity<List<Driver>> getAll() {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "DISPATCH", "LOGISTICS");
+        return ResponseEntity.ok(service.getAll());
     }
 
-    /*
-     * Dispatch users are allowed to create a driver directly
-     * while generating a normal or custom challan.
-     */
     @PostMapping
-    public ResponseEntity<?> create(
-            @RequestBody Driver driver,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
-
-        if (!canCreateDriver(user)) {
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "Only ADMIN, DISPATCH or LOGISTICS can create drivers");
-        }
-
-        Driver created = service.create(driver);
-
-        return ResponseEntity.ok(created);
+    public ResponseEntity<Driver> create(
+            @RequestBody(required = false) Driver driver) {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "DISPATCH", "LOGISTICS");
+        return ResponseEntity.ok(service.create(driver));
     }
 
-    /*
-     * Deletion is intentionally stricter.
-     * DISPATCH may create a missing driver but should not
-     * delete master records from inside the challan workflow.
-     */
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(
-            @PathVariable UUID id,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
-
-        if (!canDeleteDriver(user)) {
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "Only ADMIN or LOGISTICS can delete drivers");
-        }
-
+    public ResponseEntity<Void> delete(
+            @PathVariable UUID id) {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "LOGISTICS");
         service.delete(id);
-
-        return ResponseEntity
-                .noContent()
-                .build();
+        return ResponseEntity.noContent().build();
     }
 
-    private boolean canViewDriverMaster(
-            User user) {
-
-        return currentUserService.isAdmin(user)
-                || currentUserService.isDispatch(user)
-                || currentUserService.isLogistics(user);
-    }
-
-    private boolean canCreateDriver(
-            User user) {
-
-        return currentUserService.isAdmin(user)
-                || currentUserService.isDispatch(user)
-                || currentUserService.isLogistics(user);
-    }
-
-    private boolean canDeleteDriver(
-            User user) {
-
-        return currentUserService.isAdmin(user)
-                || currentUserService.isLogistics(user);
+    private void requireAnyRole(
+            User user,
+            String... roles) {
+        if (!currentUserService.hasAnyRole(user, roles)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You do not have permission to manage drivers");
+        }
     }
 }

@@ -1,6 +1,5 @@
 import axios from "axios";
-import * as SecureStore
-  from "expo-secure-store";
+import * as SecureStore from "expo-secure-store";
 
 export const API_BASE_URL =
   "https://alsorg-packing-backend.onrender.com";
@@ -77,9 +76,7 @@ export async function getStoredToken() {
         return clean;
       }
     } catch {
-      /*
-       * Continue checking compatibility keys.
-       */
+      /* Continue checking compatibility keys. */
     }
   }
 
@@ -110,11 +107,6 @@ export async function getStoredRole() {
 export async function getStoredRoles() {
   const possibleKeys = [
     ROLES_KEY,
-
-    /*
-     * Compatibility keys in case an older test build
-     * stored roles under a different name.
-     */
     "roles",
     "userRoles",
   ];
@@ -130,9 +122,6 @@ export async function getStoredRoles() {
         continue;
       }
 
-      /*
-       * Normal format is a JSON array.
-       */
       try {
         const parsed =
           JSON.parse(raw);
@@ -143,9 +132,6 @@ export async function getStoredRoles() {
           );
         }
       } catch {
-        /*
-         * Support a temporary comma-separated format.
-         */
         const commaSeparated =
           String(raw)
             .split(",")
@@ -163,17 +149,10 @@ export async function getStoredRoles() {
         }
       }
     } catch {
-      /*
-       * Continue checking compatibility keys.
-       */
+      /* Continue checking compatibility keys. */
     }
   }
 
-  /*
-   * Old installations have only a scalar role.
-   * AuthContext also merges this role, but returning it
-   * here makes this helper independently safe.
-   */
   const legacyRole =
     await getStoredRole();
 
@@ -272,7 +251,7 @@ export async function saveStoredAuth({
 
     /*
      * Retain the old token key temporarily because some
-     * FileSystem or background code may still read it.
+     * FileSystem/background code may still read it.
      */
     SecureStore.setItemAsync(
       "token",
@@ -287,10 +266,6 @@ export async function clearStoredAuth() {
     ROLE_KEY,
     ROLES_KEY,
     USERNAME_KEY,
-
-    /*
-     * Legacy keys.
-     */
     "token",
     "authToken",
     "accessToken",
@@ -306,9 +281,7 @@ export async function clearStoredAuth() {
       SecureStore
         .deleteItemAsync(key)
         .catch(() => {
-          /*
-           * Continue clearing remaining keys.
-           */
+          /* Continue clearing remaining keys. */
         })
     )
   );
@@ -329,6 +302,10 @@ export function buildBearerToken(
     : `Bearer ${clean}`;
 }
 
+/*
+ * ShipTrack is a native bearer client, not the FlowSuite browser client.
+ * Never opt this Axios instance into browser cookie authentication.
+ */
 export const api =
   axios.create({
     baseURL:
@@ -336,6 +313,9 @@ export const api =
 
     timeout:
       30000,
+
+    withCredentials:
+      false,
 
     headers: {
       Accept:
@@ -348,18 +328,23 @@ export const api =
 
 api.interceptors.request.use(
   async (config) => {
+    const skipAuth =
+      config?.skipAuth === true;
+
     const token =
-      await getStoredToken();
+      skipAuth
+        ? ""
+        : await getStoredToken();
 
     const bearer =
       buildBearerToken(token);
 
+    config.withCredentials =
+      false;
+
     config.headers =
       config.headers || {};
 
-    /*
-     * AxiosHeaders is used in modern Axios versions.
-     */
     if (
       typeof config.headers.set ===
       "function"
@@ -369,7 +354,10 @@ api.interceptors.request.use(
         "mobile"
       );
 
-      if (bearer) {
+      if (
+        !skipAuth &&
+        bearer
+      ) {
         config.headers.set(
           "Authorization",
           bearer
@@ -384,7 +372,10 @@ api.interceptors.request.use(
         "X-Client-Type"
       ] = "mobile";
 
-      if (bearer) {
+      if (
+        !skipAuth &&
+        bearer
+      ) {
         config.headers.Authorization =
           bearer;
       } else {

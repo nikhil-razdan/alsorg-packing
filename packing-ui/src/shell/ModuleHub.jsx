@@ -1,6 +1,7 @@
 import React from "react";
 
 import {
+	Navigate,
 	useLocation,
 	useNavigate,
 } from "react-router-dom";
@@ -123,8 +124,13 @@ function ModuleHubContent() {
 
 	const username =
 		user?.username ||
-		localStorage.getItem("username") ||
 		"User";
+
+	const authSessionKey = String(
+		user?.id ||
+		user?.username ||
+		""
+	);
 
 	/*
 	 * HRFlow uses its own backend access grants instead of the ordinary
@@ -132,40 +138,84 @@ function ModuleHubContent() {
 	 * HR_EXECUTIVE / HR_HEAD / RECRUITER / HOD user can see HRFlow even if
 	 * HRFLOW is not present in /auth/me modules. Global ADMIN always passes.
 	 */
-	const [hrFlowAllowed, setHrFlowAllowed] =
-		React.useState(() => Boolean(hasRole("ADMIN")));
+	const [hrFlowGrant, setHrFlowGrant] =
+		React.useState({
+			sessionKey: "",
+			loading: true,
+			allowed: false,
+		});
 
-	const [assetFlowRequestAllowed, setAssetFlowRequestAllowed] =
-		React.useState(false);
+	const [assetFlowRequestGrant, setAssetFlowRequestGrant] =
+		React.useState({
+			sessionKey: "",
+			allowed: false,
+		});
+
+	const hrFlowAllowed =
+		hasRole("ADMIN") ||
+		(
+			hrFlowGrant.sessionKey === authSessionKey &&
+			hrFlowGrant.allowed
+		);
+
+	const hrFlowGrantLoading =
+		!hasRole("ADMIN") &&
+		(
+			hrFlowGrant.sessionKey !== authSessionKey ||
+			hrFlowGrant.loading
+		);
+
+	const assetFlowRequestAllowed =
+		assetFlowRequestGrant.sessionKey === authSessionKey &&
+		assetFlowRequestGrant.allowed;
 
 	React.useEffect(() => {
 		let active = true;
 
 		if (hasRole("ADMIN")) {
-			setHrFlowAllowed(true);
+			setHrFlowGrant({
+				sessionKey: authSessionKey,
+				loading: false,
+				allowed: true,
+			});
 			return () => {
 				active = false;
 			};
 		}
+
+		setHrFlowGrant({
+			sessionKey: authSessionKey,
+			loading: true,
+			allowed: false,
+		});
 
 		hrflowApi
 			.me()
 			.then((response) => {
 				if (!active) return;
 
-				setHrFlowAllowed(
-					hasHrFlowBackendAccess(response?.data)
-				);
+				setHrFlowGrant({
+					sessionKey: authSessionKey,
+					loading: false,
+					allowed:
+						hasHrFlowBackendAccess(
+							response?.data
+						),
+				});
 			})
 			.catch(() => {
 				if (!active) return;
-				setHrFlowAllowed(false);
+				setHrFlowGrant({
+					sessionKey: authSessionKey,
+					loading: false,
+					allowed: false,
+				});
 			});
 
 		return () => {
 			active = false;
 		};
-	}, [user?.username, role, roles, hasRole]);
+	}, [authSessionKey, hasRole]);
 
 	React.useEffect(() => {
 		let active = true;
@@ -173,15 +223,21 @@ function ModuleHubContent() {
 		assetFlowApi.requesterContext()
 			.then((payload) => {
 				if (!active) return;
-				setAssetFlowRequestAllowed(payload?.allowed === true);
+				setAssetFlowRequestGrant({
+					sessionKey: authSessionKey,
+					allowed: payload?.allowed === true,
+				});
 			})
 			.catch(() => {
 				if (!active) return;
-				setAssetFlowRequestAllowed(false);
+				setAssetFlowRequestGrant({
+					sessionKey: authSessionKey,
+					allowed: false,
+				});
 			});
 
 		return () => { active = false; };
-	}, [user?.username, role, roles]);
+	}, [authSessionKey, role, roles]);
 
 	/*
 	 * Shared FlowSuite module hosting.
@@ -228,6 +284,33 @@ function ModuleHubContent() {
 	}
 
 	if (hrFlowView) {
+		if (hrFlowGrantLoading) {
+			return (
+				<Box sx={emptyCardSx}>
+					<Typography
+						sx={{
+							fontWeight: 900,
+							color: "var(--pf-text-strong)",
+						}}
+					>
+						Checking HRFlow access...
+					</Typography>
+				</Box>
+			);
+		}
+
+		if (!hrFlowAllowed) {
+			return (
+				<Navigate
+					to="/modules"
+					replace
+					state={{
+						deniedModule: "HRFLOW",
+					}}
+				/>
+			);
+		}
+
 		return <HrFlowWorkspace />;
 	}
 

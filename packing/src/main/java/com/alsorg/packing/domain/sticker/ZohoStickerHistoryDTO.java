@@ -21,8 +21,7 @@ public class ZohoStickerHistoryDTO {
             LocalDateTime generatedAt,
             String generatedBy,
             String generatedRole,
-            String reason
-    ) {
+            String reason) {
         this.id = id;
         this.stickerNumber = stickerNumber;
         this.zohoItemId = zohoItemId;
@@ -32,7 +31,6 @@ public class ZohoStickerHistoryDTO {
         this.reason = reason;
     }
 
-    // getters
     public String getId() { return id; }
     public String getStickerNumber() { return stickerNumber; }
     public String getZohoItemId() { return zohoItemId; }

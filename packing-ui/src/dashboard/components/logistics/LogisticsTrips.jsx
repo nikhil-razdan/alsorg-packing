@@ -11,6 +11,20 @@ import {
   downloadTripChallan
 } from "../../api/logisticsApi.jsx";
 
+import {
+  useAuth,
+} from "../../../auth/AuthContext";
+
+import {
+  formatOperationDateTime,
+} from "./logisticsUnifiedUtils";
+
+import {
+  getBackendMessage,
+} from "./logisticsAlertUtils";
+
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
+
 function getNowDateTimeLocal() {
   const d = new Date();
 
@@ -26,8 +40,33 @@ const normalizeStatus = (value) =>
     .trim()
     .toUpperCase();
 
+const getSafePodUrl = (value) => {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  /*
+   * Preserve same-site relative POD paths, but reject protocol-relative URLs
+   * and executable/data schemes. Absolute POD links must be http(s).
+   */
+  if (raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw;
+  }
+
+  try {
+    const parsed = new URL(raw);
+
+    return ["http:", "https:"].includes(parsed.protocol)
+      ? parsed.href
+      : "";
+  } catch {
+    return "";
+  }
+};
+
 function LogisticsTrips({
   showAlert = () => { },
+  liveRefreshToken = null,
 }) {
   const [loading, setLoading] =
     useState(false);
@@ -60,38 +99,99 @@ function LogisticsTrips({
       deliveryLocationAccuracy: "",
     });
 
-  const role =
-    String(localStorage.getItem("role") || "")
-      .trim()
-      .toUpperCase();
+  const {
+    hasRole,
+  } = useAuth();
 
-  const isDriver = role === "DRIVER";
-  const isDispatch = role === "DISPATCH";
-  const isLogistics = role === "LOGISTICS";
-  const isAdmin = role === "ADMIN";
+  const isDriver =
+    hasRole("DRIVER");
 
-  const load = async () => {
+  const load = async ({
+    background = false,
+  } = {}) => {
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
 
       const data =
         await fetchLogisticsTrips();
 
-      setTrips(Array.isArray(data) ? data : []);
+      const nextTrips =
+        Array.isArray(data) ? data : [];
+
+      setTrips(nextTrips);
+
+      if (background) {
+        setItemsModalTrip((current) => {
+          if (!current?.id) return current;
+
+          return (
+            nextTrips.find(
+              (trip) =>
+                String(trip?.id) ===
+                String(current.id)
+            ) || current
+          );
+        });
+
+        setEndModal((current) => {
+          if (!current?.id) return current;
+
+          return (
+            nextTrips.find(
+              (trip) =>
+                String(trip?.id) ===
+                String(current.id)
+            ) || current
+          );
+        });
+      }
     } catch (e) {
-      console.error(e);
-      showAlert(
-        e.message || "Failed to load trips",
-        "error"
-      );
+      if (!background) {
+        showAlert(
+          getBackendMessage(
+            e,
+            "Failed to load trips"
+          ),
+          "error"
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await load({
+        background: true,
+      });
+
+      if (itemsModalTrip?.id) {
+        try {
+          const data =
+            await fetchLogisticsTripItems(
+              itemsModalTrip.id
+            );
+
+          setTripItems(
+            Array.isArray(data) ? data : []
+          );
+        } catch {
+          /* Keep the last good open-modal item list. */
+        }
+      }
+    }
+  );
 
   const activeTrips = useMemo(() => {
     return trips.filter(
@@ -123,7 +223,10 @@ function LogisticsTrips({
       console.error(e);
 
       showAlert(
-        e.message || "Failed to load trip items",
+        getBackendMessage(
+          e,
+          "Failed to load trip items"
+        ),
         "error"
       );
     } finally {
@@ -173,16 +276,27 @@ function LogisticsTrips({
   const submitEndTrip = async () => {
     if (!endModal) return;
 
+    const safePodUrl =
+      getSafePodUrl(endForm.podUrl);
+
+    if (endForm.podUrl.trim() && !safePodUrl) {
+      showAlert(
+        "POD URL must be a valid http/https URL or a same-site relative path",
+        "error"
+      );
+      return;
+    }
+
     try {
       await endLogisticsTrip(
         endModal.id,
         {
           tripEnd: endForm.tripEnd,
-          remarks: endForm.remarks,
-          receiverName: endForm.receiverName,
-          receiverPhone: endForm.receiverPhone,
-          podUrl: endForm.podUrl,
-          deliveryRemarks: endForm.deliveryRemarks,
+          remarks: endForm.remarks.trim(),
+          receiverName: endForm.receiverName.trim(),
+          receiverPhone: endForm.receiverPhone.trim(),
+          podUrl: safePodUrl || "",
+          deliveryRemarks: endForm.deliveryRemarks.trim(),
           deliveryLatitude: endForm.deliveryLatitude
             ? Number(endForm.deliveryLatitude)
             : null,
@@ -206,11 +320,19 @@ function LogisticsTrips({
       console.error(e);
 
       showAlert(
-        e.message || "Failed to end trip",
+        getBackendMessage(
+          e,
+          "Failed to end trip"
+        ),
         "error"
       );
     }
   };
+
+  const itemsModalPodUrl =
+    getSafePodUrl(
+      itemsModalTrip?.podUrl
+    );
 
   return (
     <div style={wrap}>
@@ -260,9 +382,9 @@ function LogisticsTrips({
             <div>{trip.driver?.name || "—"}</div>
             <div>{trip.vehicle?.vehicleNumber || "—"}</div>
             <div>
-              {trip.tripStart
-                ? new Date(trip.tripStart).toLocaleString()
-                : "—"}
+              {formatOperationDateTime(
+                trip.tripStart
+              )}
             </div>
             <div>{trip.totalItems || 0}</div>
             <div>
@@ -341,14 +463,14 @@ function LogisticsTrips({
             <div>{trip.driver?.name || "—"}</div>
             <div>{trip.vehicle?.vehicleNumber || "—"}</div>
             <div>
-              {trip.tripStart
-                ? new Date(trip.tripStart).toLocaleString()
-                : "—"}
+              {formatOperationDateTime(
+                trip.tripStart
+              )}
             </div>
             <div>
-              {trip.tripEnd
-                ? new Date(trip.tripEnd).toLocaleString()
-                : "—"}
+              {formatOperationDateTime(
+                trip.tripEnd
+              )}
             </div>
             <div>{trip.totalItems || 0}</div>
             <div>
@@ -423,15 +545,17 @@ function LogisticsTrips({
 
                 <div>
                   <strong>POD:</strong>{" "}
-                  {itemsModalTrip.podUrl ? (
+                  {itemsModalPodUrl ? (
                     <a
-                      href={itemsModalTrip.podUrl}
+                      href={itemsModalPodUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       style={podLink}
                     >
                       Open POD
                     </a>
+                  ) : itemsModalTrip.podUrl ? (
+                    "Invalid POD URL"
                   ) : (
                     "—"
                   )}

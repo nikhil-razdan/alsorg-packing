@@ -4,13 +4,41 @@ const MODE_KEY = "assetflow-color-mode";
 const MATFLOW_MODE_KEY = "matflow-color-mode";
 const AssetFlowThemeContext = createContext(null);
 
+const readStoredMode = (key) => {
+  if (typeof window === "undefined") return "";
+  try {
+    const value = window.localStorage?.getItem(key);
+    return value === "dark" || value === "light" ? value : "";
+  } catch {
+    return "";
+  }
+};
+
+const writeStoredMode = (key, mode) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage?.setItem(key, mode);
+  } catch {
+    // Theme preference is optional; storage restrictions must not break AssetFlow.
+  }
+};
+
 const readMode = () => {
   if (typeof window === "undefined") return "dark";
-  const own = window.localStorage.getItem(MODE_KEY);
-  if (own === "dark" || own === "light") return own;
-  const matFlowMode = window.localStorage.getItem(MATFLOW_MODE_KEY);
-  if (matFlowMode === "dark" || matFlowMode === "light") return matFlowMode;
-  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
+
+  const own = readStoredMode(MODE_KEY);
+  if (own) return own;
+
+  const matFlowMode = readStoredMode(MATFLOW_MODE_KEY);
+  if (matFlowMode) return matFlowMode;
+
+  try {
+    return window.matchMedia?.("(prefers-color-scheme: light)")?.matches
+      ? "light"
+      : "dark";
+  } catch {
+    return "dark";
+  }
 };
 
 const variables = (mode) => {
@@ -96,10 +124,23 @@ export function AssetFlowThemeProvider({ children }) {
   const cssVars = useMemo(() => variables(mode), [mode]);
 
   useEffect(() => {
-    window.localStorage.setItem(MODE_KEY, mode);
+    writeStoredMode(MODE_KEY, mode);
   }, [mode]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const onStorage = (event) => {
+      if (event.key !== MODE_KEY && event.key !== MATFLOW_MODE_KEY) return;
+      setMode(readMode());
+    };
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
     const previous = document.body.style.backgroundColor;
     document.body.style.backgroundColor = cssVars["--af-page-bg"];
     return () => {
@@ -111,7 +152,9 @@ export function AssetFlowThemeProvider({ children }) {
     mode,
     isDark: mode === "dark",
     toggleMode: () => setMode((current) => (current === "dark" ? "light" : "dark")),
-    setMode,
+    setMode: (nextMode) => {
+      if (nextMode === "dark" || nextMode === "light") setMode(nextMode);
+    },
   }), [mode]);
 
   return (

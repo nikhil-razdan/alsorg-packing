@@ -9,6 +9,10 @@ import {
 
 import API from "../services/api";
 import { normalizeRole } from "../utils/permissions";
+import {
+	clearRuntimeAuthUser,
+	setRuntimeAuthUser,
+} from "../utils/runtimeAuthState";
 
 /*
  * HRFLOW PUBLIC-PORTAL IMPORTS
@@ -147,91 +151,118 @@ const modulesForRoles = (roles) => {
 	return Array.from(modules);
 };
 
+const LEGACY_TOKEN_KEYS = [
+	"token",
+	"authToken",
+	"jwt",
+	"accessToken",
+];
+
+const COMPATIBILITY_USER_KEYS = [
+	"currentUser",
+	"username",
+	"role",
+	"roles",
+	"modules",
+	"plantCode",
+	"plantCodes",
+	"warehouseAccess",
+	"driverId",
+];
+
+const purgeLegacyBrowserTokens = () => {
+	if (typeof window === "undefined") {
+		return;
+	}
+
+	try {
+		LEGACY_TOKEN_KEYS.forEach((key) => {
+			window.localStorage.removeItem(key);
+			window.sessionStorage.removeItem(key);
+		});
+	} catch {
+		/*
+		 * Storage is a compatibility convenience only. Browser authentication
+		 * remains the HttpOnly cookie even when storage is blocked.
+		 */
+	}
+};
+
 const clearCompatibilityStorage = () => {
-	localStorage.removeItem("token");
-	localStorage.removeItem("authToken");
-	localStorage.removeItem("jwt");
-	localStorage.removeItem("accessToken");
+	if (typeof window === "undefined") {
+		return;
+	}
 
-	localStorage.removeItem("currentUser");
-	localStorage.removeItem("username");
+	purgeLegacyBrowserTokens();
 
-	localStorage.removeItem("role");
-	localStorage.removeItem("roles");
-
-	localStorage.removeItem("modules");
-
-	localStorage.removeItem("plantCode");
-	localStorage.removeItem("plantCodes");
-
-	localStorage.removeItem(
-		"warehouseAccess"
-	);
-
-	localStorage.removeItem(
-		"driverId"
-	);
+	try {
+		COMPATIBILITY_USER_KEYS.forEach((key) => {
+			window.localStorage.removeItem(key);
+		});
+	} catch {
+		/* Non-authoritative compatibility mirror only. */
+	}
 };
 
 const persistCompatibilityUser = (user) => {
+	/*
+	 * IMPORTANT: no access/JWT token is ever persisted here. This temporary
+	 * metadata mirror is retained only so older non-PackFlow modules that have
+	 * not yet been migrated to AuthContext do not break during the staged
+	 * FlowSuite sweep. All reviewed guards/pages use AuthContext and the backend
+	 * remains the authorization authority.
+	 */
+	purgeLegacyBrowserTokens();
+
 	if (!user) {
 		clearCompatibilityStorage();
 		return;
 	}
 
-	localStorage.setItem(
-		"currentUser",
-		JSON.stringify(user)
-	);
+	if (typeof window === "undefined") {
+		return;
+	}
 
-	localStorage.setItem(
-		"username",
-		user.username || ""
-	);
-
-	localStorage.setItem(
-		"role",
-		user.role || ""
-	);
-
-	localStorage.setItem(
-		"roles",
-		JSON.stringify(
-			user.roles || []
-		)
-	);
-
-	localStorage.setItem(
-		"modules",
-		JSON.stringify(
-			user.modules || []
-		)
-	);
-
-	localStorage.setItem(
-		"plantCode",
-		user.plantCode || ""
-	);
-
-	localStorage.setItem(
-		"plantCodes",
-		JSON.stringify(
-			user.plantCodes || []
-		)
-	);
-
-	localStorage.setItem(
-		"warehouseAccess",
-		String(
-			user.warehouseAccess ===
-			true
-		)
-	);
-
-	localStorage.setItem(
-		"driverId",
-		user.driverId || ""
-	);
+	try {
+		window.localStorage.setItem(
+			"currentUser",
+			JSON.stringify(user)
+		);
+		window.localStorage.setItem(
+			"username",
+			user.username || ""
+		);
+		window.localStorage.setItem(
+			"role",
+			user.role || ""
+		);
+		window.localStorage.setItem(
+			"roles",
+			JSON.stringify(user.roles || [])
+		);
+		window.localStorage.setItem(
+			"modules",
+			JSON.stringify(user.modules || [])
+		);
+		window.localStorage.setItem(
+			"plantCode",
+			user.plantCode || ""
+		);
+		window.localStorage.setItem(
+			"plantCodes",
+			JSON.stringify(user.plantCodes || [])
+		);
+		window.localStorage.setItem(
+			"warehouseAccess",
+			String(user.warehouseAccess === true)
+		);
+		window.localStorage.setItem(
+			"driverId",
+			user.driverId || ""
+		);
+	} catch {
+		/* Non-authoritative compatibility mirror only. */
+	}
 };
 
 const unwrapAuthResponse = (response) => {
@@ -293,10 +324,17 @@ const resolveHrPublicPortal = () => {
 			continue;
 		}
 
-		const encodedToken = parts
-			.slice(hrIndex + 2)
-			.join("/")
-			.trim();
+		/*
+		 * Public HR links have exactly one token path segment. Reject trailing
+		 * path material instead of silently folding it into the token.
+		 */
+		if (parts.length !== hrIndex + 3) {
+			continue;
+		}
+
+		const encodedToken = String(
+			parts[hrIndex + 2] || ""
+		).trim();
 
 		if (!encodedToken) {
 			continue;
@@ -384,6 +422,10 @@ export function AuthProvider({
 
 			setUserState(cleanUser);
 
+			setRuntimeAuthUser(
+				cleanUser
+			);
+
 			persistCompatibilityUser(
 				cleanUser
 			);
@@ -394,6 +436,7 @@ export function AuthProvider({
 	const clearSession = useCallback(
 		() => {
 			setUserState(null);
+			clearRuntimeAuthUser();
 			clearCompatibilityStorage();
 		},
 		[]
@@ -557,6 +600,14 @@ export function AuthProvider({
 			setUser,
 		]
 	);
+
+	useEffect(() => {
+		/*
+		 * Clean up credentials left by the pre-HttpOnly browser architecture.
+		 * The compatibility metadata mirror intentionally contains no token.
+		 */
+		purgeLegacyBrowserTokens();
+	}, []);
 
 	useEffect(() => {
 		/*

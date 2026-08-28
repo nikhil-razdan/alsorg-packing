@@ -1,4 +1,8 @@
 import { API_BASE_URL } from "../../config";
+import {
+  getSecurityCacheNamespace,
+  secureFetch,
+} from "../../services/api";
 
 /**
  * Packing Report API
@@ -12,21 +16,7 @@ const REPORT_CACHE_TTL_MS = 2 * 60 * 1000;
 const responseCache = new Map();
 const inFlight = new Map();
 
-const authHeaders = () => {
-  const token = localStorage.getItem("token");
-
-  if (
-    !token ||
-    token === "null" ||
-    token === "undefined"
-  ) {
-    return {};
-  }
-
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-};
+const authHeaders = () => ({});
 
 const buildRangeQuery = (from, to) =>
   `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
@@ -58,7 +48,8 @@ const fetchJsonReport = async (
   fallbackError,
   { forceRefresh = false } = {}
 ) => {
-  const key = url;
+  const key =
+    `${getSecurityCacheNamespace()}::${url}`;
 
   if (!forceRefresh) {
     const cached = readCached(key);
@@ -68,7 +59,7 @@ const fetchJsonReport = async (
     if (existing) return existing;
   }
 
-  const request = fetch(url, {
+  const request = secureFetch(url, {
     credentials: "include",
     cache: "no-store",
     headers: authHeaders(),
@@ -138,13 +129,57 @@ export async function fetchPackingVolumeReport(
 /**
  * Existing report export helper retained.
  */
-export function exportPackingReport(type, from, to) {
+export async function exportPackingReport(type, from, to) {
   const query = buildRangeQuery(from, to);
 
+  const isCsv =
+    String(type || "").toLowerCase() === "csv";
+
   const url =
-    type === "csv"
+    isCsv
       ? `${API_BASE_URL}/api/reports/export/packing/csv?${query}`
       : `${API_BASE_URL}/api/reports/export/packing/excel?${query}`;
 
-  window.open(url, "_blank", "noopener,noreferrer");
+  const response =
+    await secureFetch(url, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Accept: isCsv
+          ? "text/csv"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    });
+
+  if (!response.ok) {
+    throw new Error(
+      await readError(
+        response,
+        "Failed to export packing report"
+      )
+    );
+  }
+
+  const blob =
+    await response.blob();
+
+  const objectUrl =
+    window.URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = objectUrl;
+  link.download =
+    isCsv
+      ? "packing_report.csv"
+      : "packing_report.xlsx";
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.URL.revokeObjectURL(
+    objectUrl
+  );
 }

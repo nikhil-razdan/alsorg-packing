@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.files;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -20,9 +21,7 @@ public class PodFile {
     private UUID id;
 
     private String filename;
-
     private String contentType;
-
     private Long sizeBytes;
 
     @Lob
@@ -31,7 +30,6 @@ public class PodFile {
     private byte[] data;
 
     private String createdBy;
-
     private LocalDateTime createdAt;
 
     @PrePersist
@@ -39,65 +37,26 @@ public class PodFile {
         if (id == null) {
             id = UUID.randomUUID();
         }
-
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        }
+        if (sizeBytes == null && data != null) {
+            sizeBytes = (long) data.length;
         }
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getFilename() {
-        return filename;
-    }
-
-    public void setFilename(String filename) {
-        this.filename = filename;
-    }
-
-    public String getContentType() {
-        return contentType;
-    }
-
-    public void setContentType(String contentType) {
-        this.contentType = contentType;
-    }
-
-    public Long getSizeBytes() {
-        return sizeBytes;
-    }
-
-    public void setSizeBytes(Long sizeBytes) {
-        this.sizeBytes = sizeBytes;
-    }
-
-    public byte[] getData() {
-        return data;
-    }
-
-    public void setData(byte[] data) {
-        this.data = data;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public String getFilename() { return filename; }
+    public void setFilename(String filename) { this.filename = filename; }
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
+    public Long getSizeBytes() { return sizeBytes; }
+    public void setSizeBytes(Long sizeBytes) { this.sizeBytes = sizeBytes; }
+    public byte[] getData() { return data; }
+    public void setData(byte[] data) { this.data = data; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

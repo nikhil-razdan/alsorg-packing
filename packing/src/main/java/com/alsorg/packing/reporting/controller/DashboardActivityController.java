@@ -2,31 +2,33 @@ package com.alsorg.packing.reporting.controller;
 
 import java.util.List;
 
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.alsorg.packing.reporting.dto.DashboardActivityRow;
 import com.alsorg.packing.reporting.service.DashboardActivityService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard/activity")
+@PreAuthorize("isAuthenticated()")
 public class DashboardActivityController {
 
     private final DashboardActivityService service;
 
     public DashboardActivityController(
-            DashboardActivityService service
-    ) {
+            DashboardActivityService service) {
         this.service = service;
     }
 
     @GetMapping
     public List<DashboardActivityRow> getActivity(
             @RequestParam(defaultValue = "12") int limit,
-            @RequestParam(defaultValue = "0") int offset
-    ) {
+            @RequestParam(defaultValue = "0") int offset) {
         return service.getRecentActivity(
-                limit,
-                offset
-        );
+                Math.min(Math.max(limit, 1), 50),
+                Math.max(offset, 0));
     }
 }

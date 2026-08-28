@@ -1,13 +1,13 @@
 import API from "../../services/api";
 
 export async function fetchHardwarePackets() {
-	const response = await API.get("/api/hardware-packets");
+	const response = await API.get("/hardware-packets");
 	return response.data;
 }
 
 export async function createHardwarePackets(payload) {
 	const response = await API.post(
-		"/api/hardware-packets",
+		"/hardware-packets",
 		payload
 	);
 
@@ -19,7 +19,7 @@ export async function updateHardwarePacket(
 	payload
 ) {
 	const response = await API.put(
-		`/api/hardware-packets/${itemId}`,
+		`/hardware-packets/${itemId}`,
 		payload
 	);
 
@@ -28,7 +28,7 @@ export async function updateHardwarePacket(
 
 export async function deleteHardwarePacket(itemId) {
 	const response = await API.delete(
-		`/api/hardware-packets/${itemId}`
+		`/hardware-packets/${itemId}`
 	);
 
 	return response.data;
@@ -40,7 +40,7 @@ export async function previewHardwareSticker(
 	showCompanyHeader = true
 ) {
 	const response = await API.post(
-		`/api/hardware-packets/${itemId}/preview-sticker`,
+		`/hardware-packets/${itemId}/preview-sticker`,
 		null,
 		{
 			params: {
@@ -61,7 +61,7 @@ export async function generateHardwareSticker(
 	showCompanyHeader = true
 ) {
 	const response = await API.post(
-		`/api/hardware-packets/${itemId}/generate-sticker`,
+		`/hardware-packets/${itemId}/generate-sticker`,
 		null,
 		{
 			params: {
@@ -80,7 +80,7 @@ export async function downloadLatestHardwareSticker(
 	itemId
 ) {
 	const response = await API.get(
-		`/api/hardware-packets/${itemId}/sticker`,
+		`/hardware-packets/${itemId}/sticker`,
 		{
 			responseType: "blob",
 		}

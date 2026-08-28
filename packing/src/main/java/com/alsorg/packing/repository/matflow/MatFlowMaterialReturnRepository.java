@@ -8,17 +8,27 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface MatFlowMaterialReturnRepository extends JpaRepository<MatFlowMaterialReturn, UUID> {
+public interface MatFlowMaterialReturnRepository
+        extends JpaRepository<MatFlowMaterialReturn, UUID> {
 
     List<MatFlowMaterialReturn> findAllByOrderByUpdatedAtDesc();
 
-    @EntityGraph(attributePaths = {"requisition", "fromLocation", "viaLocation", "toLocation"})
+    Page<MatFlowMaterialReturn> findAllByOrderByUpdatedAtDesc(Pageable pageable);
+
+    @EntityGraph(attributePaths = {
+            "requisition",
+            "fromLocation",
+            "viaLocation",
+            "toLocation"
+    })
     @Query("""
             select materialReturn
             from MatFlowMaterialReturn materialReturn
@@ -26,12 +36,13 @@ public interface MatFlowMaterialReturnRepository extends JpaRepository<MatFlowMa
             """)
     Optional<MatFlowMaterialReturn> findDetailById(@Param("id") UUID id);
 
-    /**
-     * Serializes dispatch/receipt transitions for one return document so two
-     * operators cannot advance the same custody leg concurrently.
-     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = {"requisition", "fromLocation", "viaLocation", "toLocation"})
+    @EntityGraph(attributePaths = {
+            "requisition",
+            "fromLocation",
+            "viaLocation",
+            "toLocation"
+    })
     @Query("""
             select materialReturn
             from MatFlowMaterialReturn materialReturn

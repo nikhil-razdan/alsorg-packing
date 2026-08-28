@@ -6,22 +6,24 @@ import java.util.List;
 
 import com.alsorg.packing.domain.logistics.VehicleExpenseField;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
+
 public class VehicleExpenseRequest {
 
     private LocalDate expenseMonth;
 
+    @Size(max = 4000, message = "Expense notes cannot exceed 4000 characters.")
     private String notes;
 
-    private List<VehicleExpenseField> fields =
-            new ArrayList<>();
+    @Size(max = 100, message = "A maximum of 100 expense fields is allowed.")
+    private List<@Valid VehicleExpenseField> fields = new ArrayList<>();
 
     public LocalDate getExpenseMonth() {
         return expenseMonth;
     }
 
-    public void setExpenseMonth(
-            LocalDate expenseMonth
-    ) {
+    public void setExpenseMonth(LocalDate expenseMonth) {
         this.expenseMonth = expenseMonth;
     }
 
@@ -29,9 +31,7 @@ public class VehicleExpenseRequest {
         return notes;
     }
 
-    public void setNotes(
-            String notes
-    ) {
+    public void setNotes(String notes) {
         this.notes = notes;
     }
 
@@ -39,12 +39,9 @@ public class VehicleExpenseRequest {
         return fields;
     }
 
-    public void setFields(
-            List<VehicleExpenseField> fields
-    ) {
-        this.fields =
-                fields != null
-                        ? fields
-                        : new ArrayList<>();
+    public void setFields(List<VehicleExpenseField> fields) {
+        this.fields = fields != null
+                ? fields
+                : new ArrayList<>();
     }
 }

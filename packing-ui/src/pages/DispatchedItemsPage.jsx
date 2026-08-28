@@ -32,6 +32,7 @@ import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import { API_BASE_URL } from "../config";
+import { secureFetch } from "../services/api";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import usePackFlowDataRefresh
 	from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -7002,29 +7003,17 @@ export default function DispatchedItemsPage() {
 		}, 150);
 	}, [qrDispatchOpen, scanMode, scanCart.length]);
 
-	const getStoredToken = () => {
-		return (
-			localStorage.getItem("token") ||
-			localStorage.getItem("jwt") ||
-			localStorage.getItem("accessToken") ||
-			""
-		);
-	};
-
 	const getAuthHeaders = (extraHeaders = {}) => {
 		const headers = {
 			...(extraHeaders || {}),
 		};
 
-		const token = getStoredToken();
-
-		if (token && !headers.Authorization) {
-			headers.Authorization = token.startsWith("Bearer ")
-				? token
-				: `Bearer ${token}`;
-		}
-
-		const username = localStorage.getItem("username");
+		/*
+		 * X-Username remains only as a backward-compatible audit hint.
+		 * Authentication/authorization is always derived from the JWT/cookie.
+		 */
+		const username =
+			String(currentUser?.username || "").trim();
 
 		if (username && !headers["X-Username"]) {
 			headers["X-Username"] = username;
@@ -7034,7 +7023,7 @@ export default function DispatchedItemsPage() {
 	};
 
 	const authFetch = (url, options = {}) => {
-		return fetch(url, {
+		return secureFetch(url, {
 			...options,
 			credentials: "include",
 			headers: getAuthHeaders(options.headers || {}),
@@ -10907,7 +10896,7 @@ export default function DispatchedItemsPage() {
 		};
 
 	const fetchData =
-		async ({ preferCache = false } = {}) => {
+		async ({ preferCache = false, forceRevalidate = false } = {}) => {
 			const requestId =
 				++dispatchFetchRequestRef.current;
 
@@ -10971,7 +10960,8 @@ export default function DispatchedItemsPage() {
 			if (
 				preferCache &&
 				cached &&
-				isDispatchPageCacheFresh(cached)
+				isDispatchPageCacheFresh(cached) &&
+				!forceRevalidate
 			) {
 				const cachedTotalPages = Math.max(
 					1,
@@ -11054,7 +11044,9 @@ export default function DispatchedItemsPage() {
 				 * while preserving a fresh count on first load and explicit refresh.
 				 */
 				const reuseKnownTotal =
-					preferCache && knownTotalElements !== null;
+					preferCache &&
+					!forceRevalidate &&
+					knownTotalElements !== null;
 
 				const result = await fetchDispatchServerPage({
 					backendPage,
@@ -11176,8 +11168,14 @@ export default function DispatchedItemsPage() {
 
 	usePackFlowDataRefresh(
 		"dispatch",
-		async () => {
-			await fetchData();
+		async (detail) => {
+			const background =
+				Boolean(detail?.background);
+
+			await fetchData({
+				preferCache: background,
+				forceRevalidate: background,
+			});
 
 			/*
 			 * Refresh the currently open challan history too,

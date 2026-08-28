@@ -46,6 +46,8 @@ import {
     dialogTitleSx,
     fieldSx,
     formatDate,
+    localBusinessDateKey,
+    parseMatFlowDateTime,
     mainTextSx,
     normalize,
     pageSx,
@@ -199,6 +201,7 @@ export function MatFlowExceptionPage() {
     const [requisitions, setRequisitions] = useState([]);
     const [boms, setBoms] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [referenceLoading, setReferenceLoading] = useState(false);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
@@ -228,29 +231,85 @@ export function MatFlowExceptionPage() {
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
+
         try {
-            const [exceptionResponse, requisitionResponse, bomResponse] = await Promise.all([
-                matflowApi.listWorkflowExceptions({
+            const exceptionResponse =
+                await matflowApi.listWorkflowExceptions({
                     plantCode: selectedPlantParam || undefined,
                     search: clean(search) || undefined,
                     status: status || undefined,
                     severity: severity || undefined,
-                }),
-                matflowApi.listRequisitions(),
-                matflowApi.listBoms({ latestOnly: false }),
-            ]);
-            setRows(Array.isArray(exceptionResponse?.data) ? exceptionResponse.data : []);
-            setRequisitions(Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : []);
-            setBoms(Array.isArray(bomResponse?.data) ? bomResponse.data : []);
+                });
+
+            setRows(
+                Array.isArray(exceptionResponse?.data)
+                    ? exceptionResponse.data
+                    : []
+            );
         } catch (requestError) {
             setRows([]);
-            setError(readMatFlowError(requestError, "Unable to load the Operational Exception & Recovery Register."));
+            setError(readMatFlowError(
+                requestError,
+                "Unable to load the Operational Exception & Recovery Register."
+            ));
         } finally {
             setLoading(false);
         }
     }, [selectedPlantParam, search, status, severity]);
 
-    useEffect(() => { load(); }, [load]);
+    /*
+     * MR/BOM reference lists are only required while creating an exception.
+     * Do not download both operational registers every time the Exception
+     * dashboard refreshes.
+     */
+    const loadReferenceData = useCallback(async () => {
+        setReferenceLoading(true);
+
+        try {
+            const [
+                requisitionResponse,
+                bomResponse,
+            ] = await Promise.all([
+                matflowApi.listRequisitions(),
+                matflowApi.listBoms({
+                    latestOnly: false,
+                }),
+            ]);
+
+            setRequisitions(
+                Array.isArray(requisitionResponse?.data)
+                    ? requisitionResponse.data
+                    : []
+            );
+
+            setBoms(
+                Array.isArray(bomResponse?.data)
+                    ? bomResponse.data
+                    : []
+            );
+        } catch (requestError) {
+            setRequisitions([]);
+            setBoms([]);
+            setError(readMatFlowError(
+                requestError,
+                "Unable to load MR/BOM references for the exception form."
+            ));
+        } finally {
+            setReferenceLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    useEffect(() => {
+        if (!createOpen) {
+            return;
+        }
+
+        loadReferenceData();
+    }, [createOpen, loadReferenceData]);
 
     useEffect(() => {
         if (params.get("new") !== "1") return;
@@ -286,7 +345,10 @@ export function MatFlowExceptionPage() {
         if (openDelta) return openDelta;
         const severityDelta = severityRank(b.severity) - severityRank(a.severity);
         if (severityDelta) return severityDelta;
-        return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+        return (
+            (parseMatFlowDateTime(b.updatedAt || b.createdAt)?.getTime() || 0) -
+            (parseMatFlowDateTime(a.updatedAt || a.createdAt)?.getTime() || 0)
+        );
     }), [rows]);
 
     const reportRows = useMemo(() => orderedRows.map(flattenReportRow), [orderedRows]);
@@ -307,7 +369,7 @@ export function MatFlowExceptionPage() {
         setError("");
         try {
             await downloadMatFlowExcel({
-                fileName: `MATFLOW_Operational_Exception_Recovery_Register_${new Date().toISOString().slice(0, 10)}`,
+                fileName: `MATFLOW_Operational_Exception_Recovery_Register_${localBusinessDateKey()}`,
                 sheetName: "Exception Register",
                 title: "ALSORG / MATFLOW — Operational Exception & Recovery Register",
                 subtitle: "Fact-based operational exception, containment, recovery, root-cause and CAPA register. Source record ownership is evidence of process participation, not an automatic fault verdict.",
@@ -334,7 +396,7 @@ export function MatFlowExceptionPage() {
             });
             saveBlob(
                 response?.data,
-                `MATFLOW_Operational_Exception_Recovery_Register_${new Date().toISOString().slice(0, 10)}.pdf`
+                `MATFLOW_Operational_Exception_Recovery_Register_${localBusinessDateKey()}.pdf`
             );
         } catch (reportError) {
             setError(readMatFlowError(reportError, "Unable to generate the Operational Exception & Recovery PDF report."));
@@ -626,6 +688,11 @@ export function MatFlowExceptionPage() {
                 <DialogContent sx={dialogContentSx}>
                     <Box sx={{ display: "grid", gap: 1.25 }}>
                         <Alert severity="warning">Describe the wrong information and its impact. Do not type a person to blame; MatFlow derives the source-record owner from the linked BOM/MR when possible.</Alert>
+                        {referenceLoading && form.recordType !== "GENERAL" && (
+                            <Alert severity="info">
+                                Loading the latest MR / BOM references...
+                            </Alert>
+                        )}
                         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3,1fr)" }, gap: 1 }}>
                             <TextField select label="Link exception to *" value={form.recordType} onChange={(e) => setForm((c) => ({ ...c, recordType: e.target.value, requisitionId: "", bomId: "", requisitionLineId: "", workflowHold: e.target.value === "GENERAL" ? false : c.workflowHold }))} sx={fieldSx}>
                                 <MenuItem value="MR">Material Requisition</MenuItem>
@@ -642,7 +709,7 @@ export function MatFlowExceptionPage() {
 
                         {form.recordType === "MR" && (
                             <>
-                                <TextField select label="Affected MR *" value={form.requisitionId} onChange={(e) => setForm((c) => ({ ...c, requisitionId: e.target.value, requisitionLineId: "" }))} sx={fieldSx}>
+                                <TextField select disabled={referenceLoading} label="Affected MR *" value={form.requisitionId} onChange={(e) => setForm((c) => ({ ...c, requisitionId: e.target.value, requisitionLineId: "" }))} sx={fieldSx}>
                                     {requisitions.map((row) => <MenuItem key={row.id} value={row.id}>{row.requisitionNumber} · {row.projectCode} / {row.drawingNo} · {readable(row.status)}</MenuItem>)}
                                 </TextField>
                                 {selectedReq && Array.isArray(selectedReq.lines) && selectedReq.lines.length > 0 && (
@@ -654,7 +721,7 @@ export function MatFlowExceptionPage() {
                             </>
                         )}
                         {form.recordType === "BOM" && (
-                            <TextField select label="Affected BOM *" value={form.bomId} onChange={(e) => setForm((c) => ({ ...c, bomId: e.target.value }))} sx={fieldSx}>
+                            <TextField select disabled={referenceLoading} label="Affected BOM *" value={form.bomId} onChange={(e) => setForm((c) => ({ ...c, bomId: e.target.value }))} sx={fieldSx}>
                                 {boms.map((row) => <MenuItem key={row.id} value={row.id}>{row.bomNumber} · {row.projectCode} / {row.drawingNo} · Rev {row.revisionNo ?? "-"}</MenuItem>)}
                             </TextField>
                         )}
@@ -683,7 +750,7 @@ export function MatFlowExceptionPage() {
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
                     <Button onClick={() => setCreateOpen(false)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button startIcon={<AddAlertOutlinedIcon />} onClick={createException} disabled={working} sx={primaryBtnSx}>Create Exception</Button>
+                    <Button startIcon={<AddAlertOutlinedIcon />} onClick={createException} disabled={working || referenceLoading} sx={primaryBtnSx}>Create Exception</Button>
                 </DialogActions>
             </Dialog>
 

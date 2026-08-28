@@ -4,10 +4,15 @@ import com.alsorg.packing.bomflow.dto.BomFlowCommercialDtos.*;
 import com.alsorg.packing.bomflow.service.BomFlowCommercialService;
 import com.alsorg.packing.bomflow.service.BomFlowCommercialService.RateEvidenceDownload;
 
+import jakarta.validation.Valid;
+
+import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,8 +21,13 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
+@Validated
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/api/bomflow/commercial")
 public class BomFlowCommercialController {
+
+    private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     private final BomFlowCommercialService service;
 
@@ -37,14 +47,14 @@ public class BomFlowCommercialController {
 
     @PostMapping("/rates")
     public MaterialRateResponse createMaterialRate(
-            @RequestBody MaterialRateRequest request) {
+            @Valid @RequestBody MaterialRateRequest request) {
         return service.createMaterialRate(request);
     }
 
     @PutMapping("/rates/{rateId}")
     public MaterialRateResponse updateMaterialRate(
             @PathVariable UUID rateId,
-            @RequestBody MaterialRateRequest request) {
+            @Valid @RequestBody MaterialRateRequest request) {
         return service.updateMaterialRate(rateId, request);
     }
 
@@ -74,22 +84,22 @@ public class BomFlowCommercialController {
     @GetMapping("/rates/{rateId}/evidence")
     public ResponseEntity<org.springframework.core.io.Resource> rateEvidence(
             @PathVariable UUID rateId) {
+
         RateEvidenceDownload download = service.downloadRateEvidence(rateId);
-        MediaType mediaType;
-        try {
-            mediaType = download.contentType() == null || download.contentType().isBlank()
-                    ? MediaType.APPLICATION_OCTET_STREAM
-                    : MediaType.parseMediaType(download.contentType());
-        } catch (IllegalArgumentException ex) {
-            mediaType = MediaType.APPLICATION_OCTET_STREAM;
-        }
+        MediaType mediaType = safeMediaType(download.contentType());
+
         ContentDisposition disposition = ContentDisposition.attachment()
-                .filename(download.originalFileName(), StandardCharsets.UTF_8)
+                .filename(safeDownloadName(download.originalFileName(), "rate-evidence"), StandardCharsets.UTF_8)
                 .build();
-        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+
+        ResponseEntity.BodyBuilder builder = sensitiveDownloadBuilder()
                 .contentType(mediaType)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString());
-        if (download.fileSize() > 0) builder.contentLength(download.fileSize());
+
+        if (download.fileSize() > 0) {
+            builder.contentLength(download.fileSize());
+        }
+
         return builder.body(download.resource());
     }
 
@@ -110,14 +120,14 @@ public class BomFlowCommercialController {
 
     @PostMapping("/labour-rates")
     public LabourRateResponse createLabourRate(
-            @RequestBody LabourRateRequest request) {
+            @Valid @RequestBody LabourRateRequest request) {
         return service.createLabourRate(request);
     }
 
     @PutMapping("/labour-rates/{rateId}")
     public LabourRateResponse updateLabourRate(
             @PathVariable UUID rateId,
-            @RequestBody LabourRateRequest request) {
+            @Valid @RequestBody LabourRateRequest request) {
         return service.updateLabourRate(rateId, request);
     }
 
@@ -140,7 +150,7 @@ public class BomFlowCommercialController {
     @PutMapping("/costing/{revisionId}/settings")
     public CostingSettingsResponse saveCostingSettings(
             @PathVariable UUID revisionId,
-            @RequestBody CostingSettingsRequest request) {
+            @Valid @RequestBody CostingSettingsRequest request) {
         return service.saveCostingSettings(revisionId, request);
     }
 
@@ -160,7 +170,7 @@ public class BomFlowCommercialController {
     @PostMapping("/costing/{revisionId}/labour-lines")
     public LabourLineResponse addLabourLine(
             @PathVariable UUID revisionId,
-            @RequestBody LabourLineRequest request) {
+            @Valid @RequestBody LabourLineRequest request) {
         return service.addLabourLine(revisionId, request);
     }
 
@@ -168,7 +178,7 @@ public class BomFlowCommercialController {
     public LabourLineResponse updateLabourLine(
             @PathVariable UUID revisionId,
             @PathVariable UUID lineId,
-            @RequestBody LabourLineRequest request) {
+            @Valid @RequestBody LabourLineRequest request) {
         return service.updateLabourLine(revisionId, lineId, request);
     }
 
@@ -223,9 +233,8 @@ public class BomFlowCommercialController {
                 .filename("BOMFlow_Costing_Workbook.xlsx", StandardCharsets.UTF_8)
                 .build();
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        return sensitiveDownloadBuilder()
+                .contentType(XLSX_MEDIA_TYPE)
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .contentLength(bytes.length)
                 .body(bytes);
@@ -239,10 +248,47 @@ public class BomFlowCommercialController {
                 .filename(fileName, StandardCharsets.UTF_8)
                 .build();
 
-        return ResponseEntity.ok()
+        return sensitiveDownloadBuilder()
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .contentLength(bytes.length)
                 .body(bytes);
+    }
+
+    private ResponseEntity.BodyBuilder sensitiveDownloadBuilder() {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header("X-Content-Type-Options", "nosniff");
+    }
+
+    private MediaType safeMediaType(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (IllegalArgumentException ex) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+    }
+
+    private String safeDownloadName(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+
+        String clean = value.replace('\\', '/');
+        int slash = clean.lastIndexOf('/');
+        if (slash >= 0) {
+            clean = clean.substring(slash + 1);
+        }
+
+        clean = clean.replaceAll("[\\r\\n\\t]", "_").trim();
+        if (clean.isBlank()) {
+            return fallback;
+        }
+        return clean.length() > 500 ? clean.substring(clean.length() - 500) : clean;
     }
 }

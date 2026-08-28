@@ -1,20 +1,27 @@
 package com.alsorg.packing.reporting.service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.reporting.dto.ReportSchedule;
 import com.alsorg.packing.reporting.repository.ReportScheduleRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class ReportSchedulerService {
 
-    private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
+    private static final Logger log = LoggerFactory.getLogger(ReportSchedulerService.class);
+
+    private static final java.time.ZoneId ZONE = TimeZoneConfig.APP_ZONE;
+    private static final int MAX_DUE_SCHEDULES_PER_RUN = 100;
 
     private final ReportScheduleRepository repo;
     private final InventoryReportWorkbookService workbookService;
@@ -23,8 +30,7 @@ public class ReportSchedulerService {
     public ReportSchedulerService(
             ReportScheduleRepository repo,
             InventoryReportWorkbookService workbookService,
-            EmailService emailService
-    ) {
+            EmailService emailService) {
         this.repo = repo;
         this.workbookService = workbookService;
         this.emailService = emailService;
@@ -32,21 +38,24 @@ public class ReportSchedulerService {
 
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Kolkata")
     public void runSchedules() {
-
         LocalTime now = LocalTime.now(ZONE)
                 .withSecond(0)
                 .withNano(0);
 
         LocalDate today = LocalDate.now(ZONE);
 
-        List<ReportSchedule> schedules =
-                repo.findDueSchedules(now, today);
+        List<ReportSchedule> schedules = repo.findDueSchedules(
+                now,
+                today,
+                PageRequest.of(
+                        0,
+                        MAX_DUE_SCHEDULES_PER_RUN));
 
         if (schedules.isEmpty()) {
             return;
         }
 
-        System.out.println("📩 Due report schedules found: " + schedules.size());
+        log.info("Due report schedules found: count={}", schedules.size());
 
         for (ReportSchedule schedule : schedules) {
             sendSchedule(schedule, today);
@@ -55,45 +64,42 @@ public class ReportSchedulerService {
 
     private void sendSchedule(
             ReportSchedule schedule,
-            LocalDate today
-    ) {
+            LocalDate today) {
+        if (schedule == null || schedule.getId() == null) {
+            log.warn("Ignoring malformed report schedule without id");
+            return;
+        }
+
         try {
-            String reportType = normalizeReportType(
-                    schedule.getReportType()
-            );
+            String reportType = normalizeReportType(schedule.getReportType());
 
             byte[] excel = generateExcel(reportType);
-
             String filename = buildFilename(reportType, today);
-
             String subject = buildSubject(reportType, today);
 
             emailService.sendExcel(
                     schedule.getEmail(),
                     subject,
                     excel,
-                    filename
-            );
+                    filename);
 
             schedule.setLastSent(today);
             repo.save(schedule);
 
-            System.out.println(
-                    "✅ Scheduled report sent | ID: "
-                            + schedule.getId()
-                            + " | Email: "
-                            + schedule.getEmail()
-            );
+            log.info(
+                    "Scheduled report completed: scheduleId={}, reportType={}",
+                    schedule.getId(),
+                    reportType);
 
-        } catch (Exception e) {
-            System.out.println(
-                    "❌ Scheduled report failed | ID: "
-                            + schedule.getId()
-                            + " | Email: "
-                            + schedule.getEmail()
-            );
-
-            e.printStackTrace();
+        } catch (Exception exception) {
+            /*
+             * A failed email is intentionally not marked lastSent. The next
+             * scheduler run may retry it. Do not log the recipient address.
+             */
+            log.error(
+                    "Scheduled report failed: scheduleId={}",
+                    schedule.getId(),
+                    exception);
         }
     }
 
@@ -101,8 +107,7 @@ public class ReportSchedulerService {
         return workbookService.exportInventoryReport(
                 type,
                 null,
-                null
-        );
+                null);
     }
 
     private String normalizeReportType(String type) {
@@ -110,18 +115,15 @@ public class ReportSchedulerService {
             return "inventory";
         }
 
-        String normalized =
-                type.trim().toLowerCase();
+        String normalized = type.trim().toLowerCase(Locale.ROOT);
 
         if ("combined".equals(normalized)) {
             return "inventory";
         }
 
-        if (
-                "inventory".equals(normalized) ||
-                "packing".equals(normalized) ||
-                "dispatch".equals(normalized)
-        ) {
+        if ("inventory".equals(normalized)
+                || "packing".equals(normalized)
+                || "dispatch".equals(normalized)) {
             return normalized;
         }
 
@@ -130,8 +132,7 @@ public class ReportSchedulerService {
 
     private String buildFilename(
             String reportType,
-            LocalDate today
-    ) {
+            LocalDate today) {
         return "alsorg-"
                 + reportType
                 + "-professional-report-"
@@ -141,8 +142,7 @@ public class ReportSchedulerService {
 
     private String buildSubject(
             String reportType,
-            LocalDate today
-    ) {
+            LocalDate today) {
         return "Alsorg "
                 + capitalize(reportType)
                 + " Report - "
@@ -154,7 +154,7 @@ public class ReportSchedulerService {
             return value;
         }
 
-        return value.substring(0, 1).toUpperCase()
-                + value.substring(1).toLowerCase();
+        return value.substring(0, 1).toUpperCase(Locale.ROOT)
+                + value.substring(1).toLowerCase(Locale.ROOT);
     }
 }

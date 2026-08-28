@@ -1,75 +1,38 @@
-import { API_BASE_URL } from "../config";
+import {
+	isFlowSuiteApiRequest,
+	secureFetch,
+} from "../services/api";
 
 let installed = false;
 
-const isBackendApiUrl = (url) => {
-	if (!url) return false;
-
-	const text = String(url);
-	const apiBase = String(API_BASE_URL || "").replace(/\/$/, "");
-
-	return (
-		text.startsWith(`${apiBase}/api`) ||
-		text.startsWith("/api")
-	);
-};
-
-const isBadAuthorization = (value) => {
-	if (!value) return false;
-
-	const clean = String(value).trim();
-
-	return (
-		clean === "Bearer" ||
-		clean === "Bearer null" ||
-		clean === "Bearer undefined" ||
-		clean === "null" ||
-		clean === "undefined"
-	);
-};
-
+/*
+ * Transitional bridge for FlowSuite modules that still call window.fetch
+ * directly. PackFlow's reviewed code already uses API/secureFetch, but this
+ * bridge prevents an older raw-fetch caller elsewhere in the SPA from bypassing
+ * cookie credentials, CSRF, request correlation and centralized 401 handling.
+ *
+ * services/api.js captures the native fetch before this patch is installed, so
+ * secureFetch does not recurse back through window.fetch.
+ */
 export function installAuthFetchPatch() {
-	if (installed || typeof window === "undefined") {
+	if (
+		installed ||
+		typeof window === "undefined" ||
+		typeof window.fetch !== "function"
+	) {
 		return;
 	}
 
 	installed = true;
 
-	const nativeFetch = window.fetch.bind(window);
+	const nativeFetch =
+		window.fetch.bind(window);
 
 	window.fetch = (input, init = {}) => {
-		const url =
-			typeof input === "string"
-				? input
-				: input?.url;
-
-		if (!isBackendApiUrl(url)) {
+		if (!isFlowSuiteApiRequest(input)) {
 			return nativeFetch(input, init);
 		}
 
-		const headers = new Headers(
-			init?.headers ||
-				(input instanceof Request ? input.headers : undefined)
-		);
-
-		const authorization = headers.get("Authorization");
-
-		if (isBadAuthorization(authorization)) {
-			headers.delete("Authorization");
-		}
-
-		/*
-		 * X-Username should not decide user identity anymore.
-		 * Backend must take username from JWT/cookie.
-		 */
-		headers.delete("X-Username");
-
-		const nextInit = {
-			...init,
-			credentials: "include",
-			headers,
-		};
-
-		return nativeFetch(input, nextInit);
+		return secureFetch(input, init);
 	};
 }

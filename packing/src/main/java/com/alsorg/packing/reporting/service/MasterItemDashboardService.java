@@ -32,6 +32,10 @@ public class MasterItemDashboardService {
             int page,
             int size
     ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must be before or equal to 'to'");
+        }
+
         return repository.findMasterItems(
                 clean(search),
                 clean(packingStatus),
@@ -40,7 +44,7 @@ public class MasterItemDashboardService {
                 from,
                 to,
                 Math.max(page, 0),
-                Math.min(Math.max(size, 10), 700)
+                Math.min(Math.max(size, 10), 100)
         );
     }
 

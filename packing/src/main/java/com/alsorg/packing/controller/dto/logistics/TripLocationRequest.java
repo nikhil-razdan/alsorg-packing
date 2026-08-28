@@ -1,13 +1,32 @@
 package com.alsorg.packing.controller.dto.logistics;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+
 public class TripLocationRequest {
 
+    @DecimalMin(value = "-90.0", inclusive = true, message = "Latitude must be at least -90.")
+    @DecimalMax(value = "90.0", inclusive = true, message = "Latitude must be at most 90.")
     private Double latitude;
+
+    @DecimalMin(value = "-180.0", inclusive = true, message = "Longitude must be at least -180.")
+    @DecimalMax(value = "180.0", inclusive = true, message = "Longitude must be at most 180.")
     private Double longitude;
+
+    @DecimalMin(value = "0.0", inclusive = true, message = "Accuracy cannot be negative.")
+    @DecimalMax(value = "1000000.0", inclusive = true, message = "Accuracy is too large.")
     private Double accuracy;
 
+    @DecimalMin(value = "0.0", inclusive = true, message = "Speed cannot be negative.")
+    @DecimalMax(value = "1000.0", inclusive = true, message = "Speed is too large.")
     private Double speed;
+
+    @DecimalMin(value = "0.0", inclusive = true, message = "Heading cannot be negative.")
+    @DecimalMax(value = "360.0", inclusive = true, message = "Heading cannot exceed 360 degrees.")
     private Double heading;
+
+    @DecimalMin(value = "-10000.0", inclusive = true, message = "Altitude is too small.")
+    @DecimalMax(value = "100000.0", inclusive = true, message = "Altitude is too large.")
     private Double altitude;
 
     public Double getLatitude() {

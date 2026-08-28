@@ -3,7 +3,10 @@ package com.alsorg.packing.domain.audit;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "admin_deletion_audit")
@@ -36,77 +39,22 @@ public class AdminDeletionAudit {
     @Column(name = "snapshot_json", columnDefinition = "text")
     private String snapshotJson;
 
-    // Getters and setters
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getTargetType() {
-        return targetType;
-    }
-
-    public void setTargetType(String targetType) {
-        this.targetType = targetType;
-    }
-
-    public String getTargetId() {
-        return targetId;
-    }
-
-    public void setTargetId(String targetId) {
-        this.targetId = targetId;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getDeletedBy() {
-        return deletedBy;
-    }
-
-    public void setDeletedBy(String deletedBy) {
-        this.deletedBy = deletedBy;
-    }
-
-    public LocalDateTime getDeletedAt() {
-        return deletedAt;
-    }
-
-    public void setDeletedAt(LocalDateTime deletedAt) {
-        this.deletedAt = deletedAt;
-    }
-
-    public String getAffectedRowsJson() {
-        return affectedRowsJson;
-    }
-
-    public void setAffectedRowsJson(String affectedRowsJson) {
-        this.affectedRowsJson = affectedRowsJson;
-    }
-
-    public String getSnapshotJson() {
-        return snapshotJson;
-    }
-
-    public void setSnapshotJson(String snapshotJson) {
-        this.snapshotJson = snapshotJson;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public String getTargetType() { return targetType; }
+    public void setTargetType(String targetType) { this.targetType = targetType; }
+    public String getTargetId() { return targetId; }
+    public void setTargetId(String targetId) { this.targetId = targetId; }
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+    public String getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(String deletedBy) { this.deletedBy = deletedBy; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+    public String getAffectedRowsJson() { return affectedRowsJson; }
+    public void setAffectedRowsJson(String affectedRowsJson) { this.affectedRowsJson = affectedRowsJson; }
+    public String getSnapshotJson() { return snapshotJson; }
+    public void setSnapshotJson(String snapshotJson) { this.snapshotJson = snapshotJson; }
 }

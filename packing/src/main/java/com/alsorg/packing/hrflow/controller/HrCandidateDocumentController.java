@@ -3,6 +3,7 @@ package com.alsorg.packing.hrflow.controller;
 import com.alsorg.packing.hrflow.domain.HrDocumentType;
 import com.alsorg.packing.hrflow.dto.HrDocumentDtos;
 import com.alsorg.packing.hrflow.service.HrDocumentService;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -58,9 +59,14 @@ public class HrCandidateDocumentController {
                         .build()
         );
 
+        byte[] bytes = document.bytes() == null ? new byte[0] : document.bytes();
+
         return ResponseEntity.ok()
                 .headers(headers)
-                .body(document.bytes());
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .contentLength(bytes.length)
+                .body(bytes);
     }
 
     @DeleteMapping("/{documentId}")

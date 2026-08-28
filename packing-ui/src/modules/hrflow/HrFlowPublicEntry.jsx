@@ -37,11 +37,20 @@ const readPublicRoute = (pathname = "") => {
 	if (hrIndex < 0) return { mode: "", token: "" };
 
 	const mode = String(parts[hrIndex + 1] || "").trim().toLowerCase();
-	const rawToken = parts.slice(hrIndex + 2).join("/");
+	const tokenSegment = parts[hrIndex + 2] || "";
+	const hasUnexpectedTrailingPath = parts.length > hrIndex + 3;
+
+	if (
+		!["apply", "onboarding"].includes(mode) ||
+		!tokenSegment ||
+		hasUnexpectedTrailingPath
+	) {
+		return { mode: "", token: "" };
+	}
 
 	return {
 		mode,
-		token: decodeToken(rawToken),
+		token: decodeToken(tokenSegment),
 	};
 };
 

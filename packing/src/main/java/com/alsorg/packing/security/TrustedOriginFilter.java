@@ -20,16 +20,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-/**
- * CSRF defense for the browser HttpOnly-cookie authentication path.
- *
- * FlowSuite also supports ShipTrack/mobile Bearer tokens. Bearer-only requests
- * do not rely on ambient browser cookies and therefore do not require this
- * browser-origin check.
- *
- * For unsafe cookie-authenticated requests, the browser Origin (or Referer
- * fallback) must exactly match one of the configured frontend origins.
- */
+
 @Component
 public class TrustedOriginFilter
         extends OncePerRequestFilter {
@@ -77,9 +68,43 @@ public class TrustedOriginFilter
         String secFetchSite = trimToNull(
                 request.getHeader("Sec-Fetch-Site"));
 
+        boolean nativeMobileClient =
+                isNativeMobileClient(request);
+
+        boolean authLogin =
+                isAuthLogin(request);
+
+        boolean hasBearerToken =
+                hasBearerToken(request);
+
         /*
-         * Any browser that supplies an Origin must supply a trusted one.
-         * This protects public POST endpoints too, not only authenticated ones.
+         * Native ShipTrack transport is explicitly bearer-based.
+         *
+         * IMPORTANT:
+         * This check intentionally happens before the generic Origin rejection.
+         * Some React Native / Expo networking stacks may supply an Origin header
+         * even though the request is not running inside a browser. Requiring that
+         * native Origin to match the FlowSuite web origin caused the production
+         * "Request origin is not allowed" login failure.
+         *
+         * A normal modern browser is NOT treated as native mobile merely because
+         * it sends X-Client-Type: mobile: browser Fetch Metadata headers make
+         * isNativeMobileClient(...) return false, and normal CORS/origin policy
+         * remains in force.
+         */
+        if (nativeMobileClient
+                && (authLogin || hasBearerToken)) {
+
+            filterChain.doFilter(
+                    request,
+                    response);
+
+            return;
+        }
+
+        /*
+         * Any browser/non-native request that supplies an Origin must supply an
+         * exact configured origin. This protects public unsafe endpoints too.
          */
         if (originHeader != null
                 && !isAllowedOrigin(originHeader)) {
@@ -88,10 +113,17 @@ public class TrustedOriginFilter
             return;
         }
 
-        boolean hasAccessCookie = hasAccessCookie(request);
-        boolean bearerOnly = hasBearerToken(request)
-                && !hasAccessCookie;
+        boolean hasAccessCookie =
+                hasAccessCookie(request);
 
+        boolean bearerOnly =
+                hasBearerToken
+                        && !hasAccessCookie;
+
+        /*
+         * Generic API clients using Bearer-only auth remain stateless and do not
+         * participate in browser ambient-cookie CSRF semantics.
+         */
         if (bearerOnly) {
             filterChain.doFilter(
                     request,
@@ -117,14 +149,13 @@ public class TrustedOriginFilter
         }
 
         /*
-         * Login occurs before an auth cookie exists. Modern browsers send
-         * Origin for cross-origin POSTs. If a browser identifies the request
-         * as cross-site but supplies neither a trusted Origin nor Referer,
-         * refuse it. Native/mobile clients normally do not send Sec-Fetch-Site.
+         * Browser login occurs before a new auth cookie exists. Modern browsers
+         * send Origin for cross-origin POSTs. If a browser explicitly identifies
+         * the request as cross-site but supplies neither a trusted Origin nor a
+         * trusted Referer, refuse it.
          */
         if (!hasAccessCookie
-                && isAuthLogin(request)
-                && !isMobileClient(request)
+                && authLogin
                 && "cross-site".equalsIgnoreCase(secFetchSite)
                 && originHeader == null
                 && !isAllowedReferer(refererHeader)) {
@@ -168,7 +199,8 @@ public class TrustedOriginFilter
         String authorization = trimToNull(
                 request.getHeader("Authorization"));
 
-        if (authorization == null) {
+        if (authorization == null
+                || authorization.length() <= 7) {
             return false;
         }
 
@@ -189,15 +221,41 @@ public class TrustedOriginFilter
                 request.getServletPath());
     }
 
-    private boolean isMobileClient(
+    /**
+     * X-Client-Type is a transport hint, not an authorization boundary.
+     *
+     * Normal modern browsers attach Fetch Metadata headers. Native Expo / React
+     * Native networking does not. This allows native ShipTrack to remain
+     * independent of browser Origin headers without turning a normal browser
+     * request into a bearer-token-returning mobile login just by adding a header.
+     */
+    private boolean isNativeMobileClient(
             HttpServletRequest request) {
 
         String clientType = trimToNull(
                 request.getHeader("X-Client-Type"));
 
-        return clientType != null
-                && "mobile".equalsIgnoreCase(
-                        clientType);
+        if (clientType == null
+                || !"mobile".equalsIgnoreCase(
+                        clientType)) {
+            return false;
+        }
+
+        return !hasBrowserFetchMetadata(
+                request);
+    }
+
+    private boolean hasBrowserFetchMetadata(
+            HttpServletRequest request) {
+
+        return trimToNull(
+                request.getHeader("Sec-Fetch-Site")) != null
+                || trimToNull(
+                        request.getHeader("Sec-Fetch-Mode")) != null
+                || trimToNull(
+                        request.getHeader("Sec-Fetch-Dest")) != null
+                || trimToNull(
+                        request.getHeader("Sec-Fetch-User")) != null;
     }
 
     private boolean isAllowedOrigin(
@@ -231,12 +289,60 @@ public class TrustedOriginFilter
                         configuredOrigins.split(","))
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .map(this::normalizeOrigin)
-                .filter(value -> value != null
-                        && !value.isBlank())
+                .map(this::normalizeConfiguredOrigin)
                 .collect(
                         Collectors.toCollection(
                                 LinkedHashSet::new));
+    }
+
+    private String normalizeConfiguredOrigin(
+            String value) {
+
+        String clean = trimToNull(value);
+
+        if (clean == null) {
+            throw new IllegalStateException(
+                    "Blank app.security.allowed-origins entry");
+        }
+
+        try {
+            URI uri = URI.create(clean);
+
+            if (uri.getUserInfo() != null
+                    || uri.getQuery() != null
+                    || uri.getFragment() != null) {
+                throw new IllegalStateException(
+                        "Invalid app.security.allowed-origins entry: "
+                                + value);
+            }
+
+            String path = uri.getPath();
+
+            if (path != null
+                    && !path.isBlank()
+                    && !"/".equals(path)) {
+                throw new IllegalStateException(
+                        "Allowed origins must not contain a path: "
+                                + value);
+            }
+
+            String normalized = normalizeOrigin(
+                    clean);
+
+            if (normalized == null) {
+                throw new IllegalStateException(
+                        "Invalid app.security.allowed-origins entry: "
+                                + value);
+            }
+
+            return normalized;
+
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "Invalid app.security.allowed-origins entry: "
+                            + value,
+                    exception);
+        }
     }
 
     private String normalizeOrigin(

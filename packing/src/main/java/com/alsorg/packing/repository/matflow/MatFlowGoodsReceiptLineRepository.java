@@ -9,18 +9,14 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowGoodsReceiptLineRepository
-                extends JpaRepository<MatFlowGoodsReceiptLine, UUID> {
+        extends JpaRepository<MatFlowGoodsReceiptLine, UUID> {
 
-        List<MatFlowGoodsReceiptLine> findByGoodsReceipt_IdOrderByCreatedAtAsc(
-                        UUID goodsReceiptId);
+    List<MatFlowGoodsReceiptLine> findByGoodsReceipt_IdOrderByCreatedAtAsc(UUID goodsReceiptId);
 
-        Optional<MatFlowGoodsReceiptLine> findByIdAndGoodsReceipt_Id(
-                        UUID id,
-                        UUID goodsReceiptId);
+    Optional<MatFlowGoodsReceiptLine> findByIdAndGoodsReceipt_Id(UUID id, UUID goodsReceiptId);
 
-        List<MatFlowGoodsReceiptLine> findByPurchaseOrderLine_Id(
-                        UUID purchaseOrderLineId);
+    List<MatFlowGoodsReceiptLine> findByPurchaseOrderLine_Id(UUID purchaseOrderLineId);
 
-        List<MatFlowGoodsReceiptLine> findByPurchaseOrderLine_IdOrderByCreatedAtAsc(
-                        UUID purchaseOrderLineId);
+    List<MatFlowGoodsReceiptLine> findByPurchaseOrderLine_IdOrderByCreatedAtAsc(
+            UUID purchaseOrderLineId);
 }

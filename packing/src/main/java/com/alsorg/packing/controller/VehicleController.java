@@ -2,8 +2,24 @@ package com.alsorg.packing.controller;
 
 import java.util.UUID;
 
+import jakarta.servlet.http.HttpServletRequest;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.logistics.Vehicle;
 import com.alsorg.packing.domain.users.User;
@@ -14,134 +30,102 @@ import com.alsorg.packing.service.VehicleService;
 @RequestMapping("/api/logistics/vehicles")
 public class VehicleController {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final VehicleService service;
     private final CurrentUserService currentUserService;
 
     public VehicleController(
             VehicleService service,
             CurrentUserService currentUserService) {
-
         this.service = service;
-        this.currentUserService =
-                currentUserService;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping
-    public ResponseEntity<?> create(
-            @RequestBody Vehicle vehicle,
-            @RequestHeader(
-                    value = "Authorization",
-                    required = false)
-            String auth,
-            @RequestHeader(
-                    value = "X-Client-Type",
-                    required = false)
-            String clientType) {
+    public ResponseEntity<Vehicle> create(
+            @RequestBody(required = false) Vehicle vehicle,
+            @RequestHeader(value = "X-Client-Type", required = false) String clientType,
+            HttpServletRequest request) {
 
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "DISPATCH", "LOGISTICS");
 
-        if (!currentUserService.isAdmin(user)
-                && !currentUserService.isDispatch(user)
-                && !currentUserService.isLogistics(user)) {
-
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "Only ADMIN, DISPATCH or LOGISTICS can create vehicles");
-        }
-
-        boolean mobileClient =
-                "mobile".equalsIgnoreCase(
-                        String.valueOf(clientType)
-                                .trim());
-
-        /*
-         * Mobile quick-create can omit vehicleType.
-         * Normal web creation still requires it.
-         */
-        return ResponseEntity.ok(
-                service.create(
-                        vehicle,
-                        mobileClient));
+        boolean mobileQuickCreate = isNativeMobileRequest(clientType, request);
+        return ResponseEntity.ok(service.create(vehicle, mobileQuickCreate));
     }
 
+    /**
+     * Compatibility full-list endpoint used by existing dropdowns.
+     */
     @GetMapping
-    public ResponseEntity<?> getAll(
-            @RequestHeader(
-                    value = "Authorization",
-                    required = false)
-            String auth) {
+    public ResponseEntity<?> getAll() {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "DISPATCH", "LOGISTICS", "DRIVER");
+        return ResponseEntity.ok(service.getAll());
+    }
 
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
+    @GetMapping("/search")
+    public Page<Vehicle> search(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "DISPATCH", "LOGISTICS", "DRIVER");
 
-        if (!currentUserService.isAdmin(user)
-                && !currentUserService.isDispatch(user)
-                && !currentUserService.isLogistics(user)
-                && !currentUserService.isDriver(user)) {
-
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "You do not have permission to view vehicles");
-        }
-
-        return ResponseEntity.ok(
-                service.getAll());
+        return service.getPage(
+                PageRequest.of(
+                        Math.max(0, page),
+                        Math.max(1, Math.min(size, MAX_PAGE_SIZE)),
+                        Sort.by(Sort.Direction.ASC, "vehicleNumber")));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(
+    public ResponseEntity<Vehicle> update(
             @PathVariable UUID id,
-            @RequestBody Vehicle vehicle,
-            @RequestHeader(
-                    value = "Authorization",
-                    required = false)
-            String auth) {
-
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
-
-        if (!currentUserService.isAdmin(user)
-                && !currentUserService.isLogistics(user)) {
-
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "Only ADMIN or LOGISTICS can update vehicles");
-        }
-
-        return ResponseEntity.ok(
-                service.update(
-                        id,
-                        vehicle));
+            @RequestBody(required = false) Vehicle vehicle) {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "LOGISTICS");
+        return ResponseEntity.ok(service.update(id, vehicle));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(
-            @PathVariable UUID id,
-            @RequestHeader(
-                    value = "Authorization",
-                    required = false)
-            String auth) {
+    public ResponseEntity<Void> delete(
+            @PathVariable UUID id) {
+        User user = currentUserService.requireCurrentUser();
+        requireAnyRole(user, "ADMIN", "LOGISTICS");
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 
-        User user = currentUserService
-                .getCurrentUserFromAuth(auth);
+    private boolean isNativeMobileRequest(
+            String clientType,
+            HttpServletRequest request) {
 
-        if (!currentUserService.isAdmin(user)
-                && !currentUserService.isLogistics(user)) {
-
-            return ResponseEntity
-                    .status(403)
-                    .body(
-                            "Only ADMIN or LOGISTICS can delete vehicles");
+        if (clientType == null || !"mobile".equalsIgnoreCase(clientType.trim())) {
+            return false;
         }
 
-        service.delete(id);
+        if (request == null) {
+            return false;
+        }
 
-        return ResponseEntity
-                .noContent()
-                .build();
+        String origin = request.getHeader("Origin");
+        String referer = request.getHeader("Referer");
+
+        /*
+         * X-Client-Type is a compatibility hint, not an authentication boundary.
+         * Browsers carrying Origin/Referer do not get the relaxed mobile-only
+         * vehicle-type validation path.
+         */
+        return (origin == null || origin.isBlank())
+                && (referer == null || referer.isBlank());
+    }
+
+    private void requireAnyRole(User user, String... roles) {
+        if (!currentUserService.hasAnyRole(user, roles)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You do not have permission to manage vehicles");
+        }
     }
 }

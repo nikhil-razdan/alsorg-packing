@@ -29,8 +29,26 @@ public class HrAccessGrantService {
     @Transactional
     public HrAccessDtos.AccessGrantResponse grant(HrAccessDtos.GrantAccessRequest request) {
         accessService.requireGlobalAdmin();
+
+        if (request == null) {
+            throw HrFlowException.badRequest("HRFLOW access grant request is required.");
+        }
+        if (request.role() == null) {
+            throw HrFlowException.badRequest("HRFLOW access role is required.");
+        }
+
+        String principal = request.principalName() == null
+                ? ""
+                : request.principalName().trim();
+
+        if (principal.isBlank()) {
+            throw HrFlowException.badRequest("Principal name is required.");
+        }
+        if (principal.length() > 200) {
+            throw HrFlowException.badRequest("Principal name is too long.");
+        }
+
         String actor = accessService.actor();
-        String principal = request.principalName().trim();
         HrAccessGrant grant = repository.findByPrincipalNameIgnoreCaseAndRole(principal, request.role())
                 .orElseGet(HrAccessGrant::new);
         if (grant.getId() == null) {
@@ -50,6 +68,11 @@ public class HrAccessGrantService {
     @Transactional
     public HrAccessDtos.AccessGrantResponse revoke(UUID id) {
         accessService.requireGlobalAdmin();
+
+        if (id == null) {
+            throw HrFlowException.badRequest("HRFLOW access grant id is required.");
+        }
+
         String actor = accessService.actor();
         HrAccessGrant grant = repository.findById(id)
                 .orElseThrow(() -> HrFlowException.notFound("HRFLOW access grant not found."));

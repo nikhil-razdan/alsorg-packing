@@ -1,5 +1,11 @@
 package com.alsorg.packing.bomflow.dto;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -12,20 +18,20 @@ public final class BomFlowCommercialDtos {
     }
 
     public record MaterialRateRequest(
-            String category,
-            String itemName,
-            String brand,
-            String vendorName,
-            String unit,
-            String rateType,
-            BigDecimal rate,
-            BigDecimal gstPercent,
+            @NotBlank @Size(max = 120) String category,
+            @NotBlank @Size(max = 500) String itemName,
+            @Size(max = 255) String brand,
+            @Size(max = 220) String vendorName,
+            @NotBlank @Size(max = 60) String unit,
+            @Size(max = 40) String rateType,
+            @DecimalMin("0.0") BigDecimal rate,
+            @DecimalMin("0.0") @DecimalMax("100.0") BigDecimal gstPercent,
             LocalDate effectiveFrom,
             LocalDate effectiveTo,
-            String sourceReference,
-            String notes,
+            @Size(max = 1000) String sourceReference,
+            @Size(max = 3000) String notes,
             Boolean active,
-            Long rowVersion) {
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record MaterialRateResponse(
@@ -57,19 +63,19 @@ public final class BomFlowCommercialDtos {
     }
 
     public record LabourRateRequest(
-            String department,
-            String processCode,
-            String processName,
-            String basis,
-            String unit,
-            BigDecimal rate,
-            BigDecimal defaultLabourCount,
-            BigDecimal defaultWorkingHours,
+            @NotBlank @Size(max = 160) String department,
+            @Size(max = 100) String processCode,
+            @NotBlank @Size(max = 220) String processName,
+            @Size(max = 40) String basis,
+            @Size(max = 60) String unit,
+            @DecimalMin("0.0") BigDecimal rate,
+            @DecimalMin("0.0") BigDecimal defaultLabourCount,
+            @DecimalMin("0.0") BigDecimal defaultWorkingHours,
             LocalDate effectiveFrom,
             LocalDate effectiveTo,
-            String notes,
+            @Size(max = 3000) String notes,
             Boolean active,
-            Long rowVersion) {
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record LabourRateResponse(
@@ -95,14 +101,14 @@ public final class BomFlowCommercialDtos {
 
     public record LabourLineRequest(
             UUID labourRateId,
-            String basis,
-            String unit,
-            BigDecimal labourCount,
-            BigDecimal workingHours,
-            BigDecimal quantity,
-            BigDecimal rate,
-            String remarks,
-            Long rowVersion) {
+            @Size(max = 40) String basis,
+            @Size(max = 60) String unit,
+            @DecimalMin("0.0") BigDecimal labourCount,
+            @DecimalMin("0.0") BigDecimal workingHours,
+            @DecimalMin("0.0") BigDecimal quantity,
+            @DecimalMin("0.0") BigDecimal rate,
+            @Size(max = 3000) String remarks,
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record LabourLineResponse(
@@ -141,16 +147,16 @@ public final class BomFlowCommercialDtos {
     }
 
     public record CostingSettingsRequest(
-            BigDecimal markupPercent,
-            BigDecimal factoryFixedOverheadPercent,
-            BigDecimal factoryVariableOverheadPercent,
-            BigDecimal adminOverheadPercent,
-            BigDecimal sellingOverheadPercent,
-            BigDecimal profitPercent,
-            BigDecimal franchisePercent,
-            BigDecimal gstPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal markupPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal factoryFixedOverheadPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal factoryVariableOverheadPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal adminOverheadPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal sellingOverheadPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal profitPercent,
+            @DecimalMin("0.0") @DecimalMax("1000.0") BigDecimal franchisePercent,
+            @DecimalMin("0.0") @DecimalMax("100.0") BigDecimal gstPercent,
             Boolean roundOff,
-            Long rowVersion) {
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record CostingSettingsResponse(
@@ -224,7 +230,6 @@ public final class BomFlowCommercialDtos {
             List<MaterialCostLineResponse> materialLines,
             List<LabourLineResponse> labourLines) {
     }
-
 
     public record RevisionCostPointResponse(
             UUID revisionId,

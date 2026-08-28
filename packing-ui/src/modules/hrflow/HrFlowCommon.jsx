@@ -31,11 +31,40 @@ const HrThemeContext = createContext(null);
 
 const readMode = () => {
 	if (typeof window === "undefined") return "dark";
-	const stored = window.localStorage.getItem(MODE_KEY);
-	if (stored === "dark" || stored === "light") return stored;
-	const matFlowMode = window.localStorage.getItem(MATFLOW_MODE_KEY);
-	if (matFlowMode === "dark" || matFlowMode === "light") return matFlowMode;
-	return window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
+
+	try {
+		const stored =
+			window.localStorage.getItem(
+				MODE_KEY
+			);
+
+		if (
+			stored === "dark" ||
+			stored === "light"
+		) {
+			return stored;
+		}
+
+		const matFlowMode =
+			window.localStorage.getItem(
+				MATFLOW_MODE_KEY
+			);
+
+		if (
+			matFlowMode === "dark" ||
+			matFlowMode === "light"
+		) {
+			return matFlowMode;
+		}
+	} catch {
+		// Theme persistence is optional.
+	}
+
+	return window.matchMedia?.(
+		"(prefers-color-scheme: light)"
+	)?.matches
+		? "light"
+		: "dark";
 };
 
 const variables = (mode) => {
@@ -199,7 +228,18 @@ export function HrFlowThemeProvider({ children }) {
 	const cssVars = useMemo(() => variables(mode), [mode]);
 
 	useEffect(() => {
-		window.localStorage.setItem(MODE_KEY, mode);
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		try {
+			window.localStorage.setItem(
+				MODE_KEY,
+				mode
+			);
+		} catch {
+			// Theme persistence is optional.
+		}
 	}, [mode]);
 
 	const value = useMemo(() => ({

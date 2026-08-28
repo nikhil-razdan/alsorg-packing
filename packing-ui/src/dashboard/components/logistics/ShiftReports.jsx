@@ -21,6 +21,7 @@ import {
 } from "./logisticsAlertUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   formatVehicleDate,
@@ -1646,6 +1647,7 @@ function TripEndImportSummary({
 
 function ShiftReports({
   showAlert = () => { },
+  liveRefreshToken = null,
 }) {
   const [loading, setLoading] =
     useState(true);
@@ -1717,10 +1719,14 @@ function ShiftReports({
       total: 0,
     });
 
-  async function loadReports() {
+  async function loadReports({
+    background = false,
+  } = {}) {
     try {
-      setLoading(true);
-      setLoadWarning("");
+      if (!background) {
+        setLoading(true);
+        setLoadWarning("");
+      }
 
       const results = await Promise.allSettled([
         fetchDrivers(),
@@ -1747,8 +1753,8 @@ function ShiftReports({
             : []
         );
       } else {
-        setDrivers([]);
         failed.push("drivers");
+        if (!background) setDrivers([]);
       }
 
       if (vehicleResult.status === "fulfilled") {
@@ -1758,8 +1764,8 @@ function ShiftReports({
             : []
         );
       } else {
-        setVehicles([]);
         failed.push("vehicles");
+        if (!background) setVehicles([]);
       }
 
       if (shiftResult.status === "fulfilled") {
@@ -1769,8 +1775,8 @@ function ShiftReports({
             : []
         );
       } else {
-        setShifts([]);
         failed.push("manual operations");
+        if (!background) setShifts([]);
       }
 
       if (challanResult.status === "fulfilled") {
@@ -1780,24 +1786,24 @@ function ShiftReports({
             : []
         );
       } else {
-        setChallans([]);
         failed.push("dispatch challans");
+        if (!background) setChallans([]);
       }
 
-      if (
-        legacyTripResult.status === "fulfilled"
-      ) {
+      if (legacyTripResult.status === "fulfilled") {
         setLegacyTrips(
           Array.isArray(legacyTripResult.value)
             ? legacyTripResult.value
             : []
         );
       } else {
-        setLegacyTrips([]);
         failed.push("legacy trips");
+        if (!background) setLegacyTrips([]);
       }
 
-      if (failed.length > 0) {
+      if (failed.length === 0) {
+        setLoadWarning("");
+      } else if (!background) {
         setLoadWarning(
           `Some report sources could not be loaded: ${failed.join(
             ", "
@@ -1805,18 +1811,30 @@ function ShiftReports({
         );
       }
     } catch (error) {
-      console.error(error);
-      showAlert(
-        getBackendMessage(
-          error,
-          "Failed to load logistics reports"
-        ),
-        "error"
-      );
+      if (!background) {
+        showAlert(
+          getBackendMessage(
+            error,
+            "Failed to load logistics reports"
+          ),
+          "error"
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   }
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await loadReports({
+        background: true,
+      });
+    }
+  );
 
   useEffect(() => {
     loadReports();
@@ -4359,33 +4377,29 @@ const subtitle = {
 };
 
 const refreshBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 40,
-  borderRadius: 11,
+  borderRadius: 12,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.10)",
-  background: "var(--pf-surface-alt)",
-  color: "var(--pf-text-strong)",
-  WebkitTextFillColor:
-    "var(--pf-text-strong)",
-  padding: "0 14px",
-  fontWeight: 850,
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background:
+    "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text)",
+  WebkitTextFillColor: "var(--pf-text)",
+  padding: "0 15px",
+  fontWeight: 800,
   cursor: "pointer",
 };
 
 
 const uploadTripEndBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 40,
-  borderRadius: 11,
+  borderRadius: 10,
   border: "none",
   background:
     "linear-gradient(135deg,#d97706,#f59e0b)",
   color: "#fff",
   WebkitTextFillColor: "#fff",
-  padding: "0 14px",
+  padding: "0 15px",
   fontWeight: 900,
   cursor: "pointer",
   boxShadow:
@@ -4448,17 +4462,14 @@ const tripEndImportSubtitle = {
 };
 
 const tripEndImportClose = {
-  appearance: "none",
-  WebkitAppearance: "none",
   width: 34,
   height: 34,
   borderRadius: 10,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.10)",
-  background: "var(--pf-surface-alt)",
-  color: "var(--pf-text-strong)",
-  WebkitTextFillColor:
-    "var(--pf-text-strong)",
+    "1px solid rgba(148,163,184,.12)",
+  background:
+    "rgba(var(--pf-fg-rgb),.035)",
+  color: "var(--pf-text)",
   fontSize: 22,
   lineHeight: 1,
   cursor: "pointer",
@@ -4668,25 +4679,21 @@ const tripEndImportFooterActions = {
 };
 
 const tripEndImportCancelBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 38,
   padding: "0 14px",
   borderRadius: 10,
   border:
     "1px solid rgba(var(--pf-fg-rgb),.10)",
-  background: "var(--pf-surface-alt)",
+  background:
+    "var(--pf-surface-alt)",
   color: "var(--pf-text-strong)",
-  WebkitTextFillColor:
-    "var(--pf-text-strong)",
+  WebkitTextFillColor: "var(--pf-text-strong)",
   fontWeight: 850,
   cursor: "pointer",
 };
 
 const tripEndImportConfirmBtn =
   (disabled) => ({
-    appearance: "none",
-    WebkitAppearance: "none",
     height: 38,
     padding: "0 15px",
     borderRadius: 10,
@@ -4695,30 +4702,29 @@ const tripEndImportConfirmBtn =
     WebkitTextFillColor: "#fff",
     background:
       disabled
-        ? "#94a3b8"
-        : "linear-gradient(135deg,#16a34a,#22c55e)",
+        ? "rgba(var(--pf-fg-rgb),.16)"
+        : "linear-gradient(135deg,#059669,#10b981)",
     opacity: disabled ? 0.58 : 1,
     cursor:
       disabled
         ? "not-allowed"
         : "pointer",
     fontWeight: 900,
-    boxShadow: disabled
-      ? "none"
-      : "0 7px 16px rgba(34,197,94,.18)",
+    boxShadow:
+      disabled
+        ? "none"
+        : "0 7px 16px rgba(5,150,105,.18)",
   });
 
 const downloadCurrentBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 40,
-  borderRadius: 11,
+  borderRadius: 10,
   border: "none",
   background:
     "linear-gradient(135deg,#2563eb,#3b82f6)",
   color: "#fff",
   WebkitTextFillColor: "#fff",
-  padding: "0 14px",
+  padding: "0 15px",
   fontWeight: 900,
   cursor: "pointer",
   boxShadow:
@@ -4726,20 +4732,18 @@ const downloadCurrentBtn = {
 };
 
 const downloadBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 40,
-  borderRadius: 11,
+  borderRadius: 10,
   border: "none",
   background:
-    "linear-gradient(135deg,#16a34a,#22c55e)",
+    "linear-gradient(135deg,#059669,#10b981)",
   color: "#fff",
   WebkitTextFillColor: "#fff",
-  padding: "0 15px",
+  padding: "0 16px",
   fontWeight: 900,
   cursor: "pointer",
   boxShadow:
-    "0 7px 16px rgba(34,197,94,.18)",
+    "0 7px 16px rgba(5,150,105,.18)",
 };
 
 const warningBox = {
@@ -4800,19 +4804,17 @@ const searchInput = {
 };
 
 const clearBtn = {
-  appearance: "none",
-  WebkitAppearance: "none",
-  height: 37,
+  height: 38,
   borderRadius: 10,
-  border:
-    "1px solid rgba(var(--pf-fg-rgb),.12)",
+  border: "1px solid var(--pf-border)",
   background: "var(--pf-surface)",
   color: "var(--pf-text-strong)",
-  WebkitTextFillColor:
-    "var(--pf-text-strong)",
-  padding: "0 13px",
+  WebkitTextFillColor: "var(--pf-text-strong)",
+  padding: "0 14px",
   fontWeight: 850,
   cursor: "pointer",
+  boxShadow:
+    "0 4px 10px rgba(var(--pf-shadow-rgb),.04)",
 };
 
 const summaryGrid = {

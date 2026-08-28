@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.http.HttpMethod;
@@ -33,6 +34,7 @@ public class JwtAuthenticationFilter
     public static final String ACCESS_COOKIE = "ALSORG_ACCESS";
 
     private static final int MAX_JWT_LENGTH = 8192;
+    private static final int MAX_USERNAME_LENGTH = 180;
 
     private final UserRepository userRepository;
 
@@ -57,7 +59,17 @@ public class JwtAuthenticationFilter
 
         return "/api/auth/login".equals(path)
                 || "/api/auth/logout".equals(path)
-                || "/api/auth/csrf".equals(path);
+                || "/api/auth/csrf".equals(path)
+                || "/actuator/health".equals(path)
+                || (path != null
+                        && path.startsWith(
+                                "/actuator/health/"))
+                || (path != null
+                        && path.startsWith(
+                                "/api/assetflow/public/"))
+                || (path != null
+                        && path.startsWith(
+                                "/api/hrflow/public/"));
     }
 
     @Override
@@ -104,7 +116,8 @@ public class JwtAuthenticationFilter
                             claims);
 
             if (username == null
-                    || username.isBlank()) {
+                    || username.isBlank()
+                    || username.length() > MAX_USERNAME_LENGTH) {
 
                 handleInvalidUser(
                         request,
@@ -387,7 +400,8 @@ public class JwtAuthenticationFilter
                         "(?i)^ROLE_",
                         "")
                 .trim()
-                .toUpperCase();
+                .toUpperCase(
+                        Locale.ROOT);
     }
 
     private void writeJsonError(

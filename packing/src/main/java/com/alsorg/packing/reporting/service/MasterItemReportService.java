@@ -29,6 +29,10 @@ public class MasterItemReportService {
             int limit,
             int offset
     ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must be before or equal to 'to'");
+        }
+
         return repository.fetchMasterItems(
                 status,
                 search,
@@ -36,8 +40,8 @@ public class MasterItemReportService {
                 client,
                 from,
                 to,
-                limit,
-                offset
+                Math.min(Math.max(limit, 1), 1000),
+                Math.max(offset, 0)
         );
     }
 }

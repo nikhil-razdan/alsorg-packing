@@ -5,6 +5,7 @@ import com.alsorg.packing.hrflow.domain.HrDocumentType;
 import com.alsorg.packing.hrflow.dto.HrDocumentDtos;
 import com.alsorg.packing.hrflow.service.HrCandidateTokenService;
 import com.alsorg.packing.hrflow.service.HrDocumentService;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -64,7 +65,14 @@ public class HrPublicCandidateDocumentController {
                         .build()
         );
 
-        return ResponseEntity.ok().headers(headers).body(document.bytes());
+        byte[] bytes = document.bytes() == null ? new byte[0] : document.bytes();
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .contentLength(bytes.length)
+                .body(bytes);
     }
 
     private MediaType safeMediaType(String value) {

@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowQcInspectionRepository
@@ -15,8 +17,13 @@ public interface MatFlowQcInspectionRepository
 
     List<MatFlowQcInspection> findAllByOrderByCreatedAtDesc();
 
-    List<MatFlowQcInspection> findByStatusOrderByCreatedAtAsc(
-            QcInspectionStatus status);
+    Page<MatFlowQcInspection> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    List<MatFlowQcInspection> findByStatusOrderByCreatedAtAsc(QcInspectionStatus status);
+
+    Page<MatFlowQcInspection> findByStatusOrderByCreatedAtAsc(
+            QcInspectionStatus status,
+            Pageable pageable);
 
     Optional<MatFlowQcInspection> findBySourceTypeAndSourceLineId(
             QcSourceType sourceType,

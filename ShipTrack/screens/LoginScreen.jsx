@@ -80,16 +80,18 @@ export default function LoginScreen() {
         "Required",
         "Enter username"
       );
-
       return;
     }
 
-    if (!password.trim()) {
+    /*
+     * Do not trim the password sent to the backend. Spaces can be a legitimate
+     * part of a password. Only reject an actually empty input here.
+     */
+    if (!password) {
       Alert.alert(
         "Required",
         "Enter password"
       );
-
       return;
     }
 
@@ -109,8 +111,7 @@ export default function LoginScreen() {
         data?.accessToken ||
         data?.data?.token ||
         data?.data?.jwt ||
-        data?.data
-          ?.accessToken;
+        data?.data?.accessToken;
 
       const responseUser =
         data?.user ||
@@ -173,13 +174,8 @@ export default function LoginScreen() {
         cleanUsername;
 
       if (!token) {
-        console.log(
-          "Mobile login response without token:",
-          data
-        );
-
         throw new Error(
-          "Backend login succeeded, but mobile token was not returned. Check X-Client-Type mobile handling in AuthController."
+          "Backend login succeeded, but the ShipTrack bearer token was not returned. Deploy the paired AuthController/TrustedOriginFilter fix."
         );
       }
 
@@ -187,11 +183,6 @@ export default function LoginScreen() {
         !primaryRole ||
         responseRoles.length === 0
       ) {
-        console.log(
-          "Mobile login response without roles:",
-          data
-        );
-
         throw new Error(
           "Login succeeded, but no user role was returned."
         );
@@ -199,13 +190,10 @@ export default function LoginScreen() {
 
       await saveAuth({
         token,
-
         role:
           primaryRole,
-
         roles:
           responseRoles,
-
         username:
           finalUsername,
       });

@@ -16,8 +16,7 @@ import java.util.UUID;
         @Index(name = "idx_mf_transfer_line_order", columnList = "transfer_order_id"),
         @Index(name = "idx_mf_transfer_line_material", columnList = "material_id")
 })
-public class MatFlowTransferLine
-        extends MatFlowBaseEntity {
+public class MatFlowTransferLine extends MatFlowBaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "transfer_order_id", nullable = false)

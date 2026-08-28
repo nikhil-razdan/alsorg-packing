@@ -30,6 +30,9 @@ public class ClientMasterService {
     private static final int DEFAULT_SUGGESTION_LIMIT = 12;
     private static final int MAX_SUGGESTION_LIMIT = 25;
     private static final int MIN_SEARCH_LENGTH = 2;
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_SEARCH_LENGTH = 200;
+    private static final int MAX_ADDRESS_LENGTH = 2000;
 
     private final ClientMasterRepository clientMasterRepository;
 
@@ -44,6 +47,12 @@ public class ClientMasterService {
             Integer requestedLimit) {
 
         String normalizedQuery = normalizeName(query);
+
+        if (normalizedQuery.length() > MAX_SEARCH_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Client search is too long");
+        }
 
         /*
          * Important UX/performance rule:
@@ -88,16 +97,32 @@ public class ClientMasterService {
         int safePage = Math.max(0, page);
         int safeSize = Math.min(
                 Math.max(1, size),
-                200);
+                MAX_PAGE_SIZE);
 
         String cleanSearch = search == null
                 ? ""
                 : search.trim();
 
+        if (cleanSearch.length() > MAX_SEARCH_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Client search is too long");
+        }
+
         String cleanStatus = status == null
                 ? "ALL"
                 : status.trim()
                         .toUpperCase(Locale.ROOT);
+
+        if (!Set.of(
+                "ALL",
+                "ACTIVE",
+                "INACTIVE")
+                .contains(cleanStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Client status must be ALL, ACTIVE or INACTIVE");
+        }
 
         Pageable pageable = PageRequest.of(
                 safePage,
@@ -168,8 +193,7 @@ public class ClientMasterService {
         ClientMaster client = new ClientMaster();
         client.setName(name);
         client.setNormalizedName(normalizedName);
-        client.setAddress(cleanOptional(
-                request.address()));
+        client.setAddress(cleanAddress(request.address()));
         client.setActive(
                 request.active() == null ||
                         request.active());
@@ -222,8 +246,7 @@ public class ClientMasterService {
 
         client.setName(name);
         client.setNormalizedName(normalizedName);
-        client.setAddress(cleanOptional(
-                request.address()));
+        client.setAddress(cleanAddress(request.address()));
 
         if (request.active() != null) {
             client.setActive(request.active());
@@ -337,6 +360,20 @@ public class ClientMasterService {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Client name is too long");
+        }
+
+        return clean;
+    }
+
+
+    private String cleanAddress(
+            String value) {
+        String clean = cleanOptional(value);
+
+        if (clean != null && clean.length() > MAX_ADDRESS_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Client address is too long");
         }
 
         return clean;

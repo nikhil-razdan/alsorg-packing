@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -103,6 +104,10 @@ public class User {
 
         public Long getId() {
                 return id;
+        }
+
+        public void setId(Long id) {
+                this.id = id;
         }
 
         public String getUsername() {
@@ -385,7 +390,7 @@ public class User {
 
                 return clean == null
                                 ? null
-                                : clean.toUpperCase();
+                                : clean.toUpperCase(Locale.ROOT);
         }
 
         private static String cleanText(

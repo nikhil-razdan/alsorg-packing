@@ -88,8 +88,15 @@ export default function RequireModule({
 		normalizedModuleKey === MODULE_KEYS.HRFLOW &&
 		!ordinaryAccess;
 
+	const sessionKey = String(
+		user?.id ||
+		user?.username ||
+		""
+	);
+
 	const [hrGrantState, setHrGrantState] =
 		React.useState({
+			sessionKey: "",
 			loading: false,
 			allowed: false,
 		});
@@ -103,6 +110,7 @@ export default function RequireModule({
 			!requiresHrGrantCheck
 		) {
 			setHrGrantState({
+				sessionKey,
 				loading: false,
 				allowed: false,
 			});
@@ -113,6 +121,7 @@ export default function RequireModule({
 		}
 
 		setHrGrantState({
+			sessionKey,
 			loading: true,
 			allowed: false,
 		});
@@ -123,6 +132,7 @@ export default function RequireModule({
 				if (!active) return;
 
 				setHrGrantState({
+					sessionKey,
 					loading: false,
 					allowed:
 						hasHrFlowBackendAccess(
@@ -134,6 +144,7 @@ export default function RequireModule({
 				if (!active) return;
 
 				setHrGrantState({
+					sessionKey,
 					loading: false,
 					allowed: false,
 				});
@@ -146,7 +157,7 @@ export default function RequireModule({
 		authLoading,
 		isLoggedIn,
 		requiresHrGrantCheck,
-		user?.username,
+		sessionKey,
 	]);
 
 	if (authLoading) {
@@ -161,13 +172,24 @@ export default function RequireModule({
 				state={{
 					from:
 						location.pathname +
-						location.search,
+						location.search +
+						location.hash,
 				}}
 			/>
 		);
 	}
 
-	if (requiresHrGrantCheck && hrGrantState.loading) {
+	const hrGrantReady =
+		hrGrantState.sessionKey ===
+		sessionKey;
+
+	if (
+		requiresHrGrantCheck &&
+		(
+			!hrGrantReady ||
+			hrGrantState.loading
+		)
+	) {
 		return null;
 	}
 
@@ -188,7 +210,8 @@ export default function RequireModule({
 						normalizedModuleKey || moduleKey,
 					from:
 						location.pathname +
-						location.search,
+						location.search +
+						location.hash,
 				}}
 			/>
 		);

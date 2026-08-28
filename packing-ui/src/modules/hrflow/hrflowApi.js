@@ -1,4 +1,4 @@
-import API from "../../services/api";
+import API, { publicApiFetch } from "../../services/api";
 
 const BASE = "/hrflow";
 
@@ -33,6 +33,62 @@ const styledFormKey = (formKey, style) => {
 const downloadBlob = async (requestPromise) => {
 	const response = await requestPromise;
 	return response;
+};
+
+const parsePublicJson = async (response) => {
+	const text = await response.text();
+	if (!text) return null;
+	try {
+		return JSON.parse(text);
+	} catch {
+		return text;
+	}
+};
+
+/*
+ * Candidate and onboarding links are token-authenticated public HRFlow flows,
+ * not FlowSuite-session flows. Use the credential-free native transport so an
+ * unrelated browser login cookie is never attached and a bad/expired public
+ * token cannot mutate the ordinary authenticated SPA session state.
+ */
+const publicRequest = async (path, { method = "GET", body, responseType = "json" } = {}) => {
+	const headers = { Accept: responseType === "blob" ? "application/octet-stream,application/pdf,*/*" : "application/json" };
+	let requestBody = body;
+
+	if (body !== undefined && body !== null && !(body instanceof FormData)) {
+		headers["Content-Type"] = "application/json";
+		requestBody = JSON.stringify(body);
+	}
+
+	const response = await publicApiFetch(`${BASE}${path}`, {
+		method,
+		headers,
+		body: requestBody,
+	});
+
+	const responseData = responseType === "blob"
+		? await response.blob()
+		: await parsePublicJson(response);
+
+	const compatibleResponse = {
+		data: responseData,
+		status: response.status,
+		headers: response.headers,
+	};
+
+	if (!response.ok) {
+		let message = `Request failed (${response.status})`;
+		if (responseType !== "blob") {
+			message = (responseData && typeof responseData === "object" && (responseData.message || responseData.error))
+				|| (typeof responseData === "string" && responseData)
+				|| message;
+		}
+		const error = new Error(message);
+		error.response = compatibleResponse;
+		throw error;
+	}
+
+	return compatibleResponse;
 };
 
 const hrflowApi = {
@@ -150,55 +206,55 @@ const hrflowApi = {
 		),
 
 	publicGetApplication: (rawToken) =>
-		API.get(`${BASE}/public/applications/${token(rawToken)}`),
+		publicRequest(`/public/applications/${token(rawToken)}`),
 	publicSaveApplication: (rawToken, body) =>
-		API.put(`${BASE}/public/applications/${token(rawToken)}`, body),
+		publicRequest(`/public/applications/${token(rawToken)}`, { method: "PUT", body }),
 	publicSubmitApplication: (rawToken, body) =>
-		API.post(`${BASE}/public/applications/${token(rawToken)}/submit`, body),
+		publicRequest(`/public/applications/${token(rawToken)}/submit`, { method: "POST", body }),
 	publicDownloadCandidateForm: (rawToken, formKey, style) =>
 		downloadBlob(
-			API.get(`${BASE}/public/applications/${token(rawToken)}/form-pdf/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
+			publicRequest(`/public/applications/${token(rawToken)}/form-pdf/${id(styledFormKey(formKey, style), "Form key")}`, { responseType: "blob" })
 		),
 	publicListDocuments: (rawToken) =>
-		API.get(`${BASE}/public/applications/${token(rawToken)}/documents`),
+		publicRequest(`/public/applications/${token(rawToken)}/documents`),
 	publicUploadDocument: (rawToken, { documentType, remarks, file }) => {
 		const form = new FormData();
 		form.append("documentType", documentType);
 		if (String(remarks || "").trim()) form.append("remarks", String(remarks).trim());
 		form.append("file", file);
-		return API.post(
-			`${BASE}/public/applications/${token(rawToken)}/documents`,
-			form
-		);
+		return publicRequest(`/public/applications/${token(rawToken)}/documents`, {
+			method: "POST",
+			body: form,
+		});
 	},
 	publicDownloadDocument: (rawToken, documentId) =>
 		downloadBlob(
-			API.get(
-				`${BASE}/public/applications/${token(rawToken)}/documents/${id(documentId, "Document ID")}/download`,
+			publicRequest(
+				`/public/applications/${token(rawToken)}/documents/${id(documentId, "Document ID")}/download`,
 				{ responseType: "blob" }
 			)
 		),
 
 	publicOnboardingPortal: (rawToken) =>
-		API.get(`${BASE}/public/onboarding/${token(rawToken)}`),
+		publicRequest(`/public/onboarding/${token(rawToken)}`),
 	publicDownloadOnboardingForm: (rawToken, formKey) =>
 		downloadBlob(
-			API.get(`${BASE}/public/onboarding/${token(rawToken)}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
+			publicRequest(`/public/onboarding/${token(rawToken)}/form-pdf/${id(formKey, "Form key")}`, { responseType: "blob" })
 		),
 	publicAcknowledgeJoining: (rawToken) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/joining-report/acknowledge`),
+		publicRequest(`/public/onboarding/${token(rawToken)}/joining-report/acknowledge`, { method: "POST" }),
 	publicAcknowledgePolicy: (rawToken, body) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/policy/acknowledge`, body),
+		publicRequest(`/public/onboarding/${token(rawToken)}/policy/acknowledge`, { method: "POST", body }),
 	publicAcceptNda: (rawToken, body) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/nda/accept`, body),
+		publicRequest(`/public/onboarding/${token(rawToken)}/nda/accept`, { method: "POST", body }),
 	publicAcceptDeclaration: (rawToken, body) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/declaration/accept`, body),
+		publicRequest(`/public/onboarding/${token(rawToken)}/declaration/accept`, { method: "POST", body }),
 	publicAcknowledgeOrientation: (rawToken, body) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/orientation/acknowledge`, body),
+		publicRequest(`/public/onboarding/${token(rawToken)}/orientation/acknowledge`, { method: "POST", body }),
 	publicFeedbackQuestions: (rawToken) =>
-		API.get(`${BASE}/public/onboarding/${token(rawToken)}/feedback/questions`),
+		publicRequest(`/public/onboarding/${token(rawToken)}/feedback/questions`),
 	publicSubmitFeedback: (rawToken, body) =>
-		API.post(`${BASE}/public/onboarding/${token(rawToken)}/feedback`, body),
+		publicRequest(`/public/onboarding/${token(rawToken)}/feedback`, { method: "POST", body }),
 };
 
 export default hrflowApi;

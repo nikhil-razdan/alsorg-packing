@@ -178,10 +178,50 @@ export function MatFlowQcPage() {
         try {
             const response = await matflowApi.getQcPhoto(row.id);
             const blob = response?.data;
-            if (!(blob instanceof Blob)) throw new Error("QC picture could not be loaded.");
-            const url = URL.createObjectURL(blob);
-            window.open(url, "_blank", "noopener,noreferrer");
-            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+            if (
+                !(blob instanceof Blob) ||
+                blob.size === 0
+            ) {
+                throw new Error(
+                    "QC picture could not be loaded."
+                );
+            }
+
+            const url =
+                URL.createObjectURL(blob);
+
+            const opened =
+                window.open(
+                    url,
+                    "_blank",
+                    "noopener,noreferrer"
+                );
+
+            if (!opened) {
+                const anchor =
+                    document.createElement("a");
+
+                anchor.href = url;
+                anchor.target = "_blank";
+                anchor.rel =
+                    "noopener noreferrer";
+
+                document.body.appendChild(
+                    anchor
+                );
+
+                anchor.click();
+                anchor.remove();
+            }
+
+            window.setTimeout(
+                () =>
+                    URL.revokeObjectURL(
+                        url
+                    ),
+                60_000
+            );
         } catch (requestError) {
             setError(readMatFlowError(requestError, requestError?.message || "Unable to open the QC picture."));
         } finally {

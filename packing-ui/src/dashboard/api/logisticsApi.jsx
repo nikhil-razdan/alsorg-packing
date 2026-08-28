@@ -1,41 +1,7 @@
 import { API_BASE_URL } from "../../config";
+import { secureFetch } from "../../services/api";
 
-const getStoredToken = () => {
-  const possibleKeys = [
-    "token",
-    "authToken",
-    "jwt",
-    "accessToken",
-  ];
-
-  for (const key of possibleKeys) {
-    const value = localStorage.getItem(key);
-
-    if (value && value.trim()) {
-      const token = value.trim();
-
-      return token.startsWith("Bearer ")
-        ? token
-        : `Bearer ${token}`;
-    }
-  }
-
-  return "";
-};
-
-const buildAuthHeaders = (extra = {}) => {
-  const headers = {
-    ...extra,
-  };
-
-  const token = getStoredToken();
-
-  if (token && !headers.Authorization) {
-    headers.Authorization = token;
-  }
-
-  return headers;
-};
+const buildAuthHeaders = (extra = {}) => ({ ...extra });
 
 const requestJson = async (
   path,
@@ -58,7 +24,7 @@ const requestJson = async (
     finalHeaders["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await secureFetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
     headers: buildAuthHeaders(finalHeaders),
@@ -98,7 +64,7 @@ const requestBlob = async (
     finalHeaders["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await secureFetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
     headers: buildAuthHeaders(finalHeaders),
@@ -566,12 +532,206 @@ export async function createDispatchChallan({
  * Do not redirect these functions to /api/logistics/trips.
  */
 
-export async function fetchDispatchChallans() {
+export async function fetchDispatchChallans({
+  pageSize = 100,
+} = {}) {
+  /*
+   * Compatibility helper for analytics/history screens that still need the
+   * complete challan set. Never fall back to the legacy unbounded endpoint.
+   * Read the server-side paged search contract sequentially so each database
+   * request remains bounded while preserving complete results for existing
+   * reports until dedicated aggregate/history APIs are introduced.
+   */
+  const safePageSize = Math.min(
+    100,
+    Math.max(1, Number(pageSize) || 100)
+  );
+
+  const rows = [];
+  let page = 0;
+  let previousPage = -1;
+
+  while (true) {
+    const result =
+      await fetchDispatchChallansPage({
+        page,
+        size: safePageSize,
+      });
+
+    const pageRows =
+      Array.isArray(result?.rows)
+        ? result.rows
+        : [];
+
+    rows.push(...pageRows);
+
+    if (!result?.hasNext) {
+      return rows;
+    }
+
+    if (pageRows.length === 0) {
+      throw new Error(
+        "Dispatch challan paging stopped because the server returned an empty page with more history still indicated"
+      );
+    }
+
+    const nextPage =
+      Math.max(
+        page + 1,
+        Number(result?.pageNumber || page) + 1
+      );
+
+    if (nextPage <= page || nextPage === previousPage) {
+      throw new Error(
+        "Dispatch challan paging did not advance"
+      );
+    }
+
+    previousPage = page;
+    page = nextPage;
+  }
+}
+
+export async function fetchDispatchChallansPage({
+  page = 0,
+  size = 50,
+} = {}) {
+  const safePage =
+    Math.max(0, Number(page) || 0);
+
+  const safeSize =
+    Math.min(
+      100,
+      Math.max(1, Number(size) || 50)
+    );
+
+  const params =
+    new URLSearchParams({
+      page: String(safePage),
+      size: String(safeSize),
+    });
+
+  const response =
+    await secureFetch(
+      `${API_BASE_URL}/api/dispatched/challans/search?${params.toString()}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+  if (!response.ok) {
+    const text =
+      await response.text();
+
+    throw new Error(
+      text ||
+      "Failed to fetch dispatch challan history"
+    );
+  }
+
+  const payload =
+    await response.json();
+
+  const rows =
+    Array.isArray(payload)
+      ? payload
+      : [];
+
+  const readNumberHeader =
+    (name, fallback) => {
+      const value =
+        Number(
+          response.headers.get(name)
+        );
+
+      return Number.isFinite(value)
+        ? value
+        : fallback;
+    };
+
+  const totalElements =
+    Math.max(
+      0,
+      readNumberHeader(
+        "X-Total-Elements",
+        rows.length
+      )
+    );
+
+  const totalPages =
+    Math.max(
+      0,
+      readNumberHeader(
+        "X-Total-Pages",
+        totalElements > 0 ? 1 : 0
+      )
+    );
+
+  const pageNumber =
+    Math.max(
+      0,
+      readNumberHeader(
+        "X-Page-Number",
+        safePage
+      )
+    );
+
+  const pageSize =
+    Math.max(
+      1,
+      readNumberHeader(
+        "X-Page-Size",
+        safeSize
+      )
+    );
+
+  const hasNextHeader =
+    String(
+      response.headers.get(
+        "X-Has-Next"
+      ) || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  return {
+    rows,
+    totalElements,
+    totalPages,
+    pageNumber,
+    pageSize,
+    hasNext:
+      hasNextHeader === "true" ||
+      (
+        totalPages > 0 &&
+        pageNumber + 1 < totalPages
+      ),
+  };
+}
+
+export async function fetchDispatchChallanDetail(
+  challanNumber
+) {
+  const cleanNumber =
+    String(challanNumber || "").trim();
+
+  if (!cleanNumber) {
+    throw new Error(
+      "Challan number is required"
+    );
+  }
+
   return requestJson(
-    "/api/dispatched/challans",
+    `/api/dispatched/challans/${encodeURIComponent(
+      cleanNumber
+    )}`,
     {
       errorMessage:
-        "Failed to fetch dispatch challans",
+        "Failed to load dispatch challan",
     }
   );
 }
@@ -717,7 +877,9 @@ export async function downloadTripChallan(
   a.click();
   a.remove();
 
-  window.URL.revokeObjectURL(url);
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 10000);
 
   return {
     filename,

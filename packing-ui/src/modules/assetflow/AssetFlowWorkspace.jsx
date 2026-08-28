@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import assetFlowApi from "./assetFlowApi";
 import { createQrMatrix } from "./assetQr";
@@ -159,30 +159,71 @@ const EMPTY_PLAN = {
   active: true,
 };
 
+function parseBusinessDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const copy = new Date(value.getTime());
+    return Number.isNaN(copy.getTime()) ? null : copy;
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const localMatch = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/
+  );
+
+  // Spring LocalDate / LocalDateTime values intentionally represent business-local
+  // wall-clock time. Build them from components instead of allowing Date.parse()
+  // to reinterpret a date-only value as UTC.
+  if (localMatch) {
+    const [, year, month, day, hour = "0", minute = "0", second = "0", millis = "0"] = localMatch;
+    const date = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+      Number(String(millis).padEnd(3, "0"))
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
 function dateInput(value) {
-  const d = value instanceof Date ? value : value ? new Date(value) : null;
-  if (!d || Number.isNaN(d.getTime())) return "";
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
+  const d = parseBusinessDate(value);
+  if (!d) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function dateTimeInput(value) {
-  const d = value ? new Date(value) : null;
-  if (!d || Number.isNaN(d.getTime())) return "";
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
+  const d = parseBusinessDate(value);
+  if (!d) return "";
+  return `${dateInput(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 function fmtDate(value, withTime = false) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
+  const d = parseBusinessDate(value);
+  if (!d) return value ? String(value) : "—";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   }).format(d);
+}
+
+function isPastBusinessDate(value) {
+  const d = parseBusinessDate(value);
+  return Boolean(d && d.getTime() < Date.now());
 }
 
 function fmtNumber(value, digits = 0) {
@@ -243,23 +284,57 @@ function errorText(error) {
   return error?.response?.data?.message || error?.response?.data?.error || error?.message || "Something went wrong";
 }
 
+function useDebouncedValue(value, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = globalThis.setTimeout(() => setDebounced(value), delay);
+    return () => globalThis.clearTimeout(timer);
+  }, [value, delay]);
+
+  return debounced;
+}
+
 function useAsync(fn, deps = []) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
+
   const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: null }));
+    const requestId = ++requestIdRef.current;
+
+    if (mountedRef.current) {
+      setState((current) => ({ ...current, loading: true, error: null }));
+    }
+
     try {
       const data = await fn();
-      setState({ loading: false, data, error: null });
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setState({ loading: false, data, error: null });
+      }
       return data;
     } catch (error) {
-      setState({ loading: false, data: null, error });
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        setState({ loading: false, data: null, error });
+      }
       throw error;
     }
+    // The caller supplies the dependency contract for fn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
+
   useEffect(() => {
     load().catch(() => {});
   }, [load]);
+
   return { ...state, reload: load };
 }
 
@@ -364,10 +439,11 @@ function ErrorBox({ error, onRetry }) {
 
 function AssetFlowWorkspaceContent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { roles = [], username = "", user, logout } = useAuth();
   const { isDark, toggleMode } = useAssetFlowTheme();
   const [collapsed, setCollapsed] = useState(false);
-  const query = useMemo(() => new URLSearchParams(window.location.search), []);
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const qrToken = query.get("asset") || query.get("qr") || "";
   const qrMode = String(query.get("mode") || "").toLowerCase() === "report" && Boolean(qrToken);
 
@@ -956,13 +1032,42 @@ function WorkOrders({ plantCode, serviceDomain, notify, plants, canCoordinate, c
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
+  const debouncedSearch = useDebouncedValue(search);
   const state = useAsync(
-    () => assetFlowApi.workOrders({ plantCode, serviceDomain: serviceDomain || undefined, search, priority, type, status, size: 1000 }),
-    [plantCode, serviceDomain, search, priority, type, status]
+    () => assetFlowApi.workOrders({
+      plantCode,
+      serviceDomain: serviceDomain || undefined,
+      search: debouncedSearch,
+      priority,
+      type,
+      status,
+      // The current backend board contract is capped at 1,000 records. True
+      // cursor/server pagination will be completed in the backend phase so
+      // Kanban counts are not made inaccurate by a frontend-only truncation.
+      size: 1000,
+    }),
+    [plantCode, serviceDomain, debouncedSearch, priority, type, status]
   );
-  const equipment = useAsync(() => assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined }), [plantCode, serviceDomain]);
-  const teams = useAsync(() => assetFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
-  const users = useAsync(() => assetFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+
+  const needsReferenceData = createOpen || Boolean(selectedId);
+  const equipment = useAsync(
+    () => needsReferenceData
+      ? assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined })
+      : Promise.resolve({ items: [] }),
+    [needsReferenceData, plantCode, serviceDomain]
+  );
+  const teams = useAsync(
+    () => needsReferenceData
+      ? assetFlowApi.teams(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needsReferenceData, plantCode, serviceDomain]
+  );
+  const users = useAsync(
+    () => needsReferenceData
+      ? assetFlowApi.users(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needsReferenceData, plantCode, serviceDomain]
+  );
 
   const items = state.data?.items || [];
   const byStatus = useMemo(() => {
@@ -1420,9 +1525,30 @@ function Equipment({ plantCode, serviceDomain, notify, plants, canManageMasters,
   const [editAsset, setEditAsset] = useState(null);
   const [editLoadingId, setEditLoadingId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const state = useAsync(() => assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined, status, search }), [plantCode, serviceDomain, status, search]);
-  const teams = useAsync(() => assetFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
-  const users = useAsync(() => assetFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+  const debouncedSearch = useDebouncedValue(search);
+  const state = useAsync(
+    () => assetFlowApi.equipment({
+      plantCode,
+      serviceDomain: serviceDomain || undefined,
+      status,
+      search: debouncedSearch,
+    }),
+    [plantCode, serviceDomain, status, debouncedSearch]
+  );
+
+  const needsEditorReferences = createOpen || Boolean(editAsset);
+  const teams = useAsync(
+    () => needsEditorReferences
+      ? assetFlowApi.teams(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needsEditorReferences, plantCode, serviceDomain]
+  );
+  const users = useAsync(
+    () => needsEditorReferences
+      ? assetFlowApi.users(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needsEditorReferences, plantCode, serviceDomain]
+  );
 
   const saveCreate = async (payload) => {
     try {
@@ -1709,13 +1835,32 @@ function EquipmentForm({ mode = "create", equipment = null, onClose, onSave, tea
   );
 }
 
+function sameOriginAppUrl(path) {
+  if (typeof window === "undefined") return "";
+  const value = String(path || "").trim();
+  if (!value.startsWith("/") || value.startsWith("//")) return "";
+
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function openSameOriginAppUrl(url) {
+  if (!url || typeof window === "undefined") return;
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (opened) opened.opener = null;
+}
+
 function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
   const state = useAsync(() => assetFlowApi.equipmentOne(id), [id]);
   if (state.loading) return <div className="af-drawer"><Loading /></div>;
   if (state.error) return <div className="af-drawer"><ErrorBox error={state.error} onRetry={state.reload} /></div>;
   const e = state.data;
   const h = e.health || {};
-  const qrUrl = e.qrPath && typeof window !== "undefined" ? `${window.location.origin}${e.qrPath}` : "";
+  const qrUrl = sameOriginAppUrl(e.qrPath);
 
   const copyQrLink = async () => {
     if (!qrUrl) return;
@@ -1730,7 +1875,7 @@ function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
   const rotateQr = async () => {
     if (!window.confirm("Rotate this asset QR token? The old QR label/link will immediately stop working.")) return;
     try {
-      await assetFlowApi.rotateEquipmentQr(e.id, { version: e.version });
+      await assetFlowApi.rotateEquipmentQr(e.id);
       notify("Asset QR token rotated. Print a replacement QR label.");
       state.reload();
     } catch (error) { notify(errorText(error), "error"); }
@@ -1780,7 +1925,7 @@ function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
             <div className="af-inline-actions">
               <Button onClick={copyQrLink}>Copy QR link</Button>
               <Button onClick={() => window.print()}>Print QR label</Button>
-              {qrUrl && <Button onClick={() => window.open(qrUrl, "_blank", "noopener,noreferrer")}>Test complaint view</Button>}
+              {qrUrl && <Button onClick={() => openSameOriginAppUrl(qrUrl)}>Test complaint view</Button>}
               {canEditAssets && <Button onClick={rotateQr}>Rotate token</Button>}
             </div>
             <small>QR is generated locally inside the browser; no asset token is sent to an external QR service. Rotating the token invalidates every previously printed label for this asset.</small>
@@ -1825,14 +1970,42 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
   const [planOpen, setPlanOpen] = useState(false);
   const [reporterOpen, setReporterOpen] = useState(null);
 
-  const teams = useAsync(() => assetFlowApi.teams(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
-  const reporters = useAsync(
-    () => isAdmin ? assetFlowApi.reporters(plantCode, false) : Promise.resolve([]),
-    [plantCode, isAdmin]
+  const needTeams = section === "teams" || section === "plans" || teamOpen || planOpen;
+  const needReporters = isAdmin && section === "reporters";
+  const needPlans = section === "plans";
+  const needEquipment = section === "plans" || planOpen;
+  const needUsers = teamOpen || planOpen;
+
+  const teams = useAsync(
+    () => needTeams
+      ? assetFlowApi.teams(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needTeams, plantCode, serviceDomain]
   );
-  const plans = useAsync(() => assetFlowApi.plans(plantCode, serviceDomain || undefined, false), [plantCode, serviceDomain]);
-  const equipment = useAsync(() => assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined }), [plantCode, serviceDomain]);
-  const users = useAsync(() => assetFlowApi.users(plantCode, serviceDomain || undefined), [plantCode, serviceDomain]);
+  const reporters = useAsync(
+    () => needReporters
+      ? assetFlowApi.reporters(plantCode, false)
+      : Promise.resolve([]),
+    [needReporters, plantCode]
+  );
+  const plans = useAsync(
+    () => needPlans
+      ? assetFlowApi.plans(plantCode, serviceDomain || undefined, false)
+      : Promise.resolve([]),
+    [needPlans, plantCode, serviceDomain]
+  );
+  const equipment = useAsync(
+    () => needEquipment
+      ? assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined })
+      : Promise.resolve({ items: [] }),
+    [needEquipment, plantCode, serviceDomain]
+  );
+  const users = useAsync(
+    () => needUsers
+      ? assetFlowApi.users(plantCode, serviceDomain || undefined)
+      : Promise.resolve([]),
+    [needUsers, plantCode, serviceDomain]
+  );
 
   const generate = async () => {
     try {
@@ -1843,8 +2016,11 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
   };
 
   const copyDeskLink = async (team) => {
-    if (!team?.requestPath || typeof window === "undefined") return;
-    const value = `${window.location.origin}${team.requestPath}`;
+    const value = sameOriginAppUrl(team?.requestPath);
+    if (!value) {
+      notify("The service-desk request link returned by the server is invalid.", "error");
+      return;
+    }
     try {
       await navigator.clipboard.writeText(value);
       notify(`${SERVICE_DOMAIN_LABELS[team.serviceDomain] || "Service"} request link copied`);
@@ -1894,9 +2070,9 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
                 <p>{team.plantCode || "Company-wide"}</p>
                 <span>Head / Lead: {team.lead || "Not assigned"}</span>
                 <div className="af-chip-row">{(team.members || []).slice(0, 10).map((member) => <Badge key={member}>{member}</Badge>)}</div>
-                {team.publicReportingEnabled && team.requestPath && (
+                {team.publicReportingEnabled && sameOriginAppUrl(team.requestPath) && (
                   <div className="af-service-desk-mini">
-                    <MachineQr value={`${window.location.origin}${team.requestPath}`} size={82} />
+                    <MachineQr value={sameOriginAppUrl(team.requestPath)} size={82} />
                     <div>
                       <strong>{SERVICE_DOMAIN_LABELS[team.serviceDomain] || human(team.serviceDomain)} Service Desk QR</strong>
                       <span>{team.serviceDomain === "IT" ? "LAN, internet, PC/laptop, printer, software and IT infrastructure requests route to IT only." : "Machine, electrical, lighting, AC/HVAC, utilities and facility requests route to Machine Maintenance only."}</span>
@@ -1957,7 +2133,7 @@ function Configuration({ plantCode, serviceDomain, notify, plants, isAdmin }) {
                   <td>{plan.equipmentName}</td>
                   <td><strong>{plan.title}</strong><small>{plan.checklistText ? "Checklist configured" : "No checklist"}</small></td>
                   <td>Every {plan.intervalDays}d<small>Generate {plan.leadDays}d before</small></td>
-                  <td className={cx(new Date(plan.nextDueDate) < new Date() && "af-danger-text")}>{fmtDate(plan.nextDueDate)}<small>{plan.scheduledTime ? String(plan.scheduledTime).slice(0, 5) : "Time not set"}</small></td>
+                  <td className={cx(isPastBusinessDate(plan.nextDueDate) && "af-danger-text")}>{fmtDate(plan.nextDueDate)}<small>{plan.scheduledTime ? String(plan.scheduledTime).slice(0, 5) : "Time not set"}</small></td>
                   <td>{fmtNumber(plan.estimatedMinutes)} min</td>
                   <td>{plan.responsible || plan.teamName || "Asset/domain default"}</td>
                   <td>{plan.requiresShutdown ? <Badge tone="amber">Planned shutdown</Badge> : <Badge>Running access</Badge>}</td>

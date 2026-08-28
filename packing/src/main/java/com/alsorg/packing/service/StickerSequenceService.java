@@ -1,22 +1,23 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Locale;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.sticker.StickerSequence;
 import com.alsorg.packing.repository.StickerSequenceRepository;
 
 @Service
 public class StickerSequenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(StickerSequenceService.class);
+
     private static final int SEQUENCE_ROW_ID = 1;
-
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
-
     private static final String STICKER_PREFIX = "ALS-SNO";
 
     private final StickerSequenceRepository repository;
@@ -28,70 +29,41 @@ public class StickerSequenceService {
 
     @Transactional
     public String generateNextStickerNumber() {
-
-        /*
-         * Use the application timezone instead of the
-         * hosting server's default timezone.
-         */
-        int currentYear = LocalDate.now(APP_ZONE)
+        int currentYear = LocalDate.now(TimeZoneConfig.APP_ZONE)
                 .getYear();
 
         /*
-         * Normally the migration creates this row.
-         *
-         * This remains as a defensive fallback and is safe
-         * under simultaneous requests because PostgreSQL
-         * uses ON CONFLICT DO NOTHING.
+         * Defensive, concurrency-safe initialization. The database row is normally
+         * created by migration/startup initialization, but ON CONFLICT DO NOTHING
+         * keeps first-use safe too.
          */
         repository.ensureSequenceRowExists(
                 SEQUENCE_ROW_ID,
                 currentYear);
 
-        /*
-         * Hard database lock prevents duplicate sequence values.
-         */
         StickerSequence sequence = repository.findByIdForUpdate(
-                SEQUENCE_ROW_ID)
+                        SEQUENCE_ROW_ID)
                 .orElseThrow(() -> new IllegalStateException(
                         "Sticker sequence row could not be initialized"));
 
         Integer storedYear = sequence.getSequenceYear();
-
         Long storedValue = sequence.getCurrentValue();
 
         /*
-         * Backward-compatible handling for an older database row.
-         *
-         * When sequenceYear is NULL, preserve the current counter.
-         * This means your existing value such as 10147 is not reset.
+         * Preserve a legacy counter when sequenceYear was historically NULL.
+         * Only a confirmed calendar-year transition resets the counter.
          */
         if (storedYear == null) {
-
-            sequence.setSequenceYear(
-                    currentYear);
-
+            sequence.setSequenceYear(currentYear);
         } else if (storedYear.intValue() != currentYear) {
-
-            /*
-             * The calendar year changed.
-             *
-             * Reset to zero here so the first generated number
-             * in the new year becomes 000001.
-             */
-            sequence.setSequenceYear(
-                    currentYear);
-
-            sequence.setCurrentValue(
-                    0L);
-
+            sequence.setSequenceYear(currentYear);
+            sequence.setCurrentValue(0L);
             storedValue = 0L;
         }
 
         long safeCurrentValue = storedValue == null
                 ? 0L
-                : Math.max(
-                        storedValue,
-                        0L);
+                : Math.max(storedValue, 0L);
 
         final long nextValue;
 
@@ -105,30 +77,10 @@ public class StickerSequenceService {
                     exception);
         }
 
-        sequence.setCurrentValue(
-                nextValue);
+        sequence.setCurrentValue(nextValue);
+        sequence.setSequenceYear(currentYear);
+        repository.save(sequence);
 
-        sequence.setSequenceYear(
-                currentYear);
-
-        /*
-         * Keep the explicit save from your existing implementation.
-         * The row lock remains held until the surrounding transaction
-         * completes.
-         */
-        repository.save(
-                sequence);
-
-        /*
-         * %06d means minimum six digits, not maximum six digits.
-         *
-         * It automatically expands:
-         *
-         * 1 -> 000001
-         * 10147 -> 010147
-         * 999999 -> 999999
-         * 1000000 -> 1000000
-         */
         String stickerNumber = String.format(
                 Locale.ROOT,
                 "%s-%d-%06d",
@@ -136,9 +88,7 @@ public class StickerSequenceService {
                 currentYear,
                 nextValue);
 
-        System.out.println(
-                ">>> GENERATED STICKER NUMBER: "
-                        + stickerNumber);
+        log.debug("Generated sticker number {}", stickerNumber);
 
         return stickerNumber;
     }

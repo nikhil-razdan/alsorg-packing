@@ -4,7 +4,6 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -17,6 +16,7 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.qrcodegenerator.QRCodeGenerator;
 import com.alsorg.packing.repository.ZohoStickerRepository;
@@ -33,6 +33,7 @@ public class GatePassPdfService {
     private static final float CONTENT_WIDTH = PAGE_WIDTH - (MARGIN * 2);
 
     private static final int ROWS_PER_PAGE = 18;
+    private static final int MAX_GATE_PASS_ITEMS = 2000;
 
     private final ZohoStickerRepository stickerRepo;
 
@@ -56,6 +57,11 @@ public class GatePassPdfService {
 
         if (items == null || items.isEmpty()) {
             throw new RuntimeException("No items found for gate pass");
+        }
+
+        if (items.size() > MAX_GATE_PASS_ITEMS) {
+            throw new IllegalArgumentException(
+                    "A gate pass cannot contain more than " + MAX_GATE_PASS_ITEMS + " items");
         }
 
         try (PDDocument doc = new PDDocument()) {
@@ -144,9 +150,7 @@ public class GatePassPdfService {
                 safe(first.getGatePassNumber());
 
         String date =
-                LocalDate.now(
-                        ZoneId.of("Asia/Kolkata")
-                ).format(
+                LocalDate.now(TimeZoneConfig.APP_ZONE).format(
                         DateTimeFormatter.ofPattern("dd-MM-yyyy")
                 );
 

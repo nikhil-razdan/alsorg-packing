@@ -1,7 +1,6 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -13,6 +12,7 @@ import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.admin.AdminPacketRollbackPreviewResponse;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.DecisionRequest;
 import com.alsorg.packing.controller.dto.admin.PacketLifecycleRequestDtos.DecisionResponse;
@@ -42,8 +43,9 @@ import com.alsorg.packing.repository.StickerHistoryRepository;
 @Service
 public class PacketLifecycleChangeRequestService {
 
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
     private static final int MAX_BATCH_SIZE = 200;
+    private static final int MAX_PENDING_PAGE_SIZE = 100;
     private static final int MAX_REASON_LENGTH = 1000;
     private static final int MAX_DECISION_REASON_LENGTH = 500;
 
@@ -250,10 +252,13 @@ public class PacketLifecycleChangeRequestService {
             User user) {
         requireAdmin(user);
 
+        Pageable safePageable = boundedPendingPageable(
+                pageable);
+
         return requestRepository
                 .findByStatusOrderByRequestedAtAscIdAsc(
                         PacketLifecycleChangeRequestStatus.PENDING,
-                        pageable)
+                        safePageable)
                 .map(this::toResponse);
     }
 
@@ -535,6 +540,25 @@ public class PacketLifecycleChangeRequestService {
             throw new AccessDeniedException(
                     "You can request a lifecycle change only from your own Generated History");
         }
+    }
+
+    private Pageable boundedPendingPageable(
+            Pageable pageable) {
+
+        if (pageable == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Pending request page is required");
+        }
+
+        return PageRequest.of(
+                Math.max(0, pageable.getPageNumber()),
+                Math.max(
+                        1,
+                        Math.min(
+                                pageable.getPageSize(),
+                                MAX_PENDING_PAGE_SIZE)),
+                pageable.getSort());
     }
 
     private List<String> normalizeTargetIds(

@@ -13,8 +13,7 @@ import jakarta.persistence.UniqueConstraint;
         @Index(name = "idx_mf_vendor_name", columnList = "vendor_name"),
         @Index(name = "idx_mf_vendor_active", columnList = "active")
 })
-public class MatFlowVendor
-        extends MatFlowBaseEntity {
+public class MatFlowVendor extends MatFlowBaseEntity {
 
     @Column(name = "vendor_code", nullable = false, length = 100)
     public String vendorCode;

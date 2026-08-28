@@ -9,7 +9,7 @@ import {
     publishPackFlowDataChanged,
 } from "../../../utils/packFlowDataEvents";
 
-import { API_BASE_URL } from "../../../config";
+import { secureFetch } from "../../../services/api";
 
 import {
     executeAdminMasterDeletion,
@@ -40,10 +40,9 @@ async function requestAdminWarehouseDeletion(
     path,
     options = {}
 ) {
-    const response = await fetch(
-        `${API_BASE_URL}${path}`,
+    const response = await secureFetch(
+        path,
         {
-            credentials: "include",
             ...options,
             headers: {
                 ...(options.body

@@ -1,5 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import usePackFlowDataRefresh from "../hooks/usePackFlowDataRefresh";
 import { API_BASE_URL } from "../../config";
+import { secureFetch } from "../../services/api";
+
+const toLocalDateTimeInput = (value) => {
+  const date =
+    value instanceof Date
+      ? new Date(value.getTime())
+      : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  date.setMinutes(
+    date.getMinutes() -
+    date.getTimezoneOffset()
+  );
+
+  return date
+    .toISOString()
+    .slice(0, 16);
+};
 
 function ReportViewerModal({
   open,
@@ -15,65 +37,119 @@ function ReportViewerModal({
   const [from, setFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 16);
+    return toLocalDateTimeInput(d);
   });
 
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 16));
+  const [to, setTo] = useState(() =>
+    toLocalDateTimeInput(new Date())
+  );
 
-  const authHeaders = () => {
-    const token = localStorage.getItem("token");
+  const [followNow, setFollowNow] =
+    useState(true);
 
-    if (
-      !token ||
-      token === "null" ||
-      token === "undefined"
-    ) {
-      return {};
-    }
+  const authHeaders = () => ({});
 
-    return {
-      Authorization: `Bearer ${token}`,
-    };
-  };
+  const loadReport = useCallback(
+    async ({
+      background = false,
+    } = {}) => {
+      const effectiveTo =
+        followNow
+          ? toLocalDateTimeInput(
+            new Date()
+          )
+          : to;
 
-  const loadReport = async () => {
-    try {
-      setLoading(true);
-
-      const res = await fetch(
-        `${API_BASE_URL}${fetchUrl}?from=${encodeURIComponent(
-          from
-        )}&to=${encodeURIComponent(to)}`,
-        {
-          credentials: "include",
-          headers: authHeaders(),
-        }
-      );
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to load report");
+      if (
+        followNow &&
+        effectiveTo !== to
+      ) {
+        setTo(effectiveTo);
       }
 
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Report load failed", err);
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        if (!background) {
+          setLoading(true);
+        }
+
+        const res = await secureFetch(
+          `${API_BASE_URL}${fetchUrl}?from=${encodeURIComponent(
+            from
+          )}&to=${encodeURIComponent(
+            effectiveTo
+          )}`,
+          {
+            credentials: "include",
+            headers: authHeaders(),
+          }
+        );
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(
+            text ||
+            "Failed to load report"
+          );
+        }
+
+        const data = await res.json();
+        setRows(
+          Array.isArray(data)
+            ? data
+            : []
+        );
+      } catch (err) {
+        if (!background) {
+          console.error(
+            "Report load failed",
+            err
+          );
+          setRows([]);
+        }
+      } finally {
+        if (!background) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      fetchUrl,
+      followNow,
+      from,
+      to,
+    ]
+  );
 
   useEffect(() => {
     if (!open) return;
-    loadReport();
+
+    void loadReport();
+    // Opening the modal triggers the foreground load. Live polling handles
+    // subsequent revalidation without turning each "follow now" tick into a
+    // second visible request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  usePackFlowDataRefresh(
+    "reports",
+    async () => {
+      if (!open) {
+        return;
+      }
+
+      await loadReport({
+        background: true,
+      });
+    },
+    {
+      enabled: open,
+      intervalMs: 10000,
+    }
+  );
+
   const exportFile = async (url, filename) => {
     try {
-      const res = await fetch(
+      const res = await secureFetch(
         `${API_BASE_URL}${url}?from=${encodeURIComponent(
           from
         )}&to=${encodeURIComponent(to)}`,
@@ -135,7 +211,10 @@ function ReportViewerModal({
           <input
             type="datetime-local"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={(e) => {
+              setFollowNow(false);
+              setTo(e.target.value);
+            }}
             style={input}
           />
 

@@ -211,6 +211,20 @@ public class JwtUtil {
                     "JWT required claims are missing");
         }
 
+        Instant now = Instant.now();
+
+        if (claims.getIssuedAt()
+                .toInstant()
+                .isAfter(
+                        now.plusSeconds(
+                                CLOCK_SKEW_SECONDS))) {
+            throw new IllegalArgumentException(
+                    "JWT issued-at time is invalid");
+        }
+
+        validateSecurityVersionClaim(
+                claims);
+
         boolean hardenedToken =
                 hasText(claims.getIssuer())
                         || claims.get("aud") != null
@@ -251,6 +265,50 @@ public class JwtUtil {
         }
 
         return claims;
+    }
+
+    private static void validateSecurityVersionClaim(
+            Claims claims) {
+
+        Object value = claims.get("sv");
+
+        if (value == null) {
+            return;
+        }
+
+        long parsed;
+
+        if (value instanceof Byte
+                || value instanceof Short
+                || value instanceof Integer
+                || value instanceof Long) {
+            parsed = ((Number) value).longValue();
+
+        } else if (value instanceof String text) {
+            String clean = text.trim();
+
+            if (!clean.matches("\\d+")) {
+                throw new IllegalArgumentException(
+                        "JWT security version is invalid");
+            }
+
+            try {
+                parsed = Long.parseLong(clean);
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException(
+                        "JWT security version is invalid",
+                        exception);
+            }
+
+        } else {
+            throw new IllegalArgumentException(
+                    "JWT security version is invalid");
+        }
+
+        if (parsed < 0L) {
+            throw new IllegalArgumentException(
+                    "JWT security version is invalid");
+        }
     }
 
     public static long getSecurityVersion(

@@ -7,7 +7,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "hr_candidate_access_token",
-        indexes = @Index(name = "idx_hr_candidate_token_candidate", columnList = "candidate_id"),
+        indexes = {
+                @Index(name = "idx_hr_candidate_token_candidate", columnList = "candidate_id"),
+                @Index(name = "idx_hr_candidate_token_candidate_purpose", columnList = "candidate_id,purpose,revoked_at"),
+                @Index(name = "idx_hr_candidate_token_expiry", columnList = "purpose,expires_at")
+        },
         uniqueConstraints = @UniqueConstraint(name = "uk_hr_candidate_token_hash", columnNames = "token_hash"))
 public class HrCandidateAccessToken {
 

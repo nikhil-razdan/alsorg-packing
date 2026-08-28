@@ -4,16 +4,21 @@ import com.alsorg.packing.bomflow.dto.BomFlowProductDtos.ProductRequest;
 import com.alsorg.packing.bomflow.dto.BomFlowProductDtos.ProductResponse;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.CreateRevisionRequest;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.RevisionSummaryResponse;
-
 import com.alsorg.packing.bomflow.service.BomFlowProductService;
 
+import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
+@Validated
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/api/bomflow/products")
 public class BomFlowProductController {
 
@@ -21,47 +26,38 @@ public class BomFlowProductController {
 
     public BomFlowProductController(
             BomFlowProductService service) {
-
         this.service = service;
     }
 
     @GetMapping
     public List<ProductResponse> list(
-            @RequestParam(required = false)
-            String search) {
-
+            @RequestParam(required = false) String search) {
         return service.list(search);
     }
 
     @GetMapping("/{productId}")
     public ProductResponse get(
             @PathVariable UUID productId) {
-
         return service.get(productId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ProductResponse create(
-            @RequestBody ProductRequest request) {
-
+            @Valid @RequestBody ProductRequest request) {
         return service.create(request);
     }
 
     @PutMapping("/{productId}")
     public ProductResponse update(
             @PathVariable UUID productId,
-            @RequestBody ProductRequest request) {
-
-        return service.update(
-                productId,
-                request);
+            @Valid @RequestBody ProductRequest request) {
+        return service.update(productId, request);
     }
 
     @GetMapping("/{productId}/revisions")
     public List<RevisionSummaryResponse> revisions(
             @PathVariable UUID productId) {
-
         return service.revisions(productId);
     }
 
@@ -69,11 +65,7 @@ public class BomFlowProductController {
     @ResponseStatus(HttpStatus.CREATED)
     public RevisionSummaryResponse createRevision(
             @PathVariable UUID productId,
-            @RequestBody(required = false)
-            CreateRevisionRequest request) {
-
-        return service.createRevision(
-                productId,
-                request);
+            @Valid @RequestBody(required = false) CreateRevisionRequest request) {
+        return service.createRevision(productId, request);
     }
 }

@@ -9,6 +9,7 @@ import java.util.UUID;
 @Table(name = "hr_audit_log",
         indexes = {
                 @Index(name = "idx_hr_audit_entity", columnList = "entity_type,entity_id"),
+                @Index(name = "idx_hr_audit_entity_created", columnList = "entity_type,entity_id,created_at"),
                 @Index(name = "idx_hr_audit_created", columnList = "created_at")
         })
 public class HrAuditLog {

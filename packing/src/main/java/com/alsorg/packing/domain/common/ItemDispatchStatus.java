@@ -1,7 +1,6 @@
 package com.alsorg.packing.domain.common;
 
 public enum ItemDispatchStatus {
-
     AVAILABLE,
     ON_FLOOR,
     WAREHOUSE_REQUESTED,

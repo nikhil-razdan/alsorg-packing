@@ -34,9 +34,24 @@ const ThemeContext = createContext(null);
 
 const readMode = () => {
   if (typeof window === "undefined") return "dark";
-  const stored = window.localStorage.getItem(MODE_KEY);
-  if (stored === "dark" || stored === "light") return stored;
-  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches
+
+  try {
+    const stored =
+      window.localStorage.getItem(MODE_KEY);
+
+    if (
+      stored === "dark" ||
+      stored === "light"
+    ) {
+      return stored;
+    }
+  } catch {
+    // Theme persistence is optional.
+  }
+
+  return window.matchMedia?.(
+    "(prefers-color-scheme: light)"
+  )?.matches
     ? "light"
     : "dark";
 };
@@ -314,7 +329,16 @@ export function MatFlowThemeProvider({ children }) {
   const cssVars = useMemo(() => variables(mode), [mode]);
 
   useEffect(() => {
-    window.localStorage.setItem(MODE_KEY, mode);
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.setItem(
+        MODE_KEY,
+        mode
+      );
+    } catch {
+      // Theme persistence is optional.
+    }
   }, [mode]);
 
   const value = useMemo(
@@ -606,7 +630,19 @@ export function MatFlowProvider({ children }) {
   const [serverPlants, setServerPlants] = useState([]);
   useEffect(() => {
     let active = true;
-    if (!user) { setServerPlants([]); return () => { active = false; }; }
+
+    /*
+     * Never carry the previous signed-in user's metadata-derived plant list
+     * while the next session is being resolved.
+     */
+    setServerPlants([]);
+
+    if (!user) {
+      return () => {
+        active = false;
+      };
+    }
+
     matflowApi.metadata()
       .then((response) => {
         if (!active) return;
@@ -626,11 +662,38 @@ export function MatFlowProvider({ children }) {
 
   const [selectedPlantCode, setPlantState] = useState(() => {
     let stored = ALL_PLANTS;
-    try { stored = window.localStorage.getItem(MATFLOW_PLANT_KEY) || ALL_PLANTS; }
-    catch { /* ignore */ }
-    stored = String(stored || ALL_PLANTS).trim().toUpperCase();
-    if (canViewAllPlants) return stored;
-    return authPlants.includes(stored) ? stored : (authPlants[0] || ALL_PLANTS);
+
+    try {
+      stored =
+        window.localStorage.getItem(
+          MATFLOW_PLANT_KEY
+        ) || ALL_PLANTS;
+    } catch {
+      // Plant preference persistence is optional.
+    }
+
+    stored =
+      String(stored || ALL_PLANTS)
+        .trim()
+        .toUpperCase();
+
+    /*
+     * localStorage is only a UI preference, never a plant authorization
+     * source. Even a Manager/Admin must not issue the first request with a
+     * stale plant code inherited from another browser session before /meta
+     * has validated the available plant set.
+     */
+    if (stored === ALL_PLANTS && canViewAllPlants) {
+      return ALL_PLANTS;
+    }
+
+    if (authPlants.includes(stored)) {
+      return stored;
+    }
+
+    return canViewAllPlants
+      ? ALL_PLANTS
+      : (authPlants[0] || ALL_PLANTS);
   });
 
   useEffect(() => {
@@ -641,7 +704,14 @@ export function MatFlowProvider({ children }) {
 
     if (next !== selectedPlantCode) {
       setPlantState(next);
-      try { window.localStorage.setItem(MATFLOW_PLANT_KEY, next); } catch { /* ignore */ }
+      try {
+        window.localStorage.setItem(
+          MATFLOW_PLANT_KEY,
+          next
+        );
+      } catch {
+        // Plant preference persistence is optional.
+      }
     }
   }, [availablePlants, canViewAllPlants, selectedPlantCode]);
 
@@ -655,7 +725,14 @@ export function MatFlowProvider({ children }) {
           ? ALL_PLANTS
           : (availablePlants[0] || ALL_PLANTS);
     setPlantState(accepted);
-    try { window.localStorage.setItem(MATFLOW_PLANT_KEY, accepted); } catch { /* ignore */ }
+    try {
+      window.localStorage.setItem(
+        MATFLOW_PLANT_KEY,
+        accepted
+      );
+    } catch {
+      // Plant preference persistence is optional.
+    }
   }, [availablePlants, canViewAllPlants]);
 
   const hasRole = useCallback((...allowed) => {
@@ -687,13 +764,129 @@ export const numeric = (value) => {
 };
 export const formatQty = (value) =>
   numeric(value).toLocaleString("en-IN", { maximumFractionDigits: 3 });
-export const formatDate = (value, includeTime = true) => {
+export const parseMatFlowDateTime = (value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null
+      : new Date(value.getTime());
+  }
+
+  if (typeof value === "number") {
+    const numericDate = new Date(value);
+    return Number.isNaN(numericDate.getTime())
+      ? null
+      : numericDate;
+  }
+
+  const raw =
+    String(value)
+      .trim()
+      .replace(" ", "T");
+
+  if (!raw) {
+    return null;
+  }
+
+  const hasTimezone =
+    /[zZ]$/.test(raw) ||
+    /[+-]\d{2}:?\d{2}$/.test(raw);
+
+  if (hasTimezone) {
+    const parsed = new Date(raw);
+
+    return Number.isNaN(parsed.getTime())
+      ? null
+      : parsed;
+  }
+
+  /*
+   * Spring LocalDate / LocalDateTime values have no timezone. Parse those as
+   * factory-local browser time instead of asking the JS engine to infer a
+   * timezone or UTC conversion.
+   */
+  const match = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/
+  );
+
+  if (match) {
+    const milliseconds = Number(
+      String(match[7] || "0")
+        .slice(0, 3)
+        .padEnd(3, "0")
+    );
+
+    const parsed = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4] || 0),
+      Number(match[5] || 0),
+      Number(match[6] || 0),
+      milliseconds
+    );
+
+    return Number.isNaN(parsed.getTime())
+      ? null
+      : parsed;
+  }
+
+  const fallback = new Date(raw);
+
+  return Number.isNaN(
+    fallback.getTime()
+  )
+    ? null
+    : fallback;
+};
+
+export const localBusinessDateKey = (
+  value = new Date()
+) => {
+  const date =
+    parseMatFlowDateTime(value) ||
+    new Date();
+
+  const pad = (part) =>
+    String(part).padStart(2, "0");
+
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+  ].join("");
+};
+
+export const formatDate = (
+  value,
+  includeTime = true
+) => {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+
+  const date =
+    parseMatFlowDateTime(value);
+
+  if (!date) {
+    return String(value);
+  }
+
   return includeTime
-    ? date.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
-    : date.toLocaleDateString("en-IN", { dateStyle: "medium" });
+    ? date.toLocaleString("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : date.toLocaleDateString("en-IN", {
+        dateStyle: "medium",
+      });
 };
 export const readable = (value) =>
   normalize(value)
@@ -2040,12 +2233,29 @@ export const formatDurationMinutes = (value) => {
   return hourRest ? `${days}d ${hourRest}h` : `${days}d`;
 };
 
-export const durationMinutesBetween = (start, end = new Date()) => {
-  if (!start) return 0;
-  const from = new Date(start).getTime();
-  const to = end ? new Date(end).getTime() : Date.now();
-  if (!Number.isFinite(from) || !Number.isFinite(to)) return 0;
-  return Math.max(0, Math.round((to - from) / 60000));
+export const durationMinutesBetween = (
+  start,
+  end = new Date()
+) => {
+  const fromDate =
+    parseMatFlowDateTime(start);
+
+  const toDate =
+    parseMatFlowDateTime(end);
+
+  if (!fromDate || !toDate) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.round(
+      (
+        toDate.getTime() -
+        fromDate.getTime()
+      ) / 60000
+    )
+  );
 };
 
 export function TimingHealthChip({ health }) {

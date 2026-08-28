@@ -2,6 +2,7 @@ package com.alsorg.packing.hrflow.repository;
 
 import com.alsorg.packing.hrflow.domain.HrCandidate;
 import com.alsorg.packing.hrflow.domain.HrCandidateStage;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,9 +12,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface HrCandidateRepository extends JpaRepository<HrCandidate, UUID> {
+public interface HrCandidateRepository
+        extends JpaRepository<HrCandidate, UUID> {
 
-    Optional<HrCandidate> findByCandidateNumberIgnoreCase(String candidateNumber);
+    Optional<HrCandidate> findByCandidateNumberIgnoreCase(
+            String candidateNumber
+    );
 
     @Query("""
             select c
@@ -27,6 +31,7 @@ public interface HrCandidateRepository extends JpaRepository<HrCandidate, UUID> 
                     or lower(coalesce(c.mobileNo, '')) like lower(concat('%', :q, '%'))
                     or lower(coalesce(c.postAppliedFor, '')) like lower(concat('%', :q, '%'))
                   )
+            order by c.updatedAt desc, c.id desc
             """)
     Page<HrCandidate> search(
             @Param("q") String q,

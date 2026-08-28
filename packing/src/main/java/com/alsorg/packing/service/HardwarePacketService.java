@@ -7,7 +7,6 @@ import java.util.regex.Pattern;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -16,10 +15,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwareLineRequest;
 import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwareLineResponse;
 import com.alsorg.packing.controller.dto.hardware.HardwarePacketDtos.HardwarePacketAddRequest;
@@ -43,7 +44,7 @@ import com.alsorg.packing.repository.PacketRepository;
 @Service
 public class HardwarePacketService {
 
-        private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
 
         /*
          * Fixed sticker size cannot carry an unlimited item list legibly.
@@ -105,10 +106,7 @@ public class HardwarePacketService {
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
 
-                Company company = companyRepository.findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                Company company = requireCompany();
 
                 String actor = safeActor(user);
 
@@ -262,11 +260,7 @@ public class HardwarePacketService {
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
-                Company company = companyRepository.findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException(
-                                                "No company found"));
+                Company company = requireCompany();
 
                 List<PacketItem> existingItems = packetItemRepository
                                 .findAllByMasterItemIdWithHardwareLines(
@@ -1322,6 +1316,16 @@ public class HardwarePacketService {
                                 && !user.getUsername().isBlank()
                                                 ? user.getUsername().trim()
                                                 : "SYSTEM";
+        }
+
+        private Company requireCompany() {
+                return companyRepository
+                                .findAll(
+                                                PageRequest.of(0, 1))
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
         }
 
         private String cleanRequired(

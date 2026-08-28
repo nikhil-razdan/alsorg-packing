@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,7 +71,14 @@ public class DriverService {
 
         driver.setName(cleanName);
 
-        return repository.save(driver);
+        try {
+            return repository.saveAndFlush(driver);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Driver already exists or conflicts with an existing driver",
+                    exception);
+        }
     }
 
     @Transactional
@@ -89,7 +97,15 @@ public class DriverService {
                         HttpStatus.NOT_FOUND,
                         "Driver not found"));
 
-        repository.delete(driver);
+        try {
+            repository.delete(driver);
+            repository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Driver cannot be deleted because it is still used by logistics records",
+                    exception);
+        }
     }
 
     private String cleanName(

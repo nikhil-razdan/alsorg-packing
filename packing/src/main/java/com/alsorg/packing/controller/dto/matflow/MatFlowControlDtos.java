@@ -7,6 +7,7 @@ import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionStatu
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcDispositionType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,12 +27,16 @@ public final class MatFlowControlDtos {
 
     public record ReservationReleaseRequest(
             @NotNull(message = "Reservation row version is required.") Long rowVersion,
-            @NotNull(message = "Release reason is required.") String reason) {
+            @NotBlank(message = "Release reason is required.")
+            @Size(max = 1000, message = "Release reason cannot exceed 1000 characters.")
+            String reason) {
     }
 
     public record RequisitionCancelRequest(
             @NotNull(message = "Requisition row version is required.") Long rowVersion,
-            @NotNull(message = "Cancellation reason is required.") String reason) {
+            @NotBlank(message = "Cancellation reason is required.")
+            @Size(max = 1000, message = "Cancellation reason cannot exceed 1000 characters.")
+            String reason) {
     }
 
     /** @deprecated Legacy compatibility only; current workflow does not use this desk. */
@@ -48,21 +53,22 @@ public final class MatFlowControlDtos {
             @NotNull(message = "Return quantity is required.")
             @DecimalMin(value = "0.001", inclusive = true, message = "Return quantity must be greater than zero.")
             BigDecimal returnQty,
-            String batchNo,
-            String remarks) {
+            @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo,
+            @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
     }
 
     public record MaterialReturnCreateRequest(
             @NotNull(message = "Requisition is required.") UUID requisitionId,
             @NotNull(message = "Return reason is required.") MaterialReturnReason reason,
-            String remarks,
+            @Size(max = 2000, message = "Return remarks cannot exceed 2000 characters.") String remarks,
             @NotEmpty(message = "At least one return material is required.")
+            @Size(max = 500, message = "A maximum of 500 return-material lines is allowed.")
             List<@Valid MaterialReturnLineRequest> lines) {
     }
 
     public record MaterialReturnActionRequest(
             @NotNull(message = "Material return row version is required.") Long rowVersion,
-            String remarks) {
+            @Size(max = 2000, message = "Action remarks cannot exceed 2000 characters.") String remarks) {
     }
 
     public record MaterialReturnLineResponse(
@@ -109,9 +115,10 @@ public final class MatFlowControlDtos {
     public record QcDispositionRequest(
             Long rowVersion,
             QcDispositionType dispositionType,
-            String targetCustody,
+            @Size(max = 150, message = "Target custody cannot exceed 150 characters.") String targetCustody,
+            @DecimalMin(value = "0.001", inclusive = true, message = "Disposition quantity must be greater than zero.")
             BigDecimal quantity,
-            String remarks) {
+            @Size(max = 2000, message = "Disposition remarks cannot exceed 2000 characters.") String remarks) {
     }
 
     public record QcDispositionResponse(

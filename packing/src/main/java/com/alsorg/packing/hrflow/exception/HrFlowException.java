@@ -6,9 +6,14 @@ public class HrFlowException extends RuntimeException {
 
     private final HttpStatus status;
 
-    public HrFlowException(HttpStatus status, String message) {
+    public HrFlowException(
+            HttpStatus status,
+            String message
+    ) {
         super(message);
-        this.status = status;
+        this.status = status == null
+                ? HttpStatus.INTERNAL_SERVER_ERROR
+                : status;
     }
 
     public HttpStatus getStatus() {

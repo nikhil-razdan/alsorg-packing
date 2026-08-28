@@ -4,11 +4,15 @@ import com.alsorg.packing.hrflow.domain.HrCandidate;
 import com.alsorg.packing.hrflow.dto.HrOnboardingDtos;
 import com.alsorg.packing.hrflow.service.HrCandidateTokenService;
 import com.alsorg.packing.hrflow.service.HrOnboardingService;
+import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -39,11 +43,18 @@ public class HrPublicOnboardingController {
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         HrOnboardingService.FormPdf pdf = onboardingService.publicFormPdf(candidate, formKey);
+        byte[] bytes = pdf.bytes() == null ? new byte[0] : pdf.bytes();
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(safeFileName(pdf.fileName()), StandardCharsets.UTF_8)
+                .build();
+
         return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
                 .contentType(MediaType.APPLICATION_PDF)
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
-                .body(pdf.bytes());
+                .contentLength(bytes.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
     }
 
     @GetMapping("/{token}/joining-report")
@@ -61,7 +72,7 @@ public class HrPublicOnboardingController {
     @PostMapping("/{token}/policy/acknowledge")
     public HrOnboardingDtos.AgreementAcceptanceResponse acknowledgePolicy(
             @PathVariable String token,
-            @RequestBody HrOnboardingDtos.AcceptanceRequest request
+            @Valid @RequestBody HrOnboardingDtos.AcceptanceRequest request
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.acknowledgePolicy(candidate, request);
@@ -70,7 +81,7 @@ public class HrPublicOnboardingController {
     @PostMapping("/{token}/nda/accept")
     public HrOnboardingDtos.AgreementAcceptanceResponse acceptNda(
             @PathVariable String token,
-            @RequestBody HrOnboardingDtos.AcceptanceRequest request
+            @Valid @RequestBody HrOnboardingDtos.AcceptanceRequest request
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.acceptNda(candidate, request);
@@ -79,7 +90,7 @@ public class HrPublicOnboardingController {
     @PostMapping("/{token}/declaration/accept")
     public HrOnboardingDtos.AgreementAcceptanceResponse acceptDeclaration(
             @PathVariable String token,
-            @RequestBody HrOnboardingDtos.AcceptanceRequest request
+            @Valid @RequestBody HrOnboardingDtos.AcceptanceRequest request
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.acceptDeclaration(candidate, request);
@@ -94,7 +105,7 @@ public class HrPublicOnboardingController {
     @PostMapping("/{token}/orientation/acknowledge")
     public HrOnboardingDtos.OrientationResponse acknowledgeOrientation(
             @PathVariable String token,
-            @RequestBody HrOnboardingDtos.OrientationAcknowledgeRequest request
+            @Valid @RequestBody HrOnboardingDtos.OrientationAcknowledgeRequest request
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.acknowledgeOrientation(candidate, request);
@@ -109,9 +120,17 @@ public class HrPublicOnboardingController {
     @PostMapping("/{token}/feedback")
     public HrOnboardingDtos.FeedbackSubmissionResponse submitFeedback(
             @PathVariable String token,
-            @RequestBody HrOnboardingDtos.FeedbackSubmissionRequest request
+            @Valid @RequestBody HrOnboardingDtos.FeedbackSubmissionRequest request
     ) {
         HrCandidate candidate = tokenService.resolveOnboardingToken(token);
         return onboardingService.submitFeedback(candidate, request);
     }
+    private String safeFileName(String value) {
+        if (value == null || value.isBlank()) {
+            return "hrflow-onboarding-form.pdf";
+        }
+        String clean = value.replaceAll("[\\r\\n\\t]", "_").trim();
+        return clean.isBlank() ? "hrflow-onboarding-form.pdf" : clean;
+    }
+
 }

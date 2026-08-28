@@ -16,6 +16,8 @@ import com.alsorg.packing.assetflow.AssetFlowData.WorkOrderUpsert;
 import com.alsorg.packing.assetflow.AssetFlowData.WorkStatus;
 import com.alsorg.packing.assetflow.AssetFlowData.WorkType;
 
+import jakarta.validation.Valid;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -24,21 +26,18 @@ import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * AssetFlow / ServiceFlow API.
  *
- * Security is deliberately split into:
- *  - public QR gateway: Reporter Code + PIN is validated inside AssetFlowService;
- *  - authenticated request gateway: a FlowSuite user must have a linked Reporter
- *    profile (or be operational AssetFlow staff);
- *  - operational endpoints: domain-scoped Machine Maintenance / IT roles.
- *
- * Service-level checks are authoritative. Controller authorities only decide
- * which surface a signed-in user may attempt to call.
+ * Public Reporter Pass endpoints are isolated under /api/assetflow/public/**.
+ * Service-level plant/domain checks remain authoritative for authenticated
+ * operations.
  */
 @RestController
+@Validated
 @RequestMapping("/api/assetflow")
 public class AssetFlowController {
 
@@ -74,17 +73,20 @@ public class AssetFlowController {
     }
 
     @PostMapping("/public/authorise")
-    public Map<String, Object> authoriseReporter(@RequestBody ReporterLogin request) {
+    public Map<String, Object> authoriseReporter(
+            @Valid @RequestBody ReporterLogin request) {
         return service.authoriseReporter(request);
     }
 
     @PostMapping("/public/requests/mine")
-    public List<Map<String, Object>> reporterRequests(@RequestBody ReporterLogin request) {
+    public List<Map<String, Object>> reporterRequests(
+            @Valid @RequestBody ReporterLogin request) {
         return service.reporterRequests(request);
     }
 
     @PostMapping("/public/requests")
-    public Map<String, Object> createPublicRequest(@RequestBody PublicRequestCreate request) {
+    public Map<String, Object> createPublicRequest(
+            @Valid @RequestBody PublicRequestCreate request) {
         return service.createPublicRequest(request);
     }
 
@@ -105,7 +107,7 @@ public class AssetFlowController {
     @PostMapping("/requester/requests")
     @PreAuthorize("isAuthenticated()")
     public Map<String, Object> createAuthenticatedRequest(
-            @RequestBody AuthenticatedRequestCreate request,
+            @Valid @RequestBody AuthenticatedRequestCreate request,
             Authentication auth) {
         return service.createAuthenticatedRequest(request, auth);
     }
@@ -155,7 +157,7 @@ public class AssetFlowController {
     @PostMapping("/work-orders")
     @PreAuthorize(OPERATIONAL_READ)
     public Map<String, Object> createWorkOrder(
-            @RequestBody WorkOrderUpsert request,
+            @Valid @RequestBody WorkOrderUpsert request,
             Authentication auth) {
         return service.createWorkOrder(request, auth);
     }
@@ -164,7 +166,7 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_COORDINATE)
     public Map<String, Object> updateWorkOrder(
             @PathVariable UUID id,
-            @RequestBody WorkOrderUpsert request,
+            @Valid @RequestBody WorkOrderUpsert request,
             Authentication auth) {
         return service.updateWorkOrder(id, request, auth);
     }
@@ -173,7 +175,7 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_COORDINATE)
     public Map<String, Object> assignWorkOrder(
             @PathVariable UUID id,
-            @RequestBody AssignmentRequest request,
+            @Valid @RequestBody AssignmentRequest request,
             Authentication auth) {
         return service.assignWorkOrder(id, request, auth);
     }
@@ -182,7 +184,7 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_READ)
     public Map<String, Object> changeStatus(
             @PathVariable UUID id,
-            @RequestBody StatusChange request,
+            @Valid @RequestBody StatusChange request,
             Authentication auth) {
         return service.changeStatus(id, request, auth);
     }
@@ -197,7 +199,7 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_READ)
     public Map<String, Object> qrComplaint(
             @PathVariable UUID token,
-            @RequestBody WorkOrderUpsert request,
+            @Valid @RequestBody WorkOrderUpsert request,
             Authentication auth) {
         return service.createQrComplaint(token, request, auth);
     }
@@ -222,7 +224,7 @@ public class AssetFlowController {
     @PostMapping("/equipment")
     @PreAuthorize(OPERATIONAL_COORDINATE)
     public Map<String, Object> createEquipment(
-            @RequestBody EquipmentUpsert request,
+            @Valid @RequestBody EquipmentUpsert request,
             Authentication auth) {
         return service.createEquipment(request, auth);
     }
@@ -231,7 +233,7 @@ public class AssetFlowController {
     @PreAuthorize(ASSET_MASTER_UPDATE)
     public Map<String, Object> updateEquipment(
             @PathVariable UUID id,
-            @RequestBody EquipmentUpsert request,
+            @Valid @RequestBody EquipmentUpsert request,
             Authentication auth) {
         return service.updateEquipment(id, request, auth);
     }
@@ -254,7 +256,7 @@ public class AssetFlowController {
 
     @PostMapping("/teams")
     @PreAuthorize(OPERATIONAL_COORDINATE)
-    public Map<String, Object> createTeam(@RequestBody TeamUpsert request) {
+    public Map<String, Object> createTeam(@Valid @RequestBody TeamUpsert request) {
         return service.saveTeam(null, request);
     }
 
@@ -262,14 +264,10 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_COORDINATE)
     public Map<String, Object> updateTeam(
             @PathVariable UUID id,
-            @RequestBody TeamUpsert request) {
+            @Valid @RequestBody TeamUpsert request) {
         return service.saveTeam(id, request);
     }
 
-    /**
-     * Reporter directory is central identity data, not a department data set.
-     * Only ADMIN can create/link/disable Reporter Passes.
-     */
     @GetMapping("/reporters")
     @PreAuthorize("hasAuthority('ADMIN')")
     public List<Map<String, Object>> reporters(
@@ -282,7 +280,7 @@ public class AssetFlowController {
     @PostMapping("/reporters")
     @PreAuthorize("hasAuthority('ADMIN')")
     public Map<String, Object> createReporter(
-            @RequestBody ReporterUpsert request,
+            @Valid @RequestBody ReporterUpsert request,
             Authentication auth) {
         return service.saveReporter(null, request, auth);
     }
@@ -291,7 +289,7 @@ public class AssetFlowController {
     @PreAuthorize("hasAuthority('ADMIN')")
     public Map<String, Object> updateReporter(
             @PathVariable UUID id,
-            @RequestBody ReporterUpsert request,
+            @Valid @RequestBody ReporterUpsert request,
             Authentication auth) {
         return service.saveReporter(id, request, auth);
     }
@@ -307,7 +305,7 @@ public class AssetFlowController {
 
     @PostMapping("/preventive-plans")
     @PreAuthorize(OPERATIONAL_COORDINATE)
-    public Map<String, Object> createPlan(@RequestBody PreventivePlanUpsert request) {
+    public Map<String, Object> createPlan(@Valid @RequestBody PreventivePlanUpsert request) {
         return service.savePlan(null, request);
     }
 
@@ -315,7 +313,7 @@ public class AssetFlowController {
     @PreAuthorize(OPERATIONAL_COORDINATE)
     public Map<String, Object> updatePlan(
             @PathVariable UUID id,
-            @RequestBody PreventivePlanUpsert request) {
+            @Valid @RequestBody PreventivePlanUpsert request) {
         return service.savePlan(id, request);
     }
 

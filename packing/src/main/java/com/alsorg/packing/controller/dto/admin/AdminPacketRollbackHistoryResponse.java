@@ -12,6 +12,5 @@ public record AdminPacketRollbackHistoryResponse(
         String reason,
         String changedBy,
         LocalDateTime changedAt,
-        String changeSummaryJson
-) {
+        String changeSummaryJson) {
 }

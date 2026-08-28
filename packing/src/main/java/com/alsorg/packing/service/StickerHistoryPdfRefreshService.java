@@ -1,7 +1,6 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -12,6 +11,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.common.PacketItemType;
 import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.sticker.StickerHistory;
@@ -29,8 +29,6 @@ import com.alsorg.packing.service.pdf.dto.StickerPdfData;
  */
 @Service
 public class StickerHistoryPdfRefreshService {
-
-    private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final StickerHistoryRepository stickerHistoryRepository;
     private final PdfStickerService pdfStickerService;
@@ -244,12 +242,15 @@ public class StickerHistoryPdfRefreshService {
         pdf.setClientAddress(item.getClientAddress());
         pdf.setPdNo(item.getPdNo());
         pdf.setDrawingNo(item.getDrawingNo());
-        pdf.setPrintIteration((int) iteration);
+        pdf.setPrintIteration(
+                iteration > Integer.MAX_VALUE
+                        ? Integer.MAX_VALUE
+                        : (int) iteration);
         pdf.setQuantity(1);
 
         LocalDate packingDate = item.getPackedAt() != null
                 ? item.getPackedAt().toLocalDate()
-                : LocalDate.now(INDIA_ZONE);
+                : LocalDate.now(TimeZoneConfig.APP_ZONE);
 
         pdf.setDate(packingDate.toString());
 

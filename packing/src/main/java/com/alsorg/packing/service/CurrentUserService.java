@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.security.access.AccessDeniedException;
@@ -11,6 +12,7 @@ import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.security.JwtUtil;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 
 @Service
@@ -50,15 +52,17 @@ public class CurrentUserService {
     public User getCurrentUserFromAuth(String auth) {
         String username = usernameFromSecurityContext();
 
-        if (username == null || username.isBlank()) {
-            username = usernameFromBearerHeader(auth);
+        if (username != null && !username.isBlank()) {
+            return requireEnabledUser(username);
         }
 
-        if (username == null || username.isBlank()) {
+        User bearerUser = userFromBearerHeader(auth);
+
+        if (bearerUser == null) {
             throw new AccessDeniedException("Authentication required");
         }
 
-        return requireEnabledUser(username);
+        return bearerUser;
     }
 
     private User requireEnabledUser(String username) {
@@ -74,7 +78,7 @@ public class CurrentUserService {
         return user;
     }
 
-    private String usernameFromBearerHeader(String auth) {
+    private User userFromBearerHeader(String auth) {
         if (auth == null
                 || !auth.regionMatches(true, 0, "Bearer ", 0, 7)) {
             return null;
@@ -89,7 +93,25 @@ public class CurrentUserService {
         }
 
         try {
-            return JwtUtil.getUsername(token);
+            Claims claims = JwtUtil.getClaims(token);
+
+            String username = claims.getSubject();
+
+            if (username == null || username.isBlank()) {
+                throw new AccessDeniedException("Invalid authentication token");
+            }
+
+            User user = requireEnabledUser(username);
+
+            long tokenSecurityVersion = JwtUtil.getSecurityVersion(claims);
+
+            if (tokenSecurityVersion != user.getSecurityVersion()) {
+                throw new AccessDeniedException(
+                        "Session is no longer valid. Please login again.");
+            }
+
+            return user;
+
         } catch (JwtException | IllegalArgumentException exception) {
             throw new AccessDeniedException("Invalid authentication token");
         }
@@ -162,9 +184,16 @@ public class CurrentUserService {
             return false;
         }
 
-        return user.getEffectiveRoles()
+        Set<String> effectiveRoles = user.getEffectiveRoles();
+
+        if (effectiveRoles == null || effectiveRoles.isEmpty()) {
+            return false;
+        }
+
+        return effectiveRoles
                 .stream()
                 .map(this::normalizeRoleKey)
+                .filter(java.util.Objects::nonNull)
                 .anyMatch(
                         normalizedRequestedRole::equals);
     }
@@ -181,7 +210,7 @@ public class CurrentUserService {
                 .replaceFirst(
                         "(?i)^ROLE_",
                         "")
-                .toUpperCase();
+                .toUpperCase(Locale.ROOT);
 
         if (clean.isBlank() ||
                 "NULL".equals(clean) ||
@@ -219,7 +248,7 @@ public class CurrentUserService {
             return false;
         }
 
-        String normalizedModule = module.trim().toUpperCase();
+        String normalizedModule = module.trim().toUpperCase(Locale.ROOT);
 
         return user.getEffectiveModules() != null
                 && user.getEffectiveModules()
@@ -271,7 +300,7 @@ public class CurrentUserService {
             return false;
         }
 
-        String normalizedPlantCode = plantCode.trim().toUpperCase();
+        String normalizedPlantCode = plantCode.trim().toUpperCase(Locale.ROOT);
 
         return allowedPlants(user)
                 .stream()
@@ -292,7 +321,7 @@ public class CurrentUserService {
 
             String clean = requestedPlantCode
                     .trim()
-                    .toUpperCase();
+                    .toUpperCase(Locale.ROOT);
 
             boolean permitted = allowed.stream()
                     .anyMatch(value -> value != null

@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,101 +18,67 @@ import org.springframework.stereotype.Repository;
 public interface LogisticsTripItemRepository
         extends JpaRepository<LogisticsTripItem, UUID> {
 
-    /*
-     * =====================================================
-     * NORMAL LOGISTICS OPERATIONS
-     * =====================================================
-     */
-
     @Query("""
-        SELECT l
-        FROM LogisticsTripItem l
-        WHERE l.trip.id = :tripId
-    """)
+            SELECT l
+            FROM LogisticsTripItem l
+            WHERE l.trip.id = :tripId
+            ORDER BY l.id ASC
+            """)
     List<LogisticsTripItem> findByTripId(
-            @Param("tripId")
-            UUID tripId
-    );
+            @Param("tripId") UUID tripId);
 
-    List<LogisticsTripItem> findByZohoItemId(
-            String zohoItemId
-    );
+    @Query(value = """
+            SELECT l
+            FROM LogisticsTripItem l
+            WHERE l.trip.id = :tripId
+            ORDER BY l.id ASC
+            """, countQuery = """
+            SELECT COUNT(l)
+            FROM LogisticsTripItem l
+            WHERE l.trip.id = :tripId
+            """)
+    Page<LogisticsTripItem> findByTripId(
+            @Param("tripId") UUID tripId,
+            Pageable pageable);
 
-    @Query("""
-        SELECT COUNT(l)
-        FROM LogisticsTripItem l
-        WHERE l.trip.id = :tripId
-    """)
-    long countByTripId(
-            @Param("tripId")
-            UUID tripId
-    );
-
-    /*
-     * =====================================================
-     * ADMIN PACKET LIFECYCLE ROLLBACK
-     * =====================================================
-     *
-     * A packet can be referenced using:
-     *
-     * 1. LogisticsTripItem.packetItemId
-     * 2. PacketItem.id.toString()
-     * 3. PacketItem.zohoItemId
-     * 4. DispatchedItem.zohoItemId
-     *
-     * Therefore lookupIds must remain a collection.
-     */
+    List<LogisticsTripItem> findByZohoItemId(String zohoItemId);
 
     @Query("""
-        SELECT DISTINCT l
-        FROM LogisticsTripItem l
-        LEFT JOIN FETCH l.trip
-        WHERE l.packetItemId = :packetItemId
-           OR l.zohoItemId IN :lookupIds
-    """)
+            SELECT COUNT(l)
+            FROM LogisticsTripItem l
+            WHERE l.trip.id = :tripId
+            """)
+    long countByTripId(@Param("tripId") UUID tripId);
+
+    @Query("""
+            SELECT DISTINCT l
+            FROM LogisticsTripItem l
+            LEFT JOIN FETCH l.trip
+            WHERE l.packetItemId = :packetItemId
+               OR l.zohoItemId IN :lookupIds
+            """)
     List<LogisticsTripItem> findForAdminRollback(
-            @Param("packetItemId")
-            UUID packetItemId,
-
-            @Param("lookupIds")
-            Collection<String> lookupIds
-    );
-
-    /*
-     * =====================================================
-     * ADMIN PERMANENT DELETION
-     * =====================================================
-     */
+            @Param("packetItemId") UUID packetItemId,
+            @Param("lookupIds") Collection<String> lookupIds);
 
     @Query("""
-        SELECT DISTINCT l
-        FROM LogisticsTripItem l
-        LEFT JOIN FETCH l.trip
-        WHERE l.packetItemId IN :packetItemIds
-           OR l.zohoItemId IN :lookupIds
-    """)
+            SELECT DISTINCT l
+            FROM LogisticsTripItem l
+            LEFT JOIN FETCH l.trip
+            WHERE l.packetItemId IN :packetItemIds
+               OR l.zohoItemId IN :lookupIds
+            """)
     List<LogisticsTripItem> findForAdminDeletion(
-            @Param("packetItemIds")
-            Collection<UUID> packetItemIds,
+            @Param("packetItemIds") Collection<UUID> packetItemIds,
+            @Param("lookupIds") Collection<String> lookupIds);
 
-            @Param("lookupIds")
-            Collection<String> lookupIds
-    );
-
-    @Modifying(
-            flushAutomatically = true,
-            clearAutomatically = false
-    )
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
     @Query("""
-        DELETE FROM LogisticsTripItem l
-        WHERE l.packetItemId IN :packetItemIds
-           OR l.zohoItemId IN :lookupIds
-    """)
+            DELETE FROM LogisticsTripItem l
+            WHERE l.packetItemId IN :packetItemIds
+               OR l.zohoItemId IN :lookupIds
+            """)
     int deleteForAdminDeletion(
-            @Param("packetItemIds")
-            Collection<UUID> packetItemIds,
-
-            @Param("lookupIds")
-            Collection<String> lookupIds
-    );
+            @Param("packetItemIds") Collection<UUID> packetItemIds,
+            @Param("lookupIds") Collection<String> lookupIds);
 }

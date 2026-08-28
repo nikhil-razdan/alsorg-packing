@@ -18,6 +18,7 @@ import java.util.UUID;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Plant/material reporting plus the integrated Operational Exception & Recovery Register. */
 @RestController
@@ -42,6 +44,7 @@ public class MatFlowInsightController {
 
     @GetMapping("/reports/dashboard")
     public DashboardResponse dashboard(@RequestParam(required = false) String plantCode) {
+        validateText(plantCode, 32, "Plant code");
         return service.dashboard(plantCode);
     }
 
@@ -55,6 +58,10 @@ public class MatFlowInsightController {
     public List<ShortageAgeingRow> shortages(
             @RequestParam(required = false) String plantCode,
             @RequestParam(required = false) Integer minimumAgeDays) {
+        validateText(plantCode, 32, "Plant code");
+        if (minimumAgeDays != null && (minimumAgeDays < 0 || minimumAgeDays > 36500)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Minimum age days is out of range");
+        }
         return service.shortageAgeing(plantCode, minimumAgeDays);
     }
 
@@ -68,7 +75,18 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return service.stockLedger(plantCode, materialId, movementType, fromDate, toDate, search, page, size);
+        validateText(plantCode, 32, "Plant code");
+        validateText(search, 300, "Search");
+        validateDateRange(fromDate, toDate);
+        return service.stockLedger(
+                plantCode,
+                materialId,
+                movementType,
+                fromDate,
+                toDate,
+                search,
+                Math.max(page, 0),
+                normalizePageSize(size));
     }
 
     @GetMapping("/reports/audit")
@@ -82,7 +100,21 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return service.auditLogs(plantCode, entityType, entityId, action, fromDate, toDate, search, page, size);
+        validateText(plantCode, 32, "Plant code");
+        validateText(entityType, 100, "Entity type");
+        validateText(action, 120, "Action");
+        validateText(search, 300, "Search");
+        validateDateRange(fromDate, toDate);
+        return service.auditLogs(
+                plantCode,
+                entityType,
+                entityId,
+                action,
+                fromDate,
+                toDate,
+                search,
+                Math.max(page, 0),
+                normalizePageSize(size));
     }
 
     /**
@@ -95,6 +127,8 @@ public class MatFlowInsightController {
     public TrackerResponse productionReadiness(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String plantCode) {
+        validateText(search, 300, "Search");
+        validateText(plantCode, 32, "Plant code");
         return service.productionReadiness(search, plantCode);
     }
 
@@ -103,6 +137,9 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String plantCode,
             @RequestParam(required = false) String stage) {
+        validateText(search, 300, "Search");
+        validateText(plantCode, 32, "Plant code");
+        validateText(stage, 100, "Stage");
         return service.tracker(search, plantCode, stage);
     }
 
@@ -113,6 +150,7 @@ public class MatFlowInsightController {
 
     @GetMapping("/admin/integrity")
     public IntegrityReport integrity(@RequestParam(required = false) String plantCode) {
+        validateText(plantCode, 32, "Plant code");
         return service.inspectIntegrity(plantCode);
     }
 
@@ -124,6 +162,7 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String search) {
+        validateExceptionFilters(plantCode, status, severity, search);
         return service.workflowExceptions(plantCode, status, severity, search);
     }
 
@@ -133,6 +172,7 @@ public class MatFlowInsightController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String search) {
+        validateExceptionFilters(plantCode, status, severity, search);
         byte[] pdf = service.workflowExceptionsPdf(plantCode, status, severity, search);
         return pdfResponse(pdf, "MATFLOW_Operational_Exception_Recovery_Register.pdf");
     }
@@ -190,6 +230,42 @@ public class MatFlowInsightController {
             @RequestBody Map<String, Object> request) {
         return service.reopenWorkflowException(id, request);
     }
+    private void validateExceptionFilters(
+            String plantCode,
+            String status,
+            String severity,
+            String search) {
+        validateText(plantCode, 32, "Plant code");
+        validateText(status, 64, "Status");
+        validateText(severity, 64, "Severity");
+        validateText(search, 300, "Search");
+    }
+
+    private void validateText(
+            String value,
+            int maxLength,
+            String fieldName) {
+        if (value != null && value.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " cannot exceed " + maxLength + " characters");
+        }
+    }
+
+    private void validateDateRange(
+            LocalDateTime fromDate,
+            LocalDateTime toDate) {
+        if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "To date cannot be before From date");
+        }
+    }
+
+    private int normalizePageSize(int size) {
+        return Math.min(Math.max(size, 1), 100);
+    }
+
     private ResponseEntity<byte[]> pdfResponse(byte[] pdf, String fileName) {
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(fileName)

@@ -1,20 +1,44 @@
 package com.alsorg.packing.controller.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+
 public class PacketItemRequest {
 
+    @Size(max = 500, message = "Item name cannot exceed 500 characters.")
     private String itemName;
-    private String sku;
-    private String zohoItemId;
-    private Integer quantity;
-    private String description;
-    private String location;
-    private String floor;
-    private String pdNo;
-    private String drawingNo;
-    private String clientName;
-    private String clientAddress;
 
-    // Getters & Setters
+    @Size(max = 255, message = "SKU cannot exceed 255 characters.")
+    private String sku;
+
+    @Size(max = 300, message = "Zoho item id cannot exceed 300 characters.")
+    private String zohoItemId;
+
+    @Min(value = 1, message = "Quantity must be at least 1.")
+    @Max(value = 1000000, message = "Quantity is too large.")
+    private Integer quantity;
+
+    @Size(max = 5000, message = "Description cannot exceed 5000 characters.")
+    private String description;
+
+    @Size(max = 255, message = "Location cannot exceed 255 characters.")
+    private String location;
+
+    @Size(max = 100, message = "Floor cannot exceed 100 characters.")
+    private String floor;
+
+    @Size(max = 255, message = "PD number cannot exceed 255 characters.")
+    private String pdNo;
+
+    @Size(max = 255, message = "Drawing number cannot exceed 255 characters.")
+    private String drawingNo;
+
+    @Size(max = 500, message = "Client name cannot exceed 500 characters.")
+    private String clientName;
+
+    @Size(max = 2000, message = "Client address cannot exceed 2000 characters.")
+    private String clientAddress;
 
     public String getItemName() {
         return itemName;

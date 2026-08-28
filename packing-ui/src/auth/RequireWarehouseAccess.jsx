@@ -34,7 +34,9 @@ function RequireWarehouseAccess({
 				replace
 				state={{
 					from:
-						location.pathname,
+						location.pathname +
+						location.search +
+						location.hash,
 				}}
 			/>
 		);
@@ -55,7 +57,9 @@ function RequireWarehouseAccess({
 						"WAREHOUSE_ACCESS",
 
 					from:
-						location.pathname,
+						location.pathname +
+						location.search +
+						location.hash,
 				}}
 			/>
 		);

@@ -40,6 +40,10 @@ import {
   fetchVehicles,
 } from "../api/logisticsApi";
 
+import {
+  getBackendMessage,
+} from "../api/client";
+
 function getNowDateTimeLocal() {
   const d = new Date();
 
@@ -81,19 +85,6 @@ function clean(value) {
     value === ""
     ? "—"
     : String(value);
-}
-
-function getBackendMessage(
-  error,
-  fallback = "Something went wrong"
-) {
-  return (
-    error?.response?.data?.message ||
-    error?.response?.data?.error ||
-    error?.response?.data ||
-    error?.message ||
-    fallback
-  );
 }
 
 function getResolvedItem(data) {
@@ -369,7 +360,7 @@ export default function ScanDispatchScreen({
         return {
           label: "Waiting",
           tone: "idle",
-          message: "Scan a dispatch QR to begin.",
+          message: "Scan a dispatch QR or enter a Sticker Number to begin.",
         };
       }
 
@@ -400,28 +391,6 @@ export default function ScanDispatchScreen({
       canDispatch,
       status,
     ]);
-
-  const selectedDriver =
-    useMemo(
-      () =>
-        drivers.find(
-          (driver) =>
-            String(driver.id) ===
-            String(form.driverId)
-        ),
-      [drivers, form.driverId]
-    );
-
-  const selectedVehicle =
-    useMemo(
-      () =>
-        vehicles.find(
-          (vehicle) =>
-            String(vehicle.id) ===
-            String(form.vehicleId)
-        ),
-      [vehicles, form.vehicleId]
-    );
 
   const update = (
     key,
@@ -878,29 +847,6 @@ export default function ScanDispatchScreen({
     );
   }
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.permissionTitle}>
-          Camera Permission Required
-        </Text>
-
-        <Text style={styles.permissionText}>
-          ShipTrack needs camera access to scan dispatch QR codes.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.primaryFullBtn}
-          onPress={requestPermission}
-        >
-          <Text style={styles.primaryText}>
-            Allow Camera
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <ScrollView
       style={styles.page}
@@ -909,7 +855,7 @@ export default function ScanDispatchScreen({
       }}
     >
       <Text style={styles.title}>
-        Single QR Dispatch
+        Single Dispatch
       </Text>
 
       <Text style={styles.sub}>
@@ -1020,33 +966,62 @@ export default function ScanDispatchScreen({
       </View>
 
       <View style={styles.cameraWrap}>
-        {scannerActive ? (
-          <CameraView
-            style={styles.camera}
-            facing="back"
-            barcodeScannerSettings={{
-              barcodeTypes: ["qr"],
-            }}
-            onBarcodeScanned={
-              handleBarcodeScanned
-            }
-          />
+        {permission.granted ? (
+          scannerActive ? (
+            <CameraView
+              style={styles.camera}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={
+                handleBarcodeScanned
+              }
+            />
+          ) : (
+            <View style={styles.scanPaused}>
+              <Text style={styles.scanPausedText}>
+                {resolveSource === "STICKER"
+                  ? "Sticker item loaded"
+                  : "QR captured"}
+              </Text>
+
+              <Text
+                style={styles.scanText}
+                numberOfLines={3}
+              >
+                {scanText}
+              </Text>
+            </View>
+          )
         ) : (
-          <View style={styles.scanPaused}>
-            <Text style={styles.scanPausedText}>
-              QR captured
+          <View style={styles.cameraUnavailable}>
+            <Text style={styles.cameraUnavailableIcon}>
+              📷
             </Text>
 
-            <Text
-              style={styles.scanText}
-              numberOfLines={3}
-            >
-              {scanText}
+            <Text style={styles.cameraUnavailableTitle}>
+              Camera access unavailable
             </Text>
+
+            <Text style={styles.cameraUnavailableText}>
+              Manual Sticker Number entry still works. Allow camera access only when you want to scan a QR code.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.cameraPermissionBtn}
+              onPress={requestPermission}
+            >
+              <Text style={styles.cameraPermissionText}>
+                Allow Camera
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        <View style={styles.scanFrame} />
+        {permission.granted ? (
+          <View style={styles.scanFrame} />
+        ) : null}
       </View>
 
       <View style={styles.scanActions}>
@@ -1055,7 +1030,7 @@ export default function ScanDispatchScreen({
           onPress={resetScan}
         >
           <Text style={styles.secondaryText}>
-            Scan Again
+            Reset Item
           </Text>
         </TouchableOpacity>
 
@@ -1063,12 +1038,29 @@ export default function ScanDispatchScreen({
           <TouchableOpacity
             style={styles.secondaryBtn}
             onPress={() =>
-              resolveQr(scanText)
+              resolveItem(
+                scanText,
+                {
+                  source:
+                    resolveSource === "STICKER"
+                      ? "STICKER"
+                      : "QR",
+                }
+              )
             }
             disabled={loading}
           >
             <Text style={styles.secondaryText}>
-              Refresh QR
+              Refresh Item
+            </Text>
+          </TouchableOpacity>
+        ) : !permission.granted ? (
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={requestPermission}
+          >
+            <Text style={styles.secondaryText}>
+              Enable Camera
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -1079,7 +1071,9 @@ export default function ScanDispatchScreen({
           <ActivityIndicator />
 
           <Text style={styles.loadingText}>
-            Resolving QR...
+            {resolveSource === "STICKER"
+              ? "Resolving Sticker Number..."
+              : "Resolving item..."}
           </Text>
         </View>
       ) : null}
@@ -1454,7 +1448,7 @@ function CompactStats({
       />
 
       <MiniStat
-        label="QR"
+        label="Item"
         value={qrReady ? "YES" : "NO"}
         active={qrReady}
       />
@@ -1701,6 +1695,50 @@ const styles = {
 
   camera: {
     flex: 1,
+  },
+
+  cameraUnavailable: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 22,
+  },
+
+  cameraUnavailableIcon: {
+    fontSize: 30,
+    marginBottom: 8,
+  },
+
+  cameraUnavailableTitle: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  cameraUnavailableText: {
+    color: "#94a3b8",
+    fontWeight: "700",
+    fontSize: 11,
+    textAlign: "center",
+    lineHeight: 17,
+    marginTop: 5,
+    marginBottom: 12,
+  },
+
+  cameraPermissionBtn: {
+    paddingHorizontal: 16,
+    minHeight: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(59,130,246,.14)",
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,.28)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  cameraPermissionText: {
+    color: "#93c5fd",
+    fontWeight: "900",
   },
 
   scanPaused: {

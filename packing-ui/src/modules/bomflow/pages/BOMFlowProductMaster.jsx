@@ -42,6 +42,10 @@ import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import bomFlowApi from "../api/bomFlowApi.js";
 import BOMFlowPagination, { useBomFlowPagination } from "../BOMFlowPagination.jsx";
 import * as styles from "../styles/bomStyles.js";
+import {
+	canEditBomFlowRevision,
+	getBomFlowRole,
+} from "../../../utils/bomflowAccess.js";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const DRAWING_EXTENSIONS = ["pdf", "dwg", "dxf", "png", "jpg", "jpeg", "webp"];
@@ -65,10 +69,34 @@ const formatBytes = (value) => {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const parseBomDateTime = (value) => {
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value;
+	}
+	const raw = String(value || "").trim();
+	if (!raw) return null;
+	const local = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})[T ](\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d{1,9}))?)?$/);
+	if (local) {
+		const ms = Number(String(local[7] || "").padEnd(3, "0").slice(0, 3) || 0);
+		const parsed = new Date(
+			Number(local[1]),
+			Number(local[2]) - 1,
+			Number(local[3]),
+			Number(local[4]),
+			Number(local[5]),
+			Number(local[6] || 0),
+			ms
+		);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const formatDate = (value) => {
 	if (!value) return "-";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "-";
+	const date = parseBomDateTime(value);
+	if (!date) return "-";
 	return date.toLocaleString("en-IN", {
 		day: "2-digit",
 		month: "short",
@@ -81,6 +109,7 @@ const formatDate = (value) => {
 export default function BOMFlowProductMaster() {
 	const navigate = useNavigate();
 	const { productId } = useParams();
+	const canEdit = canEditBomFlowRevision(getBomFlowRole());
 
 	const imageInputRef = useRef(null);
 	const drawingInputRef = useRef(null);
@@ -112,6 +141,12 @@ export default function BOMFlowProductMaster() {
 		initialPageSize: 5,
 		resetKey: savedProduct?.id || productId || "",
 	});
+
+	useEffect(() => {
+		if (!productId && !canEdit) {
+			navigate("/bomflow/products", { replace: true });
+		}
+	}, [canEdit, navigate, productId]);
 
 	const updateField = (key, value) => {
 		setForm((prev) => ({ ...prev, [key]: value }));
@@ -272,6 +307,10 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const saveProduct = async () => {
+		if (!canEdit) {
+			setError("Your BOMFlow role has read-only Product access.");
+			return null;
+		}
 		const validationError = validateForm();
 		if (validationError) {
 			setError(validationError);
@@ -311,6 +350,7 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const handleStartBom = async () => {
+		if (!canEdit) return;
 		const product = await saveProduct();
 		if (!product?.id) return;
 
@@ -348,6 +388,7 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const handleImageSelected = async (file) => {
+		if (!canEdit) return;
 		const issue = validateImage(file);
 		if (issue) {
 			setError(issue);
@@ -379,6 +420,7 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const handleDrawingSelected = async (file) => {
+		if (!canEdit) return;
 		const issue = validateDrawing(file);
 		if (issue) {
 			setError(issue);
@@ -404,6 +446,7 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const removeImage = async () => {
+		if (!canEdit) return;
 		if (pendingImage && !savedProduct?.hasProductImage) {
 			setPendingImage(null);
 			setImagePreviewUrl("");
@@ -425,6 +468,7 @@ export default function BOMFlowProductMaster() {
 	};
 
 	const removeDrawing = async () => {
+		if (!canEdit) return;
 		if (pendingDrawing && !savedProduct?.hasDrawingFile) {
 			setPendingDrawing(null);
 			return;
@@ -448,22 +492,30 @@ export default function BOMFlowProductMaster() {
 		setFileWorking("drawing-download");
 		try {
 			const blob = await bomFlowApi.getProductDrawingBlob(savedProduct.id);
-			if (!blob) return;
+			if (!(blob instanceof Blob) || blob.size <= 0) {
+				throw new Error("Drawing file is empty.");
+			}
 			const url = URL.createObjectURL(blob);
 
 			if (open && String(savedProduct.drawingFileContentType || "").includes("pdf")) {
-				window.open(url, "_blank", "noopener,noreferrer");
-				setTimeout(() => URL.revokeObjectURL(url), 60000);
-				return;
+				const popup = window.open(url, "_blank", "noopener,noreferrer");
+				if (popup) {
+					popup.opener = null;
+					window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+					return;
+				}
 			}
 
 			const anchor = document.createElement("a");
 			anchor.href = url;
-			anchor.download = savedProduct.drawingFileName || "drawing";
+			anchor.download = String(savedProduct.drawingFileName || "drawing")
+				.replace(/[\\/\\\\?%*:|"<>\\u0000-\\u001f]/g, "_")
+				.slice(0, 180) || "drawing";
+			anchor.rel = "noopener";
 			document.body.appendChild(anchor);
 			anchor.click();
 			anchor.remove();
-			URL.revokeObjectURL(url);
+			window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 		} catch (requestError) {
 			setError(cleanError(requestError, "Unable to download drawing."));
 		} finally {
@@ -514,10 +566,10 @@ export default function BOMFlowProductMaster() {
 					</Box>
 
 					<Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-						<Button startIcon={<SaveOutlinedIcon />} disabled={saving || Boolean(fileWorking)} onClick={handleSaveDraft} sx={secondaryBtnSx}>
+						<Button startIcon={<SaveOutlinedIcon />} disabled={!canEdit || saving || Boolean(fileWorking)} onClick={handleSaveDraft} sx={secondaryBtnSx}>
 							{saving ? "Saving..." : "Save Draft"}
 						</Button>
-						<Button endIcon={<ArrowForwardIcon />} disabled={saving || completion < 100 || Boolean(fileWorking)} onClick={handleStartBom} sx={primaryBtnSx}>
+						<Button endIcon={<ArrowForwardIcon />} disabled={!canEdit || saving || completion < 100 || Boolean(fileWorking)} onClick={handleStartBom} sx={primaryBtnSx}>
 							Start BOM
 						</Button>
 					</Box>
@@ -529,6 +581,11 @@ export default function BOMFlowProductMaster() {
 			</Box>
 
 			{error && <Box sx={errorSx}>{error}</Box>}
+			{!canEdit && productId ? (
+				<Box sx={{ ...errorSx, color: "#bfdbfe", background: "rgba(59,130,246,.10)", borderColor: "rgba(96,165,250,.22)" }}>
+					Read-only Product view for your BOMFlow role. Editing, file replacement and new revision creation are disabled.
+				</Box>
+			) : null}
 
 			<Box sx={summaryGridSx}>
 				<MiniStat icon={<InfoOutlinedIcon />} title="Identity" value={hasText(form.productCode) ? "Ready" : "Pending"} subtitle="Code, drawing no. and category" accent="#60a5fa" />
@@ -542,13 +599,13 @@ export default function BOMFlowProductMaster() {
 					<Card sx={panelSx}>
 						<SectionTitle icon={<InfoOutlinedIcon />} title="Identification & Taxonomy" subtitle="Core identity used across BOM, costing and reports." />
 						<Box sx={styles.BOM_fieldStackSx}>
-							<TextField fullWidth label="Product Name *" value={form.productName} onChange={(e) => updateField("productName", e.target.value)} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth label="Product Name *" value={form.productName} onChange={(e) => updateField("productName", e.target.value)} sx={styles.BOM_fieldSx} />
 							<Box sx={styles.BOM_twoColumnFieldGridSx}>
-								<TextField fullWidth label="Product Code *" value={form.productCode} onChange={(e) => updateField("productCode", e.target.value)} sx={styles.BOM_fieldSx} />
-								<TextField fullWidth label="Drawing Number" value={form.drawingNumber} onChange={(e) => updateField("drawingNumber", e.target.value)} sx={styles.BOM_fieldSx} />
+								<TextField disabled={!canEdit} fullWidth label="Product Code *" value={form.productCode} onChange={(e) => updateField("productCode", e.target.value)} sx={styles.BOM_fieldSx} />
+								<TextField disabled={!canEdit} fullWidth label="Drawing Number" value={form.drawingNumber} onChange={(e) => updateField("drawingNumber", e.target.value)} sx={styles.BOM_fieldSx} />
 							</Box>
 							<Box sx={styles.BOM_twoColumnFieldGridSx}>
-								<TextField select fullWidth label="Category *" value={form.category} onChange={(e) => updateField("category", e.target.value)} sx={styles.BOM_fieldSx}>
+								<TextField disabled={!canEdit} select fullWidth label="Category *" value={form.category} onChange={(e) => updateField("category", e.target.value)} sx={styles.BOM_fieldSx}>
 									<MenuItem value="">Select Category</MenuItem>
 									<MenuItem value="desk">Desk</MenuItem>
 									<MenuItem value="chair">Chair</MenuItem>
@@ -558,7 +615,7 @@ export default function BOMFlowProductMaster() {
 									<MenuItem value="millwork">Millwork</MenuItem>
 									<MenuItem value="other">Other</MenuItem>
 								</TextField>
-								<TextField fullWidth label="Collection / Series" value={form.collection} onChange={(e) => updateField("collection", e.target.value)} sx={styles.BOM_fieldSx} />
+								<TextField disabled={!canEdit} fullWidth label="Collection / Series" value={form.collection} onChange={(e) => updateField("collection", e.target.value)} sx={styles.BOM_fieldSx} />
 							</Box>
 						</Box>
 					</Card>
@@ -566,9 +623,9 @@ export default function BOMFlowProductMaster() {
 					<Card sx={panelSx}>
 						<SectionTitle icon={<StraightenOutlinedIcon />} title="Physical Specifications" subtitle="Used downstream for costing, packing volume and logistics." color="#22c55e" />
 						<Box sx={styles.BOM_threeColumnFieldGridSx}>
-							<TextField fullWidth type="number" label="Length (mm) *" value={form.length} onChange={(e) => updateField("length", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
-							<TextField fullWidth type="number" label="Width (mm) *" value={form.width} onChange={(e) => updateField("width", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
-							<TextField fullWidth type="number" label="Height (mm) *" value={form.height} onChange={(e) => updateField("height", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth type="number" label="Length (mm) *" value={form.length} onChange={(e) => updateField("length", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth type="number" label="Width (mm) *" value={form.width} onChange={(e) => updateField("width", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth type="number" label="Height (mm) *" value={form.height} onChange={(e) => updateField("height", e.target.value)} inputProps={{ min: 0, step: "0.01" }} sx={styles.BOM_fieldSx} />
 						</Box>
 						<Box sx={dimensionPreviewSx}>
 							<Typography sx={dimensionValueSx}>
@@ -580,8 +637,8 @@ export default function BOMFlowProductMaster() {
 					<Card sx={panelSx}>
 						<SectionTitle icon={<BusinessCenterOutlinedIcon />} title="Project Allocation" subtitle="Link this product to the project and client." color="#a855f7" />
 						<Box sx={styles.BOM_twoColumnFieldGridSx}>
-							<TextField fullWidth label="Project Reference" value={form.projectReference} onChange={(e) => updateField("projectReference", e.target.value)} sx={styles.BOM_fieldSx} />
-							<TextField fullWidth label="Client Entity" value={form.clientEntity} onChange={(e) => updateField("clientEntity", e.target.value)} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth label="Project Reference" value={form.projectReference} onChange={(e) => updateField("projectReference", e.target.value)} sx={styles.BOM_fieldSx} />
+							<TextField disabled={!canEdit} fullWidth label="Client Entity" value={form.clientEntity} onChange={(e) => updateField("clientEntity", e.target.value)} sx={styles.BOM_fieldSx} />
 						</Box>
 					</Card>
 				</Box>
@@ -596,9 +653,9 @@ export default function BOMFlowProductMaster() {
 							<CameraAltOutlinedIcon sx={{ color: "#93c5fd" }} />
 						</Box>
 
-						<input ref={imageInputRef} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleImageSelected(file); }} />
+						<input ref={imageInputRef} type="file" hidden disabled={!canEdit} accept="image/png,image/jpeg,image/webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleImageSelected(file); }} />
 
-						<Box sx={imageBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) handleImageSelected(file); }}>
+						<Box sx={imageBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!canEdit) return; const file = e.dataTransfer.files?.[0]; if (file) handleImageSelected(file); }}>
 							{imagePreviewUrl ? (
 								<img src={imagePreviewUrl} alt="Product" style={imageStyle} />
 							) : (
@@ -611,11 +668,11 @@ export default function BOMFlowProductMaster() {
 						</Box>
 
 						<Box sx={fileActionRowSx}>
-							<Button disabled={fileWorking === "image"} onClick={() => imageInputRef.current?.click()} sx={browseBtnSx}>
+							<Button disabled={!canEdit || fileWorking === "image"} onClick={() => imageInputRef.current?.click()} sx={browseBtnSx}>
 								{fileWorking === "image" ? "Uploading..." : hasImage ? "Replace Image" : "Choose Image"}
 							</Button>
 							{hasImage && (
-								<Button startIcon={<DeleteOutlineIcon />} disabled={fileWorking === "image"} onClick={removeImage} sx={dangerBtnSx}>Remove</Button>
+								<Button startIcon={<DeleteOutlineIcon />} disabled={!canEdit || fileWorking === "image"} onClick={removeImage} sx={dangerBtnSx}>Remove</Button>
 							)}
 						</Box>
 
@@ -632,9 +689,9 @@ export default function BOMFlowProductMaster() {
 							<UploadFileOutlinedIcon sx={{ color: "#93c5fd" }} />
 						</Box>
 
-						<input ref={drawingInputRef} type="file" hidden accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleDrawingSelected(file); }} />
+						<input ref={drawingInputRef} type="file" hidden disabled={!canEdit} accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg,.webp" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) handleDrawingSelected(file); }} />
 
-						<Box sx={drawingBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) handleDrawingSelected(file); }}>
+						<Box sx={drawingBoxSx} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!canEdit) return; const file = e.dataTransfer.files?.[0]; if (file) handleDrawingSelected(file); }}>
 							<DescriptionOutlinedIcon sx={{ fontSize: 34, color: hasDrawing ? "#4ade80" : "#64748b" }} />
 							<Typography sx={uploadTitleSx}>
 								{pendingDrawing?.name || savedProduct?.drawingFileName || "Drop drawing file here"}
@@ -645,7 +702,7 @@ export default function BOMFlowProductMaster() {
 						</Box>
 
 						<Box sx={fileActionRowSx}>
-							<Button disabled={fileWorking === "drawing"} onClick={() => drawingInputRef.current?.click()} sx={browseBtnSx}>
+							<Button disabled={!canEdit || fileWorking === "drawing"} onClick={() => drawingInputRef.current?.click()} sx={browseBtnSx}>
 								{fileWorking === "drawing" ? "Uploading..." : hasDrawing ? "Replace Drawing" : "Browse Files"}
 							</Button>
 							{savedProduct?.hasDrawingFile && (
@@ -654,7 +711,7 @@ export default function BOMFlowProductMaster() {
 									<Button startIcon={<DownloadOutlinedIcon />} disabled={fileWorking === "drawing-download"} onClick={() => downloadDrawing(false)} sx={smallBtnSx}>Download</Button>
 								</>
 							)}
-							{hasDrawing && <Button startIcon={<DeleteOutlineIcon />} disabled={fileWorking === "drawing"} onClick={removeDrawing} sx={dangerBtnSx}>Remove</Button>}
+							{hasDrawing && <Button startIcon={<DeleteOutlineIcon />} disabled={!canEdit || fileWorking === "drawing"} onClick={removeDrawing} sx={dangerBtnSx}>Remove</Button>}
 						</Box>
 
 						{pendingDrawing && !savedProduct?.id && <Typography sx={pendingHintSx}>Selected: {pendingDrawing.name}. It will upload when the product is saved.</Typography>}

@@ -1,5 +1,6 @@
 package com.alsorg.packing.domain.matflow;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.MovementType;
 
 import jakarta.persistence.Column;
@@ -45,18 +46,9 @@ public class MatFlowStockLedger {
     @Column(name = "movement_type", nullable = false, length = 60)
     public MovementType movementType;
 
-    /**
-     * Positive = stock added.
-     * Negative = stock removed.
-     * Zero = reservation-only movement.
-     */
     @Column(name = "quantity_change", nullable = false, precision = 19, scale = 3)
     public BigDecimal quantityChange = BigDecimal.ZERO;
 
-    /**
-     * Positive = reservation added.
-     * Negative = reservation released.
-     */
     @Column(name = "reserved_change", nullable = false, precision = 19, scale = 3)
     public BigDecimal reservedChange = BigDecimal.ZERO;
 
@@ -108,7 +100,7 @@ public class MatFlowStockLedger {
     @PrePersist
     public void prePersist() {
         if (actionAt == null) {
-            actionAt = LocalDateTime.now();
+            actionAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
         }
     }
 }

@@ -6,22 +6,12 @@ import java.util.UUID;
 public class DriverResponse {
 
     private UUID id;
-
     private String name;
-
     private String phoneNumber;
-
     private String licenseNumber;
-
     private String shiftType;
-
     private boolean active;
-
     private LocalDate joiningDate;
-
-    // =========================
-    // GETTERS & SETTERS
-    // =========================
 
     public UUID getId() {
         return id;

@@ -3,14 +3,21 @@ package com.alsorg.packing.service;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.logistics.Vehicle;
 import com.alsorg.packing.repository.VehicleRepository;
 
 @Service
 public class VehicleService {
+
+    private static final int MAX_VEHICLE_NUMBER = 40;
+    private static final int MAX_SHORT_TEXT = 120;
 
     private final VehicleRepository repository;
 
@@ -19,48 +26,24 @@ public class VehicleService {
         this.repository = repository;
     }
 
-    /*
-     * CREATE VEHICLE
-     *
-     * Existing/internal callers continue requiring vehicle type.
-     */
     @Transactional
     public Vehicle create(
             Vehicle vehicle) {
-
-        return create(
-                vehicle,
-                false);
+        return create(vehicle, false);
     }
 
-    /*
-     * CREATE VEHICLE WITH CLIENT-SPECIFIC VALIDATION
-     *
-     * allowMissingVehicleType:
-     * true  = ShipTrack mobile quick-create
-     * false = regular web/admin vehicle creation
-     */
     @Transactional
     public Vehicle create(
             Vehicle vehicle,
             boolean allowMissingVehicleType) {
-
-        if (vehicle == null) {
-            throw new RuntimeException(
-                    "Vehicle request is required");
-        }
-
+        requireVehicleRequest(vehicle);
         normalizeVehicle(vehicle);
+        validateVehicle(vehicle, allowMissingVehicleType);
 
-        validateVehicle(
-                vehicle,
-                allowMissingVehicleType);
-
-        if (repository
-                .existsByVehicleNumberIgnoreCase(
-                        vehicle.getVehicleNumber())) {
-
-            throw new RuntimeException(
+        if (repository.existsByVehicleNumberIgnoreCase(
+                vehicle.getVehicleNumber())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
                     "Vehicle already exists: "
                             + vehicle.getVehicleNumber());
         }
@@ -68,246 +51,182 @@ public class VehicleService {
         return repository.save(vehicle);
     }
 
-    /*
-     * GET ALL
-     */
-
     @Transactional(readOnly = true)
     public List<Vehicle> getAll() {
+        /* Compatibility endpoint retained for existing clients. */
         return repository.findAll();
     }
 
-    /*
-     * UPDATE VEHICLE
-     *
-     * Normal vehicle-management updates still require vehicle type.
-     */
+    @Transactional(readOnly = true)
+    public Page<Vehicle> getPage(
+            Pageable pageable) {
+        if (pageable == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vehicle page request is required");
+        }
+
+        return repository.findAll(pageable);
+    }
+
     @Transactional
     public Vehicle update(
             UUID id,
             Vehicle request) {
-
-        Vehicle vehicle = repository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Vehicle not found"));
-
-        if (request == null) {
-            throw new RuntimeException(
-                    "Vehicle request is required");
+        if (id == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vehicle id is required");
         }
 
+        requireVehicleRequest(request);
         normalizeVehicle(request);
+        validateVehicle(request, false);
 
-        /*
-         * false means vehicle type stays mandatory
-         * for normal ADMIN/LOGISTICS updates.
-         */
-        validateVehicle(
-                request,
-                false);
+        Vehicle vehicle = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Vehicle not found"));
 
-        if (repository
-                .existsByVehicleNumberIgnoreCaseAndIdNot(
-                        request.getVehicleNumber(),
-                        id)) {
-
-            throw new RuntimeException(
+        if (repository.existsByVehicleNumberIgnoreCaseAndIdNot(
+                request.getVehicleNumber(),
+                id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
                     "Vehicle number already exists");
         }
 
-        vehicle.setVehicleNumber(
-                request.getVehicleNumber());
-
-        vehicle.setVehicleName(
-                request.getVehicleName());
-
-        vehicle.setVehicleType(
-                request.getVehicleType());
-
-        vehicle.setDriverName(
-                request.getDriverName());
-
-        vehicle.setOwnerName(
-                request.getOwnerName());
-
-        vehicle.setRegisteringAuthority(
-                request.getRegisteringAuthority());
-
-        vehicle.setVehicleClass(
-                request.getVehicleClass());
-
-        vehicle.setFuelType(
-                request.getFuelType());
-
-        vehicle.setFuelCapacity(
-                request.getFuelCapacity());
-
-        vehicle.setEmissionNorm(
-                request.getEmissionNorm());
-
-        vehicle.setVehicleAge(
-                request.getVehicleAge());
-
-        vehicle.setStatus(
-                request.getStatus());
-
-        vehicle.setActive(
-                request.isActive());
-
-        vehicle.setCapacity(
-                request.getCapacity());
-
-        vehicle.setRegistrationDate(
-                request.getRegistrationDate());
-
-        vehicle.setFitnessValidUpto(
-                request.getFitnessValidUpto());
-
-        vehicle.setInsuranceValidUpto(
-                request.getInsuranceValidUpto());
-
-        vehicle.setTaxValidUpto(
-                request.getTaxValidUpto());
-
-        vehicle.setPermitValidUpto(
-                request.getPermitValidUpto());
-
-        vehicle.setPuccValidUpto(
-                request.getPuccValidUpto());
-
-        vehicle.setNationalPermitValidUpto(
-                request.getNationalPermitValidUpto());
+        vehicle.setVehicleNumber(request.getVehicleNumber());
+        vehicle.setVehicleName(request.getVehicleName());
+        vehicle.setVehicleType(request.getVehicleType());
+        vehicle.setDriverName(request.getDriverName());
+        vehicle.setOwnerName(request.getOwnerName());
+        vehicle.setRegisteringAuthority(request.getRegisteringAuthority());
+        vehicle.setVehicleClass(request.getVehicleClass());
+        vehicle.setFuelType(request.getFuelType());
+        vehicle.setFuelCapacity(request.getFuelCapacity());
+        vehicle.setEmissionNorm(request.getEmissionNorm());
+        vehicle.setVehicleAge(request.getVehicleAge());
+        vehicle.setStatus(request.getStatus());
+        vehicle.setActive(request.isActive());
+        vehicle.setCapacity(request.getCapacity());
+        vehicle.setRegistrationDate(request.getRegistrationDate());
+        vehicle.setFitnessValidUpto(request.getFitnessValidUpto());
+        vehicle.setInsuranceValidUpto(request.getInsuranceValidUpto());
+        vehicle.setTaxValidUpto(request.getTaxValidUpto());
+        vehicle.setPermitValidUpto(request.getPermitValidUpto());
+        vehicle.setPuccValidUpto(request.getPuccValidUpto());
+        vehicle.setNationalPermitValidUpto(request.getNationalPermitValidUpto());
 
         normalizeVehicle(vehicle);
 
         return repository.save(vehicle);
     }
 
-    /*
-     * DELETE
-     */
-
     @Transactional
-    public void delete(UUID id) {
+    public void delete(
+            UUID id) {
+        if (id == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vehicle id is required");
+        }
 
         Vehicle vehicle = repository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Vehicle not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Vehicle not found"));
 
         repository.delete(vehicle);
     }
 
-    /*
-     * HELPERS
-     */
+    private void requireVehicleRequest(
+            Vehicle vehicle) {
+        if (vehicle == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vehicle request is required");
+        }
+    }
 
     private void validateVehicle(
             Vehicle vehicle,
             boolean allowMissingVehicleType) {
-
-        if (vehicle == null) {
-            throw new RuntimeException(
-                    "Vehicle request is required");
-        }
-
         if (vehicle.getVehicleNumber() == null
-                || vehicle.getVehicleNumber()
-                        .isBlank()) {
-
-            throw new RuntimeException(
+                || vehicle.getVehicleNumber().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
                     "Vehicle number is required");
         }
 
-        /*
-         * ShipTrack mobile can create a vehicle
-         * using only the vehicle number.
-         */
-        if (!allowMissingVehicleType
-                && (
-                    vehicle.getVehicleType() == null
-                    || vehicle.getVehicleType()
-                            .isBlank()
-                )) {
+        if (vehicle.getVehicleNumber().length() > MAX_VEHICLE_NUMBER) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vehicle number is too long");
+        }
 
-            throw new RuntimeException(
+        if (!allowMissingVehicleType
+                && (vehicle.getVehicleType() == null
+                        || vehicle.getVehicleType().isBlank())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
                     "Vehicle type is required");
         }
     }
 
     private void normalizeVehicle(
             Vehicle vehicle) {
-
-        String vehicleNumber =
-                clean(vehicle.getVehicleNumber());
+        String vehicleNumber = cleanLimited(
+                vehicle.getVehicleNumber(),
+                MAX_VEHICLE_NUMBER,
+                "Vehicle number");
 
         vehicle.setVehicleNumber(
                 vehicleNumber == null
                         ? null
                         : vehicleNumber
                                 .toUpperCase()
-                                .replaceAll(
-                                        "\\s+",
-                                        ""));
+                                .replaceAll("\\s+", ""));
 
-        vehicle.setVehicleName(
-                clean(vehicle.getVehicleName()));
+        vehicle.setVehicleName(cleanLimited(vehicle.getVehicleName(), MAX_SHORT_TEXT, "Vehicle name"));
+        vehicle.setVehicleType(cleanLimited(vehicle.getVehicleType(), MAX_SHORT_TEXT, "Vehicle type"));
+        vehicle.setDriverName(cleanLimited(vehicle.getDriverName(), MAX_SHORT_TEXT, "Driver name"));
+        vehicle.setOwnerName(cleanLimited(vehicle.getOwnerName(), MAX_SHORT_TEXT, "Owner name"));
+        vehicle.setRegisteringAuthority(cleanLimited(vehicle.getRegisteringAuthority(), MAX_SHORT_TEXT, "Registering authority"));
+        vehicle.setVehicleClass(cleanLimited(vehicle.getVehicleClass(), MAX_SHORT_TEXT, "Vehicle class"));
+        vehicle.setFuelType(cleanLimited(vehicle.getFuelType(), MAX_SHORT_TEXT, "Fuel type"));
+        vehicle.setFuelCapacity(cleanLimited(vehicle.getFuelCapacity(), MAX_SHORT_TEXT, "Fuel capacity"));
+        vehicle.setEmissionNorm(cleanLimited(vehicle.getEmissionNorm(), MAX_SHORT_TEXT, "Emission norm"));
+        vehicle.setVehicleAge(cleanLimited(vehicle.getVehicleAge(), MAX_SHORT_TEXT, "Vehicle age"));
 
-        vehicle.setVehicleType(
-                clean(vehicle.getVehicleType()));
+        String status = cleanLimited(vehicle.getStatus(), 60, "Vehicle status");
+        vehicle.setStatus(status == null ? "Active" : status);
 
-        vehicle.setDriverName(
-                clean(vehicle.getDriverName()));
-
-        vehicle.setOwnerName(
-                clean(vehicle.getOwnerName()));
-
-        vehicle.setRegisteringAuthority(
-                clean(
-                        vehicle.getRegisteringAuthority()));
-
-        vehicle.setVehicleClass(
-                clean(vehicle.getVehicleClass()));
-
-        vehicle.setFuelType(
-                clean(vehicle.getFuelType()));
-
-        vehicle.setFuelCapacity(
-                clean(vehicle.getFuelCapacity()));
-
-        vehicle.setEmissionNorm(
-                clean(vehicle.getEmissionNorm()));
-
-        vehicle.setVehicleAge(
-                clean(vehicle.getVehicleAge()));
-
-        String status =
-                clean(vehicle.getStatus());
-
-        if (status == null) {
-            vehicle.setStatus("Active");
-        } else {
-            vehicle.setStatus(status);
-        }
-
-        vehicle.setActive(
-                !"Inactive".equalsIgnoreCase(
-                        vehicle.getStatus()));
+        /* Preserve the existing status-driven active flag semantics. */
+        vehicle.setActive(!"Inactive".equalsIgnoreCase(vehicle.getStatus()));
     }
 
-    private String clean(
-            String value) {
-
+    private String cleanLimited(
+            String value,
+            int maxLength,
+            String label) {
         if (value == null) {
             return null;
         }
 
-        String cleaned =
-                value.trim();
+        String cleaned = value.trim();
 
-        return cleaned.isBlank()
-                ? null
-                : cleaned;
+        if (cleaned.isBlank()) {
+            return null;
+        }
+
+        if (cleaned.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    label + " cannot exceed "
+                            + maxLength + " characters");
+        }
+
+        return cleaned;
     }
 }

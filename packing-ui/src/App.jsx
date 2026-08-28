@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
 import MatFlowRoutes from "./modules/matflow/MatFlowRoutes";
+import HrFlowPublicEntry from "./modules/hrflow/HrFlowPublicEntry";
+import AssetFlowRequestPortal from "./modules/assetflow/AssetFlowRequestPortal";
 import DashboardPage from "./pages/Dashboard";
 import ZohoItemsPage from "./pages/ZohoItemsPage";
 import LoginPage from "./pages/LoginPage";
@@ -80,6 +82,15 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/*
+           * Explicit public routes keep SPA navigation working in addition to
+           * AuthContext's direct-page-load interception. Token/reporter-pass
+           * validation remains inside the corresponding backend flows.
+           */}
+          <Route path="/hr/apply/:token" element={<HrFlowPublicEntry />} />
+          <Route path="/hr/onboarding/:token" element={<HrFlowPublicEntry />} />
+          <Route path="/assetflow/request" element={<AssetFlowRequestPortal />} />
+
           <Route path="/login" element={<LoginPage />} />
 
           <Route

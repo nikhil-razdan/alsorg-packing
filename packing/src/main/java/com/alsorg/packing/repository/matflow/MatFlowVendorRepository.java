@@ -7,12 +7,9 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowVendorRepository
-                extends JpaRepository<MatFlowVendor, UUID> {
+        extends JpaRepository<MatFlowVendor, UUID> {
 
-        boolean existsByVendorCodeIgnoreCase(
-                        String vendorCode);
+    boolean existsByVendorCodeIgnoreCase(String vendorCode);
 
-        boolean existsByVendorCodeIgnoreCaseAndIdNot(
-                        String vendorCode,
-                        UUID id);
+    boolean existsByVendorCodeIgnoreCaseAndIdNot(String vendorCode, UUID id);
 }

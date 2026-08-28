@@ -8,7 +8,8 @@ import java.util.UUID;
 
 public final class HrEmployeeDtos {
 
-    private HrEmployeeDtos() {}
+    private HrEmployeeDtos() {
+    }
 
     public record EmployeeSummaryResponse(
             UUID id,
@@ -23,7 +24,8 @@ public final class HrEmployeeDtos {
             String mobileNo,
             LocalDateTime createdAt,
             long rowVersion
-    ) {}
+    ) {
+    }
 
     public record EmployeeDetailResponse(
             UUID id,
@@ -47,5 +49,6 @@ public final class HrEmployeeDtos {
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             long rowVersion
-    ) {}
+    ) {
+    }
 }

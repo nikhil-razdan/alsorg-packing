@@ -1,512 +1,449 @@
 package com.alsorg.packing.controller;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.alsorg.packing.service.WarehouseService;
-import com.alsorg.packing.domain.imports.ImportPreviewRow;
+import com.alsorg.packing.controller.dto.PlantAssignmentRequest;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
-import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.domain.imports.ImportPreviewRow;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.service.CurrentUserService;
+import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.service.WarehouseService;
 
 @RestController
 @RequestMapping("/api/warehouse")
 public class WarehouseController {
 
-        private final WarehouseService service;
-        private final DispatchedItemService dservice;
-        private final CurrentUserService currentUserService;
+    private static final int MAX_BULK_IDS = 200;
 
-        public WarehouseController(WarehouseService service,
-                        DispatchedItemService dservice,
-                        CurrentUserService currentUserService) {
-                this.service = service;
-                this.dservice = dservice;
-                this.currentUserService = currentUserService;
+    private final WarehouseService service;
+    private final DispatchedItemService dservice;
+    private final CurrentUserService currentUserService;
+
+    public WarehouseController(
+            WarehouseService service,
+            DispatchedItemService dservice,
+            CurrentUserService currentUserService) {
+        this.service = service;
+        this.dservice = dservice;
+        this.currentUserService = currentUserService;
+    }
+
+    @GetMapping("/floor")
+    public List<DispatchedItem> floor() {
+        User user = warehouseUser();
+        return service.getFloorItems(
+                currentUserService.allowedPlants(user),
+                currentUserService.canViewAllWarehouseData(user));
+    }
+
+    @GetMapping("/items")
+    public List<DispatchedItem> warehouse() {
+        User user = warehouseUser();
+        return service.getWarehouseItems(
+                currentUserService.allowedPlants(user),
+                currentUserService.canViewAllWarehouseData(user));
+    }
+
+    @PostMapping("/{zohoItemId}/store")
+    public ResponseEntity<Map<String, String>> moveToWarehouse(
+            @PathVariable String zohoItemId,
+            @RequestParam String warehouseCode,
+            @RequestParam String fromLocation) {
+
+        User user = currentUserService.requireCurrentUser();
+        requireGatePassGenerationAccess(user);
+
+        String gatePass = dservice.moveToWarehouse(
+                zohoItemId,
+                warehouseCode,
+                fromLocation,
+                user.getUsername(),
+                currentUserService.allowedPlants(user));
+
+        return ResponseEntity.ok(Map.of(
+                "gatePass", gatePass,
+                "status", "WAREHOUSE_REQUESTED"));
+    }
+
+    @PostMapping("/bulk-move")
+    public ResponseEntity<Map<String, String>> bulkMoveToWarehouse(
+            @RequestBody(required = false) BulkMoveRequest request) {
+
+        User user = currentUserService.requireCurrentUser();
+        requireGatePassGenerationAccess(user);
+
+        if (request == null) {
+            throw badRequest("Bulk warehouse move request is required");
         }
 
-        @GetMapping("/floor")
-        public List<DispatchedItem> floor(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        List<String> itemIds = cleanIds(request.itemIds());
 
-                assertWarehouseAccess(user);
+        String gatePass = dservice.bulkMoveToWarehouse(
+                itemIds,
+                request.warehouseCode(),
+                request.fromLocation(),
+                user.getUsername(),
+                currentUserService.allowedPlants(user));
 
-                return service.getFloorItems(
-                                currentUserService.allowedPlants(user),
-                                currentUserService.canViewAllWarehouseData(user));
+        return ResponseEntity.ok(Map.of(
+                "gatePass", gatePass,
+                "status", "WAREHOUSE_REQUESTED"));
+    }
+
+    @PostMapping("/{zohoItemId}/approve")
+    public ResponseEntity<Map<String, String>> approveWarehouse(
+            @PathVariable String zohoItemId,
+            @RequestParam String gatePass) {
+
+        User user = warehouseUser();
+
+        if (!currentUserService.canApproveWarehouseMove(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only WAREHOUSE or ADMIN can approve warehouse gate passes");
         }
 
-        @GetMapping("/items")
-        public List<DispatchedItem> warehouse(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        dservice.approveWarehouseMove(
+                zohoItemId,
+                gatePass,
+                user.getUsername(),
+                currentUserService.allowedPlants(user),
+                user.getRole());
 
-                assertWarehouseAccess(user);
+        return ResponseEntity.ok(Map.of(
+                "message", "Warehouse approved successfully",
+                "status", "IN_WAREHOUSE"));
+    }
 
-                return service.getWarehouseItems(
-                                currentUserService.allowedPlants(user),
-                                currentUserService.canViewAllWarehouseData(user));
+    @PostMapping("/{zohoItemId}/reject")
+    public ResponseEntity<Map<String, String>> rejectWarehouse(
+            @PathVariable String zohoItemId) {
+
+        User user = warehouseUser();
+
+        if (!currentUserService.canApproveWarehouseMove(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only WAREHOUSE or ADMIN can reject warehouse gate passes");
         }
 
-        @PostMapping("/{zohoItemId}/store")
-        public ResponseEntity<?> moveToWarehouse(
-                        @PathVariable String zohoItemId,
-                        @RequestParam String warehouseCode,
-                        @RequestParam String fromLocation,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        dservice.rejectWarehouseMove(
+                zohoItemId,
+                user.getUsername(),
+                currentUserService.allowedPlants(user),
+                user.getRole());
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        return ResponseEntity.ok(Map.of(
+                "message", "Warehouse request rejected",
+                "status", "READY_TO_STORE"));
+    }
 
-                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
-                }
+    @PostMapping("/import")
+    public ResponseEntity<String> importExcel(
+            @RequestParam MultipartFile file,
+            @RequestParam String mode,
+            @RequestParam(required = false) String plantCode) {
 
-                String gatePass = dservice.moveToWarehouse(
-                                zohoItemId,
-                                warehouseCode,
-                                fromLocation,
-                                user.getUsername(),
-                                currentUserService.allowedPlants(user));
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "gatePass", gatePass,
-                                                "status", "WAREHOUSE_REQUESTED"));
-        }
-
-        @SuppressWarnings("unchecked")
-        @PostMapping("/bulk-move")
-        public ResponseEntity<?> bulkMoveToWarehouse(
-                        @RequestBody Map<String, Object> body,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-
-                if (!currentUserService.canGenerateWarehouseGatePass(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .body("Only DISPATCH / ADMIN user can generate warehouse gate pass");
-                }
-
-                List<String> itemIds = (List<String>) body.get("itemIds");
-
-                String warehouseCode = (String) body.get("warehouseCode");
-
-                String fromLocation = (String) body.get("fromLocation");
-
-                String gatePass = dservice.bulkMoveToWarehouse(
-                                itemIds,
-                                warehouseCode,
-                                fromLocation,
-                                user.getUsername(),
-                                currentUserService.allowedPlants(user));
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "gatePass", gatePass,
-                                                "status", "WAREHOUSE_REQUESTED"));
-        }
-
-        @PostMapping("/{zohoItemId}/approve")
-        public ResponseEntity<?> approveWarehouse(
-                        @PathVariable String zohoItemId,
-                        @RequestParam String gatePass,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-
-                assertWarehouseAccess(user);
-
-                if (!currentUserService.canApproveWarehouseMove(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .body("Only WAREHOUSE / ADMIN / warehouse-access user can approve warehouse gate pass");
-                }
-
-                dservice.approveWarehouseMove(
-                                zohoItemId,
-                                gatePass,
-                                user.getUsername(),
-                                currentUserService.allowedPlants(user),
-                                user.getRole());
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "message", "Warehouse approved successfully",
-                                                "status", "IN_WAREHOUSE"));
-        }
-
-        @PostMapping("/import")
-        public ResponseEntity<?> importExcel(
-                        @RequestParam MultipartFile file,
-                        @RequestParam String mode,
-                        @RequestParam(required = false) String plantCode,
-                        @RequestHeader(value = "Authorization", required = false) String auth,
-                        @RequestHeader(value = "X-Username", required = false) String username) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertWarehouseAccess(user);
-
-                String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
-
-                service.processImport(
-                                file,
-                                mode,
-                                username != null && !username.isBlank()
-                                                ? username
-                                                : user.getUsername(),
-                                resolvedPlant);
-
-                return ResponseEntity.ok("Import successful");
-        }
-
-        @PostMapping("/{zohoItemId}/reject")
-        public ResponseEntity<?> rejectWarehouse(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-
-                assertWarehouseAccess(user);
-
-                if (!currentUserService.canApproveWarehouseMove(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .body("Only WAREHOUSE / ADMIN / warehouse-access user can reject warehouse gate pass");
-                }
-
-                dservice.rejectWarehouseMove(
-                                zohoItemId,
-                                user.getUsername(),
-                                currentUserService.allowedPlants(user),
-                                user.getRole());
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "message", "Warehouse request rejected",
-                                                "status", "READY_TO_STORE"));
-        }
-
-        @PostMapping("/import/preview")
-        public List<ImportPreviewRow> preview(
-                        @RequestParam MultipartFile file,
-                        @RequestParam String mode,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-
-                assertWarehouseAccess(user);
-
-                return service.previewImport(file, mode);
-        }
-
-        @PostMapping("/import/confirm")
-        public ResponseEntity<?> confirm(
-                        @RequestParam MultipartFile file,
-                        @RequestParam String mode,
-                        @RequestParam(required = false) String plantCode,
-                        @RequestHeader(value = "Authorization", required = false) String auth,
-                        @RequestHeader(value = "X-Username", required = false) String username) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertWarehouseAccess(user);
-
-                String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
-
-                service.processImport(
-                                file,
-                                mode,
-                                username != null && !username.isBlank()
-                                                ? username
-                                                : user.getUsername(),
-                                resolvedPlant);
-
-                return ResponseEntity.ok("Import successful");
-        }
-
-        @GetMapping("/import/template")
-        public ResponseEntity<byte[]> downloadTemplate(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-
-                assertWarehouseAccess(user);
-
-                String header = String.join(",",
-                                "name",
-                                "sku",
-                                "pdNo",
-                                "drawingNo",
-                                "description",
-                                "clientName",
-                                "location",
-                                "warehouseCode",
-                                "gatePass");
-
-                byte[] csv = (header + "\n").getBytes();
-
-                return ResponseEntity.ok()
-                                .header("Content-Disposition", "attachment; filename=warehouse_import_template.csv")
-                                .header("Content-Type", "text/csv")
-                                .body(csv);
-        }
+        User user = warehouseUser();
+        String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
 
         /*
-         * =========================================================
-         * ADMIN WAREHOUSE CONTROL
-         * =========================================================
+         * Audit identity is always the authenticated principal. X-Username is
+         * deliberately not accepted here because it is user-controlled input.
          */
+        service.processImport(
+                file,
+                mode,
+                user.getUsername(),
+                resolvedPlant);
 
-        @PostMapping("/admin/{zohoItemId}/request-return-to-dispatch")
-        public ResponseEntity<?> adminRequestReturnToDispatch(
-                        @PathVariable String zohoItemId,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        return ResponseEntity.ok("Import successful");
+    }
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
+    @PostMapping("/import/preview")
+    public List<ImportPreviewRow> preview(
+            @RequestParam MultipartFile file,
+            @RequestParam String mode) {
+        warehouseUser();
+        return service.previewImport(file, mode);
+    }
 
-                try {
-                        service.adminRequestReturnToDispatch(
-                                        zohoItemId,
-                                        user.getUsername());
+    @PostMapping("/import/confirm")
+    public ResponseEntity<String> confirm(
+            @RequestParam MultipartFile file,
+            @RequestParam String mode,
+            @RequestParam(required = false) String plantCode) {
 
-                        return ResponseEntity.ok(
-                                        Map.of(
-                                                        "message", "Return to Dispatch requested",
-                                                        "status", "WAREHOUSE_RETURN_REQUESTED",
-                                                        "zohoItemId", zohoItemId));
-                } catch (IllegalArgumentException exception) {
-                        return ResponseEntity.badRequest()
-                                        .body(exception.getMessage());
-                }
+        User user = warehouseUser();
+        String resolvedPlant = currentUserService.resolvePlantForWrite(user, plantCode);
+
+        service.processImport(
+                file,
+                mode,
+                user.getUsername(),
+                resolvedPlant);
+
+        return ResponseEntity.ok("Import successful");
+    }
+
+    @GetMapping("/import/template")
+    public ResponseEntity<byte[]> downloadTemplate() {
+        warehouseUser();
+
+        String header = String.join(",",
+                "name",
+                "sku",
+                "pdNo",
+                "drawingNo",
+                "description",
+                "clientName",
+                "location",
+                "warehouseCode",
+                "gatePass");
+
+        byte[] csv = (header + "\n").getBytes(StandardCharsets.UTF_8);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"warehouse_import_template.csv\"")
+                .header(
+                        HttpHeaders.CACHE_CONTROL,
+                        "no-store, no-cache, must-revalidate, max-age=0")
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .body(csv);
+    }
+
+    @PostMapping("/admin/{zohoItemId}/request-return-to-dispatch")
+    public ResponseEntity<Map<String, Object>> adminRequestReturnToDispatch(
+            @PathVariable String zohoItemId) {
+
+        User user = adminUser();
+        service.adminRequestReturnToDispatch(zohoItemId, user.getUsername());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Return to Dispatch requested",
+                "status", "WAREHOUSE_RETURN_REQUESTED",
+                "zohoItemId", zohoItemId));
+    }
+
+    @PostMapping("/admin/returns/bulk/request")
+    public ResponseEntity<Map<String, Object>> adminBulkRequestReturnToDispatch(
+            @RequestBody List<String> itemIds) {
+
+        User user = adminUser();
+        List<String> cleanIds = cleanIds(itemIds);
+
+        int updated = service.adminBulkRequestReturnToDispatch(
+                cleanIds,
+                user.getUsername());
+
+        return ResponseEntity.ok(Map.of(
+                "message", updated + " return request(s) created",
+                "updated", updated,
+                "status", "WAREHOUSE_RETURN_REQUESTED"));
+    }
+
+    @PostMapping("/admin/returns/bulk/approve")
+    public ResponseEntity<Map<String, Object>> adminBulkApproveReturnRequests(
+            @RequestBody List<String> itemIds) {
+
+        User user = adminUser();
+        List<String> cleanIds = cleanIds(itemIds);
+
+        int updated = service.adminBulkApproveReturnRequests(
+                cleanIds,
+                user.getUsername());
+
+        return ResponseEntity.ok(Map.of(
+                "message", updated + " return request(s) approved",
+                "updated", updated,
+                "status", "READY"));
+    }
+
+    @PostMapping("/admin/returns/bulk/reject")
+    public ResponseEntity<Map<String, Object>> adminBulkRejectReturnRequests(
+            @RequestBody List<String> itemIds) {
+
+        User user = adminUser();
+        List<String> cleanIds = cleanIds(itemIds);
+
+        int updated = service.adminBulkRejectReturnRequests(
+                cleanIds,
+                user.getUsername());
+
+        return ResponseEntity.ok(Map.of(
+                "message", updated + " return request(s) rejected",
+                "updated", updated,
+                "status", "IN_WAREHOUSE"));
+    }
+
+    @PatchMapping("/admin/{zohoItemId}/location")
+    public ResponseEntity<DispatchedItem> adminEditLocation(
+            @PathVariable String zohoItemId,
+            @RequestBody PlantAssignmentRequest request) {
+
+        User user = adminUser();
+        validateLocationRequest(request);
+
+        return ResponseEntity.ok(
+                service.adminEditLocation(
+                        zohoItemId,
+                        request.getPlantCode(),
+                        request.getCurrentLocationCode(),
+                        request.getFgZoneCode(),
+                        request.getWarehouseCode(),
+                        user.getUsername()));
+    }
+
+    @PatchMapping("/admin/bulk-location")
+    public ResponseEntity<Map<String, Object>> adminBulkEditLocation(
+            @RequestBody(required = false) AdminBulkLocationRequest request) {
+
+        User user = adminUser();
+
+        if (request == null) {
+            throw badRequest("Bulk location request is required");
         }
 
-        @PostMapping("/admin/returns/bulk/request")
-        public ResponseEntity<?> adminBulkRequestReturnToDispatch(
-                        @RequestBody List<String> itemIds,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        List<String> uniqueIds = cleanIds(request.itemIds());
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
-
-                if (itemIds == null || itemIds.isEmpty()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Select at least one warehouse item");
-                }
-
-                try {
-                        int updated = service.adminBulkRequestReturnToDispatch(
-                                        itemIds,
-                                        user.getUsername());
-
-                        return ResponseEntity.ok(
-                                        Map.of(
-                                                        "message", updated + " return request(s) created",
-                                                        "updated", updated,
-                                                        "status", "WAREHOUSE_RETURN_REQUESTED"));
-                } catch (IllegalArgumentException exception) {
-                        return ResponseEntity.badRequest()
-                                        .body(exception.getMessage());
-                }
+        if (request.plantCode() == null || request.plantCode().isBlank()) {
+            throw badRequest("Plant code required");
         }
 
-        @PostMapping("/admin/returns/bulk/approve")
-        public ResponseEntity<?> adminBulkApproveReturnRequests(
-                        @RequestBody List<String> itemIds,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        int updated = service.adminBulkEditLocation(
+                uniqueIds,
+                request.plantCode(),
+                request.currentLocationCode(),
+                request.fgZoneCode(),
+                request.warehouseCode(),
+                user.getUsername());
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
+        return ResponseEntity.ok(Map.of(
+                "message", updated + " item location(s) updated",
+                "updated", updated));
+    }
 
-                if (itemIds == null || itemIds.isEmpty()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Select at least one return request");
-                }
+    @PostMapping("/gatepass/generate-missing")
+    public ResponseEntity<Map<String, Object>> generateMissingGatePass() {
 
-                try {
-                        int updated = service.adminBulkApproveReturnRequests(
-                                        itemIds,
-                                        user.getUsername());
+        User user = warehouseUser();
 
-                        return ResponseEntity.ok(
-                                        Map.of(
-                                                        "message", updated + " return request(s) approved",
-                                                        "updated", updated,
-                                                        "status", "READY"));
-                } catch (IllegalArgumentException exception) {
-                        return ResponseEntity.badRequest()
-                                        .body(exception.getMessage());
-                }
+        if (!currentUserService.hasAnyRole(user, "ADMIN", "DISPATCH")) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN or DISPATCH can generate missing gate passes");
         }
 
-        @PostMapping("/admin/returns/bulk/reject")
-        public ResponseEntity<?> adminBulkRejectReturnRequests(
-                        @RequestBody List<String> itemIds,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        int generated = service.generateMissingGatePassForStoredItems(
+                currentUserService.allowedPlants(user),
+                currentUserService.canViewAllWarehouseData(user),
+                user.getUsername());
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
+        return ResponseEntity.ok(Map.of(
+                "generated", generated,
+                "message", generated + " missing gate pass number(s) generated"));
+    }
 
-                if (itemIds == null || itemIds.isEmpty()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Select at least one return request");
-                }
+    private User warehouseUser() {
+        User user = currentUserService.requireCurrentUser();
 
-                try {
-                        int updated = service.adminBulkRejectReturnRequests(
-                                        itemIds,
-                                        user.getUsername());
-
-                        return ResponseEntity.ok(
-                                        Map.of(
-                                                        "message", updated + " return request(s) rejected",
-                                                        "updated", updated,
-                                                        "status", "IN_WAREHOUSE"));
-                } catch (IllegalArgumentException exception) {
-                        return ResponseEntity.badRequest()
-                                        .body(exception.getMessage());
-                }
+        if (!currentUserService.canAccessWarehouse(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Warehouse access not allowed");
         }
 
-        @PatchMapping("/admin/{zohoItemId}/location")
-        public ResponseEntity<?> adminEditLocation(
-                        @PathVariable String zohoItemId,
-                        @RequestBody PlantAssignmentRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        return user;
+    }
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
+    private User adminUser() {
+        User user = currentUserService.requireCurrentUser();
 
-                validateLocationRequest(request);
-
-                return ResponseEntity.ok(
-                                service.adminEditLocation(
-                                                zohoItemId,
-                                                request.getPlantCode(),
-                                                request.getCurrentLocationCode(),
-                                                request.getFgZoneCode(),
-                                                request.getWarehouseCode(),
-                                                user.getUsername()));
+        if (!currentUserService.isAdmin(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only ADMIN can perform this warehouse action");
         }
 
-        @PatchMapping("/admin/bulk-location")
-        public ResponseEntity<?> adminBulkEditLocation(
-                        @RequestBody AdminBulkLocationRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+        return user;
+    }
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
-                assertAdmin(user);
+    private void requireGatePassGenerationAccess(User user) {
+        if (!currentUserService.canGenerateWarehouseGatePass(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only DISPATCH or ADMIN can generate warehouse gate passes");
+        }
+    }
 
-                if (request == null ||
-                                request.itemIds() == null ||
-                                request.itemIds().isEmpty()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Select at least one warehouse item");
-                }
-
-                if (request.plantCode() == null ||
-                                request.plantCode().isBlank()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Plant code required");
-                }
-
-                List<String> uniqueIds = request.itemIds().stream()
-                                .filter(id -> id != null && !id.trim().isBlank())
-                                .map(String::trim)
-                                .distinct()
-                                .toList();
-
-                if (uniqueIds.isEmpty()) {
-                        return ResponseEntity.badRequest()
-                                        .body("Select at least one warehouse item");
-                }
-
-                int updated = service.adminBulkEditLocation(
-                                uniqueIds,
-                                request.plantCode(),
-                                request.currentLocationCode(),
-                                request.fgZoneCode(),
-                                request.warehouseCode(),
-                                user.getUsername());
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "message", updated + " item location(s) updated",
-                                                "updated", updated));
+    private List<String> cleanIds(List<String> itemIds) {
+        if (itemIds == null) {
+            throw badRequest("Select at least one item");
         }
 
-        public record AdminBulkLocationRequest(
-                        List<String> itemIds,
-                        String plantCode,
-                        String currentLocationCode,
-                        String fgZoneCode,
-                        String warehouseCode) {
+        List<String> result = itemIds.stream()
+                .filter(id -> id != null && !id.trim().isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+
+        if (result.isEmpty()) {
+            throw badRequest("Select at least one item");
         }
 
-        private void validateLocationRequest(
-                        PlantAssignmentRequest request) {
-
-                if (request == null ||
-                                request.getPlantCode() == null ||
-                                request.getPlantCode().isBlank()) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.BAD_REQUEST,
-                                        "Plant code required");
-                }
+        if (result.size() > MAX_BULK_IDS) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "A maximum of " + MAX_BULK_IDS + " items can be processed at once");
         }
 
-        private void assertAdmin(User user) {
-                if (!currentUserService.isAdmin(user)) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.FORBIDDEN,
-                                        "Only ADMIN can perform this warehouse action");
-                }
+        return result;
+    }
+
+    private void validateLocationRequest(
+            PlantAssignmentRequest request) {
+        if (request == null
+                || request.getPlantCode() == null
+                || request.getPlantCode().isBlank()) {
+            throw badRequest("Plant code required");
         }
+    }
 
-        private void assertWarehouseAccess(User user) {
-                if (!currentUserService.canAccessWarehouse(user)) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.FORBIDDEN,
-                                        "Warehouse access not allowed");
-                }
-        }
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
 
-        @PostMapping("/gatepass/generate-missing")
-        public ResponseEntity<Map<String, Object>> generateMissingGatePass(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+    public record BulkMoveRequest(
+            List<String> itemIds,
+            String warehouseCode,
+            String fromLocation) {
+    }
 
-                assertWarehouseAccess(user);
-
-                if (!currentUserService.isAdmin(user) &&
-                                !currentUserService.isDispatch(user)) {
-                        throw new ResponseStatusException(
-                                        HttpStatus.FORBIDDEN,
-                                        "Only ADMIN or DISPATCH can generate missing gate passes");
-                }
-
-                int generated = service.generateMissingGatePassForStoredItems(
-                                currentUserService.allowedPlants(user),
-                                currentUserService.canViewAllWarehouseData(user),
-                                user.getUsername());
-
-                return ResponseEntity.ok(
-                                Map.of(
-                                                "generated", generated,
-                                                "message", generated + " missing gate pass number(s) generated"));
-        }
+    public record AdminBulkLocationRequest(
+            List<String> itemIds,
+            String plantCode,
+            String currentLocationCode,
+            String fgZoneCode,
+            String warehouseCode) {
+    }
 }

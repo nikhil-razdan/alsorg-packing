@@ -975,11 +975,16 @@ export default function DispatchHomeScreen({
       ) : (
         recentChallans.map(
           (
-            challan
+            challan,
+            index
           ) => (
             <TouchableOpacity
               key={
-                challan.challanNumber
+                String(
+                  challan.challanNumber ||
+                  challan.id ||
+                  `challan-${index}`
+                )
               }
               style={styles.challanCard}
               activeOpacity={0.86}

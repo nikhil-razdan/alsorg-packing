@@ -11,6 +11,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import ExecutiveSidebar from "./panels/ExecutiveSidebar";
 import TripsLineChart from "./charts/TripsLineChart";
 import StatusDistributionChart from "./charts/StatusDistributionChart";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   fetchDispatchChallans,
@@ -1510,6 +1511,7 @@ function PagerButton({
 
 function LogisticsDashboard({
   StatCard,
+  liveRefreshToken = null,
 }) {
   const [section, setSection] =
     useState("summary");
@@ -1565,19 +1567,24 @@ function LogisticsDashboard({
   }, []);
 
   const loadDashboard = useCallback(
-    async ({ refresh = false } = {}) => {
+    async ({
+      refresh = false,
+      background = false,
+    } = {}) => {
       const requestId =
         latestRequestRef.current + 1;
       latestRequestRef.current = requestId;
 
       try {
-        if (refresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
-        }
+        if (!background) {
+          if (refresh) {
+            setRefreshing(true);
+          } else {
+            setLoading(true);
+          }
 
-        setLoadError("");
+          setLoadError("");
+        }
 
         const results = await Promise.allSettled([
           fetchDispatchChallans(),
@@ -1609,10 +1616,6 @@ function LogisticsDashboard({
               : []
           );
         } else {
-          console.error(
-            "Dispatch challan dashboard load failed",
-            challanResult.reason
-          );
           failedSources.push("dispatch challans");
         }
 
@@ -1623,10 +1626,6 @@ function LogisticsDashboard({
               : []
           );
         } else {
-          console.error(
-            "Manual shift dashboard load failed",
-            shiftResult.reason
-          );
           failedSources.push("manual operations");
         }
 
@@ -1637,10 +1636,6 @@ function LogisticsDashboard({
               : []
           );
         } else {
-          console.error(
-            "Driver dashboard load failed",
-            driverResult.reason
-          );
           failedSources.push("drivers");
         }
 
@@ -1651,23 +1646,21 @@ function LogisticsDashboard({
               : []
           );
         } else {
-          console.error(
-            "Vehicle dashboard load failed",
-            vehicleResult.reason
-          );
           failedSources.push("vehicles");
         }
 
-        if (
-          failedSources.length ===
-          results.length
-        ) {
-          throw new Error(
-            "Unable to load logistics dashboard"
-          );
-        }
+        if (failedSources.length === 0) {
+          setLoadError("");
+        } else if (!background) {
+          if (
+            failedSources.length ===
+            results.length
+          ) {
+            throw new Error(
+              "Unable to load logistics dashboard"
+            );
+          }
 
-        if (failedSources.length > 0) {
           setLoadError(
             `Unable to refresh ${failedSources.join(
               ", "
@@ -1675,9 +1668,8 @@ function LogisticsDashboard({
           );
         }
       } catch (error) {
-        console.error(error);
-
         if (
+          !background &&
           mountedRef.current &&
           requestId === latestRequestRef.current
         ) {
@@ -1688,6 +1680,7 @@ function LogisticsDashboard({
         }
       } finally {
         if (
+          !background &&
           mountedRef.current &&
           requestId === latestRequestRef.current
         ) {
@@ -1697,6 +1690,15 @@ function LogisticsDashboard({
       }
     },
     []
+  );
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await loadDashboard({
+        background: true,
+      });
+    }
   );
 
   useEffect(() => {

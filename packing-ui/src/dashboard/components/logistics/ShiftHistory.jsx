@@ -19,6 +19,7 @@ import {
 } from "./logisticsDateTimeUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 const normalizeStatus = (status) =>
 	String(status || "WORKING")
@@ -50,6 +51,7 @@ const getShiftSearchText = (shift) => {
 
 function ShiftHistory({
 	showAlert = () => { },
+	liveRefreshToken = null,
 }) {
 	const [loading, setLoading] =
 		useState(true);
@@ -72,47 +74,21 @@ function ShiftHistory({
 	const [search, setSearch] =
 		useState("");
 
-	const loadHistory = async () => {
+	const loadHistory = async ({
+		background = false,
+	} = {}) => {
 		try {
-			setLoading(true);
+			if (!background) {
+				setLoading(true);
+			}
 
 			const data = await fetchShifts();
 
-			setShifts(data || []);
+			setShifts(
+				Array.isArray(data) ? data : []
+			);
 		} catch (e) {
-			console.error(
-				"Failed to load shift history",
-				e
-			);
-
-			showAlert(
-				getBackendMessage(
-					e,
-					"Failed to load shift history"
-				),
-				"error"
-			);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	useEffect(() => {
-		let active = true;
-
-		setLoading(true);
-
-		fetchShifts()
-			.then((data) => {
-				if (!active) return;
-
-				setShifts(data || []);
-			})
-			.catch((e) => {
-				if (!active) return;
-
-				console.error(e);
-
+			if (!background) {
 				showAlert(
 					getBackendMessage(
 						e,
@@ -120,17 +96,27 @@ function ShiftHistory({
 					),
 					"error"
 				);
-			})
-			.finally(() => {
-				if (!active) return;
-
+			}
+		} finally {
+			if (!background) {
 				setLoading(false);
-			});
+			}
+		}
+	};
 
-		return () => {
-			active = false;
-		};
-	}, [showAlert]);
+	useEffect(() => {
+		void loadHistory();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	useLogisticsLiveRefresh(
+		liveRefreshToken,
+		async () => {
+			await loadHistory({
+				background: true,
+			});
+		}
+	);
 
 	const historyRows = shifts.filter((s) => {
 		const status = normalizeStatus(s.status);
@@ -231,26 +217,55 @@ function ShiftHistory({
 		}
 
 		try {
-			await Promise.all(
-				selectedIds.map((id) =>
-					updateShiftStatus(id, bulkStatus)
-				)
-			);
+			const ids = [...selectedIds];
+
+			const results =
+				await Promise.allSettled(
+					ids.map((id) =>
+						updateShiftStatus(
+							id,
+							bulkStatus
+						)
+					)
+				);
+
+			const failedIds =
+				ids.filter(
+					(_, index) =>
+						results[index]?.status ===
+						"rejected"
+				);
+
+			const successCount =
+				ids.length -
+				failedIds.length;
 
 			await loadHistory();
 
-			showAlert(
-				[
-					"WORKING",
-					"OFF",
-					"ON_LEAVE",
-				].includes(bulkStatus)
-					? "Selected shifts moved back to operations"
-					: "Selected shifts updated successfully",
-				"success"
-			);
+			if (failedIds.length === 0) {
+				showAlert(
+					[
+						"WORKING",
+						"OFF",
+						"ON_LEAVE",
+					].includes(bulkStatus)
+						? "Selected shifts moved back to operations"
+						: "Selected shifts updated successfully",
+					"success"
+				);
 
-			clearSelection();
+				clearSelection();
+				return;
+			}
+
+			setSelectedIds(failedIds);
+
+			showAlert(
+				`${successCount} shift${successCount === 1 ? "" : "s"} updated, ${failedIds.length} failed. Failed rows remain selected for retry.`,
+				successCount > 0
+					? "warning"
+					: "error"
+			);
 		} catch (e) {
 			console.error(e);
 

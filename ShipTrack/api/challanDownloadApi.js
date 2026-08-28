@@ -23,13 +23,14 @@ function cleanFilename(value) {
 }
 
 function cleanBaseUrl(value) {
-  return String(value || "").replace(/\/+$/, "");
+  return String(value || "")
+    .replace(/\/+$/, "");
 }
 
 async function readErrorBody(uri) {
   try {
     return await FileSystem.readAsStringAsync(uri);
-  } catch (e) {
+  } catch {
     return "";
   }
 }
@@ -89,11 +90,6 @@ export async function downloadChallanPdf(
   const fileUri =
     FileSystem.documentDirectory + filename;
 
-  console.log(
-    "CHALLAN DOWNLOAD URL:",
-    url
-  );
-
   const result =
     await FileSystem.downloadAsync(
       url,
@@ -127,7 +123,7 @@ export async function downloadChallanPdf(
 
     throw new Error(
       text ||
-      `Challan download failed. Backend returned ${result.status}. URL: ${url}`
+      `Challan download failed. Backend returned ${result.status}.`
     );
   }
 

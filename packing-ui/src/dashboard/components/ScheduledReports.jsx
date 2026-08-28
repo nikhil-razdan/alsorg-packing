@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import usePackFlowDataRefresh from "../hooks/usePackFlowDataRefresh";
 import API from "../../services/api";
 
 function ScheduledReports() {
@@ -7,23 +8,47 @@ function ScheduledReports() {
   const [type, setType] = useState("inventory");
   const [time, setTime] = useState("18:00");
 
-  const load = async () => {
-    const res = await API.get("/report-schedules");
-    setRows(res.data || []);
+  const load = async ({
+    background = false,
+  } = {}) => {
+    try {
+      const res =
+        await API.get(
+          "/report-schedules"
+        );
+
+      setRows(
+        Array.isArray(res.data)
+          ? res.data
+          : []
+      );
+    } catch (e) {
+      /*
+       * Keep the last successful schedule list visible during a transient
+       * background-sync failure.  Manual create/delete still surface their
+       * original request failures to the caller.
+       */
+      if (!background) {
+        console.error(e);
+      }
+    }
   };
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        const res = await API.get("/report-schedules");
-        setRows(res.data || []);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    init();
+    void load();
   }, []);
+
+  usePackFlowDataRefresh(
+    "scheduled-reports",
+    async () => {
+      await load({
+        background: true,
+      });
+    },
+    {
+      intervalMs: 15000,
+    }
+  );
 
   const create = async () => {
     if (!email.trim()) return;

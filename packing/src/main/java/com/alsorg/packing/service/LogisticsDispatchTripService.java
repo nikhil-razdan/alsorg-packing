@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.controller.dto.logistics.LogisticsTripItemResponse;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
@@ -30,8 +31,12 @@ import com.alsorg.packing.repository.LogisticsTripLocationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
+
+import java.net.URI;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -44,7 +49,9 @@ import java.util.UUID;
 public class LogisticsDispatchTripService {
 
         private static final int MAX_TRIP_ITEMS = 1000;
-        private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
+        private static final int MAX_POD_URL_LENGTH = 2048;
+        private static final int MAX_DELIVERY_TEXT_LENGTH = 2000;
 
 
         private final LogisticsTripRepository tripRepository;
@@ -58,6 +65,9 @@ public class LogisticsDispatchTripService {
         private final ActivityLogService activityLogService;
         private final CurrentUserService currentUserService;
         private final LogisticsTripLocationRepository tripLocationRepository;
+
+        @PersistenceContext
+        private EntityManager entityManager;
 
         public LogisticsDispatchTripService(
                         LogisticsTripRepository tripRepository,
@@ -348,10 +358,8 @@ public class LogisticsDispatchTripService {
                                         "Driver profile not linked with this user");
                 }
 
-                LogisticsTrip trip = tripRepository.findById(tripId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Trip not found"));
+                LogisticsTrip trip = requireTripForUpdate(
+                                tripId);
 
                 if (trip.getDriver() == null || trip.getDriver().getId() == null) {
                         throw new ResponseStatusException(
@@ -451,10 +459,16 @@ public class LogisticsDispatchTripService {
                                         "Latitude and longitude required");
                 }
 
-                LogisticsTrip trip = tripRepository.findById(tripId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Trip not found"));
+                validateLocationSample(
+                                latitude,
+                                longitude,
+                                accuracy,
+                                speed,
+                                heading,
+                                altitude);
+
+                LogisticsTrip trip = requireTripForUpdate(
+                                tripId);
 
                 if (trip.getDriver() == null || trip.getDriver().getId() == null) {
                         throw new ResponseStatusException(
@@ -529,10 +543,8 @@ public class LogisticsDispatchTripService {
                                         "Driver profile not linked with this user");
                 }
 
-                LogisticsTrip trip = tripRepository.findById(tripId)
-                                .orElseThrow(() -> new ResponseStatusException(
-                                                HttpStatus.NOT_FOUND,
-                                                "Trip not found"));
+                LogisticsTrip trip = requireTripForUpdate(
+                                tripId);
 
                 if (trip.getDriver() == null || trip.getDriver().getId() == null) {
                         throw new ResponseStatusException(
@@ -567,24 +579,52 @@ public class LogisticsDispatchTripService {
                 trip.setEndedBy(safeActor(user.getUsername()));
                 trip.setUpdatedAt(LocalDateTime.now(APP_ZONE));
 
-                if (remarks != null && !remarks.isBlank()) {
-                        trip.setRemarks(remarks.trim());
+                String cleanRemarks = cleanLimited(
+                                remarks,
+                                MAX_DELIVERY_TEXT_LENGTH,
+                                "Trip remarks");
+
+                if (cleanRemarks != null) {
+                        trip.setRemarks(cleanRemarks);
                 }
 
-                trip.setReceiverName(cleanOrNull(receiverName));
-                trip.setReceiverPhone(cleanOrNull(receiverPhone));
-                trip.setPodUrl(cleanOrNull(podUrl));
-                trip.setDeliveryRemarks(cleanOrNull(deliveryRemarks));
+                String cleanReceiverName = cleanLimited(
+                                receiverName,
+                                250,
+                                "Receiver name");
+
+                String cleanReceiverPhone = cleanLimited(
+                                receiverPhone,
+                                80,
+                                "Receiver phone");
+
+                String cleanPodUrl = validatePodUrl(
+                                podUrl);
+
+                String cleanDeliveryRemarks = cleanLimited(
+                                deliveryRemarks,
+                                MAX_DELIVERY_TEXT_LENGTH,
+                                "Delivery remarks");
+
+                validateDeliveryLocation(
+                                deliveryLatitude,
+                                deliveryLongitude,
+                                deliveryLocationAccuracy);
+
+                trip.setReceiverName(cleanReceiverName);
+                trip.setReceiverPhone(cleanReceiverPhone);
+                trip.setPodUrl(cleanPodUrl);
+                trip.setDeliveryRemarks(cleanDeliveryRemarks);
                 trip.setDeliveryLatitude(deliveryLatitude);
                 trip.setDeliveryLongitude(deliveryLongitude);
                 trip.setDeliveryLocationAccuracy(deliveryLocationAccuracy);
 
                 List<LogisticsTripItem> tripItems = tripItemRepository.findByTripId(tripId);
 
-                final String finalReceiverName = cleanOrNull(receiverName);
-                final String finalReceiverPhone = cleanOrNull(receiverPhone);
-                final String finalPodUrl = cleanOrNull(podUrl);
-                final String finalDeliveryRemarks = cleanOrNull(deliveryRemarks);
+                final String finalReceiverName = cleanReceiverName;
+                final String finalReceiverPhone = cleanReceiverPhone;
+                final String finalPodUrl = cleanPodUrl;
+                final String finalDeliveryRemarks = cleanDeliveryRemarks;
                 final Double finalDeliveryLatitude = deliveryLatitude;
                 final Double finalDeliveryLongitude = deliveryLongitude;
                 final Double finalDeliveryLocationAccuracy = deliveryLocationAccuracy;
@@ -971,6 +1011,222 @@ public class LogisticsDispatchTripService {
                                 .toUpperCase();
 
                 return "CH-" + date + "-" + suffix;
+        }
+
+        private LogisticsTrip requireTripForUpdate(
+                        UUID tripId) {
+
+                if (tripId == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Trip id is required");
+                }
+
+                LogisticsTrip trip = entityManager.find(
+                                LogisticsTrip.class,
+                                tripId,
+                                LockModeType.PESSIMISTIC_WRITE);
+
+                if (trip == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Trip not found");
+                }
+
+                return trip;
+        }
+
+        private void validateLocationSample(
+                        Double latitude,
+                        Double longitude,
+                        Double accuracy,
+                        Double speed,
+                        Double heading,
+                        Double altitude) {
+
+                requireFiniteRange(
+                                latitude,
+                                -90D,
+                                90D,
+                                "Latitude");
+
+                requireFiniteRange(
+                                longitude,
+                                -180D,
+                                180D,
+                                "Longitude");
+
+                optionalFiniteRange(
+                                accuracy,
+                                0D,
+                                100_000D,
+                                "Location accuracy");
+
+                optionalFiniteRange(
+                                speed,
+                                0D,
+                                200D,
+                                "Speed");
+
+                optionalFiniteRange(
+                                heading,
+                                0D,
+                                360D,
+                                "Heading");
+
+                optionalFiniteRange(
+                                altitude,
+                                -1_000D,
+                                20_000D,
+                                "Altitude");
+        }
+
+        private void validateDeliveryLocation(
+                        Double latitude,
+                        Double longitude,
+                        Double accuracy) {
+
+                boolean hasLatitude = latitude != null;
+                boolean hasLongitude = longitude != null;
+
+                if (hasLatitude != hasLongitude) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Delivery latitude and longitude must be supplied together");
+                }
+
+                if (!hasLatitude) {
+                        if (accuracy != null) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Delivery location accuracy requires latitude and longitude");
+                        }
+
+                        return;
+                }
+
+                requireFiniteRange(
+                                latitude,
+                                -90D,
+                                90D,
+                                "Delivery latitude");
+
+                requireFiniteRange(
+                                longitude,
+                                -180D,
+                                180D,
+                                "Delivery longitude");
+
+                optionalFiniteRange(
+                                accuracy,
+                                0D,
+                                100_000D,
+                                "Delivery location accuracy");
+        }
+
+        private void requireFiniteRange(
+                        Double value,
+                        double min,
+                        double max,
+                        String label) {
+
+                if (value == null ||
+                                !Double.isFinite(value) ||
+                                value < min ||
+                                value > max) {
+
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        label + " is invalid");
+                }
+        }
+
+        private void optionalFiniteRange(
+                        Double value,
+                        double min,
+                        double max,
+                        String label) {
+
+                if (value == null) {
+                        return;
+                }
+
+                requireFiniteRange(
+                                value,
+                                min,
+                                max,
+                                label);
+        }
+
+        private String validatePodUrl(
+                        String value) {
+
+                String clean = cleanOrNull(value);
+
+                if (clean == null) {
+                        return null;
+                }
+
+                if (clean.length() > MAX_POD_URL_LENGTH) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "POD URL is too long");
+                }
+
+                if (clean.startsWith("/")) {
+                        if (clean.startsWith("//")) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "POD URL is invalid");
+                        }
+
+                        return clean;
+                }
+
+                try {
+                        URI uri = URI.create(clean);
+
+                        String scheme = uri.getScheme();
+
+                        if (scheme == null ||
+                                        (!"http".equalsIgnoreCase(scheme)
+                                                        && !"https".equalsIgnoreCase(scheme))) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "POD URL must use http or https");
+                        }
+
+                        if (uri.getHost() == null ||
+                                        uri.getHost().isBlank()) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "POD URL host is missing");
+                        }
+
+                        return clean;
+
+                } catch (IllegalArgumentException exception) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "POD URL is invalid");
+                }
+        }
+
+        private String cleanLimited(
+                        String value,
+                        int maxLength,
+                        String label) {
+
+                String clean = cleanOrNull(value);
+
+                if (clean != null &&
+                                clean.length() > maxLength) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        label + " is too long");
+                }
+
+                return clean;
         }
 
         private String cleanOrNull(String value) {

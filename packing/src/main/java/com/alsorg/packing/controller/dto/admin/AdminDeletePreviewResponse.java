@@ -16,6 +16,5 @@ public record AdminDeletePreviewResponse(
         Map<String, Long> affectedRows,
         boolean deletesMasterItem,
         boolean deletesInternalPacket,
-        String warning
-) {
+        String warning) {
 }

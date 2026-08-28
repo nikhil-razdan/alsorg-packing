@@ -17,6 +17,5 @@ public record CustomChallanSummaryResponse(
         String handedOverTo,
         String generatedBy,
         LocalDateTime generatedAt,
-        int totalItems
-) {
+        int totalItems) {
 }

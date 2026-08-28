@@ -40,6 +40,7 @@ import {
     fieldSx,
     formatDate,
     formatQty,
+    localBusinessDateKey,
     mainTextSx,
     normalize,
     numeric,
@@ -95,7 +96,7 @@ export function MatFlowPurchasePage() {
     const [poForm, setPoForm] = useState({
         indentId: "",
         vendorId: "",
-        poDate: new Date().toISOString().slice(0, 10),
+        poDate: localBusinessDateKey(),
         remarks: "",
         quantities: {},
     });
@@ -206,7 +207,7 @@ export function MatFlowPurchasePage() {
         setPoForm({
             indentId: indent?.id ? String(indent.id) : "",
             vendorId: "",
-            poDate: new Date().toISOString().slice(0, 10),
+            poDate: localBusinessDateKey(),
             remarks: "",
             quantities,
         });

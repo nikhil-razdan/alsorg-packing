@@ -6,12 +6,15 @@ import com.alsorg.packing.hrflow.dto.HrOnboardingDtos;
 import com.alsorg.packing.hrflow.service.HrOnboardingService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -73,11 +76,18 @@ public class HrOnboardingController {
             @PathVariable String formKey
     ) {
         HrOnboardingService.FormPdf pdf = onboardingService.formPdf(id, formKey);
+        byte[] bytes = pdf.bytes() == null ? new byte[0] : pdf.bytes();
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(safeFileName(pdf.fileName()), StandardCharsets.UTF_8)
+                .build();
+
         return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
                 .contentType(MediaType.APPLICATION_PDF)
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + pdf.fileName().replace("\"", "") + "\"")
-                .body(pdf.bytes());
+                .contentLength(bytes.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
     }
 
     @GetMapping("/{id}/joining-report")
@@ -93,7 +103,7 @@ public class HrOnboardingController {
     @PutMapping("/{id}/policy")
     public HrOnboardingDtos.LegalSnapshotResponse setPolicy(
             @PathVariable UUID id,
-            @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
+            @Valid @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
     ) {
         return onboardingService.setPolicy(id, request);
     }
@@ -106,7 +116,7 @@ public class HrOnboardingController {
     @PutMapping("/{id}/nda")
     public HrOnboardingDtos.LegalSnapshotResponse setNda(
             @PathVariable UUID id,
-            @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
+            @Valid @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
     ) {
         return onboardingService.setNda(id, request);
     }
@@ -124,7 +134,7 @@ public class HrOnboardingController {
     @PutMapping("/{id}/declaration")
     public HrOnboardingDtos.LegalSnapshotResponse setDeclaration(
             @PathVariable UUID id,
-            @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
+            @Valid @RequestBody HrOnboardingDtos.LegalSnapshotRequest request
     ) {
         return onboardingService.setDeclaration(id, request);
     }
@@ -137,7 +147,7 @@ public class HrOnboardingController {
     @PatchMapping("/{id}/orientation")
     public HrOnboardingDtos.OrientationResponse updateOrientation(
             @PathVariable UUID id,
-            @RequestBody HrOnboardingDtos.OrientationUpdateRequest request
+            @Valid @RequestBody HrOnboardingDtos.OrientationUpdateRequest request
     ) {
         return onboardingService.updateOrientation(id, request);
     }
@@ -161,4 +171,12 @@ public class HrOnboardingController {
     public HrOnboardingDtos.CompletionResponse complete(@PathVariable UUID id) {
         return onboardingService.completeOnboarding(id);
     }
+    private String safeFileName(String value) {
+        if (value == null || value.isBlank()) {
+            return "hrflow-onboarding-form.pdf";
+        }
+        String clean = value.replaceAll("[\\r\\n\\t]", "_").trim();
+        return clean.isBlank() ? "hrflow-onboarding-form.pdf" : clean;
+    }
+
 }

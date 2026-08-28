@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,20 +27,17 @@ public class BomFlowProductAttachmentService {
     private static final long IMAGE_MAX_BYTES = 5L * 1024L * 1024L;
     private static final long DRAWING_MAX_BYTES = 25L * 1024L * 1024L;
 
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of(
-            "png",
-            "jpg",
-            "jpeg",
-            "webp");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp");
+    private static final Set<String> DRAWING_EXTENSIONS = Set.of("pdf", "dwg", "dxf", "png", "jpg", "jpeg", "webp");
 
-    private static final Set<String> DRAWING_EXTENSIONS = Set.of(
-            "pdf",
-            "dwg",
-            "dxf",
-            "png",
-            "jpg",
-            "jpeg",
-            "webp");
+    private static final Map<String, String> CANONICAL_CONTENT_TYPES = Map.ofEntries(
+            Map.entry("png", "image/png"),
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("pdf", "application/pdf"),
+            Map.entry("dwg", "application/octet-stream"),
+            Map.entry("dxf", "application/octet-stream"));
 
     public record ProductFileDownload(
             String originalFileName,
@@ -58,34 +56,21 @@ public class BomFlowProductAttachmentService {
             BomFlowAccessService access,
             BomFlowMapper mapper,
             BomFlowProductFileStorageService storage) {
-
         this.productRepository = productRepository;
         this.access = access;
         this.mapper = mapper;
         this.storage = storage;
     }
 
-    public ProductResponse uploadProductImage(
-            UUID productId,
-            MultipartFile file) {
-
+    public ProductResponse uploadProductImage(UUID productId, MultipartFile file) {
         access.requireEditor();
 
         BomFlowProduct product = requireProductForUpdate(productId);
-        String extension = validateFile(
-                file,
-                IMAGE_EXTENSIONS,
-                IMAGE_MAX_BYTES,
-                "Product image",
-                true);
-
+        String extension = validateFile(file, IMAGE_EXTENSIONS, IMAGE_MAX_BYTES, "Product image", true);
         String oldStorageKey = product.productImageStorageKey;
 
-        StoredFile stored = storage.store(
-                product.id,
-                FileSlot.PRODUCT_IMAGE,
-                file,
-                extension);
+        StoredFile stored = storage.store(product.id, FileSlot.PRODUCT_IMAGE, file, extension);
+        ensureStoredSize(stored, IMAGE_MAX_BYTES, "Product image");
 
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
@@ -93,7 +78,7 @@ public class BomFlowProductAttachmentService {
         product.productImageOriginalName = cleanFileName(file.getOriginalFilename());
         product.productImageStoredName = stored.storedFileName();
         product.productImageStorageKey = stored.storageKey();
-        product.productImageContentType = clean(file.getContentType());
+        product.productImageContentType = canonicalContentType(extension);
         product.productImageSize = stored.fileSize();
         product.productImageUploadedBy = actor;
         product.productImageUploadedAt = now;
@@ -107,35 +92,22 @@ public class BomFlowProductAttachmentService {
             throw ex;
         }
 
-        if (oldStorageKey != null
-                && !oldStorageKey.equals(stored.storageKey())) {
+        if (oldStorageKey != null && !oldStorageKey.equals(stored.storageKey())) {
             storage.delete(oldStorageKey);
         }
 
         return mapper.toProductResponse(product);
     }
 
-    public ProductResponse uploadDrawing(
-            UUID productId,
-            MultipartFile file) {
-
+    public ProductResponse uploadDrawing(UUID productId, MultipartFile file) {
         access.requireEditor();
 
         BomFlowProduct product = requireProductForUpdate(productId);
-        String extension = validateFile(
-                file,
-                DRAWING_EXTENSIONS,
-                DRAWING_MAX_BYTES,
-                "Drawing",
-                false);
-
+        String extension = validateFile(file, DRAWING_EXTENSIONS, DRAWING_MAX_BYTES, "Drawing", false);
         String oldStorageKey = product.drawingFileStorageKey;
 
-        StoredFile stored = storage.store(
-                product.id,
-                FileSlot.DRAWING,
-                file,
-                extension);
+        StoredFile stored = storage.store(product.id, FileSlot.DRAWING, file, extension);
+        ensureStoredSize(stored, DRAWING_MAX_BYTES, "Drawing");
 
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
@@ -143,7 +115,7 @@ public class BomFlowProductAttachmentService {
         product.drawingFileOriginalName = cleanFileName(file.getOriginalFilename());
         product.drawingFileStoredName = stored.storedFileName();
         product.drawingFileStorageKey = stored.storageKey();
-        product.drawingFileContentType = clean(file.getContentType());
+        product.drawingFileContentType = canonicalContentType(extension);
         product.drawingFileSize = stored.fileSize();
         product.drawingFileUploadedBy = actor;
         product.drawingFileUploadedAt = now;
@@ -157,8 +129,7 @@ public class BomFlowProductAttachmentService {
             throw ex;
         }
 
-        if (oldStorageKey != null
-                && !oldStorageKey.equals(stored.storageKey())) {
+        if (oldStorageKey != null && !oldStorageKey.equals(stored.storageKey())) {
             storage.delete(oldStorageKey);
         }
 
@@ -166,48 +137,33 @@ public class BomFlowProductAttachmentService {
     }
 
     @Transactional(readOnly = true)
-    public ProductFileDownload downloadProductImage(
-            UUID productId) {
-
+    public ProductFileDownload downloadProductImage(UUID productId) {
         access.requireBomFlowAccess();
-
         BomFlowProduct product = requireProduct(productId);
-
-        if (!hasText(product.productImageStorageKey)) {
-            throw notFound("Product image is not available.");
-        }
+        if (!hasText(product.productImageStorageKey)) throw notFound("Product image is not available.");
 
         return new ProductFileDownload(
                 safeName(product.productImageOriginalName, "product-image"),
-                product.productImageContentType,
+                safeDownloadContentType(product.productImageContentType),
                 safeSize(product.productImageSize),
                 storage.load(product.productImageStorageKey));
     }
 
     @Transactional(readOnly = true)
-    public ProductFileDownload downloadDrawing(
-            UUID productId) {
-
+    public ProductFileDownload downloadDrawing(UUID productId) {
         access.requireBomFlowAccess();
-
         BomFlowProduct product = requireProduct(productId);
-
-        if (!hasText(product.drawingFileStorageKey)) {
-            throw notFound("Drawing file is not available.");
-        }
+        if (!hasText(product.drawingFileStorageKey)) throw notFound("Drawing file is not available.");
 
         return new ProductFileDownload(
                 safeName(product.drawingFileOriginalName, "drawing"),
-                product.drawingFileContentType,
+                safeDownloadContentType(product.drawingFileContentType),
                 safeSize(product.drawingFileSize),
                 storage.load(product.drawingFileStorageKey));
     }
 
-    public ProductResponse deleteProductImage(
-            UUID productId) {
-
+    public ProductResponse deleteProductImage(UUID productId) {
         access.requireEditor();
-
         BomFlowProduct product = requireProductForUpdate(productId);
         String storageKey = product.productImageStorageKey;
 
@@ -223,15 +179,11 @@ public class BomFlowProductAttachmentService {
 
         product = productRepository.saveAndFlush(product);
         storage.delete(storageKey);
-
         return mapper.toProductResponse(product);
     }
 
-    public ProductResponse deleteDrawing(
-            UUID productId) {
-
+    public ProductResponse deleteDrawing(UUID productId) {
         access.requireEditor();
-
         BomFlowProduct product = requireProductForUpdate(productId);
         String storageKey = product.drawingFileStorageKey;
 
@@ -247,7 +199,6 @@ public class BomFlowProductAttachmentService {
 
         product = productRepository.saveAndFlush(product);
         storage.delete(storageKey);
-
         return mapper.toProductResponse(product);
     }
 
@@ -258,31 +209,20 @@ public class BomFlowProductAttachmentService {
             String label,
             boolean requireImageContentType) {
 
-        if (file == null || file.isEmpty()) {
-            throw badRequest(label + " file is required.");
-        }
-
+        if (file == null || file.isEmpty()) throw badRequest(label + " file is required.");
         if (file.getSize() > maxBytes) {
-            throw badRequest(
-                    label + " exceeds the maximum size of "
-                            + (maxBytes / (1024L * 1024L))
-                            + " MB.");
+            throw badRequest(label + " exceeds the maximum size of " + (maxBytes / (1024L * 1024L)) + " MB.");
         }
 
         String fileName = cleanFileName(file.getOriginalFilename());
         String extension = extension(fileName);
-
         if (!allowedExtensions.contains(extension)) {
-            throw badRequest(
-                    label + " type is not supported. Allowed: "
-                            + String.join(", ", allowedExtensions));
+            throw badRequest(label + " type is not supported. Allowed: " + String.join(", ", allowedExtensions));
         }
 
         if (requireImageContentType) {
             String contentType = clean(file.getContentType());
-
-            if (contentType != null
-                    && !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            if (contentType != null && !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
                 throw badRequest("Product image must be an image file.");
             }
         }
@@ -290,113 +230,76 @@ public class BomFlowProductAttachmentService {
         return extension;
     }
 
-    private String extension(
-            String fileName) {
-
-        int index = fileName.lastIndexOf('.');
-
-        if (index < 0 || index == fileName.length() - 1) {
-            return "";
-        }
-
-        return fileName.substring(index + 1)
-                .trim()
-                .toLowerCase(Locale.ROOT);
+    private void ensureStoredSize(StoredFile stored, long maxBytes, String label) {
+        if (stored.fileSize() <= maxBytes) return;
+        storage.delete(stored.storageKey());
+        throw badRequest(label + " exceeds the maximum size of " + (maxBytes / (1024L * 1024L)) + " MB.");
     }
 
-    private String cleanFileName(
-            String fileName) {
+    private String canonicalContentType(String extension) {
+        return CANONICAL_CONTENT_TYPES.getOrDefault(extension, "application/octet-stream");
+    }
 
-        String value = clean(fileName);
-
-        if (value == null) {
-            return "file";
+    private String safeDownloadContentType(String value) {
+        String clean = clean(value);
+        if (clean == null || clean.length() > 255 || clean.contains("\r") || clean.contains("\n")) {
+            return "application/octet-stream";
         }
+        return clean;
+    }
 
+    private String extension(String fileName) {
+        int index = fileName.lastIndexOf('.');
+        if (index < 0 || index == fileName.length() - 1) return "";
+        return fileName.substring(index + 1).trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String cleanFileName(String fileName) {
+        String value = clean(fileName);
+        if (value == null) return "file";
         value = value.replace('\\', '/');
         int slash = value.lastIndexOf('/');
-
-        if (slash >= 0) {
-            value = value.substring(slash + 1);
-        }
-
+        if (slash >= 0) value = value.substring(slash + 1);
         value = value.replaceAll("[\\r\\n\\t]", "_");
-
-        return value.length() > 500
-                ? value.substring(value.length() - 500)
-                : value;
+        return value.length() > 500 ? value.substring(value.length() - 500) : value;
     }
 
-    private String safeName(
-            String name,
-            String fallback) {
-
-        String value = clean(name);
-        return value == null ? fallback : value;
+    private String safeName(String name, String fallback) {
+        String value = cleanFileName(name);
+        return value == null || value.isBlank() ? fallback : value;
     }
 
-    private long safeSize(
-            Long size) {
-
+    private long safeSize(Long size) {
         return size == null || size < 0 ? 0L : size;
     }
 
-    private BomFlowProduct requireProductForUpdate(
-            UUID productId) {
-
-        if (productId == null) {
-            throw badRequest("Product ID is required.");
-        }
-
-        return productRepository
-                .findByIdForUpdate(productId)
-                .orElseThrow(() -> notFound(
-                        "Product not found: " + productId));
+    private BomFlowProduct requireProductForUpdate(UUID productId) {
+        if (productId == null) throw badRequest("Product ID is required.");
+        return productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> notFound("Product not found: " + productId));
     }
 
-    private BomFlowProduct requireProduct(
-            UUID productId) {
-
-        if (productId == null) {
-            throw badRequest("Product ID is required.");
-        }
-
-        return productRepository
-                .findById(productId)
-                .orElseThrow(() -> notFound(
-                        "Product not found: " + productId));
+    private BomFlowProduct requireProduct(UUID productId) {
+        if (productId == null) throw badRequest("Product ID is required.");
+        return productRepository.findById(productId)
+                .orElseThrow(() -> notFound("Product not found: " + productId));
     }
 
-    private boolean hasText(
-            String value) {
-
+    private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }
 
-    private String clean(
-            String value) {
-
-        if (value == null) {
-            return null;
-        }
-
+    private String clean(String value) {
+        if (value == null) return null;
         String cleaned = value.trim();
         return cleaned.isEmpty() ? null : cleaned;
     }
 
-    private ResponseStatusException badRequest(
-            String message) {
-
-        return new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                message);
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
-    private ResponseStatusException notFound(
-            String message) {
-
-        return new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                message);
+    private ResponseStatusException notFound(String message) {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
     }
 }

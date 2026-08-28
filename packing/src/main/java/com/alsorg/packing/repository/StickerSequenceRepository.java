@@ -17,12 +17,6 @@ import com.alsorg.packing.domain.sticker.StickerSequence;
 public interface StickerSequenceRepository
         extends JpaRepository<StickerSequence, Integer> {
 
-    /*
-     * Safely creates the fixed sequence row if it is missing.
-     *
-     * ON CONFLICT prevents two simultaneous requests from
-     * creating duplicate rows.
-     */
     @Modifying
     @Query(value = """
             insert into sticker_sequence (
@@ -41,17 +35,11 @@ public interface StickerSequenceRepository
             @Param("id") Integer id,
             @Param("sequenceYear") Integer sequenceYear);
 
-    /*
-     * Locks the sequence row until the complete transaction ends.
-     *
-     * This prevents duplicate numbers when multiple users
-     * generate stickers simultaneously.
-     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-                select sequence
-                from StickerSequence sequence
-                where sequence.id = :id
+            select sequence
+            from StickerSequence sequence
+            where sequence.id = :id
             """)
     Optional<StickerSequence> findByIdForUpdate(
             @Param("id") Integer id);

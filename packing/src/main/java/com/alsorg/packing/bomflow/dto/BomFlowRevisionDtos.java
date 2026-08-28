@@ -2,6 +2,12 @@ package com.alsorg.packing.bomflow.dto;
 
 import com.alsorg.packing.bomflow.domain.BomFlowRevisionStatus;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,32 +19,32 @@ public final class BomFlowRevisionDtos {
     }
 
     public record CreateRevisionRequest(
-            String remarks) {
+            @Size(max = 2000) String remarks) {
     }
 
     public record RevisionLineRequest(
-            String section,
-            String category,
-            String itemName,
-            String brand,
-            String vendorName,
-            String unit,
-            BigDecimal requiredQty,
-            BigDecimal quantity,
-            BigDecimal rate,
-            BigDecimal gstPercent,
-            BigDecimal gst,
-            String remarks,
-            Long rowVersion) {
+            @NotBlank @Size(max = 120) String section,
+            @Size(max = 100) String category,
+            @NotBlank @Size(max = 500) String itemName,
+            @Size(max = 255) String brand,
+            @Size(max = 220) String vendorName,
+            @NotBlank @Size(max = 60) String unit,
+            @DecimalMin(value = "0.0001") BigDecimal requiredQty,
+            @DecimalMin(value = "0.0001") BigDecimal quantity,
+            @DecimalMin(value = "0.0") BigDecimal rate,
+            @DecimalMin(value = "0.0") @DecimalMax(value = "100.0") BigDecimal gstPercent,
+            @DecimalMin(value = "0.0") @DecimalMax(value = "100.0") BigDecimal gst,
+            @Size(max = 3000) String remarks,
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record DeleteLineRequest(
-            Long rowVersion) {
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record RevisionActionRequest(
-            String remarks,
-            Long rowVersion) {
+            @Size(max = 3000) String remarks,
+            @PositiveOrZero Long rowVersion) {
     }
 
     public record RevisionItemResponse(

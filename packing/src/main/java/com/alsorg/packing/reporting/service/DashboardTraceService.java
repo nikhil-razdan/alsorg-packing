@@ -27,13 +27,17 @@ public class DashboardTraceService {
             int limit,
             int offset
     ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must be before or equal to 'to'");
+        }
+
         return repository.fetchTrace(
                 type,
                 from,
                 to,
                 search,
-                limit,
-                offset
+                Math.min(Math.max(limit, 1), 500),
+                Math.max(offset, 0)
         );
     }
 }

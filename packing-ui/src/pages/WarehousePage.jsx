@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Button, TextField, Box, Chip, MenuItem, Drawer, IconButton } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import { API_BASE_URL } from "../config"; import {
+import { API_BASE_URL } from "../config";
+import { secureFetch } from "../services/api";
+import {
 	canOpenWarehousePage,
 	normalizeRole,
 } from "../utils/permissions";
@@ -208,7 +210,7 @@ function WarehousePage() {
 
 	const fetchPlants = async () => {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/plants`, {
+			const res = await secureFetch(`${API_BASE_URL}/api/plants`, {
 				credentials: "include",
 			});
 
@@ -225,26 +227,31 @@ function WarehousePage() {
 		}
 	};
 
-	const fetchItems = async () => {
+	const fetchItems = async ({ background = false } = {}) => {
 		if (!canOpenWarehouse) {
 			setRows([]);
 			return;
 		}
 
-		setLoading(true);
+		if (!background) {
+			setLoading(true);
+		}
 
 		try {
 			const [res1, res2] = await Promise.all([
-				fetch(`${API_BASE_URL}/api/warehouse/floor`, {
+				secureFetch(`${API_BASE_URL}/api/warehouse/floor`, {
 					credentials: "include",
 				}),
-				fetch(`${API_BASE_URL}/api/warehouse/items`, {
+				secureFetch(`${API_BASE_URL}/api/warehouse/items`, {
 					credentials: "include",
 				}),
 			]);
 
 			if (!res1.ok || !res2.ok) {
-				if (res1.status === 403 || res2.status === 403) {
+				if (
+					!background &&
+					(res1.status === 403 || res2.status === 403)
+				) {
 					alert("Warehouse access not allowed for this user");
 				}
 
@@ -292,21 +299,36 @@ function WarehousePage() {
 
 		} catch (err) {
 			console.error("Warehouse fetch failed", err);
-			setRows([]);
+
+			/*
+			 * A transient background-sync failure must not blank the live register.
+			 * Foreground/manual initial loading keeps the original failure behaviour.
+			 */
+			if (!background) {
+				setRows([]);
+			}
 		} finally {
-			setLoading(false);
+			if (!background) {
+				setLoading(false);
+			}
 		}
 	};
 
 	usePackFlowDataRefresh(
 		"warehouse",
-		async () => {
+		async (detail) => {
 			if (!canOpenWarehouse) {
 				setRows([]);
 				return;
 			}
 
-			await fetchItems();
+			await fetchItems({
+				background:
+					Boolean(detail?.background),
+			});
+		},
+		{
+			intervalMs: 6000,
 		}
 	);
 
@@ -377,7 +399,7 @@ function WarehousePage() {
 		formData.append("file", file);
 		formData.append("mode", importMode);
 
-		const res = await fetch(`${API_BASE_URL}/api/warehouse/import/preview`, {
+		const res = await secureFetch(`${API_BASE_URL}/api/warehouse/import/preview`, {
 			method: "POST",
 			credentials: "include",
 			body: formData,
@@ -398,7 +420,7 @@ function WarehousePage() {
 			return;
 		}
 
-		const res = await fetch(
+		const res = await secureFetch(
 			`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gp.trim())}`,
 			{
 				method: "POST",
@@ -423,7 +445,7 @@ function WarehousePage() {
 
 	const rejectWarehouse = async (id) => {
 		try {
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/${id}/reject`,
 				{
 					method: "POST",
@@ -445,7 +467,7 @@ function WarehousePage() {
 				? `${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/request-return-to-dispatch`
 				: `${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/request-return`;
 
-			const res = await fetch(endpoint, {
+			const res = await secureFetch(endpoint, {
 				method: "POST",
 				credentials: "include",
 			});
@@ -488,7 +510,7 @@ function WarehousePage() {
 		try {
 			setBulkLoading(true);
 
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/admin/returns/bulk/request`,
 				{
 					method: "POST",
@@ -692,7 +714,7 @@ function WarehousePage() {
 		try {
 			setSavingAssignmentId(id);
 
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/location`,
 				{
 					method: "PATCH",
@@ -777,7 +799,7 @@ function WarehousePage() {
 		try {
 			setBulkLocationLoading(true);
 
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/admin/bulk-location`,
 				{
 					method: "PATCH",
@@ -826,7 +848,7 @@ function WarehousePage() {
 		try {
 			setGeneratingMissingGatePass(true);
 
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/gatepass/generate-missing`,
 				{
 					method: "POST",
@@ -972,7 +994,7 @@ function WarehousePage() {
 		try {
 			setBulkReturnDecisionLoading(action);
 
-			const res = await fetch(
+			const res = await secureFetch(
 				`${API_BASE_URL}/api/warehouse/admin/returns/bulk/${action}`,
 				{
 					method: "POST",
@@ -1629,7 +1651,7 @@ function WarehousePage() {
 				selectedWarehouseItems.map(async (row) => {
 					const id = getWarehouseRowId(row);
 
-					const res = await fetch(
+					const res = await secureFetch(
 						`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gatePass)}`,
 						{
 							method: "POST",
@@ -1748,7 +1770,7 @@ function WarehousePage() {
 			let response;
 
 			if (cleanMode === "BULK") {
-				response = await fetch(
+				response = await secureFetch(
 					`${API_BASE_URL}/api/admin/deletions/warehouse-items/bulk/preview`,
 					{
 						method: "POST",
@@ -1766,7 +1788,7 @@ function WarehousePage() {
 			} else {
 				const itemId = getWarehouseRowId(cleanRows[0]);
 
-				response = await fetch(
+				response = await secureFetch(
 					`${API_BASE_URL}/api/admin/deletions/warehouse-items/${encodeURIComponent(
 						itemId
 					)}/preview`,
@@ -1829,7 +1851,7 @@ function WarehousePage() {
 			let response;
 
 			if (warehouseDeleteMode === "BULK") {
-				response = await fetch(
+				response = await secureFetch(
 					`${API_BASE_URL}/api/admin/deletions/warehouse-items/bulk/execute`,
 					{
 						method: "POST",
@@ -1851,7 +1873,7 @@ function WarehousePage() {
 					warehouseDeleteRows[0]
 				);
 
-				response = await fetch(
+				response = await secureFetch(
 					`${API_BASE_URL}/api/admin/deletions/warehouse-items/${encodeURIComponent(
 						itemId
 					)}/execute`,
@@ -2209,7 +2231,7 @@ function WarehousePage() {
 						size="small"
 						onClick={async () => {
 							try {
-								const res = await fetch(
+								const res = await secureFetch(
 									`${API_BASE_URL}/api/gatepass/${row.zohoItemId}/pdf`,
 									{
 										method: "GET",
@@ -2564,7 +2586,7 @@ function WarehousePage() {
 								<Button
 									size="small"
 									onClick={async () => {
-										await fetch(
+										await secureFetch(
 											`${API_BASE_URL}/api/dispatched/${row.zohoItemId}/approve-return`,
 											{
 												method: "POST",
@@ -2581,7 +2603,7 @@ function WarehousePage() {
 								<Button
 									size="small"
 									onClick={async () => {
-										await fetch(
+										await secureFetch(
 											`${API_BASE_URL}/api/dispatched/${row.zohoItemId}/reject-return`,
 											{
 												method: "POST",
@@ -2998,7 +3020,7 @@ function WarehousePage() {
 						<Button
 							variant="outlined"
 							onClick={async () => {
-								const res = await fetch(
+								const res = await secureFetch(
 									`${API_BASE_URL}/api/warehouse/import/template`,
 									{
 										credentials: "include",
@@ -4610,7 +4632,7 @@ function WarehousePage() {
 									formData.append("file", uploadFile);
 									formData.append("mode", importMode);
 
-									const res = await fetch(`${API_BASE_URL}/api/warehouse/import/confirm`, {
+									const res = await secureFetch(`${API_BASE_URL}/api/warehouse/import/confirm`, {
 										method: "POST",
 										credentials: "include",
 										body: formData,

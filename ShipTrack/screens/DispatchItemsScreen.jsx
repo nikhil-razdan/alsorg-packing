@@ -27,6 +27,10 @@ import {
   updateDispatchStatus,
 } from "../api/dispatchedApi";
 
+import {
+  getBackendMessage,
+} from "../api/client";
+
 const normalizeStatus = (value) =>
   String(value || "")
     .trim()
@@ -147,6 +151,51 @@ function getItemLocation(item) {
   );
 }
 
+
+function isLegacyLocationMissing(item) {
+  return (
+    !item?.plantCode ||
+    !item?.currentLocationCode ||
+    !item?.fgAreaCode
+  );
+}
+
+function isFgLocation(item) {
+  const location =
+    String(item?.currentLocationCode || "")
+      .trim()
+      .toUpperCase();
+
+  const fgArea =
+    String(item?.fgAreaCode || "")
+      .trim()
+      .toUpperCase();
+
+  return Boolean(
+    location &&
+    fgArea &&
+    location.startsWith(fgArea)
+  );
+}
+
+function canMarkReadyToDispatch(item) {
+  return (
+    normalizeStatus(item?.status) === "READY" &&
+    (
+      isLegacyLocationMissing(item) ||
+      isFgLocation(item)
+    )
+  );
+}
+
+function needsFgBeforeDispatch(item) {
+  return (
+    normalizeStatus(item?.status) === "READY" &&
+    !isLegacyLocationMissing(item) &&
+    !isFgLocation(item)
+  );
+}
+
 function getSearchBlob(item) {
   return [
     item.clientName,
@@ -219,10 +268,10 @@ export default function DispatchItemsScreen() {
     } catch (e) {
       Alert.alert(
         "Items failed",
-        e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
+        getBackendMessage(
+          e,
           "Failed to load items"
+        )
       );
     } finally {
       setLoading(false);
@@ -244,10 +293,10 @@ export default function DispatchItemsScreen() {
     } catch (e) {
       Alert.alert(
         "Refresh failed",
-        e?.response?.data?.message ||
-          e?.response?.data ||
-          e?.message ||
+        getBackendMessage(
+          e,
           "Failed to refresh"
+        )
       );
     } finally {
       setRefreshing(false);
@@ -498,9 +547,11 @@ export default function DispatchItemsScreen() {
       <FlatList
         data={paginatedItems}
         keyExtractor={(item, index) =>
-          item.zohoItemId ||
-          item.id ||
-          String(index)
+          String(
+            item.zohoItemId ||
+            item.id ||
+            index
+          )
         }
         refreshControl={
           <RefreshControl
@@ -1048,8 +1099,11 @@ function ItemCard({
   const status =
     normalizeStatus(item.status);
 
-  const canMarkReadyToDispatch =
-    status === "READY";
+  const canMarkReadyToDispatchAction =
+    canMarkReadyToDispatch(item);
+
+  const needsFgAction =
+    needsFgBeforeDispatch(item);
 
   const challanNumber =
     item.chalaanNumber ||
@@ -1168,7 +1222,19 @@ function ItemCard({
         ) : null}
       </View>
 
-      {canMarkReadyToDispatch ? (
+      {needsFgAction ? (
+        <View style={styles.fgWarningBox}>
+          <Text style={styles.fgWarningTitle}>
+            Move to FG first
+          </Text>
+
+          <Text style={styles.fgWarningText}>
+            This plant-tracked item must be in its FG area before it can be marked Ready To Dispatch.
+          </Text>
+        </View>
+      ) : null}
+
+      {canMarkReadyToDispatchAction ? (
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={async () => {
@@ -1187,10 +1253,10 @@ function ItemCard({
             } catch (e) {
               Alert.alert(
                 "Action failed",
-                e?.response?.data?.message ||
-                  e?.response?.data ||
-                  e?.message ||
+                getBackendMessage(
+                  e,
                   "Unable to update item"
+                )
               );
             }
           }}
@@ -1760,6 +1826,29 @@ const styles = {
     fontSize: 12,
     fontWeight: "700",
     marginTop: 3,
+  },
+
+  fgWarningBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 11,
+    backgroundColor: "rgba(245,158,11,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.22)",
+  },
+
+  fgWarningTitle: {
+    color: "#facc15",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  fgWarningText: {
+    color: "#cbd5e1",
+    fontWeight: "700",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
   },
 
   primaryBtn: {

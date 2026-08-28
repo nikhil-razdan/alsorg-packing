@@ -1,21 +1,19 @@
 package com.alsorg.packing.bomflow.service;
 
 import com.alsorg.packing.bomflow.security.BomFlowAccessService;
-
 import com.alsorg.packing.bomflow.dto.BomFlowProductDtos.ProductRequest;
 import com.alsorg.packing.bomflow.dto.BomFlowProductDtos.ProductResponse;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.CreateRevisionRequest;
 import com.alsorg.packing.bomflow.dto.BomFlowRevisionDtos.RevisionSummaryResponse;
-
 import com.alsorg.packing.bomflow.domain.BomFlowProduct;
 import com.alsorg.packing.bomflow.domain.BomFlowProductStatus;
 import com.alsorg.packing.bomflow.domain.BomFlowRevision;
 import com.alsorg.packing.bomflow.domain.BomFlowRevisionStatus;
-
 import com.alsorg.packing.bomflow.repository.BomFlowProductRepository;
 import com.alsorg.packing.bomflow.repository.BomFlowRevisionRepository;
+import com.alsorg.packing.bomflow.repository.BomFlowRevisionItemRepository;
 
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -24,7 +22,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -33,13 +34,15 @@ import java.util.UUID;
 @Transactional
 public class BomFlowProductService {
 
-    private static final Set<BomFlowRevisionStatus> OPEN_STATUSES =
-            Set.of(
-                    BomFlowRevisionStatus.DRAFT,
-                    BomFlowRevisionStatus.RETURNED);
+    private static final int MAX_PRODUCT_LIST_ROWS = 1000;
+
+    private static final Set<BomFlowRevisionStatus> OPEN_STATUSES = Set.of(
+            BomFlowRevisionStatus.DRAFT,
+            BomFlowRevisionStatus.RETURNED);
 
     private final BomFlowProductRepository productRepository;
     private final BomFlowRevisionRepository revisionRepository;
+    private final BomFlowRevisionItemRepository itemRepository;
     private final BomFlowAccessService access;
     private final BomFlowMapper mapper;
     private final JdbcTemplate jdbc;
@@ -47,71 +50,76 @@ public class BomFlowProductService {
     public BomFlowProductService(
             BomFlowProductRepository productRepository,
             BomFlowRevisionRepository revisionRepository,
+            BomFlowRevisionItemRepository itemRepository,
             BomFlowAccessService access,
             BomFlowMapper mapper,
             JdbcTemplate jdbc) {
-
         this.productRepository = productRepository;
         this.revisionRepository = revisionRepository;
+        this.itemRepository = itemRepository;
         this.access = access;
         this.mapper = mapper;
         this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
-    public List<ProductResponse> list(
-            String search) {
-
+    public List<ProductResponse> list(String search) {
         access.requireBomFlowAccess();
-
         String query = clean(search);
 
-        return productRepository
-                .findAll(
-                        Sort.by(
-                                Sort.Order.desc("updatedAt"),
-                                Sort.Order.asc("productName")))
-                .stream()
-                .filter(product -> matches(product, query))
-                .map(mapper::toProductResponse)
+        List<BomFlowProduct> products = productRepository
+                .search(query, PageRequest.of(0, MAX_PRODUCT_LIST_ROWS));
+
+        if (products.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> productIds = products.stream()
+                .map(product -> product.id)
+                .toList();
+
+        Map<UUID, BomFlowRevision> latestByProduct = new LinkedHashMap<>();
+        for (BomFlowRevision revision : revisionRepository.findLatestByProductIds(productIds)) {
+            if (revision != null && revision.product != null && revision.product.id != null) {
+                latestByProduct.merge(
+                        revision.product.id,
+                        revision,
+                        (left, right) -> left.revisionNo >= right.revisionNo ? left : right);
+            }
+        }
+
+        Map<UUID, Long> countsByProduct = new LinkedHashMap<>();
+        revisionRepository.countByProductIds(productIds).forEach(row ->
+                countsByProduct.put(row.getProductId(), row.getRevisionCount()));
+
+        return products.stream()
+                .map(product -> mapper.toProductResponse(
+                        product,
+                        latestByProduct.get(product.id),
+                        countsByProduct.getOrDefault(product.id, 0L)))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public ProductResponse get(
-            UUID productId) {
-
+    public ProductResponse get(UUID productId) {
         access.requireBomFlowAccess();
-
-        return mapper.toProductResponse(
-                requireProduct(productId));
+        return mapper.toProductResponse(requireProduct(productId));
     }
 
-    public ProductResponse create(
-            ProductRequest request) {
-
+    public ProductResponse create(ProductRequest request) {
         access.requireEditor();
         validateProductRequest(request);
 
         String productCode = upper(request.productCode());
-
-        if (productRepository
-                .existsByProductCodeIgnoreCase(productCode)) {
-
-            throw badRequest(
-                    "Product code already exists: "
-                            + productCode);
+        if (productRepository.existsByProductCodeIgnoreCase(productCode)) {
+            throw badRequest("Product code already exists: " + productCode);
         }
 
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
 
         BomFlowProduct product = new BomFlowProduct();
-
-        applyProductRequest(
-                product,
-                request);
-
+        applyProductRequest(product, request);
         product.currentRevisionNo = 0;
         product.status = BomFlowProductStatus.DRAFT;
         product.createdBy = actor;
@@ -119,85 +127,75 @@ public class BomFlowProductService {
         product.updatedBy = actor;
         product.updatedAt = now;
 
-        product = productRepository
-                .saveAndFlush(product);
-
+        product = productRepository.saveAndFlush(product);
         return mapper.toProductResponse(product);
     }
 
-    public ProductResponse update(
-            UUID productId,
-            ProductRequest request) {
-
+    public ProductResponse update(UUID productId, ProductRequest request) {
         access.requireEditor();
         validateProductRequest(request);
+        if (productId == null) throw badRequest("Product ID is required.");
 
-        BomFlowProduct product = productRepository
-                .findByIdForUpdate(productId)
-                .orElseThrow(() -> notFound(
-                        "Product not found: " + productId));
+        BomFlowProduct product = productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> notFound("Product not found: " + productId));
 
-        requireVersion(
-                product.rowVersion,
-                request.rowVersion(),
-                "Product");
+        requireVersion(product.rowVersion, request.rowVersion(), "Product");
 
         String productCode = upper(request.productCode());
-
-        if (productRepository
-                .existsByProductCodeIgnoreCaseAndIdNot(
-                        productCode,
-                        product.id)) {
-
-            throw badRequest(
-                    "Product code already exists: "
-                            + productCode);
+        if (productRepository.existsByProductCodeIgnoreCaseAndIdNot(productCode, product.id)) {
+            throw badRequest("Product code already exists: " + productCode);
         }
 
-        applyProductRequest(
-                product,
-                request);
-
+        applyProductRequest(product, request);
         product.updatedBy = access.currentUsername();
         product.updatedAt = LocalDateTime.now();
 
-        product = productRepository
-                .saveAndFlush(product);
-
+        product = productRepository.saveAndFlush(product);
         return mapper.toProductResponse(product);
     }
 
     @Transactional(readOnly = true)
-    public List<RevisionSummaryResponse> revisions(
-            UUID productId) {
-
+    public List<RevisionSummaryResponse> revisions(UUID productId) {
         access.requireBomFlowAccess();
-
         requireProduct(productId);
 
-        return revisionRepository
-                .findByProductIdOrderByRevisionNoDesc(productId)
-                .stream()
-                .map(mapper::toRevisionSummary)
+        List<BomFlowRevision> revisions = revisionRepository
+                .findByProductIdOrderByRevisionNoDesc(productId);
+
+        if (revisions.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> revisionIds = revisions.stream()
+                .map(revision -> revision.id)
+                .toList();
+
+        Map<UUID, BomFlowRevisionItemRepository.RevisionItemAggregate> aggregates =
+                new LinkedHashMap<>();
+        itemRepository.aggregateByRevisionIds(revisionIds).forEach(row ->
+                aggregates.put(row.getRevisionId(), row));
+
+        return revisions.stream()
+                .map(revision -> {
+                    BomFlowRevisionItemRepository.RevisionItemAggregate aggregate =
+                            aggregates.get(revision.id);
+                    return mapper.toRevisionSummary(
+                            revision,
+                            aggregate == null ? 0L : aggregate.getItemCount(),
+                            aggregate == null ? BigDecimal.ZERO : aggregate.getTotalAmount());
+                })
                 .toList();
     }
 
-    public RevisionSummaryResponse createRevision(
-            UUID productId,
-            CreateRevisionRequest request) {
-
+    public RevisionSummaryResponse createRevision(UUID productId, CreateRevisionRequest request) {
         access.requireEditor();
+        if (productId == null) throw badRequest("Product ID is required.");
 
-        BomFlowProduct product = productRepository
-                .findByIdForUpdate(productId)
-                .orElseThrow(() -> notFound(
-                        "Product not found: "
-                                + productId));
+        BomFlowProduct product = productRepository.findByIdForUpdate(productId)
+                .orElseThrow(() -> notFound("Product not found: " + productId));
 
         BomFlowRevision existingOpen = revisionRepository
-                .findTopByProductIdAndStatusInOrderByRevisionNoDesc(
-                        productId,
-                        OPEN_STATUSES)
+                .findTopByProductIdAndStatusInOrderByRevisionNoDesc(productId, OPEN_STATUSES)
                 .orElse(null);
 
         if (existingOpen != null) {
@@ -208,36 +206,24 @@ public class BomFlowProductService {
                 .findTopByProductIdOrderByRevisionNoDesc(productId)
                 .orElse(null);
 
-        int nextRevisionNo = sourceRevision == null
-                ? 1
-                : sourceRevision.revisionNo + 1;
-
+        int nextRevisionNo = sourceRevision == null ? 1 : sourceRevision.revisionNo + 1;
         String actor = access.currentUsername();
         LocalDateTime now = LocalDateTime.now();
 
         BomFlowRevision revision = new BomFlowRevision();
-
         revision.product = product;
         revision.revisionNo = nextRevisionNo;
         revision.status = BomFlowRevisionStatus.DRAFT;
-        revision.remarks = clean(
-                request == null
-                        ? null
-                        : request.remarks());
+        revision.remarks = clean(request == null ? null : request.remarks());
         revision.createdBy = actor;
         revision.createdAt = now;
         revision.updatedBy = actor;
         revision.updatedAt = now;
 
-        revision = revisionRepository
-                .saveAndFlush(revision);
+        revision = revisionRepository.saveAndFlush(revision);
 
         if (sourceRevision != null) {
-            cloneRevisionSnapshot(
-                    sourceRevision.id,
-                    revision.id,
-                    actor,
-                    now);
+            cloneRevisionSnapshot(sourceRevision.id, revision.id, actor, now);
         }
 
         product.currentRevisionNo = nextRevisionNo;
@@ -248,12 +234,6 @@ public class BomFlowProductService {
         return mapper.toRevisionSummary(revision);
     }
 
-    /**
-     * A new BOM revision is a cost snapshot/version, not an empty costing file.
-     * Copy the previous revision's material structure, labour inputs and costing
-     * settings so the user changes only what actually changed. The older
-     * revision remains untouched and becomes the comparison baseline.
-     */
     private void cloneRevisionSnapshot(
             UUID sourceRevisionId,
             UUID targetRevisionId,
@@ -355,186 +335,77 @@ public class BomFlowProductService {
                 now);
     }
 
-    private void applyProductRequest(
-            BomFlowProduct product,
-            ProductRequest request) {
-
-        product.productName = required(
-                request.productName(),
-                "Product name");
-
-        product.productCode = upper(
-                required(
-                        request.productCode(),
-                        "Product code"));
-
-        product.drawingNumber = clean(
-                request.drawingNumber());
-
-        product.category = required(
-                request.category(),
-                "Product category");
-
-        product.collection = clean(
-                request.collection());
-
-        product.length = positive(
-                request.length(),
-                "Length");
-
-        product.width = positive(
-                request.width(),
-                "Width");
-
-        product.height = positive(
-                request.height(),
-                "Height");
-
-        product.projectReference = clean(
-                request.projectReference());
-
-        product.clientEntity = clean(
-                request.clientEntity());
+    private void applyProductRequest(BomFlowProduct product, ProductRequest request) {
+        product.productName = required(request.productName(), "Product name");
+        product.productCode = upper(required(request.productCode(), "Product code"));
+        product.drawingNumber = cleanLimited(request.drawingNumber(), 160, "Drawing number");
+        product.category = cleanLimited(required(request.category(), "Product category"), 120, "Product category");
+        product.collection = cleanLimited(request.collection(), 160, "Collection");
+        product.length = positive(request.length(), "Length");
+        product.width = positive(request.width(), "Width");
+        product.height = positive(request.height(), "Height");
+        product.projectReference = cleanLimited(request.projectReference(), 180, "Project reference");
+        product.clientEntity = cleanLimited(request.clientEntity(), 240, "Client");
     }
 
-    private void validateProductRequest(
-            ProductRequest request) {
+    private void validateProductRequest(ProductRequest request) {
+        if (request == null) throw badRequest("Product request body is required.");
+        cleanLimited(required(request.productName(), "Product name"), 500, "Product name");
+        cleanLimited(required(request.productCode(), "Product code"), 150, "Product code");
+    }
 
-        if (request == null) {
-            throw badRequest(
-                    "Product request body is required.");
+    private BomFlowProduct requireProduct(UUID productId) {
+        if (productId == null) throw badRequest("Product ID is required.");
+        return productRepository.findById(productId)
+                .orElseThrow(() -> notFound("Product not found: " + productId));
+    }
+
+    private BigDecimal positive(BigDecimal value, String field) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw badRequest(field + " must be greater than zero.");
         }
-    }
-
-    private BomFlowProduct requireProduct(
-            UUID productId) {
-
-        if (productId == null) {
-            throw badRequest(
-                    "Product ID is required.");
-        }
-
-        return productRepository
-                .findById(productId)
-                .orElseThrow(() -> notFound(
-                        "Product not found: "
-                                + productId));
-    }
-
-    private boolean matches(
-            BomFlowProduct product,
-            String query) {
-
-        if (query == null) {
-            return true;
-        }
-
-        String haystack = String.join(
-                " ",
-                value(product.productName),
-                value(product.productCode),
-                value(product.drawingNumber),
-                value(product.category),
-                value(product.collection),
-                value(product.projectReference),
-                value(product.clientEntity))
-                .toLowerCase();
-
-        return haystack.contains(
-                query.toLowerCase());
-    }
-
-    private String value(
-            String value) {
-
-        return value == null
-                ? ""
-                : value;
-    }
-
-    private BigDecimal positive(
-            BigDecimal value,
-            String field) {
-
-        if (value == null
-                || value.compareTo(BigDecimal.ZERO) <= 0) {
-
-            throw badRequest(
-                    field + " must be greater than zero.");
-        }
-
         return value;
     }
 
-    private String required(
-            String value,
-            String field) {
-
+    private String required(String value, String field) {
         String cleaned = clean(value);
-
-        if (cleaned == null) {
-            throw badRequest(
-                    field + " is required.");
-        }
-
+        if (cleaned == null) throw badRequest(field + " is required.");
         return cleaned;
     }
 
-    private String upper(
-            String value) {
-
+    private String cleanLimited(String value, int maxLength, String field) {
         String cleaned = clean(value);
-
-        return cleaned == null
-                ? null
-                : cleaned.toUpperCase();
+        if (cleaned != null && cleaned.length() > maxLength) {
+            throw badRequest(field + " is too long.");
+        }
+        return cleaned;
     }
 
-    private String clean(
-            String value) {
+    private String upper(String value) {
+        String cleaned = clean(value);
+        return cleaned == null ? null : cleaned.toUpperCase(Locale.ROOT);
+    }
 
-        if (value == null) {
-            return null;
-        }
-
+    private String clean(String value) {
+        if (value == null) return null;
         String cleaned = value.trim();
-
-        return cleaned.isEmpty()
-                ? null
-                : cleaned;
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
-    private void requireVersion(
-            Long actual,
-            Long supplied,
-            String label) {
-
-        if (supplied == null) {
-            throw badRequest(
-                    label + " rowVersion is required.");
-        }
-
+    private void requireVersion(Long actual, Long supplied, String label) {
+        if (supplied == null) throw badRequest(label + " rowVersion is required.");
         if (!Objects.equals(actual, supplied)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    label
-                            + " was changed by another user. Refresh and try again.");
+                    label + " was changed by another user. Refresh and try again.");
         }
     }
 
-    private ResponseStatusException badRequest(
-            String message) {
-
-        return new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                message);
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
-    private ResponseStatusException notFound(
-            String message) {
-
-        return new ResponseStatusException(
-                HttpStatus.NOT_FOUND,
-                message);
+    private ResponseStatusException notFound(String message) {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
     }
 }

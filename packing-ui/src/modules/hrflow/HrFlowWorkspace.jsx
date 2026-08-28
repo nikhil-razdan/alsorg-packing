@@ -16,6 +16,7 @@ import {
 	InputAdornment,
 	MenuItem,
 	Paper,
+	Pagination,
 	Tab,
 	Tabs,
 	TextField,
@@ -621,35 +622,136 @@ function DashboardView({ onNavigate, canViewOnboarding }) {
 }
 
 function CandidatesView({ canRecruit, canOperate, globalAdmin }) {
+	const PAGE_SIZES = [10, 25, 50];
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [rows, setRows] = useState([]);
 	const [total, setTotal] = useState(0);
 	const [search, setSearch] = useState("");
 	const [stage, setStage] = useState("");
+	const [page, setPage] = useState(0);
+	const [pageSize, setPageSize] = useState(25);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [createForm, setCreateForm] = useState(blankCandidate);
 	const [selectedId, setSelectedId] = useState(null);
 
 	const load = useCallback(async () => {
-		setLoading(true); setError("");
-		try { const response = await hrflowApi.listCandidates({ q: search, stage, page: 0, size: 50, sort: "createdAt,desc" }); setRows(pageContent(response)); setTotal(totalElements(response)); }
-		catch (e) { setError(apiMessage(e, "Candidates could not be loaded.")); }
-		finally { setLoading(false); }
-	}, [search, stage]);
-	useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
+		setLoading(true);
+		setError("");
+		try {
+			const response = await hrflowApi.listCandidates({
+				q: search,
+				stage,
+				page,
+				size: pageSize,
+				sort: "createdAt,desc",
+			});
+			const nextTotal = totalElements(response);
+			const maxPage = Math.max(0, Math.ceil(nextTotal / pageSize) - 1);
+			setTotal(nextTotal);
+
+			if (page > maxPage) {
+				setPage(maxPage);
+				return;
+			}
+
+			setRows(pageContent(response));
+		} catch (e) {
+			setRows([]);
+			setError(apiMessage(e, "Candidates could not be loaded."));
+		} finally {
+			setLoading(false);
+		}
+	}, [search, stage, page, pageSize]);
+
+	useEffect(() => {
+		const timer = setTimeout(load, 250);
+		return () => clearTimeout(timer);
+	}, [load]);
 
 	const create = async () => {
 		setError("");
-		try { const response = await hrflowApi.createCandidate(createForm); setCreateOpen(false); setCreateForm(blankCandidate); await load(); setSelectedId(response.data?.id || null); }
-		catch (e) { setError(apiMessage(e, "Candidate could not be created.")); }
+		try {
+			const response = await hrflowApi.createCandidate(createForm);
+			setCreateOpen(false);
+			setCreateForm(blankCandidate);
+			if (page === 0) {
+				await load();
+			} else {
+				setPage(0);
+			}
+			setSelectedId(response.data?.id || null);
+		} catch (e) {
+			setError(apiMessage(e, "Candidate could not be created."));
+		}
 	};
 
 	return <>
-		<PageTitle eyebrow="RECRUITMENT" title="Candidates" subtitle="Create candidate records, send secure application links, review submitted information, maintain HR fields, manage documents and progress candidates into onboarding." actions={<><Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>{canRecruit ? <Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => setCreateOpen(true)} sx={primaryButtonSx}>Add candidate</Button> : null}</>} />
+		<PageTitle
+			eyebrow="RECRUITMENT"
+			title="Candidates"
+			subtitle="Create candidate records, send secure application links, review submitted information, maintain HR fields, manage documents and progress candidates into onboarding."
+			actions={
+				<>
+					<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>
+					{canRecruit ? (
+						<Button variant="contained" startIcon={<AddOutlinedIcon />} onClick={() => setCreateOpen(true)} sx={primaryButtonSx}>
+							Add candidate
+						</Button>
+					) : null}
+				</>
+			}
+		/>
 		<ErrorAlert error={error} onRetry={load} />
-		<Paper sx={{ ...panelSx, p: 1.4, mb: 1.5 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(260px,1fr) 230px auto" }, gap: 1 }}><TextField size="small" placeholder="Search candidate, mobile, post…" value={search} onChange={(e) => setSearch(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlinedIcon fontSize="small" /></InputAdornment> }} sx={fieldSx} /><TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}><MenuItem value="">All stages</MenuItem>{HR_CANDIDATE_STAGES.map((value) => <MenuItem key={value} value={value}>{humanize(value)}</MenuItem>)}</TextField><Chip label={`${total} candidate${total === 1 ? "" : "s"}`} sx={{ alignSelf: "center", borderRadius: 1.2, fontWeight: 850 }} /></Box></Paper>
-		<Paper sx={{ ...panelSx, overflow: "hidden" }}>{loading ? <LoadingBlock /> : rows.length ? <CandidateTable rows={rows} onOpen={(row) => setSelectedId(row.id)} /> : <EmptyState title="No candidates found" description="Create the first candidate or change your filters." />}</Paper>
+		<Paper sx={{ ...panelSx, p: 1.4, mb: 1.5 }}>
+			<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(260px,1fr) 230px auto" }, gap: 1 }}>
+				<TextField
+					size="small"
+					placeholder="Search candidate, mobile, post…"
+					value={search}
+					onChange={(e) => {
+						setSearch(e.target.value);
+						setPage(0);
+					}}
+					InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlinedIcon fontSize="small" /></InputAdornment> }}
+					sx={fieldSx}
+				/>
+				<TextField
+					select
+					size="small"
+					label="Stage"
+					value={stage}
+					onChange={(e) => {
+						setStage(e.target.value);
+						setPage(0);
+					}}
+					sx={fieldSx}
+				>
+					<MenuItem value="">All stages</MenuItem>
+					{HR_CANDIDATE_STAGES.map((value) => <MenuItem key={value} value={value}>{humanize(value)}</MenuItem>)}
+				</TextField>
+				<Chip label={`${total} candidate${total === 1 ? "" : "s"}`} sx={{ alignSelf: "center", borderRadius: 1.2, fontWeight: 850 }} />
+			</Box>
+		</Paper>
+		<Paper sx={{ ...panelSx, overflow: "hidden" }}>
+			{loading ? <LoadingBlock /> : rows.length ? (
+				<>
+					<CandidateTable rows={rows} onOpen={(row) => setSelectedId(row.id)} />
+					<HrServerPager
+						page={page}
+						pageSize={pageSize}
+						total={total}
+						pageSizes={PAGE_SIZES}
+						label="candidates"
+						onPage={setPage}
+						onPageSize={(next) => {
+							setPageSize(next);
+							setPage(0);
+						}}
+					/>
+				</>
+			) : <EmptyState title="No candidates found" description="Create the first candidate or change your filters." />}
+		</Paper>
 		<CreateCandidateDialog open={createOpen} form={createForm} setForm={setCreateForm} onClose={() => setCreateOpen(false)} onCreate={create} />
 		<CandidateDrawer candidateId={selectedId} open={Boolean(selectedId)} onClose={() => setSelectedId(null)} onChanged={load} canRecruit={canRecruit} canOperate={canOperate} globalAdmin={globalAdmin} />
 	</>;
@@ -1030,10 +1132,94 @@ function CandidateOnboardingStarter({ candidate, canOnboard, canOperate, form, s
 }
 
 function OnboardingView({ canOperate, canPublish, canOrientation, hodOnly }) {
-	const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [rows, setRows] = useState([]); const [total, setTotal] = useState(0); const [status, setStatus] = useState(""); const [selectedId, setSelectedId] = useState(null);
-	const load = useCallback(async () => { setLoading(true); setError(""); try { const response = await hrflowApi.listOnboarding({ status, page: 0, size: 50, sort: "createdAt,desc" }); setRows(pageContent(response)); setTotal(totalElements(response)); } catch (e) { setError(apiMessage(e, "Onboarding cases could not be loaded.")); } finally { setLoading(false); } }, [status]);
+	const PAGE_SIZES = [10, 25, 50];
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+	const [rows, setRows] = useState([]);
+	const [total, setTotal] = useState(0);
+	const [status, setStatus] = useState("");
+	const [page, setPage] = useState(0);
+	const [pageSize, setPageSize] = useState(25);
+	const [selectedId, setSelectedId] = useState(null);
+
+	const load = useCallback(async () => {
+		setLoading(true);
+		setError("");
+		try {
+			const response = await hrflowApi.listOnboarding({
+				status,
+				page,
+				size: pageSize,
+				sort: "createdAt,desc",
+			});
+			const nextTotal = totalElements(response);
+			const maxPage = Math.max(0, Math.ceil(nextTotal / pageSize) - 1);
+			setTotal(nextTotal);
+
+			if (page > maxPage) {
+				setPage(maxPage);
+				return;
+			}
+
+			setRows(pageContent(response));
+		} catch (e) {
+			setRows([]);
+			setError(apiMessage(e, "Onboarding cases could not be loaded."));
+		} finally {
+			setLoading(false);
+		}
+	}, [status, page, pageSize]);
+
 	useEffect(() => { load(); }, [load]);
-	return <><PageTitle eyebrow="JOINING & INDUCTION" title="Onboarding" subtitle="Control pre-joining details, candidate documents, joining confirmation, policies, NDA, declaration, HR/HOD orientation, employee feedback and final onboarding completion." actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>} /><ErrorAlert error={error} onRetry={load} /><Paper sx={{ ...panelSx, p: 1.4, mb: 1.5 }}><Box sx={{ display: "flex", gap: 1, justifyContent: "space-between", flexWrap: "wrap" }}><TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={{ ...fieldSx, minWidth: 230 }}><MenuItem value="">All statuses</MenuItem>{HR_ONBOARDING_STATUSES.map((value) => <MenuItem key={value} value={value}>{humanize(value)}</MenuItem>)}</TextField><Chip label={`${total} case${total === 1 ? "" : "s"}`} sx={{ borderRadius: 1.2, fontWeight: 850 }} /></Box></Paper><Paper sx={{ ...panelSx, overflow: "hidden" }}>{loading ? <LoadingBlock /> : rows.length ? <OnboardingTable rows={rows} onOpen={(row) => setSelectedId(row.id)} /> : <EmptyState title="No onboarding cases" />}</Paper><OnboardingDrawer onboardingId={selectedId} open={Boolean(selectedId)} onClose={() => setSelectedId(null)} onChanged={load} canOperate={canOperate} canPublish={canPublish} canOrientation={canOrientation} hodOnly={hodOnly} /></>;
+
+	return <>
+		<PageTitle
+			eyebrow="JOINING & INDUCTION"
+			title="Onboarding"
+			subtitle="Control pre-joining details, candidate documents, joining confirmation, policies, NDA, declaration, HR/HOD orientation, employee feedback and final onboarding completion."
+			actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>}
+		/>
+		<ErrorAlert error={error} onRetry={load} />
+		<Paper sx={{ ...panelSx, p: 1.4, mb: 1.5 }}>
+			<Box sx={{ display: "flex", gap: 1, justifyContent: "space-between", flexWrap: "wrap" }}>
+				<TextField
+					select
+					size="small"
+					label="Status"
+					value={status}
+					onChange={(e) => {
+						setStatus(e.target.value);
+						setPage(0);
+					}}
+					sx={{ ...fieldSx, minWidth: 230 }}
+				>
+					<MenuItem value="">All statuses</MenuItem>
+					{HR_ONBOARDING_STATUSES.map((value) => <MenuItem key={value} value={value}>{humanize(value)}</MenuItem>)}
+				</TextField>
+				<Chip label={`${total} case${total === 1 ? "" : "s"}`} sx={{ borderRadius: 1.2, fontWeight: 850 }} />
+			</Box>
+		</Paper>
+		<Paper sx={{ ...panelSx, overflow: "hidden" }}>
+			{loading ? <LoadingBlock /> : rows.length ? (
+				<>
+					<OnboardingTable rows={rows} onOpen={(row) => setSelectedId(row.id)} />
+					<HrServerPager
+						page={page}
+						pageSize={pageSize}
+						total={total}
+						pageSizes={PAGE_SIZES}
+						label="onboarding cases"
+						onPage={setPage}
+						onPageSize={(next) => {
+							setPageSize(next);
+							setPage(0);
+						}}
+					/>
+				</>
+			) : <EmptyState title="No onboarding cases" />}
+		</Paper>
+		<OnboardingDrawer onboardingId={selectedId} open={Boolean(selectedId)} onClose={() => setSelectedId(null)} onChanged={load} canOperate={canOperate} canPublish={canPublish} canOrientation={canOrientation} hodOnly={hodOnly} />
+	</>;
 }
 
 function OnboardingTable({ rows, onOpen }) { return <Box sx={{ overflowX: "auto" }}><Box sx={{ minWidth: 900 }}><TableHead columns={["Candidate", "Status", "Joining", "Department", "Designation", "Location", ""]} />{rows.map((row) => <Box key={row.id} sx={tableRowSx}><Cell><Typography sx={mainCellSx}>{row.candidateName}</Typography><Typography sx={subCellSx}>{row.candidateNumber}</Typography></Cell><Cell><StatusChip value={row.status} /></Cell><Cell>{formatDate(row.joiningDate)}</Cell><Cell>{row.department || "—"}</Cell><Cell>{row.designation || "—"}</Cell><Cell>{row.location || "—"}</Cell><Cell><Button size="small" onClick={() => onOpen(row)} sx={secondaryButtonSx}>Open</Button></Cell></Box>)}</Box></Box>; }
@@ -1078,7 +1264,130 @@ function FeedbackView({ feedback }) { return <Paper variant="outlined" sx={secti
 
 function CompletionView({ completion, canOperate, busy, onComplete }) { if (!completion) return <EmptyState title="Completion state unavailable" />; const checks = [["Required identity documents",completion.requiredDocumentsComplete],["Joining Report acknowledged",completion.joiningReportAcknowledged],["Current policy acknowledged",completion.policyAcknowledged],["Orientation completed & acknowledged",completion.orientationCompleted],["Induction feedback submitted",completion.inductionFeedbackSubmitted],["Current NDA accepted",completion.ndaAccepted],["NDA verified by HR",completion.ndaVerified],["Employment declaration accepted",completion.declarationAccepted]]; return <Box sx={{ display: "grid", gap: 1.5 }}><Paper variant="outlined" sx={sectionCardSx}><CompletionBar completion={completion} /><Box sx={{ mt: 1.5, display: "grid", gap: .7 }}>{checks.map(([label,done]) => <Box key={label} sx={{ display: "flex", alignItems: "center", gap: .8, p: .9, borderRadius: 1.2, background: done ? "var(--hr-success-soft)" : "var(--hr-warning-soft)", border: `1px solid ${done ? "var(--hr-success-border)" : "var(--hr-warning-border)"}` }}><CheckCircleOutlineOutlinedIcon sx={{ color: done ? hrColors.green : hrColors.amber, fontSize: 18 }} /><Typography sx={{ fontSize: 12.5, fontWeight: 800 }}>{label}</Typography></Box>)}</Box>{completion.pending?.length ? <Alert severity="warning" sx={{ mt: 1.4, borderRadius: 1.5 }}>{completion.pending.join(" • ")}</Alert> : null}{canOperate ? <Button variant="contained" disabled={busy || !completion.complete || completion.status === "ONBOARDING_COMPLETE"} onClick={onComplete} sx={{ ...primaryButtonSx, mt: 1.4 }}>{completion.status === "ONBOARDING_COMPLETE" ? "Onboarding complete" : "Finalize onboarding"}</Button> : null}</Paper></Box>; }
 
-function EmployeesView() { const [loading,setLoading] = useState(true); const [error,setError] = useState(""); const [rows,setRows] = useState([]); const [total,setTotal] = useState(0); const [search,setSearch] = useState(""); const [status,setStatus] = useState(""); const [selectedId,setSelectedId] = useState(null); const load = useCallback(async () => { setLoading(true); setError(""); try { const response = await hrflowApi.listEmployees({ q: search, status, page:0, size:50, sort:"createdAt,desc" }); setRows(pageContent(response)); setTotal(totalElements(response)); } catch(e) { setError(apiMessage(e,"Employees could not be loaded.")); } finally { setLoading(false); } },[search,status]); useEffect(() => { const t=setTimeout(load,250); return () => clearTimeout(t); },[load]); return <><PageTitle eyebrow="EMPLOYEE MASTER" title="Employees" subtitle="Authoritative employee records created only through controlled joining confirmation. FlowSuite user linkage remains optional and separate." actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>} /><ErrorAlert error={error} onRetry={load} /><Paper sx={{ ...panelSx,p:1.4,mb:1.5 }}><Box sx={{ display:"grid",gridTemplateColumns:{xs:"1fr",md:"1fr 220px auto"},gap:1 }}><TextField size="small" value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Search employee…" InputProps={{startAdornment:<InputAdornment position="start"><SearchOutlinedIcon fontSize="small" /></InputAdornment>}} sx={fieldSx}/><TextField select size="small" label="Status" value={status} onChange={(e)=>setStatus(e.target.value)} sx={fieldSx}><MenuItem value="">All statuses</MenuItem>{HR_EMPLOYEE_STATUSES.map((v)=><MenuItem key={v} value={v}>{humanize(v)}</MenuItem>)}</TextField><Chip label={`${total} employee${total===1?"":"s"}`} sx={{alignSelf:"center",borderRadius:1.2,fontWeight:850}}/></Box></Paper><Paper sx={{...panelSx,overflow:"hidden"}}>{loading?<LoadingBlock/>:rows.length?<Box sx={{overflowX:"auto"}}><Box sx={{minWidth:850}}><TableHead columns={["Employee","Status","Department","Designation","Location","Joined",""]}/>{rows.map((r)=><Box key={r.id} sx={tableRowSx}><Cell><Typography sx={mainCellSx}>{r.fullName}</Typography><Typography sx={subCellSx}>{r.employeeCode} • {r.mobileNo||"—"}</Typography></Cell><Cell><StatusChip value={r.status}/></Cell><Cell>{r.department||"—"}</Cell><Cell>{r.designation||"—"}</Cell><Cell>{r.location||"—"}</Cell><Cell>{formatDate(r.dateOfJoining)}</Cell><Cell><Button size="small" onClick={()=>setSelectedId(r.id)} sx={secondaryButtonSx}>Open</Button></Cell></Box>)}</Box></Box>:<EmptyState title="No employees found"/>}</Paper><EmployeeDrawer id={selectedId} open={Boolean(selectedId)} onClose={()=>setSelectedId(null)}/></>; }
+function EmployeesView() {
+	const PAGE_SIZES = [10, 25, 50];
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+	const [rows, setRows] = useState([]);
+	const [total, setTotal] = useState(0);
+	const [search, setSearch] = useState("");
+	const [status, setStatus] = useState("");
+	const [page, setPage] = useState(0);
+	const [pageSize, setPageSize] = useState(25);
+	const [selectedId, setSelectedId] = useState(null);
+
+	const load = useCallback(async () => {
+		setLoading(true);
+		setError("");
+		try {
+			const response = await hrflowApi.listEmployees({
+				q: search,
+				status,
+				page,
+				size: pageSize,
+				sort: "createdAt,desc",
+			});
+			const nextTotal = totalElements(response);
+			const maxPage = Math.max(0, Math.ceil(nextTotal / pageSize) - 1);
+			setTotal(nextTotal);
+
+			if (page > maxPage) {
+				setPage(maxPage);
+				return;
+			}
+
+			setRows(pageContent(response));
+		} catch (e) {
+			setRows([]);
+			setError(apiMessage(e, "Employees could not be loaded."));
+		} finally {
+			setLoading(false);
+		}
+	}, [search, status, page, pageSize]);
+
+	useEffect(() => {
+		const timer = setTimeout(load, 250);
+		return () => clearTimeout(timer);
+	}, [load]);
+
+	return <>
+		<PageTitle
+			eyebrow="EMPLOYEE MASTER"
+			title="Employees"
+			subtitle="Authoritative employee records created only through controlled joining confirmation. FlowSuite user linkage remains optional and separate."
+			actions={<Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryButtonSx}>Refresh</Button>}
+		/>
+		<ErrorAlert error={error} onRetry={load} />
+		<Paper sx={{ ...panelSx, p: 1.4, mb: 1.5 }}>
+			<Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 220px auto" }, gap: 1 }}>
+				<TextField
+					size="small"
+					value={search}
+					onChange={(e) => {
+						setSearch(e.target.value);
+						setPage(0);
+					}}
+					placeholder="Search employee…"
+					InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlinedIcon fontSize="small" /></InputAdornment> }}
+					sx={fieldSx}
+				/>
+				<TextField
+					select
+					size="small"
+					label="Status"
+					value={status}
+					onChange={(e) => {
+						setStatus(e.target.value);
+						setPage(0);
+					}}
+					sx={fieldSx}
+				>
+					<MenuItem value="">All statuses</MenuItem>
+					{HR_EMPLOYEE_STATUSES.map((value) => <MenuItem key={value} value={value}>{humanize(value)}</MenuItem>)}
+				</TextField>
+				<Chip label={`${total} employee${total === 1 ? "" : "s"}`} sx={{ alignSelf: "center", borderRadius: 1.2, fontWeight: 850 }} />
+			</Box>
+		</Paper>
+		<Paper sx={{ ...panelSx, overflow: "hidden" }}>
+			{loading ? <LoadingBlock /> : rows.length ? (
+				<>
+					<Box sx={{ overflowX: "auto" }}>
+						<Box sx={{ minWidth: 850 }}>
+							<TableHead columns={["Employee", "Status", "Department", "Designation", "Location", "Joined", ""]} />
+							{rows.map((row) => (
+								<Box key={row.id} sx={tableRowSx}>
+									<Cell>
+										<Typography sx={mainCellSx}>{row.fullName}</Typography>
+										<Typography sx={subCellSx}>{row.employeeCode} • {row.mobileNo || "—"}</Typography>
+									</Cell>
+									<Cell><StatusChip value={row.status} /></Cell>
+									<Cell>{row.department || "—"}</Cell>
+									<Cell>{row.designation || "—"}</Cell>
+									<Cell>{row.location || "—"}</Cell>
+									<Cell>{formatDate(row.dateOfJoining)}</Cell>
+									<Cell><Button size="small" onClick={() => setSelectedId(row.id)} sx={secondaryButtonSx}>Open</Button></Cell>
+								</Box>
+							))}
+						</Box>
+					</Box>
+					<HrServerPager
+						page={page}
+						pageSize={pageSize}
+						total={total}
+						pageSizes={PAGE_SIZES}
+						label="employees"
+						onPage={setPage}
+						onPageSize={(next) => {
+							setPageSize(next);
+							setPage(0);
+						}}
+					/>
+				</>
+			) : <EmptyState title="No employees found" />}
+		</Paper>
+		<EmployeeDrawer id={selectedId} open={Boolean(selectedId)} onClose={() => setSelectedId(null)} />
+	</>;
+}
 
 function EmployeeDrawer({ id, open, onClose }) {
 	const [loading, setLoading] = useState(false);
@@ -1151,6 +1460,64 @@ function EmployeeDrawer({ id, open, onClose }) {
 function AccessView() { const [loading,setLoading]=useState(true); const [error,setError]=useState(""); const [rows,setRows]=useState([]); const [principal,setPrincipal]=useState(""); const [role,setRole]=useState("HR_EXECUTIVE"); const load=useCallback(async()=>{setLoading(true);setError("");try{const r=await hrflowApi.listAccessGrants();setRows(r.data||[]);}catch(e){setError(apiMessage(e));}finally{setLoading(false);}},[]); useEffect(()=>{load();},[load]); const grant=async()=>{try{await hrflowApi.grantAccess({principalName:principal.trim(),role});setPrincipal("");await load();}catch(e){setError(apiMessage(e));}}; const revoke=async(row)=>{try{await hrflowApi.revokeAccess(row.id);await load();}catch(e){setError(apiMessage(e));}}; return <><PageTitle eyebrow="GLOBAL ADMIN" title="HRFlow access grants" subtitle="HRFlow roles are intentionally separate from the global FlowSuite role enum. Global ADMIN can grant or revoke HR-specific permissions here." actions={<Button startIcon={<RefreshOutlinedIcon/>} onClick={load} sx={secondaryButtonSx}>Refresh</Button>}/><ErrorAlert error={error} onRetry={load}/><Paper sx={{...panelSx,p:1.5,mb:1.5}}><Box sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"1fr 230px auto"},gap:1}}><TextField size="small" label="Username / principal name" value={principal} onChange={(e)=>setPrincipal(e.target.value)} sx={fieldSx}/><TextField select size="small" label="HRFlow role" value={role} onChange={(e)=>setRole(e.target.value)} sx={fieldSx}>{HR_ACCESS_ROLES.map((r)=><MenuItem key={r} value={r}>{humanize(r)}</MenuItem>)}</TextField><Button variant="contained" disabled={!principal.trim()} onClick={grant} sx={primaryButtonSx}>Grant access</Button></Box></Paper><Paper sx={{...panelSx,overflow:"hidden"}}>{loading?<LoadingBlock/>:rows.length?<Box>{rows.map((row)=><Box key={row.id} sx={{display:"grid",gridTemplateColumns:{xs:"1fr",md:"1.2fr .8fr 120px auto"},gap:1,p:1.2,borderBottom:`1px solid ${hrColors.line}`,alignItems:"center"}}><Box><Typography sx={mainCellSx}>{row.principalName}</Typography><Typography sx={subCellSx}>Updated {formatDateTime(row.updatedAt)}</Typography></Box><StatusChip value={row.role}/><StatusChip value={row.active?"ACTIVE":"REVOKED"}/><Button size="small" color="error" disabled={!row.active} onClick={()=>revoke(row)} sx={{...secondaryButtonSx,color:hrColors.red}}>Revoke</Button></Box>)}</Box>:<EmptyState title="No HR access grants"/>}</Paper></>; }
 
 function CreateCandidateDialog({ open, form, setForm, onClose, onCreate }) { const set=(key)=>(e)=>setForm((c)=>({...c,[key]:e.target.value})); return <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" PaperProps={{sx:{borderRadius:2.1}}}><DialogTitle sx={{fontWeight:950}}>Add candidate</DialogTitle><DialogContent dividers><Box sx={formGridSx}><TextField select size="small" label="Application type" value={form.applicationType} onChange={set("applicationType")} sx={fieldSx}><MenuItem value="STANDARD">Standard</MenuItem><MenuItem value="MANAGERIAL_ADMINISTRATIVE">Managerial / Administrative</MenuItem></TextField><TextField size="small" label="Full name" value={form.fullName} onChange={set("fullName")} sx={fieldSx}/><TextField size="small" label="Mobile" value={form.mobileNo} onChange={set("mobileNo")} sx={fieldSx}/><TextField size="small" type="email" label="Email" value={form.email} onChange={set("email")} sx={fieldSx}/><TextField size="small" label="Post applied for" value={form.postAppliedFor} onChange={set("postAppliedFor")} sx={fieldSx}/><TextField size="small" label="Department" value={form.department} onChange={set("department")} sx={fieldSx}/><TextField size="small" label="Designation" value={form.designation} onChange={set("designation")} sx={fieldSx}/><TextField size="small" label="HR owner" value={form.hrOwner} onChange={set("hrOwner")} sx={fieldSx}/></Box></DialogContent><DialogActions sx={{p:1.5}}><Button onClick={onClose} sx={secondaryButtonSx}>Cancel</Button><Button variant="contained" disabled={!form.applicationType} onClick={onCreate} sx={primaryButtonSx}>Create candidate</Button></DialogActions></Dialog>; }
+
+function HrServerPager({
+	page,
+	pageSize,
+	total,
+	pageSizes = [10, 25, 50],
+	label = "records",
+	onPage,
+	onPageSize,
+}) {
+	const pageCount = Math.max(1, Math.ceil(Number(total || 0) / Math.max(1, Number(pageSize || 1))));
+	const from = total ? page * pageSize + 1 : 0;
+	const to = Math.min(total, (page + 1) * pageSize);
+
+	if (!total) return null;
+
+	return (
+		<Box
+			sx={{
+				p: 1.1,
+				borderTop: `1px solid ${hrColors.line}`,
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "space-between",
+				gap: 1,
+				flexWrap: "wrap",
+				background: "var(--hr-surface)",
+			}}
+		>
+			<Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+				<Typography sx={{ fontSize: 11.2, color: hrColors.muted, fontWeight: 750 }}>
+					Showing {from}–{to} of {total} {label}
+				</Typography>
+				<TextField
+					select
+					size="small"
+					value={pageSize}
+					onChange={(event) => onPageSize(Number(event.target.value))}
+					sx={{ ...fieldSx, width: 112, "& .MuiOutlinedInput-root": { height: 32, fontSize: 11.5 } }}
+					inputProps={{ "aria-label": `${label} per page` }}
+				>
+					{pageSizes.map((value) => (
+						<MenuItem key={value} value={value}>{value} / page</MenuItem>
+					))}
+				</TextField>
+			</Box>
+			<Pagination
+				page={page + 1}
+				count={pageCount}
+				onChange={(_, nextPage) => onPage(nextPage - 1)}
+				size="small"
+				shape="rounded"
+				showFirstButton={pageCount > 5}
+				showLastButton={pageCount > 5}
+			/>
+		</Box>
+	);
+}
 
 function SimpleCandidateRows({ rows }) { return <Box sx={{display:"grid",gap:.7}}>{rows.map((row)=><Box key={row.id} sx={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:1,p:1,borderRadius:1.3,background:"var(--hr-surface)"}}><Box><Typography sx={mainCellSx}>{row.fullName||"Unnamed"}</Typography><Typography sx={subCellSx}>{row.candidateNumber} • {row.postAppliedFor||"No post"}</Typography></Box><StatusChip value={row.stage}/></Box>)}</Box>; }
 function TableHead({ columns }) { return <Box sx={{...tableRowSx,background:"var(--hr-surface)",fontSize:11,fontWeight:950,color:"var(--hr-text-secondary)",textTransform:"uppercase",letterSpacing:.55}}>{columns.map((c,i)=><Cell key={`${c}-${i}`}>{c}</Cell>)}</Box>; }

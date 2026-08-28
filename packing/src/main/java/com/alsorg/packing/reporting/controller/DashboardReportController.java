@@ -6,7 +6,12 @@ import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.users.User;
@@ -22,7 +27,11 @@ import com.alsorg.packing.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/reports/dashboard")
+@PreAuthorize("isAuthenticated()")
 public class DashboardReportController {
+
+    private static final int MAX_MASTER_PAGE_SIZE = 100;
+    private static final int MAX_TRACE_PAGE_SIZE = 500;
 
     private final DashboardReportService service;
     private final CurrentUserService currentUserService;
@@ -33,8 +42,7 @@ public class DashboardReportController {
             DashboardReportService service,
             CurrentUserService currentUserService,
             DashboardTraceService traceService,
-            MasterItemDashboardService masterItemDashboardService
-            ) {
+            MasterItemDashboardService masterItemDashboardService) {
         this.service = service;
         this.currentUserService = currentUserService;
         this.traceService = traceService;
@@ -47,10 +55,15 @@ public class DashboardReportController {
     }
 
     @GetMapping("/daily-throughput/users")
+    @PreAuthorize("hasAuthority('ADMIN')")
     public List<DailyThroughputUserDTO> getDailyThroughputUsers(
-            @RequestParam String type,
-            @RequestHeader(value = "Authorization", required = false) String auth) {
-        User user = currentUserService.getCurrentUserFromAuth(auth);
+            @RequestParam String type) {
+        /*
+         * Phase 3A identity rule: use the SecurityContext populated by the JWT
+         * filter for both cookie and Bearer sessions. Do not make a controller
+         * depend on a manually forwarded Authorization header.
+         */
+        User user = currentUserService.requireCurrentUser();
 
         if (!currentUserService.isAdmin(user)) {
             throw new ResponseStatusException(
@@ -60,10 +73,10 @@ public class DashboardReportController {
 
         try {
             return service.getTodayThroughputUsers(type);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    e.getMessage());
+                    exception.getMessage());
         }
     }
 
@@ -71,43 +84,45 @@ public class DashboardReportController {
     public List<DashboardTraceRow> getInventoryTrace(
             @RequestParam(defaultValue = "all") String type,
 
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime from,
 
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime to,
 
             @RequestParam(required = false) String search,
-
             @RequestParam(defaultValue = "250") int limit,
-
             @RequestParam(defaultValue = "0") int offset) {
         return traceService.getInventoryTrace(
                 type,
                 from,
                 to,
                 search,
-                limit,
-                offset);
+                Math.min(Math.max(limit, 1), MAX_TRACE_PAGE_SIZE),
+                Math.max(offset, 0));
     }
 
     @GetMapping("/master-items")
     public MasterItemPageResponse getMasterItems(
             @RequestParam(required = false) String search,
-
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String packingStatus,
-
             @RequestParam(required = false) String plantCode,
-
             @RequestParam(required = false) String client,
             @RequestParam(required = false) String clientName,
 
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime from,
 
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime to,
 
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
-
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) Integer offset) {
         String finalStatus = firstNonBlank(
@@ -128,7 +143,7 @@ public class DashboardReportController {
 
         finalSize = Math.min(
                 Math.max(finalSize, 10),
-                700);
+                MAX_MASTER_PAGE_SIZE);
 
         int finalPage;
 
@@ -151,20 +166,10 @@ public class DashboardReportController {
                 finalSize);
     }
 
-    /*
-     * =====================================================
-     * MASTER ITEM FULL DRILL-DOWN
-     *
-     * URL:
-     * GET /api/reports/dashboard/master-items/{masterItemId}
-     * =====================================================
-     */
-
     @GetMapping("/master-items/{masterItemId}")
     public MasterItemDetailResponse getMasterItemDetail(
             @PathVariable UUID masterItemId) {
-        return masterItemDashboardService.getMasterItemDetail(
-                masterItemId);
+        return masterItemDashboardService.getMasterItemDetail(masterItemId);
     }
 
     private String firstNonBlank(

@@ -25,6 +25,7 @@ import DispatchChallans from "./DispatchChallans";
 import ShiftOperations from "./ShiftOperations";
 import ShiftHistory from "./ShiftHistory";
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
     fetchDispatchChallans,
@@ -49,6 +50,7 @@ const VIEW = Object.freeze({
 
 function LogisticsOperationsHub({
     showAlert = () => { },
+    liveRefreshToken = null,
 }) {
     const [view, setView] =
         useState(VIEW.OVERVIEW);
@@ -83,9 +85,13 @@ function LogisticsOperationsHub({
     ] = useState(0);
 
     const loadOverview =
-        useCallback(async () => {
+        useCallback(async ({
+            background = false,
+        } = {}) => {
             try {
-                setLoading(true);
+                if (!background) {
+                    setLoading(true);
+                }
 
                 const [
                     challanResult,
@@ -106,11 +112,7 @@ function LogisticsOperationsHub({
                             ? challanResult.value
                             : []
                     );
-                } else {
-                    console.error(
-                        challanResult.reason
-                    );
-
+                } else if (!background) {
                     setChallans([]);
 
                     showAlert(
@@ -132,11 +134,7 @@ function LogisticsOperationsHub({
                             ? shiftResult.value
                             : []
                     );
-                } else {
-                    console.error(
-                        shiftResult.reason
-                    );
-
+                } else if (!background) {
                     setShifts([]);
 
                     showAlert(
@@ -151,24 +149,44 @@ function LogisticsOperationsHub({
                     challanResult.status ===
                     "rejected" &&
                     shiftResult.status ===
-                    "rejected"
+                    "rejected" &&
+                    !background
                 ) {
                     throw new Error(
                         "Unable to load logistics operations"
                     );
                 }
             } catch (error) {
-                console.error(error);
-
-                showAlert(
-                    error.message ||
-                    "Unable to load logistics operations",
-                    "error"
-                );
+                if (!background) {
+                    showAlert(
+                        error?.message ||
+                        "Unable to load logistics operations",
+                        "error"
+                    );
+                }
             } finally {
-                setLoading(false);
+                if (!background) {
+                    setLoading(false);
+                }
             }
         }, [showAlert]);
+
+    useLogisticsLiveRefresh(
+        liveRefreshToken,
+        async () => {
+            if (view !== VIEW.OVERVIEW) {
+                return;
+            }
+
+            await loadOverview({
+                background: true,
+            });
+        },
+        {
+            enabled:
+                view === VIEW.OVERVIEW,
+        }
+    );
 
     useEffect(() => {
         if (view !== VIEW.OVERVIEW) {
@@ -660,6 +678,7 @@ function LogisticsOperationsHub({
             {view === VIEW.CHALLANS && (
                 <DispatchChallans
                     showAlert={showAlert}
+                    liveRefreshToken={liveRefreshToken}
                 />
             )}
 
@@ -669,12 +688,14 @@ function LogisticsOperationsHub({
                     openCreateToken={
                         manualCreateToken
                     }
+                    liveRefreshToken={liveRefreshToken}
                 />
             )}
 
             {view === VIEW.HISTORY && (
                 <ShiftHistory
                     showAlert={showAlert}
+                    liveRefreshToken={liveRefreshToken}
                 />
             )}
         </Box>

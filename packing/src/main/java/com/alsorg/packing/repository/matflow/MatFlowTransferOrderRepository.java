@@ -8,45 +8,43 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
-
 import org.springframework.data.repository.query.Param;
 
 public interface MatFlowTransferOrderRepository
-                extends JpaRepository<MatFlowTransferOrder, UUID> {
+        extends JpaRepository<MatFlowTransferOrder, UUID> {
 
-        List<MatFlowTransferOrder> findAllByOrderByUpdatedAtDesc();
+    List<MatFlowTransferOrder> findAllByOrderByUpdatedAtDesc();
 
-        List<MatFlowTransferOrder> findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                        UUID requisitionId);
+    Page<MatFlowTransferOrder> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 
-        Optional<MatFlowTransferOrder> findByPredecessorTransferId(
-                        UUID predecessorTransferId);
+    List<MatFlowTransferOrder> findByRequisition_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+            UUID requisitionId);
 
-        boolean existsByPredecessorTransferId(
-                        UUID predecessorTransferId);
+    Optional<MatFlowTransferOrder> findByPredecessorTransferId(UUID predecessorTransferId);
 
-        boolean existsByReservation_Id(
-                        UUID reservationId);
+    boolean existsByPredecessorTransferId(UUID predecessorTransferId);
 
-        List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAsc(
-                        UUID reservationId);
+    boolean existsByReservation_Id(UUID reservationId);
 
-        Optional<MatFlowTransferOrder> findFirstByReservation_IdAndFromLocation_IdOrderByRouteSequenceNoAsc(
-                        UUID reservationId,
-                        UUID fromLocationId);
+    List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAsc(UUID reservationId);
 
-        @Lock(LockModeType.PESSIMISTIC_WRITE)
-        @Query("""
-                        select transfer
-                        from MatFlowTransferOrder transfer
-                        where transfer.id = :id
-                        """)
-        Optional<MatFlowTransferOrder> lockById(
-                        @Param("id") UUID id);
+    Optional<MatFlowTransferOrder> findFirstByReservation_IdAndFromLocation_IdOrderByRouteSequenceNoAsc(
+            UUID reservationId,
+            UUID fromLocationId);
 
-        List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
-                        UUID reservationId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select transfer
+            from MatFlowTransferOrder transfer
+            where transfer.id = :id
+            """)
+    Optional<MatFlowTransferOrder> lockById(@Param("id") UUID id);
+
+    List<MatFlowTransferOrder> findByReservation_IdOrderByRouteSequenceNoAscCreatedAtAsc(
+            UUID reservationId);
 }

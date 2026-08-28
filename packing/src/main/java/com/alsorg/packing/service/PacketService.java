@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -20,11 +19,13 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.CreateItemRequest;
 import com.alsorg.packing.controller.dto.PacketItemResponse;
 import com.alsorg.packing.controller.dto.UpdatePacketItemRequest;
@@ -48,6 +49,9 @@ import java.util.Set;
 import java.util.Objects;
 import org.springframework.security.access.AccessDeniedException;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Expression;
 import com.alsorg.packing.domain.users.User;
 
@@ -67,12 +71,17 @@ public class PacketService {
         private final PlantLocationService plantLocationService;
         private final CurrentUserService currentUserService;
         private final ActivityLogService activityLogService;
+
+        @PersistenceContext
+        private EntityManager entityManager;
         private static final List<String> NORMAL_INVENTORY_CANDIDATE_STATUSES = List.of(
                         "CREATED",
                         "RESTORED",
                         "READY");
 
-        private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
+        private static final int MAX_PACKET_PAGE_SIZE = 100;
+        private static final long MAX_STICKER_PDF_BYTES = 20L * 1024L * 1024L;
 
         @Value("${sticker.storage.path}")
         private String stickerStoragePath;
@@ -187,7 +196,7 @@ public class PacketService {
                  */
                 java.time.LocalDate stickerPackingDate = item.getPackedAt() != null
                                 ? item.getPackedAt().toLocalDate()
-                                : java.time.LocalDate.now(INDIA_ZONE);
+                                : java.time.LocalDate.now(APP_ZONE);
 
                 pdf.setDate(stickerPackingDate.toString());
 
@@ -254,7 +263,7 @@ public class PacketService {
                 packet.setStickerNumber(stickerSequenceService.generateNextStickerNumber());
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(createdBy);
-                packet.setCreatedAt(LocalDateTime.now());
+                packet.setCreatedAt(LocalDateTime.now(APP_ZONE));
                 packet.setStickerGenerated(false);
 
                 packet = packetRepository.save(packet);
@@ -385,6 +394,15 @@ public class PacketService {
                                         "Inventory pageable is required");
                 }
 
+                Pageable safePageable = PageRequest.of(
+                                Math.max(0, pageable.getPageNumber()),
+                                Math.max(
+                                                1,
+                                                Math.min(
+                                                                pageable.getPageSize(),
+                                                                MAX_PACKET_PAGE_SIZE)),
+                                pageable.getSort());
+
                 /*
                  * allowedPlants is intentionally not applied here.
                  *
@@ -402,7 +420,7 @@ public class PacketService {
 
                 Page<PacketItem> entityPage = packetItemRepository.findAll(
                                 specification,
-                                pageable);
+                                safePageable);
 
                 Map<String, Integer> maxPacketNumbers = getInventoryMaxPacketNumbersForPage(
                                 entityPage.getContent(),
@@ -1025,21 +1043,46 @@ public class PacketService {
                                 : value.trim();
         }
 
-        public Page<Packet> getPackets(UUID companyId, PacketStatus status, Pageable pageable) {
+        public Page<Packet> getPackets(
+                        UUID companyId,
+                        PacketStatus status,
+                        Pageable pageable) {
+
+                if (pageable == null) {
+                        throw new IllegalArgumentException(
+                                        "Packet page request is required");
+                }
+
+                Pageable safePageable = PageRequest.of(
+                                Math.max(0, pageable.getPageNumber()),
+                                Math.max(
+                                                1,
+                                                Math.min(
+                                                                pageable.getPageSize(),
+                                                                MAX_PACKET_PAGE_SIZE)),
+                                pageable.getSort());
 
                 if (companyId != null && status != null) {
-                        return packetRepository.findByCompany_IdAndStatus(companyId, status, pageable);
+                        return packetRepository.findByCompany_IdAndStatus(
+                                        companyId,
+                                        status,
+                                        safePageable);
                 }
 
                 if (companyId != null) {
-                        return packetRepository.findByCompany_Id(companyId, pageable);
+                        return packetRepository.findByCompany_Id(
+                                        companyId,
+                                        safePageable);
                 }
 
                 if (status != null) {
-                        return packetRepository.findByStatus(status, pageable);
+                        return packetRepository.findByStatus(
+                                        status,
+                                        safePageable);
                 }
 
-                return packetRepository.findAll(pageable);
+                return packetRepository.findAll(
+                                safePageable);
         }
 
         public Packet getPacketById(UUID packetId) {
@@ -1064,7 +1107,7 @@ public class PacketService {
                                                         + packet.getStickerNumber());
                 }
 
-                Path path = Paths.get(
+                Path path = resolveStoredStickerPath(
                                 packet.getStickerPath());
 
                 if (!Files.exists(path) ||
@@ -1076,6 +1119,14 @@ public class PacketService {
                 }
 
                 try {
+                        long fileSize = Files.size(path);
+
+                        if (fileSize < 0L ||
+                                        fileSize > MAX_STICKER_PDF_BYTES) {
+                                throw new IllegalStateException(
+                                                "Stored sticker PDF has an invalid file size");
+                        }
+
                         return Files.readAllBytes(path);
                 } catch (IOException exception) {
                         throw new RuntimeException(
@@ -1152,7 +1203,7 @@ public class PacketService {
 
                 Long ownerUserId = user.getId();
 
-                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 /*
                  * Business packing date selected from Inventory creation.
@@ -1171,12 +1222,7 @@ public class PacketService {
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
-                Company company = companyRepository
-                                .findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException(
-                                                "No company found"));
+                Company company = requireCompany();
 
                 MasterItem master = new MasterItem();
 
@@ -1965,7 +2011,7 @@ public class PacketService {
                 } else if (dispatchedItem.getStoredAt() != null) {
                         preservedTime = dispatchedItem.getStoredAt().toLocalTime();
                 } else {
-                        preservedTime = LocalDateTime.now(INDIA_ZONE).toLocalTime();
+                        preservedTime = LocalDateTime.now(APP_ZONE).toLocalTime();
                 }
 
                 LocalDateTime correctedPackedAt = parsedPackingDate
@@ -2029,7 +2075,7 @@ public class PacketService {
 
                 java.time.LocalTime preservedTime = previousPackedAt != null
                                 ? previousPackedAt.toLocalTime()
-                                : LocalDateTime.now(INDIA_ZONE).toLocalTime();
+                                : LocalDateTime.now(APP_ZONE).toLocalTime();
 
                 LocalDateTime correctedPackedAt = parsedPackingDate.atTime(preservedTime);
 
@@ -2225,10 +2271,10 @@ public class PacketService {
                         String createdBy,
                         Set<String> allowedPlants) {
                 String actor = safeActor(createdBy);
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
-                MasterItem master = masterItemRepository.findById(masterItemId)
-                                .orElseThrow(() -> new RuntimeException("Master item not found"));
+                MasterItem master = requireMasterForPacketAppend(
+                                masterItemId);
 
                 String plantCode = master.getPlantCode();
 
@@ -2237,10 +2283,7 @@ public class PacketService {
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
 
                 // ✅ GET COMPANY (same as before)
-                Company company = companyRepository.findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                Company company = requireCompany();
 
                 if (master.getItemType() == PacketItemType.HARDWARE) {
                         throw new AccessDeniedException(
@@ -2496,10 +2539,8 @@ public class PacketService {
                                 req,
                                 toCreate);
 
-                MasterItem master = masterItemRepository
-                                .findById(masterItemId)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Master item not found"));
+                MasterItem master = requireMasterForPacketAppend(
+                                masterItemId);
 
                 if (master.getItemType() == PacketItemType.HARDWARE) {
 
@@ -2526,12 +2567,7 @@ public class PacketService {
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
-                Company company = companyRepository
-                                .findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException(
-                                                "No company found"));
+                Company company = requireCompany();
 
                 String actor = safeActor(
                                 user.getUsername());
@@ -2540,7 +2576,7 @@ public class PacketService {
                                 ? master.getCreatedByUserId()
                                 : user.getId();
 
-                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 Packet packet = new Packet();
 
@@ -2751,18 +2787,13 @@ public class PacketService {
                                         "Custom packet number must be greater than zero");
                 }
 
-                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 LocalDateTime requestedPackedAt = resolveCreationPackingDateTime(
                                 req.getPackingDate(),
                                 now);
 
-                Company company = companyRepository
-                                .findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException(
-                                                "No company found"));
+                Company company = requireCompany();
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
@@ -2883,10 +2914,10 @@ public class PacketService {
                         Set<String> allowedPlants) {
 
                 String actor = safeActor(createdBy);
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
-                MasterItem master = masterItemRepository.findById(masterItemId)
-                                .orElseThrow(() -> new RuntimeException("Master item not found"));
+                MasterItem master = requireMasterForPacketAppend(
+                                masterItemId);
 
                 if (master.getItemType() == PacketItemType.HARDWARE) {
                         throw new AccessDeniedException(
@@ -2899,10 +2930,7 @@ public class PacketService {
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(plantCode);
 
-                Company company = companyRepository.findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                Company company = requireCompany();
 
                 Packet packet = new Packet();
                 packet.setId(UUID.randomUUID());
@@ -2983,10 +3011,8 @@ public class PacketService {
                                         "Custom packet number must be greater than zero");
                 }
 
-                MasterItem master = masterItemRepository
-                                .findById(masterItemId)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Master item not found"));
+                MasterItem master = requireMasterForPacketAppend(
+                                masterItemId);
 
                 if (master.getItemType() == PacketItemType.HARDWARE) {
 
@@ -3024,12 +3050,7 @@ public class PacketService {
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
 
-                Company company = companyRepository
-                                .findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException(
-                                                "No company found"));
+                Company company = requireCompany();
 
                 String actor = safeActor(
                                 user.getUsername());
@@ -3038,7 +3059,7 @@ public class PacketService {
                                 ? master.getCreatedByUserId()
                                 : user.getId();
 
-                LocalDateTime now = LocalDateTime.now(INDIA_ZONE);
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 Packet packet = new Packet();
 
@@ -3400,7 +3421,7 @@ public class PacketService {
 
                 LocalDateTime safeNow = requestNow != null
                                 ? requestNow
-                                : LocalDateTime.now(INDIA_ZONE);
+                                : LocalDateTime.now(APP_ZONE);
 
                 if (packingDate == null || packingDate.isBlank()) {
                         return safeNow;
@@ -3416,7 +3437,7 @@ public class PacketService {
                                         "Packing date must be in yyyy-MM-dd format");
                 }
 
-                LocalDate today = LocalDate.now(INDIA_ZONE);
+                LocalDate today = LocalDate.now(APP_ZONE);
 
                 if (selectedDate.isAfter(today)) {
                         throw new IllegalArgumentException(
@@ -3425,6 +3446,97 @@ public class PacketService {
 
                 return selectedDate.atTime(
                                 safeNow.toLocalTime());
+        }
+
+        private MasterItem requireMasterForPacketAppend(
+                        UUID masterItemId) {
+
+                if (masterItemId == null) {
+                        throw new IllegalArgumentException(
+                                        "Master item id is required");
+                }
+
+                MasterItem master = entityManager.find(
+                                MasterItem.class,
+                                masterItemId,
+                                LockModeType.PESSIMISTIC_WRITE);
+
+                if (master == null) {
+                        throw new RuntimeException(
+                                        "Master item not found");
+                }
+
+                return master;
+        }
+
+        private Company requireCompany() {
+                return companyRepository
+                                .findAll(
+                                                PageRequest.of(0, 1))
+                                .stream()
+                                .findFirst()
+                                .orElseThrow(() -> new RuntimeException(
+                                                "No company found"));
+        }
+
+        private Path resolveStoredStickerPath(
+                        String storedPath) {
+
+                if (storedPath == null ||
+                                storedPath.trim().isBlank()) {
+                        throw new IllegalStateException(
+                                        "Stored sticker path is missing");
+                }
+
+                if (stickerStoragePath == null ||
+                                stickerStoragePath.trim().isBlank()) {
+                        throw new IllegalStateException(
+                                        "sticker.storage.path is not configured");
+                }
+
+                try {
+                        Path configuredRoot = Paths.get(
+                                        stickerStoragePath)
+                                        .toAbsolutePath()
+                                        .normalize();
+
+                        if (configuredRoot.getParent() == null) {
+                                throw new IllegalStateException(
+                                                "sticker.storage.path cannot be a filesystem root");
+                        }
+
+                        Path root = configuredRoot.toRealPath();
+
+                        Path supplied = Paths.get(
+                                        storedPath.trim());
+
+                        Path candidate = supplied.isAbsolute()
+                                        ? supplied.toAbsolutePath().normalize()
+                                        : root.resolve(supplied).normalize();
+
+                        if (!candidate.startsWith(root)) {
+                                throw new IllegalStateException(
+                                                "Stored sticker path is outside sticker storage");
+                        }
+
+                        if (!Files.exists(candidate)) {
+                                return candidate;
+                        }
+
+                        Path realCandidate = candidate.toRealPath();
+
+                        if (!realCandidate.startsWith(root)) {
+                                throw new IllegalStateException(
+                                                "Stored sticker path resolves outside sticker storage");
+                        }
+
+                        return realCandidate;
+
+                } catch (IOException exception) {
+                        throw new IllegalStateException(
+                                        "Unable to resolve stored sticker path",
+                                        exception);
+                }
         }
 
         private String safeActor(String username) {
@@ -3625,7 +3737,7 @@ public class PacketService {
                 }
 
                 String actor = safeActor(generatedBy);
-                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 DispatchedItem dispatchedItem = dispatchedRepo.findById(zohoItemId)
                                 .orElseThrow(() -> new RuntimeException("Dispatched item not found"));
@@ -3929,10 +4041,7 @@ public class PacketService {
         private PacketItem createLegacyPacketItemFromDispatchedItem(
                         DispatchedItem dispatchedItem,
                         String actor) {
-                Company company = companyRepository.findAll()
-                                .stream()
-                                .findFirst()
-                                .orElseThrow(() -> new RuntimeException("No company found"));
+                Company company = requireCompany();
 
                 Packet packet = new Packet();
 
@@ -3942,7 +4051,7 @@ public class PacketService {
                                 stickerSequenceService.generateNextStickerNumber());
                 packet.setStatus(PacketStatus.CREATED);
                 packet.setCreatedBy(actor);
-                packet.setCreatedAt(LocalDateTime.now());
+                packet.setCreatedAt(LocalDateTime.now(APP_ZONE));
                 packet.setStickerGenerated(false);
 
                 packet = packetRepository.save(packet);

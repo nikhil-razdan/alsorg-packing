@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
@@ -24,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditRequest;
 import com.alsorg.packing.controller.dto.dispatch.AdminBulkDispatchEditResponse;
 import com.alsorg.packing.controller.dto.dispatch.AdminDispatchEditField;
@@ -57,7 +59,7 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class DispatchedItemService {
 
-        private static final java.time.ZoneId APP_ZONE = java.time.ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
 
         /*
          * Keeps the controlled XLSX reconciliation lookup bounded. Verification
@@ -67,6 +69,7 @@ public class DispatchedItemService {
 
         private static final int MAX_DISPATCH_SEARCH_LENGTH = 300;
         private static final int MAX_DISPATCH_SEARCH_TOKENS = 12;
+        private static final int MAX_DISPATCH_PAGE_SIZE = 100;
 
         private static final Set<String> FIXED_WAREHOUSE_CODES = Set.of(
                         "BLS-WH-1",
@@ -179,6 +182,8 @@ public class DispatchedItemService {
                                         "Dispatch page request is required");
                 }
 
+                Pageable safePageable = boundedDispatchPageable(pageable);
+
                 Specification<DispatchedItem> specification = buildDispatchRegisterSpecification(
                                 search,
                                 statuses,
@@ -193,7 +198,7 @@ public class DispatchedItemService {
 
                 return dispatchedRepo.findAll(
                                 specification,
-                                pageable);
+                                safePageable);
         }
 
         /**
@@ -226,6 +231,8 @@ public class DispatchedItemService {
                                         "Dispatch page request is required");
                 }
 
+                Pageable safePageable = boundedDispatchPageable(pageable);
+
                 Specification<DispatchedItem> specification = buildDispatchRegisterSpecification(
                                 search,
                                 statuses,
@@ -242,11 +249,11 @@ public class DispatchedItemService {
                                 && knownTotalElements != null
                                 && knownTotalElements >= 0L;
 
-                int pageSize = Math.max(1, pageable.getPageSize());
+                int pageSize = Math.max(1, safePageable.getPageSize());
 
                 List<DispatchedItem> fetched = fetchDispatchRegisterRows(
                                 specification,
-                                pageable,
+                                safePageable,
                                 pageSize + 1);
 
                 boolean hasLookAhead = fetched.size() > pageSize;
@@ -261,12 +268,12 @@ public class DispatchedItemService {
                  * exact count so the frontend can clamp itself safely.
                  */
                 boolean canReuseTotal = requestedTotalReuse
-                                && !(pageable.getPageNumber() > 0 && items.isEmpty());
+                                && !(safePageable.getPageNumber() > 0 && items.isEmpty());
 
                 long totalElements;
 
                 if (canReuseTotal) {
-                        long observedOffset = Math.max(0L, pageable.getOffset());
+                        long observedOffset = Math.max(0L, safePageable.getOffset());
 
                         if (hasLookAhead) {
                                 /*
@@ -303,16 +310,35 @@ public class DispatchedItemService {
 
                 boolean hasNext = canReuseTotal
                                 ? hasLookAhead
-                                : pageable.getPageNumber() + 1 < totalPages;
+                                : safePageable.getPageNumber() + 1 < totalPages;
 
                 return new DispatchRegisterWindow(
                                 items,
                                 totalElements,
                                 totalPages,
-                                pageable.getPageNumber(),
+                                safePageable.getPageNumber(),
                                 pageSize,
                                 hasNext,
                                 canReuseTotal);
+        }
+
+        private Pageable boundedDispatchPageable(
+                        Pageable pageable) {
+
+                int safePage = Math.max(
+                                0,
+                                pageable.getPageNumber());
+
+                int safeSize = Math.max(
+                                1,
+                                Math.min(
+                                                pageable.getPageSize(),
+                                                MAX_DISPATCH_PAGE_SIZE));
+
+                return PageRequest.of(
+                                safePage,
+                                safeSize,
+                                pageable.getSort());
         }
 
         private Specification<DispatchedItem> buildDispatchRegisterSpecification(
@@ -1118,7 +1144,7 @@ public class DispatchedItemService {
                                 username);
 
                 item.setApprovalRequestedAt(
-                                LocalDateTime.now());
+                                LocalDateTime.now(APP_ZONE));
 
                 dispatchedRepo.save(item);
 
@@ -1158,7 +1184,7 @@ public class DispatchedItemService {
 
                 item.setApprovedBy(admin);
                 item.setApprovedAt(
-                                LocalDateTime.now());
+                                LocalDateTime.now(APP_ZONE));
 
                 /*
                  * Keep the original dispatch record as history.
@@ -1233,7 +1259,7 @@ public class DispatchedItemService {
                                         PacketStatus.CREATED);
 
                         packet.setCreatedAt(
-                                        LocalDateTime.now());
+                                        LocalDateTime.now(APP_ZONE));
 
                         packet.setCreatedBy(
                                         "SYSTEM");
@@ -1369,7 +1395,7 @@ public class DispatchedItemService {
                 item.setApprovedBy(admin);
 
                 item.setApprovedAt(
-                                LocalDateTime.now());
+                                LocalDateTime.now(APP_ZONE));
 
                 dispatchedRepo.save(item);
 

@@ -10,12 +10,10 @@ import java.util.UUID;
 @Table(
         name = "bom_flow_items",
         indexes = {
-                @Index(
-                        name = "idx_bom_flow_item_revision",
-                        columnList = "revision_id"),
-                @Index(
-                        name = "idx_bom_flow_item_section",
-                        columnList = "section_name")
+                @Index(name = "idx_bom_flow_item_revision", columnList = "revision_id"),
+                @Index(name = "idx_bom_flow_item_section", columnList = "section_name"),
+                @Index(name = "idx_bom_flow_item_revision_line", columnList = "revision_id,line_no"),
+                @Index(name = "idx_bom_flow_item_revision_active", columnList = "revision_id,active")
         })
 public class BomFlowRevisionItem {
 
@@ -27,8 +25,7 @@ public class BomFlowRevisionItem {
     @JoinColumn(
             name = "revision_id",
             nullable = false,
-            foreignKey = @ForeignKey(
-                    name = "fk_bom_flow_item_revision_v2"))
+            foreignKey = @ForeignKey(name = "fk_bom_flow_item_revision_v2"))
     public BomFlowRevision revision;
 
     @Column(name = "line_no", nullable = false)
@@ -112,59 +109,20 @@ public class BomFlowRevisionItem {
 
     @PrePersist
     void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
+        if (id == null) id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-
-        if (createdAt == null) {
-            createdAt = now;
-        }
-
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-
-        if (baseQty == null) {
-            baseQty = BigDecimal.ZERO;
-        }
-
-        if (wastagePercent == null) {
-            wastagePercent = BigDecimal.ZERO;
-        }
-
-        if (requiredQty == null) {
-            requiredQty = BigDecimal.ZERO;
-        }
-
-        if (rate == null) {
-            rate = BigDecimal.ZERO;
-        }
-
-        if (materialAmount == null) {
-            materialAmount = BigDecimal.ZERO;
-        }
-
-        if (processingAmount == null) {
-            processingAmount = BigDecimal.ZERO;
-        }
-
-        if (amount == null) {
-            amount = BigDecimal.ZERO;
-        }
-
-        if (gstPercent == null) {
-            gstPercent = BigDecimal.ZERO;
-        }
-
-        if (storeIssueRequired == null) {
-            storeIssueRequired = true;
-        }
-
-        if (active == null) {
-            active = true;
-        }
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+        if (baseQty == null) baseQty = BigDecimal.ZERO;
+        if (wastagePercent == null) wastagePercent = BigDecimal.ZERO;
+        if (requiredQty == null) requiredQty = BigDecimal.ZERO;
+        if (rate == null) rate = BigDecimal.ZERO;
+        if (materialAmount == null) materialAmount = BigDecimal.ZERO;
+        if (processingAmount == null) processingAmount = BigDecimal.ZERO;
+        if (amount == null) amount = BigDecimal.ZERO;
+        if (gstPercent == null) gstPercent = BigDecimal.ZERO;
+        if (storeIssueRequired == null) storeIssueRequired = true;
+        if (active == null) active = true;
     }
 
     @PreUpdate

@@ -4,6 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
+
 /**
  * Request used by scanner bulk dispatch.
  *
@@ -14,58 +20,68 @@ import java.util.UUID;
  */
 public class BulkScanRequest {
 
-	private List<String> scanTexts;
-	private UUID driverId;
-	private UUID vehicleId;
-	private Integer helperLoaderCount;
-	private LocalDateTime dispatchTime;
-	private LocalDateTime tripStart;
+    @NotEmpty(message = "At least one scan is required.")
+    @Size(max = 1000, message = "A maximum of 1000 scans is allowed in one dispatch.")
+    private List<
+            @NotBlank(message = "Scan text cannot be blank.")
+            @Size(max = 1000, message = "Scan text is too long.")
+            String> scanTexts;
 
-	public List<String> getScanTexts() {
-		return scanTexts;
-	}
+    private UUID driverId;
+    private UUID vehicleId;
 
-	public void setScanTexts(List<String> scanTexts) {
-		this.scanTexts = scanTexts;
-	}
+    @Min(value = 0, message = "Helper/loader count cannot be negative.")
+    @Max(value = 10000, message = "Helper/loader count is too large.")
+    private Integer helperLoaderCount;
 
-	public UUID getDriverId() {
-		return driverId;
-	}
+    private LocalDateTime dispatchTime;
+    private LocalDateTime tripStart;
 
-	public void setDriverId(UUID driverId) {
-		this.driverId = driverId;
-	}
+    public List<String> getScanTexts() {
+        return scanTexts;
+    }
 
-	public UUID getVehicleId() {
-		return vehicleId;
-	}
+    public void setScanTexts(List<String> scanTexts) {
+        this.scanTexts = scanTexts;
+    }
 
-	public void setVehicleId(UUID vehicleId) {
-		this.vehicleId = vehicleId;
-	}
+    public UUID getDriverId() {
+        return driverId;
+    }
 
-	public Integer getHelperLoaderCount() {
-		return helperLoaderCount;
-	}
+    public void setDriverId(UUID driverId) {
+        this.driverId = driverId;
+    }
 
-	public void setHelperLoaderCount(Integer helperLoaderCount) {
-		this.helperLoaderCount = helperLoaderCount;
-	}
+    public UUID getVehicleId() {
+        return vehicleId;
+    }
 
-	public LocalDateTime getDispatchTime() {
-		return dispatchTime;
-	}
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
+    }
 
-	public void setDispatchTime(LocalDateTime dispatchTime) {
-		this.dispatchTime = dispatchTime;
-	}
+    public Integer getHelperLoaderCount() {
+        return helperLoaderCount;
+    }
 
-	public LocalDateTime getTripStart() {
-		return tripStart;
-	}
+    public void setHelperLoaderCount(Integer helperLoaderCount) {
+        this.helperLoaderCount = helperLoaderCount;
+    }
 
-	public void setTripStart(LocalDateTime tripStart) {
-		this.tripStart = tripStart;
-	}
+    public LocalDateTime getDispatchTime() {
+        return dispatchTime;
+    }
+
+    public void setDispatchTime(LocalDateTime dispatchTime) {
+        this.dispatchTime = dispatchTime;
+    }
+
+    public LocalDateTime getTripStart() {
+        return tripStart;
+    }
+
+    public void setTripStart(LocalDateTime tripStart) {
+        this.tripStart = tripStart;
+    }
 }

@@ -18,8 +18,10 @@ import com.alsorg.packing.service.matflow.MatFlowWorkflowCoordinatorService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Material Requisition + four-plant Store control boundary.
@@ -81,6 +83,7 @@ public class MatFlowRequisitionController {
     @GetMapping("/purchase-indents")
     public List<IndentResponse> purchaseIndents(
             @RequestParam(required = false) String plantCode) {
+        validatePlantCode(plantCode);
         return service.listPurchaseIndents(plantCode);
     }
 
@@ -88,6 +91,7 @@ public class MatFlowRequisitionController {
     @GetMapping("/store/requisitions")
     public List<RequisitionResponse> storeQueue(
             @RequestParam(required = false) String plantCode) {
+        validatePlantCode(plantCode);
         return service.listStoreQueue(plantCode);
     }
 
@@ -140,4 +144,13 @@ public class MatFlowRequisitionController {
             @Valid @RequestBody ReservationReleaseRequest request) {
         return service.releaseReservation(id, request);
     }
+
+    private void validatePlantCode(String plantCode) {
+        if (plantCode != null && plantCode.length() > 32) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Plant code cannot exceed 32 characters");
+        }
+    }
+
 }

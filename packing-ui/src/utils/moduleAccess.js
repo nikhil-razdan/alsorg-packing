@@ -10,7 +10,7 @@ export const MODULE_KEYS = Object.freeze({
 
 const normalizeValue = (value) => {
 	return String(value || "")
-		.replace("ROLE_", "")
+		.replace(/^ROLE_/i, "")
 		.trim()
 		.toUpperCase();
 };

@@ -10,199 +10,231 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface StickerHistoryRepository
-                extends JpaRepository<StickerHistory, UUID> {
+        extends JpaRepository<StickerHistory, UUID> {
 
-        /*
-         * =====================================================
-         * ITEM-WISE HISTORY
-         * =====================================================
-         */
+    @Query("""
+            SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
+                h.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem.id = :itemId
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """)
+    List<StickerHistoryResponse> findHistoryByItemId(
+            @Param("itemId") UUID itemId);
 
-        @Query("""
-                            SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
-                                h.id,
-                                h.stickerNumber,
-                                h.printIteration,
-                                h.reason,
-                                h.generatedAt
-                            )
-                            FROM StickerHistory h
-                            WHERE h.packetItem.id = :itemId
-                            ORDER BY h.generatedAt DESC
-                        """)
-        List<StickerHistoryResponse> findHistoryByItemId(
-                        @Param("itemId") UUID itemId);
+    @Query(value = """
+            SELECT new com.alsorg.packing.controller.dto.StickerHistoryResponse(
+                h.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem.id = :itemId
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """, countQuery = """
+            SELECT COUNT(h)
+            FROM StickerHistory h
+            WHERE h.packetItem.id = :itemId
+            """)
+    Page<StickerHistoryResponse> findHistoryPageByItemId(
+            @Param("itemId") UUID itemId,
+            Pageable pageable);
 
-        /*
-         * =====================================================
-         * GENERATED HISTORY - ALL
-         * =====================================================
-         */
+    @Query("""
+            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                h.id,
+                h.packetItem.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt,
+                h.generatedBy,
+                h.packetItem.itemName,
+                h.packetItem.sku,
+                h.packetItem.pdNo,
+                h.packetItem.drawingNo,
+                h.packetItem.clientName,
+                h.packetItem.description,
+                h.packetItem.packetNumber,
+                h.packetItem.floor,
+                h.packetItem.weight,
+                h.packetItem.dimensions,
+                h.packetItem.remarks
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """)
+    List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryAll();
 
-        @Query("""
-                            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
-                                h.id,
-                                h.packetItem.id,
-                                h.stickerNumber,
-                                h.printIteration,
-                                h.reason,
-                                h.generatedAt,
-                                h.generatedBy,
-                                h.packetItem.itemName,
-                                h.packetItem.sku,
-                                h.packetItem.pdNo,
-                                h.packetItem.drawingNo,
-                                h.packetItem.clientName,
-                                h.packetItem.description,
-                                h.packetItem.packetNumber,
-                                h.packetItem.floor,
-                                h.packetItem.weight,
-                                h.packetItem.dimensions,
-                                h.packetItem.remarks
-                            )
-                            FROM StickerHistory h
-                            WHERE h.packetItem IS NOT NULL
-                            ORDER BY h.generatedAt DESC
-                        """)
-        List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryAll();
+    @Query(value = """
+            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                h.id,
+                h.packetItem.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt,
+                h.generatedBy,
+                h.packetItem.itemName,
+                h.packetItem.sku,
+                h.packetItem.pdNo,
+                h.packetItem.drawingNo,
+                h.packetItem.clientName,
+                h.packetItem.description,
+                h.packetItem.packetNumber,
+                h.packetItem.floor,
+                h.packetItem.weight,
+                h.packetItem.dimensions,
+                h.packetItem.remarks
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """, countQuery = """
+            SELECT COUNT(h)
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+            """)
+    Page<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryPage(
+            Pageable pageable);
 
-        /*
-         * =====================================================
-         * GENERATED HISTORY - USER
-         * =====================================================
-         */
+    @Query("""
+            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                h.id,
+                h.packetItem.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt,
+                h.generatedBy,
+                h.packetItem.itemName,
+                h.packetItem.sku,
+                h.packetItem.pdNo,
+                h.packetItem.drawingNo,
+                h.packetItem.clientName,
+                h.packetItem.description,
+                h.packetItem.packetNumber,
+                h.packetItem.floor,
+                h.packetItem.weight,
+                h.packetItem.dimensions,
+                h.packetItem.remarks
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+              AND LOWER(h.generatedBy) = LOWER(:generatedBy)
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """)
+    List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryByUser(
+            @Param("generatedBy") String generatedBy);
 
-        @Query("""
-                            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
-                                h.id,
-                                h.packetItem.id,
-                                h.stickerNumber,
-                                h.printIteration,
-                                h.reason,
-                                h.generatedAt,
-                                h.generatedBy,
-                                h.packetItem.itemName,
-                                h.packetItem.sku,
-                                h.packetItem.pdNo,
-                                h.packetItem.drawingNo,
-                                h.packetItem.clientName,
-                                h.packetItem.description,
-                                h.packetItem.packetNumber,
-                                h.packetItem.floor,
-                                h.packetItem.weight,
-                                h.packetItem.dimensions,
-                                h.packetItem.remarks
-                            )
-                            FROM StickerHistory h
-                            WHERE h.packetItem IS NOT NULL
-                              AND LOWER(h.generatedBy) = LOWER(:generatedBy)
-                            ORDER BY h.generatedAt DESC
-                        """)
-        List<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryByUser(
-                        @Param("generatedBy") String generatedBy);
+    @Query(value = """
+            SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                h.id,
+                h.packetItem.id,
+                h.stickerNumber,
+                h.printIteration,
+                h.reason,
+                h.generatedAt,
+                h.generatedBy,
+                h.packetItem.itemName,
+                h.packetItem.sku,
+                h.packetItem.pdNo,
+                h.packetItem.drawingNo,
+                h.packetItem.clientName,
+                h.packetItem.description,
+                h.packetItem.packetNumber,
+                h.packetItem.floor,
+                h.packetItem.weight,
+                h.packetItem.dimensions,
+                h.packetItem.remarks
+            )
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+              AND LOWER(h.generatedBy) = LOWER(:generatedBy)
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """, countQuery = """
+            SELECT COUNT(h)
+            FROM StickerHistory h
+            WHERE h.packetItem IS NOT NULL
+              AND LOWER(h.generatedBy) = LOWER(:generatedBy)
+            """)
+    Page<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryPageByUser(
+            @Param("generatedBy") String generatedBy,
+            Pageable pageable);
 
-        /*
-         * =====================================================
-         * USER DROPDOWN
-         * =====================================================
-         */
+    @Query("""
+            SELECT DISTINCT h.generatedBy
+            FROM StickerHistory h
+            WHERE h.generatedBy IS NOT NULL
+              AND TRIM(h.generatedBy) <> ''
+            ORDER BY h.generatedBy ASC
+            """)
+    List<String> findDistinctGeneratedByUsers();
 
-        @Query("""
-                            SELECT DISTINCT h.generatedBy
-                            FROM StickerHistory h
-                            WHERE h.generatedBy IS NOT NULL
-                              AND h.generatedBy <> ''
-                            ORDER BY h.generatedBy ASC
-                        """)
-        List<String> findDistinctGeneratedByUsers();
+    long countByGeneratedAtBetween(
+            LocalDateTime start,
+            LocalDateTime end);
 
-        /*
-         * =====================================================
-         * EXISTING SUPPORT
-         * =====================================================
-         */
+    Optional<StickerHistory> findTopByStickerNumberOrderByGeneratedAtDesc(
+            String stickerNumber);
 
-        long countByGeneratedAtBetween(
-                        LocalDateTime start,
-                        LocalDateTime end);
+    void deleteByPacketItem_Id(UUID packetItemId);
 
-        Optional<StickerHistory> findTopByStickerNumberOrderByGeneratedAtDesc(
-                        String stickerNumber);
+    List<StickerHistory> findByPacketItem_IdOrderByGeneratedAtDesc(
+            UUID packetItemId);
 
-        void deleteByPacketItem_Id(
-                        UUID packetItemId);
+    @Query("""
+            SELECT h
+            FROM StickerHistory h
+            JOIN FETCH h.packetItem p
+            WHERE p.id IN :packetItemIds
+            ORDER BY h.generatedAt DESC, h.id DESC
+            """)
+    List<StickerHistory> findAllWithPacketItemsByPacketItemIds(
+            @Param("packetItemIds") Collection<UUID> packetItemIds);
 
-        List<StickerHistory> findByPacketItem_IdOrderByGeneratedAtDesc(
-                        UUID packetItemId);
+    long countByPacketItem_Id(UUID packetItemId);
 
-        /*
-         * Batch history fetch used when Admin Dispatch Edit changes sticker-facing
-         * PacketItem fields (packet number, SKU identity, PD/DWG, client, etc.).
-         * Fetching all affected histories in one query avoids one history query per
-         * selected dispatch row.
-         */
-        @Query("""
-                            SELECT h
-                            FROM StickerHistory h
-                            JOIN FETCH h.packetItem p
-                            WHERE p.id IN :packetItemIds
-                            ORDER BY h.generatedAt DESC
-                        """)
-        List<StickerHistory> findAllWithPacketItemsByPacketItemIds(
-                        @Param("packetItemIds") Collection<UUID> packetItemIds);
+    @Query("""
+            SELECT COALESCE(MAX(h.printIteration), 0)
+            FROM StickerHistory h
+            WHERE h.packetItem.id = :packetItemId
+            """)
+    Long findMaximumPrintIteration(
+            @Param("packetItemId") UUID packetItemId);
 
-        /*
-         * Required by Admin Center rollback preview.
-         */
-        long countByPacketItem_Id(
-                        UUID packetItemId);
+    long countByPacketItem_IdIn(Collection<UUID> packetItemIds);
 
-        /*
-         * Required to generate the correct next print iteration after:
-         *
-         * Sticker iteration 1
-         * Admin rollback to CREATED
-         * Sticker generated again
-         *
-         * The new sticker must become iteration 2, not iteration 1.
-         */
-        @Query("""
-                            SELECT COALESCE(MAX(h.printIteration), 0)
-                            FROM StickerHistory h
-                            WHERE h.packetItem.id = :packetItemId
-                        """)
-        Long findMaximumPrintIteration(
-                        @Param("packetItemId") UUID packetItemId);
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query("""
+            DELETE FROM StickerHistory h
+            WHERE h.packetItem.id IN :packetItemIds
+            """)
+    int deleteByPacketItemIdsForAdminDeletion(
+            @Param("packetItemIds") Collection<UUID> packetItemIds);
 
-        /*
-         * =====================================================
-         * ADMIN DELETE
-         * =====================================================
-         */
-
-        long countByPacketItem_IdIn(
-                        Collection<UUID> packetItemIds);
-
-        @Modifying(flushAutomatically = true, clearAutomatically = false)
-        @Query("""
-                            DELETE FROM StickerHistory h
-                            WHERE h.packetItem.id IN :packetItemIds
-                        """)
-        int deleteByPacketItemIdsForAdminDeletion(
-                        @Param("packetItemIds") Collection<UUID> packetItemIds);
-
-        @Query("""
-                            SELECT h
-                            FROM StickerHistory h
-                            LEFT JOIN FETCH h.packetItem p
-                            WHERE h.id = :historyId
-                        """)
-        Optional<StickerHistory> findByIdWithPacketItem(
-                        @Param("historyId") UUID historyId);
+    @Query("""
+            SELECT h
+            FROM StickerHistory h
+            LEFT JOIN FETCH h.packetItem p
+            WHERE h.id = :historyId
+            """)
+    Optional<StickerHistory> findByIdWithPacketItem(
+            @Param("historyId") UUID historyId);
 }

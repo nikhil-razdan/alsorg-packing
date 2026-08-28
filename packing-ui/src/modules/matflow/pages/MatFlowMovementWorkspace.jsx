@@ -109,6 +109,7 @@ export function MatFlowReturnsPage() {
     const [requisitions, setRequisitions] = useState([]);
     const [reasons, setReasons] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [referenceLoading, setReferenceLoading] = useState(false);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [viewMode, setViewMode] = useState("KANBAN");
@@ -125,40 +126,109 @@ export function MatFlowReturnsPage() {
     const load = useCallback(async () => {
         setLoading(true);
         setError("");
+
         try {
-            const [returnResponse, requisitionResponse, metaResponse] = await Promise.all([
-                matflowApi.listMaterialReturns(),
-                matflowApi.listRequisitions(),
-                matflowApi.metadata(),
-            ]);
+            const returnResponse =
+                await matflowApi.listMaterialReturns();
 
-            const returnRows = Array.isArray(returnResponse?.data) ? returnResponse.data : [];
-            setRows(returnRows.filter((row) => rowTouchesPlant(row, selectedPlantParam)));
+            const returnRows =
+                Array.isArray(returnResponse?.data)
+                    ? returnResponse.data
+                    : [];
 
-            const requestRows = Array.isArray(requisitionResponse?.data) ? requisitionResponse.data : [];
-            setRequisitions(requestRows.filter((row) =>
-                ["ISSUED_TO_PRODUCTION", "PRODUCTION_STARTED"].includes(normalize(row.status)) &&
-                (!selectedPlantParam || samePlant(row.productionPlantCode, selectedPlantParam))
-            ));
-
-            const enumReasons = Array.isArray(metaResponse?.data?.enums?.materialReturnReason)
-                ? metaResponse.data.enums.materialReturnReason
-                : [];
-            setReasons(enumReasons);
-            setForm((current) => ({
-                ...current,
-                reason: enumReasons.includes(current.reason) ? current.reason : (enumReasons[0] || ""),
-            }));
+            setRows(
+                returnRows.filter((row) =>
+                    rowTouchesPlant(
+                        row,
+                        selectedPlantParam
+                    )
+                )
+            );
         } catch (requestError) {
             setRows([]);
-            setRequisitions([]);
-            setError(readMatFlowError(requestError, "Unable to load Material Returns."));
+            setError(readMatFlowError(
+                requestError,
+                "Unable to load Material Returns."
+            ));
         } finally {
             setLoading(false);
         }
     }, [selectedPlantParam]);
 
-    useEffect(() => { load(); }, [load]);
+    /*
+     * Production MR choices and enum metadata are only needed while creating a
+     * new return. Store-only users and ordinary return-register refreshes no
+     * longer download the complete MR register unnecessarily.
+     */
+    const loadCreateReferences =
+        useCallback(async () => {
+            setReferenceLoading(true);
+
+            try {
+                const [
+                    requisitionResponse,
+                    metaResponse,
+                ] = await Promise.all([
+                    matflowApi.listRequisitions(),
+                    matflowApi.metadata(),
+                ]);
+
+                const requestRows =
+                    Array.isArray(requisitionResponse?.data)
+                        ? requisitionResponse.data
+                        : [];
+
+                setRequisitions(
+                    requestRows.filter((row) =>
+                        [
+                            "ISSUED_TO_PRODUCTION",
+                            "PRODUCTION_STARTED",
+                        ].includes(
+                            normalize(row.status)
+                        ) &&
+                        (
+                            !selectedPlantParam ||
+                            samePlant(
+                                row.productionPlantCode,
+                                selectedPlantParam
+                            )
+                        )
+                    )
+                );
+
+                const enumReasons =
+                    Array.isArray(
+                        metaResponse?.data
+                            ?.enums
+                            ?.materialReturnReason
+                    )
+                        ? metaResponse.data.enums.materialReturnReason
+                        : [];
+
+                setReasons(enumReasons);
+
+                setForm((current) => ({
+                    ...current,
+                    reason:
+                        enumReasons.includes(current.reason)
+                            ? current.reason
+                            : (enumReasons[0] || ""),
+                }));
+            } catch (requestError) {
+                setRequisitions([]);
+                setReasons([]);
+                setError(readMatFlowError(
+                    requestError,
+                    "Unable to load Production MR / return-reason references."
+                ));
+            } finally {
+                setReferenceLoading(false);
+            }
+        }, [selectedPlantParam]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
 
     const selectedReq = requisitions.find((row) => String(row.id) === String(form.requisitionId)) || null;
 
@@ -183,6 +253,7 @@ export function MatFlowReturnsPage() {
         });
         setDialog({ type: "CREATE" });
         setError("");
+        loadCreateReferences();
     };
 
     const createReturn = async () => {
@@ -381,11 +452,16 @@ export function MatFlowReturnsPage() {
                     <Alert severity="info" sx={{ mb: 1.5 }}>
                         You do not choose a Store destination. MatFlow derives the route from the MR plant: AL-P1 goes directly to Main Store; AL-P2/P3/P4 goes Production → own Plant Store → AL-P1 Main Store.
                     </Alert>
+                    {referenceLoading && (
+                        <Alert severity="info" sx={{ mb: 1.5 }}>
+                            Loading eligible Production MRs and return reasons...
+                        </Alert>
+                    )}
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.5 }}>
-                        <TextField select label="Production MR *" value={form.requisitionId} onChange={(e) => setForm((current) => ({ ...current, requisitionId: e.target.value }))} sx={fieldSx}>
+                        <TextField select disabled={referenceLoading} label="Production MR *" value={form.requisitionId} onChange={(e) => setForm((current) => ({ ...current, requisitionId: e.target.value }))} sx={fieldSx}>
                             {requisitions.map((row) => <MenuItem key={row.id} value={row.id}>{row.requisitionNumber} · {row.projectCode} · {row.drawingNo}</MenuItem>)}
                         </TextField>
-                        <TextField select label="Reason *" value={form.reason} onChange={(e) => setForm((current) => ({ ...current, reason: e.target.value }))} sx={fieldSx}>
+                        <TextField select disabled={referenceLoading} label="Reason *" value={form.reason} onChange={(e) => setForm((current) => ({ ...current, reason: e.target.value }))} sx={fieldSx}>
                             {reasons.map((reason) => <MenuItem key={reason} value={reason}>{readable(reason)}</MenuItem>)}
                         </TextField>
                         <TextField
@@ -431,7 +507,7 @@ export function MatFlowReturnsPage() {
                 </DialogContent>
                 <DialogActions sx={dialogActionsSx}>
                     <Button onClick={() => setDialog(null)} disabled={working} sx={secondaryBtnSx}>Cancel</Button>
-                    <Button onClick={createReturn} disabled={working} sx={primaryBtnSx}>{working ? "Saving..." : "Create Draft Return"}</Button>
+                    <Button onClick={createReturn} disabled={working || referenceLoading} sx={primaryBtnSx}>{working ? "Saving..." : "Create Draft Return"}</Button>
                 </DialogActions>
             </Dialog>
 

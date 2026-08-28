@@ -1,18 +1,25 @@
 package com.alsorg.packing.domain.item;
 
+import com.alsorg.packing.config.TimeZoneConfig;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
-import jakarta.persistence.*;
-
 @Entity
 @Table(name = "hardware_packet_lines", uniqueConstraints = {
         @UniqueConstraint(name = "uq_hardware_packet_line_number", columnNames = {
-                "packet_item_id",
-                "line_no"
+                "packet_item_id", "line_no"
         })
 })
 public class HardwarePacketLine {
@@ -37,92 +44,33 @@ public class HardwarePacketLine {
     @Column(nullable = false, length = 30)
     private String uom;
 
-    /*
-     * Reserved for Phase 2 hardware inventory integration.
-     */
     @Column(name = "hardware_inventory_item_id")
     private UUID hardwareInventoryItemId;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public PacketItem getPacketItem() {
-        return packetItem;
-    }
-
-    public void setPacketItem(PacketItem packetItem) {
-        this.packetItem = packetItem;
-    }
-
-    public Integer getLineNo() {
-        return lineNo;
-    }
-
-    public void setLineNo(Integer lineNo) {
-        this.lineNo = lineNo;
-    }
-
-    public String getItemName() {
-        return itemName;
-    }
-
-    public void setItemName(String itemName) {
-        this.itemName = itemName;
-    }
-
-    public BigDecimal getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(BigDecimal quantity) {
-        this.quantity = quantity;
-    }
-
-    public String getUom() {
-        return uom;
-    }
-
-    public void setUom(String uom) {
-        this.uom = uom;
-    }
-
-    public UUID getHardwareInventoryItemId() {
-        return hardwareInventoryItemId;
-    }
-
-    public void setHardwareInventoryItemId(UUID hardwareInventoryItemId) {
-        this.hardwareInventoryItemId = hardwareInventoryItemId;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
     @PrePersist
     private void applyCreateDefaults() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
-
-        if (uom == null
-                || uom.isBlank()) {
-            uom = "Nos";
-        }
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        if (uom == null || uom.isBlank()) uom = "Nos";
     }
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public PacketItem getPacketItem() { return packetItem; }
+    public void setPacketItem(PacketItem packetItem) { this.packetItem = packetItem; }
+    public Integer getLineNo() { return lineNo; }
+    public void setLineNo(Integer lineNo) { this.lineNo = lineNo; }
+    public String getItemName() { return itemName; }
+    public void setItemName(String itemName) { this.itemName = itemName; }
+    public BigDecimal getQuantity() { return quantity; }
+    public void setQuantity(BigDecimal quantity) { this.quantity = quantity; }
+    public String getUom() { return uom; }
+    public void setUom(String uom) { this.uom = uom; }
+    public UUID getHardwareInventoryItemId() { return hardwareInventoryItemId; }
+    public void setHardwareInventoryItemId(UUID hardwareInventoryItemId) { this.hardwareInventoryItemId = hardwareInventoryItemId; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

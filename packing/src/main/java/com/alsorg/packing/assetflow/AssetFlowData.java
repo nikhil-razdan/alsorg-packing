@@ -10,6 +10,13 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,13 +28,8 @@ import java.util.UUID;
  * Compact, isolated AssetFlow domain model.
  *
  * AssetFlow intentionally stores snapshots instead of JPA relationships into
- * PackFlow/BOMFlow/MatFlow/HRFlow. The only shared identity it consumes is the
- * existing FlowSuite user model for authenticated operational users.
- *
- * A second, intentionally lightweight identity exists inside AssetFlow for
- * employees/operators who only need to report maintenance issues. Reporter
- * records have no FlowSuite password, no module access and no authority outside
- * the controlled request portal.
+ * other FlowSuite modules. Reporter identities grant request-only access and
+ * never become FlowSuite users or Spring Security principals.
  */
 public final class AssetFlowData {
 
@@ -42,10 +44,6 @@ public final class AssetFlowData {
         IMPROVEMENT
     }
 
-    /**
-     * PLANNED remains for backward compatibility. New live complaints normally
-     * follow NEW/ASSIGNED -> ACCEPTED -> IN_PROGRESS -> REPAIRED -> CLOSED.
-     */
     public enum WorkStatus {
         NEW,
         PLANNED,
@@ -80,18 +78,6 @@ public final class AssetFlowData {
         CRITICAL
     }
 
-    /**
-     * The maintenance service desk that owns the work. This lets the same
-     * AssetFlow engine handle production machines as well as IT, electrical,
-     * facilities and utility requests without creating separate applications.
-     */
-    /**
-     * Owning department. Everything that is maintained by the factory
-     * Machine Maintenance team (production machines, electrical, lights,
-     * HVAC, utilities and facility assets) remains MACHINE. IT is completely
-     * isolated and is owned by the IT team. Request categories describe the
-     * sub-type without opening cross-department visibility.
-     */
     public enum ServiceDomain {
         MACHINE,
         IT
@@ -135,7 +121,8 @@ public final class AssetFlowData {
                     @Index(name = "idx_af_equipment_plant", columnList = "plant_code"),
                     @Index(name = "idx_af_equipment_status", columnList = "status"),
                     @Index(name = "idx_af_equipment_category", columnList = "category"),
-                    @Index(name = "idx_af_equipment_domain", columnList = "service_domain")
+                    @Index(name = "idx_af_equipment_domain", columnList = "service_domain"),
+                    @Index(name = "idx_af_equipment_scope", columnList = "plant_code,service_domain,status")
             }
     )
     public static class Equipment {
@@ -188,15 +175,12 @@ public final class AssetFlowData {
         @Column(name = "maintenance_team", length = 160)
         String maintenanceTeam;
 
-        /** Optional equipment-level override. Team head remains preferred. */
         @Column(name = "primary_technician", length = 180)
         String primaryTechnician;
 
-        /** Department/process owner, not necessarily an application identity. */
         @Column(length = 180)
         String owner;
 
-        /* IT Asset Master fields. Kept null for MACHINE assets. */
         @Column(name = "assigned_to_code", length = 80)
         String assignedToCode;
 
@@ -284,7 +268,9 @@ public final class AssetFlowData {
                     @Index(name = "idx_af_wo_scheduled", columnList = "scheduled_at"),
                     @Index(name = "idx_af_wo_responsible", columnList = "responsible"),
                     @Index(name = "idx_af_wo_requester", columnList = "requested_by"),
-                    @Index(name = "idx_af_wo_reporter", columnList = "reporter_id")
+                    @Index(name = "idx_af_wo_reporter", columnList = "reporter_id"),
+                    @Index(name = "idx_af_wo_scope_created", columnList = "plant_code,service_domain,created_at"),
+                    @Index(name = "idx_af_wo_scope_status", columnList = "plant_code,service_domain,status")
             }
     )
     public static class WorkOrder {
@@ -328,11 +314,9 @@ public final class AssetFlowData {
         @Column(name = "work_center", length = 180)
         String workCenter;
 
-        /** FlowSuite username or reporter display name snapshot. */
         @Column(name = "requested_by", length = 180)
         String requestedBy;
 
-        /** Populated only for a lightweight AssetFlow Reporter identity. */
         @Column(name = "reporter_id")
         UUID reporterId;
 
@@ -345,7 +329,6 @@ public final class AssetFlowData {
         @Column(name = "reporter_contact", length = 100)
         String reporterContact;
 
-        /** Optional actual machine/operator affected if different from reporter. */
         @Column(name = "operator_name", length = 180)
         String operatorName;
 
@@ -389,11 +372,9 @@ public final class AssetFlowData {
         @Column(name = "requested_at", nullable = false)
         LocalDateTime requestedAt = LocalDateTime.now();
 
-        /** Time requested by complainant before maintenance replanning. */
         @Column(name = "requested_for_at")
         LocalDateTime requestedForAt;
 
-        /** Current committed/planned attendance time. */
         @Column(name = "scheduled_at")
         LocalDateTime scheduledAt;
 
@@ -481,7 +462,8 @@ public final class AssetFlowData {
                     @Index(name = "idx_af_team_name", columnList = "name", unique = true),
                     @Index(name = "idx_af_team_plant", columnList = "plant_code"),
                     @Index(name = "idx_af_team_domain", columnList = "service_domain"),
-                    @Index(name = "idx_af_team_request_token", columnList = "request_token", unique = true)
+                    @Index(name = "idx_af_team_request_token", columnList = "request_token", unique = true),
+                    @Index(name = "idx_af_team_route", columnList = "plant_code,service_domain,active,default_for_plant")
             }
     )
     public static class Team {
@@ -498,7 +480,6 @@ public final class AssetFlowData {
         @Column(name = "service_domain", length = 40)
         ServiceDomain serviceDomain = ServiceDomain.MACHINE;
 
-        /** Business meaning: Head Technician / Service Desk owner. */
         @Column(length = 180)
         String lead;
 
@@ -506,7 +487,6 @@ public final class AssetFlowData {
         @Column(name = "members_text")
         String membersText;
 
-        /** Default route for this service domain at this plant. */
         @Column(name = "default_for_plant", nullable = false)
         boolean defaultForPlant;
 
@@ -535,18 +515,15 @@ public final class AssetFlowData {
         }
     }
 
-    /**
-     * Lightweight complaint identity. It is deliberately not a FlowSuite User.
-     * It grants no application/module access. A reporter can only authenticate
-     * against the controlled public request endpoints using reporterCode + PIN.
-     */
     @Entity(name = "AssetFlowReporter")
     @Table(
             name = "assetflow_reporter",
             indexes = {
                     @Index(name = "idx_af_reporter_code", columnList = "reporter_code", unique = true),
                     @Index(name = "idx_af_reporter_plant", columnList = "plant_code"),
-                    @Index(name = "idx_af_reporter_active", columnList = "active")
+                    @Index(name = "idx_af_reporter_active", columnList = "active"),
+                    @Index(name = "idx_af_reporter_linked_username", columnList = "linked_username", unique = true),
+                    @Index(name = "idx_af_reporter_lock", columnList = "locked_until")
             }
     )
     public static class Reporter {
@@ -566,11 +543,9 @@ public final class AssetFlowData {
         @Column(name = "plant_code", nullable = false, length = 80)
         String plantCode;
 
-        /** CSV plant codes for supervisors/managers who may report at more than one plant. */
         @Column(name = "plant_codes", nullable = false, length = 500)
         String plantCodes;
 
-        /** Optional link to an existing FlowSuite username. */
         @Column(name = "linked_username", length = 180, unique = true)
         String linkedUsername;
 
@@ -586,7 +561,6 @@ public final class AssetFlowData {
         @Column(length = 180)
         String email;
 
-        /** CSV enum names to keep the compact model dependency-free. */
         @Column(name = "allowed_domains", nullable = false, length = 350)
         String allowedDomains = ServiceDomain.MACHINE.name();
 
@@ -633,7 +607,8 @@ public final class AssetFlowData {
             indexes = {
                     @Index(name = "idx_af_pm_equipment", columnList = "equipment_id"),
                     @Index(name = "idx_af_pm_next_due", columnList = "next_due_date"),
-                    @Index(name = "idx_af_pm_active", columnList = "active")
+                    @Index(name = "idx_af_pm_active", columnList = "active"),
+                    @Index(name = "idx_af_pm_active_due", columnList = "active,next_due_date")
             }
     )
     public static class PreventivePlan {
@@ -708,7 +683,8 @@ public final class AssetFlowData {
             name = "assetflow_audit_event",
             indexes = {
                     @Index(name = "idx_af_audit_entity", columnList = "entity_type,entity_id"),
-                    @Index(name = "idx_af_audit_created", columnList = "created_at")
+                    @Index(name = "idx_af_audit_created", columnList = "created_at"),
+                    @Index(name = "idx_af_audit_entity_created", columnList = "entity_type,entity_id,created_at")
             }
     )
     public static class AuditEvent {
@@ -744,155 +720,154 @@ public final class AssetFlowData {
     }
 
     public record EquipmentUpsert(
-            String assetCode,
-            String name,
-            String category,
+            @Size(max = 80) String assetCode,
+            @Size(max = 220) String name,
+            @Size(max = 140) String category,
             ServiceDomain serviceDomain,
             AssetKind assetKind,
-            String plantCode,
-            String location,
-            String workCenter,
-            String manufacturer,
-            String model,
-            String serialNumber,
+            @Size(max = 80) String plantCode,
+            @Size(max = 180) String location,
+            @Size(max = 180) String workCenter,
+            @Size(max = 160) String manufacturer,
+            @Size(max = 160) String model,
+            @Size(max = 180) String serialNumber,
             Criticality criticality,
             EquipmentStatus status,
-            String maintenanceTeam,
-            String primaryTechnician,
-            String owner,
-            String assignedToCode,
-            String assignedToName,
-            String assignedDepartment,
-            String hostname,
-            String ipAddress,
-            String macAddress,
-            String operatingSystem,
+            @Size(max = 160) String maintenanceTeam,
+            @Size(max = 180) String primaryTechnician,
+            @Size(max = 180) String owner,
+            @Size(max = 80) String assignedToCode,
+            @Size(max = 180) String assignedToName,
+            @Size(max = 160) String assignedDepartment,
+            @Size(max = 180) String hostname,
+            @Size(max = 100) String ipAddress,
+            @Size(max = 100) String macAddress,
+            @Size(max = 180) String operatingSystem,
             LocalDate purchaseDate,
             LocalDate commissionedDate,
             LocalDate warrantyExpiry,
             Boolean qrEnabled,
-            String description,
-            String safetyNotes,
-            Long version
+            @Size(max = 20000) String description,
+            @Size(max = 20000) String safetyNotes,
+            @PositiveOrZero Long version
     ) {
     }
 
     public record WorkOrderUpsert(
-            String title,
-            String description,
-            String instructions,
+            @Size(max = 300) String title,
+            @Size(max = 30000) String description,
+            @Size(max = 30000) String instructions,
             UUID equipmentId,
             UUID qrToken,
             ServiceDomain serviceDomain,
-            String requestCategory,
-            String plantCode,
-            String location,
-            String operatorName,
-            String operatorContact,
-            String teamName,
-            String responsible,
+            @Size(max = 120) String requestCategory,
+            @Size(max = 80) String plantCode,
+            @Size(max = 180) String location,
+            @Size(max = 180) String operatorName,
+            @Size(max = 80) String operatorContact,
+            @Size(max = 160) String teamName,
+            @Size(max = 180) String responsible,
             WorkType workType,
             WorkStatus status,
             Priority priority,
             LocalDateTime requestedForAt,
             LocalDateTime scheduledAt,
-            Integer estimatedMinutes,
-            Integer downtimeMinutes,
+            @PositiveOrZero Integer estimatedMinutes,
+            @PositiveOrZero Integer downtimeMinutes,
             Boolean breakdown,
             Boolean productionStopped,
             Boolean safetyRisk,
-            String rootCause,
-            String actionTaken,
-            String partsUsed,
-            BigDecimal partsCost,
-            BigDecimal laborCost,
-            BigDecimal externalCost,
-            String verificationNote,
-            Long version
+            @Size(max = 30000) String rootCause,
+            @Size(max = 30000) String actionTaken,
+            @Size(max = 30000) String partsUsed,
+            @DecimalMin("0.00") BigDecimal partsCost,
+            @DecimalMin("0.00") BigDecimal laborCost,
+            @DecimalMin("0.00") BigDecimal externalCost,
+            @Size(max = 30000) String verificationNote,
+            @PositiveOrZero Long version
     ) {
     }
 
     public record AssignmentRequest(
-            String teamName,
-            String responsible,
+            @Size(max = 160) String teamName,
+            @Size(max = 180) String responsible,
             LocalDateTime scheduledAt,
-            Integer estimatedMinutes,
-            String note,
-            Long version
+            @PositiveOrZero Integer estimatedMinutes,
+            @Size(max = 4000) String note,
+            @PositiveOrZero Long version
     ) {
     }
 
     public record StatusChange(
             WorkStatus status,
-            String note,
-            Integer actualMinutes,
-            Integer downtimeMinutes,
-            String rootCause,
-            String actionTaken,
-            String partsUsed,
-            BigDecimal partsCost,
-            BigDecimal laborCost,
-            BigDecimal externalCost,
-            String verificationNote,
-            Long version
+            @Size(max = 4000) String note,
+            @PositiveOrZero Integer actualMinutes,
+            @PositiveOrZero Integer downtimeMinutes,
+            @Size(max = 30000) String rootCause,
+            @Size(max = 30000) String actionTaken,
+            @Size(max = 30000) String partsUsed,
+            @DecimalMin("0.00") BigDecimal partsCost,
+            @DecimalMin("0.00") BigDecimal laborCost,
+            @DecimalMin("0.00") BigDecimal externalCost,
+            @Size(max = 30000) String verificationNote,
+            @PositiveOrZero Long version
     ) {
     }
 
     public record TeamUpsert(
-            String name,
-            String plantCode,
+            @Size(max = 160) String name,
+            @Size(max = 80) String plantCode,
             ServiceDomain serviceDomain,
-            String lead,
-            String membersText,
+            @Size(max = 180) String lead,
+            @Size(max = 10000) String membersText,
             Boolean defaultForPlant,
             Boolean publicReportingEnabled,
-            String defaultCategories,
+            @Size(max = 700) String defaultCategories,
             Boolean active,
-            Long version
+            @PositiveOrZero Long version
     ) {
     }
 
     public record ReporterUpsert(
-            String reporterCode,
-            String displayName,
+            @Size(max = 80) String reporterCode,
+            @Size(max = 180) String displayName,
             ReporterType reporterType,
-            String plantCode,
-            Set<String> plantCodes,
-            String linkedUsername,
-            String department,
-            String designation,
-            String phone,
-            String email,
-            Set<ServiceDomain> allowedDomains,
-            String accessPin,
+            @Size(max = 80) String plantCode,
+            @Size(max = 100) Set<@Size(max = 80) String> plantCodes,
+            @Size(max = 180) String linkedUsername,
+            @Size(max = 160) String department,
+            @Size(max = 160) String designation,
+            @Size(max = 100) String phone,
+            @Email @Size(max = 180) String email,
+            @Size(max = 10) Set<ServiceDomain> allowedDomains,
+            @Pattern(regexp = "\\d{4,8}", message = "Reporter PIN must contain 4 to 8 digits") String accessPin,
             Boolean active,
             LocalDate validUntil,
-            Long version
+            @PositiveOrZero Long version
     ) {
     }
 
     public record ReporterLogin(
-            String reporterCode,
-            String accessPin,
+            @Size(max = 80) String reporterCode,
+            @Pattern(regexp = "\\d{4,8}", message = "Reporter PIN must contain 4 to 8 digits") String accessPin,
             UUID equipmentToken,
             UUID serviceDeskToken
     ) {
     }
 
-    /** Shared shape for a controlled unauthenticated reporter submission. */
     public record PublicRequestCreate(
-            String reporterCode,
-            String accessPin,
+            @Size(max = 80) String reporterCode,
+            @Pattern(regexp = "\\d{4,8}", message = "Reporter PIN must contain 4 to 8 digits") String accessPin,
             UUID equipmentToken,
             UUID serviceDeskToken,
             ServiceDomain serviceDomain,
-            String plantCode,
-            String requestCategory,
-            String title,
-            String description,
-            String location,
-            String operatorName,
-            String operatorContact,
+            @Size(max = 80) String plantCode,
+            @Size(max = 120) String requestCategory,
+            @Size(max = 300) String title,
+            @Size(max = 30000) String description,
+            @Size(max = 180) String location,
+            @Size(max = 180) String operatorName,
+            @Size(max = 80) String operatorContact,
             LocalDateTime requestedForAt,
             Priority priority,
             Boolean productionStopped,
@@ -900,22 +875,18 @@ public final class AssetFlowData {
     ) {
     }
 
-    /**
-     * Request shape for an already authenticated FlowSuite user. No AssetFlow
-     * role is required for this endpoint; normal plant access is still enforced.
-     */
     public record AuthenticatedRequestCreate(
             UUID equipmentId,
             UUID equipmentToken,
             UUID serviceDeskToken,
             ServiceDomain serviceDomain,
-            String requestCategory,
-            String plantCode,
-            String title,
-            String description,
-            String location,
-            String operatorName,
-            String operatorContact,
+            @Size(max = 120) String requestCategory,
+            @Size(max = 80) String plantCode,
+            @Size(max = 300) String title,
+            @Size(max = 30000) String description,
+            @Size(max = 180) String location,
+            @Size(max = 180) String operatorName,
+            @Size(max = 80) String operatorContact,
             LocalDateTime requestedForAt,
             Priority priority,
             Boolean productionStopped,
@@ -925,20 +896,20 @@ public final class AssetFlowData {
 
     public record PreventivePlanUpsert(
             UUID equipmentId,
-            String title,
-            Integer intervalDays,
-            Integer leadDays,
+            @Size(max = 220) String title,
+            @Positive Integer intervalDays,
+            @PositiveOrZero Integer leadDays,
             LocalDate nextDueDate,
             LocalTime scheduledTime,
-            Integer estimatedMinutes,
+            @PositiveOrZero Integer estimatedMinutes,
             Priority defaultPriority,
-            String teamName,
-            String responsible,
+            @Size(max = 160) String teamName,
+            @Size(max = 180) String responsible,
             Boolean requiresShutdown,
-            String instructions,
-            String checklistText,
+            @Size(max = 30000) String instructions,
+            @Size(max = 30000) String checklistText,
             Boolean active,
-            Long version
+            @PositiveOrZero Long version
     ) {
     }
 }

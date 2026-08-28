@@ -58,9 +58,8 @@ public class ChalaanPdfController {
         @PostMapping(value = "/dispatch", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> generateDispatchChallan(
                         @RequestBody ChallanDispatchRequest request,
-                        @RequestParam(defaultValue = "true") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "true") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!canUseDispatchChallan(user)) {
                         return ResponseEntity
@@ -83,11 +82,9 @@ public class ChalaanPdfController {
 
         @PostMapping(value = "/dispatch/preview", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> previewDispatchChallan(
-                        @RequestBody ChallanDispatchRequest request,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestBody ChallanDispatchRequest request) {
 
-                User user = currentUserService.getCurrentUserFromAuth(
-                                auth);
+                User user = currentUserService.requireCurrentUser();
 
                 /*
                  * Keep the same permission rule as final challan creation.
@@ -118,9 +115,8 @@ public class ChalaanPdfController {
         @PostMapping(value = "/custom", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> generateCustomChallan(
                         @RequestBody CustomChallanRequest request,
-                        @RequestParam(defaultValue = "true") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "true") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!canUseDispatchChallan(user)) {
                         return ResponseEntity
@@ -135,20 +131,46 @@ public class ChalaanPdfController {
                 return buildPdfResponse(result, preview);
         }
 
-        @Transactional
+        /**
+         * Legacy download route is deliberately read-only. GET must never mutate
+         * dispatch state because browser cookies can be sent on cross-site GETs.
+         * Final single-item dispatch is available through the POST route below and
+         * through the normal /dispatch endpoint.
+         */
         @GetMapping(value = "/{zohoItemId}/download", produces = MediaType.APPLICATION_PDF_VALUE)
-        public ResponseEntity<byte[]> generateSingle(
+        public ResponseEntity<byte[]> previewSingle(
                         @PathVariable String zohoItemId,
                         @RequestParam(required = false) UUID driverId,
                         @RequestParam(required = false) UUID vehicleId,
-                        @RequestParam(defaultValue = "false") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "false") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!canUseDispatchChallan(user)) {
-                        return ResponseEntity
-                                        .status(403)
-                                        .build();
+                        return ResponseEntity.status(403).build();
+                }
+
+                DispatchTripPdfResult result = dispatchChallanService.previewDispatchChallan(
+                                List.of(zohoItemId),
+                                driverId,
+                                vehicleId,
+                                null,
+                                null,
+                                user.getUsername(),
+                                currentUserService.allowedPlants(user));
+
+                return buildPdfResponse(result, preview);
+        }
+
+        @PostMapping(value = "/{zohoItemId}/dispatch", produces = MediaType.APPLICATION_PDF_VALUE)
+        public ResponseEntity<byte[]> dispatchSingle(
+                        @PathVariable String zohoItemId,
+                        @RequestParam(required = false) UUID driverId,
+                        @RequestParam(required = false) UUID vehicleId,
+                        @RequestParam(defaultValue = "false") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
+
+                if (!canUseDispatchChallan(user)) {
+                        return ResponseEntity.status(403).build();
                 }
 
                 DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
@@ -168,9 +190,8 @@ public class ChalaanPdfController {
                         @RequestBody List<String> ids,
                         @RequestParam(required = false) UUID driverId,
                         @RequestParam(required = false) UUID vehicleId,
-                        @RequestParam(defaultValue = "false") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "false") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!canUseDispatchChallan(user)) {
                         return ResponseEntity
@@ -192,50 +213,41 @@ public class ChalaanPdfController {
         @GetMapping(value = "/dispatched/{challanNumber:.+}/download", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> downloadExistingDispatchedChallan(
                         @PathVariable String challanNumber,
-                        @RequestParam(defaultValue = "false") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "false") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
-                String cleanChallanNumber = challanNumber == null
-                                ? ""
-                                : challanNumber.trim();
+                List<ItemDispatchStatus> statuses = List.of(
+                                ItemDispatchStatus.DISPATCHED);
 
-                if (cleanChallanNumber.isBlank()) {
-                        throw new RuntimeException("Challan number is required");
-                }
-
-                List<DispatchedItem> items;
+                List<DispatchedItem> sourceItems;
 
                 if (currentUserService.isAdmin(user)) {
-                        items = dispatchedItemRepository.findByStatusAndChalaanNumber(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber);
+                        sourceItems = dispatchedItemRepository.findByStatusIn(statuses);
                 } else {
-                        java.util.Set<String> allowedPlants = currentUserService.allowedPlants(user);
-
-                        if (allowedPlants == null || allowedPlants.isEmpty()) {
-                                items = dispatchedItemRepository.findLegacyByStatusAndChalaanNumber(
-                                                ItemDispatchStatus.DISPATCHED,
-                                                cleanChallanNumber);
-                        } else {
-                                items = dispatchedItemRepository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
-                                                ItemDispatchStatus.DISPATCHED,
-                                                cleanChallanNumber,
-                                                allowedPlants);
-                        }
-
-                        String currentUsername = cleanLower(user.getUsername());
-
-                        items = items
-                                        .stream()
-                                        .filter(item -> cleanLower(item.getDispatchedBy())
-                                                        .equals(currentUsername))
-                                        .toList();
+                        sourceItems = dispatchedItemRepository.findVisibleByStatusesAndPlantsIncludingLegacy(
+                                        statuses,
+                                        currentUserService.allowedPlants(user));
                 }
+
+                String currentUsername = cleanLower(user.getUsername());
+
+                List<DispatchedItem> items = sourceItems
+                                .stream()
+                                .filter(item -> item.getChalaanNumber() != null
+                                                && item.getChalaanNumber().equals(challanNumber))
+                                .filter(item -> {
+                                        if (currentUserService.isAdmin(user)) {
+                                                return true;
+                                        }
+
+                                        return cleanLower(item.getDispatchedBy())
+                                                        .equals(currentUsername);
+                                })
+                                .toList();
 
                 if (items.isEmpty()) {
                         throw new RuntimeException(
-                                        "No dispatched items found for challan: " + cleanChallanNumber);
+                                        "No dispatched items found for challan: " + challanNumber);
                 }
 
                 DispatchedItem first = items.get(0);
@@ -249,7 +261,7 @@ public class ChalaanPdfController {
                                 .min(LocalDateTime::compareTo)
                                 .orElse(null);
 
-                data.setVoucherNo(cleanChallanNumber);
+                data.setVoucherNo(challanNumber);
                 data.setDispatchTime(challanDateTime);
                 data.setDesignerName("-");
                 data.setOt("-");
@@ -267,31 +279,14 @@ public class ChalaanPdfController {
 
                 List<ChalaanItem> challanItems = new ArrayList<>();
 
-                /*
-                 * Batch-load linked PacketItems for this one challan. The previous
-                 * loop issued one SELECT per row (N+1), which becomes noticeable on
-                 * large multi-item challans even after the challan lookup itself is
-                 * indexed.
-                 */
-                java.util.Map<UUID, PacketItem> packetItemsById = packetItemRepository
-                                .findAllById(
-                                                items.stream()
-                                                                .map(DispatchedItem::getPacketItemId)
-                                                                .filter(java.util.Objects::nonNull)
-                                                                .collect(java.util.stream.Collectors.toCollection(
-                                                                                java.util.LinkedHashSet::new)))
-                                .stream()
-                                .filter(packetItem -> packetItem != null && packetItem.getId() != null)
-                                .collect(java.util.stream.Collectors.toMap(
-                                                PacketItem::getId,
-                                                java.util.function.Function.identity(),
-                                                (firstPacketItem, ignoredDuplicate) -> firstPacketItem,
-                                                java.util.LinkedHashMap::new));
-
                 for (DispatchedItem item : items) {
-                        PacketItem packetItem = item.getPacketItemId() == null
-                                        ? null
-                                        : packetItemsById.get(item.getPacketItemId());
+                        PacketItem packetItem = null;
+
+                        if (item.getPacketItemId() != null) {
+                                packetItem = packetItemRepository
+                                                .findById(item.getPacketItemId())
+                                                .orElse(null);
+                        }
 
                         challanItems.add(
                                         buildExistingChallanItem(
@@ -304,7 +299,7 @@ public class ChalaanPdfController {
 
                 byte[] pdf = pdfService.generateChalaan(data);
 
-                String filename = cleanChallanNumber
+                String filename = challanNumber
                                 .replaceAll("[^a-zA-Z0-9._-]", "_")
                                 + ".pdf";
 
@@ -349,6 +344,11 @@ public class ChalaanPdfController {
                                 .header(
                                                 "Access-Control-Expose-Headers",
                                                 "X-Challan-No, Content-Disposition")
+                                .header(
+                                                HttpHeaders.CACHE_CONTROL,
+                                                "no-store, no-cache, must-revalidate")
+                                .header("Pragma", "no-cache")
+                                .header("Expires", "0")
                                 .contentType(MediaType.APPLICATION_PDF)
                                 .body(result.getPdfBytes());
         }
@@ -395,9 +395,8 @@ public class ChalaanPdfController {
         }
 
         @GetMapping("/custom")
-        public ResponseEntity<List<CustomChallanSummaryResponse>> getCustomChallans(
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+        public ResponseEntity<List<CustomChallanSummaryResponse>> getCustomChallans() {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!canUseDispatchChallan(user)) {
                         return ResponseEntity
@@ -419,10 +418,9 @@ public class ChalaanPdfController {
 
         @GetMapping(value = "/custom/{challanNumber:.+}", produces = MediaType.APPLICATION_JSON_VALUE)
         public ResponseEntity<CustomChallanRequest> getCustomChallanForAdminEdit(
-                        @PathVariable String challanNumber,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @PathVariable String challanNumber) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -438,10 +436,9 @@ public class ChalaanPdfController {
         public ResponseEntity<byte[]> updateCustomChallanAsAdmin(
                         @PathVariable String challanNumber,
                         @RequestBody CustomChallanRequest request,
-                        @RequestParam(defaultValue = "true") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
+                        @RequestParam(defaultValue = "true") boolean preview) {
 
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isAdmin(user)) {
                         return ResponseEntity.status(403).build();
@@ -460,9 +457,8 @@ public class ChalaanPdfController {
         @GetMapping(value = "/custom/{challanNumber:.+}/download", produces = MediaType.APPLICATION_PDF_VALUE)
         public ResponseEntity<byte[]> downloadCustomChallan(
                         @PathVariable String challanNumber,
-                        @RequestParam(defaultValue = "true") boolean preview,
-                        @RequestHeader(value = "Authorization", required = false) String auth) {
-                User user = currentUserService.getCurrentUserFromAuth(auth);
+                        @RequestParam(defaultValue = "true") boolean preview) {
+                User user = currentUserService.requireCurrentUser();
 
                 if (!currentUserService.isDispatch(user)
                                 && !currentUserService.isAdmin(user)) {

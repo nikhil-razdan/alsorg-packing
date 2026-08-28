@@ -20,6 +20,13 @@ export async function loginUser(
       "/api/auth/login",
       payload,
       {
+        /*
+         * A login request must not carry an old/stale Bearer token.
+         * The backend identifies this transport with X-Client-Type and returns
+         * the new bearer token after validating username/password.
+         */
+        skipAuth: true,
+        withCredentials: false,
         headers: {
           "X-Client-Type":
             "mobile",

@@ -6,47 +6,26 @@ import java.util.UUID;
 public class VehicleResponse {
 
     private UUID id;
-
     private String vehicleNumber;
-
     private String vehicleName;
-
     private String vehicleType;
-
     private Double capacity;
-
     private boolean active;
-
     private String status;
-
     private String driverName;
-
     private String ownerName;
-
     private String registeringAuthority;
-
     private String vehicleClass;
-
     private String fuelType;
-
     private String fuelCapacity;
-
     private String emissionNorm;
-
     private String vehicleAge;
-
     private LocalDate registrationDate;
-
     private LocalDate fitnessValidUpto;
-
     private LocalDate insuranceValidUpto;
-
     private LocalDate taxValidUpto;
-
     private LocalDate permitValidUpto;
-
     private LocalDate puccValidUpto;
-
     private LocalDate nationalPermitValidUpto;
 
     public UUID getId() {

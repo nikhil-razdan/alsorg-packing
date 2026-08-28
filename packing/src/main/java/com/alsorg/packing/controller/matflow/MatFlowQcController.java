@@ -13,6 +13,8 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -70,10 +72,16 @@ public class MatFlowQcController {
     @GetMapping("/qc/{id}/photo")
     public ResponseEntity<Resource> photo(@PathVariable UUID id) {
         Resource resource = evidence.load(id);
+        String fileName = safeFileName(evidence.fileName(id), "qc-evidence");
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(evidence.contentType(id)))
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=\"" + evidence.fileName(id).replace("\"", "") + "\"")
+                .cacheControl(CacheControl.noStore())
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline()
+                                .filename(fileName)
+                                .build()
+                                .toString())
                 .body(resource);
     }
 
@@ -95,4 +103,25 @@ public class MatFlowQcController {
             @Valid @RequestBody QcDispositionRequest request) {
         return service.decideDisposition(inspectionId, request);
     }
+
+    private String safeFileName(
+            String value,
+            String fallback) {
+        String clean = value == null ? "" : value.trim();
+        clean = clean
+                .replace("\r", "_")
+                .replace("\n", "_")
+                .replace("\"", "_")
+                .replace("\\", "_")
+                .replace("/", "_");
+
+        if (clean.isBlank()) {
+            clean = fallback;
+        }
+
+        return clean.length() > 180
+                ? clean.substring(0, 180)
+                : clean;
+    }
+
 }

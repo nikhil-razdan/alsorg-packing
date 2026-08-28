@@ -487,21 +487,55 @@ QRBitBuffer.prototype = {
 
 /* ===== QR8bitByte.js ===== */
 
+function encodeUtf8Bytes(value) {
+	var text = String(value == null ? "" : value);
+	var bytes = [];
+
+	for (var i = 0; i < text.length; i++) {
+		var codePoint = text.codePointAt(i);
+		if (codePoint > 0xFFFF) i++;
+
+		if (codePoint <= 0x7F) {
+			bytes.push(codePoint);
+		} else if (codePoint <= 0x7FF) {
+			bytes.push(
+				0xC0 | (codePoint >>> 6),
+				0x80 | (codePoint & 0x3F)
+			);
+		} else if (codePoint <= 0xFFFF) {
+			bytes.push(
+				0xE0 | (codePoint >>> 12),
+				0x80 | ((codePoint >>> 6) & 0x3F),
+				0x80 | (codePoint & 0x3F)
+			);
+		} else {
+			bytes.push(
+				0xF0 | (codePoint >>> 18),
+				0x80 | ((codePoint >>> 12) & 0x3F),
+				0x80 | ((codePoint >>> 6) & 0x3F),
+				0x80 | (codePoint & 0x3F)
+			);
+		}
+	}
+
+	return bytes;
+}
+
 function QR8bitByte(data) {
 	this.mode = QRMode.MODE_8BIT_BYTE;
-	this.data = data;
+	this.data = String(data == null ? "" : data);
+	this.bytes = encodeUtf8Bytes(this.data);
 }
 
 QR8bitByte.prototype = {
 
 	getLength : function() {
-		return this.data.length;
+		return this.bytes.length;
 	},
 	
 	write : function(buffer) {
-		for (var i = 0; i < this.data.length; i++) {
-			// not JIS ...
-			buffer.put(this.data.charCodeAt(i), 8);
+		for (var i = 0; i < this.bytes.length; i++) {
+			buffer.put(this.bytes[i], 8);
 		}
 	}
 };
@@ -825,10 +859,11 @@ QRCode.prototype = {
 	},
 	
 	make : function() {
-		// Calculate automatically typeNumber if provided is < 1
+		// Calculate automatically typeNumber if provided is < 1.
+		// Version 40 is valid and must be capacity-checked too.
 		if (this.typeNumber < 1 ){
-			var typeNumber = 1;
-			for (typeNumber = 1; typeNumber < 40; typeNumber++) {
+			var selectedTypeNumber = 0;
+			for (var typeNumber = 1; typeNumber <= 40; typeNumber++) {
 				var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, this.errorCorrectLevel);
 
 				var buffer = new QRBitBuffer();
@@ -843,10 +878,17 @@ QRCode.prototype = {
 					buffer.put(data.getLength(), QRUtil.getLengthInBits(data.mode, typeNumber) );
 					data.write(buffer);
 				}
-				if (buffer.getLengthInBits() <= totalDataCount * 8)
+
+				if (buffer.getLengthInBits() <= totalDataCount * 8) {
+					selectedTypeNumber = typeNumber;
 					break;
+				}
 			}
-			this.typeNumber = typeNumber;
+
+			if (!selectedTypeNumber) {
+				throw new Error("code length overflow. QR version 40 capacity exceeded.");
+			}
+			this.typeNumber = selectedTypeNumber;
 		}
 		this.makeImpl(false, this.getBestMaskPattern() );
 	},

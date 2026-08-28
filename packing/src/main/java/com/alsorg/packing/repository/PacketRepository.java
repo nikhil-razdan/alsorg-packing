@@ -6,8 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.alsorg.packing.domain.packet.Packet;
 import com.alsorg.packing.domain.common.PacketStatus;
+import com.alsorg.packing.domain.packet.Packet;
 
 public interface PacketRepository extends JpaRepository<Packet, UUID> {
 
@@ -18,6 +18,5 @@ public interface PacketRepository extends JpaRepository<Packet, UUID> {
     Page<Packet> findByCompany_IdAndStatus(
             UUID companyId,
             PacketStatus status,
-            Pageable pageable
-    );
+            Pageable pageable);
 }

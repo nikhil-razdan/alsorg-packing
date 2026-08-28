@@ -1,6 +1,9 @@
 package com.alsorg.packing.hrflow.dto;
 
 import com.alsorg.packing.hrflow.domain.HrOnboardingStatus;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -9,35 +12,39 @@ import java.util.UUID;
 
 public final class HrOnboardingDtos {
 
-    private HrOnboardingDtos() {}
+    private HrOnboardingDtos() {
+    }
 
     public record CreateOnboardingRequest(
             LocalDate joiningDate,
-            String department,
-            String designation,
-            String location,
-            String reportingManager,
-            String appointedBy,
-            String remarks
-    ) {}
+            @Size(max = 160) String department,
+            @Size(max = 160) String designation,
+            @Size(max = 220) String location,
+            @Size(max = 180) String reportingManager,
+            @Size(max = 180) String appointedBy,
+            @Size(max = 2000) String remarks
+    ) {
+    }
 
     public record UpdateOnboardingRequest(
-            Long rowVersion,
+            @PositiveOrZero Long rowVersion,
             HrOnboardingStatus status,
             LocalDate joiningDate,
-            String department,
-            String designation,
-            String location,
-            String reportingManager,
-            String appointedBy,
-            String remarks
-    ) {}
+            @Size(max = 160) String department,
+            @Size(max = 160) String designation,
+            @Size(max = 220) String location,
+            @Size(max = 180) String reportingManager,
+            @Size(max = 180) String appointedBy,
+            @Size(max = 2000) String remarks
+    ) {
+    }
 
     public record ConfirmJoiningRequest(
-            String employeeCode,
+            @Size(max = 80) String employeeCode,
             LocalDate joiningDate,
             Boolean employeeAcknowledged
-    ) {}
+    ) {
+    }
 
     public record OnboardingSummaryResponse(
             UUID id,
@@ -54,7 +61,8 @@ public final class HrOnboardingDtos {
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             long rowVersion
-    ) {}
+    ) {
+    }
 
     public record OnboardingDetailResponse(
             UUID id,
@@ -74,7 +82,8 @@ public final class HrOnboardingDtos {
             LocalDateTime updatedAt,
             long rowVersion,
             HrDocumentDtos.DocumentCompletenessResponse documentCompleteness
-    ) {}
+    ) {
+    }
 
     public record JoiningReportResponse(
             UUID id,
@@ -91,7 +100,8 @@ public final class HrOnboardingDtos {
             LocalDateTime employeeAcknowledgedAt,
             String confirmedBy,
             LocalDateTime confirmedAt
-    ) {}
+    ) {
+    }
 
     public record PortalLinkResponse(
             UUID onboardingCaseId,
@@ -99,17 +109,15 @@ public final class HrOnboardingDtos {
             String candidateNumber,
             String token,
             LocalDateTime expiresAt
-    ) {}
+    ) {
+    }
 
-    /**
-     * Generic versioned legal/policy snapshot. The actual source text is not hard-coded
-     * in Java; HR publishes the approved version and the exact text is frozen here.
-     */
     public record LegalSnapshotRequest(
-            String version,
-            String title,
-            String body
-    ) {}
+            @Size(max = 100) String version,
+            @Size(max = 500) String title,
+            @Size(max = 100_000) String body
+    ) {
+    }
 
     public record LegalSnapshotResponse(
             UUID documentId,
@@ -119,12 +127,14 @@ public final class HrOnboardingDtos {
             String snapshotSha256,
             String publishedBy,
             LocalDateTime publishedAt
-    ) {}
+    ) {
+    }
 
     public record AcceptanceRequest(
             Boolean accepted,
-            String typedName
-    ) {}
+            @Size(max = 180) String typedName
+    ) {
+    }
 
     public record AgreementAcceptanceResponse(
             UUID documentId,
@@ -137,7 +147,8 @@ public final class HrOnboardingDtos {
             LocalDateTime acceptedAt,
             String verifiedBy,
             LocalDateTime verifiedAt
-    ) {}
+    ) {
+    }
 
     public record OrientationTask(
             String code,
@@ -150,25 +161,29 @@ public final class HrOnboardingDtos {
             String remarks,
             LocalDate visitDate,
             String assistedBy
-    ) {}
+    ) {
+    }
 
     public record OrientationTaskUpdate(
-            String code,
+            @Size(max = 40) String code,
             Boolean completed,
-            String remarks,
+            @Size(max = 2000) String remarks,
             LocalDate visitDate,
-            String assistedBy
-    ) {}
+            @Size(max = 180) String assistedBy
+    ) {
+    }
 
     public record OrientationUpdateRequest(
-            String expectedStateSha256,
-            List<OrientationTaskUpdate> tasks
-    ) {}
+            @Size(max = 64) String expectedStateSha256,
+            @Valid @Size(max = 100) List<OrientationTaskUpdate> tasks
+    ) {
+    }
 
     public record OrientationAcknowledgeRequest(
             Boolean acknowledged,
-            String typedName
-    ) {}
+            @Size(max = 180) String typedName
+    ) {
+    }
 
     public record OrientationResponse(
             UUID stateDocumentId,
@@ -180,36 +195,42 @@ public final class HrOnboardingDtos {
             String employeeAcknowledgedName,
             LocalDateTime employeeAcknowledgedAt,
             LocalDateTime updatedAt
-    ) {}
+    ) {
+    }
 
     public record FeedbackQuestion(
             String code,
             String question
-    ) {}
+    ) {
+    }
 
     public record FeedbackAnswerRequest(
-            String code,
-            String answer,
-            String suggestion
-    ) {}
+            @Size(max = 40) String code,
+            @Size(max = 10) String answer,
+            @Size(max = 4000) String suggestion
+    ) {
+    }
 
     public record FeedbackSubmissionRequest(
-            List<FeedbackAnswerRequest> answers
-    ) {}
+            @Valid @Size(max = 50) List<FeedbackAnswerRequest> answers
+    ) {
+    }
 
     public record FeedbackAnswer(
             String code,
             String question,
             String answer,
             String suggestion
-    ) {}
+    ) {
+    }
 
     public record FeedbackSubmissionResponse(
             UUID documentId,
             List<FeedbackAnswer> answers,
             String submittedBy,
             LocalDateTime submittedAt
-    ) {}
+    ) {
+    }
 
     public record CompletionResponse(
             UUID onboardingCaseId,
@@ -228,7 +249,8 @@ public final class HrOnboardingDtos {
             boolean ndaVerified,
             boolean declarationAccepted,
             List<String> pending
-    ) {}
+    ) {
+    }
 
     public record OnboardingPortalResponse(
             UUID onboardingCaseId,
@@ -253,5 +275,6 @@ public final class HrOnboardingDtos {
             List<FeedbackQuestion> feedbackQuestions,
             FeedbackSubmissionResponse feedbackSubmission,
             CompletionResponse completion
-    ) {}
+    ) {
+    }
 }

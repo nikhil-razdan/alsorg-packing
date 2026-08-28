@@ -1,244 +1,261 @@
 package com.alsorg.packing.service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.alsorg.packing.domain.dashboard.DashboardResponse;
-import com.alsorg.packing.domain.logistics.LogisticsShift;
 import com.alsorg.packing.repository.DriverRepository;
 import com.alsorg.packing.repository.LogisticsShiftRepository;
 import com.alsorg.packing.repository.VehicleRepository;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
 @Service
 public class DashboardService {
 
-    private final LogisticsShiftRepository shiftRepository;
-
     private final DriverRepository driverRepository;
-
     private final VehicleRepository vehicleRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public DashboardService(
             LogisticsShiftRepository shiftRepository,
             DriverRepository driverRepository,
-            VehicleRepository vehicleRepository
-    ) {
-        this.shiftRepository = shiftRepository;
+            VehicleRepository vehicleRepository) {
+        // Keep the existing constructor contract; dashboard reads now aggregate via EntityManager.
         this.driverRepository = driverRepository;
         this.vehicleRepository = vehicleRepository;
     }
 
+    /**
+     * Dashboard aggregation is intentionally performed in PostgreSQL.
+     *
+     * The previous implementation materialized every LogisticsShift row and then
+     * grouped the complete history in the application JVM. That made dashboard
+     * cost grow linearly with shift history and also initialized Driver/Vehicle
+     * relationships row-by-row.
+     *
+     * These aggregate queries preserve the same response contract while moving
+     * sums/grouping to the database and returning only the small result sets that
+     * the dashboard actually renders.
+     */
+    @Transactional(readOnly = true)
     public DashboardResponse getDashboard() {
 
-        List<LogisticsShift> data =
-                shiftRepository.findAll();
+        Object[] totals = entityManager.createQuery(
+                        """
+                        select coalesce(sum(s.totalTrips), 0),
+                               coalesce(sum(s.totalLoaders), 0)
+                        from LogisticsShift s
+                        """,
+                        Object[].class)
+                .getSingleResult();
 
-        DashboardResponse response =
-                new DashboardResponse();
+        int totalTrips = safeInt(totals[0]);
+        int totalLoaders = safeInt(totals[1]);
 
-        /*
-         * TOTALS
-         */
+        double efficiency = totalTrips == 0
+                ? 0D
+                : ((double) totalLoaders / totalTrips) * 100D;
 
-        int totalTrips =
-                data.stream()
-                        .mapToInt(s ->
-                                s.getTotalTrips() != null
-                                        ? s.getTotalTrips()
-                                        : 0
-                        )
-                        .sum();
+        int activeDrivers = Math.toIntExact(
+                driverRepository.count());
 
-        int totalLoaders =
-                data.stream()
-                        .mapToInt(s ->
-                                s.getTotalLoaders() != null
-                                        ? s.getTotalLoaders()
-                                        : 0
-                        )
-                        .sum();
+        int activeVehicles = Math.toIntExact(
+                vehicleRepository.count());
 
-        /*
-         * KPI
-         */
+        double avgTripsPerDriver = activeDrivers == 0
+                ? 0D
+                : (double) totalTrips / activeDrivers;
 
-        double efficiency =
-                totalTrips == 0
-                        ? 0
-                        : ((double) totalLoaders / totalTrips) * 100;
+        double avgTripsPerVehicle = activeVehicles == 0
+                ? 0D
+                : (double) totalTrips / activeVehicles;
 
-        int activeDrivers =
-                (int) driverRepository.count();
+        Map<String, Integer> tripsOverTime = intMap(
+                entityManager.createQuery(
+                                """
+                                select function('date', s.shiftStart),
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                where s.shiftStart is not null
+                                group by function('date', s.shiftStart)
+                                order by function('date', s.shiftStart)
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        int activeVehicles =
-                (int) vehicleRepository.count();
+        Map<String, Integer> tripsByLocation = intMap(
+                entityManager.createQuery(
+                                """
+                                select coalesce(s.routeCategory, 'UNKNOWN'),
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                group by coalesce(s.routeCategory, 'UNKNOWN')
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        double avgTripsPerDriver =
-                activeDrivers == 0
-                        ? 0
-                        : (double) totalTrips / activeDrivers;
+        Map<String, Integer> driverTrips = intMap(
+                entityManager.createQuery(
+                                """
+                                select s.driver.name,
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                where s.driver is not null
+                                group by s.driver.name
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        double avgTripsPerVehicle =
-                activeVehicles == 0
-                        ? 0
-                        : (double) totalTrips / activeVehicles;
+        Map<String, Double> performance = doubleMap(
+                entityManager.createQuery(
+                                """
+                                select s.driver.name,
+                                       coalesce(avg(s.driverPerformance), 0)
+                                from LogisticsShift s
+                                where s.driver is not null
+                                group by s.driver.name
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        /*
-         * TRIPS OVER TIME
-         */
+        Map<String, Integer> vehicleUtilization = intMap(
+                entityManager.createQuery(
+                                """
+                                select s.vehicle.vehicleNumber,
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                where s.vehicle is not null
+                                group by s.vehicle.vehicleNumber
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        Map<String, Integer> tripsOverTime =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getShiftStart()
-                                        .toLocalDate()
-                                        .toString(),
+        Map<String, Double> overtime = doubleMap(
+                entityManager.createQuery(
+                                """
+                                select s.driver.name,
+                                       coalesce(sum(s.overtimeHours), 0)
+                                from LogisticsShift s
+                                where s.driver is not null
+                                group by s.driver.name
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-                                Collectors.summingInt(
-                                        s -> s.getTotalTrips() != null
-                                                ? s.getTotalTrips()
-                                                : 0
-                                )
-                        ));
+        Map<String, Integer> shiftPerformance = intMap(
+                entityManager.createQuery(
+                                """
+                                select coalesce(s.status, 'UNKNOWN'),
+                                       coalesce(sum(s.totalTrips), 0)
+                                from LogisticsShift s
+                                group by coalesce(s.status, 'UNKNOWN')
+                                """,
+                                Object[].class)
+                        .getResultList());
 
-        /*
-         * ROUTE ANALYTICS
-         */
-
-        Map<String, Integer> tripsByLocation =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                LogisticsShift::getRouteCategory,
-
-                                Collectors.summingInt(
-                                        s -> s.getTotalTrips() != null
-                                                ? s.getTotalTrips()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * DRIVER TRIPS
-         */
-
-        Map<String, Integer> driverTrips =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getDriver().getName(),
-
-                                Collectors.summingInt(
-                                        s -> s.getTotalTrips() != null
-                                                ? s.getTotalTrips()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * DRIVER PERFORMANCE
-         */
-
-        Map<String, Double> performance =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getDriver().getName(),
-
-                                Collectors.averagingDouble(
-                                        s -> s.getDriverPerformance() != null
-                                                ? s.getDriverPerformance()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * VEHICLE UTILIZATION
-         */
-
-        Map<String, Integer> vehicleUtilization =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getVehicle()
-                                        .getVehicleNumber(),
-
-                                Collectors.summingInt(
-                                        s -> s.getTotalTrips() != null
-                                                ? s.getTotalTrips()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * OVERTIME ANALYTICS
-         */
-
-        Map<String, Double> overtime =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getDriver().getName(),
-
-                                Collectors.summingDouble(
-                                        s -> s.getOvertimeHours() != null
-                                                ? s.getOvertimeHours()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * SHIFT PERFORMANCE
-         */
-
-        Map<String, Integer> shiftPerformance =
-                data.stream()
-                        .collect(Collectors.groupingBy(
-                                s -> s.getStatus() != null
-                                        ? s.getStatus()
-                                        : "UNKNOWN",
-
-                                Collectors.summingInt(
-                                        s -> s.getTotalTrips() != null
-                                                ? s.getTotalTrips()
-                                                : 0
-                                )
-                        ));
-
-        /*
-         * RESPONSE
-         */
+        DashboardResponse response = new DashboardResponse();
 
         response.setTotalTrips(totalTrips);
-
         response.setTotalLoaders(totalLoaders);
-
         response.setEfficiency(efficiency);
-
         response.setActiveDrivers(activeDrivers);
-
         response.setActiveVehicles(activeVehicles);
-
-        response.setAverageTripsPerDriver(
-                avgTripsPerDriver
-        );
-
-        response.setAverageTripsPerVehicle(
-                avgTripsPerVehicle
-        );
-
+        response.setAverageTripsPerDriver(avgTripsPerDriver);
+        response.setAverageTripsPerVehicle(avgTripsPerVehicle);
         response.setTripsOverTime(tripsOverTime);
-
         response.setTripsByLocation(tripsByLocation);
-
         response.setDriverTrips(driverTrips);
-
         response.setDriverPerformance(performance);
-
         response.setVehicleUtilization(vehicleUtilization);
-
         response.setOvertimeAnalytics(overtime);
-
         response.setShiftPerformance(shiftPerformance);
 
         return response;
+    }
+
+    private Map<String, Integer> intMap(
+            List<Object[]> rows) {
+
+        Map<String, Integer> result = new LinkedHashMap<>();
+
+        if (rows == null) {
+            return result;
+        }
+
+        for (Object[] row : rows) {
+            if (row == null || row.length < 2 || row[0] == null) {
+                continue;
+            }
+
+            result.put(
+                    String.valueOf(row[0]),
+                    safeInt(row[1]));
+        }
+
+        return result;
+    }
+
+    private Map<String, Double> doubleMap(
+            List<Object[]> rows) {
+
+        Map<String, Double> result = new LinkedHashMap<>();
+
+        if (rows == null) {
+            return result;
+        }
+
+        for (Object[] row : rows) {
+            if (row == null || row.length < 2 || row[0] == null) {
+                continue;
+            }
+
+            result.put(
+                    String.valueOf(row[0]),
+                    safeDouble(row[1]));
+        }
+
+        return result;
+    }
+
+    private int safeInt(
+            Object value) {
+
+        if (!(value instanceof Number number)) {
+            return 0;
+        }
+
+        long longValue = number.longValue();
+
+        if (longValue > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+
+        if (longValue < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+
+        return (int) longValue;
+    }
+
+    private double safeDouble(
+            Object value) {
+
+        if (!(value instanceof Number number)) {
+            return 0D;
+        }
+
+        double result = number.doubleValue();
+
+        return Double.isFinite(result)
+                ? result
+                : 0D;
     }
 }

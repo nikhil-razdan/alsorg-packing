@@ -29,16 +29,20 @@ import com.alsorg.packing.assetflow.AssetFlowData.WorkType;
 import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.PlantLocationService;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
+
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -64,12 +68,18 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class AssetFlowService {
+
+    private static final int MAX_WORK_ORDER_PAGE_SIZE = 200;
+    private static final int MAX_REPORTER_DIRECTORY_ROWS = 2000;
+    private static final int MAX_EQUIPMENT_ROWS = 5000;
+    private static final int MAX_TEAM_ROWS = 1000;
+    private static final int MAX_PLAN_ROWS = 5000;
+    private static final int MAX_USER_DIRECTORY_ROWS = 5000;
 
     private static final Set<WorkStatus> TERMINAL = EnumSet.of(
             WorkStatus.CLOSED,
@@ -124,8 +134,7 @@ public class AssetFlowService {
 
         List<WorkOrder> openOrders = em.createQuery(
                         "select w from AssetFlowWorkOrder w where w.status not in :terminal and w.plantCode in :plants order by w.createdAt desc",
-                        WorkOrder.class
-                )
+                        WorkOrder.class)
                 .setParameter("terminal", TERMINAL)
                 .setParameter("plants", scope)
                 .getResultList()
@@ -291,7 +300,7 @@ public class AssetFlowService {
         Set<String> scope = readPlantScope(plantCode);
         Set<ServiceDomain> domainScope = readDomainScope(current, serviceDomain);
         int safePage = Math.max(0, page);
-        int safeSize = Math.min(Math.max(size, 1), 1000);
+        int safeSize = Math.min(Math.max(size, 1), MAX_WORK_ORDER_PAGE_SIZE);
 
         boolean technicianOnly = !currentUserService.isAdmin(current)
                 && !isDirector(current)
@@ -515,17 +524,8 @@ public class AssetFlowService {
         return workOrderDetail(w);
     }
 
-
     /* =============================== REQUEST GATEWAY =============================== */
 
-    /**
-     * Controlled request context for an authenticated FlowSuite user.
-     *
-     * A normal FlowSuite account is NOT automatically a AssetFlow complainant.
-     * The employee must either be an operational AssetFlow user or have a
-     * AssetFlow Reporter record linked to the same FlowSuite username. This is
-     * what prevents every application user from posting arbitrary requests.
-     */
     public Map<String, Object> requesterContext() {
         User current = currentUserService.requireCurrentUser();
         RequestPermission permission = authenticatedRequestPermission(current);
@@ -603,9 +603,7 @@ public class AssetFlowService {
             require(permission.plants().contains(normalizePlant(equipment.plantCode)), "This asset belongs to another plant");
             require(permission.domains().contains(domainOf(equipment)), "This asset belongs to another service department");
         }
-        if (tokenTeam != null) {
-            validateRequestRoute(tokenTeam, plant, domain);
-        }
+        if (tokenTeam != null) validateRequestRoute(tokenTeam, plant, domain);
 
         Team route = tokenTeam != null
                 ? tokenTeam
@@ -644,17 +642,12 @@ public class AssetFlowService {
         return workOrderDetail(w);
     }
 
-    /** Public QR/desk context deliberately contains no internal/user-sensitive data. */
     public Map<String, Object> publicContext(UUID equipmentToken, UUID serviceDeskToken) {
         Equipment equipment = equipmentToken == null ? null : requireEquipmentByQr(equipmentToken);
         Team team = serviceDeskToken == null ? null : resolveServiceDeskToken(serviceDeskToken, true);
 
-        if (equipment != null) {
-            require(equipment.qrEnabled, "QR reporting is disabled for this asset");
-        }
-        if (team != null) {
-            require(team.active && team.publicReportingEnabled, "This service-desk request link is disabled");
-        }
+        if (equipment != null) require(equipment.qrEnabled, "QR reporting is disabled for this asset");
+        if (team != null) require(team.active && team.publicReportingEnabled, "This service-desk request link is disabled");
 
         Map<String, Object> asset = equipment == null ? null : map(
                 "id", equipment.id,
@@ -745,8 +738,8 @@ public class AssetFlowService {
         String plant = equipment != null
                 ? normalizePlant(equipment.plantCode)
                 : tokenTeam != null && notBlank(tokenTeam.plantCode)
-                    ? normalizePlant(tokenTeam.plantCode)
-                    : normalizePlant(request.plantCode());
+                ? normalizePlant(tokenTeam.plantCode)
+                : normalizePlant(request.plantCode());
         if (!notBlank(plant) && allowedPlants.size() == 1) plant = allowedPlants.iterator().next();
         require(notBlank(plant), "Select the plant for this request");
         require(allowedPlants.contains(plant), "Your Reporter Pass is not permitted for plant " + plant);
@@ -900,7 +893,9 @@ public class AssetFlowService {
         }
         jpql.append(" order by r.active desc, r.displayName");
         TypedQuery<Reporter> query = em.createQuery(jpql.toString(), Reporter.class);
-        if (notBlank(search)) query.setParameter("search", "%" + clean(search).toLowerCase(Locale.ROOT) + "%");
+        if (notBlank(search)) query.setParameter("search", "%" + boundedSearch(search) + "%");
+        query.setMaxResults(MAX_REPORTER_DIRECTORY_ROWS);
+
         return query.getResultList().stream()
                 .filter(r -> reporterPlants(r).stream().anyMatch(scope::contains))
                 .map(this::reporterAdminView)
@@ -1020,7 +1015,8 @@ public class AssetFlowService {
                 require(domainOf(currentEquipment) == request.serviceDomain(),
                         "Asset service domain cannot be changed from the work order");
             }
-            require(readDomainScope(current, request.serviceDomain()).contains(request.serviceDomain()), "You cannot move work into another maintenance department");
+            require(readDomainScope(current, request.serviceDomain()).contains(request.serviceDomain()),
+                    "You cannot move work into another maintenance department");
             w.serviceDomain = request.serviceDomain();
         }
         if (request.requestCategory() != null) w.requestCategory = clean(request.requestCategory());
@@ -1181,7 +1177,8 @@ public class AssetFlowService {
         }
 
         if (from == WorkStatus.CLOSED && to == WorkStatus.IN_PROGRESS) {
-            require(currentUserService.isAdmin(current) || canCoordinate(current, domainOf(w)), "Only the department head/admin can reopen a closed job");
+            require(currentUserService.isAdmin(current) || canCoordinate(current, domainOf(w)),
+                    "Only the department head/admin can reopen a closed job");
             w.closedAt = null;
             w.repairedAt = null;
         }
@@ -1380,6 +1377,7 @@ public class AssetFlowService {
                         Team.class)
                 .setParameter("plants", scope)
                 .setParameter("domains", domains)
+                .setMaxResults(MAX_TEAM_ROWS)
                 .getResultList()
                 .stream()
                 .map(this::teamView)
@@ -1415,14 +1413,10 @@ public class AssetFlowService {
         }
 
         String lead = blankToNull(request.lead());
-        if (lead != null) {
-            validateHeadTechnician(lead, targetPlant, requestedDomain);
-        }
+        if (lead != null) validateHeadTechnician(lead, targetPlant, requestedDomain);
 
         List<String> members = splitMembers(request.membersText());
-        for (String member : members) {
-            validateAssignableUser(member, targetPlant, requestedDomain, false);
-        }
+        for (String member : members) validateAssignableUser(member, targetPlant, requestedDomain, false);
         if (lead != null && !members.stream().anyMatch(m -> m.equalsIgnoreCase(lead))) {
             members = new ArrayList<>(members);
             members.add(0, lead);
@@ -1529,10 +1523,6 @@ public class AssetFlowService {
         return planView(p);
     }
 
-    /**
-     * Manual generation is constrained to the signed-in user's plants and department scope.
-     * The scheduled run is system-wide and does not depend on a SecurityContext.
-     */
     public int generateDuePreventiveOrders(ServiceDomain serviceDomain) {
         User current = currentUserService.requireCurrentUser();
         Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
@@ -1540,7 +1530,7 @@ public class AssetFlowService {
         return generateDuePreventiveOrdersForPlants(readPlantScope(null), domains, current.getUsername());
     }
 
-    @Scheduled(cron = "0 10 1 * * *")
+    @Scheduled(cron = "0 10 1 * * *", zone = "${app.time-zone:Asia/Kolkata}")
     public void generateDuePreventiveOrdersScheduled() {
         generateDuePreventiveOrdersForPlants(null, Set.of(ServiceDomain.MACHINE, ServiceDomain.IT), "SYSTEM");
     }
@@ -1558,7 +1548,8 @@ public class AssetFlowService {
 
         TypedQuery<PreventivePlan> query = em.createQuery(jpql.toString(), PreventivePlan.class)
                 .setParameter("cutoff", today.plusDays(30))
-                .setParameter("domains", allowedDomains);
+                .setParameter("domains", allowedDomains)
+                .setMaxResults(MAX_PLAN_ROWS);
         if (allowedPlants != null) query.setParameter("plants", allowedPlants);
         List<PreventivePlan> plans = query.getResultList();
 
@@ -1633,6 +1624,7 @@ public class AssetFlowService {
         LocalDate start = from == null ? LocalDate.now().with(java.time.DayOfWeek.MONDAY) : from;
         LocalDate end = to == null ? start.plusDays(13) : to;
         require(!end.isBefore(start), "Calendar end date cannot be before start date");
+        require(ChronoUnit.DAYS.between(start, end) <= 366, "Calendar range cannot exceed 366 days");
         LocalDateTime startAt = start.atStartOfDay();
         LocalDateTime endAt = end.plusDays(1).atStartOfDay();
 
@@ -1644,6 +1636,7 @@ public class AssetFlowService {
                 .setParameter("to", endAt)
                 .setParameter("plants", scope)
                 .setParameter("domains", domains)
+                .setMaxResults(10000)
                 .getResultList()
                 .stream()
                 .filter(w -> canReadOrder(current, w))
@@ -1699,6 +1692,7 @@ public class AssetFlowService {
         LocalDate start = from == null ? LocalDate.now().minusMonths(6).withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
         require(!end.isBefore(start), "Report end date cannot be before start date");
+        require(ChronoUnit.DAYS.between(start, end) <= 1096, "Report range cannot exceed 3 years");
         LocalDateTime fromAt = start.atStartOfDay();
         LocalDateTime toAt = end.plusDays(1).atStartOfDay();
 
@@ -1832,6 +1826,7 @@ public class AssetFlowService {
                         String.class)
                 .setParameter("plants", scope)
                 .setParameter("domains", domains)
+                .setMaxResults(1000)
                 .getResultList();
         return names.stream().map(n -> map("name", n)).toList();
     }
@@ -1855,7 +1850,11 @@ public class AssetFlowService {
         Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
         boolean currentIsAdmin = currentUserService.isAdmin(current);
 
-        return userRepository.findAll(Sort.by(Sort.Direction.ASC, "username"))
+        return userRepository.findAll(PageRequest.of(
+                        0,
+                        MAX_USER_DIRECTORY_ROWS,
+                        Sort.by(Sort.Direction.ASC, "username")))
+                .getContent()
                 .stream()
                 .filter(User::isEnabled)
                 .filter(this::isAssetFlowOperationalUser)
@@ -1869,17 +1868,18 @@ public class AssetFlowService {
                         "id", user.getUsername(),
                         "username", user.getUsername(),
                         "displayName", user.getUsername(),
-                        "roles", user.getEffectiveRoles().stream()
-                                .filter(Objects::nonNull)
-                                .map(String::trim)
-                                .sorted()
-                                .toList(),
+                        "roles", user.getEffectiveRoles() == null
+                                ? List.of()
+                                : user.getEffectiveRoles().stream()
+                                        .filter(Objects::nonNull)
+                                        .map(String::trim)
+                                        .sorted()
+                                        .toList(),
                         "plantCodes", safePlants(user).stream().sorted().toList(),
-                        "domains", ServiceDomain.values().length == 0 ? List.of() :
-                                java.util.Arrays.stream(ServiceDomain.values())
-                                        .filter(d -> hasDomainReadAccess(user, d))
-                                        .map(Enum::name)
-                                        .toList()
+                        "domains", java.util.Arrays.stream(ServiceDomain.values())
+                                .filter(d -> hasDomainReadAccess(user, d))
+                                .map(Enum::name)
+                                .toList()
                 ))
                 .toList();
     }
@@ -1934,11 +1934,11 @@ public class AssetFlowService {
                     + "or lower(coalesce(w.equipmentName,'')) like :search "
                     + "or lower(coalesce(w.equipmentCode,'')) like :search "
                     + "or lower(coalesce(w.requestedBy,'')) like :search) ");
-            params.put("search", "%" + clean(search).toLowerCase(Locale.ROOT) + "%");
+            params.put("search", "%" + boundedSearch(search) + "%");
         }
 
         TypedQuery<WorkOrder> query = em.createQuery(
-                "select w from AssetFlowWorkOrder w" + where + " order by w.createdAt desc",
+                "select w from AssetFlowWorkOrder w" + where + " order by w.createdAt desc, w.id desc",
                 WorkOrder.class);
         TypedQuery<Long> count = em.createQuery(
                 "select count(w) from AssetFlowWorkOrder w" + where,
@@ -1980,11 +1980,12 @@ public class AssetFlowService {
                     + "or lower(coalesce(e.category,'')) like :q "
                     + "or lower(coalesce(e.hostname,'')) like :q "
                     + "or lower(coalesce(e.assignedToName,'')) like :q)");
-            params.put("q", "%" + clean(search).toLowerCase(Locale.ROOT) + "%");
+            params.put("q", "%" + boundedSearch(search) + "%");
         }
-        jpql.append(" order by e.name");
+        jpql.append(" order by e.name, e.id");
         TypedQuery<Equipment> query = em.createQuery(jpql.toString(), Equipment.class);
         params.forEach(query::setParameter);
+        query.setMaxResults(MAX_EQUIPMENT_ROWS);
         return query.getResultList();
     }
 
@@ -2004,6 +2005,7 @@ public class AssetFlowService {
         jpql.append(" order by p.nextDueDate, p.equipmentName");
         return em.createQuery(jpql.toString(), PreventivePlan.class)
                 .setParameter("plants", plants)
+                .setMaxResults(MAX_PLAN_ROWS)
                 .getResultList();
     }
 
@@ -2024,6 +2026,7 @@ public class AssetFlowService {
                 .setParameter("from", from)
                 .setParameter("to", to)
                 .setParameter("plants", plants)
+                .setMaxResults(50000)
                 .getResultList();
     }
 
@@ -2032,7 +2035,7 @@ public class AssetFlowService {
                         "select w from AssetFlowWorkOrder w where w.equipmentId=:id order by w.createdAt desc",
                         WorkOrder.class)
                 .setParameter("id", equipmentId)
-                .setMaxResults(limit)
+                .setMaxResults(Math.max(1, Math.min(limit, 100)))
                 .getResultList();
     }
 
@@ -2056,13 +2059,19 @@ public class AssetFlowService {
     /* =============================== DOMAIN HELPERS =============================== */
 
     private WorkOrder requireOrder(UUID id, boolean lock) {
-        WorkOrder w = lock ? em.find(WorkOrder.class, id, LockModeType.PESSIMISTIC_WRITE) : em.find(WorkOrder.class, id);
+        require(id != null, "Work order ID is required");
+        WorkOrder w = lock
+                ? em.find(WorkOrder.class, id, LockModeType.PESSIMISTIC_WRITE)
+                : em.find(WorkOrder.class, id);
         if (w == null) throw notFound("Work order not found");
         return w;
     }
 
     private Equipment requireEquipment(UUID id, boolean lock) {
-        Equipment e = lock ? em.find(Equipment.class, id, LockModeType.PESSIMISTIC_WRITE) : em.find(Equipment.class, id);
+        require(id != null, "Equipment ID is required");
+        Equipment e = lock
+                ? em.find(Equipment.class, id, LockModeType.PESSIMISTIC_WRITE)
+                : em.find(Equipment.class, id);
         if (e == null) throw notFound("Equipment not found");
         return e;
     }
@@ -2145,6 +2154,7 @@ public class AssetFlowService {
                 .map(String::trim)
                 .filter(AssetFlowService::notBlank)
                 .distinct()
+                .limit(200)
                 .toList();
     }
 
@@ -2248,8 +2258,6 @@ public class AssetFlowService {
         if (w.preventivePlanId == null || w.workType != WorkType.PREVENTIVE) return;
         PreventivePlan p = em.find(PreventivePlan.class, w.preventivePlanId, LockModeType.PESSIMISTIC_WRITE);
         if (p == null || !p.active) return;
-        // The scheduler advances nextDueDate at generation time. This method intentionally
-        // only refreshes equipment next-maintenance information after completion.
         updateEquipmentNextMaintenance(w.equipmentId);
     }
 
@@ -2260,10 +2268,10 @@ public class AssetFlowService {
 
         List<WorkOrder> active = em.createQuery(
                         "select w from AssetFlowWorkOrder w where w.equipmentId=:id and w.status not in :terminal order by w.createdAt desc",
-                        WorkOrder.class
-                )
+                        WorkOrder.class)
                 .setParameter("id", equipmentId)
                 .setParameter("terminal", TERMINAL)
+                .setMaxResults(10000)
                 .getResultList();
 
         boolean stopped = active.stream().anyMatch(w -> w.productionStopped && (
@@ -2285,8 +2293,7 @@ public class AssetFlowService {
         if (e == null) return;
         List<LocalDate> dates = em.createQuery(
                         "select p.nextDueDate from AssetFlowPreventivePlan p where p.equipmentId=:id and p.active=true order by p.nextDueDate",
-                        LocalDate.class
-                )
+                        LocalDate.class)
                 .setParameter("id", equipmentId)
                 .setMaxResults(1)
                 .getResultList();
@@ -2296,10 +2303,10 @@ public class AssetFlowService {
     private Map<String, Object> equipmentHealth(Equipment e) {
         List<WorkOrder> recent = em.createQuery(
                         "select w from AssetFlowWorkOrder w where w.equipmentId=:id and w.createdAt>=:from order by w.createdAt desc",
-                        WorkOrder.class
-                )
+                        WorkOrder.class)
                 .setParameter("id", e.id)
                 .setParameter("from", LocalDateTime.now().minusDays(90))
+                .setMaxResults(10000)
                 .getResultList();
         long open = recent.stream().filter(w -> !TERMINAL.contains(w.status)).count();
         long failures30 = recent.stream().filter(w -> w.breakdown && !w.createdAt.isBefore(LocalDateTime.now().minusDays(30))).count();
@@ -2346,13 +2353,13 @@ public class AssetFlowService {
 
     private void audit(String entityType, UUID entityId, String action, String from, String to, String actor, String note) {
         AuditEvent event = new AuditEvent();
-        event.entityType = entityType;
+        event.entityType = truncate(entityType, 60);
         event.entityId = entityId;
-        event.action = action;
-        event.fromStatus = from;
-        event.toStatus = to;
-        event.actor = actor;
-        event.note = note;
+        event.action = truncate(action, 100);
+        event.fromStatus = truncate(from, 60);
+        event.toStatus = truncate(to, 60);
+        event.actor = truncate(actor, 180);
+        event.note = truncate(note, 30000);
         event.createdAt = LocalDateTime.now();
         em.persist(event);
     }
@@ -2360,8 +2367,7 @@ public class AssetFlowService {
     private List<Map<String, Object>> listAudit(String entityType, UUID entityId) {
         return em.createQuery(
                         "select a from AssetFlowAuditEvent a where a.entityType=:type and a.entityId=:id order by a.createdAt desc",
-                        AuditEvent.class
-                )
+                        AuditEvent.class)
                 .setParameter("type", entityType)
                 .setParameter("id", entityId)
                 .setMaxResults(100)
@@ -2547,7 +2553,6 @@ public class AssetFlowService {
         );
     }
 
-
     /* =============================== REQUEST / REPORTER HELPERS =============================== */
 
     private Equipment resolveRequestEquipment(UUID equipmentId, UUID equipmentToken) {
@@ -2592,8 +2597,6 @@ public class AssetFlowService {
         if (!explicit.isEmpty()) {
             require(explicit.contains(plant), "You cannot raise a request for plant " + plant);
         }
-        // FlowSuite users without plant-scoped operational roles remain known/authenticated
-        // employees and may raise their own service request for a valid company plant.
     }
 
     private Priority normalizeRequestPriority(Priority requested, Boolean productionStopped, Boolean safetyRisk, boolean coordinator) {
@@ -2607,6 +2610,8 @@ public class AssetFlowService {
     private Reporter authenticateReporter(String reporterCode, String pin) {
         require(notBlank(reporterCode), "Reporter Code / Employee Code is required");
         require(notBlank(pin), "Reporter PIN is required");
+        validateReporterPin(pin);
+
         List<Reporter> rows = em.createQuery(
                         "select r from AssetFlowReporter r where lower(r.reporterCode)=:code",
                         Reporter.class)
@@ -2625,8 +2630,6 @@ public class AssetFlowService {
 
         boolean matches = r.pinHash != null && passwordEncoder.matches(pin.trim(), r.pinHash);
         if (!matches) {
-            // Record the failure in an independent transaction before returning 403.
-            // Otherwise the enclosing request transaction would roll this state back.
             reporterAuthStateService.recordFailure(r.id, now);
             throw forbidden("Invalid Reporter Code or PIN");
         }
@@ -2651,7 +2654,7 @@ public class AssetFlowService {
                 ServiceDomain domain = ServiceDomain.valueOf(token.trim().toUpperCase(Locale.ROOT));
                 out.add(domain);
             } catch (Exception ignored) {
-                // Ignore legacy values (ELECTRICAL/FACILITY/etc.) after upgrade.
+                // Ignore legacy values after domain consolidation.
             }
         }
         return out.isEmpty() ? Set.of(ServiceDomain.MACHINE) : Set.copyOf(out);
@@ -2708,6 +2711,7 @@ public class AssetFlowService {
                                 + "and (t.plantCode is null or t.plantCode in :plants) order by t.plantCode, t.name",
                         Team.class)
                 .setParameter("plants", plants)
+                .setMaxResults(MAX_TEAM_ROWS)
                 .getResultList();
         return teams.stream()
                 .filter(t -> allowedDomains == null || allowedDomains.contains(domainOf(t)))
@@ -2763,6 +2767,7 @@ public class AssetFlowService {
                 .map(String::trim)
                 .filter(AssetFlowService::notBlank)
                 .distinct()
+                .limit(100)
                 .toList();
     }
 
@@ -2873,11 +2878,6 @@ public class AssetFlowService {
         return canCoordinate(user, domain);
     }
 
-    /**
-     * Editing an existing asset master is intentionally narrower than general
-     * maintenance coordination. ADMIN and the owning department Head may edit;
-     * legacy Manager/Planner coordination roles do not receive asset-update rights.
-     */
     private boolean canEditAssetMaster(User user, ServiceDomain domain) {
         if (user == null || domain == null) return false;
         if (currentUserService.isAdmin(user)) return true;
@@ -2965,7 +2965,7 @@ public class AssetFlowService {
 
         Reporter reporter = findLinkedReporter(user.getUsername());
         if (reporter == null) {
-            throw forbidden("Maintenance request access is not assigned. Ask Admin to link your FlowSuite username to a AssetFlow Reporter profile.");
+            throw forbidden("Maintenance request access is not assigned. Ask Admin to link your FlowSuite username to an AssetFlow Reporter profile.");
         }
         return new RequestPermission(reporter, reporterPlants(reporter), reporterDomains(reporter));
     }
@@ -3008,8 +3008,9 @@ public class AssetFlowService {
     }
 
     private Set<WorkStatus> allowedTransitionsFor(User user, WorkOrder w) {
+        if (w == null) return Set.of();
         Set<WorkStatus> base = TRANSITIONS.getOrDefault(w.status, Set.of());
-        if (base.isEmpty() || user == null || w == null || isDirector(user)) return Set.of();
+        if (base.isEmpty() || user == null || isDirector(user)) return Set.of();
 
         ServiceDomain domain = domainOf(w);
         LinkedHashSet<WorkStatus> allowed = new LinkedHashSet<>();
@@ -3093,7 +3094,9 @@ public class AssetFlowService {
     private Integer resolvedActualMinutes(WorkOrder w) {
         if (w.actualMinutes != null) return w.actualMinutes;
         LocalDateTime end = w.repairedAt != null ? w.repairedAt : w.closedAt;
-        if (w.startedAt != null && end != null) return Math.toIntExact(Math.max(0, Duration.between(w.startedAt, end).toMinutes()));
+        if (w.startedAt != null && end != null) {
+            return Math.toIntExact(Math.max(0, Duration.between(w.startedAt, end).toMinutes()));
+        }
         return null;
     }
 
@@ -3102,7 +3105,9 @@ public class AssetFlowService {
     }
 
     private BigDecimal money(BigDecimal value) {
-        return (value == null ? BigDecimal.ZERO : value).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        return (value == null ? BigDecimal.ZERO : value)
+                .max(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private Integer nonNegative(Integer value, String field) {
@@ -3111,14 +3116,45 @@ public class AssetFlowService {
         return value;
     }
 
+    /**
+     * Mutating existing records must carry the version returned by the API.
+     * This closes the old null-version bypass while retaining JPA @Version.
+     */
     private void checkVersion(long current, Long supplied) {
-        if (supplied != null && supplied != current) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This record changed after you opened it. Refresh and retry.");
+        if (supplied == null) {
+            throw badRequest("Record version is required. Refresh and retry.");
+        }
+        if (supplied < 0) {
+            throw badRequest("Record version is invalid.");
+        }
+        if (supplied != current) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This record changed after you opened it. Refresh and retry.");
         }
     }
 
     private String actor(Authentication auth) {
-        return auth == null || !notBlank(auth.getName()) ? "SYSTEM" : auth.getName();
+        if (auth == null
+                || !auth.isAuthenticated()
+                || auth instanceof AnonymousAuthenticationToken
+                || !notBlank(auth.getName())
+                || "anonymousUser".equalsIgnoreCase(auth.getName())) {
+            return "SYSTEM";
+        }
+        return truncate(auth.getName().trim(), 180);
+    }
+
+    private String boundedSearch(String value) {
+        String cleaned = clean(value);
+        if (cleaned == null) return "";
+        if (cleaned.length() > 200) throw badRequest("Search text is too long");
+        return cleaned.toLowerCase(Locale.ROOT);
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     private static String clean(String value) {

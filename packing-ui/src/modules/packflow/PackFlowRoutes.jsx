@@ -9,11 +9,11 @@ import Dashboard from "../../pages/Dashboard";
 import WarehousePage from "../../pages/WarehousePage";
 import DispatchedItemsPage from "../../pages/DispatchedItemsPage";
 import LogisticsPortalPage from "../../pages/LogisticsPortalPage";
-import UsersPage from "../../pages/UsersPage";
 import ZohoItemsPage from "../../pages/ZohoItemsPage";
 
 import RequireRole from "../../auth/RequireRole";
 import RequireWarehouseAccess from "../../auth/RequireWarehouseAccess";
+import { useAuth } from "../../auth/AuthContext";
 
 const dispatchElement = (
   <RequireRole
@@ -28,12 +28,92 @@ const dispatchElement = (
   </RequireRole>
 );
 
+function PackFlowDefaultRedirect() {
+  const {
+    hasRole,
+    hasAnyRole,
+    authLoading,
+  } = useAuth();
+
+  if (authLoading) {
+    return null;
+  }
+
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
+
+  return (
+    <Navigate
+      to={
+        isHardwareOnly
+          ? "/packflow/zoho-items"
+          : "/packflow/dashboard"
+      }
+      replace
+    />
+  );
+}
+
+function PackFlowDashboardAccess({
+  children,
+}) {
+  const {
+    hasRole,
+    hasAnyRole,
+    authLoading,
+  } = useAuth();
+
+  if (authLoading) {
+    return null;
+  }
+
+  const isHardwareOnly =
+    hasRole("HARDWARE_PACKING") &&
+    !hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "WAREHOUSE",
+      "DISPATCH",
+      "LOGISTICS"
+    );
+
+  if (isHardwareOnly) {
+    return (
+      <Navigate
+        to="/packflow/zoho-items"
+        replace
+      />
+    );
+  }
+
+  return children;
+}
+
+/**
+ * PackFlow route compatibility module.
+ *
+ * App.jsx currently hosts the primary /packflow route tree. This module is
+ * retained because older builds/imports may still mount PackFlowRoutes
+ * directly. Keep its access rules aligned with the primary route tree so an
+ * older route registration cannot silently bypass the current guards.
+ */
 export default function PackFlowRoutes() {
   return (
     <Routes>
       <Route
         path="dashboard"
-        element={<Dashboard />}
+        element={
+          <PackFlowDashboardAccess>
+            <Dashboard />
+          </PackFlowDashboardAccess>
+        }
       />
 
       <Route
@@ -45,19 +125,14 @@ export default function PackFlowRoutes() {
         }
       />
 
-      {/*
-       * Current Sidebar path.
-       * Multi-role HARDWARE_PACKING + DISPATCH users pass because
-       * RequireRole checks the complete effective role list.
-       */}
       <Route
         path="dispatched-items"
         element={dispatchElement}
       />
 
       {/*
-       * Legacy compatibility path.  Keep it so old bookmarks and
-       * older links do not break.
+       * Legacy compatibility path. Keep existing bookmarks working while the
+       * same role guard is applied as /dispatched-items.
        */}
       <Route
         path="dispatch"
@@ -78,21 +153,23 @@ export default function PackFlowRoutes() {
         }
       />
 
+      {/*
+       * User Management is a top-level FlowSuite route. Redirect instead of
+       * rendering it inside a nested PackFlow shell.
+       */}
       <Route
         path="users"
         element={
-          <RequireRole allowed={["ADMIN"]}>
-            <UsersPage />
-          </RequireRole>
+          <Navigate
+            to="/users"
+            replace
+          />
         }
       />
 
-
       {/*
-       * Legacy compatibility only.
-       * Client Master is shared FlowSuite master data and is hosted by the
-       * already-existing /modules route, not inside PackFlow.  Keeping this
-       * redirect means old bookmarks still land on the correct module.
+       * Client Master is shared FlowSuite master data and is hosted by
+       * /modules. Keep the legacy PackFlow URL only as a redirect.
        */}
       <Route
         path="client-master"
@@ -106,27 +183,27 @@ export default function PackFlowRoutes() {
 
       <Route
         path="zoho-items"
-        element={<ZohoItemsPage />}
+        element={
+          <RequireRole
+            allowed={[
+              "ADMIN",
+              "PACKING",
+              "HARDWARE_PACKING",
+            ]}
+          >
+            <ZohoItemsPage />
+          </RequireRole>
+        }
       />
 
       <Route
-        path=""
-        element={
-          <Navigate
-            to="dashboard"
-            replace
-          />
-        }
+        index
+        element={<PackFlowDefaultRedirect />}
       />
 
       <Route
         path="*"
-        element={
-          <Navigate
-            to="dashboard"
-            replace
-          />
-        }
+        element={<PackFlowDefaultRedirect />}
       />
     </Routes>
   );

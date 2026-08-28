@@ -10,18 +10,11 @@ import java.util.UUID;
 @Table(
         name = "bom_flow_boms",
         indexes = {
-                @Index(
-                        name = "idx_bom_flow_product_name",
-                        columnList = "product_name"),
-                @Index(
-                        name = "idx_bom_flow_product_project",
-                        columnList = "project_code"),
-                @Index(
-                        name = "idx_bom_flow_product_category",
-                        columnList = "product_category"),
-                @Index(
-                        name = "idx_bom_flow_status",
-                        columnList = "status")
+                @Index(name = "idx_bom_flow_product_name", columnList = "product_name"),
+                @Index(name = "idx_bom_flow_product_project", columnList = "project_code"),
+                @Index(name = "idx_bom_flow_product_category", columnList = "product_category"),
+                @Index(name = "idx_bom_flow_status", columnList = "status"),
+                @Index(name = "idx_bom_flow_updated", columnList = "updated_at")
         })
 public class BomFlowProduct {
 
@@ -66,8 +59,6 @@ public class BomFlowProduct {
     @Column(name = "status", nullable = false, length = 50)
     public BomFlowProductStatus status = BomFlowProductStatus.DRAFT;
 
-    /* ================= PRODUCT IMAGE ================= */
-
     @Column(name = "product_image_original_name", length = 500)
     public String productImageOriginalName;
 
@@ -88,8 +79,6 @@ public class BomFlowProduct {
 
     @Column(name = "product_image_uploaded_at")
     public LocalDateTime productImageUploadedAt;
-
-    /* ================= DRAWING FILE ================= */
 
     @Column(name = "drawing_file_original_name", length = 500)
     public String drawingFileOriginalName;
@@ -130,43 +119,16 @@ public class BomFlowProduct {
 
     @PrePersist
     void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
+        if (id == null) id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-
-        if (createdAt == null) {
-            createdAt = now;
-        }
-
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-
-        if (status == null) {
-            status = BomFlowProductStatus.DRAFT;
-        }
-
-        if (currentRevisionNo == null) {
-            currentRevisionNo = 0;
-        }
-
-        if (category == null || category.isBlank()) {
-            category = "MISCELLANEOUS";
-        }
-
-        if (length == null) {
-            length = BigDecimal.ZERO;
-        }
-
-        if (width == null) {
-            width = BigDecimal.ZERO;
-        }
-
-        if (height == null) {
-            height = BigDecimal.ZERO;
-        }
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+        if (status == null) status = BomFlowProductStatus.DRAFT;
+        if (currentRevisionNo == null) currentRevisionNo = 0;
+        if (category == null || category.isBlank()) category = "MISCELLANEOUS";
+        if (length == null) length = BigDecimal.ZERO;
+        if (width == null) width = BigDecimal.ZERO;
+        if (height == null) height = BigDecimal.ZERO;
     }
 
     @PreUpdate

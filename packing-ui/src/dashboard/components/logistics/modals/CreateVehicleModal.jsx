@@ -24,6 +24,10 @@ import {
   getBackendMessage,
 } from "../logisticsAlertUtils";
 
+import {
+  parseVehicleDate,
+} from "../vehicleComplianceUtils";
+
 const emptyVehicleForm = {
   vehicleNumber: "",
   vehicleType: "",
@@ -104,34 +108,13 @@ const technicalFields = [
 ];
 
 const validityFields = [
-  {
-    key: "registrationDate",
-    label: "Registration Date",
-  },
-  {
-    key: "fitnessValidUpto",
-    label: "Fitness Valid Upto",
-  },
-  {
-    key: "insuranceValidUpto",
-    label: "Insurance Valid Upto",
-  },
-  {
-    key: "taxValidUpto",
-    label: "Tax Valid Upto",
-  },
-  {
-    key: "permitValidUpto",
-    label: "Permit Valid Upto",
-  },
-  {
-    key: "puccValidUpto",
-    label: "PUCC Valid Upto",
-  },
-  {
-    key: "nationalPermitValidUpto",
-    label: "National Permit Valid Upto",
-  },
+  { key: "registrationDate", label: "Registration Date" },
+  { key: "fitnessValidUpto", label: "Fitness Valid Upto" },
+  { key: "insuranceValidUpto", label: "Insurance Valid Upto" },
+  { key: "taxValidUpto", label: "Tax Valid Upto" },
+  { key: "permitValidUpto", label: "Permit Valid Upto" },
+  { key: "puccValidUpto", label: "PUCC Valid Upto" },
+  { key: "nationalPermitValidUpto", label: "National Permit Valid Upto" },
 ];
 
 const statusOptions = [
@@ -146,7 +129,7 @@ function CreateVehicleModal({
   open,
   onClose,
   onCreated,
-  showAlert = () => { },
+  showAlert = () => {},
   initialData = null,
 }) {
   const isEdit = Boolean(initialData?.id);
@@ -192,29 +175,27 @@ function CreateVehicleModal({
     }));
   };
 
-  const buildPayload = () => {
-    return {
-      ...form,
-      vehicleNumber: form.vehicleNumber?.trim(),
-      vehicleType: form.vehicleType?.trim(),
-      driverName: form.driverName?.trim(),
-      ownerName: form.ownerName?.trim(),
-      registeringAuthority: form.registeringAuthority?.trim(),
-      vehicleClass: form.vehicleClass?.trim(),
-      fuelType: form.fuelType?.trim(),
-      fuelCapacity: form.fuelCapacity?.trim(),
-      emissionNorm: form.emissionNorm?.trim(),
-      vehicleAge: form.vehicleAge?.trim(),
-      status: form.status || "Active",
-      registrationDate: toBackendDate(form.registrationDate),
-      fitnessValidUpto: toBackendDate(form.fitnessValidUpto),
-      insuranceValidUpto: toBackendDate(form.insuranceValidUpto),
-      taxValidUpto: toBackendDate(form.taxValidUpto),
-      permitValidUpto: toBackendDate(form.permitValidUpto),
-      puccValidUpto: toBackendDate(form.puccValidUpto),
-      nationalPermitValidUpto: toBackendDate(form.nationalPermitValidUpto),
-    };
-  };
+  const buildPayload = () => ({
+    ...form,
+    vehicleNumber: form.vehicleNumber?.trim(),
+    vehicleType: form.vehicleType?.trim(),
+    driverName: form.driverName?.trim(),
+    ownerName: form.ownerName?.trim(),
+    registeringAuthority: form.registeringAuthority?.trim(),
+    vehicleClass: form.vehicleClass?.trim(),
+    fuelType: form.fuelType?.trim(),
+    fuelCapacity: form.fuelCapacity?.trim(),
+    emissionNorm: form.emissionNorm?.trim(),
+    vehicleAge: form.vehicleAge?.trim(),
+    status: form.status || "Active",
+    registrationDate: toBackendDate(form.registrationDate),
+    fitnessValidUpto: toBackendDate(form.fitnessValidUpto),
+    insuranceValidUpto: toBackendDate(form.insuranceValidUpto),
+    taxValidUpto: toBackendDate(form.taxValidUpto),
+    permitValidUpto: toBackendDate(form.permitValidUpto),
+    puccValidUpto: toBackendDate(form.puccValidUpto),
+    nationalPermitValidUpto: toBackendDate(form.nationalPermitValidUpto),
+  });
 
   const saveVehicle = async () => {
     if (!form.vehicleNumber?.trim()) {
@@ -225,6 +206,19 @@ function CreateVehicleModal({
     if (!form.vehicleType?.trim()) {
       showAlert("Vehicle Type is required", "error");
       return;
+    }
+
+    for (const field of validityFields) {
+      const value =
+        String(form[field.key] || "").trim();
+
+      if (value && !parseVehicleDate(value)) {
+        showAlert(
+          `${field.label} is not a valid calendar date. Use dd/mm/yy.`,
+          "error"
+        );
+        return;
+      }
     }
 
     try {
@@ -246,11 +240,8 @@ function CreateVehicleModal({
       );
 
       await onCreated?.();
-
       onClose?.();
     } catch (e) {
-      console.error(e);
-
       showAlert(
         getBackendMessage(
           e,
@@ -271,28 +262,18 @@ function CreateVehicleModal({
       onClose={saving ? undefined : onClose}
       maxWidth="md"
       fullWidth
-      PaperProps={{
-        sx: dialogPaperSx,
-      }}
+      PaperProps={{ sx: dialogPaperSx }}
     >
       <DialogTitle sx={dialogTitleSx}>
         <Box>
-          <Box sx={dialogMainTitleSx}>
-            {title}
-          </Box>
-
-          <Box sx={dialogSubTitleSx}>
-            {subtitle}
-          </Box>
+          <Box sx={dialogMainTitleSx}>{title}</Box>
+          <Box sx={dialogSubTitleSx}>{subtitle}</Box>
         </Box>
       </DialogTitle>
 
       <DialogContent sx={dialogContentSx}>
         <Box sx={sectionCardSx}>
-          <Box sx={sectionTitleSx}>
-            Vehicle Identity
-          </Box>
-
+          <Box sx={sectionTitleSx}>Vehicle Identity</Box>
           <Box sx={fieldGridSx}>
             {basicFields.map((field) => (
               <TextField
@@ -311,10 +292,7 @@ function CreateVehicleModal({
         </Box>
 
         <Box sx={sectionCardSx}>
-          <Box sx={sectionTitleSx}>
-            Technical Details
-          </Box>
-
+          <Box sx={sectionTitleSx}>Technical Details</Box>
           <Box sx={fieldGridSx}>
             {technicalFields.map((field) => (
               <TextField
@@ -339,10 +317,7 @@ function CreateVehicleModal({
               sx={inputSx}
             >
               {statusOptions.map((status) => (
-                <MenuItem
-                  key={status}
-                  value={status}
-                >
+                <MenuItem key={status} value={status}>
                   {status}
                 </MenuItem>
               ))}
@@ -351,10 +326,7 @@ function CreateVehicleModal({
         </Box>
 
         <Box sx={sectionCardSx}>
-          <Box sx={sectionTitleSx}>
-            Document Validity
-          </Box>
-
+          <Box sx={sectionTitleSx}>Document Validity</Box>
           <Box sx={fieldGridSx}>
             {validityFields.map((field) => (
               <TextField
@@ -369,9 +341,7 @@ function CreateVehicleModal({
                   )
                 }
                 sx={inputSx}
-                InputLabelProps={{
-                  shrink: true,
-                }}
+                InputLabelProps={{ shrink: true }}
                 inputProps={{
                   inputMode: "numeric",
                   maxLength: 8,
@@ -413,10 +383,7 @@ function formatDateTyping(value) {
     .replace(/\D/g, "")
     .slice(0, 6);
 
-  if (digits.length <= 2) {
-    return digits;
-  }
-
+  if (digits.length <= 2) return digits;
   if (digits.length <= 4) {
     return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   }
@@ -431,7 +398,6 @@ function toDisplayDate(value) {
 
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
     const [year, month, day] = text.slice(0, 10).split("-");
-
     return `${day}/${month}/${year.slice(-2)}`;
   }
 
@@ -441,7 +407,6 @@ function toDisplayDate(value) {
     const day = slashMatch[1].padStart(2, "0");
     const month = slashMatch[2].padStart(2, "0");
     const year = slashMatch[3].slice(-2);
-
     return `${day}/${month}/${year}`;
   }
 
@@ -449,28 +414,14 @@ function toDisplayDate(value) {
 
   if (dashMonthMatch) {
     const day = dashMonthMatch[1].padStart(2, "0");
-
     const monthMap = {
-      Jan: "01",
-      Feb: "02",
-      Mar: "03",
-      Apr: "04",
-      May: "05",
-      Jun: "06",
-      Jul: "07",
-      Aug: "08",
-      Sep: "09",
-      Oct: "10",
-      Nov: "11",
-      Dec: "12",
+      Jan: "01", Feb: "02", Mar: "03", Apr: "04",
+      May: "05", Jun: "06", Jul: "07", Aug: "08",
+      Sep: "09", Oct: "10", Nov: "11", Dec: "12",
     };
-
     const month = monthMap[dashMonthMatch[2].slice(0, 3)];
-
     if (!month) return "";
-
     const year = dashMonthMatch[3].slice(-2);
-
     return `${day}/${month}/${year}`;
   }
 
@@ -480,30 +431,15 @@ function toDisplayDate(value) {
 function toBackendDate(value) {
   if (!value) return null;
 
-  const text = String(value).trim();
+  const date = parseVehicleDate(value);
+  if (!date) return null;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return text;
-  }
+  const pad = (part) =>
+    String(part).padStart(2, "0");
 
-  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-
-  if (!match) {
-    return null;
-  }
-
-  const day = match[1].padStart(2, "0");
-  const month = match[2].padStart(2, "0");
-
-  let year = match[3];
-
-  if (year.length === 2) {
-    year = Number(year) > 50
-      ? `19${year}`
-      : `20${year}`;
-  }
-
-  return `${year}-${month}-${day}`;
+  return `${date.getFullYear()}-${pad(
+    date.getMonth() + 1
+  )}-${pad(date.getDate())}`;
 }
 
 const dialogPaperSx = {
@@ -511,8 +447,7 @@ const dialogPaperSx = {
   background: "var(--pf-surface)",
   color: "var(--pf-text-strong)",
   border: "1px solid var(--pf-border)",
-  boxShadow:
-    "0 28px 70px rgba(var(--pf-shadow-rgb),.20)",
+  boxShadow: "0 28px 70px rgba(var(--pf-shadow-rgb),.20)",
   overflow: "hidden",
 };
 
@@ -580,50 +515,40 @@ const inputSx = {
     color: "var(--pf-text-strong)",
     colorScheme: "var(--pf-color-scheme)",
   },
-
   "& .MuiInputBase-input": {
     color: "var(--pf-text-strong)",
     WebkitTextFillColor: "var(--pf-text-strong)",
     fontSize: 13,
     fontWeight: 650,
   },
-
   "& .MuiInputBase-input::placeholder": {
     color: "var(--pf-text-dim)",
     opacity: 1,
   },
-
   "& .MuiInputLabel-root": {
     color: "var(--pf-text-muted)",
     fontWeight: 750,
   },
-
   "& .MuiInputLabel-root.Mui-focused": {
     color: "#2563eb",
   },
-
   "& .MuiOutlinedInput-notchedOutline": {
     borderColor: "var(--pf-border)",
   },
-
   "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
     borderColor: "rgba(37,99,235,.38)",
   },
-
   "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": {
     borderColor: "#2563eb",
     borderWidth: "1.5px",
   },
-
   "& .MuiSelect-select": {
     color: "var(--pf-text-strong)",
     WebkitTextFillColor: "var(--pf-text-strong)",
   },
-
   "& .MuiSelect-icon": {
     color: "var(--pf-text-muted)",
   },
-
   "& .MuiFormHelperText-root": {
     color: "var(--pf-text-dim)",
     marginLeft: 0.5,
@@ -649,7 +574,6 @@ const cancelButtonSx = {
   color: "var(--pf-text)",
   background: "var(--pf-surface-alt)",
   border: "1px solid var(--pf-border)",
-
   "&:hover": {
     color: "var(--pf-text-strong)",
     background: "var(--pf-surface-hover)",
@@ -664,18 +588,12 @@ const saveButtonSx = {
   textTransform: "none",
   fontWeight: 900,
   color: "#fff",
-  background:
-    "linear-gradient(135deg,#2563eb,#3b82f6)",
-  boxShadow:
-    "0 8px 20px rgba(37,99,235,.24)",
-
+  background: "linear-gradient(135deg,#2563eb,#3b82f6)",
+  boxShadow: "0 8px 20px rgba(37,99,235,.24)",
   "&:hover": {
-    background:
-      "linear-gradient(135deg,#1d4ed8,#2563eb)",
-    boxShadow:
-      "0 10px 24px rgba(37,99,235,.30)",
+    background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+    boxShadow: "0 10px 24px rgba(37,99,235,.30)",
   },
-
   "&.Mui-disabled": {
     color: "var(--pf-text-dim)",
     background: "var(--pf-surface-alt)",

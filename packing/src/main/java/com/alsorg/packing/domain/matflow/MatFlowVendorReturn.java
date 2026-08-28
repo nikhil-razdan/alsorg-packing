@@ -23,8 +23,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_mf_vendor_return_qc", columnList = "qc_inspection_id"),
         @Index(name = "idx_mf_vendor_return_status", columnList = "status")
 })
-public class MatFlowVendorReturn
-        extends MatFlowBaseEntity {
+public class MatFlowVendorReturn extends MatFlowBaseEntity {
 
     @Column(name = "return_number", nullable = false, length = 150)
     public String returnNumber;

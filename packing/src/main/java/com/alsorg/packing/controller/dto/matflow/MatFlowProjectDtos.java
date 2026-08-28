@@ -1,7 +1,9 @@
 package com.alsorg.packing.controller.dto.matflow;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -14,14 +16,14 @@ public final class MatFlowProjectDtos {
     }
 
     public record ProjectRequest(
-            String projectCode,
-            String projectName,
-            String clientName,
-            String plantCode,
+            @Size(max = 150, message = "Project code cannot exceed 150 characters.") String projectCode,
+            @Size(max = 300, message = "Project name cannot exceed 300 characters.") String projectName,
+            @Size(max = 300, message = "Client name cannot exceed 300 characters.") String clientName,
+            @Size(max = 100, message = "Plant code cannot exceed 100 characters.") String plantCode,
             LocalDate requiredDate,
-            String priority,
-            String projectManager,
-            String remarks,
+            @Size(max = 80, message = "Priority cannot exceed 80 characters.") String priority,
+            @Size(max = 200, message = "Project manager cannot exceed 200 characters.") String projectManager,
+            @Size(max = 2000, message = "Project remarks cannot exceed 2000 characters.") String remarks,
             Boolean active,
             Long rowVersion) {
     }
@@ -33,14 +35,14 @@ public final class MatFlowProjectDtos {
      * UI presents them as one Dimensions field. The current business unit is MM.
      */
     public record ProductRequest(
-            String productName,
-            String drawingNo,
-            String drawingRevision,
-            BigDecimal dimensionLength,
-            BigDecimal dimensionBreadth,
-            BigDecimal dimensionHeight,
+            @Size(max = 300, message = "Product name cannot exceed 300 characters.") String productName,
+            @Size(max = 200, message = "Drawing number cannot exceed 200 characters.") String drawingNo,
+            @Size(max = 100, message = "Drawing revision cannot exceed 100 characters.") String drawingRevision,
+            @DecimalMin(value = "0.001", inclusive = true, message = "Length must be greater than zero.") BigDecimal dimensionLength,
+            @DecimalMin(value = "0.001", inclusive = true, message = "Breadth must be greater than zero.") BigDecimal dimensionBreadth,
+            @DecimalMin(value = "0.001", inclusive = true, message = "Height must be greater than zero.") BigDecimal dimensionHeight,
             LocalDate requiredDate,
-            String remarks,
+            @Size(max = 2000, message = "Product remarks cannot exceed 2000 characters.") String remarks,
             Boolean active,
             Long rowVersion) {
     }
@@ -48,6 +50,7 @@ public final class MatFlowProjectDtos {
     /** Transactional multi-product creation for one Project/PD No. */
     public record ProductBulkCreateRequest(
             @NotEmpty(message = "At least one Product is required.")
+            @Size(max = 500, message = "A maximum of 500 Products can be created at once.")
             List<@Valid ProductRequest> products) {
     }
 

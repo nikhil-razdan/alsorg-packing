@@ -10,15 +10,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface MatFlowBomRouteStepRepository
         extends JpaRepository<MatFlowBomRouteStep, UUID> {
 
-    List<MatFlowBomRouteStep> findByBomLine_IdOrderBySequenceNoAsc(
-            UUID bomLineId);
+    List<MatFlowBomRouteStep> findByBomLine_IdOrderBySequenceNoAsc(UUID bomLineId);
 
     List<MatFlowBomRouteStep> findByBomLine_Bom_IdOrderByBomLine_LineNoAscSequenceNoAsc(
             UUID bomId);
 
-    boolean existsByBomLine_IdAndSequenceNo(
-            UUID bomLineId,
-            Integer sequenceNo);
+    boolean existsByBomLine_IdAndSequenceNo(UUID bomLineId, Integer sequenceNo);
 
     boolean existsByBomLine_IdAndSequenceNoAndIdNot(
             UUID bomLineId,

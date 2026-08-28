@@ -6,13 +6,9 @@ import java.util.UUID;
 public class StickerHistoryResponse {
 
     private UUID id;
-
     private String stickerNumber;
-
     private Long printIteration;
-
     private String reason;
-
     private LocalDateTime generatedAt;
 
     public StickerHistoryResponse(
@@ -20,8 +16,7 @@ public class StickerHistoryResponse {
             String stickerNumber,
             Long printIteration,
             String reason,
-            LocalDateTime generatedAt
-    ) {
+            LocalDateTime generatedAt) {
         this.id = id;
         this.stickerNumber = stickerNumber;
         this.printIteration = printIteration;

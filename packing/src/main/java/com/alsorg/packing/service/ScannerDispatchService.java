@@ -11,6 +11,7 @@ import com.alsorg.packing.repository.PacketItemRepository;
 import com.alsorg.packing.repository.StickerHistoryRepository;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,6 +28,15 @@ public class ScannerDispatchService {
 
     private static final int MAX_SCAN_TEXT_LENGTH = 4096;
     private static final int MAX_BULK_SCANS = 1000;
+
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    private static final Pattern LEGACY_STICKER_PATTERN = Pattern.compile(
+            "SNo:\\s*([^\\r\\n]+)");
+
+    private static final Pattern STICKER_NUMBER_PATTERN = Pattern.compile(
+            "SN=([^|\\r\\n\\s]+)");
 
 
     private final PacketItemRepository packetItemRepository;
@@ -294,7 +304,11 @@ public class ScannerDispatchService {
                     decoded.stickerNumber);
 
             if (history.isPresent()) {
-                return history.get().getPacketItem();
+                PacketItem historicalPacket = history.get().getPacketItem();
+
+                if (historicalPacket != null) {
+                    return historicalPacket;
+                }
             }
         }
 
@@ -406,9 +420,7 @@ public class ScannerDispatchService {
             return decoded;
         }
 
-        Matcher uuidMatcher = Pattern
-                .compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-                .matcher(scanText);
+        Matcher uuidMatcher = UUID_PATTERN.matcher(scanText);
 
         if (uuidMatcher.find()) {
             decoded.packetItemId = parseUuid(
@@ -417,9 +429,7 @@ public class ScannerDispatchService {
             return decoded;
         }
 
-        Matcher oldStickerMatcher = Pattern
-                .compile("SNo:\\s*([^\\r\\n]+)")
-                .matcher(scanText);
+        Matcher oldStickerMatcher = LEGACY_STICKER_PATTERN.matcher(scanText);
 
         if (oldStickerMatcher.find()) {
             decoded.stickerNumber = oldStickerMatcher.group(1).trim();
@@ -427,9 +437,7 @@ public class ScannerDispatchService {
             return decoded;
         }
 
-        Matcher snMatcher = Pattern
-                .compile("SN=([^|\\r\\n\\s]+)")
-                .matcher(scanText);
+        Matcher snMatcher = STICKER_NUMBER_PATTERN.matcher(scanText);
 
         if (snMatcher.find()) {
             decoded.stickerNumber = snMatcher.group(1).trim();
@@ -467,8 +475,14 @@ public class ScannerDispatchService {
             return;
         }
 
-        if (!allowedPlants.contains(item.getPlantCode())) {
-            throw new RuntimeException(
+        boolean permitted = allowedPlants.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(value -> value.trim()
+                        .equalsIgnoreCase(
+                                item.getPlantCode().trim()));
+
+        if (!permitted) {
+            throw new AccessDeniedException(
                     "User does not have access to plant: " + item.getPlantCode());
         }
     }

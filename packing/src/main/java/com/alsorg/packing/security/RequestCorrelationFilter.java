@@ -24,6 +24,9 @@ public class RequestCorrelationFilter
     public static final String HEADER = "X-Request-ID";
     public static final String MDC_KEY = "requestId";
 
+    public static final String REQUEST_ATTRIBUTE =
+            RequestCorrelationFilter.class.getName() + ".REQUEST_ID";
+
     private static final Pattern SAFE_ID = Pattern.compile(
             "^[A-Za-z0-9._-]{8,128}$");
 
@@ -34,8 +37,18 @@ public class RequestCorrelationFilter
             FilterChain filterChain)
             throws ServletException, IOException {
 
-        String requestId = resolveRequestId(
-                request.getHeader(HEADER));
+        String requestId =
+                requestIdFromAttribute(
+                        request);
+
+        if (requestId == null) {
+            requestId = resolveOrCreate(
+                    request.getHeader(HEADER));
+
+            request.setAttribute(
+                    REQUEST_ATTRIBUTE,
+                    requestId);
+        }
 
         response.setHeader(
                 HEADER,
@@ -54,7 +67,7 @@ public class RequestCorrelationFilter
         }
     }
 
-    private String resolveRequestId(
+    public static String resolveOrCreate(
             String incoming) {
 
         if (incoming != null) {
@@ -67,5 +80,22 @@ public class RequestCorrelationFilter
 
         return UUID.randomUUID()
                 .toString();
+    }
+
+    private String requestIdFromAttribute(
+            HttpServletRequest request) {
+
+        Object value = request.getAttribute(
+                REQUEST_ATTRIBUTE);
+
+        if (!(value instanceof String text)) {
+            return null;
+        }
+
+        String clean = text.trim();
+
+        return SAFE_ID.matcher(clean).matches()
+                ? clean
+                : null;
     }
 }

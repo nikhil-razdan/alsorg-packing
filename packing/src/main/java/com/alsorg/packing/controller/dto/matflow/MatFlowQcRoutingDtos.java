@@ -2,6 +2,7 @@ package com.alsorg.packing.controller.dto.matflow;
 
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.QcRoutingDecision;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -31,7 +32,7 @@ public final class MatFlowQcRoutingDtos {
                         @NotNull(message = "QC row version is required.") Long rowVersion,
                         @NotNull(message = "QC routing decision is required.") QcRoutingDecision routingDecision,
                         UUID processingRouteStepId,
-                        String remarks) {
+                        @Size(max = 2000, message = "Routing remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record QcRoutingResponse(

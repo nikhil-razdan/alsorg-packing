@@ -34,6 +34,7 @@ import {
 } from "./logisticsAlertUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 const SOURCE = Object.freeze({
   CHALLAN: "CHALLAN",
@@ -286,6 +287,7 @@ function LogisticsShiftModal({
   lockDriver = false,
   showDriverHistory = false,
   driverName = "",
+  liveRefreshToken = null,
 }) {
   const isEdit = mode === "edit";
 
@@ -400,23 +402,35 @@ function LogisticsShiftModal({
         setHistoryLoading(true);
         setHistoryLoadWarning("");
 
-        const results = await Promise.allSettled([
-          fetchDrivers(),
-          fetchVehicles(),
-          fetchShifts(),
-          fetchDispatchChallans(),
-          fetchLogisticsTrips(),
-        ]);
+        const coreResults =
+          await Promise.allSettled([
+            fetchDrivers(),
+            fetchVehicles(),
+          ]);
+
+        const historyResults =
+          showDriverHistory
+            ? await Promise.allSettled([
+                fetchShifts(),
+                fetchDispatchChallans(),
+                fetchLogisticsTrips(),
+              ])
+            : [];
 
         if (!active) return;
 
         const [
           driverResult,
           vehicleResult,
+        ] = coreResults;
+
+        const [
           shiftResult,
           challanResult,
           legacyTripResult,
-        ] = results;
+        ] = showDriverHistory
+          ? historyResults
+          : [null, null, null];
 
         const failed = [];
 
@@ -440,42 +454,48 @@ function LogisticsShiftModal({
           failed.push("vehicles");
         }
 
-        if (shiftResult.status === "fulfilled") {
-          setAllShifts(
-            Array.isArray(shiftResult.value)
-              ? shiftResult.value
-              : []
-          );
+        if (showDriverHistory) {
+          if (shiftResult?.status === "fulfilled") {
+            setAllShifts(
+              Array.isArray(shiftResult.value)
+                ? shiftResult.value
+                : []
+            );
+          } else {
+            setAllShifts([]);
+            failed.push("manual operations");
+          }
+
+          if (challanResult?.status === "fulfilled") {
+            setAllChallans(
+              Array.isArray(challanResult.value)
+                ? challanResult.value
+                : []
+            );
+          } else {
+            setAllChallans([]);
+            failed.push("dispatch challans");
+          }
+
+          if (legacyTripResult?.status === "fulfilled") {
+            setLegacyTrips(
+              Array.isArray(legacyTripResult.value)
+                ? legacyTripResult.value
+                : []
+            );
+          } else {
+            setLegacyTrips([]);
+            failed.push("legacy trips");
+          }
         } else {
           setAllShifts([]);
-          failed.push("manual operations");
-        }
-
-        if (challanResult.status === "fulfilled") {
-          setAllChallans(
-            Array.isArray(challanResult.value)
-              ? challanResult.value
-              : []
-          );
-        } else {
           setAllChallans([]);
-          failed.push("dispatch challans");
-        }
-
-        if (legacyTripResult.status === "fulfilled") {
-          setLegacyTrips(
-            Array.isArray(legacyTripResult.value)
-              ? legacyTripResult.value
-              : []
-          );
-        } else {
           setLegacyTrips([]);
-          failed.push("legacy trips");
         }
 
         if (failed.length > 0) {
           setHistoryLoadWarning(
-            `Some history could not be loaded: ${failed.join(
+            `Some logistics data could not be loaded: ${failed.join(
               ", "
             )}. Available data is still shown.`
           );
@@ -503,7 +523,7 @@ function LogisticsShiftModal({
     return () => {
       active = false;
     };
-  }, [open, showAlert]);
+  }, [open, showAlert, showDriverHistory]);
 
   const selectedDriver = useMemo(
     () =>
@@ -1054,6 +1074,10 @@ function LogisticsShiftModal({
   });
 
   async function reloadOperationalHistory() {
+    if (!showDriverHistory) {
+      return;
+    }
+
     const results = await Promise.allSettled([
       fetchShifts(),
       fetchDispatchChallans(),
@@ -1090,6 +1114,44 @@ function LogisticsShiftModal({
       );
     }
   }
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      if (!open) return;
+
+      const [
+        driverResult,
+        vehicleResult,
+      ] = await Promise.allSettled([
+        fetchDrivers(),
+        fetchVehicles(),
+      ]);
+
+      if (driverResult.status === "fulfilled") {
+        setDrivers(
+          Array.isArray(driverResult.value)
+            ? driverResult.value
+            : []
+        );
+      }
+
+      if (vehicleResult.status === "fulfilled") {
+        setVehicles(
+          Array.isArray(vehicleResult.value)
+            ? vehicleResult.value
+            : []
+        );
+      }
+
+      if (showDriverHistory) {
+        await reloadOperationalHistory();
+      }
+    },
+    {
+      enabled: open,
+    }
+  );
 
   async function submit() {
     if (saving) return;

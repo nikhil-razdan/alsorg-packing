@@ -9,49 +9,43 @@ import org.springframework.data.repository.query.Param;
 
 import com.alsorg.packing.domain.users.User;
 
-public interface UserRepository
-                extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long> {
 
-        Optional<User> findByUsername(
-                        String username);
+    Optional<User> findByUsername(String username);
 
-        Optional<User> findByUsernameIgnoreCase(
-                        String username);
+    Optional<User> findByUsernameIgnoreCase(String username);
 
-        boolean existsByUsername(
-                        String username);
+    boolean existsByUsername(String username);
 
-        boolean existsByUsernameIgnoreCase(
-                        String username);
+    boolean existsByUsernameIgnoreCase(String username);
 
-        @Query("""
-                        select distinct user
-                        from User user
-                        left join user.roles assignedRole
-                        where lower(user.role) = lower(:role)
-                           or lower(assignedRole) = lower(:role)
-                        """)
-        List<User> findAllByRoleIgnoreCase(
-                        @Param("role") String role);
+    @Query("""
+            select distinct user
+            from User user
+            left join user.roles assignedRole
+            where lower(user.role) = lower(:role)
+               or lower(assignedRole) = lower(:role)
+            """)
+    List<User> findAllByRoleIgnoreCase(
+            @Param("role") String role);
 
-        boolean existsByUsernameAndIdNot(
-                        String username,
-                        Long id);
+    boolean existsByUsernameAndIdNot(
+            String username,
+            Long id);
 
-        boolean existsByUsernameIgnoreCaseAndIdNot(
-                        String username,
-                        Long id);
+    boolean existsByUsernameIgnoreCaseAndIdNot(
+            String username,
+            Long id);
 
-
-        @Query("""
-                        select count(distinct user.id)
-                        from User user
-                        left join user.roles assignedRole
-                        where user.enabled = true
-                          and (
-                                upper(user.role) = 'ADMIN'
-                                or upper(assignedRole) = 'ADMIN'
-                              )
-                        """)
-        long countActiveAdmins();
+    @Query("""
+            select count(distinct user.id)
+            from User user
+            left join user.roles assignedRole
+            where user.enabled = true
+              and (
+                    upper(user.role) = 'ADMIN'
+                    or upper(assignedRole) = 'ADMIN'
+                  )
+            """)
+    long countActiveAdmins();
 }

@@ -9,12 +9,10 @@ import java.util.UUID;
 @Table(
         name = "bom_flow_revisions",
         indexes = {
-                @Index(
-                        name = "idx_bom_flow_revision_bom",
-                        columnList = "bom_id"),
-                @Index(
-                        name = "idx_bom_flow_revision_status",
-                        columnList = "status")
+                @Index(name = "idx_bom_flow_revision_bom", columnList = "bom_id"),
+                @Index(name = "idx_bom_flow_revision_status", columnList = "status"),
+                @Index(name = "idx_bom_flow_revision_bom_no", columnList = "bom_id,revision_no"),
+                @Index(name = "idx_bom_flow_revision_updated", columnList = "updated_at")
         })
 public class BomFlowRevision {
 
@@ -26,8 +24,7 @@ public class BomFlowRevision {
     @JoinColumn(
             name = "bom_id",
             nullable = false,
-            foreignKey = @ForeignKey(
-                    name = "fk_bom_flow_revision_bom_v2"))
+            foreignKey = @ForeignKey(name = "fk_bom_flow_revision_bom_v2"))
     public BomFlowProduct product;
 
     @Column(name = "revision_no", nullable = false)
@@ -85,23 +82,11 @@ public class BomFlowRevision {
 
     @PrePersist
     void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-
+        if (id == null) id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-
-        if (createdAt == null) {
-            createdAt = now;
-        }
-
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-
-        if (status == null) {
-            status = BomFlowRevisionStatus.DRAFT;
-        }
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+        if (status == null) status = BomFlowRevisionStatus.DRAFT;
     }
 
     @PreUpdate

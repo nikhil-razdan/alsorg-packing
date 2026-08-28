@@ -4,6 +4,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import usePackFlowDataRefresh from "../dashboard/hooks/usePackFlowDataRefresh";
 
 import {
 	Alert,
@@ -581,6 +582,55 @@ const readError = (
 		error?.message ||
 		fallback
 	);
+};
+
+
+const passwordPolicyError = (
+	password,
+	username = ""
+) => {
+	const value =
+		String(password ?? "");
+
+	const length =
+		Array.from(value).length;
+
+	if (length < 8) {
+		return "Password must be at least 8 characters.";
+	}
+
+	if (length > 128) {
+		return "Password cannot exceed 128 characters.";
+	}
+
+	if (length < 12) {
+		let classes = 0;
+
+		if (/[a-z]/.test(value)) classes += 1;
+		if (/[A-Z]/.test(value)) classes += 1;
+		if (/[0-9]/.test(value)) classes += 1;
+		if (/[^A-Za-z0-9\s]/.test(value)) classes += 1;
+
+		if (classes < 3) {
+			return "Passwords shorter than 12 characters must use at least three of: uppercase letters, lowercase letters, numbers, and symbols.";
+		}
+	}
+
+	const cleanUsername =
+		String(username || "")
+			.trim()
+			.toLowerCase();
+
+	if (
+		cleanUsername.length >= 4 &&
+		value.toLowerCase().includes(
+			cleanUsername
+		)
+	) {
+		return "Password must not contain the username.";
+	}
+
+	return "";
 };
 
 const roleMeta = (role) => {
@@ -1275,6 +1325,9 @@ function UsersPageContent() {
 	const [newPassword, setNewPassword] =
 		useState("");
 
+	const [revokingUserId, setRevokingUserId] =
+		useState(null);
+
 	const [deleteOpen, setDeleteOpen] =
 		useState(false);
 
@@ -1318,8 +1371,10 @@ function UsersPageContent() {
 	);
 
 	const loadPageData = useCallback(
-		async () => {
-			setLoading(true);
+		async ({ background = false } = {}) => {
+			if (!background) {
+				setLoading(true);
+			}
 
 			const [
 				usersResult,
@@ -1344,7 +1399,7 @@ function UsersPageContent() {
 						? usersResult.value.data
 						: []
 				);
-			} else {
+			} else if (!background) {
 				setUsers([]);
 
 				showMessage(
@@ -1367,7 +1422,7 @@ function UsersPageContent() {
 						? plantsResult.value.data
 						: []
 				);
-			} else {
+			} else if (!background) {
 				setPlants([]);
 			}
 
@@ -1382,11 +1437,13 @@ function UsersPageContent() {
 						? driversResult.value.data
 						: []
 				);
-			} else {
+			} else if (!background) {
 				setDrivers([]);
 			}
 
-			setLoading(false);
+			if (!background) {
+				setLoading(false);
+			}
 		},
 		[showMessage]
 	);
@@ -1397,8 +1454,10 @@ function UsersPageContent() {
 	);
 
 	const loadPerformance = useCallback(
-		async () => {
-			setPerformanceLoading(true);
+		async ({ background = false } = {}) => {
+			if (!background) {
+				setPerformanceLoading(true);
+			}
 
 			const traceParams = {
 				type: "all",
@@ -1545,7 +1604,9 @@ function UsersPageContent() {
 				sources,
 			});
 
-			setPerformanceLoading(false);
+			if (!background) {
+				setPerformanceLoading(false);
+			}
 		},
 		[performanceWindow]
 	);
@@ -1557,6 +1618,35 @@ function UsersPageContent() {
 		loadPageData,
 		loadPerformance,
 	]);
+
+	/*
+	 * User/access changes are much lower frequency than inventory movement, so
+	 * poll more gently.  Performance analytics is heavier and refreshes on a
+	 * slower cadence while still updating automatically in an open page.
+	 */
+	usePackFlowDataRefresh(
+		"users",
+		async () => {
+			await loadPageData({
+				background: true,
+			});
+		},
+		{
+			intervalMs: 12000,
+		}
+	);
+
+	usePackFlowDataRefresh(
+		"user-performance",
+		async () => {
+			await loadPerformance({
+				background: true,
+			});
+		},
+		{
+			intervalMs: 30000,
+		}
+	);
 
 	const plantName = useCallback(
 		(code) => {
@@ -1762,11 +1852,16 @@ function UsersPageContent() {
 			return "Password is required.";
 		}
 
-		if (
-			drawerMode === "create" &&
-			form.password.length < 8
-		) {
-			return "Password must be at least 8 characters.";
+		if (drawerMode === "create") {
+			const passwordError =
+				passwordPolicyError(
+					form.password,
+					form.username
+				);
+
+			if (passwordError) {
+				return passwordError;
+			}
 		}
 
 		if (roles.length === 0) {
@@ -1936,11 +2031,15 @@ function UsersPageContent() {
 			return;
 		}
 
-		if (
-			newPassword.length < 8
-		) {
+		const passwordError =
+			passwordPolicyError(
+				newPassword,
+				resetUser?.username
+			);
+
+		if (passwordError) {
 			showMessage(
-				"Password must be at least 8 characters.",
+				passwordError,
 				"error"
 			);
 
@@ -1961,7 +2060,7 @@ function UsersPageContent() {
 			setNewPassword("");
 
 			showMessage(
-				"Password reset successfully."
+				"Password reset successfully. Existing sessions were revoked."
 			);
 		} catch (error) {
 			showMessage(
@@ -1971,6 +2070,43 @@ function UsersPageContent() {
 				),
 				"error"
 			);
+		}
+	};
+
+	const revokeSessions = async (user) => {
+		if (!user?.id) {
+			return;
+		}
+
+		const confirmed =
+			window.confirm(
+				`Revoke all active web and mobile sessions for ${user.username || "this user"}?`
+			);
+
+		if (!confirmed) {
+			return;
+		}
+
+		setRevokingUserId(user.id);
+
+		try {
+			await API.put(
+				`/users/${user.id}/revoke-sessions`
+			);
+
+			showMessage(
+				"All existing sessions revoked successfully."
+			);
+		} catch (error) {
+			showMessage(
+				readError(
+					error,
+					"Session revocation failed."
+				),
+				"error"
+			);
+		} finally {
+			setRevokingUserId(null);
 		}
 	};
 
@@ -3224,6 +3360,14 @@ function UsersPageContent() {
 												user
 											)
 										}
+										onRevoke={() =>
+											revokeSessions(
+												user
+											)
+										}
+										revokeLoading={
+											revokingUserId === user.id
+										}
 										onDisable={() =>
 											openDisableDialog(
 												user
@@ -3548,6 +3692,8 @@ function UserRow({
 	onPerformance,
 	onEdit,
 	onReset,
+	onRevoke,
+	revokeLoading = false,
 	onDisable,
 }) {
 	const roles =
@@ -3859,6 +4005,18 @@ function UserRow({
 				</Button>
 
 				<Button
+					startIcon={<SecurityOutlinedIcon />}
+					title="Revoke all active web and mobile sessions"
+					onClick={onRevoke}
+					disabled={!enabled || revokeLoading}
+					sx={secondaryButtonSx}
+				>
+					{revokeLoading
+						? "Revoking"
+						: "Sessions"}
+				</Button>
+
+				<Button
 					startIcon={<DeleteIcon />}
 					onClick={onDisable}
 					disabled={!enabled}
@@ -3994,7 +4152,11 @@ function UserEditorDrawer({
 										.value
 								)
 							}
-							helperText="Minimum 8 characters"
+							autoComplete="new-password"
+							inputProps={{
+								maxLength: 128,
+							}}
+							helperText="Minimum 8 characters. If shorter than 12, use at least 3 of uppercase, lowercase, number and symbol."
 							sx={fieldSx}
 						/>
 					)}
@@ -4882,7 +5044,11 @@ function PasswordResetDialog({
 							event.target.value
 						)
 					}
-					helperText="Minimum 8 characters"
+					autoComplete="new-password"
+					inputProps={{
+						maxLength: 128,
+					}}
+					helperText="Minimum 8 characters. If shorter than 12, use at least 3 of uppercase, lowercase, number and symbol. Resetting also revokes existing sessions."
 					sx={{
 						...fieldSx,
 						mt: 2,
@@ -4933,8 +5099,8 @@ function DisableUserDialog({
 					<strong>
 						{user?.username || "this user"}
 					</strong>
-					? Their existing session will stop
-					working after the backend security update.
+					? Their existing web and mobile sessions will be
+					revoked immediately.
 				</Typography>
 			</DialogContent>
 

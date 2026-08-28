@@ -28,7 +28,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.csrf.CsrfToken;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -257,24 +262,24 @@ public class AuthController {
                                 user.getRole()),
                         user.getSecurityVersion());
 
-        ResponseCookie cookie =
-                buildAccessCookie(
-                        token,
-                        httpRequest);
-
         Map<String, Object> response =
                 buildAuthResponse(
                         user);
 
+        boolean nativeMobileClient =
+                isNativeMobileClient(
+                        clientType,
+                        httpRequest);
+
         /*
-         * Browser:
-         * JWT stays in HttpOnly cookie.
+         * ShipTrack native/mobile is a stateless Bearer client.
          *
-         * ShipTrack/mobile:
-         * bearer token is also returned in JSON for secure native storage.
+         * Do not create a browser auth session cookie for native login. Older
+         * ShipTrack versions may already have an ALSORG_ACCESS/XSRF-TOKEN cookie
+         * stored by the networking stack, so actively expire both cookies while
+         * returning the JWT in JSON for SecureStore.
          */
-        if (isMobileClient(
-                clientType)) {
+        if (nativeMobileClient) {
 
             response.put(
                     "token",
@@ -283,7 +288,33 @@ public class AuthController {
             response.put(
                     "accessToken",
                     token);
+
+            ResponseCookie clearedAccessCookie =
+                    clearAccessCookie(
+                            httpRequest);
+
+            ResponseCookie clearedCsrfCookie =
+                    clearCsrfCookie(
+                            httpRequest);
+
+            return noStore(
+                    ResponseEntity
+                            .ok()
+                            .header(
+                                    HttpHeaders.SET_COOKIE,
+                                    clearedAccessCookie.toString(),
+                                    clearedCsrfCookie.toString())
+                            .body(response));
         }
+
+        /*
+         * FlowSuite browser authentication remains unchanged: the JWT is kept
+         * only in the HttpOnly cookie and is not exposed to browser JavaScript.
+         */
+        ResponseCookie cookie =
+                buildAccessCookie(
+                        token,
+                        httpRequest);
 
         return noStore(
                 ResponseEntity
@@ -357,12 +388,10 @@ public class AuthController {
             CsrfToken csrfToken) {
 
         /*
-         * SpaCsrfTokenRequestHandler exposes the repository/raw token through
-         * an internal request attribute. The normal CsrfToken request
-         * attribute can be XOR/BREACH-masked, and returning that masked value
-         * while validating X-XSRF-TOKEN as a plain/raw header causes every
-         * protected POST/PUT/PATCH/DELETE request to fail with
-         * InvalidCsrfTokenException.
+         * The SPA must receive the repository/raw token. The standard request
+         * attribute can be XOR/BREACH-masked by the SPA request handler; returning
+         * that masked value while the X-XSRF-TOKEN header is validated as raw is
+         * exactly what caused the earlier production InvalidCsrfTokenException.
          */
         Object rawAttribute = request.getAttribute(
                 SpaCsrfTokenRequestHandler.RAW_CSRF_ATTRIBUTE);
@@ -371,13 +400,18 @@ public class AuthController {
                 ? rawToken
                 : csrfToken;
 
-        String token = responseToken.getToken();
+        if (responseToken == null
+                || responseToken.getToken() == null
+                || responseToken.getToken().isBlank()) {
+            throw new IllegalStateException(
+                    "CSRF token could not be created");
+        }
 
         return noStore(
                 ResponseEntity.ok(
                         Map.of(
                                 "token",
-                                token,
+                                responseToken.getToken(),
                                 "headerName",
                                 responseToken.getHeaderName())));
     }
@@ -486,12 +520,41 @@ public class AuthController {
                                                 || "DISPATCH".equals(role));
     }
 
-    private boolean isMobileClient(
-            String clientType) {
+    /**
+     * X-Client-Type is only a transport hint; valid username/password are still
+     * required and authorization remains role/JWT based.
+     *
+     * We deliberately do not reject native clients merely because their HTTP
+     * stack happens to include Origin/Referer. Instead, normal modern browser
+     * requests are distinguished by Fetch Metadata headers, so FlowSuite browser
+     * login never receives the bearer token in JavaScript.
+     */
+    private boolean isNativeMobileClient(
+            String clientType,
+            HttpServletRequest request) {
 
-        return clientType != null
-                && "mobile".equalsIgnoreCase(
-                        clientType.trim());
+        if (clientType == null
+                || !"mobile".equalsIgnoreCase(
+                        clientType.trim())
+                || request == null) {
+            return false;
+        }
+
+        return !hasBrowserFetchMetadata(
+                request);
+    }
+
+    private boolean hasBrowserFetchMetadata(
+            HttpServletRequest request) {
+
+        return cleanHeader(
+                request.getHeader("Sec-Fetch-Site")) != null
+                || cleanHeader(
+                        request.getHeader("Sec-Fetch-Mode")) != null
+                || cleanHeader(
+                        request.getHeader("Sec-Fetch-Dest")) != null
+                || cleanHeader(
+                        request.getHeader("Sec-Fetch-User")) != null;
     }
 
     private ResponseCookie buildAccessCookie(
@@ -627,6 +690,20 @@ public class AuthController {
         }
 
         return text;
+    }
+
+    private String cleanHeader(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String text = value.trim();
+
+        return text.isBlank()
+                ? null
+                : text;
     }
 
     private String normalizeSameSite(

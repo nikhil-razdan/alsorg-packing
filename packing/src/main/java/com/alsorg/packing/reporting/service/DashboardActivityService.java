@@ -2,20 +2,20 @@ package com.alsorg.packing.reporting.service;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.reporting.dto.DashboardActivityRow;
 
 @Service
 public class DashboardActivityService {
 
-    private static final ZoneId APP_ZONE =
-            ZoneId.of("Asia/Kolkata");
+    private static final java.time.ZoneId APP_ZONE =
+            TimeZoneConfig.APP_ZONE;
 
     private static final DateTimeFormatter ISO_OFFSET_FORMATTER =
             DateTimeFormatter.ISO_OFFSET_DATE_TIME;

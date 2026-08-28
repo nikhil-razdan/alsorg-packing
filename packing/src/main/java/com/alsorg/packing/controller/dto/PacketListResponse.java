@@ -18,8 +18,6 @@ public class PacketListResponse {
     private String clientName;
     private String clientAddress;
 
-    // ===== Getters =====
-
     public UUID getPacketId() {
         return packetId;
     }
@@ -67,8 +65,6 @@ public class PacketListResponse {
     public String getClientAddress() {
         return clientAddress;
     }
-
-    // ===== Setters =====
 
     public void setPacketId(UUID packetId) {
         this.packetId = packetId;

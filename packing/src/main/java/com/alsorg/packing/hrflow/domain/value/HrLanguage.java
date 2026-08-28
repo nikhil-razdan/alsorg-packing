@@ -21,19 +21,47 @@ public class HrLanguage {
     public HrLanguage() {
     }
 
-    public HrLanguage(String language, Boolean canRead, Boolean canWrite, Boolean canSpeak) {
+    public HrLanguage(
+            String language,
+            Boolean canRead,
+            Boolean canWrite,
+            Boolean canSpeak
+    ) {
         this.language = language;
         this.canRead = canRead;
         this.canWrite = canWrite;
         this.canSpeak = canSpeak;
     }
 
-    public String getLanguage() { return language; }
-    public void setLanguage(String language) { this.language = language; }
-    public Boolean getCanRead() { return canRead; }
-    public void setCanRead(Boolean canRead) { this.canRead = canRead; }
-    public Boolean getCanWrite() { return canWrite; }
-    public void setCanWrite(Boolean canWrite) { this.canWrite = canWrite; }
-    public Boolean getCanSpeak() { return canSpeak; }
-    public void setCanSpeak(Boolean canSpeak) { this.canSpeak = canSpeak; }
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public Boolean getCanRead() {
+        return canRead;
+    }
+
+    public void setCanRead(Boolean canRead) {
+        this.canRead = canRead;
+    }
+
+    public Boolean getCanWrite() {
+        return canWrite;
+    }
+
+    public void setCanWrite(Boolean canWrite) {
+        this.canWrite = canWrite;
+    }
+
+    public Boolean getCanSpeak() {
+        return canSpeak;
+    }
+
+    public void setCanSpeak(Boolean canSpeak) {
+        this.canSpeak = canSpeak;
+    }
 }

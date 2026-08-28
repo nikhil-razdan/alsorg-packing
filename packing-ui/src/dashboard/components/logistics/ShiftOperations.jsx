@@ -7,6 +7,7 @@ import "./logisticsScrollbars.css";
 
 import LogisticsShiftModal from "./LogisticsShiftModal";
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   formatShiftDate,
@@ -55,6 +56,7 @@ const getShiftSearchText = (shift) => {
 function ShiftOperations({
   showAlert = () => { },
   openCreateToken = 0,
+  liveRefreshToken = null,
 }) {
   const [createOpen, setCreateOpen] =
     useState(false);
@@ -92,46 +94,21 @@ function ShiftOperations({
     setCreateOpen(true);
   }, [openCreateToken]);
 
-  const load = async () => {
+  const load = async ({
+    background = false,
+  } = {}) => {
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
 
       const data = await fetchShifts();
 
-      setShifts(data || []);
-
-    } catch (e) {
-      console.error(e);
-
-      showAlert(
-        getBackendMessage(
-          e,
-          "Failed to load shifts"
-        ),
-        "error"
+      setShifts(
+        Array.isArray(data) ? data : []
       );
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-
-    setLoading(true);
-
-    fetchShifts()
-      .then((data) => {
-        if (!active) return;
-
-        setShifts(data || []);
-      })
-      .catch((e) => {
-        if (!active) return;
-
-        console.error(e);
-
+    } catch (e) {
+      if (!background) {
         showAlert(
           getBackendMessage(
             e,
@@ -139,17 +116,27 @@ function ShiftOperations({
           ),
           "error"
         );
-      })
-      .finally(() => {
-        if (!active) return;
-
+      }
+    } finally {
+      if (!background) {
         setLoading(false);
-      });
+      }
+    }
+  };
 
-    return () => {
-      active = false;
-    };
-  }, [showAlert]);
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await load({
+        background: true,
+      });
+    }
+  );
 
   const remove = async (id) => {
     try {
@@ -313,24 +300,52 @@ function ShiftOperations({
     }
 
     try {
-      await Promise.all(
-        selectedIds.map((id) =>
-          updateShiftStatus(id, bulkStatus)
-        )
-      );
+      const ids = [...selectedIds];
+
+      const results =
+        await Promise.allSettled(
+          ids.map((id) =>
+            updateShiftStatus(
+              id,
+              bulkStatus
+            )
+          )
+        );
+
+      const failedIds =
+        ids.filter(
+          (_, index) =>
+            results[index]?.status ===
+            "rejected"
+        );
+
+      const successCount =
+        ids.length - failedIds.length;
 
       await load();
 
-      showAlert(
-        bulkStatus === "COMPLETED"
-          ? "Selected shifts completed and moved to history"
-          : bulkStatus === "CANCELLED"
-            ? "Selected shifts cancelled and moved to history"
-            : "Selected shifts updated successfully",
-        "success"
-      );
+      if (failedIds.length === 0) {
+        showAlert(
+          bulkStatus === "COMPLETED"
+            ? "Selected shifts completed and moved to history"
+            : bulkStatus === "CANCELLED"
+              ? "Selected shifts cancelled and moved to history"
+              : "Selected shifts updated successfully",
+          "success"
+        );
 
-      clearSelection();
+        clearSelection();
+        return;
+      }
+
+      setSelectedIds(failedIds);
+
+      showAlert(
+        `${successCount} shift${successCount === 1 ? "" : "s"} updated, ${failedIds.length} failed. Failed rows remain selected for retry.`,
+        successCount > 0
+          ? "warning"
+          : "error"
+      );
     } catch (e) {
       console.error(e);
 
@@ -611,6 +626,7 @@ function ShiftOperations({
           }
           onSaved={load}
           showAlert={showAlert}
+          liveRefreshToken={liveRefreshToken}
         />
       )}
 
@@ -624,6 +640,7 @@ function ShiftOperations({
           }
           onSaved={load}
           showAlert={showAlert}
+          liveRefreshToken={liveRefreshToken}
         />
       )}
     </div>

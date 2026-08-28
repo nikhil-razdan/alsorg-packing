@@ -1,10 +1,12 @@
 package com.alsorg.packing.domain.dispatch;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
@@ -61,123 +63,68 @@ public class CustomChallan {
     @OneToMany(mappedBy = "challan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CustomChallanItem> items = new ArrayList<>();
 
-    public String getChallanNumber() {
-        return challanNumber;
+    @PrePersist
+    private void initialiseGeneratedAt() {
+        if (generatedAt == null) {
+            generatedAt = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+        }
+        if (items == null) {
+            items = new ArrayList<>();
+        }
     }
 
-    public void setChallanNumber(String challanNumber) {
-        this.challanNumber = challanNumber;
-    }
-
-    public String getChallanType() {
-        return challanType;
-    }
-
-    public void setChallanType(String challanType) {
-        this.challanType = challanType;
-    }
-
-    public String getFromLocation() {
-        return fromLocation;
-    }
-
-    public void setFromLocation(String fromLocation) {
-        this.fromLocation = fromLocation;
-    }
-
-    public String getToLocation() {
-        return toLocation;
-    }
-
-    public void setToLocation(String toLocation) {
-        this.toLocation = toLocation;
-    }
-
-    public String getPdNo() {
-        return pdNo;
-    }
-
-    public void setPdNo(String pdNo) {
-        this.pdNo = pdNo;
-    }
-
-    public String getClientName() {
-        return clientName;
-    }
-
-    public void setClientName(String clientName) {
-        this.clientName = clientName;
-    }
-
-    public String getClientAddress() {
-        return clientAddress;
-    }
-
-    public void setClientAddress(String clientAddress) {
-        this.clientAddress = clientAddress;
-    }
-
-    public String getPurpose() {
-        return purpose;
-    }
-
-    public void setPurpose(String purpose) {
-        this.purpose = purpose;
-    }
-
-    public String getMovementMode() {
-        return movementMode;
-    }
-
-    public void setMovementMode(String movementMode) {
-        this.movementMode = movementMode;
-    }
-
-    public String getGeneratedBy() {
-        return generatedBy;
-    }
-
-    public void setGeneratedBy(String generatedBy) {
-        this.generatedBy = generatedBy;
-    }
-
-    public LocalDateTime getGeneratedAt() {
-        return generatedAt;
-    }
-
-    public void setGeneratedAt(LocalDateTime generatedAt) {
-        this.generatedAt = generatedAt;
-    }
+    public String getChallanNumber() { return challanNumber; }
+    public void setChallanNumber(String challanNumber) { this.challanNumber = challanNumber; }
+    public String getChallanType() { return challanType; }
+    public void setChallanType(String challanType) { this.challanType = challanType; }
+    public String getFromLocation() { return fromLocation; }
+    public void setFromLocation(String fromLocation) { this.fromLocation = fromLocation; }
+    public String getToLocation() { return toLocation; }
+    public void setToLocation(String toLocation) { this.toLocation = toLocation; }
+    public String getPdNo() { return pdNo; }
+    public void setPdNo(String pdNo) { this.pdNo = pdNo; }
+    public String getClientName() { return clientName; }
+    public void setClientName(String clientName) { this.clientName = clientName; }
+    public String getClientAddress() { return clientAddress; }
+    public void setClientAddress(String clientAddress) { this.clientAddress = clientAddress; }
+    public String getPurpose() { return purpose; }
+    public void setPurpose(String purpose) { this.purpose = purpose; }
+    public String getMovementMode() { return movementMode; }
+    public void setMovementMode(String movementMode) { this.movementMode = movementMode; }
+    public String getDriverName() { return driverName; }
+    public void setDriverName(String driverName) { this.driverName = driverName; }
+    public String getVehicleNumber() { return vehicleNumber; }
+    public void setVehicleNumber(String vehicleNumber) { this.vehicleNumber = vehicleNumber; }
+    public String getHandedOverTo() { return handedOverTo; }
+    public void setHandedOverTo(String handedOverTo) { this.handedOverTo = handedOverTo; }
+    public String getGeneratedBy() { return generatedBy; }
+    public void setGeneratedBy(String generatedBy) { this.generatedBy = generatedBy; }
+    public LocalDateTime getGeneratedAt() { return generatedAt; }
+    public void setGeneratedAt(LocalDateTime generatedAt) { this.generatedAt = generatedAt; }
 
     public List<CustomChallanItem> getItems() {
+        if (items == null) {
+            items = new ArrayList<>();
+        }
         return items;
     }
 
     public void setItems(List<CustomChallanItem> items) {
-        this.items = items;
+        List<CustomChallanItem> incoming = items == null
+                ? List.of()
+                : new ArrayList<>(items);
+
+        List<CustomChallanItem> target = getItems();
+        target.clear();
+
+        for (CustomChallanItem item : incoming) {
+            addItem(item);
+        }
     }
 
-    public String getDriverName() {
-        return driverName;
-    }
-
-    public void setDriverName(String driverName) {
-        this.driverName = driverName;
-    }
-
-    public String getVehicleNumber() {
-        return vehicleNumber;
-    }
-
-    public void setVehicleNumber(String vehicleNumber) {
-        this.vehicleNumber = vehicleNumber;
-    }
-
-    public String getHandedOverTo() {
-        return handedOverTo;
-    }
-
-    public void setHandedOverTo(String handedOverTo) {
-        this.handedOverTo = handedOverTo;
+    public void addItem(CustomChallanItem item) {
+        if (item == null) return;
+        item.setChallan(this);
+        getItems().add(item);
     }
 }

@@ -15,33 +15,10 @@ public class VehicleExpenseField {
     @Column(name = "field_value", columnDefinition = "TEXT")
     private String fieldValue;
 
-    public String getFieldName() {
-        return fieldName;
-    }
-
-    public void setFieldName(
-            String fieldName
-    ) {
-        this.fieldName = fieldName;
-    }
-
-    public String getFieldType() {
-        return fieldType;
-    }
-
-    public void setFieldType(
-            String fieldType
-    ) {
-        this.fieldType = fieldType;
-    }
-
-    public String getFieldValue() {
-        return fieldValue;
-    }
-
-    public void setFieldValue(
-            String fieldValue
-    ) {
-        this.fieldValue = fieldValue;
-    }
+    public String getFieldName() { return fieldName; }
+    public void setFieldName(String fieldName) { this.fieldName = fieldName; }
+    public String getFieldType() { return fieldType; }
+    public void setFieldType(String fieldType) { this.fieldType = fieldType; }
+    public String getFieldValue() { return fieldValue; }
+    public void setFieldValue(String fieldValue) { this.fieldValue = fieldValue; }
 }

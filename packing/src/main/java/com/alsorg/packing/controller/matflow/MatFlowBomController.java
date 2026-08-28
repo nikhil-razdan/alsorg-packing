@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Product-specific Operational BOM controller.
@@ -43,6 +44,7 @@ public class MatFlowBomController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) MatFlowBomStatus status,
             @RequestParam(required = false, defaultValue = "true") Boolean latestOnly) {
+        validateText(search, 300, "Search");
         return service.list(search, status, latestOnly);
     }
 
@@ -147,4 +149,12 @@ public class MatFlowBomController {
             @RequestParam Long rowVersion) {
         service.deleteRouteStep(id, lineId, stepId, rowVersion);
     }
+    private void validateText(String value, int maxLength, String fieldName) {
+        if (value != null && value.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " cannot exceed " + maxLength + " characters");
+        }
+    }
+
 }

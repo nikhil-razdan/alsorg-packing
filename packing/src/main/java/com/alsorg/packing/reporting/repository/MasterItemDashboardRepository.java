@@ -73,29 +73,19 @@ public class MasterItemDashboardRepository {
                         mi.packed_area_code,
                         mi.fg_area_code,
                         mi.allowed_warehouse_codes,
-
-                        /*
-                         * Corrected:
-                         * If old master_item.total_packets is stale,
-                         * use actual packet_items count as expected minimum.
-                         */
                         greatest(
                             coalesce(mi.total_packets, 0),
                             count(distinct pi.id)::int
                         ) as expected_packets,
-
                         mi.created_at,
-
                         count(distinct pi.id) as actual_packets,
                         count(distinct pi.id) as packet_items,
-
                         count(distinct case
                             when pi.sticker_number is not null
                               or pi.packed_at is not null
                               or sh.id is not null
                             then pi.id
                         end) as packed_packet_items,
-
                         count(distinct case
                             when pi.id is not null
                               and pi.sticker_number is null
@@ -103,50 +93,37 @@ public class MasterItemDashboardRepository {
                               and sh.id is null
                             then pi.id
                         end) as pending_packet_items,
-
                         count(distinct case
                             when upper(coalesce(cast(d.status as varchar), '')) = 'DISPATCHED'
                             then pi.id
                         end) as dispatched_packet_items,
-
                         count(distinct case
                             when pi.sticker_number is not null
                               or sh.id is not null
                             then pi.id
                         end) as sticker_count,
-
                         count(distinct case
                             when d.chalaan_number is not null
                               and trim(d.chalaan_number) <> ''
                             then d.chalaan_number
                         end) as challan_count,
-
                         min(coalesce(pi.packed_at, sh.generated_at)) as first_packed_at,
                         max(coalesce(pi.packed_at, sh.generated_at)) as last_packed_at,
-
                         min(d.dispatched_at) as first_dispatched_at,
                         max(d.dispatched_at) as last_dispatched_at,
-
                         lpu.packed_by as last_packed_by,
                         ldu.dispatched_by as last_dispatched_by
-
                     from master_item mi
-
                     left join packet_items pi
                         on pi.master_item_id = mi.id
-
                     left join sticker_history sh
                         on sh.packet_item_id = pi.id
-
                     left join dispatched_items d
                         on d.packet_item_id = pi.id
-
                     left join latest_packed_user lpu
                         on lpu.master_item_id = mi.id
-
                     left join latest_dispatch_user ldu
                         on ldu.master_item_id = mi.id
-
                     group by
                         mi.id,
                         mi.item_name,
@@ -167,7 +144,6 @@ public class MasterItemDashboardRepository {
                 final_rows as (
                     select
                         b.*,
-
                         case
                             when b.packet_items = 0 then 0
                             else round(
@@ -178,14 +154,12 @@ public class MasterItemDashboardRepository {
                                 2
                             )
                         end as completion_percent,
-
                         case
                             when b.packet_items = 0 then 'NO_PACKETS'
                             when b.packed_packet_items = b.packet_items then 'FULLY_PACKED'
                             when b.packed_packet_items > 0 then 'PARTIALLY_PACKED'
                             else 'UNPACKED'
                         end as packing_status
-
                     from base b
                 )
                 select *
@@ -202,14 +176,10 @@ public class MasterItemDashboardRepository {
             int page,
             int size) {
         MapSqlParameterSource params = new MapSqlParameterSource();
-
         StringBuilder where = new StringBuilder(" where 1 = 1 ");
 
         if (search != null && !search.isBlank()) {
-            params.addValue(
-                    "search",
-                    "%" + search.trim().toLowerCase() + "%");
-
+            params.addValue("search", "%" + search.trim().toLowerCase() + "%");
             where.append("""
                         and (
                             lower(coalesce(item_name, '')) like :search
@@ -226,9 +196,7 @@ public class MasterItemDashboardRepository {
         if (packingStatus != null
                 && !packingStatus.isBlank()
                 && !"ALL".equalsIgnoreCase(packingStatus)) {
-            String normalizedStatus = packingStatus
-                    .trim()
-                    .toUpperCase();
+            String normalizedStatus = packingStatus.trim().toUpperCase();
 
             if ("DISPATCHED".equals(normalizedStatus)) {
                 where.append("""
@@ -248,10 +216,7 @@ public class MasterItemDashboardRepository {
                             )
                         """);
             } else {
-                params.addValue(
-                        "packingStatus",
-                        normalizedStatus);
-
+                params.addValue("packingStatus", normalizedStatus);
                 where.append("""
                             and packing_status = :packingStatus
                         """);
@@ -259,20 +224,14 @@ public class MasterItemDashboardRepository {
         }
 
         if (plantCode != null && !plantCode.isBlank()) {
-            params.addValue(
-                    "plantCode",
-                    plantCode.trim().toUpperCase());
-
+            params.addValue("plantCode", plantCode.trim().toUpperCase());
             where.append("""
                         and upper(coalesce(plant_code, '')) = :plantCode
                     """);
         }
 
         if (clientName != null && !clientName.isBlank()) {
-            params.addValue(
-                    "clientName",
-                    "%" + clientName.trim().toLowerCase() + "%");
-
+            params.addValue("clientName", "%" + clientName.trim().toLowerCase() + "%");
             where.append("""
                         and lower(coalesce(client_name, '')) like :clientName
                     """);
@@ -280,7 +239,6 @@ public class MasterItemDashboardRepository {
 
         if (from != null) {
             params.addValue("fromDate", from);
-
             where.append("""
                         and created_at >= :fromDate
                     """);
@@ -288,23 +246,16 @@ public class MasterItemDashboardRepository {
 
         if (to != null) {
             params.addValue("toDate", to);
-
             where.append("""
                         and created_at < :toDate
                     """);
         }
 
         int safePage = Math.max(page, 0);
-
         int safeSize = Math.min(Math.max(size, 10), 100);
 
-        params.addValue(
-                "limit",
-                safeSize);
-
-        params.addValue(
-                "offset",
-                safePage * safeSize);
+        params.addValue("limit", safeSize);
+        params.addValue("offset", safePage * safeSize);
 
         String dataSql = BASE_MASTER_SQL
                 + where
@@ -341,9 +292,7 @@ public class MasterItemDashboardRepository {
     public Optional<MasterItemListRow> findMasterItem(
             UUID masterItemId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue(
-                        "masterItemId",
-                        masterItemId);
+                .addValue("masterItemId", masterItemId);
 
         String sql = BASE_MASTER_SQL
                 + """
@@ -365,22 +314,18 @@ public class MasterItemDashboardRepository {
                         pi.id as packet_id,
                         pi.id as packet_item_id,
                         pi.packet_number as packet_number,
-
                         coalesce(pi.sticker_number, max(sh.sticker_number)) as sticker_number,
                         pi.status,
                         pi.floor as factory_floor,
                         pi.warehouse_code,
                         pi.gate_pass_number,
-
                         max(d.chalaan_number) as challan_number,
-
                         coalesce(
                             pi.packed_at,
                             max(sh.generated_at),
                             max(d.dispatched_at),
                             max(d.created_at)
                         ) as created_at,
-
                         coalesce(
                             pi.created_by,
                             max(sh.generated_by),
@@ -388,9 +333,7 @@ public class MasterItemDashboardRepository {
                             max(d.created_by),
                             'SYSTEM'
                         ) as created_by,
-
                         1 as packet_items,
-
                         case
                             when pi.sticker_number is not null
                               or pi.packed_at is not null
@@ -398,7 +341,6 @@ public class MasterItemDashboardRepository {
                             then 1
                             else 0
                         end as packed_items,
-
                         case
                             when count(
                                 case
@@ -410,17 +352,12 @@ public class MasterItemDashboardRepository {
                             then 1
                             else 0
                         end as dispatched_items
-
                     from packet_items pi
-
                     left join sticker_history sh
                         on sh.packet_item_id = pi.id
-
                     left join dispatched_items d
                         on d.packet_item_id = pi.id
-
                     where pi.master_item_id = :masterItemId
-
                     group by
                         pi.id,
                         pi.packet_number,
@@ -431,7 +368,6 @@ public class MasterItemDashboardRepository {
                         pi.gate_pass_number,
                         pi.packed_at,
                         pi.created_by
-
                     order by
                         nullif(
                             regexp_replace(
@@ -449,9 +385,7 @@ public class MasterItemDashboardRepository {
         return jdbc.query(
                 sql,
                 new MapSqlParameterSource()
-                        .addValue(
-                                "masterItemId",
-                                masterItemId),
+                        .addValue("masterItemId", masterItemId),
                 packetMapper());
     }
 
@@ -497,13 +431,7 @@ public class MasterItemDashboardRepository {
                     )
                     select
                         pi.id as packet_item_id,
-
-                        /*
-                         * Dashboard logical packet id.
-                         * Do NOT use packet table here.
-                         */
                         pi.id as packet_id,
-
                         pi.packet_number,
                         pi.item_name,
                         pi.sku,
@@ -519,11 +447,9 @@ public class MasterItemDashboardRepository {
                         pi.warehouse_code,
                         pi.current_location_code,
                         pi.plant_code,
-
                         coalesce(sc.sticker_history_count, 0) as sticker_history_count,
                         ls.generated_at as last_sticker_generated_at,
                         ls.generated_by as last_sticker_generated_by,
-
                         ld.chalaan_number,
                         ld.dispatched_at,
                         ld.dispatched_by,
@@ -532,7 +458,6 @@ public class MasterItemDashboardRepository {
                         ld.vehicle_number,
                         ld.trip_started_at,
                         ld.trip_ended_at
-
                     from packet_items pi
                     left join latest_dispatch ld
                         on ld.packet_item_id = pi.id
@@ -549,9 +474,7 @@ public class MasterItemDashboardRepository {
         return jdbc.query(
                 sql,
                 new MapSqlParameterSource()
-                        .addValue(
-                                "masterItemId",
-                                masterItemId),
+                        .addValue("masterItemId", masterItemId),
                 packetItemMapper());
     }
 
@@ -581,9 +504,7 @@ public class MasterItemDashboardRepository {
         return jdbc.query(
                 sql,
                 new MapSqlParameterSource()
-                        .addValue(
-                                "masterItemId",
-                                masterItemId),
+                        .addValue("masterItemId", masterItemId),
                 challanMapper());
     }
 
@@ -619,13 +540,9 @@ public class MasterItemDashboardRepository {
     private RowMapper<MasterPacketRow> packetMapper() {
         return (rs, rowNum) -> {
             UUID packetId = getUuid(rs, "packet_id");
-
             UUID packetItemId = getUuid(rs, "packet_item_id");
-
             String stickerNumber = rs.getString("sticker_number");
-
-            boolean hasSticker = stickerNumber != null &&
-                    !stickerNumber.isBlank();
+            boolean hasSticker = stickerNumber != null && !stickerNumber.isBlank();
 
             String stickerPreviewUrl = packetItemId == null || !hasSticker
                     ? null
@@ -703,13 +620,11 @@ public class MasterItemDashboardRepository {
 
             String previewUrl = encoded == null
                     ? null
-                    : "/api/reports/dashboard/challan/preview?challanNumber="
-                            + encoded;
+                    : "/api/reports/dashboard/challan/preview?challanNumber=" + encoded;
 
             String downloadUrl = encoded == null
                     ? null
-                    : "/api/reports/dashboard/challan/download?challanNumber="
-                            + encoded;
+                    : "/api/reports/dashboard/challan/download?challanNumber=" + encoded;
 
             return new MasterChallanRow(
                     challanNumber,
@@ -739,37 +654,27 @@ public class MasterItemDashboardRepository {
             return uuid;
         }
 
-        return UUID.fromString(
-                String.valueOf(value));
+        return UUID.fromString(String.valueOf(value));
     }
 
     private Integer getInteger(
             ResultSet rs,
             String column) throws SQLException {
         int value = rs.getInt(column);
-
-        return rs.wasNull()
-                ? null
-                : value;
+        return rs.wasNull() ? null : value;
     }
 
     private Long getLongObject(
             ResultSet rs,
             String column) throws SQLException {
         long value = rs.getLong(column);
-
-        return rs.wasNull()
-                ? null
-                : value;
+        return rs.wasNull() ? null : value;
     }
 
     private LocalDateTime getLocalDateTime(
             ResultSet rs,
             String column) throws SQLException {
         Timestamp timestamp = rs.getTimestamp(column);
-
-        return timestamp == null
-                ? null
-                : timestamp.toLocalDateTime();
+        return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

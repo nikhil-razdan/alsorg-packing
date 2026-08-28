@@ -11,6 +11,7 @@ import {
 } from "./logisticsAlertUtils";
 
 import LogisticsPagination from "./LogisticsPagination";
+import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   fetchDrivers,
@@ -82,6 +83,7 @@ function recordMatchesDriver(
 
 function DriverManagement({
   showAlert = () => { },
+  liveRefreshToken = null,
 }) {
   const [drivers, setDrivers] =
     useState([]);
@@ -108,9 +110,13 @@ function DriverManagement({
   const [selectedDriver, setSelectedDriver] =
     useState(null);
 
-  async function loadDrivers() {
+  async function loadDrivers({
+    background = false,
+  } = {}) {
     try {
-      setLoading(true);
+      if (!background) {
+        setLoading(true);
+      }
 
       const results = await Promise.allSettled([
         fetchDrivers(),
@@ -130,7 +136,7 @@ function DriverManagement({
             ? driverResult.value
             : []
         );
-      } else {
+      } else if (!background) {
         throw driverResult.reason;
       }
 
@@ -140,8 +146,7 @@ function DriverManagement({
             ? challanResult.value
             : []
         );
-      } else {
-        console.error(challanResult.reason);
+      } else if (!background) {
         setChallans([]);
       }
 
@@ -151,24 +156,34 @@ function DriverManagement({
             ? shiftResult.value
             : []
         );
-      } else {
-        console.error(shiftResult.reason);
+      } else if (!background) {
         setShifts([]);
       }
     } catch (error) {
-      console.error(error);
-
-      showAlert(
-        getBackendMessage(
-          error,
-          "Failed to load drivers"
-        ),
-        "error"
-      );
+      if (!background) {
+        showAlert(
+          getBackendMessage(
+            error,
+            "Failed to load drivers"
+          ),
+          "error"
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!background) {
+        setLoading(false);
+      }
     }
   }
+
+  useLogisticsLiveRefresh(
+    liveRefreshToken,
+    async () => {
+      await loadDrivers({
+        background: true,
+      });
+    }
+  );
 
   useEffect(() => {
     loadDrivers();
@@ -622,6 +637,7 @@ function DriverManagement({
           onClose={closeShiftForDriver}
           onSaved={loadDrivers}
           showAlert={showAlert}
+          liveRefreshToken={liveRefreshToken}
         />
       )}
     </div>
@@ -690,8 +706,6 @@ const subtitle = {
 };
 
 const button = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 42,
   padding: "0 18px",
   borderRadius: 12,
@@ -707,18 +721,16 @@ const button = {
 };
 
 const secondaryButton = {
-  appearance: "none",
-  WebkitAppearance: "none",
   height: 42,
   padding: "0 15px",
   borderRadius: 12,
   border:
-    "1px solid rgba(var(--pf-fg-rgb),.10)",
-  background: "var(--pf-surface-alt)",
-  color: "var(--pf-text-strong)",
-  WebkitTextFillColor:
-    "var(--pf-text-strong)",
-  fontWeight: 850,
+    "1px solid rgba(var(--pf-fg-rgb),.08)",
+  background:
+    "rgba(var(--pf-fg-rgb),.04)",
+  color: "var(--pf-text)",
+  WebkitTextFillColor: "var(--pf-text)",
+  fontWeight: 800,
   cursor: "pointer",
 };
 
@@ -944,7 +956,7 @@ const viewBtn = {
   fontSize: 10.5,
   opacity: 1,
   boxShadow:
-    "0 6px 14px rgba(37,99,235,.18)",
+    "0 6px 14px rgba(37,99,235,.16)",
 };
 
 const deleteBtn = {
@@ -963,7 +975,7 @@ const deleteBtn = {
   fontSize: 10.5,
   opacity: 1,
   boxShadow:
-    "0 6px 14px rgba(239,68,68,.17)",
+    "0 6px 14px rgba(239,68,68,.14)",
 };
 
 const emptyRow = {

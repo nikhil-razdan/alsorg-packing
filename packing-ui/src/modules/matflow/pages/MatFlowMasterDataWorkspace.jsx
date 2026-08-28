@@ -183,6 +183,60 @@ const productRequestBody = (form, rowVersion = null) => ({
     rowVersion,
 });
 
+const allSettledWithConcurrency = async (
+    items,
+    worker,
+    concurrency = 4
+) => {
+    const source = Array.isArray(items) ? items : [];
+    if (!source.length) return [];
+
+    const results = new Array(source.length);
+    let nextIndex = 0;
+    const workerCount = Math.max(
+        1,
+        Math.min(
+            Number(concurrency) || 1,
+            source.length
+        )
+    );
+
+    const run = async () => {
+        while (true) {
+            const index = nextIndex;
+            nextIndex += 1;
+
+            if (index >= source.length) {
+                return;
+            }
+
+            try {
+                results[index] = {
+                    status: "fulfilled",
+                    value: await worker(
+                        source[index],
+                        index
+                    ),
+                };
+            } catch (reason) {
+                results[index] = {
+                    status: "rejected",
+                    reason,
+                };
+            }
+        }
+    };
+
+    await Promise.all(
+        Array.from(
+            { length: workerCount },
+            () => run()
+        )
+    );
+
+    return results;
+};
+
 export function MatFlowProjectsPage() {
     const navigate = useNavigate();
     const { hasRole, selectedPlantParam, availablePlants } = useMatFlow();
@@ -191,6 +245,7 @@ export function MatFlowProjectsPage() {
     const [rows, setRows] = useState([]);
     const [expandedProjects, setExpandedProjects] = useState({});
     const [loading, setLoading] = useState(true);
+    const [attachmentsLoading, setAttachmentsLoading] = useState(false);
     const [working, setWorking] = useState(false);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
@@ -217,6 +272,15 @@ export function MatFlowProjectsPage() {
 
             const projectRows = Array.isArray(response?.data) ? response.data : [];
             setRows(projectRows);
+            setProductAttachmentMap({});
+
+            /*
+             * The Projects/Product register itself is ready now. Do not hold
+             * the whole page behind the secondary filesystem attachment-status
+             * sweep.
+             */
+            setLoading(false);
+            setAttachmentsLoading(true);
 
             /*
              * Attachment metadata is filesystem-backed and deliberately separate
@@ -224,14 +288,35 @@ export function MatFlowProjectsPage() {
              * visible Project keeps the Product list informative without adding a
              * new attachment entity/table to MatFlow.
              */
-            const attachmentResults = await Promise.allSettled(
-                projectRows
-                    .filter((project) => project?.id)
-                    .map(async (project) => {
-                        const attachmentResponse = await matflowApi.getProjectProductAttachments(project.id);
-                        return Array.isArray(attachmentResponse?.data) ? attachmentResponse.data : [];
-                    })
-            );
+            const attachmentProjects =
+                projectRows.filter(
+                    (project) => project?.id
+                );
+
+            /*
+             * The backend currently exposes attachment status per Project.
+             * Keep the existing exact result set, but cap browser concurrency
+             * so a large Project list does not create an unbounded request
+             * burst. A future backend bulk-status projection can remove this
+             * remaining N-request compatibility path completely.
+             */
+            const attachmentResults =
+                await allSettledWithConcurrency(
+                    attachmentProjects,
+                    async (project) => {
+                        const attachmentResponse =
+                            await matflowApi.getProjectProductAttachments(
+                                project.id
+                            );
+
+                        return Array.isArray(
+                            attachmentResponse?.data
+                        )
+                            ? attachmentResponse.data
+                            : [];
+                    },
+                    4
+                );
 
             const nextAttachmentMap = {};
             attachmentResults.forEach((result) => {
@@ -243,12 +328,14 @@ export function MatFlowProjectsPage() {
                 });
             });
             setProductAttachmentMap(nextAttachmentMap);
+            setAttachmentsLoading(false);
         } catch (requestError) {
             setRows([]);
             setProductAttachmentMap({});
             setError(readMatFlowError(requestError, "Unable to load Projects & Products."));
         } finally {
             setLoading(false);
+            setAttachmentsLoading(false);
         }
     }, [search, activeFilter, selectedPlantParam]);
 
@@ -652,6 +739,7 @@ export function MatFlowProjectsPage() {
                     <>
                         <Button
                             startIcon={<FileDownloadOutlinedIcon />}
+                            disabled={attachmentsLoading}
                             onClick={() => downloadMatFlowExcel({
                                 fileName: "MatFlow_Projects_Products",
                                 sheetName: "Projects",
@@ -688,7 +776,9 @@ export function MatFlowProjectsPage() {
                             })}
                             sx={secondaryBtnSx}
                         >
-                            Export Excel
+                            {attachmentsLoading
+                                ? "Loading Attachments..."
+                                : "Export Excel"}
                         </Button>
                         <Button startIcon={<RefreshIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
                         {canManage && (

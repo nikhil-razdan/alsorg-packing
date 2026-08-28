@@ -11,6 +11,8 @@ import java.util.UUID;
         name = "hr_employee",
         indexes = {
                 @Index(name = "idx_hr_employee_status", columnList = "status"),
+                @Index(name = "idx_hr_employee_status_updated", columnList = "status,updated_at"),
+                @Index(name = "idx_hr_employee_updated", columnList = "updated_at"),
                 @Index(name = "idx_hr_employee_department", columnList = "department"),
                 @Index(name = "idx_hr_employee_name", columnList = "full_name")
         },

@@ -1,4 +1,6 @@
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   min-height: 100%;
   margin: 0;
@@ -11,16 +13,20 @@ html, body, #root {
 body {
   overflow-x: hidden;
   overflow-y: auto;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f1f5f9;
-  color: #0f172a;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
 :root {
   --card-bg: #ffffff;
   --card-radius: 16px;
-  --card-shadow: 0 6px 18px rgba(0,0,0,0.08);
-  --border-light: 1px solid rgba(0,0,0,0.06);
+  --card-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  --border-light: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 a {
@@ -28,6 +34,9 @@ a {
   text-decoration: none;
 }
 
-button, input, textarea, select {
+button,
+input,
+textarea,
+select {
   font: inherit;
 }

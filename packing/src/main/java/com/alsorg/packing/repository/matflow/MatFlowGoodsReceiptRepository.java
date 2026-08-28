@@ -5,6 +5,8 @@ import com.alsorg.packing.domain.matflow.MatFlowGoodsReceipt;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowGoodsReceiptRepository
@@ -12,6 +14,11 @@ public interface MatFlowGoodsReceiptRepository
 
     List<MatFlowGoodsReceipt> findAllByOrderByReceivedAtDesc();
 
-    List<MatFlowGoodsReceipt> findByPurchaseOrder_IdOrderByReceivedAtAsc(
-            UUID purchaseOrderId);
+    Page<MatFlowGoodsReceipt> findAllByOrderByReceivedAtDesc(Pageable pageable);
+
+    List<MatFlowGoodsReceipt> findByPurchaseOrder_IdOrderByReceivedAtAsc(UUID purchaseOrderId);
+
+    Page<MatFlowGoodsReceipt> findByPurchaseOrder_IdOrderByReceivedAtAsc(
+            UUID purchaseOrderId,
+            Pageable pageable);
 }

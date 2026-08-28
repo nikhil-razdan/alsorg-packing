@@ -6,9 +6,15 @@ import CssBaseline from "@mui/material/CssBaseline";
 import theme from "./theme/theme";
 import { installAuthFetchPatch } from "./utils/installAuthFetchPatch";
 
+/*
+ * Install after services/api has captured native fetch. Legacy backend fetch
+ * calls are then routed through the same cookie/CSRF/session security path.
+ */
 installAuthFetchPatch();
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+ReactDOM.createRoot(
+  document.getElementById("root")
+).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />

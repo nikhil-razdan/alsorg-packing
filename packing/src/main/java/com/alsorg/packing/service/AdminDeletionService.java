@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.admin.AdminDeletePreviewResponse;
 import com.alsorg.packing.controller.dto.admin.AdminDeleteRequest;
 import com.alsorg.packing.controller.dto.admin.AdminDeleteResultResponse;
@@ -47,7 +48,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -62,10 +62,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -82,9 +87,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AdminDeletionService {
 
-        private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final Logger log =
+                        LoggerFactory.getLogger(AdminDeletionService.class);
 
         private static final UUID NO_MATCH_UUID = new UUID(0L, 0L);
+
+        private static final int DEFAULT_PAGE_SIZE = 25;
+        private static final int MAX_PAGE_SIZE = 100;
 
         /*
          * Warehouse page rows are DispatchedItem records. Excel imports create
@@ -133,6 +142,8 @@ public class AdminDeletionService {
 
         private final EntityManager entityManager;
 
+        private final Path stickerStorageRoot;
+
         public AdminDeletionService(
                         PacketItemRepository packetItemRepository,
                         HardwarePacketLineRepository hardwarePacketLineRepository,
@@ -150,7 +161,9 @@ public class AdminDeletionService {
                         PacketDeletionRequestRepository deletionRequestRepository,
                         CurrentUserService currentUserService,
                         ObjectMapper objectMapper,
-                        EntityManager entityManager) {
+                        EntityManager entityManager,
+                        @Value("${sticker.storage.path:/app/data/stickers}")
+                        String stickerStoragePath) {
                 this.packetItemRepository = packetItemRepository;
                 this.hardwarePacketLineRepository = hardwarePacketLineRepository;
                 this.masterItemRepository = masterItemRepository;
@@ -168,6 +181,8 @@ public class AdminDeletionService {
                 this.currentUserService = currentUserService;
                 this.objectMapper = objectMapper;
                 this.entityManager = entityManager;
+                this.stickerStorageRoot = normalizeStorageRoot(
+                                stickerStoragePath);
         }
 
         /*
@@ -184,6 +199,7 @@ public class AdminDeletionService {
                 assertAdmin(user);
 
                 String query = normalizeSearchQuery(rawQuery);
+                Pageable safePageable = boundedPageable(pageable);
 
                 /*
                  * UUID lookup is handled separately because portable JPQL
@@ -200,7 +216,7 @@ public class AdminDeletionService {
                                 return new PageImpl<>(
                                                 List.of(
                                                                 toPacketSearchResult(exactItem)),
-                                                pageable,
+                                                safePageable,
                                                 1);
                         }
                 }
@@ -208,7 +224,7 @@ public class AdminDeletionService {
                 return packetItemRepository
                                 .searchForAdminDeletion(
                                                 query,
-                                                pageable)
+                                                safePageable)
                                 .map(this::toPacketSearchResult);
         }
 
@@ -226,6 +242,7 @@ public class AdminDeletionService {
                 assertAdmin(user);
 
                 String query = normalizeSearchQuery(rawQuery);
+                Pageable safePageable = boundedPageable(pageable);
 
                 UUID possibleId = tryParseUuid(query);
 
@@ -239,7 +256,7 @@ public class AdminDeletionService {
                                                 List.of(
                                                                 toMasterSearchResult(
                                                                                 exactMaster)),
-                                                pageable,
+                                                safePageable,
                                                 1);
                         }
                 }
@@ -247,7 +264,7 @@ public class AdminDeletionService {
                 return masterItemRepository
                                 .searchForAdminDeletion(
                                                 query,
-                                                pageable)
+                                                safePageable)
                                 .map(this::toMasterSearchResult);
         }
 
@@ -520,6 +537,7 @@ public class AdminDeletionService {
                 assertAdmin(user);
 
                 String query = normalizeSearchQuery(rawQuery);
+                Pageable safePageable = boundedPageable(pageable);
 
                 DispatchedItem exactItem = dispatchedItemRepository
                                 .findById(query)
@@ -528,7 +546,7 @@ public class AdminDeletionService {
                 if (isWarehouseDeleteCandidate(exactItem)) {
                         return new PageImpl<>(
                                         List.of(toWarehouseSearchResult(exactItem)),
-                                        pageable,
+                                        safePageable,
                                         1);
                 }
 
@@ -569,7 +587,7 @@ public class AdminDeletionService {
                 };
 
                 return dispatchedItemRepository
-                                .findAll(specification, pageable)
+                                .findAll(specification, safePageable)
                                 .map(this::toWarehouseSearchResult);
         }
 
@@ -1046,9 +1064,12 @@ public class AdminDeletionService {
                         User user) {
                 assertAdmin(user);
 
+                Pageable safePageable = boundedPageable(
+                                pageable);
+
                 return adminDeletionAuditRepository
                                 .findAllByOrderByDeletedAtDesc(
-                                                pageable)
+                                                safePageable)
                                 .map(audit -> new AdminDeletionHistoryResponse(
                                                 audit.getId(),
                                                 audit.getTargetType(),
@@ -2143,7 +2164,7 @@ public class AdminDeletionService {
                                         Math.toIntExact(remainingCount));
 
                         trip.setUpdatedAt(
-                                        LocalDateTime.now(INDIA_ZONE));
+                                        LocalDateTime.now(TimeZoneConfig.APP_ZONE));
 
                         logisticsTripRepository.save(trip);
                 }
@@ -2287,7 +2308,7 @@ public class AdminDeletionService {
                 audit.setDeletedBy(actor);
 
                 audit.setDeletedAt(
-                                LocalDateTime.now(INDIA_ZONE));
+                                LocalDateTime.now(TimeZoneConfig.APP_ZONE));
 
                 audit.setAffectedRowsJson(
                                 toJson(deletedRows));
@@ -2328,20 +2349,110 @@ public class AdminDeletionService {
                                                                         }
 
                                                                         try {
+                                                                                Path safePath = resolveStickerPathForDeletion(
+                                                                                                filePath);
+
+                                                                                if (safePath == null) {
+                                                                                        log.warn(
+                                                                                                        "Skipped sticker file cleanup outside configured storage root: {}",
+                                                                                                        filePath);
+                                                                                        continue;
+                                                                                }
+
                                                                                 Files.deleteIfExists(
-                                                                                                Path.of(
-                                                                                                                filePath));
+                                                                                                safePath);
 
                                                                         } catch (Exception exception) {
-                                                                                System.err.println(
-                                                                                                "Unable to delete sticker file: "
-                                                                                                                + filePath);
-
-                                                                                exception.printStackTrace();
+                                                                                log.warn(
+                                                                                                "Unable to delete sticker file after committed admin deletion: {}",
+                                                                                                filePath,
+                                                                                                exception);
                                                                         }
                                                                 }
                                                         }
                                                 });
+        }
+
+        private Path normalizeStorageRoot(
+                        String configuredPath) {
+
+                String cleanPath = clean(
+                                configuredPath);
+
+                if (cleanPath == null) {
+                        throw new IllegalStateException(
+                                        "sticker.storage.path must not be blank");
+                }
+
+                Path normalized = Path.of(cleanPath)
+                                .toAbsolutePath()
+                                .normalize();
+
+                if (normalized.getRoot() != null
+                                && normalized.equals(
+                                                normalized.getRoot())) {
+                        throw new IllegalStateException(
+                                        "sticker.storage.path must not be the filesystem root");
+                }
+
+                return normalized;
+        }
+
+        private Path resolveStickerPathForDeletion(
+                        String rawPath) {
+
+                String cleanPath = clean(
+                                rawPath);
+
+                if (cleanPath == null) {
+                        return null;
+                }
+
+                final Path candidate;
+
+                try {
+                        Path parsed = Path.of(cleanPath);
+
+                        candidate = (parsed.isAbsolute()
+                                        ? parsed
+                                        : stickerStorageRoot.resolve(parsed))
+                                        .toAbsolutePath()
+                                        .normalize();
+
+                } catch (RuntimeException exception) {
+                        return null;
+                }
+
+                if (!candidate.startsWith(
+                                stickerStorageRoot)) {
+                        return null;
+                }
+
+                if (!Files.exists(candidate)) {
+                        return candidate;
+                }
+
+                try {
+                        Path realRoot = Files.exists(
+                                        stickerStorageRoot)
+                                                        ? stickerStorageRoot.toRealPath()
+                                                        : stickerStorageRoot;
+
+                        Path realCandidate = candidate.toRealPath();
+
+                        return realCandidate.startsWith(
+                                        realRoot)
+                                                        ? realCandidate
+                                                        : null;
+
+                } catch (Exception exception) {
+                        log.warn(
+                                        "Could not validate sticker cleanup path: {}",
+                                        candidate,
+                                        exception);
+
+                        return null;
+                }
         }
 
         /*
@@ -3102,6 +3213,32 @@ public class AdminDeletionService {
                 }
 
                 return query;
+        }
+
+        private Pageable boundedPageable(
+                        Pageable pageable) {
+
+                if (pageable == null
+                                || pageable.isUnpaged()) {
+                        return PageRequest.of(
+                                        0,
+                                        DEFAULT_PAGE_SIZE);
+                }
+
+                int pageNumber = Math.max(
+                                0,
+                                pageable.getPageNumber());
+
+                int pageSize = Math.max(
+                                1,
+                                Math.min(
+                                                MAX_PAGE_SIZE,
+                                                pageable.getPageSize()));
+
+                return PageRequest.of(
+                                pageNumber,
+                                pageSize,
+                                pageable.getSort());
         }
 
         /*

@@ -4,6 +4,9 @@ export const PACKFLOW_DATA_CHANGED_EVENT =
 export const PACKFLOW_DATA_CHANGED_STORAGE_KEY =
   "packflow:data-changed:last-event";
 
+const BROADCAST_CHANNEL_NAME =
+  "packflow:data-changed:v1";
+
 const normalizeScopes = (scopes) => {
   const values =
     Array.isArray(scopes)
@@ -38,6 +41,31 @@ const createEventId = () => {
     .slice(2)}`;
 };
 
+const buildCrossTabEnvelope = (payload) => ({
+  eventId: payload.eventId,
+  changedAt: payload.changedAt,
+  scopes: normalizeScopes(payload.scopes),
+  action: String(payload.action || "").slice(0, 80),
+  targetType: String(payload.targetType || "").slice(0, 80),
+});
+
+const openBroadcastChannel = () => {
+  if (
+    typeof window === "undefined" ||
+    typeof window.BroadcastChannel !== "function"
+  ) {
+    return null;
+  }
+
+  try {
+    return new window.BroadcastChannel(
+      BROADCAST_CHANNEL_NAME
+    );
+  } catch {
+    return null;
+  }
+};
+
 export const publishPackFlowDataChanged = (
   detail = {}
 ) => {
@@ -47,15 +75,12 @@ export const publishPackFlowDataChanged = (
 
   const payload = {
     ...detail,
-
     eventId:
       detail.eventId ||
       createEventId(),
-
     changedAt:
       detail.changedAt ||
       new Date().toISOString(),
-
     scopes: normalizeScopes(
       detail.scopes?.length
         ? detail.scopes
@@ -68,34 +93,46 @@ export const publishPackFlowDataChanged = (
     ),
   };
 
-  /*
-   * Refresh listeners inside the current browser tab.
-   */
+  /* Current tab receives the full in-memory detail. */
   window.dispatchEvent(
     new CustomEvent(
       PACKFLOW_DATA_CHANGED_EVENT,
-      {
-        detail: payload,
-      }
+      { detail: payload }
     )
   );
 
   /*
-   * Notify other open browser tabs.
-   *
-   * The browser's storage event fires in other tabs,
-   * but not in the tab that performed setItem().
+   * Other tabs only need enough information to know what to refresh. Never
+   * persist deletion results, snapshots or other business payloads in
+   * localStorage merely to trigger a refresh.
    */
-  try {
-    localStorage.setItem(
-      PACKFLOW_DATA_CHANGED_STORAGE_KEY,
-      JSON.stringify(payload)
-    );
-  } catch (error) {
-    console.warn(
-      "Unable to publish cross-tab PackFlow change:",
-      error
-    );
+  const envelope =
+    buildCrossTabEnvelope(payload);
+
+  const channel =
+    openBroadcastChannel();
+
+  if (channel) {
+    try {
+      channel.postMessage(envelope);
+    } finally {
+      channel.close();
+    }
+  } else {
+    try {
+      window.localStorage.setItem(
+        PACKFLOW_DATA_CHANGED_STORAGE_KEY,
+        JSON.stringify(envelope)
+      );
+      window.localStorage.removeItem(
+        PACKFLOW_DATA_CHANGED_STORAGE_KEY
+      );
+    } catch (error) {
+      console.warn(
+        "Unable to publish cross-tab PackFlow change:",
+        error
+      );
+    }
   }
 
   return payload;
@@ -129,11 +166,9 @@ export const subscribeToPackFlowDataChanges = (
   };
 
   const notify = (payload) => {
-    if (!shouldHandle(payload)) {
-      return;
+    if (shouldHandle(payload)) {
+      listener(payload || {});
     }
-
-    listener(payload || {});
   };
 
   const handleCurrentTabEvent = (event) => {
@@ -150,9 +185,7 @@ export const subscribeToPackFlowDataChanges = (
     }
 
     try {
-      notify(
-        JSON.parse(event.newValue)
-      );
+      notify(JSON.parse(event.newValue));
     } catch (error) {
       console.warn(
         "Invalid PackFlow data-change event:",
@@ -161,25 +194,45 @@ export const subscribeToPackFlowDataChanges = (
     }
   };
 
+  const channel =
+    openBroadcastChannel();
+
+  const handleBroadcastMessage = (event) => {
+    notify(event?.data || {});
+  };
+
   window.addEventListener(
     PACKFLOW_DATA_CHANGED_EVENT,
     handleCurrentTabEvent
   );
-
   window.addEventListener(
     "storage",
     handleOtherTabEvent
   );
+
+  if (channel) {
+    channel.addEventListener(
+      "message",
+      handleBroadcastMessage
+    );
+  }
 
   return () => {
     window.removeEventListener(
       PACKFLOW_DATA_CHANGED_EVENT,
       handleCurrentTabEvent
     );
-
     window.removeEventListener(
       "storage",
       handleOtherTabEvent
     );
+
+    if (channel) {
+      channel.removeEventListener(
+        "message",
+        handleBroadcastMessage
+      );
+      channel.close();
+    }
   };
 };

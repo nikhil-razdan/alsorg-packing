@@ -2,14 +2,24 @@ package com.alsorg.packing.service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
+
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.logistics.CreateShiftRequest;
 import com.alsorg.packing.controller.dto.logistics.UpdateShiftStatusRequest;
 import com.alsorg.packing.domain.logistics.Driver;
@@ -23,7 +33,8 @@ import com.alsorg.packing.repository.VehicleRepository;
 @Transactional
 public class LogisticsShiftService {
 
-        private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
+        private static final int MAX_SHIFT_PAGE_SIZE = 100;
 
         private static final List<String> ALLOWED_STATUSES = List.of(
                         "WORKING",
@@ -35,6 +46,9 @@ public class LogisticsShiftService {
         private final LogisticsShiftRepository shiftRepository;
         private final DriverRepository driverRepository;
         private final VehicleRepository vehicleRepository;
+
+        @PersistenceContext
+        private EntityManager entityManager;
 
         public LogisticsShiftService(
                         LogisticsShiftRepository shiftRepository,
@@ -75,6 +89,38 @@ public class LogisticsShiftService {
                                 .findAllByOrderByShiftStartDesc();
         }
 
+        /**
+         * Server-paged compatibility path for the scalable Logistics frontend.
+         *
+         * The legacy full-list method above remains available until every
+         * dashboard/report endpoint has its own server-side aggregate contract.
+         */
+        @Transactional(readOnly = true)
+        public Page<LogisticsShift> getShifts(
+                        Pageable pageable) {
+
+                if (pageable == null) {
+                        throw badRequest(
+                                        "Shift page request is required");
+                }
+
+                Pageable safePageable = PageRequest.of(
+                                Math.max(0, pageable.getPageNumber()),
+                                Math.max(
+                                                1,
+                                                Math.min(
+                                                                pageable.getPageSize(),
+                                                                MAX_SHIFT_PAGE_SIZE)),
+                                pageable.getSort().isSorted()
+                                                ? pageable.getSort()
+                                                : Sort.by(
+                                                                Sort.Direction.DESC,
+                                                                "shiftStart"));
+
+                return shiftRepository.findAll(
+                                safePageable);
+        }
+
         public void deleteShift(UUID id) {
                 LogisticsShift shift = requireShift(id);
 
@@ -109,7 +155,7 @@ public class LogisticsShiftService {
                 LogisticsShift shift = requireShift(id);
 
                 if (request == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Status request is required");
                 }
 
@@ -186,17 +232,17 @@ public class LogisticsShiftService {
         private void validateRequest(
                         CreateShiftRequest request) {
                 if (request == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Shift request is required");
                 }
 
                 if (request.getDriverId() == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Driver is required");
                 }
 
                 if (request.getVehicleId() == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Vehicle is required");
                 }
 
@@ -208,40 +254,50 @@ public class LogisticsShiftService {
         private Driver requireDriver(
                         UUID driverId) {
                 if (driverId == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Driver is required");
                 }
 
                 return driverRepository
                                 .findById(driverId)
-                                .orElseThrow(() -> new RuntimeException(
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
                                                 "Driver not found"));
         }
 
         private Vehicle requireVehicle(
                         UUID vehicleId) {
                 if (vehicleId == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Vehicle is required");
                 }
 
                 return vehicleRepository
                                 .findById(vehicleId)
-                                .orElseThrow(() -> new RuntimeException(
+                                .orElseThrow(() -> new ResponseStatusException(
+                                                HttpStatus.NOT_FOUND,
                                                 "Vehicle not found"));
         }
 
         private LogisticsShift requireShift(
                         UUID id) {
                 if (id == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Shift id is required");
                 }
 
-                return shiftRepository
-                                .findById(id)
-                                .orElseThrow(() -> new RuntimeException(
-                                                "Shift not found"));
+                LogisticsShift shift = entityManager.find(
+                                LogisticsShift.class,
+                                id,
+                                LockModeType.PESSIMISTIC_WRITE);
+
+                if (shift == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Shift not found");
+                }
+
+                return shift;
         }
 
         private void validateShiftTimes(
@@ -249,12 +305,12 @@ public class LogisticsShiftService {
                         LocalDateTime shiftEnd) {
                 if (shiftStart == null ||
                                 shiftEnd == null) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Shift start and shift end are required");
                 }
 
                 if (!shiftEnd.isAfter(shiftStart)) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Shift end time must be after shift start time");
                 }
         }
@@ -319,7 +375,7 @@ public class LogisticsShiftService {
 
                 if (!ALLOWED_STATUSES.contains(
                                 normalized)) {
-                        throw new RuntimeException(
+                        throw badRequest(
                                         "Unsupported shift status: "
                                                         + normalized);
                 }
@@ -354,7 +410,14 @@ public class LogisticsShiftService {
                         return fallback;
                 }
 
-                return value.trim();
+                String clean = value.trim();
+
+                if (clean.length() > 120) {
+                        throw badRequest(
+                                        "Route category is too long");
+                }
+
+                return clean;
         }
 
         private String cleanOrNull(
@@ -364,6 +427,20 @@ public class LogisticsShiftService {
                         return null;
                 }
 
-                return value.trim();
+                String clean = value.trim();
+
+                if (clean.length() > 2000) {
+                        throw badRequest(
+                                        "Shift remarks are too long");
+                }
+
+                return clean;
+        }
+
+        private ResponseStatusException badRequest(
+                        String message) {
+                return new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST,
+                                message);
         }
 }

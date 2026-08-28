@@ -21,6 +21,16 @@ public class PackingReportService {
             LocalDateTime from,
             LocalDateTime to
     ) {
+        validateRange(from, to);
+
         return repository.fetchPackingReport(from, to);
+    }
+
+    private void validateRange(
+            LocalDateTime from,
+            LocalDateTime to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must be before or equal to 'to'");
+        }
     }
 }

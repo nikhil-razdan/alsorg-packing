@@ -13,6 +13,7 @@ import com.alsorg.packing.hrflow.repository.HrCandidateDocumentRepository;
 import com.alsorg.packing.hrflow.security.HrAccessService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -387,10 +388,21 @@ public class HrDocumentService {
             throw HrFlowException.badRequest("The document could not be read.");
         }
 
+        /*
+         * Multipart metadata is client-controlled. Re-check the actual byte array
+         * after reading it so a misleading MultipartFile size cannot bypass the
+         * configured HRFlow document limit.
+         */
+        if (bytes.length == 0) {
+            throw HrFlowException.badRequest("A document file is required.");
+        }
+        if (bytes.length > maxBytes) {
+            throw HrFlowException.badRequest(
+                    "Document is too large. Maximum allowed size is " + maxBytes + " bytes.");
+        }
+
         String originalName = cleanFileName(file.getOriginalFilename());
-        String contentType = clean(file.getContentType());
-        if (contentType == null)
-            contentType = "application/octet-stream";
+        String contentType = safeContentType(file.getContentType());
 
         HrCandidateDocument document = new HrCandidateDocument();
         document.setCandidateId(candidateId);
@@ -527,12 +539,33 @@ public class HrDocumentService {
         String v = clean(value);
         if (v == null)
             return "document.bin";
+
         v = v.replace("\\", "/");
         int slash = v.lastIndexOf('/');
         if (slash >= 0)
             v = v.substring(slash + 1);
-        v = v.replaceAll("[\\r\\n\\t]", "_");
-        return v.length() > 500 ? v.substring(v.length() - 500) : v;
+
+        /* Remove all ASCII control characters from user-controlled names. */
+        v = v.replaceAll("[\\x00-\\x1F\\x7F]", "_").trim();
+
+        if (v.isBlank())
+            return "document.bin";
+
+        return v.length() > 255 ? v.substring(v.length() - 255) : v;
+    }
+
+    private String safeContentType(String value) {
+        String raw = clean(value);
+        if (raw == null) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+
+        try {
+            MediaType parsed = MediaType.parseMediaType(raw);
+            return parsed.toString();
+        } catch (Exception ignored) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
     }
 
     private String clean(String value) {

@@ -1,19 +1,16 @@
 package com.alsorg.packing.service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.audit.AuditLog;
 import com.alsorg.packing.repository.AuditLogRepository;
 
 @Service
 @Transactional
 public class AuditLogService {
-
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final AuditLogRepository auditRepo;
 
@@ -31,12 +28,39 @@ public class AuditLogService {
             String role
     ) {
         AuditLog log = new AuditLog();
-        log.setZohoItemId(zohoItemId);
-        log.setAction(action);
-        log.setPerformedBy(performedBy);
-        log.setRole(role);
-        log.setPerformedAt(LocalDateTime.now(APP_ZONE));
+        log.setZohoItemId(clean(zohoItemId));
+        log.setAction(clean(action));
+        log.setPerformedBy(safe(performedBy, "SYSTEM"));
+        log.setRole(safe(role, "SYSTEM"));
+        log.setPerformedAt(
+                LocalDateTime.now(
+                        TimeZoneConfig.APP_ZONE));
 
         auditRepo.save(log);
+    }
+
+    private String clean(
+            String value) {
+
+        if (value == null) {
+            return null;
+        }
+
+        String text = value.trim();
+
+        return text.isBlank()
+                ? null
+                : text;
+    }
+
+    private String safe(
+            String value,
+            String fallback) {
+
+        String text = clean(value);
+
+        return text == null
+                ? fallback
+                : text;
     }
 }

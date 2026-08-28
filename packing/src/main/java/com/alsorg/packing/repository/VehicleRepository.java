@@ -11,8 +11,7 @@ import com.alsorg.packing.domain.logistics.Vehicle;
 public interface VehicleRepository
         extends JpaRepository<Vehicle, UUID> {
 
-    boolean existsByVehicleNumberIgnoreCase(
-            String vehicleNumber);
+    boolean existsByVehicleNumberIgnoreCase(String vehicleNumber);
 
     boolean existsByVehicleNumberIgnoreCaseAndIdNot(
             String vehicleNumber,

@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,13 +28,13 @@ public final class MatFlowProcurementDtos {
         }
 
         public record VendorRequest(
-                        String vendorCode,
-                        String vendorName,
-                        String gstin,
-                        String contactPerson,
-                        String contactPhone,
-                        String email,
-                        String address,
+                        @Size(max = 100, message = "Vendor code cannot exceed 100 characters.") String vendorCode,
+                        @Size(max = 300, message = "Vendor name cannot exceed 300 characters.") String vendorName,
+                        @Size(max = 50, message = "GSTIN cannot exceed 50 characters.") String gstin,
+                        @Size(max = 200, message = "Contact person cannot exceed 200 characters.") String contactPerson,
+                        @Size(max = 50, message = "Contact phone cannot exceed 50 characters.") String contactPhone,
+                        @Size(max = 320, message = "Email cannot exceed 320 characters.") String email,
+                        @Size(max = 2000, message = "Address cannot exceed 2000 characters.") String address,
                         Boolean active,
                         Long rowVersion) {
         }
@@ -52,18 +53,22 @@ public final class MatFlowProcurementDtos {
         }
 
         public record PurchaseOrderLineRequest(
-                        @NotNull UUID indentLineId,
-                        @NotNull @DecimalMin(value = "0.001") BigDecimal orderedQty,
-                        String remarks) {
+                        @NotNull(message = "Indent line is required.") UUID indentLineId,
+                        @NotNull(message = "Ordered quantity is required.")
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Ordered quantity must be greater than zero.")
+                        BigDecimal orderedQty,
+                        @Size(max = 1000, message = "Line remarks cannot exceed 1000 characters.") String remarks) {
         }
 
         public record PurchaseOrderRequest(
-                        String poNumber,
-                        @NotNull LocalDate poDate,
-                        @NotNull UUID vendorId,
-                        @NotNull UUID indentId,
-                        @NotEmpty List<@Valid PurchaseOrderLineRequest> lines,
-                        String remarks) {
+                        @Size(max = 150, message = "PO number cannot exceed 150 characters.") String poNumber,
+                        @NotNull(message = "PO date is required.") LocalDate poDate,
+                        @NotNull(message = "Vendor is required.") UUID vendorId,
+                        @NotNull(message = "Indent is required.") UUID indentId,
+                        @NotEmpty(message = "At least one PO line is required.")
+                        @Size(max = 500, message = "A maximum of 500 PO lines is allowed.")
+                        List<@Valid PurchaseOrderLineRequest> lines,
+                        @Size(max = 2000, message = "PO remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record PurchaseOrderLineResponse(
@@ -102,17 +107,21 @@ public final class MatFlowProcurementDtos {
         }
 
         public record GoodsReceiptLineRequest(
-                        @NotNull UUID purchaseOrderLineId,
-                        @NotNull @DecimalMin(value = "0.001") BigDecimal receivedQty,
-                        String batchNo) {
+                        @NotNull(message = "Purchase Order line is required.") UUID purchaseOrderLineId,
+                        @NotNull(message = "Received quantity is required.")
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Received quantity must be greater than zero.")
+                        BigDecimal receivedQty,
+                        @Size(max = 150, message = "Batch number cannot exceed 150 characters.") String batchNo) {
         }
 
         public record GoodsReceiptRequest(
-                        @NotNull UUID purchaseOrderId,
-                        String vendorChallanNo,
-                        String vendorInvoiceNo,
-                        @NotEmpty List<@Valid GoodsReceiptLineRequest> lines,
-                        String remarks) {
+                        @NotNull(message = "Purchase Order is required.") UUID purchaseOrderId,
+                        @Size(max = 150, message = "Vendor challan number cannot exceed 150 characters.") String vendorChallanNo,
+                        @Size(max = 150, message = "Vendor invoice number cannot exceed 150 characters.") String vendorInvoiceNo,
+                        @NotEmpty(message = "At least one GRN line is required.")
+                        @Size(max = 500, message = "A maximum of 500 GRN lines is allowed.")
+                        List<@Valid GoodsReceiptLineRequest> lines,
+                        @Size(max = 2000, message = "GRN remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record GoodsReceiptLineResponse(
@@ -159,10 +168,14 @@ public final class MatFlowProcurementDtos {
          * Active QC is a check/tick against an MR material lot. It is not a Location.
          */
         public record QcDecisionRequest(
-                        @NotNull Long rowVersion,
-                        @NotNull @DecimalMin(value = "0.0") BigDecimal acceptedQty,
-                        @NotNull @DecimalMin(value = "0.0") BigDecimal rejectedQty,
-                        String remarks) {
+                        @NotNull(message = "QC row version is required.") Long rowVersion,
+                        @NotNull(message = "Accepted quantity is required.")
+                        @DecimalMin(value = "0.0", inclusive = true, message = "Accepted quantity cannot be negative.")
+                        BigDecimal acceptedQty,
+                        @NotNull(message = "Rejected quantity is required.")
+                        @DecimalMin(value = "0.0", inclusive = true, message = "Rejected quantity cannot be negative.")
+                        BigDecimal rejectedQty,
+                        @Size(max = 2000, message = "QC remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record QcInspectionResponse(
@@ -191,9 +204,11 @@ public final class MatFlowProcurementDtos {
         }
 
         public record VendorReturnRequest(
-                        @NotNull Long rowVersion,
-                        @NotNull @DecimalMin(value = "0.001") BigDecimal returnQty,
-                        String remarks) {
+                        @NotNull(message = "QC row version is required.") Long rowVersion,
+                        @NotNull(message = "Return quantity is required.")
+                        @DecimalMin(value = "0.001", inclusive = true, message = "Return quantity must be greater than zero.")
+                        BigDecimal returnQty,
+                        @Size(max = 2000, message = "Return remarks cannot exceed 2000 characters.") String remarks) {
         }
 
         public record VendorReturnResponse(

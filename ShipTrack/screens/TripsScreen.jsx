@@ -38,6 +38,10 @@ import {
   endDispatchedChallanTrip,
 } from "../api/logisticsApi";
 
+import {
+  getBackendMessage,
+} from "../api/client";
+
 function normalizeText(value) {
   return String(value || "")
     .trim()
@@ -59,6 +63,22 @@ function formatStatus(value) {
   }
 
   return text.replace(/_/g, " ");
+}
+
+
+function getTripStatus(challan) {
+  if (challan?.tripEndedAt) {
+    return "ENDED";
+  }
+
+  return (
+    normalizeStatus(challan?.tripStatus) ||
+    "RUNNING"
+  );
+}
+
+function isTripEnded(challan) {
+  return getTripStatus(challan) === "ENDED";
 }
 
 function formatDateTime(value) {
@@ -370,14 +390,12 @@ export default function TripsScreen() {
           : []
       );
     } catch (e) {
-      console.error(e);
-
       Alert.alert(
         "Challans failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to load dispatched challans"
+        getBackendMessage(
+          e,
+          "Failed to load dispatched challans"
+        )
       );
     } finally {
       setLoading(false);
@@ -399,10 +417,10 @@ export default function TripsScreen() {
     } catch (e) {
       Alert.alert(
         "Refresh failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Failed to refresh challans"
+        getBackendMessage(
+          e,
+          "Failed to refresh challans"
+        )
       );
     } finally {
       setRefreshing(false);
@@ -450,7 +468,7 @@ export default function TripsScreen() {
       const values =
         challans
           .map((x) =>
-            normalizeStatus(x.tripStatus || "RUNNING")
+            getTripStatus(x)
           )
           .filter(Boolean);
 
@@ -534,7 +552,7 @@ export default function TripsScreen() {
           String(challan.vehicleNumber || "").trim() === vehicleFilter;
 
         const challanTripStatus =
-          normalizeStatus(challan.tripStatus || "RUNNING");
+          getTripStatus(challan);
 
         const matchesTripStatus =
           tripStatusFilter === "ALL" ||
@@ -641,7 +659,12 @@ export default function TripsScreen() {
       () =>
         filteredChallans.reduce(
           (sum, challan) =>
-            sum + Number(challan.totalItems || 0),
+            sum +
+            Number(
+              challan.totalItems ||
+              challan.items?.length ||
+              0
+            ),
           0
         ),
       [filteredChallans]
@@ -652,7 +675,7 @@ export default function TripsScreen() {
       () =>
         filteredChallans.filter(
           (challan) =>
-            normalizeStatus(challan.tripStatus || "RUNNING") !== "ENDED"
+            !isTripEnded(challan)
         ).length,
       [filteredChallans]
     );
@@ -662,7 +685,7 @@ export default function TripsScreen() {
       () =>
         filteredChallans.filter(
           (challan) =>
-            normalizeStatus(challan.tripStatus) === "ENDED"
+            isTripEnded(challan)
         ).length,
       [filteredChallans]
     );
@@ -761,10 +784,10 @@ export default function TripsScreen() {
     } catch (e) {
       Alert.alert(
         "Save failed",
-        e?.response?.data?.message ||
-        e?.response?.data ||
-        e?.message ||
-        "Unable to save trip end time"
+        getBackendMessage(
+          e,
+          "Unable to save trip end time"
+        )
       );
     } finally {
       setSavingEndTrip("");
@@ -801,8 +824,10 @@ export default function TripsScreen() {
       <FlatList
         data={paginatedChallans}
         keyExtractor={(item, index) =>
-          item.challanNumber ||
-          `challan-${index}`
+          String(
+            item.challanNumber ||
+            `challan-${index}`
+          )
         }
         refreshControl={
           <RefreshControl
@@ -1516,7 +1541,7 @@ function ChallanCard({
 
         <Info
           label="Trip Status"
-          value={challan?.tripStatus || "RUNNING"}
+          value={getTripStatus(challan)}
         />
 
         <Info

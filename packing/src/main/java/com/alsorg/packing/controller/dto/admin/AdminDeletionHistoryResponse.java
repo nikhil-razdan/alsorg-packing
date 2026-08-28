@@ -11,6 +11,5 @@ public record AdminDeletionHistoryResponse(
         String reason,
         String deletedBy,
         LocalDateTime deletedAt,
-        String affectedRowsJson
-) {
+        String affectedRowsJson) {
 }

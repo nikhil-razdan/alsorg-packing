@@ -1,12 +1,17 @@
 package com.alsorg.packing.controller;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
@@ -19,6 +24,9 @@ import com.alsorg.packing.service.pdf.GatePassPdfService;
 @RequestMapping("/api/gatepass")
 public class GatePassController {
 
+    private static final int MAX_IDENTIFIER_LENGTH = 220;
+    private static final int MAX_GATE_PASS_ITEMS = 2000;
+
     private final DispatchedItemRepository repo;
     private final GatePassPdfService pdfService;
     private final CurrentUserService currentUserService;
@@ -27,7 +35,6 @@ public class GatePassController {
             DispatchedItemRepository repo,
             GatePassPdfService pdfService,
             CurrentUserService currentUserService) {
-
         this.repo = repo;
         this.pdfService = pdfService;
         this.currentUserService = currentUserService;
@@ -35,93 +42,102 @@ public class GatePassController {
 
     @GetMapping("/{zohoItemId}/pdf")
     public ResponseEntity<byte[]> downloadGatePass(
-            @PathVariable String zohoItemId,
-            @RequestHeader(value = "Authorization", required = false) String auth) throws Exception {
+            @PathVariable String zohoItemId) throws Exception {
 
-        User user =
-                currentUserService.getCurrentUserFromAuth(auth);
-
+        User user = currentUserService.requireCurrentUser();
         assertGatePassViewAccess(user);
 
-        DispatchedItem item =
-                repo.findById(zohoItemId)
-                        .orElseThrow(() -> new IllegalStateException("Item not found"));
+        String cleanItemId = requireIdentifier(zohoItemId, "Item id");
+
+        DispatchedItem item = repo.findById(cleanItemId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Item not found"));
 
         assertPlantVisibility(user, item);
 
-        if (item.getGatePassNumber() == null ||
-                item.getGatePassNumber().trim().isBlank()) {
-            throw new IllegalStateException("Gate pass not generated yet");
-        }
+        String gatePassNumber = requireIdentifier(
+                item.getGatePassNumber(),
+                "Gate pass number");
 
-        List<DispatchedItem> gatePassItems =
-                repo.findByGatePassNumber(item.getGatePassNumber());
+        List<DispatchedItem> gatePassItems = repo.findByGatePassNumber(gatePassNumber);
 
         if (gatePassItems == null || gatePassItems.isEmpty()) {
             gatePassItems = List.of(item);
         }
 
-        if (!currentUserService.canViewAllWarehouseData(user)) {
-            gatePassItems =
-                    gatePassItems.stream()
-                            .filter(gpItem -> isVisiblePlant(user, gpItem))
-                            .toList();
-        }
+        gatePassItems = filterVisibleItems(user, gatePassItems);
+        validateGatePassItems(gatePassItems);
 
-        if (gatePassItems.isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Gate pass not visible for this user");
-        }
-
-        byte[] pdf =
-                pdfService.generateBulkGatePass(gatePassItems);
-
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=" + item.getGatePassNumber() + ".pdf")
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(pdf);
+        byte[] pdf = pdfService.generateBulkGatePass(gatePassItems);
+        return pdfResponse(pdf, gatePassNumber);
     }
 
     @GetMapping("/bulk/{gatePass}/pdf")
     public ResponseEntity<byte[]> bulkGatePassPdf(
-            @PathVariable String gatePass,
-            @RequestHeader(value = "Authorization", required = false) String auth) throws Exception {
+            @PathVariable String gatePass) throws Exception {
 
-        User user =
-                currentUserService.getCurrentUserFromAuth(auth);
-
+        User user = currentUserService.requireCurrentUser();
         assertGatePassViewAccess(user);
 
-        List<DispatchedItem> items =
-                repo.findByGatePassNumber(gatePass);
+        String cleanGatePass = requireIdentifier(gatePass, "Gate pass number");
+        List<DispatchedItem> items = repo.findByGatePassNumber(cleanGatePass);
 
-        if (items.isEmpty()) {
-            throw new RuntimeException("No items found for gate pass");
+        if (items == null || items.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No items found for gate pass");
         }
 
-        if (!currentUserService.canViewAllWarehouseData(user)) {
-            items =
-                    items.stream()
-                            .filter(item -> isVisiblePlant(user, item))
-                            .toList();
+        items = filterVisibleItems(user, items);
+        validateGatePassItems(items);
+
+        byte[] pdf = pdfService.generateBulkGatePass(items);
+        return pdfResponse(pdf, cleanGatePass);
+    }
+
+    private List<DispatchedItem> filterVisibleItems(
+            User user,
+            List<DispatchedItem> items) {
+
+        if (currentUserService.canViewAllWarehouseData(user)) {
+            return items;
         }
 
-        if (items.isEmpty()) {
+        return items.stream()
+                .filter(item -> isVisiblePlant(user, item))
+                .toList();
+    }
+
+    private void validateGatePassItems(
+            List<DispatchedItem> items) {
+        if (items == null || items.isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Gate pass not visible for this user");
         }
 
-        byte[] pdf =
-                pdfService.generateBulkGatePass(items);
+        if (items.size() > MAX_GATE_PASS_ITEMS) {
+            throw new ResponseStatusException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Gate pass contains too many items to render safely");
+        }
+    }
+
+    private ResponseEntity<byte[]> pdfResponse(
+            byte[] pdf,
+            String gatePassNumber) {
+
+        String safeFilename = gatePassNumber
+                .replaceAll("[^a-zA-Z0-9._-]", "_");
 
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=" + gatePass + ".pdf")
+                        "inline; filename=\"" + safeFilename + ".pdf\"")
+                .header(
+                        HttpHeaders.CACHE_CONTROL,
+                        "no-store, no-cache, must-revalidate, max-age=0")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
@@ -130,7 +146,6 @@ public class GatePassController {
         if (!currentUserService.canAccessWarehouse(user)
                 && !currentUserService.isDispatch(user)
                 && !currentUserService.isAdmin(user)) {
-
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Gate pass access not allowed");
@@ -140,7 +155,6 @@ public class GatePassController {
     private void assertPlantVisibility(
             User user,
             DispatchedItem item) {
-
         if (currentUserService.canViewAllWarehouseData(user)) {
             return;
         }
@@ -156,12 +170,46 @@ public class GatePassController {
             User user,
             DispatchedItem item) {
 
-        if (item.getPlantCode() == null || item.getPlantCode().isBlank()) {
+        if (item == null) {
+            return false;
+        }
+
+        String plantCode = item.getPlantCode();
+
+        /*
+         * Preserve legacy rows that pre-date plant tracking. New plant-tracked
+         * rows remain strictly filtered.
+         */
+        if (plantCode == null || plantCode.isBlank()) {
             return true;
         }
 
-        return currentUserService
-                .allowedPlants(user)
-                .contains(item.getPlantCode());
+        Set<String> allowed = currentUserService.allowedPlants(user);
+        String target = plantCode.trim().toUpperCase(Locale.ROOT);
+
+        return allowed.stream()
+                .filter(value -> value != null)
+                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .anyMatch(target::equals);
+    }
+
+    private String requireIdentifier(
+            String value,
+            String label) {
+        if (value == null || value.trim().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    label + " is required");
+        }
+
+        String clean = value.trim();
+
+        if (clean.length() > MAX_IDENTIFIER_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    label + " is too long");
+        }
+
+        return clean;
     }
 }

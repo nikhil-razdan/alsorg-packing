@@ -10,14 +10,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+
 @Service
 public class BomFlowAccessService {
 
     private final UserRepository userRepository;
 
-    public BomFlowAccessService(
-            UserRepository userRepository) {
-
+    public BomFlowAccessService(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
 
@@ -32,19 +35,16 @@ public class BomFlowAccessService {
                 || authentication.getName() == null
                 || authentication.getName().isBlank()
                 || "anonymousUser".equalsIgnoreCase(authentication.getName())) {
-
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "User not authenticated");
         }
 
-        String username = authentication.getName().trim();
-
         User user = userRepository
-                .findByUsernameIgnoreCase(username)
+                .findByUsernameIgnoreCase(authentication.getName().trim())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
-                        "User not found: " + username));
+                        "Authenticated user account was not found"));
 
         if (!user.isEnabled()) {
             throw new ResponseStatusException(
@@ -56,54 +56,71 @@ public class BomFlowAccessService {
     }
 
     public String currentUsername() {
-        return currentUser().getUsername();
+        String username = currentUser().getUsername();
+        if (username == null || username.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated");
+        }
+        return username.trim();
     }
 
     public String currentRole() {
-        String role = currentUser().getRole();
+        Set<String> roles = currentRoles();
+        return roles.stream().findFirst().orElse("");
+    }
 
-        return role == null
-                ? ""
-                : role.trim().replace("ROLE_", "").toUpperCase();
+    public Set<String> currentRoles() {
+        User user = currentUser();
+        LinkedHashSet<String> roles = new LinkedHashSet<>();
+
+        if (user.getEffectiveRoles() != null) {
+            user.getEffectiveRoles().stream()
+                    .filter(Objects::nonNull)
+                    .map(this::normalizeRole)
+                    .filter(role -> !role.isBlank())
+                    .forEach(roles::add);
+        }
+
+        if (user.getRole() != null) {
+            String role = normalizeRole(user.getRole());
+            if (!role.isBlank()) roles.add(role);
+        }
+
+        return Set.copyOf(roles);
     }
 
     public boolean isManager() {
-        String role = currentRole();
-
-        return "ADMIN".equals(role)
-                || "BOMFLOW_MANAGER".equals(role);
+        Set<String> roles = currentRoles();
+        return roles.contains("ADMIN") || roles.contains("BOMFLOW_MANAGER");
     }
 
     public boolean isEditor() {
-        return isManager()
-                || "BOMFLOW_EDITOR".equals(currentRole());
+        Set<String> roles = currentRoles();
+        return roles.contains("ADMIN")
+                || roles.contains("BOMFLOW_MANAGER")
+                || roles.contains("BOMFLOW_EDITOR");
     }
 
     public boolean isReviewer() {
-        String role = currentRole();
-
-        return isManager()
-                || "BOMFLOW_REVIEWER".equals(role)
-                || "BOMFLOW_APPROVER".equals(role);
+        Set<String> roles = currentRoles();
+        return roles.contains("ADMIN")
+                || roles.contains("BOMFLOW_MANAGER")
+                || roles.contains("BOMFLOW_REVIEWER")
+                || roles.contains("BOMFLOW_APPROVER");
     }
 
     public boolean isApprover() {
-        return isManager()
-                || "BOMFLOW_APPROVER".equals(currentRole());
+        Set<String> roles = currentRoles();
+        return roles.contains("ADMIN")
+                || roles.contains("BOMFLOW_MANAGER")
+                || roles.contains("BOMFLOW_APPROVER");
     }
 
     public void requireBomFlowAccess() {
-        String role = currentRole();
-
-        boolean allowed = switch (role) {
-            case "ADMIN",
-                    "BOMFLOW_MANAGER",
-                    "BOMFLOW_EDITOR",
-                    "BOMFLOW_REVIEWER",
-                    "BOMFLOW_APPROVER" -> true;
-
+        Set<String> roles = currentRoles();
+        boolean allowed = roles.stream().anyMatch(role -> switch (role) {
+            case "ADMIN", "BOMFLOW_MANAGER", "BOMFLOW_EDITOR", "BOMFLOW_REVIEWER", "BOMFLOW_APPROVER" -> true;
             default -> false;
-        };
+        });
 
         if (!allowed) {
             throw new ResponseStatusException(
@@ -114,7 +131,6 @@ public class BomFlowAccessService {
 
     public void requireEditor() {
         requireBomFlowAccess();
-
         if (!isEditor()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -124,7 +140,6 @@ public class BomFlowAccessService {
 
     public void requireReviewer() {
         requireBomFlowAccess();
-
         if (!isReviewer()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -134,11 +149,16 @@ public class BomFlowAccessService {
 
     public void requireApprover() {
         requireBomFlowAccess();
-
         if (!isApprover()) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "BOMFlow Approver access required");
         }
+    }
+
+    private String normalizeRole(String value) {
+        if (value == null) return "";
+        String role = value.trim().toUpperCase(Locale.ROOT);
+        return role.startsWith("ROLE_") ? role.substring(5) : role;
     }
 }

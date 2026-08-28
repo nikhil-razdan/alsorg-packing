@@ -420,6 +420,87 @@ public interface PacketItemRepository
 
     /*
      * =====================================================
+     * SCALE-READY HARDWARE INVENTORY ID PAGES
+     * =====================================================
+     *
+     * Paging directly over an EntityGraph that fetches hardwareLines would
+     * paginate a to-many join and can produce duplicate/partial pages. These
+     * additive ID-page queries allow a safe two-step read: page root IDs first,
+     * then batch-fetch the selected roots with masterItem + hardwareLines.
+     * Existing List methods below remain for backward compatibility.
+     */
+
+    @Query(value = """
+            SELECT p.id
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+            ORDER BY LOWER(COALESCE(p.itemName, '')) ASC,
+                     p.packetNumber ASC,
+                     p.id ASC
+            """, countQuery = """
+            SELECT COUNT(p)
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+            """)
+    Page<UUID> findItemIdsByItemType(
+            @Param("itemType") PacketItemType itemType,
+            Pageable pageable);
+
+    @Query(value = """
+            SELECT p.id
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+              AND p.createdByUserId = :userId
+            ORDER BY LOWER(COALESCE(p.itemName, '')) ASC,
+                     p.packetNumber ASC,
+                     p.id ASC
+            """, countQuery = """
+            SELECT COUNT(p)
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+              AND p.createdByUserId = :userId
+            """)
+    Page<UUID> findOwnedItemIdsByItemType(
+            @Param("itemType") PacketItemType itemType,
+            @Param("userId") Long userId,
+            Pageable pageable);
+
+    @Query(value = """
+            SELECT p.id
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+              AND p.plantCode IN :plantCodes
+            ORDER BY LOWER(COALESCE(p.itemName, '')) ASC,
+                     p.packetNumber ASC,
+                     p.id ASC
+            """, countQuery = """
+            SELECT COUNT(p)
+            FROM PacketItem p
+            WHERE p.itemType = :itemType
+              AND p.plantCode IN :plantCodes
+            """)
+    Page<UUID> findItemIdsByItemTypeAndPlantCodeIn(
+            @Param("itemType") PacketItemType itemType,
+            @Param("plantCodes") Collection<String> plantCodes,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {
+            "masterItem",
+            "hardwareLines"
+    })
+    @Query("""
+            SELECT DISTINCT p
+            FROM PacketItem p
+            WHERE p.id IN :itemIds
+            ORDER BY LOWER(COALESCE(p.itemName, '')) ASC,
+                     p.packetNumber ASC,
+                     p.id ASC
+            """)
+    List<PacketItem> findByIdsWithHardwareLines(
+            @Param("itemIds") Collection<UUID> itemIds);
+
+    /*
+     * =====================================================
      * HARDWARE INVENTORY READS
      * =====================================================
      */

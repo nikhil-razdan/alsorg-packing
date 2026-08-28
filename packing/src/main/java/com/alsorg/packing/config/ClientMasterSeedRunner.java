@@ -3,6 +3,8 @@ package com.alsorg.packing.config;
 import java.util.List;
 
 import org.springframework.boot.ApplicationArguments;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +20,9 @@ import com.alsorg.packing.service.ClientMasterService;
  */
 @Component
 public class ClientMasterSeedRunner implements ApplicationRunner {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(ClientMasterSeedRunner.class);
 
     private static final String SOURCE = "XLSX_SEED_2026-08-19";
 
@@ -116,9 +121,9 @@ public class ClientMasterSeedRunner implements ApplicationRunner {
              * A migration/configuration issue can be fixed independently and the
              * admin can also maintain the shared master through its UI.
              */
-            System.err.println(
-                    "Client Master XLSX seed skipped: "
-                            + exception.getMessage());
+            log.warn(
+                    "Client Master XLSX seed skipped: {}",
+                    exception.getMessage());
         }
     }
 }

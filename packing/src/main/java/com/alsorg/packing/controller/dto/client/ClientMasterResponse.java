@@ -12,6 +12,5 @@ public record ClientMasterResponse(
         String createdBy,
         LocalDateTime createdAt,
         String updatedBy,
-        LocalDateTime updatedAt
-) {
+        LocalDateTime updatedAt) {
 }

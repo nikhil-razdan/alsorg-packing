@@ -11,6 +11,8 @@ import java.util.UUID;
         name = "hr_onboarding_case",
         indexes = {
                 @Index(name = "idx_hr_onboarding_status", columnList = "status"),
+                @Index(name = "idx_hr_onboarding_status_updated", columnList = "status,updated_at"),
+                @Index(name = "idx_hr_onboarding_updated", columnList = "updated_at"),
                 @Index(name = "idx_hr_onboarding_joining_date", columnList = "joining_date")
         },
         uniqueConstraints = {

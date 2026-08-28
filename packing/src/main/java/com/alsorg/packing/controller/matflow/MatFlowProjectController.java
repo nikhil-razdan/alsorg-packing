@@ -10,7 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Canonical approval-free Project -> Products aggregate API. */
 @RestController
@@ -43,6 +47,8 @@ public class MatFlowProjectController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String plantCode) {
+        validateText(search, 300, "Search");
+        validateText(plantCode, 32, "Plant code");
         return service.list(search, active, plantCode);
     }
 
@@ -121,15 +127,19 @@ public class MatFlowProjectController {
             @PathVariable UUID productId) {
 
         Resource resource = service.loadProductImage(projectId, productId);
+        String fileName = safeFileName(
+                service.productImageFileName(projectId, productId),
+                "product-image");
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(
                         service.productImageContentType(projectId, productId)))
+                .cacheControl(CacheControl.noStore())
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=\""
-                                + service.productImageFileName(projectId, productId)
-                                        .replace("\"", "")
-                                + "\"")
+                        ContentDisposition.inline()
+                                .filename(fileName)
+                                .build()
+                                .toString())
                 .body(resource);
     }
 
@@ -156,15 +166,19 @@ public class MatFlowProjectController {
             @PathVariable UUID productId) {
 
         Resource resource = service.loadProductDrawing(projectId, productId);
+        String fileName = safeFileName(
+                service.productDrawingFileName(projectId, productId),
+                "product-drawing");
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(
                         service.productDrawingContentType(projectId, productId)))
+                .cacheControl(CacheControl.noStore())
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
-                        "inline; filename=\""
-                                + service.productDrawingFileName(projectId, productId)
-                                        .replace("\"", "")
-                                + "\"")
+                        ContentDisposition.inline()
+                                .filename(fileName)
+                                .build()
+                                .toString())
                 .body(resource);
     }
 
@@ -182,4 +196,36 @@ public class MatFlowProjectController {
             @RequestParam Long rowVersion) {
         return service.deleteProduct(projectId, productId, rowVersion);
     }
+
+    private void validateText(
+            String value,
+            int maxLength,
+            String fieldName) {
+        if (value != null && value.length() > maxLength) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " cannot exceed " + maxLength + " characters");
+        }
+    }
+
+    private String safeFileName(
+            String value,
+            String fallback) {
+        String clean = value == null ? "" : value.trim();
+        clean = clean
+                .replace("\r", "_")
+                .replace("\n", "_")
+                .replace("\"", "_")
+                .replace("\\", "_")
+                .replace("/", "_");
+
+        if (clean.isBlank()) {
+            clean = fallback;
+        }
+
+        return clean.length() > 180
+                ? clean.substring(0, 180)
+                : clean;
+    }
+
 }

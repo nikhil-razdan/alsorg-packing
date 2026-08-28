@@ -7,21 +7,28 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowLocationRepository
-                extends JpaRepository<MatFlowLocation, UUID> {
+        extends JpaRepository<MatFlowLocation, UUID> {
 
-        boolean existsByLocationCodeIgnoreCase(
-                        String locationCode);
+    boolean existsByLocationCodeIgnoreCase(String locationCode);
 
-        boolean existsByLocationCodeIgnoreCaseAndIdNot(
-                        String locationCode,
-                        UUID id);
+    boolean existsByLocationCodeIgnoreCaseAndIdNot(String locationCode, UUID id);
 
-        List<MatFlowLocation> findByPlantCodeInAndActiveTrueOrderByLocationCodeAsc(
-                        Set<String> plantCodes);
+    List<MatFlowLocation> findByPlantCodeInAndActiveTrueOrderByLocationCodeAsc(
+            Set<String> plantCodes);
 
-        List<MatFlowLocation> findByPlantCodeInOrderByLocationCodeAsc(
-                        Collection<String> plantCodes);
+    Page<MatFlowLocation> findByPlantCodeInAndActiveTrueOrderByLocationCodeAsc(
+            Collection<String> plantCodes,
+            Pageable pageable);
+
+    List<MatFlowLocation> findByPlantCodeInOrderByLocationCodeAsc(
+            Collection<String> plantCodes);
+
+    Page<MatFlowLocation> findByPlantCodeInOrderByLocationCodeAsc(
+            Collection<String> plantCodes,
+            Pageable pageable);
 }

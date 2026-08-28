@@ -1,9 +1,11 @@
 package com.alsorg.packing.domain.dispatch;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -16,9 +18,10 @@ import java.util.UUID;
 public class CustomChallanItem {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "challan_number")
     private CustomChallan challan;
@@ -41,67 +44,20 @@ public class CustomChallanItem {
     @Column(name = "remarks", length = 1000)
     private String remarks;
 
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public CustomChallan getChallan() {
-        return challan;
-    }
-
-    public void setChallan(CustomChallan challan) {
-        this.challan = challan;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getDrawingNo() {
-        return drawingNo;
-    }
-
-    public void setDrawingNo(String drawingNo) {
-        this.drawingNo = drawingNo;
-    }
-
-    public Double getQuantity() {
-        return quantity;
-    }
-
-    public String getUom() {
-        return uom;
-    }
-
-    public void setUom(String uom) {
-        this.uom = uom;
-    }
-
-    public void setQuantity(Double quantity) {
-        this.quantity = quantity;
-    }
-
-    public Boolean getReturnable() {
-        return returnable;
-    }
-
-    public void setReturnable(Boolean returnable) {
-        this.returnable = returnable;
-    }
-
-    public String getRemarks() {
-        return remarks;
-    }
-
-    public void setRemarks(String remarks) {
-        this.remarks = remarks;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+    public CustomChallan getChallan() { return challan; }
+    public void setChallan(CustomChallan challan) { this.challan = challan; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public String getDrawingNo() { return drawingNo; }
+    public void setDrawingNo(String drawingNo) { this.drawingNo = drawingNo; }
+    public Double getQuantity() { return quantity; }
+    public void setQuantity(Double quantity) { this.quantity = quantity; }
+    public String getUom() { return uom; }
+    public void setUom(String uom) { this.uom = uom; }
+    public Boolean getReturnable() { return returnable; }
+    public void setReturnable(Boolean returnable) { this.returnable = returnable; }
+    public String getRemarks() { return remarks; }
+    public void setRemarks(String remarks) { this.remarks = remarks; }
 }

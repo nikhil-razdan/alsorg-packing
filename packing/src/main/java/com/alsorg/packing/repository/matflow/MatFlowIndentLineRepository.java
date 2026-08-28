@@ -11,10 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface MatFlowIndentLineRepository
         extends JpaRepository<MatFlowIndentLine, UUID> {
 
-    List<MatFlowIndentLine> findByIndent_IdOrderByCreatedAtAsc(
-            UUID indentId);
+    List<MatFlowIndentLine> findByIndent_IdOrderByCreatedAtAsc(UUID indentId);
 
-    Optional<MatFlowIndentLine> findByIdAndIndent_Id(
-            UUID id,
-            UUID indentId);
+    Optional<MatFlowIndentLine> findByIdAndIndent_Id(UUID id, UUID indentId);
 }

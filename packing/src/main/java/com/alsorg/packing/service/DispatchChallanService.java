@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.logistics.DispatchTripPdfResult;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
@@ -20,7 +21,6 @@ import com.alsorg.packing.controller.dto.challan.CustomChallanRequest;
 import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -33,9 +33,10 @@ import java.util.UUID;
 @Transactional
 public class DispatchChallanService {
 
-        private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+        private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
 
         private static final int MAX_CHALLAN_ITEMS = 1000;
+        private static final int MAX_CUSTOM_CHALLAN_ITEMS = 500;
 
         private final ChalaanPdfService pdfService;
         private final DispatchedItemRepository dispatchedRepo;
@@ -339,7 +340,7 @@ public class DispatchChallanService {
                 LocalDateTime dispatchTimeIst = dispatchTime != null
                                 ? dispatchTime
                                 : LocalDateTime.now(
-                                                INDIA_ZONE);
+                                                APP_ZONE);
 
                 String previewChallanNumber = "PREVIEW";
 
@@ -542,8 +543,21 @@ public class DispatchChallanService {
                         throw new RuntimeException("To location / site is required");
                 }
 
+                if ("SITE_RETURN".equalsIgnoreCase(
+                                cleanNullable(request.challanType()))
+                                && isBlank(request.handedOverTo())) {
+                        throw new RuntimeException(
+                                        "Handed over to is required for Site Return challan");
+                }
+
                 if (request.items() == null || request.items().isEmpty()) {
                         throw new RuntimeException("At least one challan item is required");
+                }
+
+                if (request.items().size() > MAX_CUSTOM_CHALLAN_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A maximum of " + MAX_CUSTOM_CHALLAN_ITEMS
+                                                        + " items can be added to one custom challan");
                 }
 
                 boolean hasValidItem = false;
@@ -856,13 +870,13 @@ public class DispatchChallanService {
                                 LocalDateTime value = item.getDispatchedAt();
 
                                 if (value == null) {
-                                        return LocalDateTime.now(INDIA_ZONE);
+                                        return LocalDateTime.now(APP_ZONE);
                                 }
 
                                 if (common == null) {
                                         common = value;
                                 } else if (!common.equals(value)) {
-                                        return LocalDateTime.now(INDIA_ZONE);
+                                        return LocalDateTime.now(APP_ZONE);
                                 }
                         }
 
@@ -871,7 +885,7 @@ public class DispatchChallanService {
                         }
                 }
 
-                return LocalDateTime.now(INDIA_ZONE);
+                return LocalDateTime.now(APP_ZONE);
         }
 
         private String resolveChallanDriverName(
@@ -925,7 +939,13 @@ public class DispatchChallanService {
                         return;
                 }
 
-                if (!allowedPlants.contains(item.getPlantCode())) {
+                boolean permitted = allowedPlants.stream()
+                                .filter(java.util.Objects::nonNull)
+                                .anyMatch(value -> value.trim()
+                                                .equalsIgnoreCase(
+                                                                item.getPlantCode().trim()));
+
+                if (!permitted) {
                         throw new RuntimeException(
                                         "User does not have access to plant: "
                                                         + item.getPlantCode());
@@ -1006,7 +1026,7 @@ public class DispatchChallanService {
                         LocalDateTime dispatchTimeIst) {
                 String date = (dispatchTimeIst != null
                                 ? dispatchTimeIst.toLocalDate()
-                                : java.time.LocalDate.now(INDIA_ZONE)).format(
+                                : java.time.LocalDate.now(APP_ZONE)).format(
                                                 java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
                 String suffix = UUID.randomUUID()
@@ -1097,7 +1117,7 @@ public class DispatchChallanService {
                         prefix = "CUS-CH";
                 }
 
-                String date = java.time.LocalDate.now(INDIA_ZONE)
+                String date = java.time.LocalDate.now(APP_ZONE)
                                 .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
                 String suffix = UUID.randomUUID()

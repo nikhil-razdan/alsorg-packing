@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatFlowProcessingJobRepository
@@ -13,13 +15,13 @@ public interface MatFlowProcessingJobRepository
 
     List<MatFlowProcessingJob> findAllByOrderByUpdatedAtDesc();
 
+    Page<MatFlowProcessingJob> findAllByOrderByUpdatedAtDesc(Pageable pageable);
+
     Optional<MatFlowProcessingJob> findByReservation_IdAndRouteStep_Id(
             UUID reservationId,
             UUID routeStepId);
 
-    List<MatFlowProcessingJob> findByReservation_Id(
-            UUID reservationId);
+    List<MatFlowProcessingJob> findByReservation_Id(UUID reservationId);
 
-    List<MatFlowProcessingJob> findByRequisition_IdOrderByCreatedAtAsc(
-            UUID requisitionId);
+    List<MatFlowProcessingJob> findByRequisition_IdOrderByCreatedAtAsc(UUID requisitionId);
 }

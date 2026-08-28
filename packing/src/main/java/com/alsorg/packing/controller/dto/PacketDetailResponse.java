@@ -1,6 +1,7 @@
 package com.alsorg.packing.controller.dto;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.UUID;
 
 public class PacketDetailResponse {
@@ -77,14 +78,22 @@ public class PacketDetailResponse {
 
     // ✅ Mapper
     public static PacketDetailResponse from(com.alsorg.packing.domain.packet.Packet packet) {
+        Objects.requireNonNull(packet, "Packet is required");
+
         PacketDetailResponse dto = new PacketDetailResponse();
         dto.setPacketId(packet.getId());
         dto.setStickerNumber(packet.getStickerNumber());
-        dto.setCompanyName(packet.getCompany().getName());
-        dto.setStatus(packet.getStatus().name());
+        dto.setCompanyName(
+                packet.getCompany() == null
+                        ? null
+                        : packet.getCompany().getName());
+        dto.setStatus(
+                packet.getStatus() == null
+                        ? null
+                        : packet.getStatus().name());
         dto.setCreatedBy(packet.getCreatedBy());
         dto.setCreatedAt(packet.getCreatedAt());
-        dto.setStickerGenerated(packet.getStickerGenerated());
+        dto.setStickerGenerated(Boolean.TRUE.equals(packet.getStickerGenerated()));
         return dto;
     }
 }

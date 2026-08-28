@@ -30,6 +30,10 @@ import {
     fetchTripItems,
 } from "../api/logisticsApi";
 
+import {
+    getBackendMessage,
+} from "../api/client";
+
 function normalizeText(value) {
     return String(value || "")
         .trim()
@@ -92,6 +96,18 @@ function getItemLocation(item) {
         item?.warehouseCode ||
         item?.fgZoneCode ||
         "—"
+    );
+}
+
+
+function getTripStatus(trip) {
+    if (trip?.tripEndedAt) {
+        return "ENDED";
+    }
+
+    return (
+        normalizeStatus(trip?.tripStatus) ||
+        "RUNNING"
     );
 }
 
@@ -242,14 +258,12 @@ export default function TripItemScreen({
                     : []
             );
         } catch (e) {
-            console.error(e);
-
             Alert.alert(
                 "Items failed",
-                e?.response?.data?.message ||
-                e?.response?.data ||
-                e?.message ||
-                "Failed to load dispatch items"
+                getBackendMessage(
+                    e,
+                    "Failed to load dispatch items"
+                )
             );
         } finally {
             setLoading(false);
@@ -275,10 +289,10 @@ export default function TripItemScreen({
         } catch (e) {
             Alert.alert(
                 "Refresh failed",
-                e?.response?.data?.message ||
-                e?.response?.data ||
-                e?.message ||
-                "Failed to refresh items"
+                getBackendMessage(
+                    e,
+                    "Failed to refresh items"
+                )
             );
         } finally {
             setRefreshing(false);
@@ -505,10 +519,12 @@ export default function TripItemScreen({
             <FlatList
                 data={paginatedItems}
                 keyExtractor={(item, index) =>
-                    item.id ||
-                    item.zohoItemId ||
-                    item.packetItemId ||
-                    String(index)
+                    String(
+                        item.id ||
+                        item.zohoItemId ||
+                        item.packetItemId ||
+                        index
+                    )
                 }
                 refreshControl={
                     <RefreshControl
@@ -558,8 +574,7 @@ export default function TripItemScreen({
                                 <Info
                                     label="Trip Status"
                                     value={
-                                        trip?.tripStatus ||
-                                        "RUNNING"
+                                        getTripStatus(trip)
                                     }
                                 />
                             </View>

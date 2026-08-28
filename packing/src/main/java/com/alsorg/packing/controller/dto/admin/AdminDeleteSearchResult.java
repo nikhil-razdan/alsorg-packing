@@ -14,6 +14,5 @@ public record AdminDeleteSearchResult(
         String status,
         String location,
         String plantCode,
-        Integer totalPackets
-) {
+        Integer totalPackets) {
 }

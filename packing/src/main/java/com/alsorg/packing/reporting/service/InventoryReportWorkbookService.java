@@ -18,6 +18,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.reporting.dto.DashboardStatsDTO;
 import com.alsorg.packing.reporting.dto.DispatchReportRow;
 import com.alsorg.packing.reporting.dto.InventoryAgingRow;
@@ -2218,7 +2219,7 @@ public class InventoryReportWorkbookService {
                         data.peakDispatchDate = peakDispatch.date;
                 }
 
-                LocalDate today = LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"));
+                LocalDate today = LocalDate.now(TimeZoneConfig.APP_ZONE);
                 LocalDate comparisonEnd = endDate.equals(today)
                                 ? endDate.minusDays(1)
                                 : endDate;
@@ -2492,7 +2493,7 @@ public class InventoryReportWorkbookService {
                                                 + " - "
                                                 + dateLabel(to)
                                                 + "  |  Snapshot: "
-                                                + LocalDateTime.now(java.time.ZoneId.of("Asia/Kolkata"))
+                                                + LocalDateTime.now(TimeZoneConfig.APP_ZONE)
                                                                 .format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm"))
                                                 + " IST  |  Source: PackFlow Reports");
                 meta.setCellStyle(metaStyle);
@@ -3999,7 +4000,39 @@ public class InventoryReportWorkbookService {
                 }
 
                 cell.setCellValue(
-                                String.valueOf(value));
+                                safeSpreadsheetText(String.valueOf(value)));
+        }
+
+        private String safeSpreadsheetText(
+                        String value) {
+                if (value == null) {
+                        return "";
+                }
+
+                String text = value
+                                .replace("\u0000", "")
+                                .replace("\r", " ")
+                                .replace("\n", " ")
+                                .trim();
+
+                if (text.isEmpty()) {
+                        return "";
+                }
+
+                if ("-".equals(text)) {
+                        return text;
+                }
+
+                char first = text.charAt(0);
+
+                if (first == '='
+                                || first == '+'
+                                || first == '-'
+                                || first == '@') {
+                        return "'" + text;
+                }
+
+                return text;
         }
 
         private CellStyle titleStyle(
@@ -4234,7 +4267,7 @@ public class InventoryReportWorkbookService {
                 if (value instanceof Date date) {
                         return LocalDateTime.ofInstant(
                                         date.toInstant(),
-                                        java.time.ZoneId.systemDefault());
+                                        TimeZoneConfig.APP_ZONE);
                 }
 
                 try {
@@ -4332,7 +4365,7 @@ public class InventoryReportWorkbookService {
                 return Math.max(
                                 java.time.Duration.between(
                                                 created,
-                                                LocalDateTime.now()).toDays(),
+                                                LocalDateTime.now(TimeZoneConfig.APP_ZONE)).toDays(),
                                 0);
         }
 

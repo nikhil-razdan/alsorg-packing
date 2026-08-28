@@ -25,10 +25,9 @@ const isHrPublicPath = (location) => {
 			.replace(/\/+/g, "/")
 			.replace(/\/+$/, "");
 
-		return (
-			/(^|\/)hr\/apply\/[^/]+/.test(clean) ||
-			/(^|\/)hr\/onboarding\/[^/]+/.test(clean)
-		);
+		const pathOnly = clean.split("?")[0];
+
+		return /(^|\/)hr\/(apply|onboarding)\/[^/]+$/.test(pathOnly);
 	});
 };
 

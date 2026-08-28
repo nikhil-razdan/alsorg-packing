@@ -1,71 +1,78 @@
 package com.alsorg.packing.reporting.repository;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import java.time.ZoneId;
 
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import com.alsorg.packing.domain.common.ItemDispatchStatus;
-import com.alsorg.packing.domain.dispatch.DispatchedItem;
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.reporting.dto.InventoryAgingRow;
-import com.alsorg.packing.repository.DispatchedItemRepository;
 
 @Repository
 public class InventoryAgingReportRepository {
 
-        private static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
-        private final DispatchedItemRepository repo;
+    private final JdbcTemplate jdbc;
 
-        public InventoryAgingReportRepository(
-                        DispatchedItemRepository repo) {
-                this.repo = repo;
-        }
+    public InventoryAgingReportRepository(
+            JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
 
-        public List<InventoryAgingRow> fetchInventoryAging() {
+    public List<InventoryAgingRow> fetchInventoryAging() {
+        LocalDateTime now = LocalDateTime.now(TimeZoneConfig.APP_ZONE);
 
-                List<DispatchedItem> items = repo.findByStatusIn(
-                                List.of(
-                                                ItemDispatchStatus.IN_WAREHOUSE,
-                                                ItemDispatchStatus.READY_TO_STORE,
-                                                ItemDispatchStatus.WAREHOUSE_REQUESTED,
-                                                ItemDispatchStatus.READY_TO_DISPATCH,
-                                                ItemDispatchStatus.READY));
+        /*
+         * Select only the fields required by InventoryAgingRow. The previous
+         * repository loaded every matching DispatchedItem entity into Hibernate
+         * and then transformed it in Java, which becomes expensive as the
+         * operational register grows.
+         */
+        return jdbc.query(
+                """
+                select
+                    d.zoho_item_id,
+                    d.name,
+                    d.client_name,
+                    cast(d.status as varchar) as status,
+                    coalesce(d.stored_at, d.packed_at) as aging_start
+                from dispatched_items d
+                where upper(coalesce(cast(d.status as varchar), '')) in (
+                    'IN_WAREHOUSE',
+                    'READY_TO_STORE',
+                    'WAREHOUSE_REQUESTED',
+                    'READY_TO_DISPATCH',
+                    'READY'
+                )
+                order by
+                    coalesce(d.stored_at, d.packed_at) asc nulls last,
+                    d.zoho_item_id asc
+                """,
+                (rs, rowNum) -> {
+                    Timestamp timestamp = rs.getTimestamp("aging_start");
+                    LocalDateTime start = timestamp == null
+                            ? null
+                            : timestamp.toLocalDateTime();
 
-                LocalDateTime now = LocalDateTime.now(ZONE);
+                    long days = start == null
+                            ? 0L
+                            : Math.max(ChronoUnit.DAYS.between(start, now), 0L);
 
-                return items.stream()
-                                .map(item -> {
+                    String zohoItemId = rs.getString("zoho_item_id");
+                    String itemName = rs.getString("name");
+                    String status = rs.getString("status");
 
-                                        LocalDateTime start = item.getStoredAt() != null
-                                                        ? item.getStoredAt()
-                                                        : item.getPackedAt();
-
-                                        long days = 0;
-
-                                        if (start != null) {
-                                                days = ChronoUnit.DAYS.between(
-                                                                start,
-                                                                now);
-                                        }
-
-                                        String status = item.getStatus() != null
-                                                        ? item.getStatus().name()
-                                                        : "UNKNOWN";
-
-                                        return new InventoryAgingRow(
-                                                        item.getZohoItemId(),
-                                                        item.getName(),
-                                                        item.getClientName(),
-
-                                                        item.getZohoItemId(),
-                                                        item.getName(),
-
-                                                        status,
-                                                        start,
-                                                        days);
-                                })
-                                .toList();
-        }
+                    return new InventoryAgingRow(
+                            zohoItemId,
+                            itemName,
+                            rs.getString("client_name"),
+                            zohoItemId,
+                            itemName,
+                            status == null || status.isBlank() ? "UNKNOWN" : status,
+                            start,
+                            days);
+                });
+    }
 }

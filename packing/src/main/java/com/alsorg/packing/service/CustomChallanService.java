@@ -9,23 +9,28 @@ import com.alsorg.packing.domain.dispatch.CustomChallanItem;
 import com.alsorg.packing.repository.CustomChallanRepository;
 import com.alsorg.packing.service.pdf.ChalaanPdfService;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.alsorg.packing.config.TimeZoneConfig;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 
 @Service
 @Transactional
 public class CustomChallanService {
 
-    private static final ZoneId INDIA_ZONE = ZoneId.of("Asia/Kolkata");
+    private static final java.time.ZoneId APP_ZONE = TimeZoneConfig.APP_ZONE;
     private static final int MAX_CUSTOM_CHALLAN_ITEMS = 500;
 
     private final CustomChallanRepository repository;
@@ -50,7 +55,7 @@ public class CustomChallanService {
 
         LocalDateTime generatedAt = request.dispatchTime() != null
                 ? request.dispatchTime()
-                : LocalDateTime.now(INDIA_ZONE);
+                : LocalDateTime.now(APP_ZONE);
 
         String challanNo = generateCustomChallanNumber(
                 request.challanType(),
@@ -101,7 +106,7 @@ public class CustomChallanService {
 
         validateRequest(request);
 
-        CustomChallan challan = findRequired(
+        CustomChallan challan = findRequiredForUpdate(
                 challanNumber);
 
         applyHeaderFields(
@@ -267,6 +272,32 @@ public class CustomChallanService {
                 pdf);
     }
 
+    private CustomChallan findRequiredForUpdate(
+            String challanNumber) {
+
+        String cleanNumber = cleanNullable(
+                challanNumber);
+
+        if (cleanNumber == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Custom challan number is required");
+        }
+
+        CustomChallan challan = entityManager.find(
+                CustomChallan.class,
+                cleanNumber,
+                LockModeType.PESSIMISTIC_WRITE);
+
+        if (challan == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Custom challan not found: " + cleanNumber);
+        }
+
+        return challan;
+    }
+
     private CustomChallan findRequired(
             String challanNumber) {
 
@@ -274,13 +305,15 @@ public class CustomChallanService {
                 challanNumber);
 
         if (cleanNumber == null) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
                     "Custom challan number is required");
         }
 
         return repository
                 .findById(cleanNumber)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
                         "Custom challan not found: " + cleanNumber));
     }
 
@@ -356,28 +389,29 @@ public class CustomChallanService {
     private void validateRequest(
             CustomChallanRequest request) {
         if (request == null) {
-            throw new RuntimeException("Custom challan request missing");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Custom challan request missing");
         }
 
         if (isBlank(request.fromLocation())) {
-            throw new RuntimeException("From location is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "From location is required");
         }
 
         if (isBlank(request.toLocation())) {
-            throw new RuntimeException("To location / site is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "To location / site is required");
         }
 
         if (isType(request.challanType(), "SITE_RETURN")
                 && isBlank(request.handedOverTo())) {
-            throw new RuntimeException("Handed over to is required for Site Return challan");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Handed over to is required for Site Return challan");
         }
 
         if (request.items() == null || request.items().isEmpty()) {
-            throw new RuntimeException("At least one item is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one item is required");
         }
 
         if (request.items().size() > MAX_CUSTOM_CHALLAN_ITEMS) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
                     "A maximum of " + MAX_CUSTOM_CHALLAN_ITEMS
                             + " items can be added to one custom challan");
         }
@@ -388,7 +422,7 @@ public class CustomChallanService {
                         !isBlank(item.description()));
 
         if (!hasValidItem) {
-            throw new RuntimeException("At least one item description is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one item description is required");
         }
     }
 
@@ -417,7 +451,7 @@ public class CustomChallanService {
 
         String date = (generatedAt != null
                 ? generatedAt.toLocalDate()
-                : java.time.LocalDate.now(INDIA_ZONE)).format(
+                : java.time.LocalDate.now(APP_ZONE)).format(
                         java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
 
         String suffix = UUID.randomUUID()
@@ -463,17 +497,31 @@ public class CustomChallanService {
             boolean admin) {
         String currentUsername = cleanLower(username);
 
-        return repository
-                .findAllByOrderByGeneratedAtDesc()
-                .stream()
-                .filter(challan -> {
-                    if (admin) {
-                        return true;
-                    }
+        if (!admin && currentUsername.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Authenticated username is required");
+        }
 
-                    return cleanLower(challan.getGeneratedBy())
-                            .equals(currentUsername);
-                })
+        if (admin) {
+            return repository
+                    .findAllByOrderByGeneratedAtDesc()
+                    .stream()
+                    .map(this::toSummary)
+                    .toList();
+        }
+
+        return entityManager.createQuery(
+                        """
+                        select challan
+                        from CustomChallan challan
+                        where lower(trim(coalesce(challan.generatedBy, ''))) = :username
+                        order by challan.generatedAt desc
+                        """,
+                        CustomChallan.class)
+                .setParameter("username", currentUsername)
+                .getResultList()
+                .stream()
                 .map(this::toSummary)
                 .toList();
     }
@@ -485,14 +533,22 @@ public class CustomChallanService {
             boolean admin) {
         CustomChallan challan = repository
                 .findById(challanNumber)
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
                         "Custom challan not found: " + challanNumber));
 
         if (!admin) {
             String currentUsername = cleanLower(username);
 
+            if (currentUsername.isBlank()) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Authenticated username is required");
+            }
+
             if (!cleanLower(challan.getGeneratedBy()).equals(currentUsername)) {
-                throw new RuntimeException(
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
                         "You do not have access to this custom challan");
             }
         }
@@ -537,7 +593,7 @@ public class CustomChallanService {
             return "";
         }
 
-        return value.trim().toLowerCase();
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeUom(

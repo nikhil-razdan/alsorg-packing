@@ -84,21 +84,15 @@ public class DispatchReportRepository {
                             nullif(trim(mi.address), '')
                         ) as client_address,
 
-                        /*
-                         * Area means current operational area/location.
-                         * This returns the most specific available location.
-                         */
                         coalesce(
                             nullif(trim(d.current_location_code), ''),
                             nullif(trim(d.location), ''),
                             nullif(trim(d.fg_area_code), ''),
                             nullif(trim(d.packed_area_code), ''),
                             nullif(trim(d.warehouse_code), ''),
-
                             nullif(trim(pi.current_location_code), ''),
                             nullif(trim(pi.location), ''),
                             nullif(trim(pi.warehouse_code), ''),
-
                             nullif(trim(mi.fg_area_code), ''),
                             nullif(trim(mi.packed_area_code), ''),
                             '-'
@@ -115,20 +109,12 @@ public class DispatchReportRepository {
                             nullif(trim(mi.floor), '')
                         ) as floor,
 
-                        /*
-                         * Real packet number.
-                         * Zoho ID is only the fallback for old unlinked dispatch data.
-                         */
                         coalesce(
                             nullif(trim(pi.packet_number), ''),
                             nullif(trim(d.zoho_item_id), ''),
                             '-'
                         ) as packet_number,
 
-                        /*
-                         * Keep the old packet-name behavior without inventing
-                         * a non-existing packets.packet_name column.
-                         */
                         coalesce(
                             nullif(trim(pi.item_name), ''),
                             nullif(trim(d.name), ''),
@@ -203,20 +189,14 @@ public class DispatchReportRepository {
             sql.append("""
                         and d.dispatched_at >= :from
                     """);
-
-            params.addValue(
-                    "from",
-                    from);
+            params.addValue("from", from);
         }
 
         if (to != null) {
             sql.append("""
                         and d.dispatched_at <= :to
                     """);
-
-            params.addValue(
-                    "to",
-                    to);
+            params.addValue("to", to);
         }
 
         sql.append("""
@@ -236,46 +216,27 @@ public class DispatchReportRepository {
     private RowMapper<DispatchReportRow> dispatchRowMapper() {
         return (rs, rowNum) -> new DispatchReportRow(
                 rs.getString("zoho_item_id"),
-
                 rs.getString("pd_no"),
                 rs.getString("drawing_no"),
                 rs.getString("sku"),
-
                 rs.getString("item_name"),
                 rs.getString("description"),
-
                 rs.getString("client_name"),
                 rs.getString("client_address"),
-
                 rs.getString("area"),
                 rs.getString("plant_code"),
                 rs.getString("floor"),
-
                 rs.getString("packet_number"),
                 rs.getString("packet_name"),
-
-                getInteger(
-                        rs,
-                        "quantity"),
-
+                getInteger(rs, "quantity"),
                 rs.getString("status"),
-
-                getLocalDateTime(
-                        rs,
-                        "packed_at"),
-
+                getLocalDateTime(rs, "packed_at"),
                 rs.getString("packed_by"),
-
-                getLocalDateTime(
-                        rs,
-                        "dispatched_at"),
-
+                getLocalDateTime(rs, "dispatched_at"),
                 rs.getString("dispatched_by"),
-
                 rs.getString("challan_number"),
                 rs.getString("driver_name"),
                 rs.getString("vehicle_number"),
-
                 rs.getString("warehouse_code"),
                 rs.getString("remarks"));
     }
@@ -294,9 +255,8 @@ public class DispatchReportRepository {
         }
 
         try {
-            return Integer.parseInt(
-                    String.valueOf(value));
-        } catch (Exception e) {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception exception) {
             return null;
         }
     }

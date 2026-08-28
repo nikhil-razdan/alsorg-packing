@@ -18,18 +18,52 @@ import java.util.UUID;
 public interface BomFlowRevisionRepository
         extends JpaRepository<BomFlowRevision, UUID> {
 
-    List<BomFlowRevision> findByProductIdOrderByRevisionNoDesc(
-            UUID productId);
+    interface ProductRevisionCount {
+        UUID getProductId();
+        long getRevisionCount();
+    }
 
-    Optional<BomFlowRevision> findTopByProductIdOrderByRevisionNoDesc(
-            UUID productId);
+    @Query("""
+            select r
+            from BomFlowRevision r
+            join fetch r.product p
+            where p.id = :productId
+            order by r.revisionNo desc
+            """)
+    List<BomFlowRevision> findByProductIdOrderByRevisionNoDesc(
+            @Param("productId") UUID productId);
+
+    Optional<BomFlowRevision> findTopByProductIdOrderByRevisionNoDesc(UUID productId);
 
     Optional<BomFlowRevision> findTopByProductIdAndStatusInOrderByRevisionNoDesc(
             UUID productId,
             Collection<BomFlowRevisionStatus> statuses);
 
-    long countByProductId(
-            UUID productId);
+    long countByProductId(UUID productId);
+
+    @Query("""
+            select r
+            from BomFlowRevision r
+            join fetch r.product p
+            where p.id in :productIds
+              and r.revisionNo = (
+                    select max(r2.revisionNo)
+                    from BomFlowRevision r2
+                    where r2.product.id = p.id
+                  )
+            """)
+    List<BomFlowRevision> findLatestByProductIds(
+            @Param("productIds") Collection<UUID> productIds);
+
+    @Query("""
+            select r.product.id as productId,
+                   count(r) as revisionCount
+            from BomFlowRevision r
+            where r.product.id in :productIds
+            group by r.product.id
+            """)
+    List<ProductRevisionCount> countByProductIds(
+            @Param("productIds") Collection<UUID> productIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -38,8 +72,7 @@ public interface BomFlowRevisionRepository
             join fetch r.product
             where r.id = :id
             """)
-    Optional<BomFlowRevision> findByIdForUpdate(
-            @Param("id") UUID id);
+    Optional<BomFlowRevision> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("""
             select r
@@ -47,6 +80,5 @@ public interface BomFlowRevisionRepository
             join fetch r.product
             where r.id = :id
             """)
-    Optional<BomFlowRevision> findByIdWithProduct(
-            @Param("id") UUID id);
+    Optional<BomFlowRevision> findByIdWithProduct(@Param("id") UUID id);
 }
