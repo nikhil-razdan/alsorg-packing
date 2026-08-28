@@ -12,26 +12,35 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
+import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.UtlWorkflowService;
 
 /**
- * Defense-in-depth read isolation for UTL-routed dispatch records.
+ * Defense-in-depth response isolation for UTL-routed DispatchedItem records.
  *
- * Existing server paging remains untouched.  If a normal plant dispatch page
- * happens to contain a UTL row assigned to another dispatcher, that row is
- * removed before JSON serialization.  Mutation endpoints are independently
- * protected by UtlWorkflowService, so this advice is not the authorization
- * boundary by itself.
+ * Database-level filtering remains the primary boundary for the paged Dispatch
+ * register.  This advice protects legacy/list endpoints too and deliberately
+ * preserves two operational exceptions required by PackFlow:
+ *
+ * 1. A normal Warehouse user may see same-plant UTL rows when reading the
+ *    ordinary /api/warehouse queue, so UTL Packing can hand work to the normal
+ *    AL-P3/WR-38 Warehouse team without exposing it on unrelated endpoints.
+ * 2. Normal WR-38 operational users may see the combined normal + UTL WR-38
+ *    plant view, as required by the separate WR-38 workflow.
  */
 @ControllerAdvice
 public class UtlDispatchIsolationResponseAdvice
         implements ResponseBodyAdvice<Object> {
 
     private final UtlWorkflowService utlWorkflowService;
+    private final CurrentUserService currentUserService;
 
     public UtlDispatchIsolationResponseAdvice(
-            UtlWorkflowService utlWorkflowService) {
+            UtlWorkflowService utlWorkflowService,
+            CurrentUserService currentUserService) {
         this.utlWorkflowService = utlWorkflowService;
+        this.currentUserService = currentUserService;
     }
 
     @Override
@@ -50,8 +59,12 @@ public class UtlDispatchIsolationResponseAdvice
             ServerHttpRequest request,
             ServerHttpResponse response) {
 
+        String requestPath = request == null || request.getURI() == null
+                ? ""
+                : String.valueOf(request.getURI().getPath());
+
         if (body instanceof DispatchedItem item) {
-            return utlWorkflowService.canCurrentUserRead(item)
+            return canCurrentUserRead(item, requestPath)
                     ? item
                     : null;
         }
@@ -71,12 +84,85 @@ public class UtlDispatchIsolationResponseAdvice
         }
 
         List<Object> filtered = new ArrayList<>(source.size());
+
         for (Object value : source) {
             if (!(value instanceof DispatchedItem item)
-                    || utlWorkflowService.canCurrentUserRead(item)) {
+                    || canCurrentUserRead(item, requestPath)) {
                 filtered.add(value);
             }
         }
+
         return filtered;
+    }
+
+    private boolean canCurrentUserRead(
+            DispatchedItem item,
+            String requestPath) {
+
+        if (item == null || item.getPacketItemId() == null) {
+            return true;
+        }
+
+        boolean routed = utlWorkflowService
+                .findRoutingByPacketItemId(item.getPacketItemId())
+                .isPresent();
+
+        if (!routed) {
+            return true;
+        }
+
+        User user;
+
+        try {
+            user = currentUserService.requireCurrentUser();
+        } catch (RuntimeException exception) {
+            return false;
+        }
+
+        if (currentUserService.isAdmin(user)) {
+            return true;
+        }
+
+        String itemPlant = normalize(item.getPlantCode());
+
+        /*
+         * Ordinary Warehouse exception is endpoint-scoped.  It lets the normal
+         * same-plant Warehouse team receive UTL work without widening normal
+         * Dispatch visibility or exposing the other UTL plant/team.
+         */
+        if (requestPath.startsWith("/api/warehouse")
+                && !currentUserService.isUtlUser(user)
+                && currentUserService.isWarehouse(user)
+                && itemPlant != null
+                && currentUserService.canAccessPlant(user, itemPlant)) {
+            return true;
+        }
+
+        /*
+         * WR-38 is explicitly different: normal operational WR-38 identities
+         * see the plant's normal and UTL records together.
+         */
+        if ("WR-38".equals(itemPlant)
+                && !currentUserService.isUtlUser(user)
+                && currentUserService.canAccessPlant(user, "WR-38")
+                && currentUserService.hasAnyRole(
+                        user,
+                        "PACKING",
+                        "WAREHOUSE",
+                        "DISPATCH",
+                        "LOGISTICS")) {
+            return true;
+        }
+
+        return utlWorkflowService.canCurrentUserRead(item);
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim().toUpperCase(java.util.Locale.ROOT);
+        return clean.isBlank() ? null : clean;
     }
 }

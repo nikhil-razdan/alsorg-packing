@@ -42,6 +42,11 @@ function RequireWarehouseAccess({
 		);
 	}
 
+	/*
+	 * UTL_DISPATCH is allowed to open this page by permissions.js, but
+	 * WarehousePage sends that identity only to /api/utl/warehouse.
+	 * No generic WAREHOUSE authority is granted here.
+	 */
 	const allowed =
 		canOpenWarehousePageFromUser(
 			user

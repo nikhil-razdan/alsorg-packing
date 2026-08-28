@@ -97,6 +97,9 @@ function WarehousePage() {
 	const isDispatch =
 		hasRole("DISPATCH");
 
+	const isUtlDispatch =
+		hasRole("UTL_DISPATCH");
+
 	const isPacking =
 		hasRole("PACKING");
 
@@ -107,15 +110,26 @@ function WarehousePage() {
 		hasRole("LOGISTICS");
 
 	/*
-	 * Important:
-	 * warehouseAccess permits opening the page.
-	 *
-	 * It must not grant warehouse approval authority.
-	 * Backend approval is ADMIN or WAREHOUSE only.
+	 * UTL_DISPATCH is the isolated UTL Warehouse / Dispatch identity.
+	 * It deliberately does NOT inherit generic WAREHOUSE authority. Pure UTL
+	 * identities use the assignment-filtered /api/utl/warehouse boundary below.
+	 * Ordinary AL/WR Warehouse remains on the existing /api/warehouse API.
 	 */
+	const utlWarehouseMode =
+		isUtlDispatch &&
+		!isAdmin &&
+		!isDispatch &&
+		!isWarehouse;
+
+	const warehouseApiBase =
+		utlWarehouseMode
+			? `${API_BASE_URL}/api/utl/warehouse`
+			: `${API_BASE_URL}/api/warehouse`;
+
 	const canApproveWarehouse =
 		isAdmin ||
-		isWarehouse;
+		isWarehouse ||
+		utlWarehouseMode;
 
 	const WAREHOUSE_OPTIONS = [
 		"BLS-WH-1",
@@ -243,10 +257,10 @@ function WarehousePage() {
 
 		try {
 			const [res1, res2] = await Promise.all([
-				secureFetch(`${API_BASE_URL}/api/warehouse/floor`, {
+				secureFetch(`${warehouseApiBase}/floor`, {
 					credentials: "include",
 				}),
-				secureFetch(`${API_BASE_URL}/api/warehouse/items`, {
+				secureFetch(`${warehouseApiBase}/items`, {
 					credentials: "include",
 				}),
 			]);
@@ -425,7 +439,7 @@ function WarehousePage() {
 		}
 
 		const res = await secureFetch(
-			`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gp.trim())}`,
+			`${warehouseApiBase}/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gp.trim())}`,
 			{
 				method: "POST",
 				credentials: "include",
@@ -450,7 +464,7 @@ function WarehousePage() {
 	const rejectWarehouse = async (id) => {
 		try {
 			const res = await secureFetch(
-				`${API_BASE_URL}/api/warehouse/${id}/reject`,
+				`${warehouseApiBase}/${encodeURIComponent(id)}/reject`,
 				{
 					method: "POST",
 					credentials: "include",
@@ -469,7 +483,9 @@ function WarehousePage() {
 		try {
 			const endpoint = isAdmin
 				? `${API_BASE_URL}/api/warehouse/admin/${encodeURIComponent(id)}/request-return-to-dispatch`
-				: `${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/request-return`;
+				: utlWarehouseMode
+					? `${warehouseApiBase}/${encodeURIComponent(id)}/request-return`
+					: `${API_BASE_URL}/api/dispatched/${encodeURIComponent(id)}/request-return`;
 
 			const res = await secureFetch(endpoint, {
 				method: "POST",
@@ -1660,7 +1676,7 @@ function WarehousePage() {
 					const id = getWarehouseRowId(row);
 
 					const res = await secureFetch(
-						`${API_BASE_URL}/api/warehouse/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gatePass)}`,
+						`${warehouseApiBase}/${encodeURIComponent(id)}/approve?gatePass=${encodeURIComponent(gatePass)}`,
 						{
 							method: "POST",
 							credentials: "include",
@@ -2574,7 +2590,7 @@ function WarehousePage() {
 								</Button>
 							</Box>
 						);
-					} else if (isDispatch) {
+					} else if (isDispatch || utlWarehouseMode) {
 						actionContent = (
 							<Button
 								size="small"
@@ -2964,6 +2980,8 @@ function WarehousePage() {
 							</Button>
 						)}
 
+						{!utlWarehouseMode && (
+							<>
 						<TextField
 							select
 							size="small"
@@ -3071,6 +3089,8 @@ function WarehousePage() {
 						>
 							Download Template
 						</Button>
+							</>
+						)}
 					</Box>
 
 					<Box sx={compactLegend}>

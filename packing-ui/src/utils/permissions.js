@@ -24,9 +24,7 @@ export const userRoleList = (
 			)
 		);
 
-	/*
-	 * Keep the primary legacy role as a fallback.
-	 */
+	/* Keep the primary legacy role as a fallback. */
 	const primaryRole =
 		normalizeRole(
 			user?.role
@@ -103,7 +101,14 @@ export const canOpenWarehousePageFromUser = (
 			user,
 			"ADMIN",
 			"DISPATCH",
-			"WAREHOUSE"
+			"WAREHOUSE",
+			/*
+			 * UTL_DISPATCH is the isolated UTL Warehouse / Dispatch profile.
+			 * This only opens the Warehouse page. WarehousePage routes this
+			 * identity to /api/utl/warehouse, never to the generic Warehouse
+			 * authority/API.
+			 */
+			"UTL_DISPATCH"
 		) ||
 		readBoolean(
 			user?.warehouseAccess
@@ -120,9 +125,7 @@ export const canOpenWarehousePageFromUser = (
 	);
 };
 
-/*
- * Compatibility alias used by WarehousePage.
- */
+/* Compatibility alias used by WarehousePage. */
 export const canOpenWarehousePage = (
 	user
 ) => {

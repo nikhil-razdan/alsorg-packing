@@ -41,6 +41,7 @@ import com.alsorg.packing.domain.logistics.Driver;
 import com.alsorg.packing.domain.logistics.Vehicle;
 import com.alsorg.packing.domain.packet.Packet;
 import com.alsorg.packing.domain.utl.UtlPacketRouting;
+import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.repository.DriverRepository;
 import com.alsorg.packing.repository.PacketItemRepository;
@@ -114,6 +115,14 @@ public class DispatchedItemService {
 
         @org.springframework.beans.factory.annotation.Autowired(required = false)
         private UtlWorkflowService utlWorkflowService;
+
+        /*
+         * Read-query fallback for older controllers that do not yet pass an
+         * explicit UtlReadContext. Keeping this optional preserves direct unit
+         * construction while making production pagination identity-aware.
+         */
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private CurrentUserService currentUserService;
 
         /*
          * Read-only Dispatch register queries sometimes need a content-only page
@@ -478,6 +487,12 @@ public class DispatchedItemService {
                         String ownerUsername,
                         UtlReadContext utlReadContext) {
 
+                UtlReadContext effectiveUtlReadContext =
+                                resolveEffectiveUtlReadContext(
+                                                completeRegisterAccess,
+                                                allowedPlants,
+                                                utlReadContext);
+
                 return (root, query, cb) -> {
                         List<Predicate> predicates = new ArrayList<>();
 
@@ -489,7 +504,7 @@ public class DispatchedItemService {
                                         completeRegisterAccess,
                                         allowedPlants,
                                         ownerUsername,
-                                        utlReadContext);
+                                        effectiveUtlReadContext);
 
                         appendDispatchStatusPredicate(
                                         predicates,
@@ -709,9 +724,25 @@ public class DispatchedItemService {
                                         cb.equal(dispatchedBy, username)));
                 }
 
-                if (utlReadContext.operationalPlantRead()) {
-                        /* Warehouse / Logistics preserve the projected plant queue. */
-                        routedReadPredicates.add(basePlantAccess);
+                if (utlReadContext.operationalPlantRead()
+                                && containsPlant(allowedPlants, "WR-38")) {
+                        /*
+                         * The business exception is WR-38 only: normal WR-38
+                         * operational users may see both ordinary WR-38 and UTL
+                         * WR-38 rows. Do NOT widen this predicate to every allowed
+                         * plant, otherwise a multi-plant account could inherit UTL
+                         * AL-P3 rows that were not assigned to it.
+                         */
+                        Expression<String> routedPlant = cb.upper(
+                                        cb.trim(
+                                                        cb.coalesce(
+                                                                        root.<String>get("plantCode"),
+                                                                        "")));
+
+                        routedReadPredicates.add(
+                                        cb.equal(
+                                                        routedPlant,
+                                                        "WR-38"));
                 }
 
                 Predicate routedAccess = routedReadPredicates.isEmpty()
@@ -729,7 +760,10 @@ public class DispatchedItemService {
 
                 predicates.add(cb.or(
                                 ordinaryBranch,
-                                cb.and(isUtlRow, routedAccess)));
+                                cb.and(
+                                                isUtlRow,
+                                                basePlantAccess,
+                                                routedAccess)));
         }
 
         private Predicate buildDispatchPlantAccessPredicate(
@@ -781,6 +815,80 @@ public class DispatchedItemService {
                 return cb.or(createdOwner, packedOwner, legacyDispatchOwner);
         }
 
+        private UtlReadContext resolveEffectiveUtlReadContext(
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants,
+                        UtlReadContext suppliedContext) {
+
+                if (completeRegisterAccess || suppliedContext != null) {
+                        return suppliedContext;
+                }
+
+                if (currentUserService == null) {
+                        /*
+                         * Compatibility fallback for tests / old direct construction.
+                         * A null context preserves the historical service behaviour.
+                         */
+                        return null;
+                }
+
+                final User user;
+
+                try {
+                        user = currentUserService.requireCurrentUser();
+                } catch (RuntimeException exception) {
+                        return null;
+                }
+
+                if (user == null || currentUserService.isAdmin(user)) {
+                        return null;
+                }
+
+                boolean utlOnlyIdentity =
+                                currentUserService.isUtlUser(user);
+
+                boolean creatorRead =
+                                currentUserService.isUtlPacking(user);
+
+                boolean assignedDispatcherRead =
+                                currentUserService.isUtlDispatch(user)
+                                                || currentUserService.isDispatch(user);
+
+                boolean normalWr38CombinedRead =
+                                !utlOnlyIdentity
+                                                && containsPlant(allowedPlants, "WR-38")
+                                                && currentUserService.hasAnyRole(
+                                                                user,
+                                                                "PACKING",
+                                                                "WAREHOUSE",
+                                                                "DISPATCH",
+                                                                "LOGISTICS");
+
+                return new UtlReadContext(
+                                user.getUsername(),
+                                creatorRead,
+                                assignedDispatcherRead,
+                                normalWr38CombinedRead,
+                                utlOnlyIdentity);
+        }
+
+        private boolean containsPlant(
+                        Set<String> plants,
+                        String requestedPlant) {
+
+                if (plants == null
+                                || plants.isEmpty()
+                                || requestedPlant == null
+                                || requestedPlant.isBlank()) {
+                        return false;
+                }
+
+                return plants.stream()
+                                .filter(Objects::nonNull)
+                                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                                .anyMatch(requestedPlant.trim().toUpperCase(Locale.ROOT)::equals);
+        }
+
         public record UtlReadContext(
                         String username,
                         boolean creatorRead,
@@ -808,6 +916,38 @@ public class DispatchedItemService {
                         return Page.empty(pageable);
                 }
 
+                Set<String> visiblePlants = Set.of();
+
+                if (currentUserService != null) {
+                        try {
+                                User user = currentUserService.requireCurrentUser();
+
+                                if (user != null
+                                                && user.getUsername() != null
+                                                && cleanUsername.equals(
+                                                                user.getUsername()
+                                                                                .trim()
+                                                                                .toLowerCase(Locale.ROOT))) {
+                                        visiblePlants = currentUserService.allowedPlants(user);
+                                }
+                        } catch (RuntimeException ignored) {
+                                /* Keep old direct-service calls compatible. */
+                        }
+                }
+
+                boolean enforcePlantScope =
+                                visiblePlants != null
+                                                && !visiblePlants.isEmpty();
+
+                String plantScope = enforcePlantScope
+                                ? """
+                                          and (
+                                                d.plantCode in :plants
+                                                or r.dispatchTargetPlantCode in :plants
+                                              )
+                                  """
+                                : "";
+
                 String selectJpql = """
                                 select d.chalaanNumber
                                 from DispatchedItem d
@@ -818,6 +958,9 @@ public class DispatchedItemService {
                                         select r.packetItemId
                                         from UtlPacketRouting r
                                         where r.packetItemId = d.packetItemId
+                                """
+                                + plantScope
+                                + """
                                           and (
                                                 lower(r.packedByUsername) = :username
                                                 or lower(r.dispatchTargetUsername) = :username
@@ -838,6 +981,9 @@ public class DispatchedItemService {
                                         select r.packetItemId
                                         from UtlPacketRouting r
                                         where r.packetItemId = d.packetItemId
+                                """
+                                + plantScope
+                                + """
                                           and (
                                                 lower(r.packedByUsername) = :username
                                                 or lower(r.dispatchTargetUsername) = :username
@@ -849,13 +995,23 @@ public class DispatchedItemService {
                 TypedQuery<String> query = entityManager.createQuery(selectJpql, String.class);
                 query.setParameter("status", ItemDispatchStatus.DISPATCHED);
                 query.setParameter("username", cleanUsername);
+
+                if (enforcePlantScope) {
+                        query.setParameter("plants", visiblePlants);
+                }
+
                 query.setFirstResult((int) Math.min(Integer.MAX_VALUE, Math.max(0L, pageable.getOffset())));
                 query.setMaxResults(Math.max(1, pageable.getPageSize()));
 
-                Long total = entityManager.createQuery(countJpql, Long.class)
+                TypedQuery<Long> countQuery = entityManager.createQuery(countJpql, Long.class)
                                 .setParameter("status", ItemDispatchStatus.DISPATCHED)
-                                .setParameter("username", cleanUsername)
-                                .getSingleResult();
+                                .setParameter("username", cleanUsername);
+
+                if (enforcePlantScope) {
+                        countQuery.setParameter("plants", visiblePlants);
+                }
+
+                Long total = countQuery.getSingleResult();
 
                 return new PageImpl<>(
                                 query.getResultList(),
@@ -872,6 +1028,41 @@ public class DispatchedItemService {
                         return Page.empty(pageable);
                 }
 
+                User currentUser = null;
+
+                if (currentUserService != null) {
+                        try {
+                                currentUser = currentUserService.requireCurrentUser();
+                        } catch (RuntimeException ignored) {
+                                /* Preserve compatibility for non-request test calls. */
+                        }
+                }
+
+                if (currentUser != null
+                                && currentUserService.isUtlUser(currentUser)) {
+                        return searchUtlVisibleChallanNumbers(
+                                        currentUser.getUsername(),
+                                        pageable);
+                }
+
+                String username = currentUser == null
+                                || currentUser.getUsername() == null
+                                                ? ""
+                                                : currentUser.getUsername()
+                                                                .trim()
+                                                                .toLowerCase(Locale.ROOT);
+
+                boolean wr38CombinedRead =
+                                currentUser != null
+                                                && !currentUserService.isUtlUser(currentUser)
+                                                && containsPlant(allowedPlants, "WR-38");
+
+                String routedVisibility = wr38CombinedRead
+                                ? """
+                                  or upper(coalesce(d.plantCode, '')) = 'WR-38'
+                                  """
+                                : "";
+
                 String selectJpql = """
                                 select d.chalaanNumber
                                 from DispatchedItem d
@@ -879,6 +1070,23 @@ public class DispatchedItemService {
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
+                                  and (
+                                        not exists (
+                                                select r.packetItemId
+                                                from UtlPacketRouting r
+                                                where r.packetItemId = d.packetItemId
+                                        )
+                                        or lower(coalesce(d.dispatchedBy, '')) = :username
+                                        or exists (
+                                                select r2.packetItemId
+                                                from UtlPacketRouting r2
+                                                where r2.packetItemId = d.packetItemId
+                                                  and lower(coalesce(r2.dispatchTargetUsername, '')) = :username
+                                        )
+                                """
+                                + routedVisibility
+                                + """
+                                  )
                                 group by d.chalaanNumber
                                 order by max(d.dispatchedAt) desc, d.chalaanNumber desc
                                 """;
@@ -890,17 +1098,36 @@ public class DispatchedItemService {
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
+                                  and (
+                                        not exists (
+                                                select r.packetItemId
+                                                from UtlPacketRouting r
+                                                where r.packetItemId = d.packetItemId
+                                        )
+                                        or lower(coalesce(d.dispatchedBy, '')) = :username
+                                        or exists (
+                                                select r2.packetItemId
+                                                from UtlPacketRouting r2
+                                                where r2.packetItemId = d.packetItemId
+                                                  and lower(coalesce(r2.dispatchTargetUsername, '')) = :username
+                                        )
+                                """
+                                + routedVisibility
+                                + """
+                                  )
                                 """;
 
                 TypedQuery<String> query = entityManager.createQuery(selectJpql, String.class);
                 query.setParameter("status", ItemDispatchStatus.DISPATCHED);
                 query.setParameter("plants", allowedPlants);
+                query.setParameter("username", username);
                 query.setFirstResult((int) Math.min(Integer.MAX_VALUE, Math.max(0L, pageable.getOffset())));
                 query.setMaxResults(Math.max(1, pageable.getPageSize()));
 
                 Long total = entityManager.createQuery(countJpql, Long.class)
                                 .setParameter("status", ItemDispatchStatus.DISPATCHED)
                                 .setParameter("plants", allowedPlants)
+                                .setParameter("username", username)
                                 .getSingleResult();
 
                 return new PageImpl<>(

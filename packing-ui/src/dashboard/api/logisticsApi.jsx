@@ -422,6 +422,7 @@ export async function createDispatchChallan({
   dispatchTime,
   tripStart,
   preview = true,
+  utlMode = false,
 }) {
   const finalDispatchTime =
     normalizeLocalDateTime(
@@ -473,8 +474,13 @@ export async function createDispatchChallan({
     );
   }
 
+  const challanBasePath =
+    utlMode
+      ? "/api/utl/chalaan"
+      : "/api/chalaan";
+
   const res = await requestBlob(
-    `/api/chalaan/dispatch?preview=${preview ? "true" : "false"
+    `${challanBasePath}/dispatch?preview=${preview ? "true" : "false"
     }`,
     {
       method: "POST",

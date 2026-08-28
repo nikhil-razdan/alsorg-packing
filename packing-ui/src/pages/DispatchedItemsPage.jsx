@@ -5779,6 +5779,20 @@ export default function DispatchedItemsPage() {
 		hasRole("UTL_PACKING");
 
 	/*
+	 * UTL Warehouse / Dispatch writes use dedicated assignment-scoped APIs.
+	 * Normal PackFlow dispatch/challan endpoints stay completely unchanged.
+	 */
+	const dispatchMutationApiBase =
+		isUtlDispatch
+			? `${API_BASE_URL}/api/utl/dispatch`
+			: `${API_BASE_URL}/api/dispatched`;
+
+	const dispatchChallanApiBase =
+		isUtlDispatch
+			? `${API_BASE_URL}/api/utl/chalaan`
+			: `${API_BASE_URL}/api/chalaan`;
+
+	/*
 	 * UTL_PACKING may open this register read-only so the creator keeps
 	 * visibility after an internal AL/WR dispatcher completes the dispatch.
 	 * Only DISPATCH / UTL_DISPATCH receive operational controls.
@@ -7811,7 +7825,7 @@ export default function DispatchedItemsPage() {
 			clearSingleGatePassPreview();
 
 			const res = await authFetch(
-				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+				`${dispatchMutationApiBase}/${encodeURIComponent(
 					gatePassModal.zohoItemId
 				)}/store?warehouseCode=${encodeURIComponent(
 					cleanWarehouseCode
@@ -7896,7 +7910,7 @@ export default function DispatchedItemsPage() {
 			clearBulkGatePassPreview();
 
 			const res = await authFetch(
-				`${API_BASE_URL}/api/dispatched/bulk/store?warehouseCode=${encodeURIComponent(
+				`${dispatchMutationApiBase}/bulk/store?warehouseCode=${encodeURIComponent(
 					cleanWarehouseCode
 				)}&fromLocation=${encodeURIComponent(cleanFromLocation)}`,
 				{
@@ -11957,7 +11971,7 @@ export default function DispatchedItemsPage() {
 			: "";
 
 		const res = await authFetch(
-			`${API_BASE_URL}/api/dispatched/${encodeURIComponent(item.zohoItemId)}/move-to-fg${query}`,
+			`${dispatchMutationApiBase}/${encodeURIComponent(item.zohoItemId)}/move-to-fg${query}`,
 			{
 				method: "POST",
 				headers: getAuthHeaders(),
@@ -12636,7 +12650,7 @@ export default function DispatchedItemsPage() {
 
 			const response =
 				await authFetch(
-					`${API_BASE_URL}/api/dispatched/bulk/status?status=${encodeURIComponent(
+					`${dispatchMutationApiBase}/bulk/status?status=${encodeURIComponent(
 						cleanStatus
 					)}`,
 					{
@@ -12723,7 +12737,7 @@ export default function DispatchedItemsPage() {
 
 		const response =
 			await authFetch(
-				`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+				`${dispatchMutationApiBase}/${encodeURIComponent(
 					cleanItemId
 				)}/dispatch?status=${encodeURIComponent(
 					cleanStatus
@@ -14548,7 +14562,7 @@ export default function DispatchedItemsPage() {
 
 				const response =
 					await authFetch(
-						`${API_BASE_URL}/api/chalaan/dispatch/preview`,
+						`${dispatchChallanApiBase}/dispatch/preview`,
 						{
 							method: "POST",
 
@@ -16273,6 +16287,9 @@ export default function DispatchedItemsPage() {
 						 */
 						preview:
 							true,
+
+						utlMode:
+							isUtlDispatch,
 					});
 
 				const blob =
@@ -25441,7 +25458,7 @@ export default function DispatchedItemsPage() {
 												: "";
 
 											const res = await authFetch(
-												`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+												`${dispatchMutationApiBase}/${encodeURIComponent(
 													moveFgModal.zohoItemId
 												)}/move-to-fg${query}`,
 												{
@@ -25782,7 +25799,7 @@ export default function DispatchedItemsPage() {
 
 											for (const item of readyItemsNotInFg) {
 												const res = await authFetch(
-													`${API_BASE_URL}/api/dispatched/${encodeURIComponent(
+													`${dispatchMutationApiBase}/${encodeURIComponent(
 														item.zohoItemId
 													)}/move-to-fg${query}`,
 													{

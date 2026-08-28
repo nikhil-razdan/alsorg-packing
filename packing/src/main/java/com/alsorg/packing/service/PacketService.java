@@ -4653,11 +4653,18 @@ public class PacketService {
                                         false);
                 }
 
+                boolean showCompanyHeader =
+                                utlWorkflowService == null
+                                                || utlWorkflowService
+                                                                .findRoutingByPacketItemId(
+                                                                                item.getId())
+                                                                .isEmpty();
+
                 StickerPdfData pdf = buildStickerPdfData(
                                 item,
                                 activeStickerNumber,
                                 item.getFloor(),
-                                true,
+                                showCompanyHeader,
                                 iteration,
                                 false);
 

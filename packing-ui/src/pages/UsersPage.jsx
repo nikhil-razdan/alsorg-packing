@@ -126,7 +126,7 @@ const ACCESS_GROUPS = [
 				value: "UTL_PACKING",
 				label: "UTL Packing",
 				description:
-					"External UTL packing at AL-P3 K&W or WR-38. Must assign each packed packet to one eligible dispatch user before final sticker generation.",
+					"External UTL packing at AL-P3 K&W or WR-38. Final output must be routed to a same-plant normal Dispatch user or UTL Warehouse / Dispatch user. AL-P3 prints the PackFlow sticker + QR without company header; WR-38 remains QR-only.",
 			},
 			{
 				value: "HARDWARE_PACKING",
@@ -148,9 +148,9 @@ const ACCESS_GROUPS = [
 			},
 			{
 				value: "UTL_DISPATCH",
-				label: "UTL Dispatch",
+				label: "UTL Warehouse / Dispatch",
 				description:
-					"External UTL dispatch restricted to UTL packets explicitly assigned to this username at AL-P3 K&W or WR-38.",
+					"Combined UTL warehouse and dispatch profile. Sees and operates only same-plant UTL packets explicitly routed to this username; ordinary plant data stays hidden.",
 			},
 			{
 				value: "LOGISTICS",
@@ -598,6 +598,7 @@ const readWarehouseAccess = (user) => {
 		hasAssignedRole(roles, "ADMIN") ||
 		hasAssignedRole(roles, "WAREHOUSE") ||
 		hasAssignedRole(roles, "DISPATCH") ||
+		hasAssignedRole(roles, "UTL_DISPATCH") ||
 		user?.warehouseAccess === true
 	);
 };
@@ -1119,7 +1120,9 @@ const getPackFlowAccessMatrix = (user) => {
 	const has = (...requested) =>
 		requested.some((role) => roles.includes(role));
 
-	const warehouse = readWarehouseAccess(user);
+	const warehouse =
+		readWarehouseAccess(user) ||
+		roles.includes("UTL_DISPATCH");
 
 	return [
 		{
@@ -1147,7 +1150,7 @@ const getPackFlowAccessMatrix = (user) => {
 		{
 			key: "DISPATCH",
 			label: "Dispatched Items",
-			granted: has("ADMIN", "DISPATCH", "UTL_DISPATCH", "WAREHOUSE", "PACKING"),
+			granted: has("ADMIN", "DISPATCH", "UTL_DISPATCH", "WAREHOUSE", "PACKING", "UTL_PACKING"),
 		},
 		{
 			key: "LOGISTICS",

@@ -92,9 +92,11 @@ const modulesForRoles = (roles) => {
 		if (
 			[
 				"PACKING",
+				"UTL_PACKING",
 				"HARDWARE_PACKING",
 				"WAREHOUSE",
 				"DISPATCH",
+				"UTL_DISPATCH",
 				"LOGISTICS",
 				"DRIVER",
 			].includes(role)

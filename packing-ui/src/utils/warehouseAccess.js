@@ -1,6 +1,8 @@
 /*
- * Compatibility facade. Warehouse access rules live in permissions.js so the
- * sidebar, route guard and Warehouse page cannot drift apart.
+ * Compatibility facade. Warehouse page-opening rules live in permissions.js so
+ * Sidebar/Layout, RequireWarehouseAccess and WarehousePage cannot drift apart.
+ * UTL_DISPATCH is allowed to open the page, while WarehousePage routes that
+ * identity exclusively to /api/utl/warehouse rather than the normal API.
  */
 export {
 	normalizeRole,

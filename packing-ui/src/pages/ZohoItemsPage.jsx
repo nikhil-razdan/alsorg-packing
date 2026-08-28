@@ -1881,6 +1881,9 @@ function ZohoItemsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [utlDispatchTargets, setUtlDispatchTargets] = useState([]);
+  const [utlDispatchTargetsLoading, setUtlDispatchTargetsLoading] = useState(false);
+  const [utlDispatchTargetUsername, setUtlDispatchTargetUsername] = useState("");
   const [detailsPopup, setDetailsPopup] = useState(false);
 
   const [
@@ -2060,6 +2063,9 @@ function ZohoItemsPage() {
   const isPacking =
     hasRole("PACKING");
 
+  const isUtlPacking =
+    hasRole("UTL_PACKING");
+
   const isHardwarePacking =
     hasRole("HARDWARE_PACKING");
 
@@ -2076,7 +2082,8 @@ function ZohoItemsPage() {
    */
   const canOpenNormalInventory =
     isAdmin ||
-    isPacking;
+    isPacking ||
+    isUtlPacking;
 
   const canOpenHardwareInventory =
     isAdmin ||
@@ -2123,7 +2130,8 @@ function ZohoItemsPage() {
    */
   const canCreateNormalPackets =
     isAdmin ||
-    isPacking;
+    isPacking ||
+    isUtlPacking;
 
   /*
    * Hardware inventory write operations:
@@ -2316,7 +2324,7 @@ function ZohoItemsPage() {
     remarks: "",
     numberOfPackets: 1,
     packingDate: getIndiaTodayDateInputValue(),
-    showCompanyHeader: true,
+    showCompanyHeader: !isUtlPacking,
   });
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2601,6 +2609,16 @@ function ZohoItemsPage() {
     );
   };
 
+  /*
+   * UTL packet operations use an isolated controller instead of widening the
+   * ordinary PACKING controller. This keeps UTL identities out of unrelated
+   * normal-packing endpoints while reusing PacketService lifecycle rules.
+   */
+  const normalPacketBasePath =
+    isUtlPacking
+      ? "/api/utl/packets"
+      : "/api/packets";
+
   const WR38_PLANT_CODE = "WR-38";
 
   const isWr38PlantCode = (value) =>
@@ -2631,12 +2649,12 @@ function ZohoItemsPage() {
     }
 
     if (isWr38Row(row)) {
-      return `/api/packets/items/${encodeURIComponent(
+      return `${normalPacketBasePath}/items/${encodeURIComponent(
         itemId
       )}/preview-wr38-qr`;
     }
 
-    return `/api/packets/items/${encodeURIComponent(
+    return `${normalPacketBasePath}/items/${encodeURIComponent(
       itemId
     )}/preview-sticker`;
   };
@@ -2658,12 +2676,12 @@ function ZohoItemsPage() {
     }
 
     if (isWr38Row(row)) {
-      return `/api/packets/items/${encodeURIComponent(
+      return `${normalPacketBasePath}/items/${encodeURIComponent(
         itemId
       )}/generate-wr38-qr`;
     }
 
-    return `/api/packets/items/${encodeURIComponent(
+    return `${normalPacketBasePath}/items/${encodeURIComponent(
       itemId
     )}/generate-sticker`;
   };
@@ -2684,7 +2702,7 @@ function ZohoItemsPage() {
       )}`;
     }
 
-    return `/api/packets/items/${encodeURIComponent(
+    return `${normalPacketBasePath}/items/${encodeURIComponent(
       itemId
     )}`;
   };
@@ -2706,12 +2724,12 @@ function ZohoItemsPage() {
     }
 
     if (isAdmin) {
-      return `/api/packets/items/${encodeURIComponent(
+      return `${normalPacketBasePath}/items/${encodeURIComponent(
         itemId
       )}/admin-sticker-details`;
     }
 
-    return `/api/packets/items/${encodeURIComponent(
+    return `${normalPacketBasePath}/items/${encodeURIComponent(
       itemId
     )}`;
   };
@@ -2743,6 +2761,60 @@ function ZohoItemsPage() {
       console.error(e);
       setMyPlants([]);
       return [];
+    }
+  };
+
+  const fetchUtlDispatchTargets = async () => {
+    if (!isUtlPacking) {
+      setUtlDispatchTargets([]);
+      setUtlDispatchTargetUsername("");
+      return [];
+    }
+
+    setUtlDispatchTargetsLoading(true);
+
+    try {
+      const res = await authFetch(
+        `${API_BASE_URL}${normalPacketBasePath}/dispatch-targets`,
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          (await readApiErrorMessage(res)) ||
+          "Failed to load UTL dispatch users"
+        );
+      }
+
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : [];
+
+      setUtlDispatchTargets(rows);
+      setUtlDispatchTargetUsername((current) => {
+        if (current && rows.some((row) => row?.username === current)) {
+          return current;
+        }
+
+        return rows.length === 1
+          ? String(rows[0]?.username || "")
+          : "";
+      });
+
+      return rows;
+    } catch (error) {
+      console.error(error);
+      setUtlDispatchTargets([]);
+      setUtlDispatchTargetUsername("");
+      showUiAlert(
+        "error",
+        error?.message || "Failed to load UTL dispatch users"
+      );
+      return [];
+    } finally {
+      setUtlDispatchTargetsLoading(false);
     }
   };
 
@@ -2959,7 +3031,7 @@ function ZohoItemsPage() {
     remarks: "",
     numberOfPackets: 1,
     packingDate: getIndiaTodayDateInputValue(),
-    showCompanyHeader: true,
+    showCompanyHeader: !isUtlPacking,
     factoryFloor: "",
   });
 
@@ -3580,7 +3652,7 @@ function ZohoItemsPage() {
 
       const response =
         await authFetch(
-          `${API_BASE_URL}/api/packets/items/search?${query.toString()}`,
+          `${API_BASE_URL}${normalPacketBasePath}/items/search?${query.toString()}`,
           {
             method: "GET",
             headers: {
@@ -3870,7 +3942,7 @@ function ZohoItemsPage() {
 
       const normalRows =
         await fetchInventoryRowsFromPath(
-          "/api/packets/items"
+          `${normalPacketBasePath}/items`
         );
 
       return (
@@ -6932,6 +7004,7 @@ function ZohoItemsPage() {
     setPdfUrl(null);
     setDrawerOpen(false);
     setGenerating(false);
+    setUtlDispatchTargetUsername("");
   };
 
   const openGenerateStickerDrawer = (row = selectedItem) => {
@@ -6946,7 +7019,12 @@ function ZohoItemsPage() {
     setGenerating(false);
     setSelectedItem(row);
     setPdfUrl(null);
+    setUtlDispatchTargetUsername("");
     setDrawerOpen(true);
+
+    if (isUtlPacking) {
+      void fetchUtlDispatchTargets();
+    }
   };
 
   const openStickerReviewModal = async (row) => {
@@ -6982,7 +7060,7 @@ function ZohoItemsPage() {
           row.floor || ""
         )}` +
         `&showCompanyHeader=${encodeURIComponent(
-          form.showCompanyHeader
+          isUtlPacking ? false : form.showCompanyHeader
         )}`;
 
       const res = await authFetch(
@@ -10877,6 +10955,25 @@ function ZohoItemsPage() {
                 dimensions, package content and customer data stay in PackFlow and
                 are resolved after scanning; the approved Illustrator label remains unchanged.
               </Box>
+            ) : isUtlPacking ? (
+              <Box sx={stickerOptionRowSx}>
+                <Box>
+                  <Box sx={optionMainTextSx}>
+                    UTL Sticker Header
+                  </Box>
+
+                  <Box sx={optionSubTextSx}>
+                    UTL AL-P3 uses the standard PackFlow sticker + QR, but the ALSORG
+                    company header is permanently hidden for this identity.
+                  </Box>
+                </Box>
+
+                <Chip
+                  size="small"
+                  label="Company Header Off"
+                  sx={inventorySoftChipSx}
+                />
+              </Box>
             ) : (
               <Box sx={stickerOptionRowSx}>
                 <Box>
@@ -10900,10 +10997,52 @@ function ZohoItemsPage() {
                 />
               </Box>
             )}
+
+            {isUtlPacking && (
+              <Box sx={{ mt: 2 }}>
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  label="Assign UTL Dispatch User"
+                  value={utlDispatchTargetUsername}
+                  onChange={(event) =>
+                    setUtlDispatchTargetUsername(event.target.value)
+                  }
+                  disabled={utlDispatchTargetsLoading}
+                  helperText={
+                    utlDispatchTargetsLoading
+                      ? "Loading eligible dispatch users for this UTL plant…"
+                      : utlDispatchTargets.length === 0
+                        ? "No eligible DISPATCH / UTL_DISPATCH user is assigned to this plant."
+                        : "Required before final generation. AL-P3 and WR-38 target lists are strictly separated."
+                  }
+                  sx={formFieldSx()}
+                >
+                  <MenuItem value="">
+                    Select dispatch user
+                  </MenuItem>
+
+                  {utlDispatchTargets.map((target) => (
+                    <MenuItem
+                      key={`${target?.username || "user"}-${target?.plantCode || "plant"}`}
+                      value={target?.username || ""}
+                    >
+                      {target?.username || "Unnamed user"}
+                      {target?.utlDispatch ? " · UTL Dispatch" : " · Dispatch"}
+                      {target?.plantCode ? ` · ${target.plantCode}` : ""}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            )}
           </Box>
 
           <Button
-            disabled={generating}
+            disabled={
+              generating ||
+              (isUtlPacking && !utlDispatchTargetUsername)
+            }
             onClick={async () => {
               const itemId = getPacketItemId(selectedItem);
 
@@ -10927,17 +11066,47 @@ function ZohoItemsPage() {
                   return;
                 }
 
-                const query =
-                  `factoryFloor=${encodeURIComponent(
-                    selectedItem?.floor || ""
-                  )}` +
-                  `&showCompanyHeader=${encodeURIComponent(
-                    form.showCompanyHeader
-                  )}`;
+                const query = new URLSearchParams();
+
+                query.set(
+                  "factoryFloor",
+                  selectedItem?.floor || ""
+                );
+
+                query.set(
+                  "showCompanyHeader",
+                  String(
+                    isUtlPacking
+                      ? false
+                      : form.showCompanyHeader
+                  )
+                );
+
+                if (isUtlPacking) {
+                  if (!utlDispatchTargetUsername) {
+                    showUiAlert(
+                      "error",
+                      "Select the UTL dispatch user before generating the sticker / QR"
+                    );
+                    return;
+                  }
+
+                  query.set("dispatchMode", "USER");
+                  query.set(
+                    "dispatchTargetUsername",
+                    utlDispatchTargetUsername
+                  );
+                  query.set(
+                    "dispatchTargetPlantCode",
+                    String(selectedItem?.plantCode || "")
+                      .trim()
+                      .toUpperCase()
+                  );
+                }
 
                 const genRes =
                   await authFetch(
-                    `${API_BASE_URL}${generatePath}?${query}`,
+                    `${API_BASE_URL}${generatePath}?${query.toString()}`,
                     {
                       method: "POST",
                     }
@@ -10976,7 +11145,11 @@ function ZohoItemsPage() {
 
                 showUiAlert(
                   "success",
-                  isWr38Row(selectedItem) ? "WR-38 QR generated and downloaded successfully" : "Sticker generated and downloaded successfully"
+                  isWr38Row(selectedItem)
+                    ? "WR-38 QR generated and downloaded successfully"
+                    : isUtlPacking
+                      ? "UTL sticker generated without company header and downloaded successfully"
+                      : "Sticker generated and downloaded successfully"
                 );
 
                 await fetchItems();
@@ -11214,7 +11387,7 @@ function ZohoItemsPage() {
                       return;
                     }
 
-                    const res = await authFetch(`${API_BASE_URL}/api/packets/create`, {
+                    const res = await authFetch(`${API_BASE_URL}${normalPacketBasePath}/create`, {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
@@ -11393,7 +11566,7 @@ function ZohoItemsPage() {
                         return;
                       }
 
-                      const res = await authFetch(`${API_BASE_URL}/api/packets/create-custom`, {
+                      const res = await authFetch(`${API_BASE_URL}${normalPacketBasePath}/create-custom`, {
                         method: "POST",
                         headers: {
                           "Content-Type": "application/json",
@@ -11555,7 +11728,7 @@ function ZohoItemsPage() {
                   onClick={async () => {
                     try {
                       const res = await authFetch(
-                        `${API_BASE_URL}/api/packets/add-more/${selectedItem.masterItemId}`,
+                        `${API_BASE_URL}${normalPacketBasePath}/add-more/${selectedItem.masterItemId}`,
                         {
                           method: "POST",
                           headers: {
@@ -11738,7 +11911,7 @@ function ZohoItemsPage() {
                   onClick={async () => {
                     try {
                       const res = await authFetch(
-                        `${API_BASE_URL}/api/packets/add-custom/${selectedItem.masterItemId}`,
+                        `${API_BASE_URL}${normalPacketBasePath}/add-custom/${selectedItem.masterItemId}`,
                         {
                           method: "POST",
                           headers: {
@@ -11892,7 +12065,7 @@ function ZohoItemsPage() {
                       const editUrl =
                         isAdmin
                           ? `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}/admin-sticker-details`
-                          : `${API_BASE_URL}/api/packets/items/${encodeURIComponent(editItemId)}`;
+                          : `${API_BASE_URL}${normalPacketBasePath}/items/${encodeURIComponent(editItemId)}`;
 
                       const res = await authFetch(
                         editUrl,

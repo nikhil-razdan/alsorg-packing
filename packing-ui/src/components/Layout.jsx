@@ -85,8 +85,16 @@ function PackFlowNavigation({
       "PACKFLOW_DIRECTOR"
     );
 
+  /*
+   * UTL_PACKING receives the same Inventory page shell, but ZohoItemsPage
+   * switches all packet calls to the isolated /api/utl/packets boundary.
+   */
   const canOpenNormalInventory =
-    hasAnyRole("ADMIN", "PACKING", "UTL_PACKING");
+    hasAnyRole(
+      "ADMIN",
+      "PACKING",
+      "UTL_PACKING"
+    );
 
   const canOpenHardwareInventory =
     hasAnyRole(
@@ -101,10 +109,10 @@ function PackFlowNavigation({
     hasAnyRole(
       "ADMIN",
       "DISPATCH",
+      "UTL_DISPATCH",
       "WAREHOUSE",
       "PACKING",
-      "UTL_PACKING",
-      "UTL_DISPATCH"
+      "UTL_PACKING"
     );
 
   const canOpenLogistics =
