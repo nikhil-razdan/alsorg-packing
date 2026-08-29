@@ -35,9 +35,9 @@ import com.alsorg.packing.controller.dto.PacketItemResponse;
 import com.alsorg.packing.controller.dto.UpdatePacketItemRequest;
 import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.repository.UserRepository;
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.PacketService;
+import com.alsorg.packing.service.UtlWorkflowService;
 
 /**
  * Strict UTL packing boundary.
@@ -57,19 +57,17 @@ public class UtlPacketController {
 
     private static final int MAX_INVENTORY_PAGE_SIZE = 100;
     private static final Set<String> UTL_PLANTS = Set.of("AL-P3", "WR-38");
-    private static final String USER_ROUTING_MODE = "USER";
-
     private final PacketService packetService;
     private final CurrentUserService currentUserService;
-    private final UserRepository userRepository;
+    private final UtlWorkflowService utlWorkflowService;
 
     public UtlPacketController(
             PacketService packetService,
             CurrentUserService currentUserService,
-            UserRepository userRepository) {
+            UtlWorkflowService utlWorkflowService) {
         this.packetService = packetService;
         this.currentUserService = currentUserService;
-        this.userRepository = userRepository;
+        this.utlWorkflowService = utlWorkflowService;
     }
 
     @GetMapping(value = "/items/search", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -239,38 +237,17 @@ public class UtlPacketController {
     }
 
     @GetMapping("/dispatch-targets")
-    public ResponseEntity<List<Map<String, Object>>> dispatchTargets() {
+    public ResponseEntity<List<UtlWorkflowService.DispatchTarget>> dispatchTargets() {
         User user = requireUtlPackingUser();
         String plantCode = requireSingleUtlPlant(user)
                 .iterator()
                 .next();
 
-        List<Map<String, Object>> targets = userRepository.findAll()
-                .stream()
-                .filter(User::isEnabled)
-                .filter(target -> hasAnyRole(
-                        target,
-                        "DISPATCH",
-                        "UTL_DISPATCH"))
-                .filter(target -> userHasPlant(
-                        target,
-                        plantCode))
-                .sorted((left, right) ->
-                        String.valueOf(left.getUsername())
-                                .compareToIgnoreCase(
-                                        String.valueOf(right.getUsername())))
-                .map(target -> {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("username", target.getUsername());
-                    row.put("plantCode", plantCode);
-                    row.put("utlDispatch", hasAnyRole(target, "UTL_DISPATCH"));
-                    return row;
-                })
-                .toList();
-
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(targets);
+                .body(utlWorkflowService.getEligibleDispatchTargets(
+                        user,
+                        plantCode));
     }
 
     @PostMapping("/items/{itemId}/preview-sticker")
@@ -315,34 +292,35 @@ public class UtlPacketController {
     public ResponseEntity<byte[]> generateSticker(
             @PathVariable UUID itemId,
             @RequestParam(defaultValue = "") String factoryFloor,
-            @RequestParam(defaultValue = USER_ROUTING_MODE) String dispatchMode,
+            @RequestParam String dispatchMode,
             @RequestParam String dispatchTargetUsername,
             @RequestParam(required = false) String dispatchTargetPlantCode) {
 
         User user = requireUtlPackingUser();
-        String plantCode = requireSingleUtlPlant(user)
+        String sourcePlant = requireSingleUtlPlant(user)
                 .iterator()
                 .next();
 
-        if ("WR-38".equals(plantCode)) {
+        if ("WR-38".equals(sourcePlant)) {
             throw badRequest(
                     "WR-38 UTL packets use the QR-only generation endpoint");
         }
 
-        String targetUsername = validateRoutingTarget(
+        UtlWorkflowService.DispatchTarget selected = validateRoutingTarget(
+                user,
                 dispatchMode,
                 dispatchTargetUsername,
                 dispatchTargetPlantCode,
-                plantCode);
+                sourcePlant);
 
         byte[] pdf = packetService.generateUtlNormalSticker(
                 itemId,
                 factoryFloor,
                 user,
-                Set.of(plantCode),
-                USER_ROUTING_MODE,
-                targetUsername,
-                plantCode);
+                Set.of(sourcePlant),
+                selected.dispatchMode(),
+                selected.username(),
+                selected.plantCode());
 
         return pdfResponse(
                 pdf,
@@ -353,14 +331,15 @@ public class UtlPacketController {
     @PostMapping("/items/{itemId}/generate-wr38-qr")
     public ResponseEntity<byte[]> generateWr38Qr(
             @PathVariable UUID itemId,
-            @RequestParam(defaultValue = USER_ROUTING_MODE) String dispatchMode,
+            @RequestParam String dispatchMode,
             @RequestParam String dispatchTargetUsername,
             @RequestParam(required = false) String dispatchTargetPlantCode) {
 
         User user = requireUtlPackingUser();
         requirePlant(user, "WR-38");
 
-        String targetUsername = validateRoutingTarget(
+        UtlWorkflowService.DispatchTarget selected = validateRoutingTarget(
+                user,
                 dispatchMode,
                 dispatchTargetUsername,
                 dispatchTargetPlantCode,
@@ -370,9 +349,9 @@ public class UtlPacketController {
                 itemId,
                 user,
                 Set.of("WR-38"),
-                USER_ROUTING_MODE,
-                targetUsername,
-                "WR-38");
+                selected.dispatchMode(),
+                selected.username(),
+                selected.plantCode());
 
         return pdfResponse(
                 pdf,
@@ -380,60 +359,48 @@ public class UtlPacketController {
                 false);
     }
 
-    private String validateRoutingTarget(
+    private UtlWorkflowService.DispatchTarget validateRoutingTarget(
+            User packingUser,
             String dispatchMode,
             String dispatchTargetUsername,
             String dispatchTargetPlantCode,
             String sourcePlant) {
 
         String cleanMode = normalizeCode(dispatchMode);
-
-        if (!USER_ROUTING_MODE.equals(cleanMode)) {
-            throw badRequest(
-                    "UTL packet routing mode must be USER");
-        }
-
         String cleanTargetUsername = clean(dispatchTargetUsername);
+        String requestedTargetPlant = normalizeCode(dispatchTargetPlantCode);
+
+        if (!UtlWorkflowService.MODE_UTL.equals(cleanMode)
+                && !UtlWorkflowService.MODE_INTERNAL.equals(cleanMode)) {
+            throw badRequest(
+                    "Select UTL Dispatch or normal same-plant Dispatch before final sticker / QR generation");
+        }
 
         if (cleanTargetUsername == null) {
             throw badRequest(
                     "Select a dispatch user before final sticker / QR generation");
         }
 
-        String requestedTargetPlant = normalizeCode(dispatchTargetPlantCode);
+        String finalTargetPlant = requestedTargetPlant == null
+                ? sourcePlant
+                : requestedTargetPlant;
 
-        if (requestedTargetPlant != null
-                && !sourcePlant.equals(requestedTargetPlant)) {
+        if (!sourcePlant.equals(finalTargetPlant)) {
             throw new AccessDeniedException(
-                    "UTL dispatch target must belong to the same team plant: "
+                    "UTL packets can be routed only within their source plant: "
                             + sourcePlant);
         }
 
-        User target = userRepository
-                .findByUsernameIgnoreCase(cleanTargetUsername)
-                .orElseThrow(() -> badRequest(
-                        "Selected dispatch user does not exist"));
-
-        if (!target.isEnabled()) {
-            throw badRequest(
-                    "Selected dispatch user is disabled");
-        }
-
-        if (!hasAnyRole(
-                target,
-                "DISPATCH",
-                "UTL_DISPATCH")) {
-            throw badRequest(
-                    "Selected user does not have DISPATCH / UTL_DISPATCH access");
-        }
-
-        if (!userHasPlant(target, sourcePlant)) {
-            throw new AccessDeniedException(
-                    "Selected dispatch user is not assigned to "
-                            + sourcePlant);
-        }
-
-        return target.getUsername().trim();
+        return utlWorkflowService.getEligibleDispatchTargets(
+                        packingUser,
+                        sourcePlant)
+                .stream()
+                .filter(target -> cleanMode.equals(target.dispatchMode()))
+                .filter(target -> sourcePlant.equalsIgnoreCase(target.plantCode()))
+                .filter(target -> cleanTargetUsername.equalsIgnoreCase(target.username()))
+                .findFirst()
+                .orElseThrow(() -> new AccessDeniedException(
+                        "Selected dispatch user is not eligible for this UTL packet"));
     }
 
     private User requireUtlPackingUser() {
@@ -493,42 +460,6 @@ public class UtlPacketController {
         }
     }
 
-    private boolean userHasPlant(
-            User user,
-            String plantCode) {
-        if (user == null
-                || user.getEffectivePlantCodes() == null) {
-            return false;
-        }
-
-        return user.getEffectivePlantCodes()
-                .stream()
-                .filter(value -> value != null)
-                .map(this::normalizeCode)
-                .anyMatch(plantCode::equals);
-    }
-
-    private boolean hasAnyRole(
-            User user,
-            String... roles) {
-        if (user == null
-                || user.getEffectiveRoles() == null
-                || roles == null) {
-            return false;
-        }
-
-        Set<String> requested = java.util.Arrays.stream(roles)
-                .map(this::normalizeRole)
-                .filter(value -> value != null)
-                .collect(java.util.stream.Collectors.toSet());
-
-        return user.getEffectiveRoles()
-                .stream()
-                .map(this::normalizeRole)
-                .filter(value -> value != null)
-                .anyMatch(requested::contains);
-    }
-
     private Sort buildInventorySort(String groupBy) {
         String cleanGroup = normalizeCode(groupBy);
 
@@ -571,19 +502,6 @@ public class UtlPacketController {
         return new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 message);
-    }
-
-    private String normalizeRole(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String clean = value
-                .trim()
-                .replaceFirst("(?i)^ROLE_", "")
-                .toUpperCase(Locale.ROOT);
-
-        return clean.isBlank() ? null : clean;
     }
 
     private String normalizeCode(String value) {

@@ -45,8 +45,6 @@ public class UtlWorkflowService {
     public static final String WR_38 = "WR-38";
 
     private static final Set<String> UTL_SOURCE_PLANTS = Set.of(AL_P3, WR_38);
-    private static final Set<String> ALS_INTERNAL_DISPATCH_PLANTS = Set.of(
-            "AL-P1", "AL-P2", "AL-P3", "AL-P4");
 
     private final UtlPacketRoutingRepository routingRepository;
     private final UserService userService;
@@ -113,33 +111,22 @@ public class UtlWorkflowService {
                         MODE_UTL,
                         sourcePlant,
                         sourcePlant.equals(WR_38)
-                                ? "UTL Dispatch • WR-38"
-                                : "UTL Dispatch • AL-P3 K&W"));
+                                ? "UTL Warehouse / Dispatch • WR-38"
+                                : "UTL Warehouse / Dispatch • AL-P3 K&W"));
             }
 
-            if (!currentUserService.isDispatch(candidate)) {
-                continue;
-            }
-
-            if (WR_38.equals(sourcePlant)) {
-                if (plants.contains(WR_38)) {
-                    result.add(new DispatchTarget(
-                            username,
-                            MODE_INTERNAL,
-                            WR_38,
-                            "WR-38 Dispatch"));
-                }
-                continue;
-            }
-
-            for (String plant : ALS_INTERNAL_DISPATCH_PLANTS) {
-                if (plants.contains(plant)) {
-                    result.add(new DispatchTarget(
-                            username,
-                            MODE_INTERNAL,
-                            plant,
-                            plant + " Dispatch"));
-                }
+            /*
+             * INTERNAL means the ordinary PackFlow Dispatch team of the SAME
+             * physical source plant.  Never project an AL-P3 UTL packet into
+             * AL-P1 / AL-P2 / AL-P4 merely because that dispatcher exists.
+             */
+            if (currentUserService.isDispatch(candidate)
+                    && plants.contains(sourcePlant)) {
+                result.add(new DispatchTarget(
+                        username,
+                        MODE_INTERNAL,
+                        sourcePlant,
+                        sourcePlant + " Dispatch"));
             }
         }
 
@@ -328,14 +315,26 @@ public class UtlWorkflowService {
 
         UtlPacketRouting routing = optionalRouting.get();
         String targetPlant = cleanUpper(routing.getDispatchTargetPlantCode());
+        String mode = cleanUpper(routing.getDispatchMode());
 
-        /* Existing Warehouse / Logistics hand-off stays plant-scoped. */
+        /*
+         * Normal downstream Warehouse / Logistics may operate an UTL-origin
+         * packet only when it was explicitly routed into the INTERNAL flow.
+         * WR-38 keeps the requested combined normal + UTL plant exception.
+         */
         if (currentUserService.isWarehouse(user) || currentUserService.isLogistics(user)) {
-            if (targetPlant != null && currentUserService.canAccessPlant(user, targetPlant)) {
+            boolean samePlant = targetPlant != null
+                    && currentUserService.canAccessPlant(user, targetPlant);
+
+            if (samePlant
+                    && (MODE_INTERNAL.equals(mode)
+                            || (WR_38.equals(targetPlant)
+                                    && !currentUserService.isUtlUser(user)))) {
                 return;
             }
+
             throw new AccessDeniedException(
-                    "UTL packet is outside this user's assigned plant");
+                    "This UTL packet is not routed into this user's normal plant workflow");
         }
 
         String username = requireUsername(user);
@@ -347,12 +346,10 @@ public class UtlWorkflowService {
                             + routing.getDispatchTargetUsername());
         }
 
-        String mode = cleanUpper(routing.getDispatchMode());
-
         if (MODE_UTL.equals(mode)) {
             if (!currentUserService.isUtlDispatch(user)) {
                 throw new AccessDeniedException(
-                        "This packet is assigned to UTL Dispatch");
+                        "This packet is assigned to UTL Warehouse / Dispatch");
             }
         } else if (MODE_INTERNAL.equals(mode)) {
             if (!currentUserService.isDispatch(user)) {
@@ -412,8 +409,28 @@ public class UtlWorkflowService {
             }
         }
 
-        if (currentUserService.isWarehouse(user) || currentUserService.isLogistics(user)) {
-            String targetPlant = cleanUpper(routing.getDispatchTargetPlantCode());
+        String targetPlant = cleanUpper(routing.getDispatchTargetPlantCode());
+        String mode = cleanUpper(routing.getDispatchMode());
+
+        /* Normal WR-38 operational users intentionally see both WR-38 branches. */
+        if (WR_38.equals(targetPlant)
+                && !currentUserService.isUtlUser(user)
+                && currentUserService.canAccessPlant(user, WR_38)
+                && currentUserService.hasAnyRole(
+                        user,
+                        "PACKING",
+                        "WAREHOUSE",
+                        "DISPATCH",
+                        "LOGISTICS")) {
+            return true;
+        }
+
+        /*
+         * For AL-P3, normal Warehouse / Logistics receive only INTERNAL-routed
+         * UTL work. MODE_UTL remains private to the selected UTL_DISPATCH user.
+         */
+        if ((currentUserService.isWarehouse(user) || currentUserService.isLogistics(user))
+                && MODE_INTERNAL.equals(mode)) {
             return targetPlant != null && currentUserService.canAccessPlant(user, targetPlant);
         }
 
@@ -454,8 +471,28 @@ public class UtlWorkflowService {
             return true;
         }
 
-        if (currentUserService.isWarehouse(user) || currentUserService.isLogistics(user)) {
-            String targetPlant = cleanUpper(routing.getDispatchTargetPlantCode());
+        String targetPlant = cleanUpper(routing.getDispatchTargetPlantCode());
+        String mode = cleanUpper(routing.getDispatchMode());
+
+        /* Normal WR-38 operational users intentionally see both WR-38 branches. */
+        if (WR_38.equals(targetPlant)
+                && !currentUserService.isUtlUser(user)
+                && currentUserService.canAccessPlant(user, WR_38)
+                && currentUserService.hasAnyRole(
+                        user,
+                        "PACKING",
+                        "WAREHOUSE",
+                        "DISPATCH",
+                        "LOGISTICS")) {
+            return true;
+        }
+
+        /*
+         * For AL-P3, normal Warehouse / Logistics receive only INTERNAL-routed
+         * UTL work. MODE_UTL remains private to the selected UTL_DISPATCH user.
+         */
+        if ((currentUserService.isWarehouse(user) || currentUserService.isLogistics(user))
+                && MODE_INTERNAL.equals(mode)) {
             return targetPlant != null && currentUserService.canAccessPlant(user, targetPlant);
         }
 

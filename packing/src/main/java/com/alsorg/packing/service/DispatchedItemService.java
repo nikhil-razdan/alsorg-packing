@@ -724,7 +724,31 @@ public class DispatchedItemService {
                                         cb.equal(dispatchedBy, username)));
                 }
 
-                if (utlReadContext.operationalPlantRead()
+                if (utlReadContext.internalOperationalPlantRead()
+                                && allowedPlants != null
+                                && !allowedPlants.isEmpty()) {
+                        /*
+                         * Normal Warehouse / Logistics users may receive a UTL-origin
+                         * packet only when the packer explicitly selected INTERNAL.
+                         * MODE_UTL therefore never leaks into the normal AL-P3 queue.
+                         */
+                        Subquery<UUID> internalIds = query.subquery(UUID.class);
+                        Root<UtlPacketRouting> internalRouting = internalIds.from(UtlPacketRouting.class);
+                        internalIds.select(internalRouting.get("packetItemId"));
+                        internalIds.where(cb.and(
+                                        cb.equal(
+                                                        cb.upper(
+                                                                        cb.trim(
+                                                                                        cb.coalesce(
+                                                                                                        internalRouting.<String>get("dispatchMode"),
+                                                                                                        ""))),
+                                                        "INTERNAL"),
+                                        internalRouting.get("dispatchTargetPlantCode").in(allowedPlants)));
+
+                        routedReadPredicates.add(root.get("packetItemId").in(internalIds));
+                }
+
+                if (utlReadContext.wr38CombinedRead()
                                 && containsPlant(allowedPlants, "WR-38")) {
                         /*
                          * The business exception is WR-38 only: normal WR-38
@@ -854,6 +878,13 @@ public class DispatchedItemService {
                                 currentUserService.isUtlDispatch(user)
                                                 || currentUserService.isDispatch(user);
 
+                boolean internalOperationalPlantRead =
+                                !utlOnlyIdentity
+                                                && currentUserService.hasAnyRole(
+                                                                user,
+                                                                "WAREHOUSE",
+                                                                "LOGISTICS");
+
                 boolean normalWr38CombinedRead =
                                 !utlOnlyIdentity
                                                 && containsPlant(allowedPlants, "WR-38")
@@ -868,6 +899,7 @@ public class DispatchedItemService {
                                 user.getUsername(),
                                 creatorRead,
                                 assignedDispatcherRead,
+                                internalOperationalPlantRead,
                                 normalWr38CombinedRead,
                                 utlOnlyIdentity);
         }
@@ -893,7 +925,8 @@ public class DispatchedItemService {
                         String username,
                         boolean creatorRead,
                         boolean assignedDispatcherRead,
-                        boolean operationalPlantRead,
+                        boolean internalOperationalPlantRead,
+                        boolean wr38CombinedRead,
                         boolean utlOnlyIdentity) {
 
                 public String normalizedUsername() {

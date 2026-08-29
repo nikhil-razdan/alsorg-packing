@@ -13,6 +13,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.users.User;
+import com.alsorg.packing.domain.utl.UtlPacketRouting;
 import com.alsorg.packing.service.CurrentUserService;
 import com.alsorg.packing.service.UtlWorkflowService;
 
@@ -23,9 +24,9 @@ import com.alsorg.packing.service.UtlWorkflowService;
  * register.  This advice protects legacy/list endpoints too and deliberately
  * preserves two operational exceptions required by PackFlow:
  *
- * 1. A normal Warehouse user may see same-plant UTL rows when reading the
- *    ordinary /api/warehouse queue, so UTL Packing can hand work to the normal
- *    AL-P3/WR-38 Warehouse team without exposing it on unrelated endpoints.
+ * 1. A normal Warehouse user may see same-plant UTL rows only when the UTL
+ *    packet was explicitly routed into INTERNAL normal-plant dispatch. MODE_UTL
+ *    remains private to the selected UTL Warehouse / Dispatch identity.
  * 2. Normal WR-38 operational users may see the combined normal + UTL WR-38
  *    plant view, as required by the separate WR-38 workflow.
  */
@@ -103,11 +104,11 @@ public class UtlDispatchIsolationResponseAdvice
             return true;
         }
 
-        boolean routed = utlWorkflowService
+        UtlPacketRouting routing = utlWorkflowService
                 .findRoutingByPacketItemId(item.getPacketItemId())
-                .isPresent();
+                .orElse(null);
 
-        if (!routed) {
+        if (routing == null) {
             return true;
         }
 
@@ -134,7 +135,9 @@ public class UtlDispatchIsolationResponseAdvice
                 && !currentUserService.isUtlUser(user)
                 && currentUserService.isWarehouse(user)
                 && itemPlant != null
-                && currentUserService.canAccessPlant(user, itemPlant)) {
+                && currentUserService.canAccessPlant(user, itemPlant)
+                && UtlWorkflowService.MODE_INTERNAL.equalsIgnoreCase(
+                        String.valueOf(routing.getDispatchMode()))) {
             return true;
         }
 

@@ -11025,11 +11025,13 @@ function ZohoItemsPage() {
 
                   {utlDispatchTargets.map((target) => (
                     <MenuItem
-                      key={`${target?.username || "user"}-${target?.plantCode || "plant"}`}
+                      key={`${target?.dispatchMode || "mode"}-${target?.username || "user"}-${target?.plantCode || "plant"}`}
                       value={target?.username || ""}
                     >
                       {target?.username || "Unnamed user"}
-                      {target?.utlDispatch ? " · UTL Dispatch" : " · Dispatch"}
+                      {target?.dispatchMode === "UTL"
+                        ? " · UTL Warehouse / Dispatch"
+                        : " · Normal Dispatch"}
                       {target?.plantCode ? ` · ${target.plantCode}` : ""}
                     </MenuItem>
                   ))}
@@ -11091,16 +11093,57 @@ function ZohoItemsPage() {
                     return;
                   }
 
-                  query.set("dispatchMode", "USER");
+                  const selectedUtlTarget =
+                    utlDispatchTargets.find(
+                      (target) =>
+                        String(target?.username || "")
+                          .trim()
+                          .toLowerCase() ===
+                        String(utlDispatchTargetUsername || "")
+                          .trim()
+                          .toLowerCase()
+                    );
+
+                  if (!selectedUtlTarget) {
+                    showUiAlert(
+                      "error",
+                      "The selected UTL dispatch route is no longer available. Refresh the target list and try again."
+                    );
+                    return;
+                  }
+
+                  const dispatchMode =
+                    String(selectedUtlTarget?.dispatchMode || "")
+                      .trim()
+                      .toUpperCase();
+
+                  const dispatchTargetPlantCode =
+                    String(selectedUtlTarget?.plantCode || "")
+                      .trim()
+                      .toUpperCase();
+
+                  if (
+                    !["UTL", "INTERNAL"].includes(dispatchMode) ||
+                    dispatchTargetPlantCode !==
+                      String(selectedItem?.plantCode || "")
+                        .trim()
+                        .toUpperCase()
+                  ) {
+                    showUiAlert(
+                      "error",
+                      "Invalid UTL route. Packing and Warehouse / Dispatch must remain in the same plant."
+                    );
+                    return;
+                  }
+
+                  query.set("dispatchMode", dispatchMode);
                   query.set(
                     "dispatchTargetUsername",
-                    utlDispatchTargetUsername
+                    selectedUtlTarget.username
                   );
                   query.set(
                     "dispatchTargetPlantCode",
-                    String(selectedItem?.plantCode || "")
-                      .trim()
-                      .toUpperCase()
+                    dispatchTargetPlantCode
                   );
                 }
 

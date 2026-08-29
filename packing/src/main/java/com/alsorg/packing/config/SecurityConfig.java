@@ -252,6 +252,24 @@ public class SecurityConfig {
                                                 "UTL_PACKING",
                                                 "HARDWARE_PACKING")
 
+                                        /*
+                                         * UTL is a dedicated security boundary. Keep these
+                                         * endpoint families role-specific at the filter layer
+                                         * as defense-in-depth in addition to @PreAuthorize and
+                                         * row-level routing checks.
+                                         */
+                                        .requestMatchers(
+                                                "/api/utl/packets/**")
+                                        .hasAuthority(
+                                                "UTL_PACKING")
+
+                                        .requestMatchers(
+                                                "/api/utl/warehouse/**",
+                                                "/api/utl/dispatch/**",
+                                                "/api/utl/chalaan/**")
+                                        .hasAuthority(
+                                                "UTL_DISPATCH")
+
                                         .requestMatchers(
                                                 "/api/users/**")
                                         .hasAuthority(

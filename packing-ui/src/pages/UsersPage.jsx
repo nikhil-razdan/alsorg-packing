@@ -1262,8 +1262,10 @@ const getUserAccessHealth = (user) => {
 			issues.push("UTL profile may operate only at AL-P3 K&W or WR-38.");
 		}
 
-		if (readWarehouseAccess(user)) {
-			issues.push("UTL profile must not have Warehouse page access.");
+		if (user?.warehouseAccess === true) {
+			issues.push(
+				"UTL profile must not receive the generic warehouseAccess flag. UTL_DISPATCH uses the isolated UTL Warehouse / Dispatch workspace."
+			);
 		}
 	}
 
@@ -4612,7 +4614,7 @@ function UserEditorDrawer({
 
 				{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) && (
 					<Alert severity="warning" sx={infoAlertSx}>
-						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38, receives no Warehouse access, and sees/acts only on UTL work assigned to its role.
+						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38. UTL_DISPATCH may open the isolated UTL Warehouse / Dispatch workspaces, but it never inherits generic WAREHOUSE authority or ordinary plant-wide data.
 					</Alert>
 				)}
 
