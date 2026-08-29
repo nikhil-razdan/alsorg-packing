@@ -28,8 +28,7 @@ public class DashboardTraceRepository {
             int limit,
             int offset
     ) {
-        String normalizedType =
-                normalizeType(type);
+        String normalizedType = normalizeType(type);
 
         if ("custom".equals(normalizedType)) {
             return fetchCustomTrace(
@@ -41,17 +40,14 @@ public class DashboardTraceRepository {
             );
         }
 
-        int safeLimit =
-                Math.min(
-                        Math.max(limit, 1),
-                        500
-                );
+        int safeLimit = Math.min(
+                Math.max(limit, 1),
+                500
+        );
 
-        int safeOffset =
-                Math.max(offset, 0);
+        int safeOffset = Math.max(offset, 0);
 
-        StringBuilder sql =
-                new StringBuilder("""
+        StringBuilder sql = new StringBuilder("""
                     with latest_sticker as (
                         select distinct on (sh.packet_item_id)
                             sh.packet_item_id,
@@ -74,6 +70,17 @@ public class DashboardTraceRepository {
 
                             mi.item_name as master_item_name,
                             coalesce(pi.item_name, mi.item_name) as item_name,
+
+                            /*
+                             * PacketItem is the authoritative PackFlow description.
+                             * DispatchedItem is a safe legacy/read-model fallback for
+                             * older rows whose packet description was not retained.
+                             */
+                            coalesce(
+                                nullif(trim(pi.description), ''),
+                                nullif(trim(d.description), '')
+                            ) as description,
+
                             coalesce(pi.client_name, mi.client_name) as client_name,
                             coalesce(pi.client_address, mi.address) as client_address,
 
@@ -172,6 +179,7 @@ public class DashboardTraceRepository {
 
                             mi.item_name as master_item_name,
                             mi.item_name as item_name,
+                            null::varchar as description,
                             mi.client_name as client_name,
                             mi.address as client_address,
 
@@ -225,6 +233,7 @@ public class DashboardTraceRepository {
 
                             null::varchar as master_item_name,
                             null::varchar as item_name,
+                            null::varchar as description,
                             null::varchar as client_name,
                             null::varchar as client_address,
 
@@ -280,6 +289,7 @@ public class DashboardTraceRepository {
 
                         b.master_item_name,
                         b.item_name,
+                        b.description,
                         b.packet_number,
 
                         b.pd_no,
@@ -320,10 +330,7 @@ public class DashboardTraceRepository {
                     where 1 = 1
                 """);
 
-        appendTypeFilter(
-                sql,
-                normalizedType
-        );
+        appendTypeFilter(sql, normalizedType);
 
         if (from != null) {
             sql.append("""
@@ -359,6 +366,7 @@ public class DashboardTraceRepository {
                     b.packet_item_id::text,
                     b.master_item_name,
                     b.item_name,
+                    b.description,
                     b.packet_number,
                     b.pd_no,
                     b.drawing_no,
@@ -393,42 +401,12 @@ public class DashboardTraceRepository {
             offset :offset
         """);
 
-        Query query =
-                em.createNativeQuery(
-                        sql.toString()
-                );
+        Query query = em.createNativeQuery(sql.toString());
 
-        if (from != null) {
-            query.setParameter("from", from);
-        }
-
-        if (to != null) {
-            query.setParameter("to", to);
-        }
-
-        if (search != null && !search.isBlank()) {
-            query.setParameter(
-                    "search",
-                    "%"
-                            + search.trim()
-                            .toLowerCase()
-                            + "%"
-            );
-        }
-
-        query.setParameter(
-                "limit",
-                safeLimit
-        );
-
-        query.setParameter(
-                "offset",
-                safeOffset
-        );
+        bindCommonParameters(query, from, to, search, safeLimit, safeOffset);
 
         @SuppressWarnings("unchecked")
-        List<Object[]> rows =
-                query.getResultList();
+        List<Object[]> rows = query.getResultList();
 
         return rows.stream()
                 .map(this::mapRow)
@@ -442,17 +420,14 @@ public class DashboardTraceRepository {
             int limit,
             int offset
     ) {
-        int safeLimit =
-                Math.min(
-                        Math.max(limit, 1),
-                        500
-                );
+        int safeLimit = Math.min(
+                Math.max(limit, 1),
+                500
+        );
 
-        int safeOffset =
-                Math.max(offset, 0);
+        int safeOffset = Math.max(offset, 0);
 
-        StringBuilder sql =
-                new StringBuilder("""
+        StringBuilder sql = new StringBuilder("""
                     select
                         'CUSTOM_CHALLAN' as source_type,
                         coalesce(c.challan_type, c.movement_mode, 'CUSTOM_CHALLAN') as movement_type,
@@ -463,6 +438,7 @@ public class DashboardTraceRepository {
 
                         null::varchar as master_item_name,
                         ci.description as item_name,
+                        nullif(trim(ci.description), '') as description,
                         null::varchar as packet_number,
 
                         c.pd_no as pd_no,
@@ -549,11 +525,26 @@ public class DashboardTraceRepository {
             offset :offset
         """);
 
-        Query query =
-                em.createNativeQuery(
-                        sql.toString()
-                );
+        Query query = em.createNativeQuery(sql.toString());
 
+        bindCommonParameters(query, from, to, search, safeLimit, safeOffset);
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = query.getResultList();
+
+        return rows.stream()
+                .map(this::mapRow)
+                .toList();
+    }
+
+    private void bindCommonParameters(
+            Query query,
+            LocalDateTime from,
+            LocalDateTime to,
+            String search,
+            int limit,
+            int offset
+    ) {
         if (from != null) {
             query.setParameter("from", from);
         }
@@ -565,30 +556,12 @@ public class DashboardTraceRepository {
         if (search != null && !search.isBlank()) {
             query.setParameter(
                     "search",
-                    "%"
-                            + search.trim()
-                            .toLowerCase()
-                            + "%"
+                    "%" + search.trim().toLowerCase() + "%"
             );
         }
 
-        query.setParameter(
-                "limit",
-                safeLimit
-        );
-
-        query.setParameter(
-                "offset",
-                safeOffset
-        );
-
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows =
-                query.getResultList();
-
-        return rows.stream()
-                .map(this::mapRow)
-                .toList();
+        query.setParameter("limit", limit);
+        query.setParameter("offset", offset);
     }
 
     private void appendTypeFilter(
@@ -634,16 +607,12 @@ public class DashboardTraceRepository {
         }
     }
 
-    private String normalizeType(
-            String type
-    ) {
+    private String normalizeType(String type) {
         if (type == null || type.isBlank()) {
             return "all";
         }
 
-        String clean =
-                type.trim()
-                        .toLowerCase();
+        String clean = type.trim().toLowerCase();
 
         return switch (clean) {
             case "all",
@@ -669,9 +638,7 @@ public class DashboardTraceRepository {
         };
     }
 
-    private DashboardTraceRow mapRow(
-            Object[] row
-    ) {
+    private DashboardTraceRow mapRow(Object[] row) {
         return new DashboardTraceRow(
                 asString(row[0]),
                 asString(row[1]),
@@ -683,62 +650,55 @@ public class DashboardTraceRepository {
                 asString(row[5]),
                 asString(row[6]),
                 asString(row[7]),
-
                 asString(row[8]),
+
                 asString(row[9]),
                 asString(row[10]),
-
                 asString(row[11]),
-                asString(row[12]),
 
+                asString(row[12]),
                 asString(row[13]),
+
                 asString(row[14]),
                 asString(row[15]),
-
                 asString(row[16]),
 
                 asString(row[17]),
-                asLong(row[18]),
 
-                asDateTime(row[19]),
-                asString(row[20]),
+                asString(row[18]),
+                asLong(row[19]),
 
-                asDateTime(row[21]),
-                asString(row[22]),
+                asDateTime(row[20]),
+                asString(row[21]),
 
+                asDateTime(row[22]),
                 asString(row[23]),
+
                 asString(row[24]),
                 asString(row[25]),
+                asString(row[26]),
 
-                asDateTime(row[26]),
                 asDateTime(row[27]),
+                asDateTime(row[28]),
 
-                asString(row[28]),
-                asDateTime(row[29]),
+                asString(row[29]),
+                asDateTime(row[30]),
 
-                asString(row[30])
+                asString(row[31])
         );
     }
 
-    private String asString(
-            Object value
-    ) {
+    private String asString(Object value) {
         if (value == null) {
             return null;
         }
 
-        String text =
-                String.valueOf(value)
-                        .trim();
+        String text = String.valueOf(value).trim();
 
-        return text.isBlank()
-                ? null
-                : text;
+        return text.isBlank() ? null : text;
     }
 
-    private UUID asUuid(
-            Object value
-    ) {
+    private UUID asUuid(Object value) {
         if (value == null) {
             return null;
         }
@@ -748,17 +708,13 @@ public class DashboardTraceRepository {
         }
 
         try {
-            return UUID.fromString(
-                    String.valueOf(value)
-            );
+            return UUID.fromString(String.valueOf(value));
         } catch (Exception e) {
             return null;
         }
     }
 
-    private Long asLong(
-            Object value
-    ) {
+    private Long asLong(Object value) {
         if (value == null) {
             return null;
         }
@@ -768,17 +724,13 @@ public class DashboardTraceRepository {
         }
 
         try {
-            return Long.parseLong(
-                    String.valueOf(value)
-            );
+            return Long.parseLong(String.valueOf(value));
         } catch (Exception e) {
             return null;
         }
     }
 
-    private LocalDateTime asDateTime(
-            Object value
-    ) {
+    private LocalDateTime asDateTime(Object value) {
         if (value == null) {
             return null;
         }
@@ -792,8 +744,7 @@ public class DashboardTraceRepository {
         }
 
         if (value instanceof java.sql.Date date) {
-            return date.toLocalDate()
-                    .atStartOfDay();
+            return date.toLocalDate().atStartOfDay();
         }
 
         if (value instanceof LocalDate date) {
@@ -801,9 +752,7 @@ public class DashboardTraceRepository {
         }
 
         try {
-            return LocalDateTime.parse(
-                    String.valueOf(value)
-            );
+            return LocalDateTime.parse(String.valueOf(value));
         } catch (Exception ignored) {
         }
 
