@@ -34,6 +34,11 @@ import {
     getBackendMessage,
 } from "../api/client";
 
+import {
+    getDisplayPlantCode,
+    getDisplaySku,
+} from "../api/operationalMetadataApi";
+
 function normalizeText(value) {
     return String(value || "")
         .trim()
@@ -82,11 +87,7 @@ function getItemStatus(item) {
 }
 
 function getItemPlant(item) {
-    return String(
-        item.plantCode ||
-        item.plant ||
-        ""
-    ).trim();
+    return getDisplayPlantCode(item);
 }
 
 function getItemLocation(item) {
@@ -175,7 +176,7 @@ function getSearchBlob(item) {
     return [
         item.name,
         item.itemName,
-        item.sku,
+        getDisplaySku(item),
         item.pdNo,
         item.drawingNo,
         item.dwgNo,
@@ -185,7 +186,7 @@ function getSearchBlob(item) {
         item.remarks,
         item.packetItemId,
         item.zohoItemId,
-        item.plantCode,
+        getDisplayPlantCode(item),
         item.currentLocationCode,
         item.location,
         item.status,
@@ -1149,7 +1150,9 @@ function ItemCard({
                         style={styles.itemSub}
                         numberOfLines={1}
                     >
-                        SKU: {cleanValue(item.sku)}
+                        SKU: {cleanValue(
+                            getDisplaySku(item)
+                        )}
                     </Text>
                 </View>
 

@@ -44,6 +44,11 @@ import {
   getBackendMessage,
 } from "../api/client";
 
+import {
+  getDisplayPlantCode,
+  getDisplaySku,
+} from "../api/operationalMetadataApi";
+
 function getNowDateTimeLocal() {
   const d = new Date();
 
@@ -203,8 +208,13 @@ export default function ScanDispatchScreen({
     hasRole,
   } = useAuth();
 
+  const isUtlDispatch =
+    hasRole("UTL_DISPATCH") &&
+    !hasRole("DISPATCH");
+
   const isDispatch =
-    hasRole("DISPATCH");
+    hasRole("DISPATCH") ||
+    hasRole("UTL_DISPATCH");
 
   const normalizedRole =
     normalizeStatus(role) ||
@@ -284,6 +294,18 @@ export default function ScanDispatchScreen({
   };
 
   const loadMasters = async () => {
+    if (isUtlDispatch) {
+      /*
+       * Current driver/vehicle master endpoints are normal
+       * ADMIN/DISPATCH/LOGISTICS masters. UTL Dispatch keeps
+       * these challan fields optional instead of broadening
+       * master-data permissions merely for the mobile app.
+       */
+      setDrivers([]);
+      setVehicles([]);
+      return;
+    }
+
     try {
       const [
         driverData,
@@ -321,7 +343,7 @@ export default function ScanDispatchScreen({
     if (isDispatch) {
       loadMasters();
     }
-  }, [isDispatch]);
+  }, [isDispatch, isUtlDispatch]);
 
   const item =
     useMemo(
@@ -814,7 +836,7 @@ export default function ScanDispatchScreen({
         </Text>
 
         <Text style={styles.permissionText}>
-          QR Dispatch, Move to FG, and Dispatch Item are allowed only for DISPATCH users.
+          QR Dispatch, Move to FG, and Dispatch Item are allowed only for DISPATCH / UTL_DISPATCH users.
         </Text>
 
         <Text style={styles.permissionText}>
@@ -1095,8 +1117,7 @@ export default function ScanDispatchScreen({
                 <Text style={styles.itemSub}>
                   SKU:{" "}
                   {clean(
-                    item?.sku ||
-                    item?.codeSku
+                    getDisplaySku(item)
                   )}
                 </Text>
               </View>
@@ -1180,7 +1201,9 @@ export default function ScanDispatchScreen({
 
               <Info
                 label="Plant"
-                value={clean(item?.plantCode)}
+                value={clean(
+                  getDisplayPlantCode(item)
+                )}
               />
 
               <Info
@@ -1297,6 +1320,7 @@ export default function ScanDispatchScreen({
                   update("vehicleId", value)
                 }
                 onCreated={addCreatedMaster}
+                allowCreate={!isUtlDispatch}
               />
 
               <TripStartPicker

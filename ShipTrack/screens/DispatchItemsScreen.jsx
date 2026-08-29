@@ -31,6 +31,15 @@ import {
   getBackendMessage,
 } from "../api/client";
 
+import {
+  useAuth,
+} from "../auth/AuthContext";
+
+import {
+  getDisplayPlantCode,
+  getDisplaySku,
+} from "../api/operationalMetadataApi";
+
 const normalizeStatus = (value) =>
   String(value || "")
     .trim()
@@ -200,7 +209,7 @@ function getSearchBlob(item) {
   return [
     item.clientName,
     item.clientAddress,
-    item.sku,
+    getDisplaySku(item),
     item.pdNo,
     item.drawingNo,
     item.dwgNo,
@@ -214,12 +223,21 @@ function getSearchBlob(item) {
     item.driverName,
     item.vehicleNumber,
     item.dispatchedBy,
+    getDisplayPlantCode(item),
   ]
     .map(normalizeText)
     .join(" ");
 }
 
 export default function DispatchItemsScreen() {
+  const { hasAnyRole } = useAuth();
+
+  const canMutateDispatch =
+    hasAnyRole(
+      "DISPATCH",
+      "UTL_DISPATCH"
+    );
+
   const [loading, setLoading] =
     useState(false);
 
@@ -350,7 +368,7 @@ export default function DispatchItemsScreen() {
       const plants =
         items
           .map((item) =>
-            String(item.plantCode || "").trim()
+            getDisplayPlantCode(item)
           )
           .filter(Boolean);
 
@@ -386,7 +404,7 @@ export default function DispatchItemsScreen() {
           normalizeStatus(item.status);
 
         const itemPlant =
-          String(item.plantCode || "").trim();
+          getDisplayPlantCode(item);
 
         const itemLocation =
           getItemLocation(item);
@@ -654,6 +672,7 @@ export default function DispatchItemsScreen() {
           <ItemCard
             item={item}
             reload={load}
+            canMutateDispatch={canMutateDispatch}
           />
         )}
         ListEmptyComponent={
@@ -1095,6 +1114,7 @@ function FilterGroup({
 function ItemCard({
   item,
   reload,
+  canMutateDispatch = false,
 }) {
   const status =
     normalizeStatus(item.status);
@@ -1125,7 +1145,9 @@ function ItemCard({
           </Text>
 
           <Text style={styles.meta}>
-            SKU: {cleanValue(item.sku)}
+            SKU: {cleanValue(
+              getDisplaySku(item)
+            )}
           </Text>
 
           {challanNumber ? (
@@ -1182,7 +1204,10 @@ function ItemCard({
 
         <Info
           label="Plant"
-          value={item.plantCode || "—"}
+          value={
+            getDisplayPlantCode(item) ||
+            "—"
+          }
         />
 
         <Info
@@ -1234,7 +1259,8 @@ function ItemCard({
         </View>
       ) : null}
 
-      {canMarkReadyToDispatchAction ? (
+      {canMutateDispatch &&
+      canMarkReadyToDispatchAction ? (
         <TouchableOpacity
           style={styles.primaryBtn}
           onPress={async () => {

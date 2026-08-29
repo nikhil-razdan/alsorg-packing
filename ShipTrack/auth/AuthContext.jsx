@@ -14,9 +14,11 @@ import {
   getStoredToken,
   getStoredUsername,
   saveStoredAuth,
+  setAuthInvalidatedHandler,
 } from "../api/client";
 
 import {
+  fetchMe,
   logoutUser,
 } from "../api/authApi";
 
@@ -100,49 +102,124 @@ export function AuthProvider({
           getStoredUsername(),
         ]);
 
-        const cleanRoles =
+        const cleanStoredRoles =
           normalizeRoles([
-            ...(
-              Array.isArray(
-                storedRoles
-              )
-                ? storedRoles
-                : []
-            ),
+            ...(Array.isArray(storedRoles)
+              ? storedRoles
+              : []),
             storedRole,
           ]);
 
-        const preferredRole =
-          normalizeRole(
-            storedRole
-          );
+        const preferredStoredRole =
+          normalizeRole(storedRole);
 
-        const primaryRole =
-          preferredRole &&
-            cleanRoles.includes(
-              preferredRole
+        const storedPrimaryRole =
+          preferredStoredRole &&
+            cleanStoredRoles.includes(
+              preferredStoredRole
             )
-            ? preferredRole
-            : cleanRoles[0] ||
-            "";
+            ? preferredStoredRole
+            : cleanStoredRoles[0] || "";
 
-        setToken(
-          storedToken ||
-          null
-        );
+        if (!storedToken) {
+          setToken(null);
+          setRole("");
+          setRoles([]);
+          setUsername("");
+          return;
+        }
 
-        setRole(
-          primaryRole
-        );
+        /*
+         * SecureStore is only a local cache. Reconcile it with /api/auth/me so
+         * a disabled user, revoked/expired token, or backend role change cannot
+         * keep stale mobile authority until the user manually logs out.
+         *
+         * A transient network outage keeps the locally stored session so the UI
+         * can show the last known identity; the backend still authorizes every
+         * API request. 401/403 or authenticated:false clears the session.
+         */
+        try {
+          const me = await fetchMe();
 
-        setRoles(
-          cleanRoles
-        );
+          if (
+            !me ||
+            me?.authenticated === false ||
+            me?.enabled === false
+          ) {
+            await clearStoredAuth();
+            setToken(null);
+            setRole("");
+            setRoles([]);
+            setUsername("");
+            return;
+          }
 
-        setUsername(
-          storedUsername ||
-          ""
-        );
+          const serverRoles =
+            normalizeRoles([
+              ...(Array.isArray(me?.roles)
+                ? me.roles
+                : []),
+              me?.role,
+            ]);
+
+          const preferredServerRole =
+            normalizeRole(me?.role);
+
+          const serverPrimaryRole =
+            preferredServerRole &&
+              serverRoles.includes(
+                preferredServerRole
+              )
+              ? preferredServerRole
+              : serverRoles[0] || "";
+
+          if (serverRoles.length === 0) {
+            await clearStoredAuth();
+            setToken(null);
+            setRole("");
+            setRoles([]);
+            setUsername("");
+            return;
+          }
+
+          const serverUsername =
+            String(
+              me?.username ||
+              storedUsername ||
+              ""
+            ).trim();
+
+          await saveStoredAuth({
+            token: storedToken,
+            role: serverPrimaryRole,
+            roles: serverRoles,
+            username: serverUsername,
+          });
+
+          setToken(storedToken);
+          setRole(serverPrimaryRole);
+          setRoles(serverRoles);
+          setUsername(serverUsername);
+          return;
+        } catch (verificationError) {
+          const status =
+            verificationError?.response?.status;
+
+          if (status === 401 || status === 403) {
+            await clearStoredAuth();
+            setToken(null);
+            setRole("");
+            setRoles([]);
+            setUsername("");
+            return;
+          }
+
+          /* Transient connection failure: preserve the last known local identity. */
+          setToken(storedToken);
+          setRole(storedPrimaryRole);
+          setRoles(cleanStoredRoles);
+          setUsername(storedUsername || "");
+        }
       } catch (error) {
         console.error(
           "Unable to restore mobile authentication:",
@@ -163,6 +240,15 @@ export function AuthProvider({
   useEffect(() => {
     loadStoredAuth();
   }, [loadStoredAuth]);
+
+  useEffect(() => {
+    return setAuthInvalidatedHandler(() => {
+      setToken(null);
+      setRole("");
+      setRoles([]);
+      setUsername("");
+    });
+  }, []);
 
   const saveAuth =
     useCallback(

@@ -122,13 +122,20 @@ function formatDateTime(value) {
 function isTripEnded(
   challan
 ) {
+  const status =
+    normalizeStatus(
+      challan?.tripStatus
+    );
+
   return (
     Boolean(
       challan?.tripEndedAt
     ) ||
-    normalizeStatus(
-      challan?.tripStatus
-    ) === "ENDED"
+    [
+      "ENDED",
+      "COMPLETED",
+      "DELIVERED",
+    ].includes(status)
   );
 }
 

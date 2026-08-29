@@ -175,7 +175,7 @@ export default function LoginScreen() {
 
       if (!token) {
         throw new Error(
-          "Backend login succeeded, but the ShipTrack bearer token was not returned. Deploy the paired AuthController/TrustedOriginFilter fix."
+          "Backend login succeeded, but the ShipTrack bearer token was not returned. Verify that the current PackFlow backend recognizes X-Client-Type: mobile."
         );
       }
 

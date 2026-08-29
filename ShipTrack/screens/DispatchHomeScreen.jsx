@@ -269,13 +269,20 @@ function canDispatch(
 function isTripEnded(
   challan
 ) {
+  const status =
+    normalizeStatus(
+      challan?.tripStatus
+    );
+
   return (
     Boolean(
       challan?.tripEndedAt
     ) ||
-    normalizeStatus(
-      challan?.tripStatus
-    ) === "ENDED"
+    [
+      "ENDED",
+      "COMPLETED",
+      "DELIVERED",
+    ].includes(status)
   );
 }
 
@@ -293,7 +300,19 @@ export default function DispatchHomeScreen({
   const isDispatch =
     hasRole(
       "DISPATCH"
+    ) ||
+    hasRole(
+      "UTL_DISPATCH"
     );
+
+  const isLogistics =
+    hasRole(
+      "LOGISTICS"
+    );
+
+  const canUseControlCentre =
+    isDispatch ||
+    isLogistics;
 
   const roleLabel =
     roles.length
@@ -447,13 +466,13 @@ export default function DispatchHomeScreen({
     useCallback(
       () => {
         if (
-          isDispatch
+          canUseControlCentre
         ) {
           loadDashboard();
         }
       },
       [
-        isDispatch,
+        canUseControlCentre,
         loadDashboard,
       ]
     )
@@ -595,7 +614,7 @@ export default function DispatchHomeScreen({
     );
 
   if (
-    !isDispatch
+    !canUseControlCentre
   ) {
     return (
       <View style={styles.center}>
@@ -604,7 +623,7 @@ export default function DispatchHomeScreen({
         </Text>
 
         <Text style={styles.restrictedText}>
-          This control centre is available to DISPATCH users.
+          This control centre is available to DISPATCH, UTL_DISPATCH and LOGISTICS users.
         </Text>
 
         <TouchableOpacity
@@ -793,11 +812,13 @@ export default function DispatchHomeScreen({
         />
       </View>
 
-      <Text style={styles.sectionTitle}>
-        Quick Dispatch
-      </Text>
+      {isDispatch ? (
+        <>
+          <Text style={styles.sectionTitle}>
+            Quick Dispatch
+          </Text>
 
-      <View style={styles.primaryActions}>
+          <View style={styles.primaryActions}>
         <TouchableOpacity
           style={styles.primaryAction}
           activeOpacity={0.86}
@@ -857,7 +878,9 @@ export default function DispatchHomeScreen({
             ›
           </Text>
         </TouchableOpacity>
-      </View>
+          </View>
+        </>
+      ) : null}
 
       <Text style={styles.sectionTitle}>
         Live Status

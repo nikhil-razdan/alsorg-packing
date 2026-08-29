@@ -1,6 +1,26 @@
 import {
   api,
+  getStoredRoles,
 } from "./client";
+
+import {
+  enrichResolvedScanResponse,
+} from "./operationalMetadataApi";
+
+const normalizeRole = (value) =>
+  String(value || "")
+    .replace(/^ROLE_/i, "")
+    .trim()
+    .toUpperCase();
+
+async function isPureUtlDispatchSession() {
+  const roles = (await getStoredRoles()).map(normalizeRole);
+
+  return (
+    roles.includes("UTL_DISPATCH") &&
+    !roles.includes("DISPATCH")
+  );
+}
 
 /*
  * =========================================================
@@ -323,7 +343,9 @@ export async function resolveScan(
       }
     );
 
-  return res.data;
+  return enrichResolvedScanResponse(
+    res.data
+  );
 }
 
 /*
@@ -358,9 +380,16 @@ export async function moveItemToFg(
       )}`
       : "";
 
+  const pureUtlDispatch =
+    await isPureUtlDispatchSession();
+
+  const base = pureUtlDispatch
+    ? "/api/utl/dispatch"
+    : "/api/dispatched";
+
   const res =
     await api.post(
-      `/api/dispatched/${encodeURIComponent(
+      `${base}/${encodeURIComponent(
         cleanId
       )}/move-to-fg${query}`
     );

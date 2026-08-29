@@ -326,6 +326,21 @@ export const api =
     },
   });
 
+let authInvalidatedHandler = null;
+
+export function setAuthInvalidatedHandler(handler) {
+  authInvalidatedHandler =
+    typeof handler === "function"
+      ? handler
+      : null;
+
+  return () => {
+    if (authInvalidatedHandler === handler) {
+      authInvalidatedHandler = null;
+    }
+  };
+}
+
 api.interceptors.request.use(
   async (config) => {
     const skipAuth =
@@ -388,6 +403,29 @@ api.interceptors.request.use(
   },
   (error) =>
     Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status =
+      error?.response?.status;
+
+    const skippedAuth =
+      error?.config?.skipAuth === true;
+
+    if (status === 401 && !skippedAuth) {
+      await clearStoredAuth();
+
+      try {
+        authInvalidatedHandler?.();
+      } catch {
+        /* UI invalidation is best-effort; local credentials are already cleared. */
+      }
+    }
+
+    return Promise.reject(error);
+  }
 );
 
 export function getBackendMessage(

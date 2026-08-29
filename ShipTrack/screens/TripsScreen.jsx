@@ -42,6 +42,11 @@ import {
   getBackendMessage,
 } from "../api/client";
 
+import {
+  getDisplayPlantCode,
+  getDisplaySku,
+} from "../api/operationalMetadataApi";
+
 function normalizeText(value) {
   return String(value || "")
     .trim()
@@ -78,7 +83,13 @@ function getTripStatus(challan) {
 }
 
 function isTripEnded(challan) {
-  return getTripStatus(challan) === "ENDED";
+  return [
+    "ENDED",
+    "COMPLETED",
+    "DELIVERED",
+  ].includes(
+    getTripStatus(challan)
+  );
 }
 
 function formatDateTime(value) {
@@ -287,13 +298,13 @@ function getChallanSearchBlob(challan) {
         [
           item.name,
           item.itemName,
-          item.sku,
+          getDisplaySku(item),
           item.pdNo,
           item.drawingNo,
           item.clientName,
           item.description,
           item.remarks,
-          item.plantCode,
+          getDisplayPlantCode(item),
           item.currentLocationCode,
           item.location,
           item.status,
@@ -485,7 +496,7 @@ export default function TripsScreen() {
       challans.forEach((challan) => {
         (challan.items || []).forEach((item) => {
           const plant =
-            String(item.plantCode || "").trim();
+            getDisplayPlantCode(item);
 
           if (plant) {
             values.push(plant);
@@ -578,7 +589,7 @@ export default function TripsScreen() {
           plantFilter === "ALL" ||
           items.some(
             (item) =>
-              String(item.plantCode || "").trim() === plantFilter
+              getDisplayPlantCode(item) === plantFilter
           );
 
         const matchesLocation =
@@ -1616,7 +1627,7 @@ function ChallanCard({
                   style={styles.itemMeta}
                   numberOfLines={2}
                 >
-                  SKU: {item?.sku || "—"}
+                  SKU: {getDisplaySku(item) || "—"}
                 </Text>
 
                 <Text style={styles.itemMeta}>
@@ -1625,7 +1636,7 @@ function ChallanCard({
                 </Text>
 
                 <Text style={styles.itemMeta}>
-                  Plant: {item?.plantCode || "—"} • Location:{" "}
+                  Plant: {getDisplayPlantCode(item) || "—"} • Location:{" "}
                   {item?.currentLocationCode ||
                     item?.location ||
                     "—"}

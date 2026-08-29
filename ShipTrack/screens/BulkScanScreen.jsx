@@ -41,6 +41,11 @@ import {
   useAuth,
 } from "../auth/AuthContext";
 
+import {
+  getDisplayPlantCode,
+  getDisplaySku,
+} from "../api/operationalMetadataApi";
+
 function getNowDateTimeLocal() {
   const d = new Date();
 
@@ -132,8 +137,9 @@ function getCurrentLocation(item) {
 }
 
 function getPlantCode(item) {
-  return String(item?.plantCode || "")
-    .trim();
+  return String(
+    getDisplayPlantCode(item) || ""
+  ).trim();
 }
 
 function isLegacyLocationMissing(item) {
@@ -293,7 +299,7 @@ function getSearchBlob(row) {
     row?.scanText,
     item.itemName,
     item.name,
-    item.sku,
+    getDisplaySku(item),
     item.pdNo,
     item.drawingNo,
     item.clientName,
@@ -301,7 +307,7 @@ function getSearchBlob(row) {
     item.remarks,
     item.stickerNumber,
     row.sourceType,
-    item.plantCode,
+    getDisplayPlantCode(item),
     item.currentLocationCode,
     item.location,
     item.status,
@@ -321,8 +327,13 @@ export default function BulkScanScreen({
     hasRole,
   } = useAuth();
 
+  const isUtlDispatch =
+    hasRole("UTL_DISPATCH") &&
+    !hasRole("DISPATCH");
+
   const isDispatch =
-    hasRole("DISPATCH");
+    hasRole("DISPATCH") ||
+    hasRole("UTL_DISPATCH");
 
   const normalizedRole =
     normalizeStatus(role) ||
@@ -417,6 +428,12 @@ export default function BulkScanScreen({
   };
 
   const loadMasters = async () => {
+    if (isUtlDispatch) {
+      setDrivers([]);
+      setVehicles([]);
+      return;
+    }
+
     try {
       const [
         driverData,
@@ -454,7 +471,7 @@ export default function BulkScanScreen({
     if (isDispatch) {
       loadMasters();
     }
-  }, [isDispatch]);
+  }, [isDispatch, isUtlDispatch]);
 
   const update = (
     key,
@@ -1936,6 +1953,7 @@ export default function BulkScanScreen({
               update("vehicleId", value)
             }
             onCreated={addCreatedMaster}
+            allowCreate={!isUtlDispatch}
           />
 
           <TripStartPicker
@@ -2452,7 +2470,9 @@ function BulkItemCard({
           </Text>
 
           <Text style={styles.itemSub}>
-            SKU: {clean(item.sku)}
+            SKU: {clean(
+              getDisplaySku(item)
+            )}
           </Text>
 
           <View style={styles.sourceRow}>
@@ -2534,7 +2554,9 @@ function BulkItemCard({
 
         <Info
           label="Plant"
-          value={clean(item.plantCode)}
+          value={clean(
+            getDisplayPlantCode(item)
+          )}
         />
 
         <Info

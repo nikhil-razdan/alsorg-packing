@@ -98,6 +98,7 @@ export default function DriverVehicleFields({
   onDriverChange,
   onVehicleChange,
   onCreated,
+  allowCreate = true,
 }) {
   const [createType, setCreateType] =
     useState("");
@@ -227,8 +228,10 @@ export default function DriverVehicleFields({
             : "Driver will remain blank."
         }
         onChange={onDriverChange}
-        onCreate={() =>
-          openCreate("driver")
+        onCreate={
+          allowCreate
+            ? () => openCreate("driver")
+            : undefined
         }
       />
 
@@ -247,8 +250,10 @@ export default function DriverVehicleFields({
             : "Vehicle will remain blank."
         }
         onChange={onVehicleChange}
-        onCreate={() =>
-          openCreate("vehicle")
+        onCreate={
+          allowCreate
+            ? () => openCreate("vehicle")
+            : undefined
         }
       />
 
@@ -417,17 +422,19 @@ function MasterSection({
           );
         })}
 
-        <TouchableOpacity
-          style={[
-            styles.optionChip,
-            styles.addChip,
-          ]}
-          onPress={onCreate}
-        >
-          <Text style={styles.addChipText}>
-            {createText}
-          </Text>
-        </TouchableOpacity>
+        {typeof onCreate === "function" ? (
+          <TouchableOpacity
+            style={[
+              styles.optionChip,
+              styles.addChip,
+            ]}
+            onPress={onCreate}
+          >
+            <Text style={styles.addChipText}>
+              {createText}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <Text
