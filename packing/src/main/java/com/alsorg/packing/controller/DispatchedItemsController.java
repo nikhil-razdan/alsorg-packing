@@ -428,20 +428,71 @@ public class DispatchedItemsController {
                         return null;
                 }
 
-                boolean utlPacking = currentUserService.isUtlPacking(user);
-                boolean utlDispatch = currentUserService.isUtlDispatch(user);
-                boolean internalDispatch = currentUserService.isDispatch(user);
+                boolean utlPacking =
+                                currentUserService.isUtlPacking(user);
+
+                boolean utlDispatch =
+                                currentUserService.isUtlDispatch(user);
+
+                boolean internalDispatch =
+                                currentUserService.isDispatch(user);
+
+                boolean warehouse =
+                                currentUserService.isWarehouse(user);
+
+                boolean logistics =
+                                currentUserService.isLogistics(user);
+
+                /*
+                 * UTL identities remain isolated from the ordinary plant-wide
+                 * Dispatch/Warehouse/Logistics register. UserService already keeps
+                 * UTL roles in their own profile, but deriving this explicitly here
+                 * keeps the read context correct even for migrated/legacy accounts.
+                 */
+                boolean utlOnlyIdentity =
+                                (utlPacking || utlDispatch)
+                                                && !internalDispatch
+                                                && !warehouse
+                                                && !logistics;
+
+                /*
+                 * Normal Warehouse/Logistics may receive only UTL-origin rows that
+                 * were explicitly routed as INTERNAL. Pure UTL identities never get
+                 * this plant-wide operational branch.
+                 */
+                boolean internalOperationalPlantRead =
+                                !utlOnlyIdentity
+                                                && (warehouse || logistics);
+
+                /*
+                 * WR-38 is the deliberate business exception: a normal WR-38
+                 * operational PackFlow user sees the combined normal + UTL WR-38
+                 * register. This must never widen AL-P3 UTL visibility.
+                 */
+                boolean wr38CombinedRead =
+                                !utlOnlyIdentity
+                                                && currentUserService.hasAnyRole(
+                                                                user,
+                                                                "PACKING",
+                                                                "WAREHOUSE",
+                                                                "DISPATCH",
+                                                                "LOGISTICS")
+                                                && currentUserService.allowedPlants(user)
+                                                                .stream()
+                                                                .filter(java.util.Objects::nonNull)
+                                                                .map(String::trim)
+                                                                .anyMatch(
+                                                                                plantCode ->
+                                                                                                "WR-38".equalsIgnoreCase(
+                                                                                                                plantCode));
 
                 return new DispatchedItemService.UtlReadContext(
                                 user.getUsername(),
                                 utlPacking,
                                 internalDispatch || utlDispatch,
-                                currentUserService.isWarehouse(user)
-                                                || currentUserService.isLogistics(user),
-                                (utlPacking || utlDispatch)
-                                                && !internalDispatch
-                                                && !currentUserService.isWarehouse(user)
-                                                && !currentUserService.isLogistics(user));
+                                internalOperationalPlantRead,
+                                wr38CombinedRead,
+                                utlOnlyIdentity);
         }
 
         private boolean shouldRestrictDispatchReadToOwner(User user) {

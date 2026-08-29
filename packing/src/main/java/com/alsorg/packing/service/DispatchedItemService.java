@@ -929,6 +929,33 @@ public class DispatchedItemService {
                         boolean wr38CombinedRead,
                         boolean utlOnlyIdentity) {
 
+                /*
+                 * Backward-compatible constructor for older controllers/tests that
+                 * were compiled against the previous five-component context:
+                 *
+                 * username, creatorRead, assignedDispatcherRead,
+                 * operationalPlantRead, utlOnlyIdentity
+                 *
+                 * Old callers had no WR-38 combined-view flag, so it defaults to
+                 * false. Current production controllers should use the canonical
+                 * six-argument constructor above.
+                 */
+                public UtlReadContext(
+                                String username,
+                                boolean creatorRead,
+                                boolean assignedDispatcherRead,
+                                boolean internalOperationalPlantRead,
+                                boolean utlOnlyIdentity) {
+
+                        this(
+                                        username,
+                                        creatorRead,
+                                        assignedDispatcherRead,
+                                        internalOperationalPlantRead,
+                                        false,
+                                        utlOnlyIdentity);
+                }
+
                 public String normalizedUsername() {
                         return username == null
                                         ? ""
