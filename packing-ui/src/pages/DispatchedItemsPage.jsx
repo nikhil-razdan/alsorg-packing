@@ -58,6 +58,11 @@ import {
 	downloadCustomChallan,
 } from "../dashboard/api/logisticsApi";
 import { useAuth } from "../auth/AuthContext";
+import {
+	fetchUtlOriginMetadataForRows,
+	getPackFlowPlantDisplayLabel,
+	getPackFlowSkuDisplayValue,
+} from "../utils/utlOriginDisplay";
 
 /*
  * Loaded asynchronously to prevent this page from participating in a
@@ -5712,6 +5717,7 @@ const CHALLAN_HISTORY_SERVER_PAGE_SIZE = 50;
 
 export default function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
+	const [utlOriginMetadata, setUtlOriginMetadata] = useState({});
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState(["ALL"]);
@@ -5808,6 +5814,52 @@ export default function DispatchedItemsPage() {
 
 	const isLogistics =
 		hasRole("LOGISTICS");
+
+	useEffect(() => {
+		if (authLoading || !currentUser || rows.length === 0) {
+			if (rows.length === 0) {
+				setUtlOriginMetadata({});
+			}
+			return undefined;
+		}
+
+		const controller = new AbortController();
+
+		fetchUtlOriginMetadataForRows(
+			rows,
+			{ signal: controller.signal }
+		)
+			.then(setUtlOriginMetadata)
+			.catch((error) => {
+				if (error?.name !== "AbortError") {
+					console.debug(
+						"Dispatch UTL origin metadata refresh skipped:",
+						error
+					);
+				}
+			});
+
+		return () => controller.abort();
+	}, [
+		authLoading,
+		currentUser?.id,
+		currentUser?.username,
+		rows,
+	]);
+
+	const getDispatchRowPlantDisplayLabel = (row) =>
+		getPackFlowPlantDisplayLabel(
+			row,
+			utlOriginMetadata,
+			{
+				fallbackUtl:
+					isUtlDispatch ||
+					isUtlPacking,
+			}
+		);
+
+	const getDispatchRowSkuDisplayValue = (row) =>
+		getPackFlowSkuDisplayValue(row) || "—";
 
 	const canRequestLifecycleFromDispatch =
 		!isAdmin && isDispatch;
@@ -13730,11 +13782,18 @@ export default function DispatchedItemsPage() {
 				<span>SKU</span>
 			),
 
-			renderCell: (params) => (
-				<span style={simpleMonoText} title={params.value}>
-					{params.value || "—"}
-				</span>
-			),
+			renderCell: (params) => {
+				const value =
+					getDispatchRowSkuDisplayValue(
+						params.row
+					);
+
+				return (
+					<span style={simpleMonoText} title={value}>
+						{value}
+					</span>
+				);
+			},
 		},
 		{
 			field: "pdNo",
@@ -13869,14 +13928,21 @@ export default function DispatchedItemsPage() {
 
 			renderHeader: () => <span>Plant</span>,
 
-			renderCell: (params) => (
-				<span
-					style={simpleMutedText}
-					title={getDispatchPlantDisplayLabel(params.value)}
-				>
-					{getDispatchPlantDisplayLabel(params.value)}
-				</span>
-			),
+			renderCell: (params) => {
+				const value =
+					getDispatchRowPlantDisplayLabel(
+						params.row
+					);
+
+				return (
+					<span
+						style={simpleMutedText}
+						title={value}
+					>
+						{value}
+					</span>
+				);
+			},
 		},
 		{
 			field: "currentLocationCode",
@@ -14394,7 +14460,7 @@ export default function DispatchedItemsPage() {
 					fields: [
 						{ label: "Item Name", value: textValue(row?.name, row?.itemName) },
 						{ label: "Packet No.", value: getDispatchDrawerPacketNumber(row) },
-						{ label: "SKU", value: textValue(row?.sku) },
+						{ label: "SKU", value: getDispatchRowSkuDisplayValue(row) },
 						{ label: "Type", value: resolveDispatchItemType(row) },
 						{ label: "PD No.", value: textValue(row?.pdNo) },
 						{ label: "Drawing No.", value: textValue(row?.drawingNo) },
@@ -14412,7 +14478,7 @@ export default function DispatchedItemsPage() {
 				{
 					title: "Plant & Location",
 					fields: [
-						{ label: "Plant", value: getDispatchPlantDisplayLabel(row?.plantCode) },
+						{ label: "Plant", value: getDispatchRowPlantDisplayLabel(row) },
 						{ label: "Current Location", value: textValue(row?.currentLocationCode, row?.location) },
 						{ label: "Packed Area", value: textValue(row?.packedAreaCode) },
 						{ label: "FG Area", value: textValue(row?.fgAreaCode) },

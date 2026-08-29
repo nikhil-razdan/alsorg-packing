@@ -13,6 +13,11 @@ import usePackFlowDataRefresh
 import {
 	publishPackFlowDataChanged,
 } from "../utils/packFlowDataEvents";
+import {
+	fetchUtlOriginMetadataForRows,
+	getPackFlowPlantDisplayLabel,
+	getPackFlowSkuDisplayValue,
+} from "../utils/utlOriginDisplay";
 
 
 /*
@@ -78,6 +83,7 @@ const formatWarehouseDrawerDateTime = (value) => {
 
 function WarehousePage() {
 	const [rows, setRows] = useState([]);
+	const [utlOriginMetadata, setUtlOriginMetadata] = useState({});
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
 	const [gatePassPopup, setGatePassPopup] = useState(null);
@@ -130,6 +136,41 @@ function WarehousePage() {
 		isAdmin ||
 		isWarehouse ||
 		utlWarehouseMode;
+
+	useEffect(() => {
+		if (!canOpenWarehouse || rows.length === 0) {
+			setUtlOriginMetadata({});
+			return undefined;
+		}
+
+		const controller = new AbortController();
+
+		fetchUtlOriginMetadataForRows(
+			rows,
+			{ signal: controller.signal }
+		)
+			.then(setUtlOriginMetadata)
+			.catch((error) => {
+				if (error?.name !== "AbortError") {
+					console.debug(
+						"Warehouse UTL origin metadata refresh skipped:",
+						error
+					);
+				}
+			});
+
+		return () => controller.abort();
+	}, [canOpenWarehouse, rows]);
+
+	const getWarehousePlantDisplayLabel = (row) =>
+		getPackFlowPlantDisplayLabel(
+			row,
+			utlOriginMetadata,
+			{ fallbackUtl: utlWarehouseMode }
+		);
+
+	const getWarehouseSkuDisplayValue = (row) =>
+		getPackFlowSkuDisplayValue(row) || "—";
 
 	const WAREHOUSE_OPTIONS = [
 		"BLS-WH-1",
@@ -1376,7 +1417,9 @@ function WarehousePage() {
 					{
 						label: "SKU",
 						value: getWarehouseDrawerValue(
-							row?.sku
+							getWarehouseSkuDisplayValue(
+								row
+							)
 						),
 					},
 					{
@@ -1445,8 +1488,8 @@ function WarehousePage() {
 					{
 						label: "Plant",
 						value: getWarehouseDrawerValue(
-							getPlantLabel(
-								row?.plantCode
+							getWarehousePlantDisplayLabel(
+								row
 							)
 						),
 					},
@@ -2065,11 +2108,18 @@ function WarehousePage() {
 
 			renderHeader: () => <span>SKU</span>,
 
-			renderCell: (params) => (
-				<span style={simpleMutedText} title={params.value}>
-					{params.value || "—"}
-				</span>
-			),
+			renderCell: (params) => {
+				const value =
+					getWarehouseSkuDisplayValue(
+						params.row
+					);
+
+				return (
+					<span style={simpleMutedText} title={value}>
+						{value}
+					</span>
+				);
+			},
 		},
 		{
 			field: "pdNo",
@@ -2160,11 +2210,14 @@ function WarehousePage() {
 					);
 				}
 
+				const plantDisplay =
+					getWarehousePlantDisplayLabel(
+						row
+					);
+
 				return (
-					<span style={simpleMutedText} title={getPlantLabel(row.plantCode)}>
-						{row.plantCode
-							? getPlantLabel(row.plantCode)
-							: "—"}
+					<span style={simpleMutedText} title={plantDisplay}>
+						{plantDisplay}
 					</span>
 				);
 			},

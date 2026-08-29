@@ -3801,7 +3801,10 @@ public class DispatchedItemService {
                                 item.getPacket().getId());
 
                 dispatched.setSku(
-                                item.getSku());
+                                resolveOperationalSku(
+                                                item.getPlantCode(),
+                                                item.getPdNo(),
+                                                item.getSku()));
 
                 dispatched.setLocation(
                                 item.getCurrentLocationCode());
@@ -4202,6 +4205,13 @@ public class DispatchedItemService {
                 item.setPlantCode(
                                 cleanPlantCode);
 
+                if (isWr38PlantCode(
+                                cleanPlantCode)) {
+                        item.setSku(
+                                        requireWr38OperationalProductCode(
+                                                        item.getPdNo()));
+                }
+
                 item.setPackedAreaCode(
                                 plant.packedAreaCode());
 
@@ -4234,6 +4244,13 @@ public class DispatchedItemService {
                                         .ifPresent(packetItem -> {
                                                 packetItem.setPlantCode(
                                                                 cleanPlantCode);
+
+                                                if (isWr38PlantCode(
+                                                                cleanPlantCode)) {
+                                                        packetItem.setSku(
+                                                                        requireWr38OperationalProductCode(
+                                                                                        packetItem.getPdNo()));
+                                                }
 
                                                 packetItem.setPackedAreaCode(
                                                                 plant.packedAreaCode());
@@ -4653,6 +4670,13 @@ public class DispatchedItemService {
                                 item.setPdNo(
                                                 cleanNullable(
                                                                 request.pdNo()));
+
+                                if (isWr38PlantCode(
+                                                item.getPlantCode())) {
+                                        item.setSku(
+                                                        requireWr38OperationalProductCode(
+                                                                        item.getPdNo()));
+                                }
                         }
 
                         if (fields.contains(
@@ -4676,6 +4700,7 @@ public class DispatchedItemService {
                                  */
                                 item.setSku(
                                                 rebuildAdminDispatchSku(
+                                                                item.getPlantCode(),
                                                                 item.getSku(),
                                                                 item.getPdNo(),
                                                                 item.getDrawingNo(),
@@ -4815,6 +4840,19 @@ public class DispatchedItemService {
                                 packetItem.setPdNo(
                                                 cleanNullable(
                                                                 request.pdNo()));
+
+                                if (isWr38PlantCode(
+                                                packetItem.getPlantCode())) {
+                                        String productCode =
+                                                        requireWr38OperationalProductCode(
+                                                                        packetItem.getPdNo());
+
+                                        packetItem.setSku(
+                                                        productCode);
+
+                                        dispatchedItem.setSku(
+                                                        productCode);
+                                }
                         }
 
                         if (fields.contains(
@@ -4853,6 +4891,7 @@ public class DispatchedItemService {
 
                                 packetItem.setSku(
                                                 buildAdminPacketItemSku(
+                                                                packetItem.getPlantCode(),
                                                                 packetItem.getPdNo(),
                                                                 packetItem.getDrawingNo(),
                                                                 packetNo,
@@ -5218,12 +5257,58 @@ public class DispatchedItemService {
                 return packetNo;
         }
 
+        private boolean isWr38PlantCode(
+                        String plantCode) {
+
+                return plantCode != null
+                                && "WR-38".equalsIgnoreCase(
+                                                plantCode.trim());
+        }
+
+        private String requireWr38OperationalProductCode(
+                        String pdNo) {
+
+                String productCode = cleanNullable(
+                                pdNo);
+
+                if (productCode == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Product Code is required for WR-38");
+                }
+
+                return productCode;
+        }
+
+        private String resolveOperationalSku(
+                        String plantCode,
+                        String pdNo,
+                        String existingSku) {
+
+                if (isWr38PlantCode(plantCode)) {
+                        String productCode = cleanNullable(
+                                        pdNo);
+
+                        if (productCode != null) {
+                                return productCode;
+                        }
+                }
+
+                return existingSku;
+        }
+
         private String rebuildAdminDispatchSku(
+                        String plantCode,
                         String existingSku,
                         String pdNo,
                         String drawingNo,
                         int packetNo,
                         PacketItemType itemType) {
+
+                if (isWr38PlantCode(plantCode)) {
+                        return requireWr38OperationalProductCode(
+                                        pdNo);
+                }
 
                 String existing = cleanNullable(
                                 existingSku);
@@ -5282,11 +5367,18 @@ public class DispatchedItemService {
         }
 
         private String buildAdminPacketItemSku(
+                        String plantCode,
                         String pdNo,
                         String drawingNo,
                         int packetNo,
                         PacketItemType itemType,
                         String existingSku) {
+
+                if (isWr38PlantCode(plantCode)
+                                && itemType != PacketItemType.HARDWARE) {
+                        return requireWr38OperationalProductCode(
+                                        pdNo);
+                }
 
                 boolean hardware = itemType == PacketItemType.HARDWARE
                                 || (existingSku != null

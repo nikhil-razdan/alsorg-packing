@@ -23,6 +23,7 @@ import com.alsorg.packing.domain.item.PacketItem;
 import com.alsorg.packing.domain.users.User;
 import com.alsorg.packing.domain.utl.UtlPacketRouting;
 import com.alsorg.packing.repository.UtlPacketRoutingRepository;
+import com.alsorg.packing.repository.PacketItemRepository;
 
 /**
  * Strict boundary around the external UTL packing/dispatch workflow.
@@ -47,6 +48,16 @@ public class UtlWorkflowService {
     private static final Set<String> UTL_SOURCE_PLANTS = Set.of(AL_P3, WR_38);
 
     private final UtlPacketRoutingRepository routingRepository;
+
+    /*
+     * Optional compatibility read for UTL-created packets before final routing.
+     * Routing is intentionally not persisted until the receiver is selected;
+     * this lets Admin / the UTL creator still see the "- UTL" distinction in
+     * Inventory without adding a fake plant code or a database column.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PacketItemRepository packetItemRepository;
+
     private final UserService userService;
     private final CurrentUserService currentUserService;
     private final PlantLocationService plantLocationService;
@@ -499,6 +510,268 @@ public class UtlWorkflowService {
         return false;
     }
 
+
+    /**
+     * Read-only UTL-origin descriptors used by Inventory / Warehouse / Dispatch
+     * presentation. plantCode itself remains the physical PackFlow plant code;
+     * callers render the returned displayPlantCode only as UI metadata.
+     *
+     * No routing, status, sticker, Warehouse or Dispatch state is modified.
+     */
+    @Transactional(readOnly = true)
+    public List<UtlOriginMetadata> getVisibleOriginMetadata(
+            Collection<String> rawPacketItemIds) {
+
+        User user = currentUserService.requireCurrentUser();
+
+        if (rawPacketItemIds == null || rawPacketItemIds.isEmpty()) {
+            return List.of();
+        }
+
+        LinkedHashSet<UUID> packetItemIds = new LinkedHashSet<>();
+
+        for (String rawId : rawPacketItemIds) {
+            String cleanId = clean(rawId);
+
+            if (cleanId == null) {
+                continue;
+            }
+
+            try {
+                packetItemIds.add(UUID.fromString(cleanId));
+            } catch (IllegalArgumentException ignored) {
+                /* Ignore non-PacketItem legacy IDs rather than leaking metadata. */
+            }
+
+            if (packetItemIds.size() > 500) {
+                throw new IllegalArgumentException(
+                        "A maximum of 500 packet item IDs can be checked at once");
+            }
+        }
+
+        if (packetItemIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<UtlOriginMetadata> result = new ArrayList<>();
+
+        for (UtlPacketRouting routing :
+                routingRepository.findByPacketItemIdIn(packetItemIds)) {
+
+            if (routing == null
+                    || routing.getPacketItemId() == null
+                    || !canUserReadRoutingMetadata(
+                            routing,
+                            user)) {
+                continue;
+            }
+
+            String sourcePlant = cleanUpper(
+                    routing.getSourcePlantCode());
+
+            if (sourcePlant == null) {
+                sourcePlant = cleanUpper(
+                        routing.getDispatchTargetPlantCode());
+            }
+
+            if (sourcePlant == null) {
+                continue;
+            }
+
+            result.add(
+                    new UtlOriginMetadata(
+                            routing.getPacketItemId(),
+                            true,
+                            sourcePlant,
+                            cleanUpper(
+                                    routing.getDispatchMode()),
+                            cleanUpper(
+                                    routing.getDispatchTargetPlantCode()),
+                            sourcePlant + " - UTL"));
+        }
+
+        /*
+         * Before the final sticker/QR is generated there is no UtlPacketRouting
+         * yet because the dispatch receiver has not been chosen. For those rows
+         * identify UTL origin from the creator account only for Admin or the same
+         * UTL creator. No normal Warehouse/Dispatch user receives unrouted UTL
+         * metadata.
+         */
+        if (packetItemRepository != null) {
+            Set<UUID> alreadyResolved = result.stream()
+                    .map(UtlOriginMetadata::packetItemId)
+                    .collect(
+                            java.util.stream.Collectors.toCollection(
+                                    LinkedHashSet::new));
+
+            LinkedHashSet<UUID> unresolved = new LinkedHashSet<>(
+                    packetItemIds);
+            unresolved.removeAll(alreadyResolved);
+
+            if (!unresolved.isEmpty()) {
+                Map<String, User> usersByUsername = new LinkedHashMap<>();
+
+                for (User candidate : userService.getAllUsers()) {
+                    String username = candidate == null
+                            ? null
+                            : clean(candidate.getUsername());
+
+                    if (username != null) {
+                        usersByUsername.putIfAbsent(
+                                username.toLowerCase(Locale.ROOT),
+                                candidate);
+                    }
+                }
+
+                for (PacketItem item : packetItemRepository.findAllById(
+                        unresolved)) {
+                    if (item == null || item.getId() == null) {
+                        continue;
+                    }
+
+                    String creatorUsername = clean(
+                            item.getCreatedBy());
+
+                    User creator = creatorUsername == null
+                            ? null
+                            : usersByUsername.get(
+                                    creatorUsername.toLowerCase(Locale.ROOT));
+
+                    if (creator == null
+                            || !currentUserService.isUtlPacking(creator)) {
+                        continue;
+                    }
+
+                    String sourcePlant = cleanUpper(
+                            item.getPlantCode());
+
+                    if (!isUtlSourcePlant(sourcePlant)
+                            || !canUserReadUnroutedOrigin(
+                                    item,
+                                    user)) {
+                        continue;
+                    }
+
+                    result.add(
+                            new UtlOriginMetadata(
+                                    item.getId(),
+                                    true,
+                                    sourcePlant,
+                                    null,
+                                    null,
+                                    sourcePlant + " - UTL"));
+                }
+            }
+        }
+
+        result.sort(
+                Comparator.comparing(
+                        metadata ->
+                                metadata.packetItemId()
+                                        .toString()));
+
+        return List.copyOf(result);
+    }
+
+    private boolean canUserReadUnroutedOrigin(
+            PacketItem item,
+            User user) {
+
+        if (item == null || user == null) {
+            return false;
+        }
+
+        if (currentUserService.isAdmin(user)) {
+            return true;
+        }
+
+        if (!currentUserService.isUtlPacking(user)) {
+            return false;
+        }
+
+        String creatorUsername = clean(
+                item.getCreatedBy());
+        String currentUsername = clean(
+                user.getUsername());
+
+        return creatorUsername != null
+                && currentUsername != null
+                && creatorUsername.equalsIgnoreCase(
+                        currentUsername);
+    }
+
+    private boolean canUserReadRoutingMetadata(
+            UtlPacketRouting routing,
+            User user) {
+
+        if (routing == null || user == null) {
+            return false;
+        }
+
+        if (currentUserService.isAdmin(user)) {
+            return true;
+        }
+
+        String username = clean(user.getUsername());
+
+        if (username != null) {
+            if (username.equalsIgnoreCase(
+                    clean(routing.getPackedByUsername()))) {
+                return true;
+            }
+
+            if (username.equalsIgnoreCase(
+                    clean(routing.getDispatchTargetUsername()))) {
+                return true;
+            }
+        }
+
+        String sourcePlant = cleanUpper(
+                routing.getSourcePlantCode());
+
+        String targetPlant = cleanUpper(
+                routing.getDispatchTargetPlantCode());
+
+        String mode = cleanUpper(
+                routing.getDispatchMode());
+
+        /*
+         * WR-38 deliberately has a combined normal + UTL operational view.
+         * This remains a presentation/read exception only; routing is unchanged.
+         */
+        if (!currentUserService.isUtlUser(user)
+                && currentUserService.hasAnyRole(
+                        user,
+                        "PACKING",
+                        "WAREHOUSE",
+                        "DISPATCH",
+                        "LOGISTICS")
+                && currentUserService.canAccessPlant(
+                        user,
+                        WR_38)
+                && (WR_38.equals(sourcePlant)
+                        || WR_38.equals(targetPlant))) {
+            return true;
+        }
+
+        /*
+         * Normal AL-P3 Warehouse / Logistics see UTL identity only for packets
+         * explicitly handed to INTERNAL. MODE_UTL remains isolated.
+         */
+        if (!currentUserService.isUtlUser(user)
+                && MODE_INTERNAL.equals(mode)
+                && (currentUserService.isWarehouse(user)
+                        || currentUserService.isLogistics(user))
+                && targetPlant != null
+                && currentUserService.canAccessPlant(
+                        user,
+                        targetPlant)) {
+            return true;
+        }
+
+        return false;
+    }
+
     public String requireUtlSourcePlant(String plantCode) {
         String clean = cleanUpper(plantCode);
         if (clean == null || !UTL_SOURCE_PLANTS.contains(clean)) {
@@ -548,5 +821,14 @@ public class UtlWorkflowService {
             String dispatchMode,
             String plantCode,
             String label) {
+    }
+
+    public record UtlOriginMetadata(
+            UUID packetItemId,
+            boolean utlOrigin,
+            String sourcePlantCode,
+            String dispatchMode,
+            String dispatchTargetPlantCode,
+            String displayPlantCode) {
     }
 }

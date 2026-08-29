@@ -35,6 +35,11 @@ import {
 import {
   submitPacketDeletionRequests,
 } from "../dashboard/api/packetDeletionRequestApi";
+import {
+  fetchUtlOriginMetadataForRows,
+  getPackFlowPlantDisplayLabel,
+  getPackFlowSkuDisplayValue,
+} from "../utils/utlOriginDisplay";
 
 /*
  * Keep role normalization local to this page.
@@ -306,6 +311,8 @@ function InventoryMasterWorkbench({
   onPreviewSticker,
   onDownloadSticker,
   onAddHardwarePackets,
+  getPlantDisplayLabel = (row) => row?.plantCode || "Unassigned",
+  getSkuDisplayValue = (row) => row?.sku || "—",
 }) {
   const [openMap, setOpenMap] =
     useState({});
@@ -630,7 +637,7 @@ function InventoryMasterWorkbench({
 
                       <Chip
                         size="small"
-                        label={group.plantCode}
+                        label={getPlantDisplayLabel(group.rows?.[0] || group)}
                         sx={inventoryPlantMiniChipSx}
                       />
                     </Box>
@@ -732,7 +739,7 @@ function InventoryMasterWorkbench({
                         </Box>
 
                         <Box sx={inventoryPacketMonoSx}>
-                          {row.sku || "—"}
+                          {getSkuDisplayValue(row) || "—"}
                         </Box>
 
                         <Box sx={inventoryPacketSubSx}>
@@ -1884,6 +1891,7 @@ function ZohoItemsPage() {
   const [utlDispatchTargets, setUtlDispatchTargets] = useState([]);
   const [utlDispatchTargetsLoading, setUtlDispatchTargetsLoading] = useState(false);
   const [utlDispatchTargetUsername, setUtlDispatchTargetUsername] = useState("");
+  const [utlOriginMetadata, setUtlOriginMetadata] = useState({});
   const [detailsPopup, setDetailsPopup] = useState(false);
 
   const [
@@ -2451,6 +2459,66 @@ function ZohoItemsPage() {
   ] = useState(() => [
     createEmptyHardwarePacketDraft(),
   ]);
+
+  /*
+   * UTL origin is persisted separately from the physical plant code.
+   * Keep AL-P3 / WR-38 untouched for routing and show "- UTL" only as
+   * presentation metadata. A pure UTL Packing user also gets a local fallback
+   * before the receiver route exists.
+   */
+  useEffect(() => {
+    if (authLoading || !currentUser) {
+      return undefined;
+    }
+
+    const visibleRows = [
+      ...(Array.isArray(rows) ? rows : []),
+      ...(Array.isArray(masterWorkbenchRows) ? masterWorkbenchRows : []),
+      ...(itemDetailsRow ? [itemDetailsRow] : []),
+      ...(selectedItem ? [selectedItem] : []),
+    ];
+
+    if (visibleRows.length === 0) {
+      setUtlOriginMetadata({});
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    fetchUtlOriginMetadataForRows(
+      visibleRows,
+      { signal: controller.signal }
+    )
+      .then(setUtlOriginMetadata)
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          console.debug(
+            "UTL origin metadata refresh skipped:",
+            error
+          );
+        }
+      });
+
+    return () => controller.abort();
+  }, [
+    authLoading,
+    currentUser?.id,
+    currentUser?.username,
+    rows,
+    masterWorkbenchRows,
+    itemDetailsRow,
+    selectedItem,
+  ]);
+
+  const getInventoryPlantDisplayLabel = (row) =>
+    getPackFlowPlantDisplayLabel(
+      row,
+      utlOriginMetadata,
+      { fallbackUtl: isUtlPacking }
+    );
+
+  const getInventorySkuDisplayValue = (row) =>
+    getPackFlowSkuDisplayValue(row) || "—";
 
   const buildHardwareDescription = (
     lines = []
@@ -6682,6 +6750,14 @@ function ZohoItemsPage() {
     if (!form.itemName) err.itemName = "Required";
     if (!form.plantCode) err.plantCode = "Plant location required";
 
+    if (
+      isWr38PlantCode(form.plantCode) &&
+      !String(form.pdNo || "").trim()
+    ) {
+      err.pdNo =
+        "Product Code is required for WR-38";
+    }
+
     const packingDateError =
       getPackingDateValidationMessage(
         form.packingDate
@@ -9816,9 +9892,9 @@ function ZohoItemsPage() {
                             ...inventoryLongTextStyle,
                             wordBreak: "break-all",
                           }}
-                          title={row.sku}
+                          title={getInventorySkuDisplayValue(row)}
                         >
-                          {row.sku || "—"}
+                          {getInventorySkuDisplayValue(row)}
                         </span>
                       </div>
 
@@ -9865,7 +9941,7 @@ function ZohoItemsPage() {
                       >
                         <Chip
                           size="small"
-                          label={row.plantCode || "Unassigned"}
+                          label={getInventoryPlantDisplayLabel(row)}
                           sx={row.plantCode ? plantChipSx : unassignedPlantChipSx}
                         />
                       </div>
@@ -10311,6 +10387,12 @@ function ZohoItemsPage() {
                 setMasterWorkbenchOpen(false);
                 openHardwareAddPacketsModal(row);
               }}
+              getPlantDisplayLabel={
+                getInventoryPlantDisplayLabel
+              }
+              getSkuDisplayValue={
+                getInventorySkuDisplayValue
+              }
             />
           </Box>
         </InventoryModal>
@@ -10360,7 +10442,9 @@ function ZohoItemsPage() {
 
             <Box sx={stickerSkuSx}>
               {getSafeValue(
-                itemDetailsRow?.sku
+                getInventorySkuDisplayValue(
+                  itemDetailsRow
+                )
               )}
             </Box>
 
@@ -10405,7 +10489,9 @@ function ZohoItemsPage() {
                 ],
                 [
                   "Plant",
-                  itemDetailsRow?.plantCode,
+                  getInventoryPlantDisplayLabel(
+                    itemDetailsRow
+                  ),
                 ],
                 [
                   "Location",
@@ -11593,6 +11679,21 @@ function ZohoItemsPage() {
                         return;
                       }
 
+                      if (
+                        isWr38PlantCode(form.plantCode) &&
+                        !String(form.pdNo || "").trim()
+                      ) {
+                        setErrors((previous) => ({
+                          ...previous,
+                          pdNo: "Product Code is required for WR-38",
+                        }));
+                        showUiAlert(
+                          "error",
+                          "Product Code is required for WR-38"
+                        );
+                        return;
+                      }
+
                       const packingDateError =
                         getPackingDateValidationMessage(
                           form.packingDate
@@ -11834,7 +11935,7 @@ function ZohoItemsPage() {
                     fontSize: 12,
                   }}
                 >
-                  Plant: {getPlantCodeOnly(selectedItem)}
+                  Plant: {getInventoryPlantDisplayLabel(selectedItem)}
                   <br />
                   Location: {getPackingLocationCode(selectedItem)}
                 </Box>
@@ -12019,7 +12120,7 @@ function ZohoItemsPage() {
                     fontSize: 12,
                   }}
                 >
-                  Plant: {getPlantCodeOnly(selectedItem)}
+                  Plant: {getInventoryPlantDisplayLabel(selectedItem)}
                   <br />
                   Location: {getPackingLocationCode(selectedItem)}
                 </Box>

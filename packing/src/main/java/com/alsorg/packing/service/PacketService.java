@@ -917,7 +917,10 @@ public class PacketService {
                                 item.getItemName());
 
                 dto.setSku(
-                                item.getSku());
+                                resolveSkuForPlantRead(
+                                                item.getPlantCode(),
+                                                item.getPdNo(),
+                                                item.getSku()));
 
                 dto.setLocation(
                                 item.getLocation());
@@ -1209,9 +1212,12 @@ public class PacketService {
                                         dto.setClientAddress(item.getClientAddress());
 
                                         dto.setSku(
-                                                        item.getSku() != null
-                                                                        ? item.getSku()
-                                                                        : "-");
+                                                        firstNonBlankValue(
+                                                                        resolveSkuForPlantRead(
+                                                                                        item.getPlantCode(),
+                                                                                        item.getPdNo(),
+                                                                                        item.getSku()),
+                                                                        "-"));
 
                                         dto.setZohoItemId(
                                                         item.getZohoItemId() != null
@@ -1363,7 +1369,8 @@ public class PacketService {
                                         "Pkt-" + packetNo);
 
                         item.setSku(
-                                        buildSku(
+                                        buildSkuForPlant(
+                                                        plantCode,
                                                         req.pdNo,
                                                         req.drawingNo,
                                                         packetNo));
@@ -1509,6 +1516,17 @@ public class PacketService {
                 }
 
                 String plantCode = item.getPlantCode();
+
+                /*
+                 * WR-38 has no AL-style composite SKU. Product Code (pdNo) is the
+                 * canonical SKU for the complete Wriver flow. Repair older rows
+                 * lazily when they are printed/reprinted without touching AL plants.
+                 */
+                if (isWr38PlantCode(plantCode)) {
+                        item.setSku(
+                                        requireWr38ProductCode(
+                                                        item.getPdNo()));
+                }
 
                 PlantLocationService.PlantConfig plant = plantLocationService.getPlantConfig(
                                 plantCode);
@@ -1834,7 +1852,8 @@ public class PacketService {
                                 item.getPacketNumber(),
                                 item.getSku());
 
-                String rebuiltSku = buildSku(
+                String rebuiltSku = buildSkuForPlant(
+                                item.getPlantCode(),
                                 item.getPdNo(),
                                 item.getDrawingNo(),
                                 packetNo);
@@ -2472,7 +2491,11 @@ public class PacketService {
                         item.setFgZoneCode(null);
                         item.setPacketNumber("Pkt-" + packetNo);
 
-                        String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
+                        String sku = buildSkuForPlant(
+                                        plantCode,
+                                        master.getPdNo(),
+                                        master.getDrawingName(),
+                                        packetNo);
 
                         String desc = (descriptions != null && descriptions.size() > i)
                                         ? descriptions.get(i)
@@ -2781,7 +2804,8 @@ public class PacketService {
                                         "Pkt-" + packetNo);
 
                         item.setSku(
-                                        buildSku(
+                                        buildSkuForPlant(
+                                                        plantCode,
                                                         master.getPdNo(),
                                                         master.getDrawingName(),
                                                         packetNo));
@@ -3013,7 +3037,8 @@ public class PacketService {
                                 "Pkt-" + packetNo);
 
                 item.setSku(
-                                buildSku(
+                                buildSkuForPlant(
+                                                plantCode,
                                                 req.pdNo,
                                                 req.drawingNo,
                                                 packetNo));
@@ -3114,7 +3139,11 @@ public class PacketService {
                 item.setFgZoneCode(null);
                 item.setPacketNumber("Pkt-" + packetNo);
 
-                String sku = buildSku(master.getPdNo(), master.getDrawingName(), packetNo);
+                String sku = buildSkuForPlant(
+                                plantCode,
+                                master.getPdNo(),
+                                master.getDrawingName(),
+                                packetNo);
 
                 item.setSku(sku);
                 item.setQuantity(1);
@@ -3268,7 +3297,8 @@ public class PacketService {
                                 packetNumber);
 
                 item.setSku(
-                                buildSku(
+                                buildSkuForPlant(
+                                                plantCode,
                                                 master.getPdNo(),
                                                 master.getDrawingName(),
                                                 packetNo));
@@ -3372,7 +3402,8 @@ public class PacketService {
                                         item.getPacketNumber(),
                                         item.getSku());
 
-                        String sku = buildSku(
+                        String sku = buildSkuForPlant(
+                                        item.getPlantCode(),
                                         req.getPdNo(),
                                         req.getDrawingNo(),
                                         packetNo);
@@ -3389,6 +3420,67 @@ public class PacketService {
                 }
 
                 return value.trim().replaceAll("\\s+", " ");
+        }
+
+        private boolean isWr38PlantCode(
+                        String plantCode) {
+
+                return plantCode != null
+                                && "WR-38".equalsIgnoreCase(
+                                                plantCode.trim());
+        }
+
+        private String requireWr38ProductCode(
+                        String pdNo) {
+
+                if (pdNo == null || pdNo.trim().isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Product Code is required for WR-38");
+                }
+
+                return pdNo.trim()
+                                .replaceAll("\\s+", " ");
+        }
+
+        /**
+         * AL-P1/P2/P3/P4 keep the existing PD/DWG/Pkt-N SKU convention.
+         * WR-38 deliberately does not: its Product Code (pdNo) is its SKU.
+         */
+        private String buildSkuForPlant(
+                        String plantCode,
+                        String pdNo,
+                        String drawingNo,
+                        int packetNo) {
+
+                if (isWr38PlantCode(plantCode)) {
+                        return requireWr38ProductCode(
+                                        pdNo);
+                }
+
+                return buildSku(
+                                pdNo,
+                                drawingNo,
+                                packetNo);
+        }
+
+        /**
+         * Read paths must remain tolerant of historical WR-38 rows. If a legacy
+         * row has Product Code populated, expose it as SKU immediately; otherwise
+         * retain the existing stored value until an edit/print can validate it.
+         */
+        private String resolveSkuForPlantRead(
+                        String plantCode,
+                        String pdNo,
+                        String existingSku) {
+
+                if (isWr38PlantCode(plantCode)
+                                && pdNo != null
+                                && !pdNo.trim().isBlank()) {
+                        return pdNo.trim()
+                                        .replaceAll("\\s+", " ");
+                }
+
+                return existingSku;
         }
 
         private String buildSku(String pdNo, String drawingNo, int packetNo) {
@@ -3718,6 +3810,13 @@ public class PacketService {
                                 .orElseThrow(() -> new RuntimeException("Item not found"));
 
                 item.setPlantCode(plantCode);
+
+                if (isWr38PlantCode(plantCode)) {
+                        item.setSku(
+                                        requireWr38ProductCode(
+                                                        item.getPdNo()));
+                }
+
                 item.setPackedAreaCode(plant.packedAreaCode());
                 item.setFgAreaCode(plant.fgAreaCode());
 
@@ -3737,6 +3836,11 @@ public class PacketService {
 
                 dispatchedRepo.findById(itemId.toString()).ifPresent(d -> {
                         d.setPlantCode(plantCode);
+                        d.setSku(
+                                        resolveSkuForPlantRead(
+                                                        plantCode,
+                                                        saved.getPdNo(),
+                                                        saved.getSku()));
                         d.setPackedAreaCode(plant.packedAreaCode());
                         d.setFgAreaCode(plant.fgAreaCode());
 
@@ -4125,6 +4229,15 @@ public class PacketService {
                                                 packetItem.getDrawingNo(),
                                                 dispatchedItem.getDrawingNo()));
 
+                if (isWr38PlantCode(
+                                packetItem.getPlantCode())) {
+                        packetItem.setSku(
+                                        resolveSkuForPlantRead(
+                                                        packetItem.getPlantCode(),
+                                                        packetItem.getPdNo(),
+                                                        packetItem.getSku()));
+                }
+
                 packetItem.setClientName(
                                 keepExistingIfBlank(
                                                 packetItem.getClientName(),
@@ -4257,12 +4370,27 @@ public class PacketService {
                                                 dispatchedItem.getName(),
                                                 "Legacy Item"));
 
-                String sku = firstNonBlankValue(
-                                dispatchedItem.getSku(),
-                                buildSku(
-                                                dispatchedItem.getPdNo(),
-                                                dispatchedItem.getDrawingNo(),
-                                                1));
+                String sku;
+
+                if (isWr38PlantCode(
+                                dispatchedItem.getPlantCode())) {
+                        /*
+                         * Historical WR-38 rows may predate the Product Code rule.
+                         * Prefer pdNo when available, otherwise retain the stored code
+                         * until the operator supplies Product Code on the next edit.
+                         */
+                        sku = resolveSkuForPlantRead(
+                                        dispatchedItem.getPlantCode(),
+                                        dispatchedItem.getPdNo(),
+                                        dispatchedItem.getSku());
+                } else {
+                        sku = firstNonBlankValue(
+                                        dispatchedItem.getSku(),
+                                        buildSku(
+                                                        dispatchedItem.getPdNo(),
+                                                        dispatchedItem.getDrawingNo(),
+                                                        1));
+                }
 
                 packetItem.setSku(sku);
                 packetItem.setPdNo(dispatchedItem.getPdNo());
