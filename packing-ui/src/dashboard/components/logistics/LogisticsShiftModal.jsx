@@ -16,11 +16,6 @@ import {
 } from "./logisticsDateTimeUtils";
 
 import {
-  fetchDrivers,
-  fetchVehicles,
-  fetchShifts,
-  fetchDispatchChallans,
-  fetchLogisticsTrips,
   fetchDispatchChallanPdf,
   downloadTripChallan,
   endDispatchChallanTrip,
@@ -28,6 +23,15 @@ import {
   createShift,
   updateShift,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedDispatchChallans,
+  getCachedDrivers,
+  getCachedShifts,
+  getCachedTrips,
+  getCachedVehicles,
+  invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import {
   getBackendMessage,
@@ -288,6 +292,7 @@ function LogisticsShiftModal({
   showDriverHistory = false,
   driverName = "",
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const isEdit = mode === "edit";
 
@@ -404,16 +409,16 @@ function LogisticsShiftModal({
 
         const coreResults =
           await Promise.allSettled([
-            fetchDrivers(),
-            fetchVehicles(),
+            getCachedDrivers(cacheScope),
+            getCachedVehicles(cacheScope),
           ]);
 
         const historyResults =
           showDriverHistory
             ? await Promise.allSettled([
-                fetchShifts(),
-                fetchDispatchChallans(),
-                fetchLogisticsTrips(),
+                getCachedShifts(cacheScope),
+                getCachedDispatchChallans(cacheScope),
+                getCachedTrips(cacheScope),
               ])
             : [];
 
@@ -1079,9 +1084,9 @@ function LogisticsShiftModal({
     }
 
     const results = await Promise.allSettled([
-      fetchShifts(),
-      fetchDispatchChallans(),
-      fetchLogisticsTrips(),
+      getCachedShifts(cacheScope, { force: true }),
+      getCachedDispatchChallans(cacheScope, { force: true }),
+      getCachedTrips(cacheScope, { force: true }),
     ]);
 
     const [
@@ -1124,8 +1129,8 @@ function LogisticsShiftModal({
         driverResult,
         vehicleResult,
       ] = await Promise.allSettled([
-        fetchDrivers(),
-        fetchVehicles(),
+        getCachedDrivers(cacheScope),
+        getCachedVehicles(cacheScope),
       ]);
 
       if (driverResult.status === "fulfilled") {
@@ -1435,6 +1440,7 @@ function LogisticsShiftModal({
       });
 
       await reloadOperationalHistory();
+      invalidateLogisticsResources(cacheScope, ["shifts"]);
       await onSaved?.();
     } catch (error) {
       console.error(error);

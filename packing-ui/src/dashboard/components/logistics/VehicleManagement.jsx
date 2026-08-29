@@ -17,9 +17,13 @@ import {
 } from "@mui/material";
 
 import {
-  fetchVehicles,
   deleteVehicle,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedVehicles,
+  invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import VehicleExpenseModal from "./modals/VehicleExpenseModal";
 import CreateVehicleModal from "./modals/CreateVehicleModal";
@@ -45,6 +49,7 @@ const normalizeText = (value) =>
 function VehicleManagement({
   showAlert = () => { },
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [vehicles, setVehicles] =
     useState([]);
@@ -78,13 +83,14 @@ function VehicleManagement({
 
   async function loadVehicles({
     background = false,
+    force = false,
   } = {}) {
     try {
       if (!background) {
         setLoading(true);
       }
 
-      const data = await fetchVehicles();
+      const data = await getCachedVehicles(cacheScope, { force });
 
       setVehicles(
         Array.isArray(data) ? data : []
@@ -111,12 +117,13 @@ function VehicleManagement({
     async () => {
       await loadVehicles({
         background: true,
+        force: false,
       });
     }
   );
 
   useEffect(() => {
-    loadVehicles();
+    void loadVehicles({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -285,7 +292,8 @@ function VehicleManagement({
 
     try {
       await deleteVehicle(deleteVehicleId);
-      await loadVehicles();
+      invalidateLogisticsResources(cacheScope, ["vehicles"]);
+      await loadVehicles({ force: true });
 
       showAlert(
         "Vehicle deleted successfully",
@@ -323,7 +331,7 @@ function VehicleManagement({
           <button
             type="button"
             style={refreshBtn}
-            onClick={loadVehicles}
+            onClick={() => loadVehicles({ force: true })}
             disabled={loading}
           >
             {loading
@@ -591,7 +599,7 @@ function VehicleManagement({
       <CreateVehicleModal
         open={open}
         onClose={closeForm}
-        onCreated={loadVehicles}
+        onCreated={() => loadVehicles({ force: true })}
         showAlert={showAlert}
         initialData={editingVehicle}
       />

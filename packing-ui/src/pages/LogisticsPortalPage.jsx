@@ -1,5 +1,9 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
+  useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -9,12 +13,40 @@ import usePackFlowDataRefresh
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 
-import LogisticsOperationsHub from "../dashboard/components/logistics/LogisticsOperationsHub";
-import ShiftReports from "../dashboard/components/logistics/ShiftReports";
-import DriverManagement from "../dashboard/components/logistics/DriverManagement";
-import VehicleManagement from "../dashboard/components/logistics/VehicleManagement";
+import { useAuth } from "../auth/AuthContext";
+import {
+  clearLogisticsReadCache,
+  prefetchLogisticsCore,
+  scheduleLogisticsIdleWork,
+} from "../dashboard/components/logistics/logisticsReadCache";
+
+const LogisticsOperationsHub = lazy(() =>
+  import("../dashboard/components/logistics/LogisticsOperationsHub")
+);
+
+const ShiftReports = lazy(() =>
+  import("../dashboard/components/logistics/ShiftReports")
+);
+
+const DriverManagement = lazy(() =>
+  import("../dashboard/components/logistics/DriverManagement")
+);
+
+const VehicleManagement = lazy(() =>
+  import("../dashboard/components/logistics/VehicleManagement")
+);
 
 function LogisticsPortalPage() {
+  const { user } = useAuth();
+
+  const cacheScope = useMemo(() =>
+    [user?.id, user?.username, user?.role]
+      .filter((value) => value !== null && value !== undefined && String(value).trim())
+      .map((value) => String(value).trim())
+      .join(":"),
+    [user?.id, user?.username, user?.role]
+  );
+
   const [tab, setTab] =
     useState("operations");
 
@@ -36,12 +68,29 @@ function LogisticsPortalPage() {
   usePackFlowDataRefresh(
     "logistics",
     async () => {
-      setLivePulse(
-        (current) =>
-          current + 1
-      );
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+
+      setLivePulse((current) => current + 1);
+    },
+    {
+      intervalMs: 12000,
     }
   );
+
+  useEffect(() => {
+    if (!cacheScope) return undefined;
+
+    const cancelPrefetch = scheduleLogisticsIdleWork(() => {
+      void prefetchLogisticsCore(cacheScope);
+    }, 700);
+
+    return () => {
+      cancelPrefetch();
+      clearLogisticsReadCache(cacheScope);
+    };
+  }, [cacheScope]);
 
   const [snackOpen, setSnackOpen] =
     useState(false);
@@ -131,10 +180,12 @@ function LogisticsPortalPage() {
           />
         </div>
 
+        <Suspense fallback={<div style={workspaceLoading}>Loading logistics workspace…</div>}>
         {tab === "operations" && (
           <LogisticsOperationsHub
             showAlert={showAlert}
             liveRefreshToken={livePulse}
+            cacheScope={cacheScope}
           />
         )}
 
@@ -142,6 +193,7 @@ function LogisticsPortalPage() {
           <DriverManagement
             showAlert={showAlert}
             liveRefreshToken={livePulse}
+            cacheScope={cacheScope}
           />
         )}
 
@@ -149,6 +201,7 @@ function LogisticsPortalPage() {
           <VehicleManagement
             showAlert={showAlert}
             liveRefreshToken={livePulse}
+            cacheScope={cacheScope}
           />
         )}
 
@@ -174,9 +227,11 @@ function LogisticsPortalPage() {
             <ShiftReports
               showAlert={showAlert}
               liveRefreshToken={livePulse}
+              cacheScope={cacheScope}
             />
           </>
         )}
+        </Suspense>
 
         <Snackbar
           open={snackOpen}
@@ -362,3 +417,5 @@ const reportNoticeText = {
 };
 
 export default LogisticsPortalPage;
+
+const workspaceLoading = { minHeight: 180, display: "grid", placeItems: "center", color: "var(--pf-text-muted)", fontSize: 12, fontWeight: 800 };

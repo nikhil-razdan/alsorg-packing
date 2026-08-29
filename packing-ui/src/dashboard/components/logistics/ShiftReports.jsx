@@ -8,13 +8,17 @@ import {
 import "./logisticsScrollbars.css";
 
 import {
-  fetchDrivers,
-  fetchVehicles,
-  fetchShifts,
-  fetchDispatchChallans,
-  fetchLogisticsTrips,
   endDispatchChallanTrip,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedDispatchChallans,
+  getCachedDrivers,
+  getCachedShifts,
+  getCachedTrips,
+  getCachedVehicles,
+  invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import {
   getBackendMessage,
@@ -1648,6 +1652,7 @@ function TripEndImportSummary({
 function ShiftReports({
   showAlert = () => { },
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [loading, setLoading] =
     useState(true);
@@ -1721,6 +1726,7 @@ function ShiftReports({
 
   async function loadReports({
     background = false,
+    force = false,
   } = {}) {
     try {
       if (!background) {
@@ -1729,11 +1735,11 @@ function ShiftReports({
       }
 
       const results = await Promise.allSettled([
-        fetchDrivers(),
-        fetchVehicles(),
-        fetchShifts(),
-        fetchDispatchChallans(),
-        fetchLogisticsTrips(),
+        getCachedDrivers(cacheScope, { force }),
+        getCachedVehicles(cacheScope, { force }),
+        getCachedShifts(cacheScope, { force }),
+        getCachedDispatchChallans(cacheScope, { force }),
+        getCachedTrips(cacheScope, { force }),
       ]);
 
       const [
@@ -1832,12 +1838,16 @@ function ShiftReports({
     async () => {
       await loadReports({
         background: true,
+        force: false,
       });
+    },
+    {
+      minIntervalMs: 45000,
     }
   );
 
   useEffect(() => {
-    loadReports();
+    void loadReports({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2359,8 +2369,10 @@ function ShiftReports({
 
       /* Re-read current challans before preview. This ensures matching and
        * current End comparisons are based on live data, not stale report state. */
+      invalidateLogisticsResources(cacheScope, ["challan-page", "challan-full"]);
+
       const liveData =
-        await fetchDispatchChallans();
+        await getCachedDispatchChallans(cacheScope, { force: true });
 
       const liveChallans =
         Array.isArray(liveData)
@@ -2583,7 +2595,8 @@ function ShiftReports({
 
       setTripEndImportConfirmed(false);
 
-      await loadReports();
+      invalidateLogisticsResources(cacheScope, ["challan-page", "challan-full", "trips"]);
+      await loadReports({ force: true });
 
       if (failureCount === 0) {
         showAlert(
@@ -3503,7 +3516,7 @@ function ShiftReports({
           <button
             type="button"
             style={refreshBtn}
-            onClick={loadReports}
+            onClick={() => loadReports({ force: true })}
             disabled={loading}
           >
             {loading

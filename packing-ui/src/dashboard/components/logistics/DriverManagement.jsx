@@ -14,11 +14,17 @@ import LogisticsPagination from "./LogisticsPagination";
 import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
-  fetchDrivers,
-  fetchDispatchChallans,
-  fetchShifts,
   deleteDriver,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedDispatchChallanWindow,
+  getCachedDispatchChallans,
+  getCachedDrivers,
+  getCachedShifts,
+  invalidateLogisticsResources,
+  scheduleLogisticsIdleWork,
+} from "./logisticsReadCache";
 
 import CreateDriverModal from "./modals/CreateDriverModal";
 import LogisticsShiftModal from "./LogisticsShiftModal";
@@ -84,6 +90,7 @@ function recordMatchesDriver(
 function DriverManagement({
   showAlert = () => { },
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [drivers, setDrivers] =
     useState([]);
@@ -112,6 +119,7 @@ function DriverManagement({
 
   async function loadDrivers({
     background = false,
+    force = false,
   } = {}) {
     try {
       if (!background) {
@@ -119,9 +127,13 @@ function DriverManagement({
       }
 
       const results = await Promise.allSettled([
-        fetchDrivers(),
-        fetchDispatchChallans(),
-        fetchShifts(),
+        getCachedDrivers(cacheScope, { force }),
+        getCachedDispatchChallanWindow(cacheScope, {
+          pages: 2,
+          size: 100,
+          force,
+        }),
+        getCachedShifts(cacheScope, { force }),
       ]);
 
       const [
@@ -142,8 +154,8 @@ function DriverManagement({
 
       if (challanResult.status === "fulfilled") {
         setChallans(
-          Array.isArray(challanResult.value)
-            ? challanResult.value
+          Array.isArray(challanResult.value?.rows)
+            ? challanResult.value.rows
             : []
         );
       } else if (!background) {
@@ -181,60 +193,93 @@ function DriverManagement({
     async () => {
       await loadDrivers({
         background: true,
+        force: false,
       });
     }
   );
 
   useEffect(() => {
-    loadDrivers();
+    void loadDrivers({ force: false });
+
+    const cancelHydration = scheduleLogisticsIdleWork(() => {
+      void getCachedDispatchChallans(cacheScope)
+        .then((fullRows) => {
+          if (Array.isArray(fullRows)) {
+            setChallans(fullRows);
+          }
+        })
+        .catch(() => {
+          /* Keep recent activity visible when deep history cannot hydrate. */
+        });
+    }, 1200);
+
+    return cancelHydration;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cacheScope]);
 
   const driverRows = useMemo(() => {
+    const challansById = new Map();
+    const challansByNameWithoutId = new Map();
+    const shiftsById = new Map();
+    const shiftsByNameWithoutId = new Map();
+
+    const append = (map, key, value) => {
+      if (!key) return;
+      const list = map.get(key);
+      if (list) list.push(value);
+      else map.set(key, [value]);
+    };
+
+    challans.forEach((challan) => {
+      const id = String(
+        challan?.driverId || challan?.driver?.id || ""
+      ).trim();
+      const name = normalizeText(
+        challan?.driverName || challan?.driver?.name
+      );
+
+      if (id) append(challansById, id, challan);
+      else if (name) append(challansByNameWithoutId, name, challan);
+    });
+
+    shifts.forEach((shift) => {
+      const id = String(
+        shift?.driver?.id || shift?.driverId || ""
+      ).trim();
+      const name = normalizeText(
+        shift?.driver?.name || shift?.driverName
+      );
+
+      if (id) append(shiftsById, id, shift);
+      else if (name) append(shiftsByNameWithoutId, name, shift);
+    });
+
     return drivers.map((driver) => {
-      const driverChallans = challans.filter(
-        (challan) =>
-          recordMatchesDriver(
-            driver,
-            challan?.driverId ||
-            challan?.driver?.id,
-            challan?.driverName ||
-            challan?.driver?.name
-          )
+      const driverId = String(driver?.id || "").trim();
+      const driverName = normalizeText(driver?.name);
+
+      const driverChallans = [
+        ...(driverId ? challansById.get(driverId) || [] : []),
+        ...(driverName ? challansByNameWithoutId.get(driverName) || [] : []),
+      ];
+
+      const driverShifts = [
+        ...(driverId ? shiftsById.get(driverId) || [] : []),
+        ...(driverName ? shiftsByNameWithoutId.get(driverName) || [] : []),
+      ];
+
+      const activeChallans = driverChallans.filter(
+        (challan) => getChallanStatus(challan) === "RUNNING"
+      ).length;
+
+      const completedChallans = driverChallans.filter(
+        (challan) => getChallanStatus(challan) === "COMPLETED"
+      ).length;
+
+      const dispatchedItems = driverChallans.reduce(
+        (sum, challan) => sum + Number(challan?.totalItems || 0),
+        0
       );
-
-      const driverShifts = shifts.filter(
-        (shift) =>
-          recordMatchesDriver(
-            driver,
-            shift?.driver?.id ||
-            shift?.driverId,
-            shift?.driver?.name ||
-            shift?.driverName
-          )
-      );
-
-      const activeChallans =
-        driverChallans.filter(
-          (challan) =>
-            getChallanStatus(challan) ===
-            "RUNNING"
-        ).length;
-
-      const completedChallans =
-        driverChallans.filter(
-          (challan) =>
-            getChallanStatus(challan) ===
-            "COMPLETED"
-        ).length;
-
-      const dispatchedItems =
-        driverChallans.reduce(
-          (sum, challan) =>
-            sum +
-            Number(challan?.totalItems || 0),
-          0
-        );
 
       return {
         driver,
@@ -243,9 +288,7 @@ function DriverManagement({
         completedChallans,
         manualRecords: driverShifts.length,
         dispatchedItems,
-        totalActivity:
-          driverChallans.length +
-          driverShifts.length,
+        totalActivity: driverChallans.length + driverShifts.length,
       };
     });
   }, [drivers, challans, shifts]);
@@ -356,7 +399,8 @@ function DriverManagement({
   async function remove(id) {
     try {
       await deleteDriver(id);
-      await loadDrivers();
+      invalidateLogisticsResources(cacheScope, ["drivers"]);
+      await loadDrivers({ force: true });
 
       showAlert(
         "Driver deleted successfully",
@@ -391,7 +435,7 @@ function DriverManagement({
           <button
             type="button"
             style={secondaryButton}
-            onClick={loadDrivers}
+            onClick={() => loadDrivers({ force: true })}
             disabled={loading}
           >
             {loading ? "Refreshing..." : "Refresh"}
@@ -618,7 +662,7 @@ function DriverManagement({
       <CreateDriverModal
         open={open}
         onClose={() => setOpen(false)}
-        onCreated={loadDrivers}
+        onCreated={() => loadDrivers({ force: true })}
         showAlert={showAlert}
       />
 
@@ -635,9 +679,10 @@ function DriverManagement({
           lockDriver={true}
           showDriverHistory={true}
           onClose={closeShiftForDriver}
-          onSaved={loadDrivers}
+          onSaved={() => loadDrivers({ force: true })}
           showAlert={showAlert}
           liveRefreshToken={liveRefreshToken}
+          cacheScope={cacheScope}
         />
       )}
     </div>

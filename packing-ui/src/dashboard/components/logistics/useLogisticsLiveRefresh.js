@@ -32,6 +32,9 @@ function useLogisticsLiveRefresh(
   const queuedRef =
     useRef(false);
 
+  const lastRunAtRef =
+    useRef(0);
+
   const mountedRef =
     useRef(true);
 
@@ -41,6 +44,11 @@ function useLogisticsLiveRefresh(
 
   const enabled =
     options?.enabled !== false;
+
+  const minIntervalMs = Math.max(
+    3000,
+    Number(options?.minIntervalMs ?? 8000) || 8000
+  );
 
   useEffect(() => {
     callbackRef.current =
@@ -61,12 +69,26 @@ function useLogisticsLiveRefresh(
         return;
       }
 
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+
+      const elapsed = Date.now() - lastRunAtRef.current;
+
+      if (elapsed < minIntervalMs) {
+        return;
+      }
+
       if (runningRef.current) {
         queuedRef.current = true;
         return;
       }
 
       runningRef.current = true;
+      lastRunAtRef.current = Date.now();
 
       try {
         await Promise.resolve(
@@ -95,14 +117,14 @@ function useLogisticsLiveRefresh(
           queuedRef.current = false;
         }
       }
-    }, []);
+    }, [minIntervalMs]);
 
   usePackFlowDataRefresh(
     "logistics",
     executeRefresh,
     {
       intervalMs:
-        options?.intervalMs ?? 6000,
+        options?.intervalMs ?? 12000,
       enabled:
         enabled &&
         !hasExternalClock,

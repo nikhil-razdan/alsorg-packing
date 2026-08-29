@@ -5,11 +5,15 @@ import {
 } from "react";
 
 import {
-  fetchLogisticsTrips,
   fetchLogisticsTripItems,
   endLogisticsTrip,
   downloadTripChallan
 } from "../../api/logisticsApi.jsx";
+
+import {
+  getCachedTrips,
+  invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import {
   useAuth,
@@ -67,6 +71,7 @@ const getSafePodUrl = (value) => {
 function LogisticsTrips({
   showAlert = () => { },
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [loading, setLoading] =
     useState(false);
@@ -108,6 +113,7 @@ function LogisticsTrips({
 
   const load = async ({
     background = false,
+    force = false,
   } = {}) => {
     try {
       if (!background) {
@@ -115,7 +121,7 @@ function LogisticsTrips({
       }
 
       const data =
-        await fetchLogisticsTrips();
+        await getCachedTrips(cacheScope, { force });
 
       const nextTrips =
         Array.isArray(data) ? data : [];
@@ -165,7 +171,7 @@ function LogisticsTrips({
   };
 
   useEffect(() => {
-    void load();
+    void load({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -174,6 +180,7 @@ function LogisticsTrips({
     async () => {
       await load({
         background: true,
+        force: false,
       });
 
       if (itemsModalTrip?.id) {
@@ -315,7 +322,8 @@ function LogisticsTrips({
       );
 
       setEndModal(null);
-      await load();
+      invalidateLogisticsResources(cacheScope, ["trips", "challan-page", "challan-full"]);
+      await load({ force: true });
     } catch (e) {
       console.error(e);
 

@@ -31,9 +31,13 @@ import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlin
 import {
     endDispatchChallanTrip,
     fetchDispatchChallanPdf,
-    fetchDispatchChallansPage,
     updateDispatchChallanHelpers,
 } from "../../api/logisticsApi";
+
+import {
+    getCachedDispatchChallanPage,
+    invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
@@ -525,6 +529,7 @@ const SERVER_CHALLAN_PAGE_SIZE = 50;
 function DispatchChallans({
     showAlert,
     liveRefreshToken = null,
+    cacheScope = "",
 }) {
     const [rows, setRows] =
         useState([]);
@@ -621,6 +626,7 @@ function DispatchChallans({
 
     async function loadData({
         background = false,
+        force = false,
     } = {}) {
         try {
             if (!background) {
@@ -628,9 +634,10 @@ function DispatchChallans({
             }
 
             const result =
-                await fetchDispatchChallansPage({
+                await getCachedDispatchChallanPage(cacheScope, {
                     page: 0,
                     size: SERVER_CHALLAN_PAGE_SIZE,
+                    force,
                 });
 
             const freshRows =
@@ -732,6 +739,7 @@ function DispatchChallans({
         async () => {
             await loadData({
                 background: true,
+                force: false,
             });
         }
     );
@@ -748,9 +756,10 @@ function DispatchChallans({
             setLoadingOlder(true);
 
             const result =
-                await fetchDispatchChallansPage({
+                await getCachedDispatchChallanPage(cacheScope, {
                     page: serverPage + 1,
                     size: SERVER_CHALLAN_PAGE_SIZE,
+                    force: false,
                 });
 
             setRows((current) => {
@@ -913,7 +922,8 @@ function DispatchChallans({
 
                 closeHelperDialog();
 
-                await loadData();
+                invalidateLogisticsResources(cacheScope, ["challan-page", "challan-full"]);
+            await loadData({ force: true });
             } catch (error) {
                 console.error(error);
 
@@ -1454,7 +1464,8 @@ function DispatchChallans({
 
                 closeEndTripDialog();
 
-                await loadData();
+                invalidateLogisticsResources(cacheScope, ["challan-page", "challan-full"]);
+            await loadData({ force: true });
             } catch (e) {
                 console.error(e);
 

@@ -15,10 +15,13 @@ import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
   fetchDispatchChallansPage,
-  fetchDrivers,
-  fetchShifts,
-  fetchVehicles,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedDrivers,
+  getCachedShifts,
+  getCachedVehicles,
+} from "./logisticsReadCache";
 
 import {
   parseBusinessDateTime,
@@ -1668,6 +1671,7 @@ function PagerButton({
 function LogisticsDashboard({
   StatCard,
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [section, setSection] =
     useState("summary");
@@ -1766,15 +1770,15 @@ function LogisticsDashboard({
             "Dispatch challans"
           ),
           withDashboardSourceTimeout(
-            fetchShifts(),
+            getCachedShifts(cacheScope, { force: refresh }),
             "Manual operations"
           ),
           withDashboardSourceTimeout(
-            fetchDrivers(),
+            getCachedDrivers(cacheScope, { force: refresh }),
             "Driver master"
           ),
           withDashboardSourceTimeout(
-            fetchVehicles(),
+            getCachedVehicles(cacheScope, { force: refresh }),
             "Vehicle master"
           ),
         ]);
@@ -1901,7 +1905,7 @@ function LogisticsDashboard({
         }
       }
     },
-    [period]
+    [period, cacheScope]
   );
 
   useLogisticsLiveRefresh(

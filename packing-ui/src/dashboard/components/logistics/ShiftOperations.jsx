@@ -20,10 +20,14 @@ import {
 } from "./logisticsAlertUtils";
 
 import {
-  fetchShifts,
   deleteShift,
   updateShiftStatus,
 } from "../../api/logisticsApi";
+
+import {
+  getCachedShifts,
+  invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 const normalizeStatus = (status) =>
   String(status || "WORKING")
@@ -57,6 +61,7 @@ function ShiftOperations({
   showAlert = () => { },
   openCreateToken = 0,
   liveRefreshToken = null,
+  cacheScope = "",
 }) {
   const [createOpen, setCreateOpen] =
     useState(false);
@@ -96,13 +101,14 @@ function ShiftOperations({
 
   const load = async ({
     background = false,
+    force = false,
   } = {}) => {
     try {
       if (!background) {
         setLoading(true);
       }
 
-      const data = await fetchShifts();
+      const data = await getCachedShifts(cacheScope, { force });
 
       setShifts(
         Array.isArray(data) ? data : []
@@ -125,7 +131,7 @@ function ShiftOperations({
   };
 
   useEffect(() => {
-    void load();
+    void load({ force: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -134,6 +140,7 @@ function ShiftOperations({
     async () => {
       await load({
         background: true,
+        force: false,
       });
     }
   );
@@ -141,8 +148,9 @@ function ShiftOperations({
   const remove = async (id) => {
     try {
       await deleteShift(id);
+      invalidateLogisticsResources(cacheScope, ["shifts"]);
 
-      await load();
+      await load({ force: true });
 
       showAlert(
         "Shift deleted successfully",
@@ -176,8 +184,9 @@ function ShiftOperations({
           shift.id,
           nextStatus
         );
+        invalidateLogisticsResources(cacheScope, ["shifts"]);
 
-        await load();
+        await load({ force: true });
 
         showAlert(
           nextStatus === "COMPLETED"
@@ -322,7 +331,8 @@ function ShiftOperations({
       const successCount =
         ids.length - failedIds.length;
 
-      await load();
+      invalidateLogisticsResources(cacheScope, ["shifts"]);
+      await load({ force: true });
 
       if (failedIds.length === 0) {
         showAlert(
@@ -624,9 +634,13 @@ function ShiftOperations({
           onClose={() =>
             setCreateOpen(false)
           }
-          onSaved={load}
+          onSaved={() => {
+            invalidateLogisticsResources(cacheScope, ["shifts"]);
+            return load({ force: true });
+          }}
           showAlert={showAlert}
           liveRefreshToken={liveRefreshToken}
+          cacheScope={cacheScope}
         />
       )}
 
@@ -638,9 +652,13 @@ function ShiftOperations({
           onClose={() =>
             setEditingShift(null)
           }
-          onSaved={load}
+          onSaved={() => {
+            invalidateLogisticsResources(cacheScope, ["shifts"]);
+            return load({ force: true });
+          }}
           showAlert={showAlert}
           liveRefreshToken={liveRefreshToken}
+          cacheScope={cacheScope}
         />
       )}
     </div>

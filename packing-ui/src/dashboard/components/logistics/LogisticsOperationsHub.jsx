@@ -28,9 +28,12 @@ import LogisticsPagination from "./LogisticsPagination";
 import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
-    fetchDispatchChallans,
-    fetchShifts,
-} from "../../api/logisticsApi";
+    getCachedDispatchChallanWindow,
+    getCachedDispatchChallans,
+    getCachedShifts,
+    mergeChallanRows,
+    scheduleLogisticsIdleWork,
+} from "./logisticsReadCache";
 
 import {
     OPERATION_SOURCE,
@@ -51,6 +54,7 @@ const VIEW = Object.freeze({
 function LogisticsOperationsHub({
     showAlert = () => { },
     liveRefreshToken = null,
+    cacheScope = "",
 }) {
     const [view, setView] =
         useState(VIEW.OVERVIEW);
@@ -97,21 +101,31 @@ function LogisticsOperationsHub({
                     challanResult,
                     shiftResult,
                 ] = await Promise.allSettled([
-                    fetchDispatchChallans(),
-                    fetchShifts(),
+                    getCachedDispatchChallanWindow(cacheScope, {
+                        pages: 2,
+                        size: 100,
+                        force: !background,
+                    }),
+                    getCachedShifts(cacheScope, {
+                        force: !background,
+                    }),
                 ]);
 
                 if (
                     challanResult.status ===
                     "fulfilled"
                 ) {
-                    setChallans(
-                        Array.isArray(
-                            challanResult.value
+                    setChallans((current) => {
+                        const freshRows = Array.isArray(
+                            challanResult.value?.rows
                         )
-                            ? challanResult.value
-                            : []
-                    );
+                            ? challanResult.value.rows
+                            : [];
+
+                        return background
+                            ? mergeChallanRows(freshRows, current)
+                            : freshRows;
+                    });
                 } else if (!background) {
                     setChallans([]);
 
@@ -190,11 +204,25 @@ function LogisticsOperationsHub({
 
     useEffect(() => {
         if (view !== VIEW.OVERVIEW) {
-            return;
+            return undefined;
         }
 
-        loadOverview();
-    }, [view, loadOverview]);
+        void loadOverview();
+
+        const cancelHydration = scheduleLogisticsIdleWork(() => {
+            void getCachedDispatchChallans(cacheScope)
+                .then((fullRows) => {
+                    if (Array.isArray(fullRows)) {
+                        setChallans(fullRows);
+                    }
+                })
+                .catch(() => {
+                    /* Recent operational window stays usable if history hydration fails. */
+                });
+        }, 1400);
+
+        return cancelHydration;
+    }, [view, loadOverview, cacheScope]);
 
     const operations =
         useMemo(
@@ -679,6 +707,7 @@ function LogisticsOperationsHub({
                 <DispatchChallans
                     showAlert={showAlert}
                     liveRefreshToken={liveRefreshToken}
+                    cacheScope={cacheScope}
                 />
             )}
 
@@ -689,6 +718,7 @@ function LogisticsOperationsHub({
                         manualCreateToken
                     }
                     liveRefreshToken={liveRefreshToken}
+                    cacheScope={cacheScope}
                 />
             )}
 
@@ -696,6 +726,7 @@ function LogisticsOperationsHub({
                 <ShiftHistory
                     showAlert={showAlert}
                     liveRefreshToken={liveRefreshToken}
+                    cacheScope={cacheScope}
                 />
             )}
         </Box>

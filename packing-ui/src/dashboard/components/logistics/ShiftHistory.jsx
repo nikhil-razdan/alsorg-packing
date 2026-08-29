@@ -8,9 +8,13 @@ import {
 } from "./logisticsAlertUtils";
 
 import {
-	fetchShifts,
 	updateShiftStatus,
 } from "../../api/logisticsApi";
+
+import {
+	getCachedShifts,
+	invalidateLogisticsResources,
+} from "./logisticsReadCache";
 
 import {
 	formatShiftDate,
@@ -52,6 +56,7 @@ const getShiftSearchText = (shift) => {
 function ShiftHistory({
 	showAlert = () => { },
 	liveRefreshToken = null,
+	cacheScope = "",
 }) {
 	const [loading, setLoading] =
 		useState(true);
@@ -76,13 +81,14 @@ function ShiftHistory({
 
 	const loadHistory = async ({
 		background = false,
+		force = false,
 	} = {}) => {
 		try {
 			if (!background) {
 				setLoading(true);
 			}
 
-			const data = await fetchShifts();
+			const data = await getCachedShifts(cacheScope, { force });
 
 			setShifts(
 				Array.isArray(data) ? data : []
@@ -105,7 +111,7 @@ function ShiftHistory({
 	};
 
 	useEffect(() => {
-		void loadHistory();
+		void loadHistory({ force: false });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -114,6 +120,7 @@ function ShiftHistory({
 		async () => {
 			await loadHistory({
 				background: true,
+				force: false,
 			});
 		}
 	);
@@ -240,7 +247,8 @@ function ShiftHistory({
 				ids.length -
 				failedIds.length;
 
-			await loadHistory();
+			invalidateLogisticsResources(cacheScope, ["shifts"]);
+			await loadHistory({ force: true });
 
 			if (failedIds.length === 0) {
 				showAlert(
@@ -293,8 +301,9 @@ function ShiftHistory({
 					shift.id,
 					nextStatus
 				);
+				invalidateLogisticsResources(cacheScope, ["shifts"]);
 
-				await loadHistory();
+				await loadHistory({ force: true });
 
 				showAlert(
 					[
