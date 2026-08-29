@@ -11018,6 +11018,10 @@ function ZohoItemsPage() {
                         : "Required before final generation. AL-P3 and WR-38 target lists are strictly separated."
                   }
                   sx={formFieldSx()}
+                  slotProps={qrTrackingDispatchSelectSlotProps}
+                  SelectProps={{
+                    MenuProps: qrTrackingDispatchMenuProps,
+                  }}
                 >
                   <MenuItem value="">
                     Select dispatch user
@@ -14344,6 +14348,130 @@ const selectFieldSx = {
 
   "& .MuiSvgIcon-root": {
     color: "var(--pf-text-muted)",
+  },
+};
+
+
+/*
+ * QR Tracking receiver selector lives inside InventorySidePanel:
+ *   side-panel overlay z-index = 5000
+ *   side-panel body = overflowY: auto
+ *
+ * The ordinary page select configuration intentionally uses disablePortal:true.
+ * Reusing it here traps the dispatch receiver menu inside the drawer's
+ * scroll/stacking context, which can make the options appear clipped or behind
+ * the drawer/background.
+ *
+ * Keep the fix local to this selector: portal the Menu to document.body and
+ * place the Menu root above the Inventory side-panel overlay.
+ */
+const qrTrackingDispatchMenuProps = {
+  disablePortal: false,
+  disableScrollLock: true,
+
+  anchorOrigin: {
+    vertical: "bottom",
+    horizontal: "left",
+  },
+
+  transformOrigin: {
+    vertical: "top",
+    horizontal: "left",
+  },
+
+  sx: {
+    zIndex: "12050 !important",
+  },
+
+  PaperProps: {
+    sx: {
+      mt: 0.75,
+      maxHeight: 320,
+      minWidth: 320,
+
+      overflowY: "auto",
+
+      color: "var(--pf-text-strong)",
+
+      background:
+        "linear-gradient(180deg,var(--pf-surface-raised),var(--pf-surface))",
+
+      border:
+        "1px solid rgba(96,165,250,.22)",
+
+      borderRadius: "14px",
+
+      boxShadow:
+        "0 24px 72px rgba(2,6,23,.78)",
+
+      zIndex: "12051 !important",
+
+      scrollbarWidth: "thin",
+      scrollbarColor:
+        "rgba(96,165,250,.70) rgba(var(--pf-surface-rgb),.72)",
+
+      "&::-webkit-scrollbar": {
+        width: 7,
+      },
+
+      "&::-webkit-scrollbar-track": {
+        background:
+          "rgba(var(--pf-surface-rgb),.72)",
+      },
+
+      "&::-webkit-scrollbar-thumb": {
+        borderRadius: 999,
+        background:
+          "rgba(96,165,250,.70)",
+      },
+    },
+  },
+
+  MenuListProps: {
+    dense: true,
+
+    sx: {
+      py: 0.7,
+
+      "& .MuiMenuItem-root": {
+        minHeight: 40,
+        mx: 0.7,
+        px: 1.3,
+
+        borderRadius: "9px",
+
+        color: "var(--pf-text-soft)",
+
+        fontSize: 12.5,
+        fontWeight: 800,
+
+        whiteSpace: "normal",
+        lineHeight: 1.35,
+
+        "&:hover": {
+          color: "var(--pf-text-strong)",
+          background:
+            "rgba(59,130,246,.14)",
+        },
+
+        "&.Mui-selected": {
+          color: "#bfdbfe",
+          background:
+            "rgba(37,99,235,.24)",
+        },
+
+        "&.Mui-selected:hover": {
+          background:
+            "rgba(37,99,235,.32)",
+        },
+      },
+    },
+  },
+};
+
+const qrTrackingDispatchSelectSlotProps = {
+  select: {
+    MenuProps: qrTrackingDispatchMenuProps,
   },
 };
 
