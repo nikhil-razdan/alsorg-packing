@@ -196,6 +196,10 @@ public class CurrentUserService {
         return hasRole(user, "DRIVER");
     }
 
+    public boolean isOnsite(User user) {
+        return hasRole(user, "ONSITE");
+    }
+
     public boolean isWarehouse(User user) {
         return hasRole(user, "WAREHOUSE");
     }

@@ -164,6 +164,12 @@ const ACCESS_GROUPS = [
 				description:
 					"Mobile driver access linked to one driver profile.",
 			},
+			{
+				value: "ONSITE",
+				label: "On-site Worker",
+				description:
+					"Mobile-only packet opening verification after physical site delivery. No Dispatch or Logistics mutation authority.",
+			},
 		],
 	},
 	{
@@ -471,7 +477,7 @@ const modulesForRoles = (roles) => {
 	return Array.from(
 		new Set(
 			cleanRoles
-				.filter((role) => role !== "ASSETFLOW_REQUESTER")
+				.filter((role) => role !== "ASSETFLOW_REQUESTER" && role !== "ONSITE")
 				.map((role) => roleMeta(role).moduleKey)
 				.filter(Boolean)
 		)
@@ -494,6 +500,9 @@ const isAllowedRoleCombination = (roles) => {
 	 * a legitimate BOMFlow / MatFlow / AssetFlow responsibility.
 	 */
 	if (cleanRoles.includes("ADMIN")) return false;
+
+	/* ONSITE is a dedicated mobile-only role and is not combined with broader roles. */
+	if (cleanRoles.includes("ONSITE")) return false;
 
 	const hasUtlRole =
 		cleanRoles.includes("UTL_PACKING") ||
@@ -538,6 +547,7 @@ const rolesRequirePlantAccess = (roles) => {
 		if (
 			role === "PACKFLOW_DIRECTOR" ||
 			role === "DRIVER" ||
+			role === "ONSITE" ||
 			role.startsWith("BOMFLOW_")
 		) {
 			return false;
@@ -730,6 +740,10 @@ const modulesForRole = (role) => {
 	const cleanRole =
 		normalizeRole(role);
 
+	if (cleanRole === "ONSITE") {
+		return [];
+	}
+
 	if (cleanRole === "ADMIN") {
 		return [
 			MODULE_KEYS.PACKFLOW,
@@ -754,7 +768,8 @@ const roleRequiresPlantAccess = (role) => {
 	if (
 		cleanRole === "ADMIN" ||
 		cleanRole === "PACKFLOW_DIRECTOR" ||
-		cleanRole === "DRIVER"
+		cleanRole === "DRIVER" ||
+		cleanRole === "ONSITE"
 	) {
 		return false;
 	}
@@ -1167,6 +1182,11 @@ const getPackFlowAccessMatrix = (user) => {
 			label: "Driver Mobile",
 			granted: has("DRIVER"),
 		},
+		{
+			key: "SITE_OPENING_MOBILE",
+			label: "On-site Packet Opening",
+			granted: has("ONSITE"),
+		},
 	];
 };
 
@@ -1262,10 +1282,8 @@ const getUserAccessHealth = (user) => {
 			issues.push("UTL profile may operate only at AL-P3 K&W or WR-38.");
 		}
 
-		if (user?.warehouseAccess === true) {
-			issues.push(
-				"UTL profile must not receive the generic warehouseAccess flag. UTL_DISPATCH uses the isolated UTL Warehouse / Dispatch workspace."
-			);
+		if (readWarehouseAccess(user)) {
+			issues.push("UTL profile must not have Warehouse page access.");
 		}
 	}
 
@@ -4614,7 +4632,7 @@ function UserEditorDrawer({
 
 				{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) && (
 					<Alert severity="warning" sx={infoAlertSx}>
-						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38. UTL_DISPATCH may open the isolated UTL Warehouse / Dispatch workspaces, but it never inherits generic WAREHOUSE authority or ordinary plant-wide data.
+						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38, receives no Warehouse access, and sees/acts only on UTL work assigned to its role.
 					</Alert>
 				)}
 

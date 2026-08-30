@@ -43,6 +43,9 @@ import {
 	submitPacketDeletionRequests,
 } from "../dashboard/api/packetDeletionRequestApi";
 import {
+	fetchSiteLifecycleMetadata,
+} from "../dashboard/api/siteLifecycleApi";
+import {
 	publishPackFlowDataChanged,
 } from "../utils/packFlowDataEvents";
 import {
@@ -5718,6 +5721,7 @@ const CHALLAN_HISTORY_SERVER_PAGE_SIZE = 50;
 export default function DispatchedItemsPage() {
 	const [rows, setRows] = useState([]);
 	const [utlOriginMetadata, setUtlOriginMetadata] = useState({});
+	const [siteLifecycleMetadata, setSiteLifecycleMetadata] = useState({});
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState(["ALL"]);
@@ -5846,6 +5850,53 @@ export default function DispatchedItemsPage() {
 		currentUser?.username,
 		rows,
 	]);
+
+	useEffect(() => {
+		if (authLoading || !currentUser || rows.length === 0) {
+			if (rows.length === 0) setSiteLifecycleMetadata({});
+			return undefined;
+		}
+
+		const packetItemIds = Array.from(new Set(
+			rows
+				.map((row) => String(row?.packetItemId || "").trim())
+				.filter(Boolean)
+		));
+
+		if (packetItemIds.length === 0) {
+			setSiteLifecycleMetadata({});
+			return undefined;
+		}
+
+		const controller = new AbortController();
+
+		fetchSiteLifecycleMetadata(packetItemIds, { signal: controller.signal })
+			.then((metadataRows) => {
+				const next = {};
+				(metadataRows || []).forEach((entry) => {
+					const id = String(entry?.packetItemId || "").trim();
+					if (id) next[id] = entry;
+				});
+				setSiteLifecycleMetadata(next);
+			})
+			.catch((error) => {
+				if (error?.name !== "AbortError") {
+					console.debug("Dispatch site lifecycle metadata refresh skipped:", error);
+				}
+			});
+
+		return () => controller.abort();
+	}, [
+		authLoading,
+		currentUser?.id,
+		currentUser?.username,
+		rows,
+	]);
+
+	const getDispatchRowSiteMeta = (row) => {
+		const id = String(row?.packetItemId || "").trim();
+		return id ? siteLifecycleMetadata[id] || null : null;
+	};
 
 	const getDispatchRowPlantDisplayLabel = (row) =>
 		getPackFlowPlantDisplayLabel(
@@ -14072,6 +14123,28 @@ export default function DispatchedItemsPage() {
 							label={display.label}
 							sx={display.sx}
 						/>
+
+						{row.status === "DISPATCHED" && (() => {
+							const site = getDispatchRowSiteMeta(row);
+							if (!site) return null;
+							const siteStatus = String(site.siteStatus || "AWAITING_DELIVERY").toUpperCase();
+							const opened = siteStatus === "OPENED_ON_SITE";
+							const delivered = siteStatus === "DELIVERED";
+							return (
+								<Chip
+									size="small"
+									label={opened ? "Opened On Site" : delivered ? "Delivered On Site" : "Awaiting Site Delivery"}
+									sx={{
+										height: 22,
+										fontSize: 9,
+										fontWeight: 950,
+										color: opened ? "var(--dispatch-purple-text)" : delivered ? "var(--dispatch-green-text)" : "var(--dispatch-amber-text)",
+										background: opened ? "rgba(124,58,237,.10)" : delivered ? "rgba(5,150,105,.10)" : "rgba(217,119,6,.10)",
+										border: opened ? "1px solid rgba(124,58,237,.22)" : delivered ? "1px solid rgba(5,150,105,.22)" : "1px solid rgba(217,119,6,.22)",
+									}}
+								/>
+							);
+						})()}
 
 						{(row.driverName || row.vehicleNumber) && (
 							<Box

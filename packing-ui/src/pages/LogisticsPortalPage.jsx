@@ -28,6 +28,10 @@ const ShiftReports = lazy(() =>
   import("../dashboard/components/logistics/ShiftReports")
 );
 
+const SiteDeliveryRegister = lazy(() =>
+  import("../dashboard/components/logistics/SiteDeliveryRegister")
+);
+
 const DriverManagement = lazy(() =>
   import("../dashboard/components/logistics/DriverManagement")
 );
@@ -151,6 +155,16 @@ function LogisticsPortalPage() {
 
           <SidebarButton
             active={
+              tab === "site-delivery"
+            }
+            onClick={() =>
+              setTab("site-delivery")
+            }
+            label="Site Delivery"
+          />
+
+          <SidebarButton
+            active={
               tab === "drivers"
             }
             onClick={() =>
@@ -186,6 +200,13 @@ function LogisticsPortalPage() {
             showAlert={showAlert}
             liveRefreshToken={livePulse}
             cacheScope={cacheScope}
+          />
+        )}
+
+        {tab === "site-delivery" && (
+          <SiteDeliveryRegister
+            showAlert={showAlert}
+            liveRefreshToken={livePulse}
           />
         )}
 

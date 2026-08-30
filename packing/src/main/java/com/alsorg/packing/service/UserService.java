@@ -67,6 +67,7 @@ public class UserService {
                         "UTL_DISPATCH",
                         "LOGISTICS",
                         "DRIVER",
+                        "ONSITE",
 
                         "BOMFLOW_EDITOR",
                         "BOMFLOW_REVIEWER",
@@ -499,7 +500,7 @@ public class UserService {
                  */
                 if (!isAllowedRoleCombination(cleanRoles)) {
                         throw new RuntimeException(
-                                        "Invalid role combination. PACKFLOW_DIRECTOR cannot be combined with an operational PackFlow role, and UTL roles can only be combined with other UTL roles.");
+                                        "Invalid role combination. ONSITE is mobile-only and exclusive; PACKFLOW_DIRECTOR cannot be combined with an operational PackFlow role; UTL roles can only be combined with other UTL roles.");
                 }
 
                 return new RoleAssignment(
@@ -561,6 +562,11 @@ public class UserService {
                         }
                 }
 
+                if (containsRole(roles, "ONSITE") && !clean.isEmpty()) {
+                        throw new RuntimeException(
+                                        "ONSITE is a mobile-only role and cannot be granted FlowSuite web modules");
+                }
+
                 Set<String> requiredModules = defaultModulesForRoles(roles);
 
                 if (clean.isEmpty()) {
@@ -589,7 +595,7 @@ public class UserService {
                 }
 
                 for (String role : roles) {
-                        if (isPackFlowRole(role)) {
+                        if (isPackFlowRole(role) && !"ONSITE".equals(role)) {
                                 modules.add("PACKFLOW");
                         }
 
@@ -620,6 +626,7 @@ public class UserService {
                 return !"ADMIN".equals(role) &&
                                 !"PACKFLOW_DIRECTOR".equals(role) &&
                                 !"DRIVER".equals(role) &&
+                                !"ONSITE".equals(role) &&
                                 !role.startsWith("BOMFLOW_");
         }
 
@@ -673,6 +680,11 @@ public class UserService {
                         return false;
                 }
 
+                /* ONSITE is intentionally a narrow mobile-only identity. */
+                if (containsRole(roles, "ONSITE")) {
+                        return false;
+                }
+
                 boolean hasUtlRole = containsRole(roles, "UTL_PACKING")
                                 || containsRole(roles, "UTL_DISPATCH");
 
@@ -702,7 +714,8 @@ public class UserService {
                                 "DISPATCH".equals(role) ||
                                 "UTL_DISPATCH".equals(role) ||
                                 "LOGISTICS".equals(role) ||
-                                "DRIVER".equals(role);
+                                "DRIVER".equals(role) ||
+                                "ONSITE".equals(role);
         }
 
         private String normalizeRole(

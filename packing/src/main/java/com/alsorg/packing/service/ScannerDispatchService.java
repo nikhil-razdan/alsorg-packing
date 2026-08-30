@@ -268,6 +268,33 @@ public class ScannerDispatchService {
                 allowedPlants);
     }
 
+    /**
+     * Reuses the exact canonical QR / Sticker Number decoder and latest-sticker
+     * validation for the post-dispatch site lifecycle. Plant/UTL factory-operation
+     * checks are deliberately not applied here; SiteLifecycleService enforces its
+     * own DRIVER assignment / ONSITE authorization boundary.
+     */
+    @Transactional(readOnly = true)
+    public SiteScanResolution resolveForSiteLifecycle(
+            String rawScanText) {
+        ResolvedScan resolved = resolve(rawScanText);
+
+        if (resolved.packetItem == null || resolved.dispatchedItem == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Unable to resolve scanned packet for site lifecycle");
+        }
+
+        return new SiteScanResolution(
+                resolved.packetItem.getId(),
+                resolved.dispatchedItem.getZohoItemId());
+    }
+
+    public record SiteScanResolution(
+            UUID packetItemId,
+            String zohoItemId) {
+    }
+
     private ResolvedScan resolve(
             String rawScanText) {
         DecodedScan decoded = decode(rawScanText);

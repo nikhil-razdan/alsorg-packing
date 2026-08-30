@@ -310,6 +310,16 @@ export default function DispatchHomeScreen({
       "LOGISTICS"
     );
 
+  const isDriver =
+    hasRole(
+      "DRIVER"
+    );
+
+  const isOnsite =
+    hasRole(
+      "ONSITE"
+    );
+
   const canUseControlCentre =
     isDispatch ||
     isLogistics;
@@ -968,6 +978,34 @@ export default function DispatchHomeScreen({
             )
           }
         />
+
+        {isDriver ? (
+          <SmallAction
+            icon="📸"
+            title="Site Delivery Proof"
+            subtitle="QR + photos + current GPS"
+            onPress={() =>
+              navigation.navigate(
+                "SiteLifecycle",
+                { mode: "DELIVERY" }
+              )
+            }
+          />
+        ) : null}
+
+        {(isOnsite || isLogistics) ? (
+          <SmallAction
+            icon="📦"
+            title="On-site Opening"
+            subtitle="Scan delivered packet when opened"
+            onPress={() =>
+              navigation.navigate(
+                "SiteLifecycle",
+                { mode: "OPENING" }
+              )
+            }
+          />
+        ) : null}
       </View>
 
       <View style={styles.sectionHeader}>

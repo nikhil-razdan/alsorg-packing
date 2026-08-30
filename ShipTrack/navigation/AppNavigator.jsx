@@ -25,6 +25,7 @@ import ScanDispatchScreen from "../screens/ScanDispatchScreen";
 import BulkScanScreen from "../screens/BulkScanScreen";
 import TripsScreen from "../screens/TripsScreen";
 import TripItemScreen from "../screens/TripItemScreen";
+import SiteLifecycleScreen from "../screens/SiteLifecycleScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -37,6 +38,37 @@ function HomeEntry(props) {
     return (
       <AdminDashboardScreen
         {...props}
+      />
+    );
+  }
+
+  const pureDriver =
+    hasRole("DRIVER") &&
+    !hasRole("DISPATCH") &&
+    !hasRole("UTL_DISPATCH") &&
+    !hasRole("LOGISTICS");
+
+  const pureOnsite =
+    hasRole("ONSITE") &&
+    !hasRole("DRIVER") &&
+    !hasRole("DISPATCH") &&
+    !hasRole("UTL_DISPATCH") &&
+    !hasRole("LOGISTICS");
+
+  if (pureDriver) {
+    return (
+      <SiteLifecycleScreen
+        {...props}
+        initialMode="DELIVERY"
+      />
+    );
+  }
+
+  if (pureOnsite) {
+    return (
+      <SiteLifecycleScreen
+        {...props}
+        initialMode="OPENING"
       />
     );
   }
@@ -137,6 +169,14 @@ export default function AppNavigator() {
               component={TripItemScreen}
               options={{
                 title: "Dispatch Items",
+              }}
+            />
+
+            <Stack.Screen
+              name="SiteLifecycle"
+              component={SiteLifecycleScreen}
+              options={{
+                title: "Site Proof",
               }}
             />
           </>
