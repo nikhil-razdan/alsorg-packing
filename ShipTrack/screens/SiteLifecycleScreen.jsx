@@ -99,6 +99,10 @@ export default function SiteLifecycleScreen({
   const maxPhotos = mode === "DELIVERY" ? 4 : 2;
   const photoRequired = mode === "DELIVERY";
   const siteStatus = normalize(resolved?.siteStatus || "AWAITING_DELIVERY");
+  const unassignedDelivery =
+    mode === "DELIVERY" &&
+    Boolean(resolved) &&
+    !clean(resolved?.driverName);
 
   const modeTitle = mode === "DELIVERY" ? "Site Delivery Proof" : "On-site Packet Opening";
   const modeSub = mode === "DELIVERY"
@@ -375,6 +379,15 @@ export default function SiteLifecycleScreen({
             ) : null}
           </View>
 
+          {unassignedDelivery ? (
+            <View style={styles.unassignedCard}>
+              <Text style={styles.unassignedTitle}>Unassigned / External Driver Packet</Text>
+              <Text style={styles.unassignedText}>
+                Dispatch left Driver empty for this packet. Any authenticated DRIVER account may claim this delivery only after scanning this exact current QR and submitting the mandatory photo + fresh GPS proof. Your ShipTrack username is saved as Delivered By.
+              </Text>
+            </View>
+          ) : null}
+
           {mode === "DELIVERY" ? (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>2. Receiver / site note</Text>
@@ -430,7 +443,7 @@ export default function SiteLifecycleScreen({
             />
 
             <TouchableOpacity style={[styles.confirmBtn, submitting ? styles.disabled : null]} onPress={confirm} disabled={submitting}>
-              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>{mode === "DELIVERY" ? "Confirm Delivery + GPS" : "Confirm Opened + GPS"}</Text>}
+              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>{mode === "DELIVERY" ? (unassignedDelivery ? "Claim Delivery + Photo + GPS" : "Confirm Delivery + GPS") : "Confirm Opened + GPS"}</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.resetBtn} onPress={resetPacket} disabled={submitting}>
@@ -516,6 +529,27 @@ const styles = {
   disabled: { opacity: 0.65 },
   resetBtn: { minHeight: 42, marginTop: 8, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.04)" },
   resetText: { color: "#94a3b8", fontWeight: "900", fontSize: 12 },
+  unassignedCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(245,158,11,.11)",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,.30)",
+  },
+  unassignedTitle: {
+    color: "#fbbf24",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  unassignedText: {
+    marginTop: 6,
+    color: "#fde68a",
+    fontSize: 11.5,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+
   successCard: { marginTop: 12, padding: 13, borderRadius: 16, backgroundColor: "rgba(16,185,129,.10)", borderWidth: 1, borderColor: "rgba(16,185,129,.24)" },
   successTitle: { color: "#6ee7b7", fontWeight: "900", fontSize: 12 },
   successText: { color: "#cbd5e1", fontWeight: "700", fontSize: 11, marginTop: 4 },

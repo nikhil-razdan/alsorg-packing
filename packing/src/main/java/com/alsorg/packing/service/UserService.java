@@ -388,17 +388,16 @@ public class UserService {
                                 finalWarehouseAccess);
 
                 /*
-                 * DRIVER may be assigned together with another PackFlow role.
-                 * In that case driver profile and plant access may both apply.
+                 * DRIVER may be linked to a Driver master, but the link is optional.
+                 *
+                 * Linked DRIVER accounts keep the strict assignment workflow: they
+                 * can prove delivery only for packets dispatched to that exact Driver.
+                 * An unlinked DRIVER account is the controlled external/temporary
+                 * driver identity and may prove delivery only for packets whose
+                 * dispatch intentionally left driverId blank.
                  */
                 if (containsRole(roles, "DRIVER")) {
-                        if (driverId == null) {
-                                throw new RuntimeException(
-                                                "Driver profile required when DRIVER role is assigned");
-                        }
-
-                        if (!driverRepository.existsById(
-                                        driverId)) {
+                        if (driverId != null && !driverRepository.existsById(driverId)) {
                                 throw new RuntimeException(
                                                 "Selected driver profile does not exist");
                         }

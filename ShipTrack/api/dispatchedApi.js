@@ -225,3 +225,28 @@ export async function requestReturnToDispatch(
 
   return res.data;
 }
+
+/*
+ * Lightweight count used by ShipTrack home dashboards. Unlike
+ * fetchDispatchedItems(), this does not walk the complete register. PostgreSQL
+ * applies the status filter and returns only one row plus X-Total-Elements.
+ */
+export async function fetchDispatchedStatusCount(statuses = "ALL") {
+  const cleanStatuses = Array.isArray(statuses)
+    ? statuses.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean).join(",")
+    : String(statuses || "ALL").trim().toUpperCase() || "ALL";
+
+  const res = await api.get(
+    "/api/dispatched/search",
+    {
+      params: {
+        page: 0,
+        size: 1,
+        statuses: cleanStatuses,
+        includeTotal: true,
+      },
+    }
+  );
+
+  return headerNumber(res?.headers, "x-total-elements", Array.isArray(res?.data) ? res.data.length : 0);
+}

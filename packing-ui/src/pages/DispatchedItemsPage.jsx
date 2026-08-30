@@ -44,6 +44,8 @@ import {
 } from "../dashboard/api/packetDeletionRequestApi";
 import {
 	fetchSiteLifecycleMetadata,
+	fetchSiteLifecycleDetail,
+	fetchSiteEvidenceBlob,
 } from "../dashboard/api/siteLifecycleApi";
 import {
 	publishPackFlowDataChanged,
@@ -5859,6 +5861,7 @@ export default function DispatchedItemsPage() {
 
 		const packetItemIds = Array.from(new Set(
 			rows
+				.filter((row) => String(row?.status || "").trim().toUpperCase() === "DISPATCHED")
 				.map((row) => String(row?.packetItemId || "").trim())
 				.filter(Boolean)
 		));
@@ -5896,6 +5899,84 @@ export default function DispatchedItemsPage() {
 	const getDispatchRowSiteMeta = (row) => {
 		const id = String(row?.packetItemId || "").trim();
 		return id ? siteLifecycleMetadata[id] || null : null;
+	};
+
+	const revokeSiteProofEvidenceUrls = (urls = siteProofEvidenceUrls) => {
+		(urls || []).forEach((url) => {
+			try {
+				URL.revokeObjectURL(url);
+			} catch {
+				/* Browser URL cleanup is best effort. */
+			}
+		});
+	};
+
+	const clearSiteProofInspection = () => {
+		revokeSiteProofEvidenceUrls();
+		setSiteProofEvidenceUrls([]);
+		setSiteProofDetail(null);
+		setSiteProofError("");
+		setSiteProofLoading(false);
+	};
+
+	const canViewSiteEvidence =
+		isAdmin ||
+		isDispatch ||
+		isUtlDispatch ||
+		isLogistics;
+
+	const loadSiteProofInspection = async (row) => {
+		const packetItemId = String(row?.packetItemId || "").trim();
+
+		if (!packetItemId) {
+			setSiteProofError("This dispatch row is not linked to a physical packet QR.");
+			return;
+		}
+
+		try {
+			setSiteProofLoading(true);
+			setSiteProofError("");
+			revokeSiteProofEvidenceUrls();
+			setSiteProofEvidenceUrls([]);
+
+			const detail = await fetchSiteLifecycleDetail(packetItemId);
+			setSiteProofDetail(detail || null);
+
+			const evidenceIds = Array.isArray(detail?.evidenceIds)
+				? detail.evidenceIds
+				: [];
+
+			if (evidenceIds.length > 0) {
+				const evidenceResults = await Promise.allSettled(
+					evidenceIds.map((id) => fetchSiteEvidenceBlob(id))
+				);
+
+				const urls = evidenceResults
+					.filter((result) => result.status === "fulfilled")
+					.map((result) => URL.createObjectURL(result.value));
+
+				setSiteProofEvidenceUrls(urls);
+			}
+		} catch (error) {
+			setSiteProofError(
+				error?.message ||
+				"Unable to load site delivery evidence."
+			);
+		} finally {
+			setSiteProofLoading(false);
+		}
+	};
+
+	const formatSiteGps = (latitude, longitude, accuracy) => {
+		const lat = Number(latitude);
+		const lon = Number(longitude);
+		const acc = Number(accuracy);
+
+		if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "—";
+
+		return `${lat.toFixed(6)}, ${lon.toFixed(6)}${
+			Number.isFinite(acc) ? ` • ±${Math.round(acc)} m` : ""
+		}`;
 	};
 
 	const getDispatchRowPlantDisplayLabel = (row) =>
@@ -6043,6 +6124,11 @@ export default function DispatchedItemsPage() {
 		dispatchItemDrawerRow,
 		setDispatchItemDrawerRow,
 	] = useState(null);
+
+	const [siteProofDetail, setSiteProofDetail] = useState(null);
+	const [siteProofLoading, setSiteProofLoading] = useState(false);
+	const [siteProofError, setSiteProofError] = useState("");
+	const [siteProofEvidenceUrls, setSiteProofEvidenceUrls] = useState([]);
 
 	const scannerInputRef = useRef(null);
 	const scanTimerRef = useRef(null);
@@ -7031,6 +7117,7 @@ export default function DispatchedItemsPage() {
 				return;
 			}
 
+			clearSiteProofInspection();
 			setDispatchItemDrawerRow(
 				row
 			);
@@ -7050,6 +7137,12 @@ export default function DispatchedItemsPage() {
 				row
 			);
 		};
+
+	useEffect(() => {
+		return () => {
+			revokeSiteProofEvidenceUrls(siteProofEvidenceUrls);
+		};
+	}, [siteProofEvidenceUrls]);
 
 	useEffect(() => {
 		return () => {
@@ -14244,6 +14337,28 @@ export default function DispatchedItemsPage() {
 									View Challan PDF
 								</Button>
 							</Tooltip>
+						)}
+
+						{canViewSiteEvidence && row?.packetItemId && row?.status === "DISPATCHED" && (
+							<Button
+								size="small"
+								onClick={() => {
+									openDispatchItemDrawer(row);
+									void loadSiteProofInspection(row);
+								}}
+								sx={{
+									...tableActionButton,
+									minWidth: 92,
+									color: "var(--dispatch-purple-text)",
+									background: "rgba(124,58,237,.08)",
+									border: "1px solid rgba(124,58,237,.20)",
+									"&:hover": {
+										background: "rgba(124,58,237,.15)",
+									},
+								}}
+							>
+								Site Proof
+							</Button>
 						)}
 
 						{showMoveToFg && (
@@ -29784,7 +29899,10 @@ export default function DispatchedItemsPage() {
 				<Drawer
 					anchor="right"
 					open={Boolean(dispatchItemDrawerRow)}
-					onClose={() => setDispatchItemDrawerRow(null)}
+					onClose={() => {
+						clearSiteProofInspection();
+						setDispatchItemDrawerRow(null);
+					}}
 					PaperProps={{
 						sx: dispatchItemDrawerPaperSx,
 					}}
@@ -29892,7 +30010,10 @@ export default function DispatchedItemsPage() {
 
 								<IconButton
 									aria-label="Close item details"
-									onClick={() => setDispatchItemDrawerRow(null)}
+									onClick={() => {
+								clearSiteProofInspection();
+								setDispatchItemDrawerRow(null);
+							}}
 									sx={modalCloseButtonSx}
 								>
 									<Box
@@ -29941,8 +30062,89 @@ export default function DispatchedItemsPage() {
 										>
 											Activity Logs
 										</Button>
+
+										{canViewSiteEvidence && dispatchItemDrawerRow?.packetItemId && (
+											<Button
+												onClick={() => loadSiteProofInspection(dispatchItemDrawerRow)}
+												disabled={siteProofLoading}
+												sx={dispatchDrawerQuickActionSx}
+											>
+												{siteProofLoading ? "Loading Site Proof…" : "Evidence / Site Timeline"}
+											</Button>
+										)}
 									</Box>
 								</Box>
+
+								{(siteProofDetail || siteProofLoading || siteProofError) && (
+									<Box sx={dispatchItemDrawerSectionSx}>
+										<Box sx={dispatchItemDrawerSectionTitleSx}>
+											Physical Site Timeline & Evidence
+										</Box>
+
+										{siteProofLoading && (
+											<Box sx={{ color: "var(--pf-text-muted)", fontSize: 12, fontWeight: 800 }}>
+												Loading protected site proof…
+											</Box>
+										)}
+
+										{siteProofError && (
+											<Box sx={{ p: 1.2, borderRadius: 2, color: "var(--dispatch-red-text)", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.16)", fontSize: 11.5, fontWeight: 800 }}>
+												{siteProofError}
+											</Box>
+										)}
+
+										{siteProofDetail && (
+											<>
+												<Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 1 }}>
+													{[
+														["Site Status", String(siteProofDetail.siteStatus || "AWAITING_DELIVERY").replaceAll("_", " ")],
+														["Dispatched At", formatDispatchTableDateTime(siteProofDetail.dispatchedAt)],
+														["Dispatch Driver", siteProofDetail.driverName || "Unassigned"],
+														["Vehicle", siteProofDetail.vehicleNumber || "Not recorded"],
+														["Delivered At", formatDispatchTableDateTime(siteProofDetail.deliveredAt)],
+														["Delivered By", siteProofDetail.deliveredBy || "—"],
+														["Receiver", [siteProofDetail.receiverName, siteProofDetail.receiverPhone].filter(Boolean).join(" • ") || "—"],
+														["Delivery GPS", formatSiteGps(siteProofDetail.deliveryLatitude, siteProofDetail.deliveryLongitude, siteProofDetail.deliveryAccuracy)],
+														["Opened At", formatDispatchTableDateTime(siteProofDetail.openedAt)],
+														["Opened By", siteProofDetail.openedBy || "—"],
+														["Opening GPS", formatSiteGps(siteProofDetail.openingLatitude, siteProofDetail.openingLongitude, siteProofDetail.openingAccuracy)],
+													].map(([label, value]) => (
+														<Box key={label} sx={{ p: 1.15, borderRadius: 2, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" }}>
+															<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 950, textTransform: "uppercase", letterSpacing: ".06em" }}>{label}</Box>
+															<Box sx={{ mt: .45, color: "var(--pf-text-strong)", fontSize: 11.5, fontWeight: 850, wordBreak: "break-word" }}>{value || "—"}</Box>
+														</Box>
+													))}
+												</Box>
+
+												{(siteProofDetail.deliveryRemarks || siteProofDetail.openingRemarks) && (
+													<Box sx={{ mt: 1.2, p: 1.2, borderRadius: 2, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" }}>
+														<Box sx={{ color: "var(--pf-text-muted)", fontSize: 9.5, fontWeight: 950, textTransform: "uppercase" }}>Site Remarks</Box>
+														<Box sx={{ mt: .6, color: "var(--pf-text-strong)", fontSize: 11.5, fontWeight: 750, lineHeight: 1.5 }}>
+															{siteProofDetail.deliveryRemarks || ""}
+															{siteProofDetail.deliveryRemarks && siteProofDetail.openingRemarks ? " • " : ""}
+															{siteProofDetail.openingRemarks || ""}
+														</Box>
+													</Box>
+												)}
+
+												<Box sx={{ mt: 1.2 }}>
+													<Box sx={{ color: "var(--pf-text-muted)", fontSize: 10, fontWeight: 950, textTransform: "uppercase", mb: .8 }}>
+														Evidence Photos ({siteProofEvidenceUrls.length})
+													</Box>
+													{siteProofEvidenceUrls.length === 0 ? (
+														<Box sx={{ color: "var(--pf-text-muted)", fontSize: 11.5, fontWeight: 750 }}>No stored photo evidence.</Box>
+													) : (
+														<Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 1 }}>
+															{siteProofEvidenceUrls.map((url, index) => (
+																<Box component="img" key={url} src={url} alt={`Site evidence ${index + 1}`} sx={{ width: "100%", aspectRatio: "4 / 3", objectFit: "cover", borderRadius: 2, border: "1px solid var(--pf-border-soft)", background: "#000" }} />
+															))}
+														</Box>
+													)}
+												</Box>
+											</>
+										)}
+									</Box>
+								)}
 
 								{buildDispatchItemDrawerSections(
 									dispatchItemDrawerRow

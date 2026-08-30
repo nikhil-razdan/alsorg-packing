@@ -99,6 +99,20 @@ public class SiteLifecycleController {
         return noStore(ResponseEntity.ok(service.metadata(packetItemIds, user)));
     }
 
+    @GetMapping(value = "/metadata", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<SiteLifecycleMetadataRow>> metadataGet(
+            @RequestParam(name = "ids") List<UUID> packetItemIds) {
+        User user = currentUserService.requireCurrentUser();
+        return noStore(ResponseEntity.ok(service.metadata(packetItemIds, user)));
+    }
+
+    @GetMapping(value = "/item", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<SiteLifecycleRow> itemDetail(
+            @RequestParam UUID packetItemId) {
+        User user = currentUserService.requireCurrentUser();
+        return noStore(ResponseEntity.ok(service.detail(packetItemId, user)));
+    }
+
     @GetMapping(value = "/register", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<SiteLifecycleRow>> register(
             @RequestParam(defaultValue = "0") int page,

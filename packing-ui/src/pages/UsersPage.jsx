@@ -1229,15 +1229,6 @@ const getUserAccessHealth = (user) => {
 	}
 
 	if (
-		rolesRequireDriver(roles) &&
-		!user?.driverId
-	) {
-		issues.push(
-			"DRIVER role has no linked driver profile."
-		);
-	}
-
-	if (
 		roles.includes("DISPATCH") &&
 		!readWarehouseAccess(user)
 	) {
@@ -1833,7 +1824,7 @@ function UsersPageContent() {
 	const driverName = useCallback(
 		(driverId) => {
 			if (!driverId) {
-				return "Not linked";
+				return "External / Unassigned Driver";
 			}
 
 			const driver =
@@ -2068,13 +2059,6 @@ function UsersPageContent() {
 		}
 
 		if (
-			rolesRequireDriver(roles) &&
-			!form.driverId
-		) {
-			return "Select a linked driver profile.";
-		}
-
-		if (
 			rolesRequirePlantAccess(roles) &&
 			form.plantCodes.length === 0
 		) {
@@ -2136,7 +2120,7 @@ function UsersPageContent() {
 
 			driverId:
 				rolesRequireDriver(roles)
-					? form.driverId
+					? (form.driverId || null)
 					: null,
 
 			warehouseAccess:
@@ -4482,6 +4466,10 @@ function UserEditorDrawer({
 							sx={fieldSx}
 							SelectProps={{ MenuProps: filterMenuProps }}
 						>
+							<MenuItem value="">
+								External / Unassigned Driver (no master link)
+							</MenuItem>
+
 							{drivers.map(
 								(driver) => (
 									<MenuItem
@@ -4495,6 +4483,18 @@ function UserEditorDrawer({
 								)
 							)}
 						</TextField>
+
+						<Typography
+							sx={{
+								mt: 1,
+								color: "var(--pf-text-muted)",
+								fontSize: 11.5,
+								fontWeight: 700,
+								lineHeight: 1.5,
+							}}
+						>
+							Linked drivers can deliver only their assigned packets. Leave this blank for an external/temporary DRIVER login; that account can deliver only packets dispatched with Driver left empty, and the ShipTrack username + QR + photo + GPS become the delivery proof.
+						</Typography>
 					</Box>
 				)}
 

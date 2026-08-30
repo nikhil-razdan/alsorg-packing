@@ -26,11 +26,12 @@ import {
 } from "../api/client";
 
 import {
-  fetchDispatchedItems,
+  fetchDispatchedItemsPage,
+  fetchDispatchedStatusCount,
 } from "../api/dispatchedApi";
 
 import {
-  fetchDispatchedChallans,
+  fetchDispatchedChallansPage,
   fetchDrivers,
   fetchVehicles,
 } from "../api/logisticsApi";
@@ -299,6 +300,16 @@ export default function AdminDashboardScreen({
   const [vehicles, setVehicles] =
     useState([]);
 
+  const [serverCounts, setServerCounts] =
+    useState({
+      totalItems: 0,
+      ready: 0,
+      readyToDispatch: 0,
+      dispatched: 0,
+      inWarehouse: 0,
+      totalChallans: 0,
+    });
+
   const [notice, setNotice] =
     useState(null);
 
@@ -307,44 +318,107 @@ export default function AdminDashboardScreen({
       try {
         setLoading(true);
 
+        /*
+         * Dashboard startup must stay bounded. The old implementation walked
+         * every Dispatch page and every Challan page before rendering, which
+         * became progressively slower as PackFlow history grew. These reads are
+         * all small and run in parallel; master-data failures are non-fatal.
+         */
+        const results = await Promise.allSettled([
+          fetchDispatchedItemsPage({ page: 0, size: 100 }),
+          fetchDispatchedChallansPage({ page: 0, size: 100 }),
+          fetchDispatchedStatusCount("READY"),
+          fetchDispatchedStatusCount("READY_TO_DISPATCH"),
+          fetchDispatchedStatusCount("DISPATCHED"),
+          fetchDispatchedStatusCount([
+            "IN_WAREHOUSE",
+            "WAREHOUSE_REQUESTED",
+            "READY_TO_STORE",
+            "WAREHOUSE_RETURN_REQUESTED",
+          ]),
+          fetchDrivers(),
+          fetchVehicles(),
+        ]);
+
         const [
-          itemData,
-          challanData,
-          driverData,
-          vehicleData,
-        ] =
-          await Promise.all([
-            fetchDispatchedItems(),
-            fetchDispatchedChallans(),
-            fetchDrivers(),
-            fetchVehicles(),
-          ]);
+          itemResult,
+          challanResult,
+          readyResult,
+          readyDispatchResult,
+          dispatchedResult,
+          warehouseResult,
+          driverResult,
+          vehicleResult,
+        ] = results;
 
-        setItems(
-          Array.isArray(itemData)
-            ? itemData
-            : []
-        );
+        if (itemResult.status === "fulfilled") {
+          setItems(Array.isArray(itemResult.value?.rows) ? itemResult.value.rows : []);
+        } else {
+          setItems([]);
+        }
 
-        setChallans(
-          Array.isArray(challanData)
-            ? challanData
-            : []
-        );
+        if (challanResult.status === "fulfilled") {
+          setChallans(Array.isArray(challanResult.value?.rows) ? challanResult.value.rows : []);
+        } else {
+          setChallans([]);
+        }
 
         setDrivers(
-          Array.isArray(driverData)
-            ? driverData
+          driverResult.status === "fulfilled" && Array.isArray(driverResult.value)
+            ? driverResult.value
             : []
         );
 
         setVehicles(
-          Array.isArray(vehicleData)
-            ? vehicleData
+          vehicleResult.status === "fulfilled" && Array.isArray(vehicleResult.value)
+            ? vehicleResult.value
             : []
         );
 
-        setNotice(null);
+        setServerCounts({
+          totalItems:
+            itemResult.status === "fulfilled"
+              ? Number(itemResult.value?.totalElements || itemResult.value?.rows?.length || 0)
+              : 0,
+          ready:
+            readyResult.status === "fulfilled"
+              ? Number(readyResult.value || 0)
+              : 0,
+          readyToDispatch:
+            readyDispatchResult.status === "fulfilled"
+              ? Number(readyDispatchResult.value || 0)
+              : 0,
+          dispatched:
+            dispatchedResult.status === "fulfilled"
+              ? Number(dispatchedResult.value || 0)
+              : 0,
+          inWarehouse:
+            warehouseResult.status === "fulfilled"
+              ? Number(warehouseResult.value || 0)
+              : 0,
+          totalChallans:
+            challanResult.status === "fulfilled"
+              ? Number(challanResult.value?.totalElements || challanResult.value?.rows?.length || 0)
+              : 0,
+        });
+
+        if (itemResult.status === "rejected" && challanResult.status === "rejected") {
+          throw itemResult.reason || challanResult.reason || new Error("Dashboard core data failed");
+        }
+
+        const optionalFailures = results
+          .slice(2)
+          .filter((result) => result.status === "rejected").length;
+
+        setNotice(
+          optionalFailures > 0
+            ? {
+                type: "warning",
+                title: "Dashboard partially loaded",
+                message: "Core Dispatch data is available. One or more optional counters/masters could not refresh and will retry next time.",
+              }
+            : null
+        );
       } catch (e) {
         setNotice({
           type: "error",
@@ -378,15 +452,17 @@ export default function AdminDashboardScreen({
   const stats =
     useMemo(() => {
       const totalItems =
-        items.length;
+        serverCounts.totalItems || items.length;
 
       const ready =
+        serverCounts.ready ||
         items.filter(
           (item) =>
             normalizeStatus(item.status) === "READY"
         ).length;
 
       const readyToDispatch =
+        serverCounts.readyToDispatch ||
         items.filter(
           (item) =>
             normalizeStatus(item.status) ===
@@ -394,6 +470,7 @@ export default function AdminDashboardScreen({
         ).length;
 
       const dispatched =
+        serverCounts.dispatched ||
         items.filter(
           (item) =>
             normalizeStatus(item.status) === "DISPATCHED"
@@ -406,6 +483,7 @@ export default function AdminDashboardScreen({
         items.filter(canDispatchItem).length;
 
       const inWarehouse =
+        serverCounts.inWarehouse ||
         items.filter((item) =>
           [
             "IN_WAREHOUSE",
@@ -418,7 +496,7 @@ export default function AdminDashboardScreen({
         ).length;
 
       const totalChallans =
-        challans.length;
+        serverCounts.totalChallans || challans.length;
 
       const runningTrips =
         challans.filter(
@@ -481,6 +559,7 @@ export default function AdminDashboardScreen({
       challans,
       drivers,
       vehicles,
+      serverCounts,
     ]);
 
   const recentChallans =

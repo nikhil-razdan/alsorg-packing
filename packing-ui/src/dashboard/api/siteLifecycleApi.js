@@ -65,13 +65,41 @@ export async function fetchSiteLifecycleMetadata(packetItemIds = [], { signal } 
 
   if (ids.length === 0) return [];
 
-  const { data } = await jsonRequest("/api/site-lifecycle/metadata", {
-    method: "POST",
-    signal,
-    body: JSON.stringify(ids),
-  });
+  /*
+   * This is a read-only enrichment request. Use GET so browser metadata refresh
+   * does not participate in the CSRF mutation boundary. Chunking keeps each URL
+   * comfortably below common proxy/request-line limits even for UUID values.
+   * The legacy POST endpoint remains on the backend for compatibility.
+   */
+  const rows = [];
+  const chunkSize = 50;
 
-  return Array.isArray(data) ? data : [];
+  for (let index = 0; index < ids.length; index += chunkSize) {
+    const chunk = ids.slice(index, index + chunkSize);
+    const params = new URLSearchParams();
+    chunk.forEach((id) => params.append("ids", id));
+
+    const { data } = await jsonRequest(
+      `/api/site-lifecycle/metadata?${params.toString()}`,
+      { signal }
+    );
+
+    if (Array.isArray(data)) rows.push(...data);
+  }
+
+  return rows;
+}
+
+export async function fetchSiteLifecycleDetail(packetItemId, { signal } = {}) {
+  const id = String(packetItemId || "").trim();
+  if (!id) throw new Error("Packet item ID is required");
+
+  const { data } = await jsonRequest(
+    `/api/site-lifecycle/item?packetItemId=${encodeURIComponent(id)}`,
+    { signal }
+  );
+
+  return data || null;
 }
 
 export async function fetchSiteEvidenceBlob(evidenceId) {

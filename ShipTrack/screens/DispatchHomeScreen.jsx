@@ -26,11 +26,12 @@ import {
 } from "../api/client";
 
 import {
-  fetchDispatchedItems,
+  fetchDispatchedItemsPage,
+  fetchDispatchedStatusCount,
 } from "../api/dispatchedApi";
 
 import {
-  fetchDispatchedChallans,
+  fetchDispatchedChallansPage,
   fetchDrivers,
   fetchVehicles,
 } from "../api/logisticsApi";
@@ -305,6 +306,10 @@ export default function DispatchHomeScreen({
       "UTL_DISPATCH"
     );
 
+  const isPureUtlDispatch =
+    hasRole("UTL_DISPATCH") &&
+    !hasRole("DISPATCH");
+
   const isLogistics =
     hasRole(
       "LOGISTICS"
@@ -373,6 +378,13 @@ export default function DispatchHomeScreen({
     []
   );
 
+  const [serverCounts, setServerCounts] = useState({
+    ready: 0,
+    readyDispatch: 0,
+    dispatched: 0,
+    totalChallans: 0,
+  });
+
   const [
     notice,
     setNotice,
@@ -384,57 +396,84 @@ export default function DispatchHomeScreen({
     useCallback(
       async () => {
         try {
-          setLoading(
-            true
-          );
+          setLoading(true);
 
+          const requests = [
+            fetchDispatchedItemsPage({ page: 0, size: 100 }),
+            fetchDispatchedChallansPage({ page: 0, size: 100 }),
+            fetchDispatchedStatusCount("READY"),
+            fetchDispatchedStatusCount("READY_TO_DISPATCH"),
+            fetchDispatchedStatusCount("DISPATCHED"),
+          ];
+
+          /*
+           * UTL Dispatch deliberately has no ordinary Driver/Vehicle master
+           * authority. Those fields remain optional, so do not let master 403s
+           * break the entire control centre. Other operational profiles still
+           * get the master counts when available.
+           */
+          const includeMasters = !isPureUtlDispatch;
+          if (includeMasters) {
+            requests.push(fetchDrivers(), fetchVehicles());
+          }
+
+          const results = await Promise.allSettled(requests);
           const [
-            itemData,
-            challanData,
-            driverData,
-            vehicleData,
-          ] =
-            await Promise.all([
-              fetchDispatchedItems(),
-              fetchDispatchedChallans(),
-              fetchDrivers(),
-              fetchVehicles(),
-            ]);
+            itemResult,
+            challanResult,
+            readyResult,
+            readyDispatchResult,
+            dispatchedResult,
+            driverResult,
+            vehicleResult,
+          ] = results;
 
           setItems(
-            Array.isArray(
-              itemData
-            )
-              ? itemData
+            itemResult?.status === "fulfilled" && Array.isArray(itemResult.value?.rows)
+              ? itemResult.value.rows
               : []
           );
 
           setChallans(
-            Array.isArray(
-              challanData
-            )
-              ? challanData
+            challanResult?.status === "fulfilled" && Array.isArray(challanResult.value?.rows)
+              ? challanResult.value.rows
               : []
           );
 
           setDrivers(
-            Array.isArray(
-              driverData
-            )
-              ? driverData
+            includeMasters && driverResult?.status === "fulfilled" && Array.isArray(driverResult.value)
+              ? driverResult.value
               : []
           );
 
           setVehicles(
-            Array.isArray(
-              vehicleData
-            )
-              ? vehicleData
+            includeMasters && vehicleResult?.status === "fulfilled" && Array.isArray(vehicleResult.value)
+              ? vehicleResult.value
               : []
           );
 
+          setServerCounts({
+            ready: readyResult?.status === "fulfilled" ? Number(readyResult.value || 0) : 0,
+            readyDispatch: readyDispatchResult?.status === "fulfilled" ? Number(readyDispatchResult.value || 0) : 0,
+            dispatched: dispatchedResult?.status === "fulfilled" ? Number(dispatchedResult.value || 0) : 0,
+            totalChallans:
+              challanResult?.status === "fulfilled"
+                ? Number(challanResult.value?.totalElements || challanResult.value?.rows?.length || 0)
+                : 0,
+          });
+
+          if (itemResult?.status === "rejected" && challanResult?.status === "rejected") {
+            throw itemResult.reason || challanResult.reason || new Error("Dashboard core data failed");
+          }
+
+          const optionalFailures = results
+            .slice(2)
+            .filter((result) => result?.status === "rejected").length;
+
           setNotice(
-            ""
+            optionalFailures > 0
+              ? "Core Dispatch data loaded. One or more optional counters/masters could not refresh."
+              : ""
           );
         } catch (e) {
           setNotice(
@@ -444,12 +483,10 @@ export default function DispatchHomeScreen({
             )
           );
         } finally {
-          setLoading(
-            false
-          );
+          setLoading(false);
         }
       },
-      []
+      [isPureUtlDispatch]
     );
 
   const refresh =
@@ -492,6 +529,7 @@ export default function DispatchHomeScreen({
     useMemo(
       () => {
         const ready =
+          serverCounts.ready ||
           items.filter(
             (item) =>
               normalizeStatus(
@@ -500,6 +538,7 @@ export default function DispatchHomeScreen({
           ).length;
 
         const readyDispatch =
+          serverCounts.readyDispatch ||
           items.filter(
             (item) =>
               normalizeStatus(
@@ -519,6 +558,7 @@ export default function DispatchHomeScreen({
           ).length;
 
         const dispatched =
+          serverCounts.dispatched ||
           items.filter(
             (item) =>
               normalizeStatus(
@@ -582,6 +622,7 @@ export default function DispatchHomeScreen({
         challans,
         drivers,
         vehicles,
+        serverCounts,
       ]
     );
 

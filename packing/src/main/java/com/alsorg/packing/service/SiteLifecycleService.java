@@ -407,6 +407,30 @@ public class SiteLifecycleService {
     }
 
     @Transactional(readOnly = true)
+    public SiteLifecycleRow detail(
+            UUID packetItemId,
+            User user) {
+        User actor = requireUser(user);
+        if (packetItemId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Packet item ID is required");
+        }
+
+        DispatchedItem item = dispatchedItemRepository.findByPacketItemId(packetItemId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Dispatch record not found for packet"));
+
+        assertSiteTimelinePermission(actor, item);
+
+        PacketItem packetItem = packetItemRepository.findById(packetItemId)
+                .orElse(null);
+        PacketSiteLifecycle lifecycle = lifecycleRepository.findByPacketItemId(packetItemId)
+                .orElse(null);
+
+        return toRow(item, packetItem, lifecycle, true);
+    }
+
+    @Transactional(readOnly = true)
     public List<SiteLifecycleMetadataRow> metadata(
             Collection<UUID> rawPacketItemIds,
             User user) {
@@ -480,15 +504,24 @@ public class SiteLifecycleService {
     @Transactional(readOnly = true)
     public PacketSiteEvidence requireEvidence(UUID evidenceId, User user) {
         User actor = requireUser(user);
-        if (!currentUserService.isAdmin(actor) && !currentUserService.isLogistics(actor)) {
-            throw new AccessDeniedException(
-                    "Site evidence requires ADMIN or LOGISTICS access");
-        }
 
-        return evidenceRepository.findById(evidenceId)
+        PacketSiteEvidence evidence = evidenceRepository.findById(evidenceId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Site evidence not found"));
+
+        PacketSiteLifecycle lifecycle = lifecycleRepository.findById(evidence.getLifecycleId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Site lifecycle record not found"));
+
+        DispatchedItem item = dispatchedItemRepository.findById(lifecycle.getZohoItemId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Dispatch record not found for site evidence"));
+
+        assertSiteTimelinePermission(actor, item);
+        return evidence;
     }
 
     private void assertResolvePermission(User user, DispatchedItem item, String rawMode) {
@@ -527,21 +560,49 @@ public class SiteLifecycleService {
     private void assertDriverAssignment(User user, DispatchedItem item) {
         if (currentUserService.isAdmin(user)) return;
 
-        if (user.getDriverId() == null) {
-            throw new AccessDeniedException(
-                    "Your DRIVER account is not linked to a Driver master profile");
+        /*
+         * Assigned dispatch: preserve the strict identity boundary. The DRIVER
+         * account must be linked to the exact Driver master stored on the packet.
+         *
+         * Unassigned dispatch: Dispatch intentionally left driver blank. In that
+         * case any authenticated DRIVER may claim the physical delivery by
+         * scanning the current packet QR and supplying mandatory photo + fresh
+         * GPS proof. deliveredBy records the authenticated ShipTrack username.
+         * This is the controlled path for external/temporary drivers who are not
+         * present in the Driver master database.
+         */
+        if (item.getDriverId() == null) {
+            return;
         }
 
-        if (item.getDriverId() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "No driver is assigned to this dispatched packet. Assign a driver before site delivery proof.");
+        if (user.getDriverId() == null) {
+            throw new AccessDeniedException(
+                    "This packet has an assigned driver. Your DRIVER account is not linked to that Driver master profile.");
         }
 
         if (!user.getDriverId().equals(item.getDriverId())) {
             throw new AccessDeniedException(
                     "This packet is assigned to a different driver");
         }
+    }
+
+    private void assertSiteTimelinePermission(User user, DispatchedItem item) {
+        if (currentUserService.isAdmin(user) || currentUserService.isLogistics(user)) {
+            return;
+        }
+
+        if (currentUserService.isDispatch(user)) {
+            if (metadataRowAllowed(user, item)) return;
+            throw new AccessDeniedException("Site evidence is outside your authorized plant scope");
+        }
+
+        if (currentUserService.isUtlDispatch(user)) {
+            if (metadataRowAllowed(user, item)) return;
+            throw new AccessDeniedException("Site evidence is outside your assigned UTL route");
+        }
+
+        throw new AccessDeniedException(
+                "Site evidence timeline requires ADMIN, LOGISTICS, DISPATCH or UTL_DISPATCH access");
     }
 
     private void assertSiteLifecycleEligible(DispatchedItem item) {
