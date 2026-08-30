@@ -40,6 +40,13 @@ public class ChalaanPdfService {
         private static final float TABLE_HEADER_BOTTOM = 600;
         private static final float TABLE_BOTTOM = 130;
 
+        /*
+         * Standard grouped rows begin directly beneath the DESCRIPTION header
+         * separator.  The internal spacing between PD/DWG, Item and Packet lines
+         * is intentionally unchanged; only the wasted outer top gap is removed.
+         */
+        private static final float STANDARD_SECTION_START_Y = TABLE_HEADER_BOTTOM;
+
         private static final float SR_X = 40;
         private static final float SR_RIGHT = 100;
         private static final float DESC_RIGHT = 420;
@@ -135,7 +142,7 @@ public class ChalaanPdfService {
                                         vehicleNo,
                                         helperLoaderText);
 
-                        float y = 580;
+                        float y = STANDARD_SECTION_START_Y;
 
                         if (groups.isEmpty()) {
                                 drawText(
@@ -174,7 +181,7 @@ public class ChalaanPdfService {
                                          * identity.  Continue on a clean challan page instead.
                                          */
                                         if (availableHeight < headerHeight + firstPacketHeight + 4
-                                                        && y < 579) {
+                                                        && y < STANDARD_SECTION_START_Y - 0.5f) {
                                                 drawFooter(cs, regular);
                                                 cs.close();
 
@@ -195,7 +202,7 @@ public class ChalaanPdfService {
                                                                 vehicleNo,
                                                                 helperLoaderText);
 
-                                                y = 580;
+                                                y = STANDARD_SECTION_START_Y;
                                                 availableHeight = y - (TABLE_BOTTOM + 5);
                                         }
 
@@ -244,7 +251,13 @@ public class ChalaanPdfService {
                                                         y,
                                                         sectionHeight);
 
-                                        y -= sectionHeight + 3;
+                                        /*
+                                         * The next PD/DWG section now starts from the separator
+                                         * line itself.  Do not add blank vertical padding between
+                                         * business sections; the existing 8-point identity offset
+                                         * inside drawStandardGroupSection remains unchanged.
+                                         */
+                                        y -= sectionHeight;
                                         packetIndex = chunkEnd;
 
                                         if (packetIndex < group.items.size()) {
@@ -268,7 +281,7 @@ public class ChalaanPdfService {
                                                                 vehicleNo,
                                                                 helperLoaderText);
 
-                                                y = 580;
+                                                y = STANDARD_SECTION_START_Y;
                                         }
                                 }
 

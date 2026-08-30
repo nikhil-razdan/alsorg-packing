@@ -176,66 +176,71 @@ export async function fetchSiteLifecycleRegister({
  * SITE LIFECYCLE METADATA
  * =========================================================
  *
- * Lightweight metadata for Dispatch / Admin screens.
+ * Lightweight read-only metadata for Dispatch / Admin screens.
  *
- * Existing behaviour retained.
+ * IMPORTANT SECURITY BOUNDARY:
+ * The browser must use GET here.  The previous POST crossed Spring
+ * Security's CSRF mutation boundary even though this operation only reads
+ * metadata, which caused InvalidCsrfTokenException / HTTP 403.
+ *
+ * SiteLifecycleController already exposes:
+ * GET /api/site-lifecycle/metadata?ids=<uuid>&ids=<uuid>...
+ *
+ * No PackFlow mutation/status/routing behaviour is changed by this call.
  */
+const SITE_METADATA_GET_BATCH_SIZE = 50;
+
+const normalizePacketItemIds = (packetItemIds = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(packetItemIds) ? packetItemIds : [])
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )
+  ).slice(0, 500);
+
 export async function fetchSiteLifecycleMetadata(
   packetItemIds = [],
-  {
-    signal,
-  } = {}
+  { signal } = {}
 ) {
-  const ids =
-    Array.from(
-      new Set(
-        (
-          Array.isArray(
-            packetItemIds
-          )
-            ? packetItemIds
-            : []
-        )
-          .map(
-            (value) =>
-              String(
-                value || ""
-              ).trim()
-          )
-          .filter(Boolean)
-      )
-    ).slice(
-      0,
-      500
-    );
+  const ids = normalizePacketItemIds(packetItemIds);
 
-  if (
-    ids.length === 0
-  ) {
+  if (ids.length === 0) {
     return [];
   }
 
-  const {
-    data,
-  } =
-    await jsonRequest(
-      "/api/site-lifecycle/metadata",
+  const rows = [];
+
+  for (
+    let index = 0;
+    index < ids.length;
+    index += SITE_METADATA_GET_BATCH_SIZE
+  ) {
+    const batch = ids.slice(
+      index,
+      index + SITE_METADATA_GET_BATCH_SIZE
+    );
+
+    const params = new URLSearchParams();
+
+    batch.forEach((id) => {
+      params.append("ids", id);
+    });
+
+    const { data } = await jsonRequest(
+      `/api/site-lifecycle/metadata?${params.toString()}`,
       {
-        method:
-          "POST",
-
+        method: "GET",
         signal,
-
-        body:
-          JSON.stringify(
-            ids
-          ),
       }
     );
 
-  return Array.isArray(data)
-    ? data
-    : [];
+    if (Array.isArray(data)) {
+      rows.push(...data);
+    }
+  }
+
+  return rows;
 }
 
 /*
