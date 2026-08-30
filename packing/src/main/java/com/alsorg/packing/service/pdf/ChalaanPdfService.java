@@ -47,6 +47,22 @@ public class ChalaanPdfService {
          */
         private static final float STANDARD_SECTION_START_Y = TABLE_HEADER_BOTTOM;
 
+        /*
+         * Fine-tuned standard challan spacing.
+         *
+         * - Keep only a tiny breathing gap below the DESCRIPTION header.
+         * - Keep PD/DWG -> Item spacing unchanged.
+         * - Give the Item block a little more breathing room before Packet 1.
+         *
+         * These values affect PDF presentation only; grouping, pagination, packet
+         * ordering, remarks and all PackFlow business workflow remain unchanged.
+         */
+        private static final float STANDARD_IDENTITY_TOP_OFFSET = 10f;
+        private static final float STANDARD_IDENTITY_LINE_HEIGHT = 10f;
+        private static final float STANDARD_ITEM_GAP = 10f;
+        private static final float STANDARD_HEADER_RULE_GAP = 4.5f;
+        private static final float STANDARD_FIRST_PACKET_GAP = 12.5f;
+
         private static final float SR_X = 40;
         private static final float SR_RIGHT = 100;
         private static final float DESC_RIGHT = 420;
@@ -917,13 +933,21 @@ public class ChalaanPdfService {
                                 itemLine);
 
                 /*
-                 * Compact standard challan geometry. The first PD/DWG baseline
-                 * sits close to the section top and the identity block uses a
-                 * 10-point leading instead of the previous oversized padding.
+                 * Keep page-fit math aligned with the exact geometry used by
+                 * drawStandardGroupSection().  The PD/DWG block is moved only
+                 * 2pt farther from the top separator, while Packet 1 receives a
+                 * slightly larger gap beneath the Item heading/rule.
                  */
-                return Math.max(
-                                31,
-                                11 + ((identityLines + itemLines) * 10));
+                float height = STANDARD_IDENTITY_TOP_OFFSET
+                                + ((Math.max(identityLines, 1) - 1)
+                                                * STANDARD_IDENTITY_LINE_HEIGHT)
+                                + STANDARD_ITEM_GAP
+                                + ((Math.max(itemLines, 1) - 1)
+                                                * STANDARD_IDENTITY_LINE_HEIGHT)
+                                + STANDARD_HEADER_RULE_GAP
+                                + STANDARD_FIRST_PACKET_GAP;
+
+                return Math.max(37f, height);
         }
 
         private float calculateStandardPacketHeight(
@@ -1015,31 +1039,31 @@ public class ChalaanPdfService {
                                 bold,
                                 9,
                                 110,
-                                rowTop - 8,
+                                rowTop - STANDARD_IDENTITY_TOP_OFFSET,
                                 300,
                                 identityLine,
-                                10);
+                                STANDARD_IDENTITY_LINE_HEIGHT);
 
                 float itemEndY = drawWrappedTextWithLineHeight(
                                 cs,
                                 bold,
                                 9,
                                 110,
-                                identityEndY - 10,
+                                identityEndY - STANDARD_ITEM_GAP,
                                 300,
                                 "Item: " + safe(group.itemName),
-                                10);
+                                STANDARD_IDENTITY_LINE_HEIGHT);
 
                 /*
                  * A short rule beneath the group identity makes the separation
                  * between different PD/DWG/Item sections immediately visible.
                  */
-                float headerRuleY = itemEndY - 4.5f;
+                float headerRuleY = itemEndY - STANDARD_HEADER_RULE_GAP;
                 cs.setLineWidth(0.55f);
                 drawLine(cs, SR_RIGHT + 6, headerRuleY, RIGHT - 6, headerRuleY);
                 cs.setLineWidth(1f);
 
-                float packetY = headerRuleY - 8.5f;
+                float packetY = headerRuleY - STANDARD_FIRST_PACKET_GAP;
 
                 for (int index = fromPacketIndex; index < toPacketIndex; index++) {
                         ChalaanItem item = group.items.get(index);
