@@ -40,6 +40,18 @@ import {
   getDisplaySku,
 } from "../api/operationalMetadataApi";
 
+import SiteProofInspectorModal, {
+  SiteStatusPill,
+} from "../components/SiteProofInspectorModal";
+
+import {
+  fetchSiteLifecycleMetadataMap,
+  getSiteMetadataForItem,
+  getSitePacketItemId,
+  normalizeSiteStatus,
+  siteStatusLabel,
+} from "../api/siteLifecycleApi";
+
 const normalizeStatus = (value) =>
   String(value || "")
     .trim()
@@ -56,11 +68,34 @@ const ALL_STATUSES = [
   "WAREHOUSE_REQUESTED",
   "IN_WAREHOUSE",
   "READY_TO_DISPATCH",
+  "LOADED",
   "DISPATCHED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
   "AVAILABLE",
   "WAREHOUSE_RETURN_REQUESTED",
   "RESTORED",
 ];
+
+
+const SITE_PROOF_READ_STATUSES = new Set([
+  "LOADED",
+  "DISPATCHED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+]);
+
+function canReadSiteProofForDispatchItem(item) {
+  const status = normalizeStatus(
+    item?.status ||
+    item?.dispatchStatus
+  );
+
+  return Boolean(
+    getSitePacketItemId(item) &&
+    SITE_PROOF_READ_STATUSES.has(status)
+  );
+}
 
 function formatStatus(value) {
   const text =
@@ -238,6 +273,14 @@ export default function DispatchItemsScreen() {
       "UTL_DISPATCH"
     );
 
+  const canViewSiteProof =
+    hasAnyRole(
+      "ADMIN",
+      "DISPATCH",
+      "UTL_DISPATCH",
+      "LOGISTICS"
+    );
+
   const [loading, setLoading] =
     useState(false);
 
@@ -270,6 +313,16 @@ export default function DispatchItemsScreen() {
 
   const [pageSize, setPageSize] =
     useState(10);
+
+  const [
+    siteLifecycleMetadata,
+    setSiteLifecycleMetadata,
+  ] = useState({});
+
+  const [
+    siteProofItem,
+    setSiteProofItem,
+  ] = useState(null);
 
   const load = async () => {
     try {
@@ -472,6 +525,63 @@ export default function DispatchItemsScreen() {
       [filteredItems, currentPage, pageSize]
     );
 
+  /*
+   * Site lifecycle is a secondary read-only layer. Fetch it only for the
+   * currently visible page so Dispatch/Admin inspection does not turn the
+   * operational register into another full-history startup query.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!canViewSiteProof) {
+      setSiteLifecycleMetadata({});
+      return undefined;
+    }
+
+    const packetItemIds =
+      paginatedItems
+        .filter(
+          canReadSiteProofForDispatchItem
+        )
+        .map(getSitePacketItemId)
+        .filter(Boolean);
+
+    if (packetItemIds.length === 0) {
+      return undefined;
+    }
+
+    fetchSiteLifecycleMetadataMap(
+      packetItemIds
+    )
+      .then((metadata) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSiteLifecycleMetadata(
+          (current) => ({
+            ...current,
+            ...metadata,
+          })
+        );
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.debug(
+            "Site lifecycle metadata unavailable:",
+            error?.message || error
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canViewSiteProof,
+    paginatedItems,
+  ]);
+
   useEffect(() => {
     setPageNo(1);
   }, [
@@ -673,6 +783,16 @@ export default function DispatchItemsScreen() {
             item={item}
             reload={load}
             canMutateDispatch={canMutateDispatch}
+            canViewSiteProof={canViewSiteProof}
+            siteMeta={
+              getSiteMetadataForItem(
+                item,
+                siteLifecycleMetadata
+              )
+            }
+            onOpenSiteProof={() =>
+              setSiteProofItem(item)
+            }
           />
         )}
         ListEmptyComponent={
@@ -702,6 +822,22 @@ export default function DispatchItemsScreen() {
         locationFilter={locationFilter}
         setLocationFilter={setLocationFilter}
         clearFilters={clearFilters}
+      />
+
+      <SiteProofInspectorModal
+        visible={Boolean(siteProofItem)}
+        item={siteProofItem}
+        metadata={
+          siteProofItem
+            ? getSiteMetadataForItem(
+                siteProofItem,
+                siteLifecycleMetadata
+              )
+            : null
+        }
+        onClose={() =>
+          setSiteProofItem(null)
+        }
       />
     </View>
   );
@@ -1115,6 +1251,9 @@ function ItemCard({
   item,
   reload,
   canMutateDispatch = false,
+  canViewSiteProof = false,
+  siteMeta = null,
+  onOpenSiteProof,
 }) {
   const status =
     normalizeStatus(item.status);
@@ -1130,8 +1269,28 @@ function ItemCard({
     item.challanNumber ||
     "";
 
-  const isDispatched =
-    status === "DISPATCHED";
+  const isDispatchHistoryState =
+    SITE_PROOF_READ_STATUSES.has(status);
+
+  const packetItemId =
+    getSitePacketItemId(item);
+
+  const siteStatus =
+    normalizeSiteStatus(
+      siteMeta?.siteStatus
+    );
+
+  const evidencePhotoCount =
+    Number(
+      siteMeta?.deliveryPhotoCount || 0
+    ) +
+    Number(
+      siteMeta?.openingPhotoCount || 0
+    );
+
+  const siteProofReadable =
+    canViewSiteProof &&
+    canReadSiteProofForDispatchItem(item);
 
   return (
     <View style={styles.card}>
@@ -1182,6 +1341,22 @@ function ItemCard({
         </View>
       </View>
 
+      {siteProofReadable ? (
+        <View style={styles.siteStateRow}>
+          <SiteStatusPill
+            status={siteStatus}
+          />
+
+          <Text style={styles.siteEvidenceCount}>
+            {evidencePhotoCount} evidence photo{
+              evidencePhotoCount === 1
+                ? ""
+                : "s"
+            }
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.grid}>
         <Info
           label="PD No"
@@ -1220,7 +1395,7 @@ function ItemCard({
           value={item.zohoItemId || "—"}
         />
 
-        {isDispatched ? (
+        {isDispatchHistoryState ? (
           <>
             <Info
               label="Driver"
@@ -1243,9 +1418,40 @@ function ItemCard({
               label="Dispatched By"
               value={item.dispatchedBy || "—"}
             />
+
+            {siteProofReadable ? (
+              <>
+                <Info
+                  label="Site Status"
+                  value={siteStatusLabel(
+                    siteStatus
+                  )}
+                />
+
+                <Info
+                  label="Evidence"
+                  value={`${evidencePhotoCount} photo${
+                    evidencePhotoCount === 1
+                      ? ""
+                      : "s"
+                  }`}
+                />
+              </>
+            ) : null}
           </>
         ) : null}
       </View>
+
+      {siteProofReadable ? (
+        <TouchableOpacity
+          style={styles.siteProofBtn}
+          onPress={onOpenSiteProof}
+        >
+          <Text style={styles.siteProofBtnText}>
+            View Site Info / Evidence
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {needsFgAction ? (
         <View style={styles.fgWarningBox}>
@@ -1875,6 +2081,41 @@ const styles = {
     fontSize: 11,
     lineHeight: 16,
     marginTop: 4,
+  },
+
+  siteStateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+
+  siteEvidenceCount: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "right",
+    flexShrink: 1,
+  },
+
+  siteProofBtn: {
+    minHeight: 42,
+    marginTop: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.30)",
+    backgroundColor: "rgba(37,99,235,.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+
+  siteProofBtnText: {
+    color: "#93c5fd",
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   primaryBtn: {

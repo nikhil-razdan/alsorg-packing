@@ -3,7 +3,7 @@ import { secureFetch } from "../services/api";
 
 export const WR38_PLANT_CODE = "WR-38";
 const UTL_SUFFIX = " - UTL";
-const UTL_METADATA_BATCH_SIZE = 350;
+const UTL_METADATA_BATCH_SIZE = 50;
 
 export const normalizePackFlowPlantCode = (value) => {
   const text = String(value || "")
@@ -218,20 +218,30 @@ export const fetchUtlOriginMetadataForRows =
         UTL_METADATA_BATCH_SIZE
       )
     ) {
+      const query =
+        batch
+          .map(
+            (id) =>
+              `ids=${encodeURIComponent(id)}`
+          )
+          .join("&");
+
+      /*
+       * This is presentation metadata, not a mutation. Using GET avoids the
+       * cookie-authenticated browser CSRF boundary without weakening CSRF for
+       * real PackFlow writes. The backend still applies authentication plus
+       * UtlWorkflowService row visibility before returning any metadata.
+       */
       const response =
         await secureFetch(
-          `${API_BASE_URL}/api/operational-metadata/utl-origins`,
+          `${API_BASE_URL}/api/operational-metadata/utl-origins?${query}`,
           {
-            method: "POST",
+            method: "GET",
             credentials: "include",
             cache: "no-store",
             headers: {
               Accept: "application/json",
-              "Content-Type":
-                "application/json",
             },
-            body:
-              JSON.stringify(batch),
             signal,
           }
         );

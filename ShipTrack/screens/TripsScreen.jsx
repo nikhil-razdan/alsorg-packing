@@ -47,6 +47,20 @@ import {
   getDisplaySku,
 } from "../api/operationalMetadataApi";
 
+import SiteProofInspectorModal, {
+  SiteStatusPill,
+} from "../components/SiteProofInspectorModal";
+
+import {
+  fetchSiteLifecycleMetadataMap,
+  getSiteMetadataForItem,
+  getSitePacketItemId,
+  normalizeSiteStatus,
+  siteStatusLabel,
+  siteSummaryLabel,
+  summarizeSiteLifecycle,
+} from "../api/siteLifecycleApi";
+
 function normalizeText(value) {
   return String(value || "")
     .trim()
@@ -382,11 +396,29 @@ export default function TripsScreen() {
       "ADMIN"
     );
 
+  const canViewSiteProof =
+    hasAnyRole(
+      "ADMIN",
+      "DISPATCH",
+      "UTL_DISPATCH",
+      "LOGISTICS"
+    );
+
   const [endTripDrafts, setEndTripDrafts] =
     useState({});
 
   const [savingEndTrip, setSavingEndTrip] =
     useState("");
+
+  const [
+    siteLifecycleMetadata,
+    setSiteLifecycleMetadata,
+  ] = useState({});
+
+  const [
+    siteProofItem,
+    setSiteProofItem,
+  ] = useState(null);
 
   const loadChallans = async () => {
     try {
@@ -644,6 +676,63 @@ export default function TripsScreen() {
         ),
       [filteredChallans, currentPage, pageSize]
     );
+
+  /*
+   * Only hydrate site lifecycle metadata for the challans visible on this
+   * screen page. This preserves the bounded challan list behavior while still
+   * giving Dispatch/Admin live site status and evidence counts.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!canViewSiteProof) {
+      setSiteLifecycleMetadata({});
+      return undefined;
+    }
+
+    const packetItemIds =
+      paginatedChallans
+        .flatMap((challan) =>
+          Array.isArray(challan?.items)
+            ? challan.items
+            : []
+        )
+        .map(getSitePacketItemId)
+        .filter(Boolean);
+
+    if (packetItemIds.length === 0) {
+      return undefined;
+    }
+
+    fetchSiteLifecycleMetadataMap(
+      packetItemIds
+    )
+      .then((metadata) => {
+        if (!cancelled) {
+          setSiteLifecycleMetadata(
+            (current) => ({
+              ...current,
+              ...metadata,
+            })
+          );
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.debug(
+            "Challan site lifecycle metadata unavailable:",
+            error?.message || error
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canViewSiteProof,
+    paginatedChallans,
+  ]);
 
   useEffect(() => {
     setPageNo(1);
@@ -950,6 +1039,11 @@ export default function TripsScreen() {
               expanded === item.challanNumber
             }
             canManageTripEnd={canManageTripEnd}
+            canViewSiteProof={canViewSiteProof}
+            siteLifecycleMetadata={siteLifecycleMetadata}
+            onOpenSiteProof={(packetItem) =>
+              setSiteProofItem(packetItem)
+            }
             endTimeValue={getEndTripDraft(item)}
             savingEndTrip={
               savingEndTrip === item.challanNumber
@@ -1004,6 +1098,22 @@ export default function TripsScreen() {
         locationFilter={locationFilter}
         setLocationFilter={setLocationFilter}
         clearFilters={clearFilters}
+      />
+
+      <SiteProofInspectorModal
+        visible={Boolean(siteProofItem)}
+        item={siteProofItem}
+        metadata={
+          siteProofItem
+            ? getSiteMetadataForItem(
+                siteProofItem,
+                siteLifecycleMetadata
+              )
+            : null
+        }
+        onClose={() =>
+          setSiteProofItem(null)
+        }
       />
     </View>
   );
@@ -1467,6 +1577,9 @@ function ChallanCard({
   challan,
   expanded,
   canManageTripEnd,
+  canViewSiteProof = false,
+  siteLifecycleMetadata = {},
+  onOpenSiteProof,
   endTimeValue,
   savingEndTrip,
   onEndTimeChange,
@@ -1483,6 +1596,12 @@ function ChallanCard({
     Array.isArray(challan?.items)
       ? challan.items
       : [];
+
+  const siteSummary =
+    summarizeSiteLifecycle(
+      items,
+      siteLifecycleMetadata
+    );
 
   return (
     <View style={styles.card}>
@@ -1562,6 +1681,50 @@ function ChallanCard({
           )}
         />
       </View>
+
+      {canViewSiteProof &&
+      siteSummary.linkedPackets > 0 ? (
+        <View style={styles.challanSiteBox}>
+          <View style={styles.challanSiteHead}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.challanSiteKicker}>
+                SITE PROOF
+              </Text>
+
+              <Text style={styles.challanSiteTitle}>
+                {siteSummaryLabel(
+                  siteSummary
+                )}
+              </Text>
+            </View>
+
+            <Text style={styles.challanSitePhotos}>
+              {siteSummary.evidencePhotos} evidence photo{
+                siteSummary.evidencePhotos === 1
+                  ? ""
+                  : "s"
+              }
+            </Text>
+          </View>
+
+          <View style={styles.challanSiteCounts}>
+            <ChallanSiteStat
+              label="Awaiting"
+              value={siteSummary.awaiting}
+            />
+
+            <ChallanSiteStat
+              label="Delivered"
+              value={siteSummary.delivered}
+            />
+
+            <ChallanSiteStat
+              label="Opened"
+              value={siteSummary.opened}
+            />
+          </View>
+        </View>
+      ) : null}
 
       {canManageTripEnd ? (
         <EndTimePickerPanel
@@ -1645,11 +1808,82 @@ function ChallanCard({
                 <Text style={styles.itemMeta}>
                   Status: {item?.status || "DISPATCHED"}
                 </Text>
+
+                {canViewSiteProof &&
+                getSitePacketItemId(item) ? (
+                  <>
+                    <View style={styles.expandedSiteRow}>
+                      <SiteStatusPill
+                        status={normalizeSiteStatus(
+                          getSiteMetadataForItem(
+                            item,
+                            siteLifecycleMetadata
+                          )?.siteStatus
+                        )}
+                      />
+
+                      <Text style={styles.expandedSiteCount}>
+                        {Number(
+                          getSiteMetadataForItem(
+                            item,
+                            siteLifecycleMetadata
+                          )?.deliveryPhotoCount ||
+                          0
+                        ) +
+                          Number(
+                            getSiteMetadataForItem(
+                              item,
+                              siteLifecycleMetadata
+                            )?.openingPhotoCount ||
+                            0
+                          )} photo(s)
+                      </Text>
+                    </View>
+
+                    <Text style={styles.itemMeta}>
+                      Site:{" "}
+                      {siteStatusLabel(
+                        getSiteMetadataForItem(
+                          item,
+                          siteLifecycleMetadata
+                        )?.siteStatus
+                      )}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.expandedSiteBtn}
+                      onPress={() =>
+                        onOpenSiteProof?.(item)
+                      }
+                    >
+                      <Text style={styles.expandedSiteBtnText}>
+                        Site Info / Evidence
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
               </View>
             ))
           )}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function ChallanSiteStat({
+  label,
+  value,
+}) {
+  return (
+    <View style={styles.challanSiteStat}>
+      <Text style={styles.challanSiteStatValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.challanSiteStatLabel}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -2469,6 +2703,72 @@ const styles = {
     marginTop: 3,
   },
 
+  challanSiteBox: {
+    marginTop: 12,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: "rgba(37,99,235,.08)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.20)",
+  },
+
+  challanSiteHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+
+  challanSiteKicker: {
+    color: "#60a5fa",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: .7,
+  },
+
+  challanSiteTitle: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 3,
+  },
+
+  challanSitePhotos: {
+    color: "#cbd5e1",
+    fontSize: 10,
+    fontWeight: "800",
+    flexShrink: 1,
+    textAlign: "right",
+  },
+
+  challanSiteCounts: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+
+  challanSiteStat: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,.045)",
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: "center",
+  },
+
+  challanSiteStatValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  challanSiteStatLabel: {
+    color: "#94a3b8",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    marginTop: 2,
+  },
+
   endTimePanel: {
     marginTop: 14,
     padding: 14,
@@ -2710,6 +3010,38 @@ const styles = {
     fontWeight: "700",
     fontSize: 11,
     marginTop: 4,
+  },
+
+  expandedSiteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 10,
+  },
+
+  expandedSiteCount: {
+    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  expandedSiteBtn: {
+    minHeight: 38,
+    marginTop: 9,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.26)",
+    backgroundColor: "rgba(37,99,235,.11)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+
+  expandedSiteBtnText: {
+    color: "#93c5fd",
+    fontSize: 10,
+    fontWeight: "900",
   },
 };
 

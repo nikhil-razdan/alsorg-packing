@@ -5835,7 +5835,15 @@ export default function DispatchedItemsPage() {
 			rows,
 			{ signal: controller.signal }
 		)
-			.then(setUtlOriginMetadata)
+			.then((metadata) => {
+				setUtlOriginMetadata(
+					metadata &&
+					typeof metadata === "object" &&
+					!Array.isArray(metadata)
+						? metadata
+						: {}
+				);
+			})
 			.catch((error) => {
 				if (error?.name !== "AbortError") {
 					console.debug(
@@ -5876,7 +5884,11 @@ export default function DispatchedItemsPage() {
 		fetchSiteLifecycleMetadata(packetItemIds, { signal: controller.signal })
 			.then((metadataRows) => {
 				const next = {};
-				(metadataRows || []).forEach((entry) => {
+				(
+					Array.isArray(metadataRows)
+						? metadataRows
+						: []
+				).forEach((entry) => {
 					const id = String(entry?.packetItemId || "").trim();
 					if (id) next[id] = entry;
 				});
@@ -5902,7 +5914,11 @@ export default function DispatchedItemsPage() {
 	};
 
 	const revokeSiteProofEvidenceUrls = (urls = siteProofEvidenceUrls) => {
-		(urls || []).forEach((url) => {
+		(
+			Array.isArray(urls)
+				? urls
+				: []
+		).forEach((url) => {
 			try {
 				URL.revokeObjectURL(url);
 			} catch {
@@ -6049,6 +6065,16 @@ export default function DispatchedItemsPage() {
 	const [challanHistoryOpen, setChallanHistoryOpen] = useState(false);
 	const [challanHistoryLoading, setChallanHistoryLoading] = useState(false);
 	const [challanHistoryRows, setChallanHistoryRows] = useState([]);
+
+	/*
+	 * Challan history state is array-only by contract. Keep a defensive read
+	 * view as well so a stale hot-reload value or unexpected response shape can
+	 * never take the complete Dispatch page down.
+	 */
+	const safeChallanHistoryRows =
+		Array.isArray(challanHistoryRows)
+			? challanHistoryRows
+			: [];
 	const [challanHistorySearch, setChallanHistorySearch] = useState("");
 	const [challanHistoryServerPage, setChallanHistoryServerPage] = useState(0);
 	const [challanHistoryServerTotal, setChallanHistoryServerTotal] = useState(0);
@@ -11427,11 +11453,28 @@ export default function DispatchedItemsPage() {
 			 */
 			if (challanHistoryOpen) {
 				try {
-					const normalRows =
+					const normalResult =
 						await fetchChallanHistoryRows();
 
+					/*
+					 * fetchChallanHistoryRows returns a paging envelope. Storing that
+					 * object in challanHistoryRows caused the production minified crash
+					 * "(... || []).forEach is not a function" on the next render.
+					 */
 					setChallanHistoryRows(
-						normalRows
+						Array.isArray(normalResult?.rows)
+							? normalResult.rows
+							: []
+					);
+
+					setChallanHistoryServerPage(
+						Number(normalResult?.pageNumber || 0)
+					);
+					setChallanHistoryServerTotal(
+						Number(normalResult?.totalElements || 0)
+					);
+					setChallanHistoryHasMore(
+						Boolean(normalResult?.hasNext)
 					);
 
 					if (
@@ -17240,16 +17283,24 @@ export default function DispatchedItemsPage() {
 	};
 
 	const previewNormalChallanByNumber = async (challanNumber) => {
-		if (!challanNumber) {
+		const cleanNumber =
+			String(challanNumber || "").trim();
+
+		if (!cleanNumber) {
 			alert("Challan number missing");
 			return;
 		}
 
+		/*
+		 * Use the same authenticated challan-download contract as the main
+		 * Challan History preview. This avoids depending on the dashboard-report
+		 * preview route and keeps Dispatch/Admin preview behavior consistent.
+		 */
 		await previewProtectedPdfPath(
-			`/api/reports/dashboard/challan/preview?challanNumber=${encodeURIComponent(
-				challanNumber
-			)}`,
-			challanNumber
+			`/api/chalaan/dispatched/${encodeURIComponent(
+				cleanNumber
+			)}/download?preview=true`,
+			cleanNumber
 		);
 	};
 
@@ -17262,9 +17313,9 @@ export default function DispatchedItemsPage() {
 		try {
 			const res =
 				await authFetch(
-					`${API_BASE_URL}/api/reports/dashboard/challan/download?challanNumber=${encodeURIComponent(
+					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
 						challanNumber
-					)}`,
+					)}/download?preview=false`,
 					{
 						method: "GET",
 						headers: {
@@ -17516,7 +17567,11 @@ export default function DispatchedItemsPage() {
 					loadCustomChallans(),
 				]);
 
-			setChallanHistoryRows(normalResult.rows);
+			setChallanHistoryRows(
+				Array.isArray(normalResult?.rows)
+					? normalResult.rows
+					: []
+			);
 			setChallanHistoryServerPage(normalResult.pageNumber);
 			setChallanHistoryServerTotal(normalResult.totalElements);
 			setChallanHistoryHasMore(normalResult.hasNext);
@@ -17547,12 +17602,20 @@ export default function DispatchedItemsPage() {
 			setChallanHistoryRows((current) => {
 				const merged = new Map();
 
-				(current || []).forEach((row) => {
+				(
+					Array.isArray(current)
+						? current
+						: []
+				).forEach((row) => {
 					const key = getChallanNumber(row);
 					if (key) merged.set(key, row);
 				});
 
-				(result.rows || []).forEach((row) => {
+				(
+					Array.isArray(result?.rows)
+						? result.rows
+						: []
+				).forEach((row) => {
 					const key = getChallanNumber(row);
 					if (key) merged.set(key, row);
 				});
@@ -17687,7 +17750,7 @@ export default function DispatchedItemsPage() {
 		 */
 		const challanNumber = getChallanNumber(challan);
 		const completeChallan =
-			(challanHistoryRows || []).find(
+			safeChallanHistoryRows.find(
 				(row) => getChallanNumber(row) === challanNumber
 			) || challan;
 
@@ -17715,9 +17778,7 @@ export default function DispatchedItemsPage() {
 		try {
 			setNormalChallanViewLoading(true);
 
-			let sourceRows = Array.isArray(challanHistoryRows)
-				? challanHistoryRows
-				: [];
+			let sourceRows = safeChallanHistoryRows;
 
 			let challan = sourceRows.find(
 				(row) => getChallanNumber(row) === cleanNumber
@@ -17774,11 +17835,15 @@ export default function DispatchedItemsPage() {
 	const challanHistoryMasterGroups = useMemo(() => {
 		const groups = new Map();
 
-		(challanHistoryRows || []).forEach((challan) => {
+		safeChallanHistoryRows.forEach((challan) => {
 			const challanNumber =
 				getChallanNumber(challan);
 
-			(challan.items || []).forEach((item) => {
+			(
+				Array.isArray(challan?.items)
+					? challan.items
+					: []
+			).forEach((item) => {
 				const key =
 					getMasterHistoryKey(item) ||
 					`${challanNumber}-${item.zohoItemId}`;
@@ -17891,13 +17956,11 @@ export default function DispatchedItemsPage() {
 					new Date(a.lastDate || 0).getTime()
 				);
 			});
-	}, [challanHistoryRows, challanHistorySearch]);
+	}, [safeChallanHistoryRows, challanHistorySearch]);
 
 
 	const normalChallanAnalytics = useMemo(() => {
-		const source = Array.isArray(challanHistoryRows)
-			? challanHistoryRows
-			: [];
+		const source = safeChallanHistoryRows;
 
 		const allItems = source.flatMap((challan) =>
 			Array.isArray(challan?.items) ? challan.items : []
@@ -17962,7 +18025,7 @@ export default function DispatchedItemsPage() {
 			uniqueVehicles,
 			helperTotal,
 		};
-	}, [challanHistoryRows]);
+	}, [safeChallanHistoryRows]);
 
 	const normalChallanCurrentRowLookup = useMemo(() => {
 		const lookup = new Map();
@@ -29153,9 +29216,9 @@ export default function DispatchedItemsPage() {
 									<ChallanHistoryStat
 										label="Dispatch Challans"
 										value={
-											challanHistoryServerTotal > challanHistoryRows.length
-												? `${challanHistoryRows.length}/${challanHistoryServerTotal}`
-												: challanHistoryRows.length
+											challanHistoryServerTotal > safeChallanHistoryRows.length
+												? `${safeChallanHistoryRows.length}/${challanHistoryServerTotal}`
+												: safeChallanHistoryRows.length
 										}
 										accent="#22c55e"
 									/>
@@ -29169,7 +29232,7 @@ export default function DispatchedItemsPage() {
 									<ChallanHistoryStat
 										label="Total Items"
 										value={
-											challanHistoryRows.reduce(
+											safeChallanHistoryRows.reduce(
 												(sum, challan) =>
 													sum + Number(challan.totalItems || 0),
 												0
@@ -29405,7 +29468,7 @@ export default function DispatchedItemsPage() {
 												>
 													{challanHistoryLoadingMore
 														? "Loading older challans…"
-														: `Load older challans (${challanHistoryRows.length}/${challanHistoryServerTotal})`}
+														: `Load older challans (${safeChallanHistoryRows.length}/${challanHistoryServerTotal})`}
 												</Button>
 											</Box>
 										)}

@@ -161,18 +161,19 @@ public class ChalaanPdfService {
                                                         continued);
 
                                         float firstPacketHeight = calculateStandardPacketHeight(
+                                                        bold,
                                                         regular,
                                                         group.items.get(packetIndex),
                                                         packetIndex + 1);
 
-                                        float availableHeight = y - (TABLE_BOTTOM + 8);
+                                        float availableHeight = y - (TABLE_BOTTOM + 5);
 
                                         /*
                                          * Do not start a new business section at the very bottom of
                                          * a page when its first packet cannot fit beneath the group
                                          * identity.  Continue on a clean challan page instead.
                                          */
-                                        if (availableHeight < headerHeight + firstPacketHeight + 8
+                                        if (availableHeight < headerHeight + firstPacketHeight + 4
                                                         && y < 579) {
                                                 drawFooter(cs, regular);
                                                 cs.close();
@@ -195,19 +196,20 @@ public class ChalaanPdfService {
                                                                 helperLoaderText);
 
                                                 y = 580;
-                                                availableHeight = y - (TABLE_BOTTOM + 8);
+                                                availableHeight = y - (TABLE_BOTTOM + 5);
                                         }
 
                                         int chunkEnd = packetIndex;
-                                        float sectionHeight = headerHeight + 6;
+                                        float sectionHeight = headerHeight + 2;
 
                                         while (chunkEnd < group.items.size()) {
                                                 float packetHeight = calculateStandardPacketHeight(
+                                                                bold,
                                                                 regular,
                                                                 group.items.get(chunkEnd),
                                                                 chunkEnd + 1);
 
-                                                if (sectionHeight + packetHeight + 4 > availableHeight
+                                                if (sectionHeight + packetHeight + 2 > availableHeight
                                                                 && chunkEnd > packetIndex) {
                                                         break;
                                                 }
@@ -217,7 +219,7 @@ public class ChalaanPdfService {
                                                  * If a single unusually long value reaches this branch,
                                                  * still render that one packet instead of looping forever.
                                                  */
-                                                if (sectionHeight + packetHeight + 4 > availableHeight
+                                                if (sectionHeight + packetHeight + 2 > availableHeight
                                                                 && chunkEnd == packetIndex) {
                                                         sectionHeight += packetHeight;
                                                         chunkEnd++;
@@ -228,7 +230,7 @@ public class ChalaanPdfService {
                                                 chunkEnd++;
                                         }
 
-                                        sectionHeight += 4;
+                                        sectionHeight += 2;
 
                                         drawStandardGroupSection(
                                                         cs,
@@ -242,7 +244,7 @@ public class ChalaanPdfService {
                                                         y,
                                                         sectionHeight);
 
-                                        y -= sectionHeight + 6;
+                                        y -= sectionHeight + 3;
                                         packetIndex = chunkEnd;
 
                                         if (packetIndex < group.items.size()) {
@@ -901,29 +903,40 @@ public class ChalaanPdfService {
                                 300,
                                 itemLine);
 
+                /*
+                 * Compact standard challan geometry. The first PD/DWG baseline
+                 * sits close to the section top and the identity block uses a
+                 * 10-point leading instead of the previous oversized padding.
+                 */
                 return Math.max(
-                                36,
-                                12 + ((identityLines + itemLines) * 11));
+                                31,
+                                11 + ((identityLines + itemLines) * 10));
         }
 
         private float calculateStandardPacketHeight(
+                        PDFont bold,
                         PDFont regular,
                         ChalaanItem item,
                         int packetNumber) throws IOException {
 
-                String description = buildStandardPacketDescription(
-                                item,
-                                packetNumber);
+                String prefix = "Packet " + packetNumber + ":";
+                String body = safe(item == null ? null : item.getDescription());
+
+                float prefixWidth = pdfTextWidth(
+                                bold,
+                                9,
+                                prefix) + 3f;
+
+                List<String> descriptionLines = wrapTextWithFirstLineWidth(
+                                regular,
+                                9,
+                                Math.max(20f, 300f - prefixWidth),
+                                300f,
+                                body);
 
                 String remarks = buildStandardPacketRemarks(
                                 item,
                                 packetNumber);
-
-                int descriptionLines = countWrappedLines(
-                                regular,
-                                9,
-                                300,
-                                description);
 
                 int remarkLines = countWrappedLines(
                                 regular,
@@ -931,9 +944,13 @@ public class ChalaanPdfService {
                                 120,
                                 remarks);
 
+                int lineCount = Math.max(
+                                descriptionLines.size(),
+                                remarkLines);
+
                 return Math.max(
-                                20,
-                                (Math.max(descriptionLines, remarkLines) * 12) + 6);
+                                16f,
+                                (lineCount * 10.5f) + 4f);
         }
 
         private void drawStandardGroupSection(
@@ -955,7 +972,7 @@ public class ChalaanPdfService {
                                 bold,
                                 10,
                                 55,
-                                rowTop - 15,
+                                rowTop - 10,
                                 String.valueOf(groupNumber));
 
                 drawText(
@@ -963,7 +980,7 @@ public class ChalaanPdfService {
                                 regular,
                                 7,
                                 47,
-                                rowTop - 29,
+                                rowTop - 22,
                                 group.items.size() + " pkts");
 
                 if (continued) {
@@ -972,7 +989,7 @@ public class ChalaanPdfService {
                                         regular,
                                         6,
                                         48,
-                                        rowTop - 40,
+                                        rowTop - 32,
                                         "cont.");
                 }
 
@@ -985,52 +1002,53 @@ public class ChalaanPdfService {
                                 bold,
                                 9,
                                 110,
-                                rowTop - 13,
+                                rowTop - 8,
                                 300,
                                 identityLine,
-                                11);
+                                10);
 
                 float itemEndY = drawWrappedTextWithLineHeight(
                                 cs,
                                 bold,
                                 9,
                                 110,
-                                identityEndY - 11,
+                                identityEndY - 10,
                                 300,
                                 "Item: " + safe(group.itemName),
-                                11);
+                                10);
 
                 /*
                  * A short rule beneath the group identity makes the separation
                  * between different PD/DWG/Item sections immediately visible.
                  */
-                float headerRuleY = itemEndY - 8;
+                float headerRuleY = itemEndY - 4.5f;
                 cs.setLineWidth(0.55f);
                 drawLine(cs, SR_RIGHT + 6, headerRuleY, RIGHT - 6, headerRuleY);
                 cs.setLineWidth(1f);
 
-                float packetY = headerRuleY - 13;
+                float packetY = headerRuleY - 8.5f;
 
                 for (int index = fromPacketIndex; index < toPacketIndex; index++) {
                         ChalaanItem item = group.items.get(index);
                         int packetNumber = index + 1;
 
                         float packetHeight = calculateStandardPacketHeight(
+                                        bold,
                                         regular,
                                         item,
                                         packetNumber);
 
-                        drawWrappedTextWithLineHeight(
+                        drawWrappedTextWithBoldPrefix(
                                         cs,
+                                        bold,
                                         regular,
                                         9,
                                         110,
                                         packetY,
                                         300,
-                                        buildStandardPacketDescription(
-                                                        item,
-                                                        packetNumber),
-                                        12);
+                                        "Packet " + packetNumber + ":",
+                                        safe(item == null ? null : item.getDescription()),
+                                        10.5f);
 
                         drawWrappedTextWithLineHeight(
                                         cs,
@@ -1042,7 +1060,7 @@ public class ChalaanPdfService {
                                         buildStandardPacketRemarks(
                                                         item,
                                                         packetNumber),
-                                        12);
+                                        10.5f);
 
                         packetY -= packetHeight;
                 }
@@ -1136,6 +1154,116 @@ public class ChalaanPdfService {
                 }
 
                 return y;
+        }
+
+        /**
+         * Draws a packet description with only its packet identity in bold.
+         * Example: bold "Packet 2:" followed by the normal description text.
+         * Wrapped continuation lines return to the normal description left edge
+         * instead of being indented beneath the bold prefix.
+         */
+        private float drawWrappedTextWithBoldPrefix(
+                        PDPageContentStream cs,
+                        PDFont boldFont,
+                        PDFont regularFont,
+                        int fontSize,
+                        float x,
+                        float y,
+                        float maxWidth,
+                        String prefix,
+                        String body,
+                        float lineHeight) throws IOException {
+
+                String safePrefix = cleanPdfText(safe(prefix));
+                String safeBody = cleanPdfText(safe(body));
+
+                float prefixWidth = pdfTextWidth(
+                                boldFont,
+                                fontSize,
+                                safePrefix);
+
+                float gap = 3f;
+
+                List<String> lines = wrapTextWithFirstLineWidth(
+                                regularFont,
+                                fontSize,
+                                Math.max(20f, maxWidth - prefixWidth - gap),
+                                maxWidth,
+                                safeBody);
+
+                drawText(
+                                cs,
+                                boldFont,
+                                fontSize,
+                                x,
+                                y,
+                                safePrefix);
+
+                if (!lines.isEmpty()) {
+                        drawText(
+                                        cs,
+                                        regularFont,
+                                        fontSize,
+                                        x + prefixWidth + gap,
+                                        y,
+                                        lines.get(0));
+                }
+
+                for (int index = 1; index < lines.size(); index++) {
+                        drawText(
+                                        cs,
+                                        regularFont,
+                                        fontSize,
+                                        x,
+                                        y - (index * lineHeight),
+                                        lines.get(index));
+                }
+
+                return y - (Math.max(0, lines.size() - 1) * lineHeight);
+        }
+
+        private List<String> wrapTextWithFirstLineWidth(
+                        PDFont font,
+                        int fontSize,
+                        float firstLineWidth,
+                        float followingLineWidth,
+                        String text) throws IOException {
+
+                List<String> lines = new ArrayList<>();
+                String safeText = cleanPdfText(safe(text));
+                String[] words = safeText.split("\\s+");
+
+                StringBuilder line = new StringBuilder();
+                float currentMaxWidth = Math.max(1f, firstLineWidth);
+
+                for (String word : words) {
+                        String test = line.length() == 0
+                                        ? word
+                                        : line + " " + word;
+
+                        float width = pdfTextWidth(
+                                        font,
+                                        fontSize,
+                                        test);
+
+                        if (width > currentMaxWidth && line.length() > 0) {
+                                lines.add(line.toString());
+                                line = new StringBuilder(word);
+                                currentMaxWidth = Math.max(1f, followingLineWidth);
+                        } else {
+                                line = new StringBuilder(test);
+                        }
+                }
+
+                if (line.length() > 0) {
+                        lines.add(line.toString());
+                }
+
+                if (lines.isEmpty()) {
+                        lines.add("-");
+                }
+
+                return lines;
         }
 
         private static final class StandardChallanGroup {

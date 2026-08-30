@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-const MAX_METADATA_IDS = 500;
+const MAX_METADATA_IDS = 50;
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -57,10 +57,34 @@ export function getDisplaySku(item) {
   );
 }
 
+function buildMetadataQuery(ids = []) {
+  return (Array.isArray(ids) ? ids : [])
+    .map((id) => clean(id))
+    .filter(Boolean)
+    .map((id) => `ids=${encodeURIComponent(id)}`)
+    .join("&");
+}
+
 async function fetchMetadataChunk(ids) {
-  const res = await api.post(
-    "/api/operational-metadata/utl-origins",
-    ids
+  const query = buildMetadataQuery(ids);
+
+  if (!query) {
+    return [];
+  }
+
+  /*
+   * UTL-origin data is read-only presentation metadata. Use the same safe GET
+   * contract as the browser. This removes any dependency on CSRF treatment for
+   * a read while preserving the mobile Bearer token and all backend visibility
+   * checks. No PackFlow mutation/routing endpoint is changed.
+   */
+  const res = await api.get(
+    `/api/operational-metadata/utl-origins?${query}`,
+    {
+      headers: {
+        Accept: "application/json",
+      },
+    }
   );
 
   return Array.isArray(res?.data)

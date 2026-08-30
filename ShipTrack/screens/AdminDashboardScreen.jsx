@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -35,6 +36,18 @@ import {
   fetchDrivers,
   fetchVehicles,
 } from "../api/logisticsApi";
+
+import SiteProofInspectorModal, {
+  SiteStatusPill,
+} from "../components/SiteProofInspectorModal";
+
+import {
+  fetchSiteLifecycleMetadataMap,
+  getSiteMetadataForItem,
+  getSitePacketItemId,
+  siteSummaryLabel,
+  summarizeSiteLifecycle,
+} from "../api/siteLifecycleApi";
 
 function normalizeStatus(value) {
   return String(value || "")
@@ -313,6 +326,27 @@ export default function AdminDashboardScreen({
   const [notice, setNotice] =
     useState(null);
 
+  /*
+   * Site proof is an additive, read-only presentation layer.
+   * It does not alter Dispatch status, challan timing, UTL routing, FG,
+   * Warehouse, Driver/ONSITE permissions, or any PackFlow mutation path.
+   */
+  const [
+    siteLifecycleMetadata,
+    setSiteLifecycleMetadata,
+  ] = useState({});
+
+  const [
+    siteProofItem,
+    setSiteProofItem,
+  ] = useState(null);
+
+  const canViewSiteProof =
+    hasRole("ADMIN") ||
+    hasRole("DISPATCH") ||
+    hasRole("UTL_DISPATCH") ||
+    hasRole("LOGISTICS");
+
   const loadDashboard =
     useCallback(async () => {
       try {
@@ -413,10 +447,10 @@ export default function AdminDashboardScreen({
         setNotice(
           optionalFailures > 0
             ? {
-                type: "warning",
-                title: "Dashboard partially loaded",
-                message: "Core Dispatch data is available. One or more optional counters/masters could not refresh and will retry next time.",
-              }
+              type: "warning",
+              title: "Dashboard partially loaded",
+              message: "Core Dispatch data is available. One or more optional counters/masters could not refresh and will retry next time.",
+            }
             : null
         );
       } catch (e) {
@@ -584,6 +618,66 @@ export default function AdminDashboardScreen({
         })
         .slice(0, 5);
     }, [challans]);
+
+  /*
+   * Recent Challans shows only five rows, so hydrate site metadata only for
+   * packets inside those five challans. This keeps the Admin dashboard bounded
+   * and avoids turning site proof into another full-history startup request.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!canViewSiteProof) {
+      setSiteLifecycleMetadata({});
+      return undefined;
+    }
+
+    const packetItemIds =
+      recentChallans
+        .flatMap((challan) =>
+          Array.isArray(challan?.items)
+            ? challan.items
+            : []
+        )
+        .map(getSitePacketItemId)
+        .filter(Boolean);
+
+    if (packetItemIds.length === 0) {
+      setSiteLifecycleMetadata({});
+      return undefined;
+    }
+
+    fetchSiteLifecycleMetadataMap(
+      packetItemIds
+    )
+      .then((metadata) => {
+        if (!cancelled) {
+          setSiteLifecycleMetadata(
+            metadata || {}
+          );
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          /*
+           * Site metadata is deliberately non-blocking. The dashboard and
+           * existing PackFlow operations remain usable if the read-only proof
+           * endpoint is temporarily unavailable.
+           */
+          console.debug(
+            "Recent challan site metadata unavailable:",
+            error?.message || error
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    canViewSiteProof,
+    recentChallans,
+  ]);
 
   const runningChallans =
     useMemo(() => {
@@ -854,6 +948,15 @@ export default function AdminDashboardScreen({
             <RecentChallan
               key={challan.challanNumber}
               challan={challan}
+              siteLifecycleMetadata={
+                siteLifecycleMetadata
+              }
+              canViewSiteProof={
+                canViewSiteProof
+              }
+              onOpenSiteProof={(item) =>
+                setSiteProofItem(item)
+              }
               onPress={() =>
                 navigation.navigate(
                   "TripItems",
@@ -866,6 +969,22 @@ export default function AdminDashboardScreen({
           ))
         )}
       </View>
+
+      <SiteProofInspectorModal
+        visible={Boolean(siteProofItem)}
+        item={siteProofItem}
+        metadata={
+          siteProofItem
+            ? getSiteMetadataForItem(
+              siteProofItem,
+              siteLifecycleMetadata
+            )
+            : null
+        }
+        onClose={() =>
+          setSiteProofItem(null)
+        }
+      />
     </ScrollView>
   );
 }
@@ -975,62 +1094,246 @@ function TripMiniCard({
 function RecentChallan({
   challan,
   onPress,
+  siteLifecycleMetadata = {},
+  canViewSiteProof = false,
+  onOpenSiteProof,
 }) {
   const ended =
     isTripEnded(challan);
 
+  const challanItems =
+    Array.isArray(challan?.items)
+      ? challan.items
+      : [];
+
+  const sitePackets =
+    useMemo(
+      () =>
+        challanItems.filter((item) =>
+          Boolean(
+            getSitePacketItemId(item)
+          )
+        ),
+      [challanItems]
+    );
+
+  const siteSummary =
+    useMemo(
+      () =>
+        summarizeSiteLifecycle(
+          challanItems,
+          siteLifecycleMetadata
+        ),
+      [
+        challanItems,
+        siteLifecycleMetadata,
+      ]
+    );
+
   return (
-    <TouchableOpacity
-      style={styles.recentCard}
-      onPress={onPress}
-      activeOpacity={0.86}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={styles.recentTitle}>
-          {challan.challanNumber || "—"}
-        </Text>
-
-        <Text style={styles.recentMeta}>
-          {challan.driverName || "—"} •{" "}
-          {challan.vehicleNumber || "—"}
-        </Text>
-
-        <Text style={styles.recentSub}>
-          {formatDateTime(
-            challan.dispatchedAt ||
-            challan.tripStartedAt
-          )}{" "}
-          • {challan.totalItems || 0} items
-        </Text>
-
-        <Text style={styles.recentSub}>
-          Duration:{" "}
-          {formatDuration(
-            challan.tripDurationMinutes
-          )}
-        </Text>
-      </View>
-
-      <View
-        style={[
-          styles.statusPill,
-          ended
-            ? styles.endedPill
-            : styles.runningPill,
-        ]}
+    <View style={styles.recentCard}>
+      <TouchableOpacity
+        style={styles.recentMainPress}
+        onPress={onPress}
+        activeOpacity={0.86}
       >
-        <Text
+        <View style={{ flex: 1 }}>
+          <Text style={styles.recentTitle}>
+            {challan.challanNumber || "—"}
+          </Text>
+
+          <Text style={styles.recentMeta}>
+            {challan.driverName || "—"} •{" "}
+            {challan.vehicleNumber || "—"}
+          </Text>
+
+          <Text style={styles.recentSub}>
+            {formatDateTime(
+              challan.dispatchedAt ||
+              challan.tripStartedAt
+            )}{" "}
+            • {challan.totalItems || challanItems.length || 0} items
+          </Text>
+
+          <Text style={styles.recentSub}>
+            Duration:{" "}
+            {formatDuration(
+              challan.tripDurationMinutes
+            )}
+          </Text>
+        </View>
+
+        <View
           style={[
-            styles.statusPillText,
+            styles.statusPill,
             ended
-              ? styles.endedText
-              : styles.runningText,
+              ? styles.endedPill
+              : styles.runningPill,
           ]}
         >
-          {ended ? "ENDED" : "RUNNING"}
-        </Text>
-      </View>
-    </TouchableOpacity>
+          <Text
+            style={[
+              styles.statusPillText,
+              ended
+                ? styles.endedText
+                : styles.runningText,
+            ]}
+          >
+            {ended ? "ENDED" : "RUNNING"}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {canViewSiteProof &&
+        siteSummary.linkedPackets > 0 ? (
+        <View style={styles.recentSitePanel}>
+          <View style={styles.recentSiteHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recentSiteKicker}>
+                SITE / EVIDENCE
+              </Text>
+
+              <Text style={styles.recentSiteState}>
+                {siteSummaryLabel(
+                  siteSummary
+                )}
+              </Text>
+            </View>
+
+            <View style={styles.recentPhotoCountPill}>
+              <Text style={styles.recentPhotoCountText}>
+                📷 {siteSummary.evidencePhotos}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.recentSiteStatsRow}>
+            <RecentSiteStat
+              label="Awaiting"
+              value={siteSummary.awaiting}
+              tone="warning"
+            />
+
+            <RecentSiteStat
+              label="Delivered"
+              value={siteSummary.delivered}
+              tone="success"
+            />
+
+            <RecentSiteStat
+              label="Opened"
+              value={siteSummary.opened}
+              tone="purple"
+            />
+          </View>
+
+          <Text style={styles.recentPacketHeading}>
+            Packets • tap any packet for site info & photos
+          </Text>
+
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.recentPacketStrip}
+          >
+            {sitePackets.map((item, index) => {
+              const metadata =
+                getSiteMetadataForItem(
+                  item,
+                  siteLifecycleMetadata
+                );
+
+              const photoCount =
+                Number(
+                  metadata?.deliveryPhotoCount ||
+                  0
+                ) +
+                Number(
+                  metadata?.openingPhotoCount ||
+                  0
+                );
+
+              const packetLabel =
+                clean(
+                  item?.packetNumber ||
+                  item?.stickerNumber ||
+                  item?.name ||
+                  item?.itemName ||
+                  `Packet ${index + 1}`
+                );
+
+              return (
+                <TouchableOpacity
+                  key={
+                    getSitePacketItemId(item) ||
+                    item?.zohoItemId ||
+                    `${challan.challanNumber}-${index}`
+                  }
+                  style={styles.recentPacketProofCard}
+                  activeOpacity={0.82}
+                  onPress={() =>
+                    onOpenSiteProof?.(item)
+                  }
+                >
+                  <Text
+                    style={styles.recentPacketLabel}
+                    numberOfLines={1}
+                  >
+                    {packetLabel}
+                  </Text>
+
+                  <SiteStatusPill
+                    status={
+                      metadata?.siteStatus ||
+                      "AWAITING_DELIVERY"
+                    }
+                    compact
+                  />
+
+                  <Text style={styles.recentPacketPhotoText}>
+                    {photoCount > 0
+                      ? `📷 ${photoCount} photo${photoCount === 1 ? "" : "s"}`
+                      : "No photos yet"}
+                  </Text>
+
+                  <Text style={styles.recentPacketInspectText}>
+                    View site info →
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function RecentSiteStat({
+  label,
+  value,
+  tone,
+}) {
+  return (
+    <View
+      style={[
+        styles.recentSiteStat,
+        tone === "success"
+          ? styles.recentSiteStatSuccess
+          : tone === "purple"
+            ? styles.recentSiteStatPurple
+            : styles.recentSiteStatWarning,
+      ]}
+    >
+      <Text style={styles.recentSiteStatValue}>
+        {value}
+      </Text>
+
+      <Text style={styles.recentSiteStatLabel}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -1325,14 +1628,17 @@ const styles = {
   },
 
   recentCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
     backgroundColor: "#0f172a",
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,.08)",
     padding: 14,
     marginBottom: 10,
+  },
+
+  recentMainPress: {
+    flexDirection: "row",
+    alignItems: "flex-start",
   },
 
   recentTitle: {
@@ -1353,6 +1659,138 @@ const styles = {
     fontWeight: "700",
     fontSize: 11,
     marginTop: 4,
+  },
+
+  recentSitePanel: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,.07)",
+  },
+
+  recentSiteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  recentSiteKicker: {
+    color: "#60a5fa",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  recentSiteState: {
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 3,
+  },
+
+  recentPhotoCountPill: {
+    minWidth: 58,
+    minHeight: 28,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(59,130,246,.12)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.24)",
+  },
+
+  recentPhotoCountText: {
+    color: "#bfdbfe",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  recentSiteStatsRow: {
+    flexDirection: "row",
+    gap: 7,
+    marginTop: 10,
+  },
+
+  recentSiteStat: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+
+  recentSiteStatWarning: {
+    backgroundColor: "rgba(245,158,11,.08)",
+    borderColor: "rgba(245,158,11,.20)",
+  },
+
+  recentSiteStatSuccess: {
+    backgroundColor: "rgba(16,185,129,.08)",
+    borderColor: "rgba(16,185,129,.20)",
+  },
+
+  recentSiteStatPurple: {
+    backgroundColor: "rgba(139,92,246,.08)",
+    borderColor: "rgba(139,92,246,.20)",
+  },
+
+  recentSiteStatValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  recentSiteStatLabel: {
+    color: "#94a3b8",
+    fontSize: 8.5,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+
+  recentPacketHeading: {
+    color: "#94a3b8",
+    fontSize: 9.5,
+    fontWeight: "800",
+    marginTop: 11,
+    marginBottom: 7,
+  },
+
+  recentPacketStrip: {
+    gap: 8,
+    paddingRight: 4,
+  },
+
+  recentPacketProofCard: {
+    width: 164,
+    minHeight: 112,
+    padding: 10,
+    borderRadius: 13,
+    backgroundColor: "rgba(2,6,23,.52)",
+    borderWidth: 1,
+    borderColor: "rgba(96,165,250,.14)",
+  },
+
+  recentPacketLabel: {
+    color: "#fff",
+    fontSize: 10.5,
+    fontWeight: "900",
+    marginBottom: 7,
+  },
+
+  recentPacketPhotoText: {
+    color: "#cbd5e1",
+    fontSize: 9.5,
+    fontWeight: "800",
+    marginTop: 7,
+  },
+
+  recentPacketInspectText: {
+    color: "#93c5fd",
+    fontSize: 9.5,
+    fontWeight: "900",
+    marginTop: 6,
   },
 
   statusPill: {

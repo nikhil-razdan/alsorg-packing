@@ -39,6 +39,24 @@ import {
     getDisplaySku,
 } from "../api/operationalMetadataApi";
 
+import {
+    useAuth,
+} from "../auth/AuthContext";
+
+import SiteProofInspectorModal, {
+    SiteStatusPill,
+} from "../components/SiteProofInspectorModal";
+
+import {
+    fetchSiteLifecycleMetadataMap,
+    getSiteMetadataForItem,
+    getSitePacketItemId,
+    normalizeSiteStatus,
+    siteStatusLabel,
+    siteSummaryLabel,
+    summarizeSiteLifecycle,
+} from "../api/siteLifecycleApi";
+
 function normalizeText(value) {
     return String(value || "")
         .trim()
@@ -204,6 +222,18 @@ export default function TripItemScreen({
     const challanNumber =
         trip?.challanNumber || "";
 
+    const {
+        hasAnyRole,
+    } = useAuth();
+
+    const canViewSiteProof =
+        hasAnyRole(
+            "ADMIN",
+            "DISPATCH",
+            "UTL_DISPATCH",
+            "LOGISTICS"
+        );
+
     const [loading, setLoading] =
         useState(false);
 
@@ -236,6 +266,16 @@ export default function TripItemScreen({
 
     const [pageSize, setPageSize] =
         useState(10);
+
+    const [
+        siteLifecycleMetadata,
+        setSiteLifecycleMetadata,
+    ] = useState({});
+
+    const [
+        siteProofItem,
+        setSiteProofItem,
+    ] = useState(null);
 
     const loadItems = async () => {
         if (!challanNumber) {
@@ -305,6 +345,51 @@ export default function TripItemScreen({
             loadItems();
         }, [challanNumber])
     );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!canViewSiteProof) {
+            setSiteLifecycleMetadata({});
+            return undefined;
+        }
+
+        const packetItemIds =
+            items
+                .map(getSitePacketItemId)
+                .filter(Boolean);
+
+        if (packetItemIds.length === 0) {
+            setSiteLifecycleMetadata({});
+            return undefined;
+        }
+
+        fetchSiteLifecycleMetadataMap(
+            packetItemIds
+        )
+            .then((metadata) => {
+                if (!cancelled) {
+                    setSiteLifecycleMetadata(
+                        metadata || {}
+                    );
+                }
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    console.debug(
+                        "Challan site lifecycle metadata unavailable:",
+                        error?.message || error
+                    );
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        canViewSiteProof,
+        items,
+    ]);
 
     const statusOptions =
         useMemo(() => {
@@ -503,6 +588,19 @@ export default function TripItemScreen({
         trip?.vehicleNumber ||
         "—";
 
+    const siteSummary =
+        useMemo(
+            () =>
+                summarizeSiteLifecycle(
+                    items,
+                    siteLifecycleMetadata
+                ),
+            [
+                items,
+                siteLifecycleMetadata,
+            ]
+        );
+
     if (loading && items.length === 0) {
         return (
             <View style={styles.center}>
@@ -579,6 +677,48 @@ export default function TripItemScreen({
                                     }
                                 />
                             </View>
+
+                            {canViewSiteProof &&
+                            siteSummary.linkedPackets > 0 ? (
+                                <View style={styles.siteSummaryBox}>
+                                    <View style={styles.siteSummaryHead}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.siteSummaryTitle}>
+                                                Site Proof
+                                            </Text>
+
+                                            <Text style={styles.siteSummaryState}>
+                                                {siteSummaryLabel(
+                                                    siteSummary
+                                                )}
+                                            </Text>
+                                        </View>
+
+                                        <Text style={styles.siteSummaryPhotos}>
+                                            {siteSummary.evidencePhotos} photo{
+                                                siteSummary.evidencePhotos === 1
+                                                    ? ""
+                                                    : "s"
+                                            }
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.siteSummaryCounts}>
+                                        <SiteMiniStat
+                                            label="Awaiting"
+                                            value={siteSummary.awaiting}
+                                        />
+                                        <SiteMiniStat
+                                            label="Delivered"
+                                            value={siteSummary.delivered}
+                                        />
+                                        <SiteMiniStat
+                                            label="Opened"
+                                            value={siteSummary.opened}
+                                        />
+                                    </View>
+                                </View>
+                            ) : null}
 
                             <TouchableOpacity
                                 style={styles.openChallanBtn}
@@ -701,6 +841,16 @@ export default function TripItemScreen({
                         index={
                             (currentPage - 1) * pageSize + index
                         }
+                        canViewSiteProof={canViewSiteProof}
+                        siteMeta={
+                            getSiteMetadataForItem(
+                                item,
+                                siteLifecycleMetadata
+                            )
+                        }
+                        onOpenSiteProof={() =>
+                            setSiteProofItem(item)
+                        }
                     />
                 )}
             />
@@ -722,6 +872,22 @@ export default function TripItemScreen({
                 locationFilter={locationFilter}
                 setLocationFilter={setLocationFilter}
                 clearFilters={clearFilters}
+            />
+
+            <SiteProofInspectorModal
+                visible={Boolean(siteProofItem)}
+                item={siteProofItem}
+                metadata={
+                    siteProofItem
+                        ? getSiteMetadataForItem(
+                            siteProofItem,
+                            siteLifecycleMetadata
+                        )
+                        : null
+                }
+                onClose={() =>
+                    setSiteProofItem(null)
+                }
             />
         </View>
     );
@@ -1125,9 +1291,28 @@ function FilterGroup({
 function ItemCard({
     item,
     index,
+    canViewSiteProof = false,
+    siteMeta = null,
+    onOpenSiteProof,
 }) {
     const status =
         getItemStatus(item);
+
+    const packetItemId =
+        getSitePacketItemId(item);
+
+    const siteStatus =
+        normalizeSiteStatus(
+            siteMeta?.siteStatus
+        );
+
+    const evidencePhotoCount =
+        Number(
+            siteMeta?.deliveryPhotoCount || 0
+        ) +
+        Number(
+            siteMeta?.openingPhotoCount || 0
+        );
 
     return (
         <View style={styles.itemCard}>
@@ -1162,6 +1347,22 @@ function ItemCard({
                     </Text>
                 </View>
             </View>
+
+            {packetItemId && canViewSiteProof ? (
+                <View style={styles.itemSiteRow}>
+                    <SiteStatusPill
+                        status={siteStatus}
+                    />
+
+                    <Text style={styles.itemSiteEvidence}>
+                        {evidencePhotoCount} evidence photo{
+                            evidencePhotoCount === 1
+                                ? ""
+                                : "s"
+                        }
+                    </Text>
+                </View>
+            ) : null}
 
             <View style={styles.detailGrid}>
                 <Detail
@@ -1201,6 +1402,26 @@ function ItemCard({
                         "—"
                     }
                 />
+
+                {packetItemId && canViewSiteProof ? (
+                    <>
+                        <Detail
+                            label="Site Status"
+                            value={siteStatusLabel(
+                                siteStatus
+                            )}
+                        />
+
+                        <Detail
+                            label="Evidence"
+                            value={`${evidencePhotoCount} photo${
+                                evidencePhotoCount === 1
+                                    ? ""
+                                    : "s"
+                            }`}
+                        />
+                    </>
+                ) : null}
             </View>
 
             <View style={styles.longBox}>
@@ -1224,6 +1445,34 @@ function ItemCard({
                     </Text>
                 </View>
             ) : null}
+
+            {packetItemId && canViewSiteProof ? (
+                <TouchableOpacity
+                    style={styles.siteProofBtn}
+                    onPress={onOpenSiteProof}
+                >
+                    <Text style={styles.siteProofBtnText}>
+                        View Site Info / Evidence
+                    </Text>
+                </TouchableOpacity>
+            ) : null}
+        </View>
+    );
+}
+
+function SiteMiniStat({
+    label,
+    value,
+}) {
+    return (
+        <View style={styles.siteMiniStat}>
+            <Text style={styles.siteMiniStatValue}>
+                {value}
+            </Text>
+
+            <Text style={styles.siteMiniStatLabel}>
+                {label}
+            </Text>
         </View>
     );
 }
@@ -1350,6 +1599,71 @@ const styles = {
         fontSize: 12,
         fontWeight: "700",
         marginTop: 3,
+    },
+
+    siteSummaryBox: {
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 15,
+        backgroundColor: "rgba(37,99,235,.08)",
+        borderWidth: 1,
+        borderColor: "rgba(96,165,250,.20)",
+    },
+
+    siteSummaryHead: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 10,
+    },
+
+    siteSummaryTitle: {
+        color: "#93c5fd",
+        fontSize: 10,
+        fontWeight: "900",
+        textTransform: "uppercase",
+        letterSpacing: .5,
+    },
+
+    siteSummaryState: {
+        color: "#fff",
+        fontSize: 13,
+        fontWeight: "900",
+        marginTop: 3,
+    },
+
+    siteSummaryPhotos: {
+        color: "#cbd5e1",
+        fontSize: 10,
+        fontWeight: "800",
+    },
+
+    siteSummaryCounts: {
+        flexDirection: "row",
+        gap: 8,
+        marginTop: 10,
+    },
+
+    siteMiniStat: {
+        flex: 1,
+        borderRadius: 11,
+        paddingVertical: 8,
+        paddingHorizontal: 7,
+        backgroundColor: "rgba(255,255,255,.045)",
+        alignItems: "center",
+    },
+
+    siteMiniStatValue: {
+        color: "#fff",
+        fontSize: 14,
+        fontWeight: "900",
+    },
+
+    siteMiniStatLabel: {
+        color: "#94a3b8",
+        fontSize: 8,
+        fontWeight: "900",
+        marginTop: 2,
+        textTransform: "uppercase",
     },
 
     openChallanBtn: {
@@ -1872,6 +2186,40 @@ const styles = {
     statusBadgeText: {
         color: "#6ee7b7",
         fontSize: 9.5,
+        fontWeight: "900",
+    },
+
+    itemSiteRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        marginTop: 10,
+    },
+
+    itemSiteEvidence: {
+        color: "#94a3b8",
+        fontSize: 10,
+        fontWeight: "800",
+        flexShrink: 1,
+        textAlign: "right",
+    },
+
+    siteProofBtn: {
+        minHeight: 42,
+        marginTop: 12,
+        borderRadius: 13,
+        backgroundColor: "rgba(37,99,235,.12)",
+        borderWidth: 1,
+        borderColor: "rgba(96,165,250,.28)",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 12,
+    },
+
+    siteProofBtnText: {
+        color: "#93c5fd",
+        fontSize: 11,
         fontWeight: "900",
     },
 
