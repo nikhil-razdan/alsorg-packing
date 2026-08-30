@@ -17,8 +17,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
@@ -61,10 +64,21 @@ public class ChalaanPdfService {
                 }
 
                 /*
-                 * Sort a copied list so rows having the same PD number are printed
-                 * consecutively without changing the original data list.
+                 * Standard packet challans are now grouped by the business identity
+                 * that actually tells the factory/site team which packets belong
+                 * together: Client + PD No. + Drawing No. + Item Name.
+                 *
+                 * This removes the repeated PD/DWG/Item text from every packet row
+                 * while preserving every packet description and remark inside the
+                 * same visual section.  The outer challan layout, header, table
+                 * columns and signature footer remain unchanged.
                  */
-                List<ChalaanItem> items = sortChalaanItemsByPd(sourceItems);
+                List<StandardChallanGroup> groups = groupStandardChallanItems(sourceItems);
+
+                /*
+                 * Keep a flattened copy for the existing header PD-number summary.
+                 */
+                List<ChalaanItem> items = flattenStandardChallanGroups(groups);
 
                 /*
                  * Preserve the existing header-data behaviour by taking client/address
@@ -122,9 +136,8 @@ public class ChalaanPdfService {
                                         helperLoaderText);
 
                         float y = 580;
-                        int sr = 1;
 
-                        if (items.isEmpty()) {
+                        if (groups.isEmpty()) {
                                 drawText(
                                                 cs,
                                                 regular,
@@ -134,100 +147,130 @@ public class ChalaanPdfService {
                                                 "No items found for this challan");
                         }
 
-                        for (ChalaanItem item : items) {
-                                if (item == null) {
-                                        continue;
-                                }
+                        int groupNumber = 1;
 
-                                String fullDesc = "PD No: " + safe(item.getPdNo()) + " | "
-                                                + "Item: " + safe(item.getItemName()) + " | "
-                                                + "Dwg No: " + safe(item.getDrawingNo()) + " | "
-                                                + "Desc: " + safe(item.getDescription());
+                        for (StandardChallanGroup group : groups) {
+                                int packetIndex = 0;
 
-                                String remarks = safe(item.getRemarks());
+                                while (packetIndex < group.items.size()) {
+                                        boolean continued = packetIndex > 0;
 
-                                int descLines = countWrappedLines(
-                                                regular,
-                                                10,
-                                                300,
-                                                fullDesc);
+                                        float headerHeight = calculateStandardGroupHeaderHeight(
+                                                        bold,
+                                                        group,
+                                                        continued);
 
-                                int remarksLines = countWrappedLines(
-                                                regular,
-                                                10,
-                                                120,
-                                                remarks);
+                                        float firstPacketHeight = calculateStandardPacketHeight(
+                                                        regular,
+                                                        group.items.get(packetIndex),
+                                                        packetIndex + 1);
 
-                                int lineCount = Math.max(
-                                                Math.max(descLines, remarksLines),
-                                                1);
+                                        float availableHeight = y - (TABLE_BOTTOM + 8);
 
-                                float rowHeight = Math.max(28, lineCount * 14 + 12);
+                                        /*
+                                         * Do not start a new business section at the very bottom of
+                                         * a page when its first packet cannot fit beneath the group
+                                         * identity.  Continue on a clean challan page instead.
+                                         */
+                                        if (availableHeight < headerHeight + firstPacketHeight + 8
+                                                        && y < 579) {
+                                                drawFooter(cs, regular);
+                                                cs.close();
 
-                                if (y - rowHeight < TABLE_BOTTOM + 8) {
-                                        drawFooter(cs, regular);
-                                        cs.close();
+                                                page = new PDPage(new PDRectangle(PAGE_WIDTH, PAGE_HEIGHT));
+                                                doc.addPage(page);
+                                                cs = new PDPageContentStream(doc, page);
 
-                                        page = new PDPage(new PDRectangle(PAGE_WIDTH, PAGE_HEIGHT));
+                                                drawPageHeader(
+                                                                cs,
+                                                                bold,
+                                                                regular,
+                                                                pdNo,
+                                                                clientName,
+                                                                address,
+                                                                date,
+                                                                challanNo,
+                                                                driverName,
+                                                                vehicleNo,
+                                                                helperLoaderText);
 
-                                        doc.addPage(page);
+                                                y = 580;
+                                                availableHeight = y - (TABLE_BOTTOM + 8);
+                                        }
 
-                                        cs = new PDPageContentStream(doc, page);
+                                        int chunkEnd = packetIndex;
+                                        float sectionHeight = headerHeight + 6;
 
-                                        drawPageHeader(
+                                        while (chunkEnd < group.items.size()) {
+                                                float packetHeight = calculateStandardPacketHeight(
+                                                                regular,
+                                                                group.items.get(chunkEnd),
+                                                                chunkEnd + 1);
+
+                                                if (sectionHeight + packetHeight + 4 > availableHeight
+                                                                && chunkEnd > packetIndex) {
+                                                        break;
+                                                }
+
+                                                /*
+                                                 * A normal packet description is far smaller than a page.
+                                                 * If a single unusually long value reaches this branch,
+                                                 * still render that one packet instead of looping forever.
+                                                 */
+                                                if (sectionHeight + packetHeight + 4 > availableHeight
+                                                                && chunkEnd == packetIndex) {
+                                                        sectionHeight += packetHeight;
+                                                        chunkEnd++;
+                                                        break;
+                                                }
+
+                                                sectionHeight += packetHeight;
+                                                chunkEnd++;
+                                        }
+
+                                        sectionHeight += 4;
+
+                                        drawStandardGroupSection(
                                                         cs,
                                                         bold,
                                                         regular,
-                                                        pdNo,
-                                                        clientName,
-                                                        address,
-                                                        date,
-                                                        challanNo,
-                                                        driverName,
-                                                        vehicleNo,
-                                                        helperLoaderText);
+                                                        group,
+                                                        groupNumber,
+                                                        packetIndex,
+                                                        chunkEnd,
+                                                        continued,
+                                                        y,
+                                                        sectionHeight);
 
-                                        y = 580;
+                                        y -= sectionHeight + 6;
+                                        packetIndex = chunkEnd;
+
+                                        if (packetIndex < group.items.size()) {
+                                                drawFooter(cs, regular);
+                                                cs.close();
+
+                                                page = new PDPage(new PDRectangle(PAGE_WIDTH, PAGE_HEIGHT));
+                                                doc.addPage(page);
+                                                cs = new PDPageContentStream(doc, page);
+
+                                                drawPageHeader(
+                                                                cs,
+                                                                bold,
+                                                                regular,
+                                                                pdNo,
+                                                                clientName,
+                                                                address,
+                                                                date,
+                                                                challanNo,
+                                                                driverName,
+                                                                vehicleNo,
+                                                                helperLoaderText);
+
+                                                y = 580;
+                                        }
                                 }
 
-                                float rowTop = y;
-                                float rowBottom = y - rowHeight;
-
-                                drawText(
-                                                cs,
-                                                regular,
-                                                10,
-                                                55,
-                                                rowTop,
-                                                String.valueOf(sr));
-
-                                drawWrappedText(
-                                                cs,
-                                                regular,
-                                                10,
-                                                110,
-                                                rowTop,
-                                                300,
-                                                fullDesc);
-
-                                drawWrappedText(
-                                                cs,
-                                                regular,
-                                                10,
-                                                430,
-                                                rowTop,
-                                                120,
-                                                remarks);
-
-                                drawLine(
-                                                cs,
-                                                LEFT,
-                                                rowBottom,
-                                                RIGHT,
-                                                rowBottom);
-
-                                y = rowBottom - 14;
-                                sr++;
+                                groupNumber++;
                         }
 
                         drawFooter(cs, regular);
@@ -680,6 +723,440 @@ public class ChalaanPdfService {
                 return Math.max(lines, 1);
         }
 
+        private List<StandardChallanGroup> groupStandardChallanItems(
+                        List<ChalaanItem> sourceItems) {
+
+                List<ChalaanItem> sortedItems = new ArrayList<>();
+
+                if (sourceItems != null) {
+                        for (ChalaanItem item : sourceItems) {
+                                if (item != null) {
+                                        sortedItems.add(item);
+                                }
+                        }
+                }
+
+                sortedItems.sort(this::compareStandardChallanItems);
+
+                Map<String, StandardChallanGroup> grouped = new LinkedHashMap<>();
+                int anonymousIndex = 0;
+
+                for (ChalaanItem item : sortedItems) {
+                        String clientKey = normalizeGroupingValue(item.getClientName());
+                        String pdKey = normalizeGroupingValue(item.getPdNo());
+                        String drawingKey = normalizeGroupingValue(item.getDrawingNo());
+                        String itemKey = normalizeGroupingValue(item.getItemName());
+
+                        String key = clientKey + "\u001f"
+                                        + pdKey + "\u001f"
+                                        + drawingKey + "\u001f"
+                                        + itemKey;
+
+                        /*
+                         * Do not accidentally merge completely unidentified legacy rows.
+                         */
+                        if (clientKey.isEmpty()
+                                        && pdKey.isEmpty()
+                                        && drawingKey.isEmpty()
+                                        && itemKey.isEmpty()) {
+                                key = key + "\u001fANON-" + (++anonymousIndex);
+                        }
+
+                        StandardChallanGroup group = grouped.computeIfAbsent(
+                                        key,
+                                        ignored -> new StandardChallanGroup(
+                                                        safe(item.getClientName()),
+                                                        safe(item.getPdNo()),
+                                                        safe(item.getDrawingNo()),
+                                                        safe(item.getItemName())));
+
+                        group.items.add(item);
+                }
+
+                return new ArrayList<>(grouped.values());
+        }
+
+        private List<ChalaanItem> flattenStandardChallanGroups(
+                        List<StandardChallanGroup> groups) {
+
+                List<ChalaanItem> items = new ArrayList<>();
+
+                if (groups == null) {
+                        return items;
+                }
+
+                for (StandardChallanGroup group : groups) {
+                        if (group != null && group.items != null) {
+                                items.addAll(group.items);
+                        }
+                }
+
+                return items;
+        }
+
+        private int compareStandardChallanItems(
+                        ChalaanItem left,
+                        ChalaanItem right) {
+
+                if (left == right) {
+                        return 0;
+                }
+
+                if (left == null) {
+                        return 1;
+                }
+
+                if (right == null) {
+                        return -1;
+                }
+
+                int pdComparison = comparePdValues(
+                                left.getPdNo(),
+                                right.getPdNo());
+
+                if (pdComparison != 0) {
+                        return pdComparison;
+                }
+
+                int drawingComparison = compareGroupingText(
+                                left.getDrawingNo(),
+                                right.getDrawingNo());
+
+                if (drawingComparison != 0) {
+                        return drawingComparison;
+                }
+
+                int itemComparison = compareGroupingText(
+                                left.getItemName(),
+                                right.getItemName());
+
+                if (itemComparison != 0) {
+                        return itemComparison;
+                }
+
+                return compareGroupingText(
+                                left.getClientName(),
+                                right.getClientName());
+        }
+
+        private int compareGroupingText(
+                        String leftValue,
+                        String rightValue) {
+
+                String left = normalizeGroupingValue(leftValue);
+                String right = normalizeGroupingValue(rightValue);
+
+                if (left.isEmpty() && right.isEmpty()) {
+                        return 0;
+                }
+
+                if (left.isEmpty()) {
+                        return 1;
+                }
+
+                if (right.isEmpty()) {
+                        return -1;
+                }
+
+                return compareNaturalText(left, right);
+        }
+
+        private String normalizeGroupingValue(
+                        String value) {
+
+                if (value == null) {
+                        return "";
+                }
+
+                String normalized = value
+                                .trim()
+                                .replaceAll("\\s+", " ")
+                                .toUpperCase(Locale.ROOT);
+
+                return "-".equals(normalized)
+                                ? ""
+                                : normalized;
+        }
+
+        private float calculateStandardGroupHeaderHeight(
+                        PDFont bold,
+                        StandardChallanGroup group,
+                        boolean continued) throws IOException {
+
+                String identityLine = buildStandardGroupIdentityLine(
+                                group,
+                                continued);
+
+                String itemLine = "Item: " + safe(group.itemName);
+
+                int identityLines = countWrappedLines(
+                                bold,
+                                9,
+                                300,
+                                identityLine);
+
+                int itemLines = countWrappedLines(
+                                bold,
+                                9,
+                                300,
+                                itemLine);
+
+                return Math.max(
+                                36,
+                                12 + ((identityLines + itemLines) * 11));
+        }
+
+        private float calculateStandardPacketHeight(
+                        PDFont regular,
+                        ChalaanItem item,
+                        int packetNumber) throws IOException {
+
+                String description = buildStandardPacketDescription(
+                                item,
+                                packetNumber);
+
+                String remarks = buildStandardPacketRemarks(
+                                item,
+                                packetNumber);
+
+                int descriptionLines = countWrappedLines(
+                                regular,
+                                9,
+                                300,
+                                description);
+
+                int remarkLines = countWrappedLines(
+                                regular,
+                                8,
+                                120,
+                                remarks);
+
+                return Math.max(
+                                20,
+                                (Math.max(descriptionLines, remarkLines) * 12) + 6);
+        }
+
+        private void drawStandardGroupSection(
+                        PDPageContentStream cs,
+                        PDFont bold,
+                        PDFont regular,
+                        StandardChallanGroup group,
+                        int groupNumber,
+                        int fromPacketIndex,
+                        int toPacketIndex,
+                        boolean continued,
+                        float rowTop,
+                        float sectionHeight) throws IOException {
+
+                float rowBottom = rowTop - sectionHeight;
+
+                drawText(
+                                cs,
+                                bold,
+                                10,
+                                55,
+                                rowTop - 15,
+                                String.valueOf(groupNumber));
+
+                drawText(
+                                cs,
+                                regular,
+                                7,
+                                47,
+                                rowTop - 29,
+                                group.items.size() + " pkts");
+
+                if (continued) {
+                        drawText(
+                                        cs,
+                                        regular,
+                                        6,
+                                        48,
+                                        rowTop - 40,
+                                        "cont.");
+                }
+
+                String identityLine = buildStandardGroupIdentityLine(
+                                group,
+                                continued);
+
+                float identityEndY = drawWrappedTextWithLineHeight(
+                                cs,
+                                bold,
+                                9,
+                                110,
+                                rowTop - 13,
+                                300,
+                                identityLine,
+                                11);
+
+                float itemEndY = drawWrappedTextWithLineHeight(
+                                cs,
+                                bold,
+                                9,
+                                110,
+                                identityEndY - 11,
+                                300,
+                                "Item: " + safe(group.itemName),
+                                11);
+
+                /*
+                 * A short rule beneath the group identity makes the separation
+                 * between different PD/DWG/Item sections immediately visible.
+                 */
+                float headerRuleY = itemEndY - 8;
+                cs.setLineWidth(0.55f);
+                drawLine(cs, SR_RIGHT + 6, headerRuleY, RIGHT - 6, headerRuleY);
+                cs.setLineWidth(1f);
+
+                float packetY = headerRuleY - 13;
+
+                for (int index = fromPacketIndex; index < toPacketIndex; index++) {
+                        ChalaanItem item = group.items.get(index);
+                        int packetNumber = index + 1;
+
+                        float packetHeight = calculateStandardPacketHeight(
+                                        regular,
+                                        item,
+                                        packetNumber);
+
+                        drawWrappedTextWithLineHeight(
+                                        cs,
+                                        regular,
+                                        9,
+                                        110,
+                                        packetY,
+                                        300,
+                                        buildStandardPacketDescription(
+                                                        item,
+                                                        packetNumber),
+                                        12);
+
+                        drawWrappedTextWithLineHeight(
+                                        cs,
+                                        regular,
+                                        8,
+                                        430,
+                                        packetY,
+                                        120,
+                                        buildStandardPacketRemarks(
+                                                        item,
+                                                        packetNumber),
+                                        12);
+
+                        packetY -= packetHeight;
+                }
+
+                cs.setLineWidth(1.35f);
+                drawLine(
+                                cs,
+                                LEFT,
+                                rowBottom,
+                                RIGHT,
+                                rowBottom);
+                cs.setLineWidth(1f);
+        }
+
+        private String buildStandardGroupIdentityLine(
+                        StandardChallanGroup group,
+                        boolean continued) {
+
+                String text = "PD No: " + safe(group.pdNo)
+                                + " | Dwg No: " + safe(group.drawingNo)
+                                + " | Packets: " + group.items.size();
+
+                if (continued) {
+                        text += " | Continued";
+                }
+
+                return text;
+        }
+
+        private String buildStandardPacketDescription(
+                        ChalaanItem item,
+                        int packetNumber) {
+
+                return "Packet " + packetNumber + ": "
+                                + safe(item == null ? null : item.getDescription());
+        }
+
+        private String buildStandardPacketRemarks(
+                        ChalaanItem item,
+                        int packetNumber) {
+
+                return "P" + packetNumber + ": "
+                                + safe(item == null ? null : item.getRemarks());
+        }
+
+        private float drawWrappedTextWithLineHeight(
+                        PDPageContentStream cs,
+                        PDFont font,
+                        int fontSize,
+                        float x,
+                        float y,
+                        float maxWidth,
+                        String text,
+                        float lineHeight) throws IOException {
+
+                String safeText = cleanPdfText(safe(text));
+                String[] words = safeText.split("\\s+");
+                StringBuilder line = new StringBuilder();
+
+                for (String word : words) {
+                        String test = line.length() == 0
+                                        ? word
+                                        : line + " " + word;
+
+                        float width = font.getStringWidth(test) / 1000 * fontSize;
+
+                        if (width > maxWidth && line.length() > 0) {
+                                drawText(
+                                                cs,
+                                                font,
+                                                fontSize,
+                                                x,
+                                                y,
+                                                line.toString());
+
+                                line = new StringBuilder(word);
+                                y -= lineHeight;
+                        } else {
+                                line = new StringBuilder(test);
+                        }
+                }
+
+                if (line.length() > 0) {
+                        drawText(
+                                        cs,
+                                        font,
+                                        fontSize,
+                                        x,
+                                        y,
+                                        line.toString());
+                }
+
+                return y;
+        }
+
+        private static final class StandardChallanGroup {
+                private final String clientName;
+                private final String pdNo;
+                private final String drawingNo;
+                private final String itemName;
+                private final List<ChalaanItem> items = new ArrayList<>();
+
+                private StandardChallanGroup(
+                                String clientName,
+                                String pdNo,
+                                String drawingNo,
+                                String itemName) {
+                        this.clientName = clientName;
+                        this.pdNo = pdNo;
+                        this.drawingNo = drawingNo;
+                        this.itemName = itemName;
+                }
+        }
+
         private String buildAllPdNos(
                         List<ChalaanItem> items) {
                 Set<String> pdNos = new LinkedHashSet<>();
@@ -703,35 +1180,6 @@ public class ChalaanPdfService {
                 }
 
                 return String.join(", ", pdNos);
-        }
-
-        /**
-         * Returns a new list sorted by PD number.
-         *
-         * Important:
-         * - Does not modify the original list.
-         * - Removes null entries because they are not printable rows.
-         * - Uses stable sorting, preserving original order within the same PD.
-         */
-        private List<ChalaanItem> sortChalaanItemsByPd(
-                        List<ChalaanItem> sourceItems) {
-
-                List<ChalaanItem> sortedItems = new ArrayList<>();
-
-                if (sourceItems != null) {
-                        for (ChalaanItem item : sourceItems) {
-                                if (item != null) {
-                                        sortedItems.add(item);
-                                }
-                        }
-                }
-
-                sortedItems.sort(
-                                (left, right) -> comparePdValues(
-                                                left == null ? null : left.getPdNo(),
-                                                right == null ? null : right.getPdNo()));
-
-                return sortedItems;
         }
 
         /**

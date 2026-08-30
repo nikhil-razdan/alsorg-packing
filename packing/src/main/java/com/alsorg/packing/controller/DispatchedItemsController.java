@@ -9,6 +9,7 @@ import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.service.LogisticsDispatchTripService;
 import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyRequest;
 import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyResponse;
 import com.alsorg.packing.service.DispatchedItemService.DispatchImportRow;
@@ -53,6 +54,15 @@ public class DispatchedItemsController {
         @org.springframework.beans.factory.annotation.Autowired(required = false)
         private UtlWorkflowService utlWorkflowService;
 
+        /*
+         * Optional synchronization bridge for challans that were created through
+         * the legacy LogisticsTrip table.  Keeping this optional preserves direct
+         * controller tests while allowing Admin/Logistics end-time corrections to
+         * update both data models when a linked trip exists.
+         */
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private LogisticsDispatchTripService logisticsDispatchTripService;
+
         public DispatchedItemsController(
                         DispatchedItemRepository repository,
                         DispatchedItemService dispatchedItemService,
@@ -72,6 +82,12 @@ public class DispatchedItemsController {
         private static final int MAX_SEARCH_LENGTH = 300;
         private static final int MAX_FILTER_LENGTH = 200;
         private static final int MAX_ITEM_IDS_PER_MUTATION = 1000;
+
+        private static final List<ItemDispatchStatus> CHALLAN_HISTORY_STATUSES = List.of(
+                        ItemDispatchStatus.DISPATCHED,
+                        ItemDispatchStatus.LOADED,
+                        ItemDispatchStatus.OUT_FOR_DELIVERY,
+                        ItemDispatchStatus.DELIVERED);
 
         /*
          * ============================================================
@@ -845,8 +861,7 @@ public class DispatchedItemsController {
                 Page<String> challanNumbersPage;
 
                 if (currentUserService.isAdmin(user)) {
-                        challanNumbersPage = repository.findChallanNumbersPage(
-                                        ItemDispatchStatus.DISPATCHED,
+                        challanNumbersPage = dispatchedItemService.searchAllChallanNumbers(
                                         pageable);
                 } else if (currentUserService.isUtlUser(user)) {
                         challanNumbersPage = dispatchedItemService.searchUtlVisibleChallanNumbers(
@@ -904,7 +919,7 @@ public class DispatchedItemsController {
 
                 for (DispatchedItem item : pageItems) {
                         if (item == null
-                                        || item.getStatus() != ItemDispatchStatus.DISPATCHED
+                                        || !isChallanHistoryStatus(item.getStatus())
                                         || item.getChalaanNumber() == null
                                         || item.getChalaanNumber().isBlank()) {
                                 continue;
@@ -997,49 +1012,41 @@ public class DispatchedItemsController {
                                         "Challan number is required");
                 }
 
-                List<DispatchedItem> items;
+                List<DispatchedItem> items = repository
+                                .findAllByChalaanNumberIn(
+                                                List.of(cleanChallanNumber))
+                                .stream()
+                                .filter(item -> item != null
+                                                && isChallanHistoryStatus(item.getStatus())
+                                                && item.getChalaanNumber() != null
+                                                && cleanChallanNumber.equals(item.getChalaanNumber().trim()))
+                                .toList();
 
-                if (currentUserService.isAdmin(user)) {
-                        items = repository.findByStatusAndChalaanNumber(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber);
-                } else if (currentUserService.isUtlUser(user)) {
-                        /*
-                         * UTL packets may be routed from AL-P3 / WR-38 to another exact
-                         * dispatcher.  The creator therefore cannot be constrained by the
-                         * final target plant or by dispatchedBy.  Load this one challan and
-                         * apply the persisted UTL row-level visibility contract instead.
-                         */
-                        items = repository.findByStatusAndChalaanNumber(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber)
-                                        .stream()
-                                        .filter(item -> utlWorkflowService != null
-                                                        && utlWorkflowService.canCurrentUserRead(item))
-                                        .toList();
-                } else if (currentUserService.isLogistics(user)) {
-                        /*
-                         * Logistics visibility is plant-operational, not dispatchedBy-owner
-                         * visibility.  This keeps downstream trip handling aligned with the
-                         * same plant scope already used by end-trip and dashboard reads.
-                         */
-                        items = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber,
-                                        currentUserService.allowedPlants(user));
-                } else {
-                        items = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber,
-                                        currentUserService.allowedPlants(user));
+                if (!currentUserService.isAdmin(user)) {
+                        if (currentUserService.isUtlUser(user)) {
+                                items = items
+                                                .stream()
+                                                .filter(item -> utlWorkflowService != null
+                                                                && utlWorkflowService.canCurrentUserRead(item))
+                                                .toList();
+                        } else if (currentUserService.isLogistics(user)) {
+                                Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-                        String currentUsername = cleanLower(user.getUsername());
+                                items = items
+                                                .stream()
+                                                .filter(item -> isVisiblePlant(item.getPlantCode(), allowedPlants))
+                                                .toList();
+                        } else {
+                                String currentUsername = cleanLower(user.getUsername());
+                                Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-                        items = items
-                                        .stream()
-                                        .filter(item -> cleanLower(item.getDispatchedBy())
-                                                        .equals(currentUsername))
-                                        .toList();
+                                items = items
+                                                .stream()
+                                                .filter(item -> cleanLower(item.getDispatchedBy())
+                                                                .equals(currentUsername))
+                                                .filter(item -> isVisiblePlant(item.getPlantCode(), allowedPlants))
+                                                .toList();
+                        }
                 }
 
                 if (items.isEmpty()) {
@@ -1059,7 +1066,7 @@ public class DispatchedItemsController {
                         ) {
                 User user = currentUserService.requireCurrentUser();
 
-                List<ItemDispatchStatus> statuses = List.of(ItemDispatchStatus.DISPATCHED);
+                List<ItemDispatchStatus> statuses = CHALLAN_HISTORY_STATUSES;
 
                 List<DispatchedItem> sourceItems;
 
@@ -1201,6 +1208,7 @@ public class DispatchedItemsController {
                 return ResponseEntity.ok(response);
         }
 
+        @Transactional
         @PostMapping("/challans/{challanNumber:.+}/end-trip")
         public ResponseEntity<?> endDispatchedChallanTrip(
                         @PathVariable String challanNumber,
@@ -1228,38 +1236,23 @@ public class DispatchedItemsController {
                                                         "Challan number is required");
                 }
 
-                List<DispatchedItem> items;
+                List<DispatchedItem> items = repository
+                                .findAllByChalaanNumberIn(
+                                                List.of(cleanChallanNumber))
+                                .stream()
+                                .filter(item -> item != null
+                                                && isChallanHistoryStatus(item.getStatus())
+                                                && item.getChalaanNumber() != null
+                                                && cleanChallanNumber.equals(item.getChalaanNumber().trim()))
+                                .toList();
 
-                if (currentUserService.isAdmin(
-                                user)) {
+                if (!currentUserService.isAdmin(user)) {
+                        Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-                        items = repository
-                                        .findByStatusAndChalaanNumber(
-                                                        ItemDispatchStatus.DISPATCHED,
-                                                        cleanChallanNumber);
-
-                } else {
-
-                        Set<String> allowedPlants = currentUserService
-                                        .allowedPlants(
-                                                        user);
-
-                        if (allowedPlants == null ||
-                                        allowedPlants.isEmpty()) {
-
-                                items = repository
-                                                .findLegacyByStatusAndChalaanNumber(
-                                                                ItemDispatchStatus.DISPATCHED,
-                                                                cleanChallanNumber);
-
-                        } else {
-
-                                items = repository
-                                                .findVisibleByStatusAndChalaanNumberIncludingLegacy(
-                                                                ItemDispatchStatus.DISPATCHED,
-                                                                cleanChallanNumber,
-                                                                allowedPlants);
-                        }
+                        items = items
+                                        .stream()
+                                        .filter(item -> isVisiblePlant(item.getPlantCode(), allowedPlants))
+                                        .toList();
                 }
 
                 if (items.isEmpty()) {
@@ -1312,9 +1305,25 @@ public class DispatchedItemsController {
                         }
 
                         item.setTripEndedAt(finalEndTime);
+
+                        /*
+                         * If mobile/scan delivery already completed the row, the
+                         * delivery timestamp represents the same physical end event.
+                         * Keep it aligned when Admin/Logistics corrects that end time.
+                         */
+                        if (item.getStatus() == ItemDispatchStatus.DELIVERED) {
+                                item.setDeliveredAt(finalEndTime);
+                        }
                 }
 
                 repository.saveAll(items);
+
+                if (logisticsDispatchTripService != null) {
+                        logisticsDispatchTripService.updateLinkedTripEndTime(
+                                        items,
+                                        finalEndTime,
+                                        user);
+                }
 
                 Long durationMinutes = ChronoUnit.MINUTES.between(
                                 tripStartedAt,
@@ -1366,25 +1375,23 @@ public class DispatchedItemsController {
                                                 ? null
                                                 : request.helperLoaderCount());
 
-                List<DispatchedItem> challanItems;
+                List<DispatchedItem> challanItems = repository
+                                .findAllByChalaanNumberIn(
+                                                List.of(cleanChallanNumber))
+                                .stream()
+                                .filter(item -> item != null
+                                                && isChallanHistoryStatus(item.getStatus())
+                                                && item.getChalaanNumber() != null
+                                                && cleanChallanNumber.equals(item.getChalaanNumber().trim()))
+                                .toList();
 
-                if (currentUserService.isAdmin(user)) {
-                        challanItems = repository.findByStatusAndChalaanNumber(
-                                        ItemDispatchStatus.DISPATCHED,
-                                        cleanChallanNumber);
-                } else {
+                if (!currentUserService.isAdmin(user)) {
                         Set<String> allowedPlants = currentUserService.allowedPlants(user);
 
-                        if (allowedPlants == null || allowedPlants.isEmpty()) {
-                                challanItems = repository.findLegacyByStatusAndChalaanNumber(
-                                                ItemDispatchStatus.DISPATCHED,
-                                                cleanChallanNumber);
-                        } else {
-                                challanItems = repository.findVisibleByStatusAndChalaanNumberIncludingLegacy(
-                                                ItemDispatchStatus.DISPATCHED,
-                                                cleanChallanNumber,
-                                                allowedPlants);
-                        }
+                        challanItems = challanItems
+                                        .stream()
+                                        .filter(item -> isVisiblePlant(item.getPlantCode(), allowedPlants))
+                                        .toList();
                 }
 
                 /*
@@ -1658,6 +1665,13 @@ public class DispatchedItemsController {
                                         HttpStatus.BAD_REQUEST,
                                         fieldName + " cannot exceed " + maxLength + " characters");
                 }
+        }
+
+        private boolean isChallanHistoryStatus(
+                        ItemDispatchStatus status) {
+
+                return status != null
+                                && CHALLAN_HISTORY_STATUSES.contains(status);
         }
 
         private void validateChallanNumber(

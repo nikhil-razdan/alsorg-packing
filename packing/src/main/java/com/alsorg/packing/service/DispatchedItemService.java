@@ -75,6 +75,18 @@ public class DispatchedItemService {
         private static final int MAX_DISPATCH_SEARCH_TOKENS = 12;
         private static final int MAX_DISPATCH_PAGE_SIZE = 100;
 
+        /*
+         * A generated challan must remain visible after downstream driver/mobile
+         * lifecycle updates.  Older code treated DISPATCHED as the only challan
+         * history state, which made a challan disappear as soon as scanning moved
+         * its items to LOADED / OUT_FOR_DELIVERY / DELIVERED.
+         */
+        private static final List<ItemDispatchStatus> CHALLAN_HISTORY_STATUSES = List.of(
+                        ItemDispatchStatus.DISPATCHED,
+                        ItemDispatchStatus.LOADED,
+                        ItemDispatchStatus.OUT_FOR_DELIVERY,
+                        ItemDispatchStatus.DELIVERED);
+
         private static final Set<String> FIXED_WAREHOUSE_CODES = Set.of(
                         "BLS-WH-1",
                         "RTP-WH-2",
@@ -964,6 +976,64 @@ public class DispatchedItemService {
         }
 
         @Transactional
+        public Page<String> searchAllChallanNumbers(
+                        Pageable pageable) {
+
+                if (pageable == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Challan page request is required");
+                }
+
+                String selectJpql = """
+                                select d.chalaanNumber
+                                from DispatchedItem d
+                                where d.status in :statuses
+                                  and d.chalaanNumber is not null
+                                  and trim(d.chalaanNumber) <> ''
+                                group by d.chalaanNumber
+                                order by max(d.dispatchedAt) desc, d.chalaanNumber desc
+                                """;
+
+                String countJpql = """
+                                select count(distinct d.chalaanNumber)
+                                from DispatchedItem d
+                                where d.status in :statuses
+                                  and d.chalaanNumber is not null
+                                  and trim(d.chalaanNumber) <> ''
+                                """;
+
+                TypedQuery<String> query = entityManager.createQuery(
+                                selectJpql,
+                                String.class);
+
+                query.setParameter(
+                                "statuses",
+                                CHALLAN_HISTORY_STATUSES);
+
+                query.setFirstResult(
+                                (int) Math.min(
+                                                Integer.MAX_VALUE,
+                                                Math.max(0L, pageable.getOffset())));
+
+                query.setMaxResults(
+                                Math.max(1, pageable.getPageSize()));
+
+                Long total = entityManager.createQuery(
+                                countJpql,
+                                Long.class)
+                                .setParameter(
+                                                "statuses",
+                                                CHALLAN_HISTORY_STATUSES)
+                                .getSingleResult();
+
+                return new PageImpl<>(
+                                query.getResultList(),
+                                pageable,
+                                total == null ? 0L : Math.max(0L, total));
+        }
+
+        @Transactional
         public Page<String> searchUtlVisibleChallanNumbers(
                         String username,
                         Pageable pageable) {
@@ -1011,7 +1081,7 @@ public class DispatchedItemService {
                 String selectJpql = """
                                 select d.chalaanNumber
                                 from DispatchedItem d
-                                where d.status = :status
+                                where d.status in :statuses
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and exists (
@@ -1034,7 +1104,7 @@ public class DispatchedItemService {
                 String countJpql = """
                                 select count(distinct d.chalaanNumber)
                                 from DispatchedItem d
-                                where d.status = :status
+                                where d.status in :statuses
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and exists (
@@ -1053,7 +1123,7 @@ public class DispatchedItemService {
                                 """;
 
                 TypedQuery<String> query = entityManager.createQuery(selectJpql, String.class);
-                query.setParameter("status", ItemDispatchStatus.DISPATCHED);
+                query.setParameter("statuses", CHALLAN_HISTORY_STATUSES);
                 query.setParameter("username", cleanUsername);
 
                 if (enforcePlantScope) {
@@ -1064,7 +1134,7 @@ public class DispatchedItemService {
                 query.setMaxResults(Math.max(1, pageable.getPageSize()));
 
                 TypedQuery<Long> countQuery = entityManager.createQuery(countJpql, Long.class)
-                                .setParameter("status", ItemDispatchStatus.DISPATCHED)
+                                .setParameter("statuses", CHALLAN_HISTORY_STATUSES)
                                 .setParameter("username", cleanUsername);
 
                 if (enforcePlantScope) {
@@ -1126,7 +1196,7 @@ public class DispatchedItemService {
                 String selectJpql = """
                                 select d.chalaanNumber
                                 from DispatchedItem d
-                                where d.status = :status
+                                where d.status in :statuses
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
@@ -1154,7 +1224,7 @@ public class DispatchedItemService {
                 String countJpql = """
                                 select count(distinct d.chalaanNumber)
                                 from DispatchedItem d
-                                where d.status = :status
+                                where d.status in :statuses
                                   and d.chalaanNumber is not null
                                   and trim(d.chalaanNumber) <> ''
                                   and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
@@ -1178,14 +1248,14 @@ public class DispatchedItemService {
                                 """;
 
                 TypedQuery<String> query = entityManager.createQuery(selectJpql, String.class);
-                query.setParameter("status", ItemDispatchStatus.DISPATCHED);
+                query.setParameter("statuses", CHALLAN_HISTORY_STATUSES);
                 query.setParameter("plants", allowedPlants);
                 query.setParameter("username", username);
                 query.setFirstResult((int) Math.min(Integer.MAX_VALUE, Math.max(0L, pageable.getOffset())));
                 query.setMaxResults(Math.max(1, pageable.getPageSize()));
 
                 Long total = entityManager.createQuery(countJpql, Long.class)
-                                .setParameter("status", ItemDispatchStatus.DISPATCHED)
+                                .setParameter("statuses", CHALLAN_HISTORY_STATUSES)
                                 .setParameter("plants", allowedPlants)
                                 .setParameter("username", username)
                                 .getSingleResult();

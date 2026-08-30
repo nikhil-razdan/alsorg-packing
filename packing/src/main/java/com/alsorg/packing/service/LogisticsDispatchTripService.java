@@ -348,6 +348,74 @@ public class LogisticsDispatchTripService {
                                 pdf);
         }
 
+        /**
+         * Synchronizes a corrected challan end-time into any legacy/current
+         * LogisticsTrip rows linked from the supplied dispatched items.
+         *
+         * This is intentionally a timestamp correction only.  It does not force a
+         * new lifecycle status, does not create POD data, and does not reopen or
+         * re-end the driver workflow.  If the trip was already DELIVERED by mobile
+         * scan, its status remains DELIVERED; if the challan never used a
+         * LogisticsTrip row, this method is a no-op.
+         */
+        @Transactional
+        public void updateLinkedTripEndTime(
+                        List<DispatchedItem> items,
+                        LocalDateTime correctedEndTime,
+                        User user) {
+
+                if (user == null
+                                || (!currentUserService.isLogistics(user)
+                                                && !currentUserService.isAdmin(user))) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.FORBIDDEN,
+                                        "Only LOGISTICS / ADMIN user can update trip end time");
+                }
+
+                if (correctedEndTime == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Trip end time is required");
+                }
+
+                LinkedHashSet<UUID> tripIds = new LinkedHashSet<>();
+
+                if (items != null) {
+                        for (DispatchedItem item : items) {
+                                if (item != null && item.getLogisticsTripId() != null) {
+                                        tripIds.add(item.getLogisticsTripId());
+                                }
+                        }
+                }
+
+                if (tripIds.isEmpty()) {
+                        return;
+                }
+
+                LocalDateTime now = LocalDateTime.now(APP_ZONE);
+                String actor = safeActor(user.getUsername());
+
+                for (UUID tripId : tripIds) {
+                        LogisticsTrip trip = requireTripForUpdate(tripId);
+
+                        LocalDateTime tripStart = trip.getTripStart() != null
+                                        ? trip.getTripStart()
+                                        : trip.getQueuedAt();
+
+                        if (tripStart != null && correctedEndTime.isBefore(tripStart)) {
+                                throw new ResponseStatusException(
+                                                HttpStatus.BAD_REQUEST,
+                                                "Trip end time cannot be before trip start time");
+                        }
+
+                        trip.setTripEnd(correctedEndTime);
+                        trip.setEndedBy(actor);
+                        trip.setUpdatedAt(now);
+
+                        tripRepository.save(trip);
+                }
+        }
+
         @Transactional
         public LogisticsTrip startTrip(
                         UUID tripId,

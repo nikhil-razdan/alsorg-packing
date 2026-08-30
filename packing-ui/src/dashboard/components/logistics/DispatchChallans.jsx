@@ -587,6 +587,7 @@ function DispatchChallans({
             open: false,
             challanNumber: "",
             endTime: getNowDateTimeLocal(),
+            editingExisting: false,
         });
 
     const [
@@ -1414,6 +1415,8 @@ function DispatchChallans({
                 endTime:
                     existingEndTime ||
                     getNowDateTimeLocal(),
+                editingExisting:
+                    Boolean(existingEndTime),
             });
         };
 
@@ -1423,6 +1426,7 @@ function DispatchChallans({
                 open: false,
                 challanNumber: "",
                 endTime: getNowDateTimeLocal(),
+                editingExisting: false,
             });
         };
 
@@ -1458,7 +1462,9 @@ function DispatchChallans({
                 );
 
                 showAlert?.(
-                    "Trip end time saved successfully",
+                    endTripDialog.editingExisting
+                        ? "Trip end time updated successfully"
+                        : "Trip end time saved successfully",
                     "success"
                 );
 
@@ -2288,7 +2294,9 @@ function DispatchChallans({
                         borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
                     }}
                 >
-                    Enter Trip End Time
+                    {endTripDialog.editingExisting
+                        ? "Update Trip End Time"
+                        : "Enter Trip End Time"}
 
                     <IconButton
                         onClick={closeEndTripDialog}
@@ -2345,7 +2353,9 @@ function DispatchChallans({
                         >
                             {endingTrip
                                 ? "Saving..."
-                                : "Save End Time"}
+                                : endTripDialog.editingExisting
+                                    ? "Update End Time"
+                                    : "Save End Time"}
                         </Button>
                     </Box>
                 </DialogContent>

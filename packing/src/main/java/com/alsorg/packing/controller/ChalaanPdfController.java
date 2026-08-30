@@ -217,7 +217,10 @@ public class ChalaanPdfController {
                 User user = currentUserService.requireCurrentUser();
 
                 List<ItemDispatchStatus> statuses = List.of(
-                                ItemDispatchStatus.DISPATCHED);
+                                ItemDispatchStatus.DISPATCHED,
+                                ItemDispatchStatus.LOADED,
+                                ItemDispatchStatus.OUT_FOR_DELIVERY,
+                                ItemDispatchStatus.DELIVERED);
 
                 List<DispatchedItem> sourceItems;
 
@@ -236,7 +239,8 @@ public class ChalaanPdfController {
                                 .filter(item -> item.getChalaanNumber() != null
                                                 && item.getChalaanNumber().equals(challanNumber))
                                 .filter(item -> {
-                                        if (currentUserService.isAdmin(user)) {
+                                        if (currentUserService.isAdmin(user)
+                                                        || currentUserService.isLogistics(user)) {
                                                 return true;
                                         }
 
