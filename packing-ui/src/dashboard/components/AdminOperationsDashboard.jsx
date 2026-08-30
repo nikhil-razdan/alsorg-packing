@@ -466,7 +466,7 @@ function InventoryDashboard({
 
         {workspace === "reports" && (
           <div style={stack}>
-            <InventoryReports />
+            <InventoryReports audience="admin" />
             <ScheduledReports />
           </div>
         )}

@@ -17,17 +17,19 @@ import jakarta.servlet.http.HttpServletResponse;
 /**
  * Defense-in-depth boundary for PACKFLOW_DIRECTOR.
  *
- * The role is intentionally read-only inside PackFlow, even when the same user
- * also holds an independent profile in another FlowSuite module. Older PackFlow
- * controllers were created at different times and
- * some legacy endpoints may still use broad "authenticated" guards. This
- * interceptor prevents a director session from reaching those endpoints even if
- * a hidden URL is called manually.
+ * The role is intentionally read-only inside PackFlow. The Director may read:
+ * - aggregate dashboard statistics
+ * - sanitized aggregate logistics analytics
+ * - the dedicated sanitized packet-volume feed used by Director Brief
  *
- * It does not change behavior for any other role.
+ * General Inventory Reports, activity, trace, admin, deletion and operational
+ * mutation endpoints remain blocked.
  */
 @Component
 public class PackFlowDirectorApiIsolationInterceptor implements HandlerInterceptor {
+
+    private static final String DIRECTOR_VOLUME_PATH =
+            "/api/reports/director/packing-volume";
 
     @Override
     public boolean preHandle(
@@ -41,9 +43,6 @@ public class PackFlowDirectorApiIsolationInterceptor implements HandlerIntercept
 
         String method = safeUpper(request.getMethod());
 
-        /*
-         * Never interfere with browser CORS/pre-flight negotiation.
-         */
         if (HttpMethod.OPTIONS.matches(method)) {
             return true;
         }
@@ -74,16 +73,15 @@ public class PackFlowDirectorApiIsolationInterceptor implements HandlerIntercept
 
         if (HttpMethod.GET.matches(method)
                 && ("/api/reports/dashboard".equals(path)
-                        || "/api/analytics".equals(path))) {
+                        || "/api/analytics".equals(path)
+                        || DIRECTOR_VOLUME_PATH.equals(path))) {
             noStore(response);
             return true;
         }
 
         /*
-         * A PackFlow Director may also hold an independent profile in another
-         * FlowSuite module. Those module namespaces retain their own controller
-         * and service authorization and are therefore safe to pass through.
-         * PackFlow operational APIs remain blocked below.
+         * Independent FlowSuite modules keep their own authorization. This
+         * interceptor only constrains the PackFlow identity.
          */
         if (path.startsWith("/api/bomflow/")
                 || path.startsWith("/api/matflow/")
@@ -96,7 +94,7 @@ public class PackFlowDirectorApiIsolationInterceptor implements HandlerIntercept
         response.setContentType("application/json;charset=UTF-8");
         noStore(response);
         response.getWriter().write(
-                "{\"message\":\"PACKFLOW_DIRECTOR is restricted to the read-only executive dashboard.\"}");
+                "{\"message\":\"PACKFLOW_DIRECTOR is restricted to the read-only executive dashboard and approved Director report feeds.\"}");
 
         return false;
     }

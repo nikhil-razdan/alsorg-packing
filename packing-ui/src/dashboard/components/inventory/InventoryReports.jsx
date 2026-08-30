@@ -1393,7 +1393,7 @@ const formatMasterReportRows = (
   );
 };
 
-function InventoryReports() {
+function InventoryReports({ audience = "admin" } = {}) {
   const [loading, setLoading] =
     useState(true);
 
@@ -1418,7 +1418,7 @@ function InventoryReports() {
     useState("");
 
   const [reportMode, setReportMode] =
-    useState("DIRECTOR_DASHBOARD");
+    useState("DATE");
 
   const [stats, setStats] =
     useState({});
@@ -3510,7 +3510,27 @@ function InventoryReports() {
     },
   };
 
+  const directorOnlyModes = new Set([
+    "DIRECTOR_DASHBOARD",
+    "VOLUME_DETAIL",
+  ]);
+
+  const isAdminAudience =
+    String(audience || "admin")
+      .trim()
+      .toLowerCase() !== "director";
+
+  useEffect(() => {
+    if (
+      isAdminAudience &&
+      directorOnlyModes.has(reportMode)
+    ) {
+      setReportMode("DATE");
+    }
+  }, [isAdminAudience, reportMode]);
+
   const isDirectorDashboard =
+    !isAdminAudience &&
     reportMode === "DIRECTOR_DASHBOARD";
 
   const activeConfig =
@@ -6043,7 +6063,7 @@ function InventoryReports() {
           </div>
 
           <div style={subtitle}>
-            Director decision dashboard, cubic-metre workload, flow performance, aging risk and detailed operational reporting
+            Operational inventory reporting, cubic-metre summaries, flow performance, aging risk and detailed control registers
           </div>
         </div>
 
@@ -6135,13 +6155,11 @@ function InventoryReports() {
 
       <div style={modeTabs}>
         {[
-          ["DIRECTOR_DASHBOARD", "Director Dashboard"],
           ["DATE", "Date Wise"],
           ["VOLUME_USER", "Volume by User"],
           ["VOLUME_DATE", "Volume by Date"],
           ["VOLUME_CLIENT", "Volume by Client"],
           ["VOLUME_PLANT", "Volume by Plant"],
-          ["VOLUME_DETAIL", "Volume Packet Register"],
           ["MASTER_ITEMS", "Master Items"],
           ["PACKING_USER", "Packing Users"],
           ["DISPATCH_USER", "Dispatch Users"],
@@ -6281,15 +6299,9 @@ function InventoryReports() {
             </div>
           </div>
 
-          <button
-            type="button"
-            style={volumeDetailBtn}
-            onClick={() =>
-              setReportMode("VOLUME_DETAIL")
-            }
-          >
-            Open packet register ↗
-          </button>
+          <div style={directorMovedNote}>
+            Packet-level Volume Register has moved to the Director Brief dashboard.
+          </div>
         </div>
 
         <div style={volumeInsightGrid}>
@@ -7317,6 +7329,18 @@ const volumeInsightSubtitle = {
   color: "rgba(var(--pf-fg-rgb),.58)",
   fontSize: 12,
   lineHeight: 1.5,
+};
+
+const directorMovedNote = {
+  maxWidth: 330,
+  padding: "9px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(37,99,235,.15)",
+  background: "rgba(37,99,235,.055)",
+  color: "var(--pf-text-muted)",
+  fontSize: 9.5,
+  fontWeight: 800,
+  lineHeight: 1.45,
 };
 
 const volumeDetailBtn = {
