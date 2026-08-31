@@ -2550,41 +2550,6 @@ export default function DirectorExecutiveDashboard({ stats = {}, logistics = {} 
 
   return (
     <>
-      <section style={hero}>
-        <div style={heroContent}>
-          <div style={heroEyebrow}>
-            DIRECTOR BRIEF • PACKFLOW
-          </div>
-          <h1 style={heroTitle}>
-            Inventory, Packing & Outbound Control
-          </h1>
-          <p style={heroText}>
-            Executive operating view for physical packet execution, finished-goods readiness,
-            dispatch conversion, logistics capacity and cubic-metre packing demand. The packet
-            register is read-only and intentionally separated from Admin control tools.
-          </p>
-        </div>
-
-        <div style={heroScorecard}>
-          <div style={heroScoreLabel}>
-            CURRENT MANAGEMENT POSTURE
-          </div>
-          <div style={heroScoreValue}>
-            {totalExceptions > 0 || complianceFlags > 0
-              ? "ATTENTION"
-              : number(stats.packetItemsPendingSticker) > 0 ||
-                  number(stats.readyToDispatchItems) > 0
-                ? "WATCH"
-                : "STABLE"}
-          </div>
-          <div style={heroScoreDetail}>
-            {compact(totalExceptions)} control exceptions •{" "}
-            {compact(stats.readyToDispatchItems)} dispatch-ready FG •{" "}
-            {formatCbm(volumeAnalytics.totalVolumeCbm)} m³ selected-range cube
-          </div>
-        </div>
-      </section>
-
       <section style={directorWorkspaceBar}>
         <div>
           <div style={sectionEyebrow}>
