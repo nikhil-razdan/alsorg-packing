@@ -525,7 +525,6 @@ export default function AdminOperationsDashboard({
         </section>
       )}
 
-
       <DashboardRecordInspector
         config={metricInspector}
         onClose={() => setMetricInspector(null)}
@@ -558,13 +557,83 @@ const actionTone = {
   good: { accent: "#16a34a", soft: "rgba(22,163,74,.08)", border: "rgba(22,163,74,.18)" },
 };
 
-const modeBar = { marginBottom: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", borderRadius: 13, background: "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))", border: "1px solid var(--pf-border)", boxShadow: "0 8px 24px rgba(var(--pf-shadow-rgb),.05)" };
-const modeTitle = { marginTop: 4, color: "var(--pf-text-strong)", fontSize: 17, fontWeight: 950 };
-const modeSub = { maxWidth: 760, marginTop: 4, color: "var(--pf-text-muted)", fontSize: 10.5, fontWeight: 650, lineHeight: 1.5 };
-const modeActions = { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" };
-const modeSwitch = { display: "flex", gap: 5, padding: 4, borderRadius: 11, background: "var(--pf-surface-alt)", border: "1px solid var(--pf-border-soft)" };
-const modeButton = (active) => ({ minHeight: 38, padding: "0 14px", borderRadius: 8, border: active ? "1px solid rgba(37,99,235,.28)" : "1px solid transparent", background: active ? "linear-gradient(135deg,#2563eb,#3b82f6)" : "transparent", color: active ? "#fff" : "var(--pf-text-strong)", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900 });
-const adminCenterButton = { minHeight: 46, padding: "0 15px", borderRadius: 10, border: "1px solid rgba(220,38,38,.25)", background: "linear-gradient(135deg,#b91c1c,#dc2626)", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 900, boxShadow: "0 7px 16px rgba(185,28,28,.14)" };
+/*
+ * ADMIN MODE BAR
+ * ----------------
+ * Deliberately sized to the same visual system as DirectorExecutiveDashboard's
+ * DIRECTOR-ONLY WORKSPACE bar. This is a presentation-only change: all mode,
+ * Admin Center, Inventory, Dispatch and Logistics behavior above is unchanged.
+ */
+const modeBar = {
+  marginBottom: 12,
+  padding: "11px 13px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  borderRadius: 12,
+  border: "1px solid var(--pf-border)",
+  background:
+    "linear-gradient(135deg,var(--pf-surface),var(--pf-surface-alt))",
+  boxShadow:
+    "0 7px 20px rgba(var(--pf-shadow-rgb),.045)",
+};
+const modeTitle = {
+  marginTop: 4,
+  color: "var(--pf-text-strong)",
+  fontSize: 13,
+  fontWeight: 900,
+};
+const modeSub = {
+  display: "none",
+};
+const modeActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  flexWrap: "wrap",
+};
+const modeSwitch = {
+  display: "flex",
+  gap: 5,
+  flexWrap: "wrap",
+};
+const modeButton = (active) => ({
+  minHeight: 36,
+  padding: "0 12px",
+  borderRadius: 9,
+  border: active
+    ? "1px solid rgba(37,99,235,.28)"
+    : "1px solid var(--pf-border-soft)",
+  background: active
+    ? "linear-gradient(135deg,#1d4ed8,#2563eb)"
+    : "var(--pf-surface-alt)",
+  color: active
+    ? "#fff"
+    : "var(--pf-text-strong)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 9.5,
+  fontWeight: 900,
+  boxShadow: active
+    ? "0 7px 18px rgba(37,99,235,.18)"
+    : "none",
+});
+const adminCenterButton = {
+  minHeight: 35,
+  padding: "0 12px",
+  borderRadius: 8,
+  border: "1px solid rgba(220,38,38,.25)",
+  background: "rgba(220,38,38,.09)",
+  color: "#dc2626",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 9.2,
+  fontWeight: 950,
+  whiteSpace: "nowrap",
+};
+
 const logisticsShell = { minWidth: 0 };
 const metricGrid = { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 10 };
 const metricCard = (accent) => ({ position: "relative", overflow: "hidden", minHeight: 118, padding: 14, borderRadius: 12, background: "var(--pf-surface)", border: "1px solid var(--pf-border)", boxShadow: "0 6px 20px rgba(var(--pf-shadow-rgb),.05)", textAlign: "left", color: "var(--pf-text-strong)", fontFamily: "inherit" });
