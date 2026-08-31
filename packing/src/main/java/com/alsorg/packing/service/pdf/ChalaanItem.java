@@ -1,5 +1,15 @@
 package com.alsorg.packing.service.pdf;
 
+/**
+ * Lightweight row model used while building challan PDFs.
+ *
+ * packetNumber and sku are additive presentation fields only. They allow the
+ * challan renderer to print the real PacketItem packet identity entered by the
+ * Packing user instead of inventing a 1..N sequence inside a grouped item.
+ *
+ * No packing, dispatch, warehouse, logistics or lifecycle workflow state is
+ * changed by these fields.
+ */
 public class ChalaanItem {
 
     private String description;
@@ -8,11 +18,22 @@ public class ChalaanItem {
 
     private String itemName;
     private String drawingNo;
-    
+
     private String zohoItemId;
     private String clientAddress;
     private String pdNo;
     private String clientName;
+
+    /*
+     * Canonical packet identity copied from PacketItem.packetNumber
+     * (for example "Pkt-1", "Pkt-79", "Pkt-104").
+     *
+     * sku is retained only as a read-only fallback for historical rows where
+     * the packet number can still be recovered from ".../Pkt-N".
+     */
+    private String packetNumber;
+    private String sku;
+
     // ================= GETTERS =================
 
     public String getDescription() {
@@ -25,6 +46,38 @@ public class ChalaanItem {
 
     public String getRemarks() {
         return remarks;
+    }
+
+    public String getItemName() {
+        return itemName;
+    }
+
+    public String getDrawingNo() {
+        return drawingNo;
+    }
+
+    public String getZohoItemId() {
+        return zohoItemId;
+    }
+
+    public String getClientAddress() {
+        return clientAddress;
+    }
+
+    public String getPdNo() {
+        return pdNo;
+    }
+
+    public String getClientName() {
+        return clientName;
+    }
+
+    public String getPacketNumber() {
+        return packetNumber;
+    }
+
+    public String getSku() {
+        return sku;
     }
 
     // ================= SETTERS =================
@@ -41,51 +94,35 @@ public class ChalaanItem {
         this.remarks = remarks;
     }
 
-	public String getItemName() {
-		return itemName;
-	}
+    public void setItemName(String itemName) {
+        this.itemName = itemName;
+    }
 
-	public void setItemName(String itemName) {
-		this.itemName = itemName;
-	}
+    public void setDrawingNo(String drawingNo) {
+        this.drawingNo = drawingNo;
+    }
 
-	public String getDrawingNo() {
-		return drawingNo;
-	}
+    public void setZohoItemId(String zohoItemId) {
+        this.zohoItemId = zohoItemId;
+    }
 
-	public void setDrawingNo(String drawingNo) {
-		this.drawingNo = drawingNo;
-	}
+    public void setClientAddress(String clientAddress) {
+        this.clientAddress = clientAddress;
+    }
 
-	public String getZohoItemId() {
-		return zohoItemId;
-	}
+    public void setPdNo(String pdNo) {
+        this.pdNo = pdNo;
+    }
 
-	public void setZohoItemId(String zohoItemId) {
-		this.zohoItemId = zohoItemId;
-	}
+    public void setClientName(String clientName) {
+        this.clientName = clientName;
+    }
 
-	public String getClientAddress() {
-		return clientAddress;
-	}
+    public void setPacketNumber(String packetNumber) {
+        this.packetNumber = packetNumber;
+    }
 
-	public void setClientAddress(String clientAddress) {
-		this.clientAddress = clientAddress;
-	}
-
-	public String getPdNo() {
-		return pdNo;
-	}
-
-	public void setPdNo(String pdNo) {
-		this.pdNo = pdNo;
-	}
-
-	public String getClientName() {
-		return clientName;
-	}
-
-	public void setClientName(String clientName) {
-		this.clientName = clientName;
-	}
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
 }

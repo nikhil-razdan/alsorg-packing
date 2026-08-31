@@ -815,19 +815,50 @@ public class LogisticsDispatchTripService {
                                                                 item));
                         }
 
-                        Map<UUID, PacketItem> packetItemsById = loadPacketItemsById(
-                                        new ArrayList<>(dispatchedById.values()));
+                        /*
+                         * Read-only PDF enrichment:
+                         *
+                         * Prefer the live PacketItem referenced by the trip snapshot.
+                         * This is important because PacketItem.packetNumber is the
+                         * canonical packet number entered by Packing.  We also include
+                         * the packetItemId held by the live DispatchedItem so current
+                         * and historical trip rows resolve through the same path.
+                         *
+                         * No record is created or mutated here.
+                         */
+                        LinkedHashSet<UUID> packetItemIds = new LinkedHashSet<>();
+
+                        for (LogisticsTripItem tripItem : tripItems) {
+                                if (tripItem != null && tripItem.getPacketItemId() != null) {
+                                        packetItemIds.add(tripItem.getPacketItemId());
+                                }
+                        }
+
+                        for (DispatchedItem dispatchedItem : dispatchedById.values()) {
+                                if (dispatchedItem != null
+                                                && dispatchedItem.getPacketItemId() != null) {
+                                        packetItemIds.add(dispatchedItem.getPacketItemId());
+                                }
+                        }
+
+                        Map<UUID, PacketItem> packetItemsById = loadPacketItemsByIds(
+                                        packetItemIds);
 
                         for (LogisticsTripItem tripItem : tripItems) {
                                 DispatchedItem dispatchedItem = tripItem.getZohoItemId() == null
                                                 ? null
                                                 : dispatchedById.get(tripItem.getZohoItemId());
 
-                                PacketItem packetItem = dispatchedItem == null
-                                                || dispatchedItem.getPacketItemId() == null
-                                                                ? null
-                                                                : packetItemsById.get(
-                                                                                dispatchedItem.getPacketItemId());
+                                UUID packetItemId = tripItem.getPacketItemId();
+
+                                if (packetItemId == null
+                                                && dispatchedItem != null) {
+                                        packetItemId = dispatchedItem.getPacketItemId();
+                                }
+
+                                PacketItem packetItem = packetItemId == null
+                                                ? null
+                                                : packetItemsById.get(packetItemId);
 
                                 if (dispatchedItem != null) {
                                         chalaanItems.add(
@@ -836,12 +867,65 @@ public class LogisticsDispatchTripService {
                                         ChalaanItem ci = new ChalaanItem();
 
                                         ci.setZohoItemId(tripItem.getZohoItemId());
-                                        ci.setItemName(tripItem.getItemName());
-                                        ci.setPdNo(tripItem.getPdNo());
-                                        ci.setDrawingNo(tripItem.getDrawingNo());
-                                        ci.setClientName(tripItem.getClientName());
-                                        ci.setDescription(tripItem.getDescription());
-                                        ci.setRemarks(tripItem.getRemarks());
+
+                                        /*
+                                         * When the Dispatch row is no longer present but the
+                                         * PacketItem still exists, retain the real Packing packet
+                                         * number.  The stored trip SKU remains a safe historical
+                                         * fallback for AL rows containing .../Pkt-N.
+                                         */
+                                        ci.setPacketNumber(
+                                                        packetItem != null
+                                                                        ? packetItem.getPacketNumber()
+                                                                        : null);
+
+                                        ci.setSku(
+                                                        packetItem != null
+                                                                        && packetItem.getSku() != null
+                                                                                        ? packetItem.getSku()
+                                                                                        : tripItem.getSku());
+
+                                        ci.setItemName(
+                                                        packetItem != null
+                                                                        && packetItem.getItemName() != null
+                                                                                        ? packetItem.getItemName()
+                                                                                        : tripItem.getItemName());
+
+                                        ci.setPdNo(
+                                                        packetItem != null
+                                                                        && packetItem.getPdNo() != null
+                                                                                        ? packetItem.getPdNo()
+                                                                                        : tripItem.getPdNo());
+
+                                        ci.setDrawingNo(
+                                                        packetItem != null
+                                                                        && packetItem.getDrawingNo() != null
+                                                                                        ? packetItem.getDrawingNo()
+                                                                                        : tripItem.getDrawingNo());
+
+                                        ci.setClientName(
+                                                        packetItem != null
+                                                                        && packetItem.getClientName() != null
+                                                                                        ? packetItem.getClientName()
+                                                                                        : tripItem.getClientName());
+
+                                        ci.setClientAddress(
+                                                        packetItem != null
+                                                                        ? packetItem.getClientAddress()
+                                                                        : null);
+
+                                        ci.setDescription(
+                                                        packetItem != null
+                                                                        && packetItem.getDescription() != null
+                                                                                        ? packetItem.getDescription()
+                                                                                        : tripItem.getDescription());
+
+                                        ci.setRemarks(
+                                                        packetItem != null
+                                                                        && packetItem.getRemarks() != null
+                                                                                        ? packetItem.getRemarks()
+                                                                                        : tripItem.getRemarks());
+
                                         ci.setQty("1");
 
                                         chalaanItems.add(ci);
@@ -988,12 +1072,59 @@ public class LogisticsDispatchTripService {
                 return result;
         }
 
+
+        /**
+         * Batch-load PacketItems by their existing IDs for read-only challan PDF
+         * reconstruction.  This helper does not create, update or repair workflow
+         * records; it only exposes the canonical packetNumber already stored by
+         * PacketService.
+         */
+        private Map<UUID, PacketItem> loadPacketItemsByIds(
+                        Set<UUID> ids) {
+
+                if (ids == null || ids.isEmpty()) {
+                        return Map.of();
+                }
+
+                Map<UUID, PacketItem> result = new LinkedHashMap<>();
+
+                packetItemRepository.findAllById(ids)
+                                .forEach(packetItem -> {
+                                        if (packetItem != null
+                                                        && packetItem.getId() != null) {
+                                                result.put(
+                                                                packetItem.getId(),
+                                                                packetItem);
+                                        }
+                                });
+
+                return result;
+        }
+
         private ChalaanItem buildChalaanItem(
                         DispatchedItem dispatchedItem,
                         PacketItem packetItem) {
                 ChalaanItem ci = new ChalaanItem();
 
                 ci.setZohoItemId(dispatchedItem.getZohoItemId());
+
+                /*
+                 * PacketItem.packetNumber is the canonical packet identity entered
+                 * by Packing (Pkt-1, Pkt-4, Pkt-79, Pkt-104, ...). Do not replace it
+                 * with a group-local 1..N sequence.
+                 *
+                 * SKU is passed only as a read-only fallback for historical AL rows
+                 * where the packet identity is still encoded as .../Pkt-N.
+                 */
+                ci.setPacketNumber(
+                                packetItem != null
+                                                ? packetItem.getPacketNumber()
+                                                : null);
+
+                ci.setSku(
+                                packetItem != null && packetItem.getSku() != null
+                                                ? packetItem.getSku()
+                                                : dispatchedItem.getSku());
 
                 ci.setItemName(
                                 packetItem != null && packetItem.getItemName() != null
