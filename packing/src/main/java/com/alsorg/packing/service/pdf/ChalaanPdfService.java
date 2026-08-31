@@ -26,9 +26,26 @@ import java.util.Set;
 import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.controller.dto.challan.CustomChallanItemRequest;
 import com.alsorg.packing.controller.dto.challan.CustomChallanRequest;
+import com.alsorg.packing.domain.item.PacketItem;
+import com.alsorg.packing.repository.PacketItemRepository;
+import java.util.UUID;
 
 @Service
 public class ChalaanPdfService {
+
+        /*
+         * Read-only access to the canonical PacketItem identity.
+         *
+         * This is deliberately optional field injection so existing tests/tools
+         * that instantiate ChalaanPdfService directly keep compiling. In Spring
+         * production the repository is available and lets the PDF renderer recover
+         * PacketItem.packetNumber even when an older/upstream ChalaanItem builder
+         * did not copy packetNumber into the PDF DTO.
+         *
+         * No PacketItem is created, updated, repaired or saved here.
+         */
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private PacketItemRepository packetItemRepository;
 
         private static final float PAGE_WIDTH = 600;
         private static final float PAGE_HEIGHT = 800;
@@ -42,7 +59,7 @@ public class ChalaanPdfService {
 
         /*
          * Standard grouped rows begin directly beneath the DESCRIPTION header
-         * separator.  The internal spacing between PD/DWG, Item and Packet lines
+         * separator. The internal spacing between PD/DWG, Item and Packet lines
          * is intentionally unchanged; only the wasted outer top gap is removed.
          */
         private static final float STANDARD_SECTION_START_Y = TABLE_HEADER_BOTTOM;
@@ -87,13 +104,31 @@ public class ChalaanPdfService {
                 }
 
                 /*
+                 * Resolve the canonical Packing packet identity before grouping or
+                 * pagination math. This is a read-only PDF enrichment step.
+                 *
+                 * Why this is required:
+                 * - PacketService stores the real packet number on PacketItem.packetNumber.
+                 * - DispatchedItemService keeps zohoItemId == PacketItem.id for normal
+                 * Packing-origin rows and also stores packetItemId separately.
+                 * - WR-38 intentionally uses Product Code as SKU, so its SKU does NOT
+                 * contain /Pkt-N and can never be used to recover packet number.
+                 *
+                 * Therefore the renderer batch-resolves PacketItem by the UUID already
+                 * carried in ChalaanItem.zohoItemId whenever packetNumber was not copied
+                 * by the upstream builder. Nothing in Packing/FG/Warehouse/Dispatch is
+                 * mutated.
+                 */
+                enrichStandardPacketIdentityFromPacketItems(sourceItems);
+
+                /*
                  * Standard packet challans are now grouped by the business identity
                  * that actually tells the factory/site team which packets belong
                  * together: Client + PD No. + Drawing No. + Item Name.
                  *
                  * This removes the repeated PD/DWG/Item text from every packet row
                  * while preserving every packet description and remark inside the
-                 * same visual section.  The outer challan layout, header, table
+                 * same visual section. The outer challan layout, header, table
                  * columns and signature footer remain unchanged.
                  */
                 List<StandardChallanGroup> groups = groupStandardChallanItems(sourceItems);
@@ -187,14 +222,16 @@ public class ChalaanPdfService {
                                                         bold,
                                                         regular,
                                                         group.items.get(packetIndex),
-                                                        packetIndex + 1);
+                                                        resolveStandardPacketNumber(
+                                                                        group.items.get(packetIndex),
+                                                                        packetIndex + 1));
 
                                         float availableHeight = y - (TABLE_BOTTOM + 5);
 
                                         /*
                                          * Do not start a new business section at the very bottom of
                                          * a page when its first packet cannot fit beneath the group
-                                         * identity.  Continue on a clean challan page instead.
+                                         * identity. Continue on a clean challan page instead.
                                          */
                                         if (availableHeight < headerHeight + firstPacketHeight + 4
                                                         && y < STANDARD_SECTION_START_Y - 0.5f) {
@@ -230,7 +267,9 @@ public class ChalaanPdfService {
                                                                 bold,
                                                                 regular,
                                                                 group.items.get(chunkEnd),
-                                                                chunkEnd + 1);
+                                                                resolveStandardPacketNumber(
+                                                                                group.items.get(chunkEnd),
+                                                                                chunkEnd + 1));
 
                                                 if (sectionHeight + packetHeight + 2 > availableHeight
                                                                 && chunkEnd > packetIndex) {
@@ -269,7 +308,7 @@ public class ChalaanPdfService {
 
                                         /*
                                          * The next PD/DWG section now starts from the separator
-                                         * line itself.  Do not add blank vertical padding between
+                                         * line itself. Do not add blank vertical padding between
                                          * business sections; the existing 8-point identity offset
                                          * inside drawStandardGroupSection remains unchanged.
                                          */
@@ -934,7 +973,7 @@ public class ChalaanPdfService {
 
                 /*
                  * Keep page-fit math aligned with the exact geometry used by
-                 * drawStandardGroupSection().  The PD/DWG block is moved only
+                 * drawStandardGroupSection(). The PD/DWG block is moved only
                  * 2pt farther from the top separator, while Packet 1 receives a
                  * slightly larger gap beneath the Item heading/rule.
                  */
@@ -954,7 +993,7 @@ public class ChalaanPdfService {
                         PDFont bold,
                         PDFont regular,
                         ChalaanItem item,
-                        int packetNumber) throws IOException {
+                        String packetNumber) throws IOException {
 
                 String prefix = "Packet " + packetNumber + ":";
                 String body = safe(item == null ? null : item.getDescription());
@@ -1067,7 +1106,15 @@ public class ChalaanPdfService {
 
                 for (int index = fromPacketIndex; index < toPacketIndex; index++) {
                         ChalaanItem item = group.items.get(index);
-                        int packetNumber = index + 1;
+
+                        /*
+                         * IMPORTANT: this is the actual packet number created/entered
+                         * by Packing (Pkt-N), not the packet's position in this challan
+                         * group. Examples can therefore be 1, 4, 79, 104, 62, etc.
+                         */
+                        String packetNumber = resolveStandardPacketNumber(
+                                        item,
+                                        index + 1);
 
                         float packetHeight = calculateStandardPacketHeight(
                                         bold,
@@ -1127,9 +1174,275 @@ public class ChalaanPdfService {
                 return text;
         }
 
+        /**
+         * Read-only canonical packet-number enrichment for standard challans.
+         *
+         * ChalaanItem.zohoItemId is normally the PacketItem UUID because
+         * DispatchedItemService creates Packing-origin Dispatch rows with
+         * zohoItemId = PacketItem.id.toString(). We intentionally batch-load those
+         * UUIDs once per PDF generation to avoid N+1 queries and to make WR-38 work,
+         * where SKU is the Product Code and contains no Pkt-N suffix.
+         *
+         * This method only enriches the transient ChalaanItem PDF DTO. It never
+         * saves PacketItem or changes any operational state.
+         */
+        private void enrichStandardPacketIdentityFromPacketItems(
+                        List<ChalaanItem> sourceItems) {
+
+                if (packetItemRepository == null
+                                || sourceItems == null
+                                || sourceItems.isEmpty()) {
+                        return;
+                }
+
+                Map<UUID, List<ChalaanItem>> itemsByPacketItemId = new LinkedHashMap<>();
+
+                for (ChalaanItem item : sourceItems) {
+                        if (item == null) {
+                                continue;
+                        }
+
+                        /*
+                         * Always resolve the existing PacketItem when the challan row
+                         * carries its UUID. Do NOT skip merely because packetNumber is
+                         * populated: PacketService/PdfStickerService explicitly allow
+                         * the current SKU to be newer than a stale reconstructed
+                         * packetNumber (for example packetNumber=Pkt-1 while
+                         * SKU=.../Pkt-66). This remains a read-only PDF enrichment.
+                         */
+                        UUID packetItemId = parsePacketItemUuid(item.getZohoItemId());
+
+                        if (packetItemId == null) {
+                                continue;
+                        }
+
+                        itemsByPacketItemId
+                                        .computeIfAbsent(packetItemId, ignored -> new ArrayList<>())
+                                        .add(item);
+                }
+
+                if (itemsByPacketItemId.isEmpty()) {
+                        return;
+                }
+
+                for (PacketItem packetItem : packetItemRepository.findAllById(
+                                itemsByPacketItemId.keySet())) {
+
+                        if (packetItem == null || packetItem.getId() == null) {
+                                continue;
+                        }
+
+                        List<ChalaanItem> challanItems = itemsByPacketItemId.get(
+                                        packetItem.getId());
+
+                        if (challanItems == null || challanItems.isEmpty()) {
+                                continue;
+                        }
+
+                        String canonicalPacketNumber = packetItem.getPacketNumber();
+                        String canonicalSku = packetItem.getSku();
+                        String canonicalSkuPacketNumber = extractPacketDisplayNumberFromSku(
+                                        canonicalSku);
+
+                        for (ChalaanItem challanItem : challanItems) {
+                                if (challanItem == null) {
+                                        continue;
+                                }
+
+                                /*
+                                 * FIRST preserve any current challan/Dispatch SKU that
+                                 * already contains Pkt-N. The Dispatch row can be newer
+                                 * than a reconstructed PacketItem, and this is exactly
+                                 * the rule already used by the sticker flow.
+                                 */
+                                String currentSkuPacketNumber = extractPacketDisplayNumberFromSku(
+                                                challanItem.getSku());
+
+                                if (currentSkuPacketNumber != null) {
+                                        challanItem.setPacketNumber(
+                                                        "Pkt-" + currentSkuPacketNumber);
+                                        continue;
+                                }
+
+                                /*
+                                 * Otherwise use the existing PacketItem SKU when it
+                                 * carries Pkt-N. Only copy that SKU when the challan row
+                                 * does not already have a stronger packet-bearing SKU.
+                                 */
+                                if (canonicalSkuPacketNumber != null) {
+                                        challanItem.setSku(canonicalSku);
+                                        challanItem.setPacketNumber(
+                                                        "Pkt-" + canonicalSkuPacketNumber);
+                                        continue;
+                                }
+
+                                /*
+                                 * WR-38 intentionally has no Pkt-N inside SKU, so its
+                                 * stored PacketItem.packetNumber remains the fallback.
+                                 */
+                                if (normalizePacketDisplayNumber(
+                                                canonicalPacketNumber) != null) {
+                                        challanItem.setPacketNumber(canonicalPacketNumber);
+                                }
+
+                                if ((challanItem.getSku() == null
+                                                || challanItem.getSku().trim().isBlank())
+                                                && canonicalSku != null
+                                                && !canonicalSku.trim().isBlank()) {
+                                        challanItem.setSku(canonicalSku);
+                                }
+                        }
+                }
+        }
+
+        private UUID parsePacketItemUuid(String value) {
+                if (value == null || value.trim().isBlank()) {
+                        return null;
+                }
+
+                try {
+                        return UUID.fromString(value.trim());
+                } catch (IllegalArgumentException ignored) {
+                        return null;
+                }
+        }
+
+        /**
+         * Resolve the packet identity printed on the challan.
+         *
+         * IMPORTANT - this mirrors PacketService/PdfStickerService:
+         * 1) Current SKU Pkt-N wins whenever present. Dispatch Admin packet-number
+         * correction rebuilds SKU immediately, while some reconstructed/legacy
+         * PacketItems can still carry an older packetNumber value.
+         * 2) Explicit/repository-enriched PacketItem.packetNumber is the fallback
+         * for WR-38 or legacy rows whose SKU intentionally contains no Pkt-N.
+         * 3) Legacy item-name / description text containing Pkt-N.
+         * 4) "?" when no real packet identity can be recovered.
+         *
+         * This method is presentation-only and does not renumber or mutate any
+         * PacketItem, Dispatch row, challan, sticker or logistics record.
+         */
+        private String resolveStandardPacketNumber(
+                        ChalaanItem item,
+                        int ignoredLegacyFallbackSequence) {
+
+                String fromSku = extractPacketDisplayNumberFromSku(
+                                item == null
+                                                ? null
+                                                : item.getSku());
+
+                if (fromSku != null) {
+                        return fromSku;
+                }
+
+                String direct = normalizePacketDisplayNumber(
+                                item == null
+                                                ? null
+                                                : item.getPacketNumber());
+
+                if (direct != null) {
+                        return direct;
+                }
+
+                String fromItemName = extractPacketDisplayNumberFromSku(
+                                item == null
+                                                ? null
+                                                : item.getItemName());
+
+                if (fromItemName != null) {
+                        return fromItemName;
+                }
+
+                String fromDescription = extractPacketDisplayNumberFromSku(
+                                item == null
+                                                ? null
+                                                : item.getDescription());
+
+                if (fromDescription != null) {
+                        return fromDescription;
+                }
+
+                /*
+                 * Never print a fake group-local sequence. If an old/imported row
+                 * has no packet identity anywhere, show it as unavailable.
+                 */
+                return "?";
+        }
+
+        private String normalizePacketDisplayNumber(
+                        String packetNumber) {
+
+                if (packetNumber == null) {
+                        return null;
+                }
+
+                String clean = packetNumber.trim();
+
+                if (clean.isBlank() || "-".equals(clean)) {
+                        return null;
+                }
+
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                                .compile("(?i)^(?:PACKET|PKT)[-\\s]*([0-9]+)$")
+                                .matcher(clean);
+
+                if (matcher.matches()) {
+                        return matcher.group(1);
+                }
+
+                if (clean.matches("[0-9]+")) {
+                        return clean;
+                }
+
+                /*
+                 * Keep a non-standard legacy packet identity readable rather than
+                 * silently replacing it with a made-up sequence.
+                 */
+                return clean
+                                .replaceFirst("(?i)^(?:PACKET|PKT)[-\\s]*", "")
+                                .trim();
+        }
+
+        private String extractPacketDisplayNumberFromSku(
+                        String sku) {
+
+                if (sku == null || sku.trim().isBlank()) {
+                        return null;
+                }
+
+                /*
+                 * Match PacketService's current SKU resolver: use the final Pkt-
+                 * marker and read its leading digits. Example:
+                 * W-05/4-5/Pkt-66 -> 66.
+                 */
+                String value = sku.trim();
+                String lower = value.toLowerCase(Locale.ROOT);
+                int marker = lower.lastIndexOf("pkt-");
+
+                if (marker >= 0) {
+                        String suffix = value.substring(marker + 4);
+                        java.util.regex.Matcher digits = java.util.regex.Pattern
+                                        .compile("^\\s*([0-9]+)")
+                                        .matcher(suffix);
+
+                        if (digits.find()) {
+                                return digits.group(1);
+                        }
+                }
+
+                /* Tolerate older forms such as "Pkt 66". */
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                                .compile("(?i)PKT[-\\s]*([0-9]+)")
+                                .matcher(value);
+
+                return matcher.find()
+                                ? matcher.group(1)
+                                : null;
+        }
+
         private String buildStandardPacketDescription(
                         ChalaanItem item,
-                        int packetNumber) {
+                        String packetNumber) {
 
                 return "Packet " + packetNumber + ": "
                                 + safe(item == null ? null : item.getDescription());
@@ -1137,7 +1450,7 @@ public class ChalaanPdfService {
 
         private String buildStandardPacketRemarks(
                         ChalaanItem item,
-                        int packetNumber) {
+                        String packetNumber) {
 
                 return "P" + packetNumber + ": "
                                 + safe(item == null ? null : item.getRemarks());
