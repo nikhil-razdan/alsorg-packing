@@ -187,9 +187,7 @@ public class ChalaanPdfService {
                                                         bold,
                                                         regular,
                                                         group.items.get(packetIndex),
-                                                        resolveStandardPacketNumber(
-                                                                        group.items.get(packetIndex),
-                                                                        packetIndex + 1));
+                                                        packetIndex + 1);
 
                                         float availableHeight = y - (TABLE_BOTTOM + 5);
 
@@ -232,9 +230,7 @@ public class ChalaanPdfService {
                                                                 bold,
                                                                 regular,
                                                                 group.items.get(chunkEnd),
-                                                                resolveStandardPacketNumber(
-                                                                                group.items.get(chunkEnd),
-                                                                                chunkEnd + 1));
+                                                                chunkEnd + 1);
 
                                                 if (sectionHeight + packetHeight + 2 > availableHeight
                                                                 && chunkEnd > packetIndex) {
@@ -958,7 +954,7 @@ public class ChalaanPdfService {
                         PDFont bold,
                         PDFont regular,
                         ChalaanItem item,
-                        String packetNumber) throws IOException {
+                        int packetNumber) throws IOException {
 
                 String prefix = "Packet " + packetNumber + ":";
                 String body = safe(item == null ? null : item.getDescription());
@@ -1071,15 +1067,7 @@ public class ChalaanPdfService {
 
                 for (int index = fromPacketIndex; index < toPacketIndex; index++) {
                         ChalaanItem item = group.items.get(index);
-
-                        /*
-                         * IMPORTANT: this is the actual packet number created/entered
-                         * by Packing (Pkt-N), not the packet's position in this challan
-                         * group. Examples can therefore be 1, 4, 79, 104, 62, etc.
-                         */
-                        String packetNumber = resolveStandardPacketNumber(
-                                        item,
-                                        index + 1);
+                        int packetNumber = index + 1;
 
                         float packetHeight = calculateStandardPacketHeight(
                                         bold,
@@ -1139,101 +1127,9 @@ public class ChalaanPdfService {
                 return text;
         }
 
-        /**
-         * Resolve the packet identity printed on the challan.
-         *
-         * Source priority:
-         * 1) ChalaanItem.packetNumber -> PacketItem.packetNumber (canonical),
-         * 2) ChalaanItem.sku -> legacy AL SKU ending in Pkt-N,
-         * 3) group-local sequence only for genuinely old/unidentified rows.
-         *
-         * This method is presentation-only and does not renumber or mutate any
-         * PacketItem, Dispatch row, challan, sticker or logistics record.
-         */
-        private String resolveStandardPacketNumber(
-                        ChalaanItem item,
-                        int legacyFallbackSequence) {
-
-                String direct = normalizePacketDisplayNumber(
-                                item == null
-                                                ? null
-                                                : item.getPacketNumber());
-
-                if (direct != null) {
-                        return direct;
-                }
-
-                String fromSku = extractPacketDisplayNumberFromSku(
-                                item == null
-                                                ? null
-                                                : item.getSku());
-
-                if (fromSku != null) {
-                        return fromSku;
-                }
-
-                /*
-                 * Backward compatibility for historical rows created before the
-                 * challan DTO carried packet identity. This is the only case where
-                 * 1..N is used.
-                 */
-                return String.valueOf(
-                                Math.max(legacyFallbackSequence, 1));
-        }
-
-        private String normalizePacketDisplayNumber(
-                        String packetNumber) {
-
-                if (packetNumber == null) {
-                        return null;
-                }
-
-                String clean = packetNumber.trim();
-
-                if (clean.isBlank() || "-".equals(clean)) {
-                        return null;
-                }
-
-                java.util.regex.Matcher matcher = java.util.regex.Pattern
-                                .compile("(?i)^(?:PACKET|PKT)[-\\s]*([0-9]+)$")
-                                .matcher(clean);
-
-                if (matcher.matches()) {
-                        return matcher.group(1);
-                }
-
-                if (clean.matches("[0-9]+")) {
-                        return clean;
-                }
-
-                /*
-                 * Keep a non-standard legacy packet identity readable rather than
-                 * silently replacing it with a made-up sequence.
-                 */
-                return clean
-                                .replaceFirst("(?i)^(?:PACKET|PKT)[-\\s]*", "")
-                                .trim();
-        }
-
-        private String extractPacketDisplayNumberFromSku(
-                        String sku) {
-
-                if (sku == null || sku.trim().isBlank()) {
-                        return null;
-                }
-
-                java.util.regex.Matcher matcher = java.util.regex.Pattern
-                                .compile("(?i)PKT[-\\s]*([0-9]+)")
-                                .matcher(sku);
-
-                return matcher.find()
-                                ? matcher.group(1)
-                                : null;
-        }
-
         private String buildStandardPacketDescription(
                         ChalaanItem item,
-                        String packetNumber) {
+                        int packetNumber) {
 
                 return "Packet " + packetNumber + ": "
                                 + safe(item == null ? null : item.getDescription());
@@ -1241,7 +1137,7 @@ public class ChalaanPdfService {
 
         private String buildStandardPacketRemarks(
                         ChalaanItem item,
-                        String packetNumber) {
+                        int packetNumber) {
 
                 return "P" + packetNumber + ": "
                                 + safe(item == null ? null : item.getRemarks());
