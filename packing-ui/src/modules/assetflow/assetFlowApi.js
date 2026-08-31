@@ -17,6 +17,47 @@ const pathSegment = (value, label = "ID") => {
   return encodeURIComponent(clean);
 };
 
+const REQUESTER_NOT_ASSIGNED_MESSAGE =
+  "Maintenance request access is not assigned. Ask Admin to link your FlowSuite username to an AssetFlow Reporter profile.";
+
+/*
+ * Capability probing is intentionally non-exceptional at HTTP level.
+ *
+ * /requester/availability returns 200 + { allowed:false } when the signed-in
+ * user does not have an AssetFlow requester grant. That prevents an expected
+ * access check on Module Hub from being promoted by the shared 403 interceptor
+ * into an application-wide forbidden event.
+ *
+ * Actual request reads/writes remain protected by their original backend
+ * endpoints. In particular createRequesterRequest still POSTs directly to the
+ * secured /requester/requests endpoint.
+ */
+const requesterAvailability = async () =>
+  data(await API.get("/assetflow/requester/availability"));
+
+const requesterContext = async () => {
+  const context = await requesterAvailability();
+
+  if (context?.allowed !== true) {
+    const error = new Error(REQUESTER_NOT_ASSIGNED_MESSAGE);
+    error.status = 403;
+    error.code = "ASSETFLOW_REQUEST_NOT_ASSIGNED";
+    throw error;
+  }
+
+  return context;
+};
+
+const requesterRequests = async () => {
+  const context = await requesterAvailability();
+
+  if (context?.allowed !== true) {
+    return [];
+  }
+
+  return data(await API.get("/assetflow/requester/requests"));
+};
+
 /*
  * AssetFlow has an intentionally public Reporter-Pass gateway. The shared
  * publicApiFetch transport uses the browser's native fetch captured before the
@@ -64,9 +105,13 @@ export const assetFlowApi = {
   /* Normal FlowSuite session probe used by the standalone request portal. */
   sessionMe: async () => data(await API.get("/auth/me")),
 
-  /* Any authenticated FlowSuite employee - no AssetFlow role required. */
-  requesterContext: async () => data(await API.get("/assetflow/requester/context")),
-  myRequests: async () => data(await API.get("/assetflow/requester/requests")),
+  /*
+   * Requester access is capability-based, not automatically granted to every
+   * FlowSuite account. The safe probe above converts "not assigned" into a
+   * local UI result without weakening the secured request endpoints.
+   */
+  requesterContext,
+  myRequests: requesterRequests,
   createRequesterRequest: async (payload) =>
     data(await API.post("/assetflow/requester/requests", payload)),
 

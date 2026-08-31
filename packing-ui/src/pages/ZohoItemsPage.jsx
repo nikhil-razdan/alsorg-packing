@@ -2754,6 +2754,20 @@ function ZohoItemsPage() {
     )}/preview-sticker`;
   };
 
+  /*
+   * Sticker/QR preview is a read-only operation.
+   *
+   * Normal and UTL packet previews use authenticated GET aliases so browser
+   * cookie CSRF is not involved in PDF preview rendering.  Hardware preview
+   * remains on its existing POST contract because its controller/service has a
+   * separate ownership boundary.  Final sticker/QR generation remains POST and
+   * therefore continues to require the normal CSRF protection.
+   */
+  const getStickerPreviewMethod = (row) =>
+    isHardwarePacketRow(row)
+      ? "POST"
+      : "GET";
+
   const getStickerGeneratePath = (
     row
   ) => {
@@ -7169,7 +7183,7 @@ function ZohoItemsPage() {
       const res = await authFetch(
         `${API_BASE_URL}${previewPath}?${query}`,
         {
-          method: "POST",
+          method: getStickerPreviewMethod(row),
         }
       );
 
