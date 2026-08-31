@@ -7,6 +7,16 @@ import com.alsorg.packing.assetflow.AssetFlowData.AuthenticatedRequestCreate;
 import com.alsorg.packing.assetflow.AssetFlowData.AuditEvent;
 import com.alsorg.packing.assetflow.AssetFlowData.ComplaintSource;
 import com.alsorg.packing.assetflow.AssetFlowData.Criticality;
+import com.alsorg.packing.assetflow.AssetFlowData.CostBucket;
+import com.alsorg.packing.assetflow.AssetFlowData.CostSource;
+import com.alsorg.packing.assetflow.AssetFlowData.CostStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.ExpenseCategory;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCost;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostImportConfirm;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostImportRow;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostLineUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostVoidRequest;
 import com.alsorg.packing.assetflow.AssetFlowData.Equipment;
 import com.alsorg.packing.assetflow.AssetFlowData.EquipmentStatus;
 import com.alsorg.packing.assetflow.AssetFlowData.EquipmentUpsert;
@@ -44,8 +54,13 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -69,6 +84,16 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 @Service
 @Transactional
@@ -80,6 +105,9 @@ public class AssetFlowService {
     private static final int MAX_TEAM_ROWS = 1000;
     private static final int MAX_PLAN_ROWS = 5000;
     private static final int MAX_USER_DIRECTORY_ROWS = 5000;
+    private static final int MAX_COST_PAGE_SIZE = 250;
+    private static final int MAX_COST_SUMMARY_ROWS = 50000;
+    private static final int MAX_COST_IMPORT_ROWS = 5000;
 
     private static final Set<WorkStatus> TERMINAL = EnumSet.of(
             WorkStatus.CLOSED,
@@ -188,6 +216,25 @@ public class AssetFlowService {
         List<Equipment> equipment = listEquipmentEntities(scope, null, null, null).stream()
                 .filter(e -> domainScope.contains(domainOf(e)))
                 .toList();
+        boolean costVisible = canViewReports(currentUser);
+        if (costVisible) {
+            backfillLegacyWorkOrderCosts(scope, domainScope, LocalDate.now().withDayOfYear(1), LocalDate.now());
+        }
+        List<MaintenanceCost> ytdCostRows = costVisible
+                ? findMaintenanceCostEntities(
+                        scope, domainScope, LocalDate.now().withDayOfYear(1), LocalDate.now(),
+                        null, null, null, null, null, null, MAX_COST_SUMMARY_ROWS)
+                : List.of();
+        List<MaintenanceCost> verifiedYtdCosts = ytdCostRows.stream()
+                .filter(c -> c.status == CostStatus.VERIFIED)
+                .toList();
+        BigDecimal maintenanceSpendYtd = sumMaintenanceCosts(verifiedYtdCosts);
+        BigDecimal maintenanceSpendMtd = sumMaintenanceCosts(verifiedYtdCosts.stream()
+                .filter(c -> YearMonth.from(c.costDate).equals(YearMonth.now()))
+                .toList());
+        BigDecimal pendingCostYtd = sumMaintenanceCosts(ytdCostRows.stream()
+                .filter(c -> c.status == CostStatus.DRAFT)
+                .toList());
         long assetsDown = equipment.stream().filter(e -> e.status == EquipmentStatus.DOWN || e.status == EquipmentStatus.UNDER_MAINTENANCE).count();
         long warrantyRisk = equipment.stream()
                 .filter(e -> e.warrantyExpiry != null)
@@ -251,7 +298,9 @@ public class AssetFlowService {
                     "avgResolutionHours30", round(avgResolutionHours, 1),
                     "downtimeHours30", round(domainDowntime / 60.0, 1),
                     "assets", domainAssets.size(),
-                    "assetsDown", domainAssets.stream().filter(e -> e.status == EquipmentStatus.DOWN || e.status == EquipmentStatus.UNDER_MAINTENANCE).count()
+                    "assetsDown", domainAssets.stream().filter(e -> e.status == EquipmentStatus.DOWN || e.status == EquipmentStatus.UNDER_MAINTENANCE).count(),
+                    "maintenanceCostYtd", costVisible ? sumMaintenanceCosts(verifiedYtdCosts.stream().filter(c -> domainOf(c) == domain).toList()) : null,
+                    "pendingCostYtd", costVisible ? sumMaintenanceCosts(ytdCostRows.stream().filter(c -> c.status == CostStatus.DRAFT && domainOf(c) == domain).toList()) : null
             ));
         }
 
@@ -267,7 +316,10 @@ public class AssetFlowService {
                 "pmDue7", pmDue7,
                 "assetsDown", assetsDown,
                 "warrantyRisk60", warrantyRisk,
-                "equipmentCount", equipment.size()
+                "equipmentCount", equipment.size(),
+                "maintenanceSpendMtd", costVisible ? maintenanceSpendMtd : null,
+                "maintenanceSpendYtd", costVisible ? maintenanceSpendYtd : null,
+                "pendingCostYtd", costVisible ? pendingCostYtd : null
         );
 
         return map(
@@ -1149,9 +1201,30 @@ public class AssetFlowService {
             if (request.rootCause() != null) w.rootCause = clean(request.rootCause());
             if (request.actionTaken() != null) w.actionTaken = clean(request.actionTaken());
             if (request.partsUsed() != null) w.partsUsed = clean(request.partsUsed());
-            if (request.partsCost() != null) w.partsCost = money(request.partsCost());
-            if (request.laborCost() != null) w.laborCost = money(request.laborCost());
-            if (request.externalCost() != null) w.externalCost = money(request.externalCost());
+
+            // New clients submit detailed cost lines. Older clients may continue
+            // sending only the three scalar totals; both paths are supported.
+            if (request.costLines() != null) {
+                replaceWorkOrderCostLines(w, request.costLines(), actor(auth));
+                if (!notBlank(w.partsUsed)) {
+                    w.partsUsed = request.costLines().stream()
+                            .filter(line -> line != null && (line.costBucket() == null || line.costBucket() == CostBucket.MATERIAL))
+                            .map(MaintenanceCostLineUpsert::description)
+                            .filter(AssetFlowService::notBlank)
+                            .map(AssetFlowService::clean)
+                            .distinct()
+                            .collect(Collectors.joining(", "));
+                }
+            } else if (request.partsCost() != null || request.laborCost() != null || request.externalCost() != null) {
+                upsertLegacyWorkOrderCostSummary(w, request, actor(auth));
+            }
+            if (hasActiveCostLedgerRows(w.id)) {
+                recalculateWorkOrderCostTotals(w);
+            } else {
+                if (request.partsCost() != null) w.partsCost = money(request.partsCost());
+                if (request.laborCost() != null) w.laborCost = money(request.laborCost());
+                if (request.externalCost() != null) w.externalCost = money(request.externalCost());
+            }
 
             require(notBlank(w.actionTaken), "Work done / action taken is required before marking repaired");
             if (w.workType == WorkType.CORRECTIVE || w.breakdown) {
@@ -1168,6 +1241,8 @@ public class AssetFlowService {
                     : "Machine test / handover verification note is required before closing");
             w.verificationNote = verification;
             w.closedAt = now;
+            verifyWorkOrderCostLines(w, actor(auth));
+            if (hasActiveCostLedgerRows(w.id)) recalculateWorkOrderCostTotals(w);
             registerFailureOnce(w);
             completePreventiveCycleIfNeeded(w);
         }
@@ -1680,6 +1755,455 @@ public class AssetFlowService {
         return events;
     }
 
+    /* =============================== MAINTENANCE COSTING =============================== */
+
+    public Map<String, Object> listMaintenanceCosts(
+            LocalDate from,
+            LocalDate to,
+            String plantCode,
+            ServiceDomain serviceDomain,
+            UUID equipmentId,
+            UUID workOrderId,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory,
+            CostStatus status,
+            String search,
+            int page,
+            int size) {
+        User current = currentUserService.requireCurrentUser();
+        require(canViewReports(current), "Maintenance costing access is restricted to department heads, Director and ADMIN");
+        Set<String> scope = readPlantScope(plantCode);
+        Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
+        LocalDate start = from == null ? LocalDate.now().withDayOfYear(1) : from;
+        LocalDate end = to == null ? LocalDate.now() : to;
+        require(!end.isBefore(start), "Costing end date cannot be before start date");
+        require(ChronoUnit.DAYS.between(start, end) <= 1096, "Costing range cannot exceed 3 years");
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(size, 1), MAX_COST_PAGE_SIZE);
+
+        backfillLegacyWorkOrderCosts(scope, domains, start, end);
+
+        StringBuilder where = new StringBuilder(" where c.plantCode in :plants and c.serviceDomain in :domains and c.costDate>=:from and c.costDate<=:to");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("plants", scope);
+        params.put("domains", domains);
+        params.put("from", start);
+        params.put("to", end);
+        if (equipmentId != null) { where.append(" and c.equipmentId=:equipmentId"); params.put("equipmentId", equipmentId); }
+        if (workOrderId != null) { where.append(" and c.workOrderId=:workOrderId"); params.put("workOrderId", workOrderId); }
+        if (costBucket != null) { where.append(" and c.costBucket=:costBucket"); params.put("costBucket", costBucket); }
+        if (expenseCategory != null) { where.append(" and c.expenseCategory=:expenseCategory"); params.put("expenseCategory", expenseCategory); }
+        if (status != null) { where.append(" and c.status=:status"); params.put("status", status); }
+        else where.append(" and c.status<>:voidStatus");
+        if (status == null) params.put("voidStatus", CostStatus.VOID);
+        if (notBlank(search)) {
+            where.append(" and (lower(c.description) like :search or lower(coalesce(c.equipmentName,'')) like :search "
+                    + "or lower(coalesce(c.legacyMachineName,'')) like :search or lower(coalesce(c.equipmentCode,'')) like :search "
+                    + "or lower(coalesce(c.workNumber,'')) like :search or lower(coalesce(c.vendorName,'')) like :search "
+                    + "or lower(coalesce(c.poNumber,'')) like :search or lower(coalesce(c.invoiceNumber,'')) like :search)");
+            params.put("search", "%" + clean(search).toLowerCase(Locale.ROOT) + "%");
+        }
+
+        TypedQuery<MaintenanceCost> rowsQuery = em.createQuery(
+                "select c from AssetFlowMaintenanceCost c" + where + " order by c.costDate desc, c.createdAt desc",
+                MaintenanceCost.class);
+        TypedQuery<Long> countQuery = em.createQuery(
+                "select count(c) from AssetFlowMaintenanceCost c" + where,
+                Long.class);
+        params.forEach((key, value) -> { rowsQuery.setParameter(key, value); countQuery.setParameter(key, value); });
+        List<MaintenanceCost> rows = rowsQuery
+                .setFirstResult(safePage * safeSize)
+                .setMaxResults(safeSize)
+                .getResultList();
+        long total = countQuery.getSingleResult();
+
+        return map(
+                "items", rows.stream().map(this::maintenanceCostView).toList(),
+                "page", safePage,
+                "size", safeSize,
+                "total", total,
+                "pages", Math.max(1, (long) Math.ceil(total / (double) safeSize)),
+                "from", start,
+                "to", end
+        );
+    }
+
+    public Map<String, Object> maintenanceCostSummary(
+            LocalDate from,
+            LocalDate to,
+            String plantCode,
+            ServiceDomain serviceDomain,
+            UUID equipmentId,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory) {
+        User current = currentUserService.requireCurrentUser();
+        require(canViewReports(current), "Maintenance costing access is restricted to department heads, Director and ADMIN");
+        Set<String> scope = readPlantScope(plantCode);
+        Set<ServiceDomain> domains = readDomainScope(current, serviceDomain);
+        LocalDate start = from == null ? LocalDate.now().withDayOfYear(1) : from;
+        LocalDate end = to == null ? LocalDate.now() : to;
+        require(!end.isBefore(start), "Costing end date cannot be before start date");
+        require(ChronoUnit.DAYS.between(start, end) <= 1096, "Costing range cannot exceed 3 years");
+
+        backfillLegacyWorkOrderCosts(scope, domains, start, end);
+        List<MaintenanceCost> rows = findMaintenanceCostEntities(
+                scope, domains, start, end, equipmentId, null, costBucket, expenseCategory, null, null, MAX_COST_SUMMARY_ROWS);
+        return maintenanceCostSummaryFromRows(rows, start, end, serviceDomain, domains);
+    }
+
+    public Map<String, Object> saveMaintenanceCost(UUID id, MaintenanceCostUpsert request, Authentication auth) {
+        require(request != null, "Cost entry is required");
+        User current = currentUserService.requireCurrentUser();
+        MaintenanceCost c = id == null ? new MaintenanceCost() : requireMaintenanceCost(id, true);
+        if (id != null) {
+            checkVersion(c.version, request.version());
+            require(c.status != CostStatus.VOID, "A voided cost entry cannot be edited");
+            requirePlantWriteAccess(c.plantCode);
+            require(canCoordinate(current, domainOf(c)), "Department head/coordinator permission is required to edit maintenance cost");
+        }
+
+        WorkOrder workOrder = request.workOrderId() == null ? null : requireOrder(request.workOrderId(), false);
+        Equipment equipment = request.equipmentId() == null ? null : requireEquipment(request.equipmentId(), false);
+        if (workOrder != null && equipment == null && workOrder.equipmentId != null) {
+            equipment = requireEquipment(workOrder.equipmentId, false);
+        }
+        if (workOrder != null && equipment != null && workOrder.equipmentId != null) {
+            require(workOrder.equipmentId.equals(equipment.id), "Selected asset does not match the selected work order");
+        }
+
+        String targetPlant = workOrder != null ? normalizePlant(workOrder.plantCode)
+                : equipment != null ? normalizePlant(equipment.plantCode)
+                : normalizePlant(request.plantCode());
+        require(notBlank(targetPlant), "Plant is required for a maintenance cost entry");
+        requirePlantWriteAccess(targetPlant);
+
+        ServiceDomain domain = workOrder != null ? domainOf(workOrder)
+                : equipment != null ? domainOf(equipment)
+                : request.serviceDomain() == null ? ServiceDomain.MACHINE : request.serviceDomain();
+        requireDomainReadAccess(current, domain);
+        require(canCoordinate(current, domain), "Department head/coordinator permission is required to manage maintenance cost");
+
+        if (workOrder != null) ensureLegacyWorkOrderSummaryLedger(workOrder, actor(auth));
+
+        c.costDate = request.costDate() == null ? LocalDate.now() : request.costDate();
+        c.serviceDomain = domain;
+        c.plantCode = targetPlant;
+        c.equipmentId = equipment != null ? equipment.id : workOrder != null ? workOrder.equipmentId : null;
+        c.equipmentCode = equipment != null ? equipment.assetCode : workOrder != null ? workOrder.equipmentCode : null;
+        c.equipmentName = equipment != null ? equipment.name : workOrder != null ? workOrder.equipmentName : null;
+        c.workOrderId = workOrder == null ? null : workOrder.id;
+        c.workNumber = workOrder == null ? null : workOrder.workNumber;
+        c.costBucket = request.costBucket() == null ? CostBucket.MATERIAL : request.costBucket();
+        c.expenseCategory = request.expenseCategory() == null ? defaultExpenseCategory(c.costBucket) : request.expenseCategory();
+        c.description = clean(request.description());
+        require(notBlank(c.description), "Cost description is required");
+        c.quantity = positiveQuantity(request.quantity());
+        c.uom = firstNonBlank(request.uom(), defaultUom(c.costBucket));
+        c.unitRate = request.unitRate() == null ? null : money(request.unitRate());
+        c.amount = resolveCostAmount(c.quantity, c.unitRate, request.amount());
+        require(c.amount.compareTo(BigDecimal.ZERO) > 0, "Cost amount must be greater than zero");
+        c.vendorName = clean(request.vendorName());
+        c.poNumber = clean(request.poNumber());
+        c.invoiceNumber = clean(request.invoiceNumber());
+        c.legacyMachineSerial = clean(request.legacyMachineSerial());
+        c.legacyMachineName = clean(request.legacyMachineName());
+        c.remarks = clean(request.remarks());
+        c.source = id == null ? CostSource.DIRECT_ENTRY : c.source;
+        if (c.source == null) c.source = CostSource.DIRECT_ENTRY;
+
+        CostStatus requestedStatus = request.status() == null ? CostStatus.VERIFIED : request.status();
+        require(requestedStatus != CostStatus.VOID, "Use the Void action instead of setting VOID directly");
+        c.status = requestedStatus;
+        LocalDateTime now = LocalDateTime.now();
+        String actor = actor(auth);
+        c.updatedBy = actor;
+        c.updatedAt = now;
+        if (c.status == CostStatus.VERIFIED) {
+            c.verifiedBy = actor;
+            c.verifiedAt = now;
+        } else {
+            c.verifiedBy = null;
+            c.verifiedAt = null;
+        }
+        if (id == null) {
+            c.createdBy = actor;
+            c.createdAt = now;
+            em.persist(c);
+        }
+        audit("MAINTENANCE_COST", c.id, id == null ? "CREATED" : "UPDATED", null, c.status.name(), actor,
+                c.description + " · " + c.amount);
+        if (workOrder != null) recalculateWorkOrderCostTotals(workOrder);
+        return maintenanceCostView(c);
+    }
+
+    public Map<String, Object> verifyMaintenanceCost(UUID id, Long version, Authentication auth) {
+        MaintenanceCost c = requireMaintenanceCost(id, true);
+        checkVersion(c.version, version);
+        require(c.status != CostStatus.VOID, "Voided cost entries cannot be verified");
+        User current = currentUserService.requireCurrentUser();
+        requirePlantWriteAccess(c.plantCode);
+        require(canCoordinate(current, domainOf(c)), "Department head/coordinator permission is required to verify maintenance cost");
+        c.status = CostStatus.VERIFIED;
+        c.verifiedBy = actor(auth);
+        c.verifiedAt = LocalDateTime.now();
+        c.updatedBy = actor(auth);
+        c.updatedAt = c.verifiedAt;
+        audit("MAINTENANCE_COST", c.id, "VERIFIED", null, c.status.name(), actor(auth), c.description);
+        if (c.workOrderId != null) recalculateWorkOrderCostTotals(requireOrder(c.workOrderId, true));
+        return maintenanceCostView(c);
+    }
+
+    public Map<String, Object> voidMaintenanceCost(UUID id, MaintenanceCostVoidRequest request, Authentication auth) {
+        require(request != null && notBlank(request.reason()), "Void reason is required");
+        MaintenanceCost c = requireMaintenanceCost(id, true);
+        checkVersion(c.version, request.version());
+        require(c.status != CostStatus.VOID, "Cost entry is already voided");
+        User current = currentUserService.requireCurrentUser();
+        requirePlantWriteAccess(c.plantCode);
+        require(canCoordinate(current, domainOf(c)), "Department head/coordinator permission is required to void maintenance cost");
+        CostStatus from = c.status;
+        c.status = CostStatus.VOID;
+        c.voidReason = clean(request.reason());
+        c.voidedBy = actor(auth);
+        c.voidedAt = LocalDateTime.now();
+        c.updatedBy = actor(auth);
+        c.updatedAt = c.voidedAt;
+        audit("MAINTENANCE_COST", c.id, "VOIDED", from.name(), CostStatus.VOID.name(), actor(auth), c.voidReason);
+        if (c.workOrderId != null) recalculateWorkOrderCostTotals(requireOrder(c.workOrderId, true));
+        return maintenanceCostView(c);
+    }
+
+
+    public Map<String, Object> previewMaintenanceCostWorkbook(MultipartFile file) {
+        User current = currentUserService.requireCurrentUser();
+        require(file != null && !file.isEmpty(), "Select a Maintenance Costing XLSX file");
+        require(file.getSize() <= 15L * 1024L * 1024L, "Maintenance Costing XLSX must be 15 MB or smaller");
+        Set<String> scope = readPlantScope(null);
+        Set<ServiceDomain> domains = readDomainScope(current, null);
+        require(domains.stream().anyMatch(d -> canCoordinate(current, d)),
+                "Department head/coordinator permission is required to import maintenance costing");
+
+        List<Map<String, String>> sourceRows;
+        try {
+            sourceRows = readMaintenanceCostWorkbook(file.getBytes());
+        } catch (IOException ex) {
+            throw badRequest("Could not read Maintenance Costing workbook: " + ex.getMessage());
+        }
+        require(!sourceRows.isEmpty(), "No usable rows were found in the SPARE ENTRY sheet");
+
+        List<Equipment> equipment = listEquipmentEntities(scope, domains, null, null, null);
+        Map<String, Equipment> equipmentBySerial = new HashMap<>();
+        Map<String, List<Equipment>> equipmentByName = new HashMap<>();
+        for (Equipment e : equipment) {
+            if (notBlank(e.serialNumber)) equipmentBySerial.put(clean(e.serialNumber).toUpperCase(Locale.ROOT), e);
+            equipmentByName.computeIfAbsent(machineMatchKey(e.name), ignored -> new ArrayList<>()).add(e);
+        }
+
+        List<Map<String, Object>> preview = new ArrayList<>();
+        int ready = 0;
+        int skippedYear = 0;
+        int invalid = 0;
+        List<LocalDate> parsedDates = new ArrayList<>();
+
+        for (Map<String, String> raw : sourceRows) {
+            int rowNumber = parseInt(raw.get("_ROW"), preview.size() + 2);
+            String rawMonth = clean(raw.get("MONTH"));
+            String rawDate = clean(raw.get("DATE"));
+            String rawPlant = clean(raw.get("PLANT"));
+            String rawMachine = clean(raw.get("MACHINE"));
+            String rawDescription = clean(raw.get("DESCRIPTION"));
+            String rawPo = clean(raw.get("PO"));
+            String rawSerial = clean(raw.get("SERIAL"));
+            String rawCost = clean(raw.get("COST"));
+            List<String> issues = new ArrayList<>();
+            List<String> warnings = new ArrayList<>();
+
+            if ("YEAR".equalsIgnoreCase(rawMonth)) {
+                skippedYear++;
+                preview.add(map(
+                        "rowNumber", rowNumber,
+                        "rawDate", rawDate,
+                        "rawMonth", rawMonth,
+                        "rawPlant", rawPlant,
+                        "rawMachine", rawMachine,
+                        "description", rawDescription,
+                        "poNumber", rawPo,
+                        "legacyMachineSerial", rawSerial,
+                        "rawCost", rawCost,
+                        "ready", false,
+                        "include", false,
+                        "status", "SKIPPED_YEAR",
+                        "issues", List.of("YEAR summary rows are intentionally not imported; annual totals are derived from dated transactions."),
+                        "warnings", List.of()
+                ));
+                continue;
+            }
+
+            LocalDate costDate = parseLegacyCostDate(rawDate);
+            if (costDate == null) issues.add("INVALID_DATE");
+            else parsedDates.add(costDate);
+
+            String plant = resolveLegacyPlant(rawPlant, scope);
+            if (!notBlank(plant)) issues.add("UNKNOWN_PLANT");
+
+            BigDecimal amount = parseLegacyMoney(rawCost);
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) issues.add("INVALID_COST");
+            if (!notBlank(rawDescription)) issues.add("MISSING_DESCRIPTION");
+
+            Equipment resolved = resolveLegacyEquipment(rawMachine, rawSerial, plant, equipmentBySerial, equipmentByName);
+            if (notBlank(rawMachine) && resolved == null) warnings.add("UNMAPPED_ASSET_REFERENCE_PRESERVED");
+            ServiceDomain domain = resolved == null ? ServiceDomain.MACHINE : domainOf(resolved);
+            if (!domains.contains(domain)) issues.add("UNAUTHORISED_DOMAIN");
+
+            CostBucket bucket = inferLegacyCostBucket(rawDescription);
+            ExpenseCategory category = inferLegacyExpenseCategory(rawDescription, bucket);
+            boolean rowReady = issues.isEmpty();
+            if (rowReady) ready++; else invalid++;
+
+            preview.add(map(
+                    "rowNumber", rowNumber,
+                    "rawDate", rawDate,
+                    "rawMonth", rawMonth,
+                    "rawPlant", rawPlant,
+                    "rawMachine", rawMachine,
+                    "costDate", costDate,
+                    "plantCode", plant,
+                    "equipmentId", resolved == null ? null : resolved.id,
+                    "equipmentName", resolved == null ? null : resolved.name,
+                    "legacyMachineName", resolved == null ? blankToNull(rawMachine) : null,
+                    "equipmentCode", resolved == null ? null : resolved.assetCode,
+                    "serviceDomain", domain.name(),
+                    "costBucket", bucket.name(),
+                    "expenseCategory", category.name(),
+                    "description", rawDescription,
+                    "poNumber", rawPo,
+                    "legacyMachineSerial", rawSerial,
+                    "amount", amount,
+                    "ready", rowReady,
+                    "include", rowReady,
+                    "status", rowReady ? (warnings.isEmpty() ? "READY" : "READY_WITH_WARNING") : "REVIEW",
+                    "issues", issues,
+                    "warnings", warnings
+            ));
+        }
+
+        // Duplicate detection is based on dated transaction fingerprints, not YEAR summary rows.
+        if (!parsedDates.isEmpty()) {
+            LocalDate minDate = parsedDates.stream().min(LocalDate::compareTo).orElse(LocalDate.now());
+            LocalDate maxDate = parsedDates.stream().max(LocalDate::compareTo).orElse(LocalDate.now());
+            Set<String> existingFingerprints = findMaintenanceCostEntities(
+                    scope, domains, minDate, maxDate, null, null, null, null, null, null, MAX_COST_SUMMARY_ROWS)
+                    .stream().map(this::costFingerprint).collect(Collectors.toSet());
+            for (Map<String, Object> row : preview) {
+                if (!Boolean.TRUE.equals(row.get("ready"))) continue;
+                String fingerprint = previewFingerprint(row);
+                if (existingFingerprints.contains(fingerprint)) {
+                    @SuppressWarnings("unchecked")
+                    List<String> issues = new ArrayList<>((List<String>) row.get("issues"));
+                    issues.add("POSSIBLE_DUPLICATE");
+                    row.put("issues", issues);
+                    row.put("ready", false);
+                    row.put("include", false);
+                    row.put("status", "DUPLICATE");
+                    ready--;
+                    invalid++;
+                }
+            }
+        }
+
+        return map(
+                "fileName", file.getOriginalFilename(),
+                "rows", preview,
+                "summary", map(
+                        "sourceRows", sourceRows.size(),
+                        "ready", Math.max(0, ready),
+                        "review", invalid,
+                        "skippedYear", skippedYear
+                )
+        );
+    }
+
+    public Map<String, Object> confirmMaintenanceCostImport(MaintenanceCostImportConfirm request, Authentication auth) {
+        require(request != null && request.rows() != null && !request.rows().isEmpty(), "Import preview rows are required");
+        require(request.rows().size() <= MAX_COST_IMPORT_ROWS, "Import exceeds the maximum of " + MAX_COST_IMPORT_ROWS + " rows");
+        User current = currentUserService.requireCurrentUser();
+        Set<String> scope = readPlantScope(null);
+        Set<ServiceDomain> domains = readDomainScope(current, null);
+        UUID batchId = UUID.randomUUID();
+        String actor = actor(auth);
+        int created = 0;
+        int skipped = 0;
+        List<Map<String, Object>> rejected = new ArrayList<>();
+
+        for (MaintenanceCostImportRow row : request.rows()) {
+            if (row == null || Boolean.FALSE.equals(row.include())) { skipped++; continue; }
+            List<String> issues = new ArrayList<>();
+            String plant = resolveLegacyPlant(row.plantCode(), scope);
+            if (!notBlank(plant)) issues.add("UNKNOWN_PLANT");
+            if (row.costDate() == null) issues.add("INVALID_DATE");
+            BigDecimal amount = money(row.amount());
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) issues.add("INVALID_COST");
+            if (!notBlank(row.description())) issues.add("MISSING_DESCRIPTION");
+
+            Equipment equipment = row.equipmentId() == null ? null : em.find(Equipment.class, row.equipmentId());
+            if (row.equipmentId() != null && equipment == null) issues.add("ASSET_NOT_FOUND");
+            ServiceDomain domain = equipment != null ? domainOf(equipment)
+                    : row.serviceDomain() == null ? ServiceDomain.MACHINE : row.serviceDomain();
+            if (!domains.contains(domain) || !canCoordinate(current, domain)) issues.add("UNAUTHORISED_DOMAIN");
+            if (equipment != null && !normalizePlant(equipment.plantCode).equals(plant)) issues.add("ASSET_PLANT_MISMATCH");
+
+            if (!issues.isEmpty()) {
+                rejected.add(map("rowNumber", row.rowNumber(), "issues", issues));
+                continue;
+            }
+
+            MaintenanceCost c = new MaintenanceCost();
+            c.costDate = row.costDate();
+            c.plantCode = plant;
+            c.serviceDomain = domain;
+            c.equipmentId = equipment == null ? null : equipment.id;
+            c.equipmentCode = equipment == null ? null : equipment.assetCode;
+            c.equipmentName = equipment == null ? null : equipment.name;
+            c.legacyMachineName = equipment == null ? clean(row.equipmentName()) : null;
+            c.costBucket = row.costBucket() == null ? inferLegacyCostBucket(row.description()) : row.costBucket();
+            c.expenseCategory = row.expenseCategory() == null ? inferLegacyExpenseCategory(row.description(), c.costBucket) : row.expenseCategory();
+            c.description = clean(row.description());
+            c.quantity = BigDecimal.ONE.setScale(3);
+            c.uom = "LOT";
+            c.amount = amount;
+            c.poNumber = clean(row.poNumber());
+            c.legacyMachineSerial = clean(row.legacyMachineSerial());
+            c.status = CostStatus.VERIFIED;
+            c.source = CostSource.EXCEL_IMPORT;
+            c.importBatchId = batchId;
+            c.legacyRowNumber = row.rowNumber();
+            c.createdBy = actor;
+            c.createdAt = LocalDateTime.now();
+            c.updatedBy = actor;
+            c.updatedAt = c.createdAt;
+            c.verifiedBy = actor;
+            c.verifiedAt = c.createdAt;
+
+            if (maintenanceCostDuplicateExists(c)) {
+                skipped++;
+                continue;
+            }
+            em.persist(c);
+            audit("MAINTENANCE_COST", c.id, "IMPORTED", null, CostStatus.VERIFIED.name(), actor,
+                    "Batch " + batchId + " · row " + row.rowNumber() + " · " + c.description);
+            created++;
+        }
+
+        return map(
+                "batchId", batchId,
+                "created", created,
+                "skipped", skipped,
+                "rejected", rejected,
+                "rejectedCount", rejected.size()
+        );
+    }
+
+
     public Map<String, Object> reports(
             LocalDate from,
             LocalDate to,
@@ -1700,6 +2224,17 @@ public class AssetFlowService {
                 .filter(w -> domains.contains(domainOf(w)))
                 .filter(w -> canReadOrder(current, w))
                 .toList();
+        backfillLegacyWorkOrderCosts(scope, domains, start, end);
+        List<MaintenanceCost> reportCostRows = findMaintenanceCostEntities(
+                scope, domains, start, end, null, null, null, null, null, null, MAX_COST_SUMMARY_ROWS);
+        List<MaintenanceCost> verifiedReportCosts = reportCostRows.stream()
+                .filter(c -> c.status == CostStatus.VERIFIED)
+                .toList();
+        Map<String, BigDecimal> costByEquipment = verifiedReportCosts.stream()
+                .filter(c -> c.equipmentId != null || notBlank(c.equipmentName))
+                .collect(Collectors.groupingBy(
+                        this::equipmentCostKey,
+                        Collectors.reducing(BigDecimal.ZERO.setScale(2), c -> money(c.amount), BigDecimal::add)));
 
         Map<String, List<WorkOrder>> byTechnician = orders.stream()
                 .filter(w -> notBlank(w.responsible))
@@ -1727,18 +2262,22 @@ public class AssetFlowService {
                 .toList();
 
         Map<String, List<WorkOrder>> byEquipment = orders.stream()
-                .filter(w -> notBlank(w.equipmentName))
-                .collect(Collectors.groupingBy(w -> w.equipmentName));
+                .filter(w -> w.equipmentId != null || notBlank(w.equipmentName))
+                .collect(Collectors.groupingBy(this::equipmentWorkKey));
         List<Map<String, Object>> assets = byEquipment.entrySet().stream()
                 .map(e -> {
                     List<WorkOrder> list = e.getValue();
-                    ServiceDomain domain = domainOf(list.get(0));
+                    WorkOrder first = list.get(0);
+                    ServiceDomain domain = domainOf(first);
                     long failures = list.stream().filter(w -> w.breakdown).count();
                     long downtime = list.stream().map(w -> w.downtimeMinutes).filter(Objects::nonNull)
                             .mapToLong(Integer::longValue).sum();
-                    BigDecimal cost = list.stream().map(this::totalCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal cost = costByEquipment.getOrDefault(e.getKey(), BigDecimal.ZERO.setScale(2));
                     return map(
-                            "name", e.getKey(),
+                            "equipmentId", first.equipmentId,
+                            "equipmentCode", first.equipmentCode,
+                            "name", firstNonBlank(first.equipmentName, "General / Unmapped"),
+                            "plantCode", first.plantCode,
                             "serviceDomain", domain.name(),
                             "orders", list.size(),
                             "failures", failures,
@@ -1760,11 +2299,14 @@ public class AssetFlowService {
                         "closed", e.getValue().stream().filter(w -> w.status == WorkStatus.CLOSED || w.status == WorkStatus.REPAIRED).count(),
                         "breakdowns", e.getValue().stream().filter(w -> w.breakdown).count(),
                         "downtimeHours", round(e.getValue().stream().map(w -> w.downtimeMinutes).filter(Objects::nonNull)
-                                .mapToLong(Integer::longValue).sum() / 60.0, 1)
+                                .mapToLong(Integer::longValue).sum() / 60.0, 1),
+                        "cost", sumMaintenanceCosts(verifiedReportCosts.stream()
+                                .filter(c -> YearMonth.from(c.costDate).equals(e.getKey()))
+                                .toList())
                 ))
                 .toList();
 
-        BigDecimal totalCost = orders.stream().map(this::totalCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCost = sumMaintenanceCosts(verifiedReportCosts);
         long corrective = orders.stream().filter(w -> w.workType == WorkType.CORRECTIVE).count();
         long preventive = orders.stream().filter(w -> w.workType == WorkType.PREVENTIVE).count();
         long completed = orders.stream().filter(w -> w.status == WorkStatus.CLOSED || w.status == WorkStatus.REPAIRED).count();
@@ -1777,7 +2319,7 @@ public class AssetFlowService {
             long open = list.stream().filter(w -> !TERMINAL.contains(w.status)).count();
             long downtime = list.stream().map(w -> w.downtimeMinutes).filter(Objects::nonNull)
                     .mapToLong(Integer::longValue).sum();
-            BigDecimal cost = list.stream().map(this::totalCost).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal cost = sumMaintenanceCosts(verifiedReportCosts.stream().filter(c -> domainOf(c) == domain).toList());
             double response = list.stream().map(this::responseMinutes).filter(Objects::nonNull)
                     .mapToInt(Integer::intValue).average().orElse(0);
             double repair = list.stream().map(this::resolvedActualMinutes).filter(Objects::nonNull)
@@ -2057,6 +2599,798 @@ public class AssetFlowService {
     }
 
     /* =============================== DOMAIN HELPERS =============================== */
+
+    private MaintenanceCost requireMaintenanceCost(UUID id, boolean lock) {
+        require(id != null, "Maintenance cost ID is required");
+        MaintenanceCost c = lock
+                ? em.find(MaintenanceCost.class, id, LockModeType.PESSIMISTIC_WRITE)
+                : em.find(MaintenanceCost.class, id);
+        if (c == null) throw notFound("Maintenance cost entry not found");
+        return c;
+    }
+
+    private ServiceDomain domainOf(MaintenanceCost c) {
+        return c == null || c.serviceDomain == null ? ServiceDomain.MACHINE : c.serviceDomain;
+    }
+
+    private List<MaintenanceCost> findMaintenanceCostEntities(
+            Set<String> plants,
+            Set<ServiceDomain> domains,
+            LocalDate from,
+            LocalDate to,
+            UUID equipmentId,
+            UUID workOrderId,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory,
+            CostStatus status,
+            String search,
+            int maxRows) {
+        StringBuilder jpql = new StringBuilder(
+                "select c from AssetFlowMaintenanceCost c where c.plantCode in :plants and c.serviceDomain in :domains");
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("plants", plants);
+        params.put("domains", domains);
+        if (from != null) { jpql.append(" and c.costDate>=:from"); params.put("from", from); }
+        if (to != null) { jpql.append(" and c.costDate<=:to"); params.put("to", to); }
+        if (equipmentId != null) { jpql.append(" and c.equipmentId=:equipmentId"); params.put("equipmentId", equipmentId); }
+        if (workOrderId != null) { jpql.append(" and c.workOrderId=:workOrderId"); params.put("workOrderId", workOrderId); }
+        if (costBucket != null) { jpql.append(" and c.costBucket=:bucket"); params.put("bucket", costBucket); }
+        if (expenseCategory != null) { jpql.append(" and c.expenseCategory=:category"); params.put("category", expenseCategory); }
+        if (status != null) { jpql.append(" and c.status=:status"); params.put("status", status); }
+        else { jpql.append(" and c.status<>:voidStatus"); params.put("voidStatus", CostStatus.VOID); }
+        if (notBlank(search)) {
+            jpql.append(" and (lower(c.description) like :search or lower(coalesce(c.equipmentName,'')) like :search "
+                    + "or lower(coalesce(c.legacyMachineName,'')) like :search or lower(coalesce(c.workNumber,'')) like :search "
+                    + "or lower(coalesce(c.vendorName,'')) like :search or lower(coalesce(c.poNumber,'')) like :search "
+                    + "or lower(coalesce(c.invoiceNumber,'')) like :search)");
+            params.put("search", "%" + clean(search).toLowerCase(Locale.ROOT) + "%");
+        }
+        jpql.append(" order by c.costDate desc, c.createdAt desc");
+        TypedQuery<MaintenanceCost> query = em.createQuery(jpql.toString(), MaintenanceCost.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(Math.max(1, maxRows)).getResultList();
+    }
+
+    private Map<String, Object> maintenanceCostSummaryFromRows(
+            List<MaintenanceCost> rows,
+            LocalDate start,
+            LocalDate end,
+            ServiceDomain requestedDomain,
+            Set<ServiceDomain> domains) {
+        List<MaintenanceCost> verified = rows.stream().filter(c -> c.status == CostStatus.VERIFIED).toList();
+        List<MaintenanceCost> draft = rows.stream().filter(c -> c.status == CostStatus.DRAFT).toList();
+        BigDecimal total = sumMaintenanceCosts(verified);
+        BigDecimal pending = sumMaintenanceCosts(draft);
+        EnumMap<CostBucket, BigDecimal> byBucket = new EnumMap<>(CostBucket.class);
+        for (CostBucket bucket : CostBucket.values()) byBucket.put(bucket, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        for (MaintenanceCost c : verified) byBucket.merge(c.costBucket, money(c.amount), BigDecimal::add);
+
+        Map<YearMonth, List<MaintenanceCost>> monthGroups = rows.stream()
+                .collect(Collectors.groupingBy(c -> YearMonth.from(c.costDate)));
+        List<Map<String, Object>> monthly = monthGroups.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> {
+                    List<MaintenanceCost> monthRows = entry.getValue();
+                    List<MaintenanceCost> monthVerified = monthRows.stream().filter(c -> c.status == CostStatus.VERIFIED).toList();
+                    return map(
+                            "month", entry.getKey().toString(),
+                            "materialCost", sumMaintenanceCosts(monthVerified.stream().filter(c -> c.costBucket == CostBucket.MATERIAL).toList()),
+                            "laborCost", sumMaintenanceCosts(monthVerified.stream().filter(c -> c.costBucket == CostBucket.INTERNAL_LABOUR).toList()),
+                            "externalCost", sumMaintenanceCosts(monthVerified.stream().filter(c -> c.costBucket == CostBucket.EXTERNAL_SERVICE).toList()),
+                            "otherCost", sumMaintenanceCosts(monthVerified.stream().filter(c -> c.costBucket == CostBucket.OTHER).toList()),
+                            "totalCost", sumMaintenanceCosts(monthVerified),
+                            "pendingCost", sumMaintenanceCosts(monthRows.stream().filter(c -> c.status == CostStatus.DRAFT).toList()),
+                            "entries", monthVerified.size()
+                    );
+                })
+                .toList();
+
+        List<Map<String, Object>> byPlant = verified.stream()
+                .collect(Collectors.groupingBy(c -> c.plantCode))
+                .entrySet().stream()
+                .map(e -> map("plantCode", e.getKey(), "cost", sumMaintenanceCosts(e.getValue()), "entries", e.getValue().size()))
+                .sorted(Comparator.comparing((Map<String, Object> o) -> (BigDecimal) o.get("cost"), Comparator.reverseOrder()))
+                .toList();
+
+        List<Map<String, Object>> byEquipment = verified.stream()
+                .filter(c -> c.equipmentId != null || notBlank(c.equipmentName) || notBlank(c.legacyMachineName))
+                .collect(Collectors.groupingBy(this::equipmentCostKey, LinkedHashMap::new, Collectors.toList()))
+                .values().stream()
+                .map(list -> {
+                    MaintenanceCost first = list.get(0);
+                    return map(
+                            "equipmentId", first.equipmentId,
+                            "equipmentCode", first.equipmentCode,
+                            "name", firstNonBlank(first.equipmentName, first.legacyMachineName, "General / Unmapped"),
+                            "plantCode", first.plantCode,
+                            "serviceDomain", domainOf(first).name(),
+                            "cost", sumMaintenanceCosts(list),
+                            "entries", list.size()
+                    );
+                })
+                .sorted(Comparator.comparing((Map<String, Object> o) -> (BigDecimal) o.get("cost"), Comparator.reverseOrder()))
+                .limit(25)
+                .toList();
+
+        List<Map<String, Object>> byCategory = verified.stream()
+                .collect(Collectors.groupingBy(c -> c.expenseCategory))
+                .entrySet().stream()
+                .map(e -> map("category", e.getKey().name(), "cost", sumMaintenanceCosts(e.getValue()), "entries", e.getValue().size()))
+                .sorted(Comparator.comparing((Map<String, Object> o) -> (BigDecimal) o.get("cost"), Comparator.reverseOrder()))
+                .toList();
+
+        List<Map<String, Object>> byServiceDomain = new ArrayList<>();
+        for (ServiceDomain domain : ServiceDomain.values()) {
+            if (!domains.contains(domain)) continue;
+            List<MaintenanceCost> list = verified.stream().filter(c -> domainOf(c) == domain).toList();
+            byServiceDomain.add(map(
+                    "serviceDomain", domain.name(),
+                    "label", humanDomain(domain),
+                    "cost", sumMaintenanceCosts(list),
+                    "entries", list.size()
+            ));
+        }
+
+        long workOrderCount = verified.stream().map(c -> c.workOrderId).filter(Objects::nonNull).distinct().count();
+        List<Map<String, Object>> topExpenses = verified.stream()
+                .sorted(Comparator.comparing((MaintenanceCost c) -> money(c.amount)).reversed())
+                .limit(12)
+                .map(this::maintenanceCostView)
+                .toList();
+
+        return map(
+                "from", start,
+                "to", end,
+                "scope", requestedDomain == null && domains.size() > 1 ? "ALL" : domains.iterator().next().name(),
+                "summary", map(
+                        "totalCost", total,
+                        "pendingCost", pending,
+                        "materialCost", byBucket.get(CostBucket.MATERIAL),
+                        "laborCost", byBucket.get(CostBucket.INTERNAL_LABOUR),
+                        "externalCost", byBucket.get(CostBucket.EXTERNAL_SERVICE),
+                        "otherCost", byBucket.get(CostBucket.OTHER),
+                        "verifiedEntries", verified.size(),
+                        "pendingEntries", draft.size(),
+                        "workOrders", workOrderCount,
+                        "costPerWorkOrder", workOrderCount == 0 ? BigDecimal.ZERO.setScale(2) : total.divide(BigDecimal.valueOf(workOrderCount), 2, RoundingMode.HALF_UP)
+                ),
+                "monthly", monthly,
+                "byPlant", byPlant,
+                "byEquipment", byEquipment,
+                "byCategory", byCategory,
+                "byServiceDomain", byServiceDomain,
+                "topExpenses", topExpenses
+        );
+    }
+
+    private BigDecimal sumMaintenanceCosts(List<MaintenanceCost> rows) {
+        return rows.stream().map(c -> money(c.amount)).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+    }
+
+    private String equipmentCostKey(MaintenanceCost c) {
+        if (c.equipmentId != null) return "ID:" + c.equipmentId;
+        return "SNAP:" + normalizePlant(c.plantCode) + "|" + clean(firstNonBlank(c.equipmentCode, c.equipmentName, c.legacyMachineName)).toUpperCase(Locale.ROOT);
+    }
+
+    private String equipmentWorkKey(WorkOrder w) {
+        if (w.equipmentId != null) return "ID:" + w.equipmentId;
+        return "SNAP:" + normalizePlant(w.plantCode) + "|" + clean(firstNonBlank(w.equipmentCode, w.equipmentName)).toUpperCase(Locale.ROOT);
+    }
+
+    private CostBucket normalizeCostBucket(CostBucket bucket) {
+        return bucket == null ? CostBucket.MATERIAL : bucket;
+    }
+
+    private ExpenseCategory defaultExpenseCategory(CostBucket bucket) {
+        return switch (normalizeCostBucket(bucket)) {
+            case MATERIAL -> ExpenseCategory.SPARE_PART;
+            case INTERNAL_LABOUR -> ExpenseCategory.OTHER;
+            case EXTERNAL_SERVICE -> ExpenseCategory.REPAIR_SERVICE;
+            case OTHER -> ExpenseCategory.OTHER;
+        };
+    }
+
+    private String defaultUom(CostBucket bucket) {
+        return bucket == CostBucket.INTERNAL_LABOUR ? "HR" : "NOS";
+    }
+
+    private BigDecimal positiveQuantity(BigDecimal quantity) {
+        BigDecimal q = quantity == null ? BigDecimal.ONE : quantity;
+        require(q.compareTo(BigDecimal.ZERO) > 0, "Cost quantity must be greater than zero");
+        return q.setScale(3, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveCostAmount(BigDecimal quantity, BigDecimal unitRate, BigDecimal suppliedAmount) {
+        if (suppliedAmount != null) return money(suppliedAmount);
+        require(unitRate != null, "Amount or unit rate is required");
+        return money(quantity.multiply(unitRate));
+    }
+
+    private boolean hasActiveCostLedgerRows(UUID workOrderId) {
+        if (workOrderId == null) return false;
+        Long count = em.createQuery(
+                        "select count(c) from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status<>:voidStatus",
+                        Long.class)
+                .setParameter("id", workOrderId)
+                .setParameter("voidStatus", CostStatus.VOID)
+                .getSingleResult();
+        return count != null && count > 0;
+    }
+
+    private List<MaintenanceCost> activeWorkOrderCosts(UUID workOrderId) {
+        if (workOrderId == null) return List.of();
+        return em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status<>:voidStatus order by c.costDate, c.createdAt",
+                        MaintenanceCost.class)
+                .setParameter("id", workOrderId)
+                .setParameter("voidStatus", CostStatus.VOID)
+                .setMaxResults(1000)
+                .getResultList();
+    }
+
+    private void replaceWorkOrderCostLines(WorkOrder w, List<MaintenanceCostLineUpsert> lines, String actor) {
+        require(w != null, "Work order is required for cost lines");
+        List<MaintenanceCost> existing = em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status<>:voidStatus "
+                                + "and c.source in :sources",
+                        MaintenanceCost.class)
+                .setParameter("id", w.id)
+                .setParameter("voidStatus", CostStatus.VOID)
+                .setParameter("sources", Set.of(CostSource.WORK_ORDER, CostSource.LEGACY_WORK_ORDER_SUMMARY))
+                .getResultList();
+        LocalDateTime now = LocalDateTime.now();
+        for (MaintenanceCost c : existing) {
+            c.status = CostStatus.VOID;
+            c.voidReason = "Replaced by work-order repair cost breakdown";
+            c.voidedBy = actor;
+            c.voidedAt = now;
+            c.updatedBy = actor;
+            c.updatedAt = now;
+        }
+
+        int index = 0;
+        for (MaintenanceCostLineUpsert line : lines) {
+            if (line == null) continue;
+            index++;
+            CostBucket bucket = normalizeCostBucket(line.costBucket());
+            String description = clean(line.description());
+            require(notBlank(description), "Cost line " + index + " description is required");
+            BigDecimal qty = positiveQuantity(line.quantity());
+            BigDecimal rate = line.unitRate() == null ? null : money(line.unitRate());
+            BigDecimal amount = resolveCostAmount(qty, rate, line.amount());
+            require(amount.compareTo(BigDecimal.ZERO) > 0, "Cost line " + index + " amount must be greater than zero");
+
+            MaintenanceCost c = new MaintenanceCost();
+            hydrateCostFromWorkOrder(c, w);
+            c.costDate = line.costDate() == null ? LocalDate.now() : line.costDate();
+            c.costBucket = bucket;
+            c.expenseCategory = line.expenseCategory() == null ? defaultExpenseCategory(bucket) : line.expenseCategory();
+            c.description = description;
+            c.quantity = qty;
+            c.uom = firstNonBlank(line.uom(), defaultUom(bucket));
+            c.unitRate = rate;
+            c.amount = amount;
+            c.vendorName = clean(line.vendorName());
+            c.poNumber = clean(line.poNumber());
+            c.invoiceNumber = clean(line.invoiceNumber());
+            c.remarks = clean(line.remarks());
+            c.status = CostStatus.DRAFT;
+            c.source = CostSource.WORK_ORDER;
+            c.createdBy = actor;
+            c.createdAt = now;
+            c.updatedBy = actor;
+            c.updatedAt = now;
+            em.persist(c);
+        }
+    }
+
+    private void upsertLegacyWorkOrderCostSummary(WorkOrder w, StatusChange request, String actor) {
+        List<MaintenanceCost> detailed = em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status<>:voidStatus "
+                                + "and c.source<>:legacySource",
+                        MaintenanceCost.class)
+                .setParameter("id", w.id)
+                .setParameter("voidStatus", CostStatus.VOID)
+                .setParameter("legacySource", CostSource.LEGACY_WORK_ORDER_SUMMARY)
+                .setMaxResults(1)
+                .getResultList();
+        if (!detailed.isEmpty()) return;
+
+        List<MaintenanceCost> legacy = em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status<>:voidStatus and c.source=:source",
+                        MaintenanceCost.class)
+                .setParameter("id", w.id)
+                .setParameter("voidStatus", CostStatus.VOID)
+                .setParameter("source", CostSource.LEGACY_WORK_ORDER_SUMMARY)
+                .getResultList();
+        LocalDateTime now = LocalDateTime.now();
+        for (MaintenanceCost c : legacy) {
+            c.status = CostStatus.VOID;
+            c.voidReason = "Legacy work-order totals refreshed";
+            c.voidedBy = actor;
+            c.voidedAt = now;
+            c.updatedBy = actor;
+            c.updatedAt = now;
+        }
+        createLegacySummaryLine(w, CostBucket.MATERIAL, ExpenseCategory.SPARE_PART,
+                "Work-order parts / consumables summary", request.partsCost(), actor, now);
+        createLegacySummaryLine(w, CostBucket.INTERNAL_LABOUR, ExpenseCategory.OTHER,
+                "Work-order labour summary", request.laborCost(), actor, now);
+        createLegacySummaryLine(w, CostBucket.EXTERNAL_SERVICE, ExpenseCategory.REPAIR_SERVICE,
+                "Work-order external / vendor summary", request.externalCost(), actor, now);
+    }
+
+    /**
+     * One-time/lazy compatibility bridge for work orders created before the detailed
+     * maintenance-cost ledger existed. It does not change workflow state or totals;
+     * it only snapshots the already-stored scalar costs into dated ledger rows.
+     */
+    private void backfillLegacyWorkOrderCosts(
+            Set<String> plants, Set<ServiceDomain> domains, LocalDate from, LocalDate to) {
+        if (plants == null || plants.isEmpty() || domains == null || domains.isEmpty()) return;
+        BigDecimal zero = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        List<WorkOrder> candidates = em.createQuery(
+                        "select w from AssetFlowWorkOrder w where w.plantCode in :plants "
+                                + "and (w.partsCost>:zero or w.laborCost>:zero or w.externalCost>:zero)",
+                        WorkOrder.class)
+                .setParameter("plants", plants)
+                .setParameter("zero", zero)
+                .setMaxResults(MAX_EQUIPMENT_ROWS)
+                .getResultList();
+
+        for (WorkOrder w : candidates) {
+            if (!domains.contains(domainOf(w))) continue;
+            LocalDateTime source = w.repairedAt != null ? w.repairedAt
+                    : w.closedAt != null ? w.closedAt
+                    : w.updatedAt != null ? w.updatedAt
+                    : w.createdAt;
+            LocalDate date = source == null ? LocalDate.now() : source.toLocalDate();
+            if (from != null && date.isBefore(from)) continue;
+            if (to != null && date.isAfter(to)) continue;
+            ensureLegacyWorkOrderSummaryLedger(w, "SYSTEM_LEGACY_COST_MIGRATION");
+        }
+        // Subsequent ledger queries in the same transaction must see newly persisted rows.
+        em.flush();
+    }
+
+    private void ensureLegacyWorkOrderSummaryLedger(WorkOrder w, String actor) {
+        if (w == null || hasActiveCostLedgerRows(w.id) || totalCost(w).compareTo(BigDecimal.ZERO) <= 0) return;
+        LocalDateTime now = LocalDateTime.now();
+        CostStatus status = (w.status == WorkStatus.CLOSED || w.status == WorkStatus.REPAIRED)
+                ? CostStatus.VERIFIED
+                : CostStatus.DRAFT;
+        createLegacySummaryLine(w, CostBucket.MATERIAL, ExpenseCategory.SPARE_PART,
+                "Migrated legacy parts / consumables total", w.partsCost, actor, now, status);
+        createLegacySummaryLine(w, CostBucket.INTERNAL_LABOUR, ExpenseCategory.OTHER,
+                "Migrated legacy labour total", w.laborCost, actor, now, status);
+        createLegacySummaryLine(w, CostBucket.EXTERNAL_SERVICE, ExpenseCategory.REPAIR_SERVICE,
+                "Migrated legacy external / vendor total", w.externalCost, actor, now, status);
+    }
+
+    private void createLegacySummaryLine(
+            WorkOrder w, CostBucket bucket, ExpenseCategory category, String description,
+            BigDecimal amount, String actor, LocalDateTime now) {
+        createLegacySummaryLine(w, bucket, category, description, amount, actor, now, CostStatus.DRAFT);
+    }
+
+    private void createLegacySummaryLine(
+            WorkOrder w, CostBucket bucket, ExpenseCategory category, String description,
+            BigDecimal amount, String actor, LocalDateTime now, CostStatus status) {
+        BigDecimal value = money(amount);
+        if (value.compareTo(BigDecimal.ZERO) <= 0) return;
+        MaintenanceCost c = new MaintenanceCost();
+        hydrateCostFromWorkOrder(c, w);
+        LocalDateTime sourceDate = w.repairedAt != null ? w.repairedAt : w.closedAt != null ? w.closedAt : w.updatedAt;
+        c.costDate = sourceDate == null ? LocalDate.now() : sourceDate.toLocalDate();
+        c.costBucket = bucket;
+        c.expenseCategory = category;
+        c.description = description;
+        c.quantity = BigDecimal.ONE.setScale(3);
+        c.uom = bucket == CostBucket.INTERNAL_LABOUR ? "JOB" : "LOT";
+        c.amount = value;
+        c.status = status;
+        c.source = CostSource.LEGACY_WORK_ORDER_SUMMARY;
+        c.createdBy = actor;
+        c.createdAt = now;
+        c.updatedBy = actor;
+        c.updatedAt = now;
+        if (status == CostStatus.VERIFIED) {
+            c.verifiedBy = actor;
+            c.verifiedAt = now;
+        }
+        em.persist(c);
+    }
+
+    private void hydrateCostFromWorkOrder(MaintenanceCost c, WorkOrder w) {
+        c.workOrderId = w.id;
+        c.workNumber = w.workNumber;
+        c.serviceDomain = domainOf(w);
+        c.plantCode = normalizePlant(w.plantCode);
+        c.equipmentId = w.equipmentId;
+        c.equipmentCode = w.equipmentCode;
+        c.equipmentName = w.equipmentName;
+    }
+
+    private void verifyWorkOrderCostLines(WorkOrder w, String actor) {
+        if (w == null) return;
+        ensureLegacyWorkOrderSummaryLedger(w, actor);
+        LocalDateTime now = LocalDateTime.now();
+        List<MaintenanceCost> draft = em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.workOrderId=:id and c.status=:status",
+                        MaintenanceCost.class)
+                .setParameter("id", w.id)
+                .setParameter("status", CostStatus.DRAFT)
+                .getResultList();
+        for (MaintenanceCost c : draft) {
+            c.status = CostStatus.VERIFIED;
+            c.verifiedBy = actor;
+            c.verifiedAt = now;
+            c.updatedBy = actor;
+            c.updatedAt = now;
+        }
+    }
+
+    private void recalculateWorkOrderCostTotals(WorkOrder w) {
+        if (w == null) return;
+        List<MaintenanceCost> rows = activeWorkOrderCosts(w.id);
+        if (rows.isEmpty()) return;
+        w.partsCost = sumMaintenanceCosts(rows.stream().filter(c -> c.costBucket == CostBucket.MATERIAL).toList());
+        w.laborCost = sumMaintenanceCosts(rows.stream().filter(c -> c.costBucket == CostBucket.INTERNAL_LABOUR).toList());
+        w.externalCost = sumMaintenanceCosts(rows.stream()
+                .filter(c -> c.costBucket == CostBucket.EXTERNAL_SERVICE || c.costBucket == CostBucket.OTHER)
+                .toList());
+    }
+
+    private Map<String, Object> maintenanceCostView(MaintenanceCost c) {
+        return map(
+                "id", c.id,
+                "costDate", c.costDate,
+                "month", c.costDate == null ? null : YearMonth.from(c.costDate).toString(),
+                "serviceDomain", domainOf(c).name(),
+                "plantCode", c.plantCode,
+                "equipmentId", c.equipmentId,
+                "equipmentCode", c.equipmentCode,
+                "equipmentName", c.equipmentName,
+                "workOrderId", c.workOrderId,
+                "workNumber", c.workNumber,
+                "costBucket", c.costBucket == null ? CostBucket.MATERIAL.name() : c.costBucket.name(),
+                "expenseCategory", c.expenseCategory == null ? defaultExpenseCategory(c.costBucket).name() : c.expenseCategory.name(),
+                "description", c.description,
+                "quantity", c.quantity,
+                "uom", c.uom,
+                "unitRate", c.unitRate,
+                "amount", money(c.amount),
+                "vendorName", c.vendorName,
+                "poNumber", c.poNumber,
+                "invoiceNumber", c.invoiceNumber,
+                "legacyMachineSerial", c.legacyMachineSerial,
+                "legacyMachineName", c.legacyMachineName,
+                "remarks", c.remarks,
+                "status", c.status == null ? CostStatus.DRAFT.name() : c.status.name(),
+                "source", c.source == null ? CostSource.DIRECT_ENTRY.name() : c.source.name(),
+                "importBatchId", c.importBatchId,
+                "legacyRowNumber", c.legacyRowNumber,
+                "createdBy", c.createdBy,
+                "createdAt", c.createdAt,
+                "updatedBy", c.updatedBy,
+                "updatedAt", c.updatedAt,
+                "verifiedBy", c.verifiedBy,
+                "verifiedAt", c.verifiedAt,
+                "voidedBy", c.voidedBy,
+                "voidedAt", c.voidedAt,
+                "voidReason", c.voidReason,
+                "version", c.version
+        );
+    }
+
+
+    private List<Map<String, String>> readMaintenanceCostWorkbook(byte[] workbookBytes) throws IOException {
+        require(workbookBytes != null && workbookBytes.length > 0, "Maintenance Costing workbook is empty");
+        Map<String, byte[]> zip = new LinkedHashMap<>();
+        long expanded = 0;
+        try (ZipInputStream zin = new ZipInputStream(new ByteArrayInputStream(workbookBytes))) {
+            ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = zin.read(buffer)) >= 0) {
+                    out.write(buffer, 0, read);
+                    expanded += read;
+                    if (expanded > 40L * 1024L * 1024L) throw new IOException("Workbook expands beyond the safe 40 MB limit");
+                }
+                zip.put(entry.getName(), out.toByteArray());
+            }
+        }
+        require(zip.keySet().stream().anyMatch(name -> name.startsWith("xl/worksheets/")), "File is not a readable XLSX workbook");
+
+        List<String> sharedStrings = parseSharedStrings(zip.get("xl/sharedStrings.xml"));
+        List<String> sheetNames = zip.keySet().stream()
+                .filter(name -> name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml"))
+                .sorted()
+                .toList();
+        for (String sheetName : sheetNames) {
+            List<Map<String, String>> rows = parseMaintenanceSheet(zip.get(sheetName), sharedStrings);
+            if (!rows.isEmpty()) return rows;
+        }
+        return List.of();
+    }
+
+    private List<String> parseSharedStrings(byte[] xml) throws IOException {
+        if (xml == null || xml.length == 0) return List.of();
+        Document doc = parseXml(xml);
+        NodeList items = doc.getElementsByTagName("si");
+        List<String> strings = new ArrayList<>(items.getLength());
+        for (int i = 0; i < items.getLength(); i++) {
+            Node si = items.item(i);
+            NodeList texts = ((Element) si).getElementsByTagName("t");
+            StringBuilder value = new StringBuilder();
+            for (int j = 0; j < texts.getLength(); j++) value.append(texts.item(j).getTextContent());
+            strings.add(value.toString());
+        }
+        return strings;
+    }
+
+    private List<Map<String, String>> parseMaintenanceSheet(byte[] xml, List<String> sharedStrings) throws IOException {
+        if (xml == null || xml.length == 0) return List.of();
+        Document doc = parseXml(xml);
+        NodeList rowNodes = doc.getElementsByTagName("row");
+        Map<String, String> columns = null;
+        int headerRow = -1;
+
+        for (int i = 0; i < Math.min(rowNodes.getLength(), 25); i++) {
+            Element row = (Element) rowNodes.item(i);
+            Map<String, String> cells = readXlsxRow(row, sharedStrings);
+            Map<String, String> candidate = identifyMaintenanceColumns(cells);
+            if (candidate.keySet().containsAll(Set.of("DATE", "PLANT", "DESCRIPTION", "COST"))) {
+                columns = candidate;
+                headerRow = parseInt(row.getAttribute("r"), i + 1);
+                break;
+            }
+        }
+        if (columns == null) return List.of();
+
+        List<Map<String, String>> out = new ArrayList<>();
+        int trailingTemplateYearRows = 0;
+        for (int i = 0; i < rowNodes.getLength() && out.size() < MAX_COST_IMPORT_ROWS; i++) {
+            Element row = (Element) rowNodes.item(i);
+            int rowNumber = parseInt(row.getAttribute("r"), i + 1);
+            if (rowNumber <= headerRow) continue;
+            Map<String, String> cells = readXlsxRow(row, sharedStrings);
+            LinkedHashMap<String, String> item = new LinkedHashMap<>();
+            item.put("_ROW", String.valueOf(rowNumber));
+            for (String field : List.of("DATE", "MONTH", "PLANT", "MACHINE", "DESCRIPTION", "PO", "SERIAL", "COST")) {
+                String column = columns.get(field);
+                item.put(field, column == null ? "" : cells.getOrDefault(column, ""));
+            }
+
+            boolean blank = item.entrySet().stream()
+                    .filter(e -> !"_ROW".equals(e.getKey()))
+                    .allMatch(e -> !notBlank(e.getValue()));
+            if (blank) continue;
+
+            boolean emptyYearTemplate = "YEAR".equalsIgnoreCase(clean(item.get("MONTH")))
+                    && List.of("DATE", "PLANT", "MACHINE", "DESCRIPTION", "PO", "SERIAL", "COST").stream()
+                    .allMatch(field -> !notBlank(item.get(field)));
+            if (emptyYearTemplate) {
+                trailingTemplateYearRows++;
+                // The source workbook carries thousands of formatted YEAR template rows.
+                // They are layout artifacts, not transactions; do not flood the preview.
+                if (trailingTemplateYearRows >= 50) break;
+                continue;
+            }
+
+            trailingTemplateYearRows = 0;
+            out.add(item);
+        }
+        return out;
+    }
+
+    private Map<String, String> identifyMaintenanceColumns(Map<String, String> cells) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : cells.entrySet()) {
+            String header = canonicalHeader(entry.getValue());
+            if (!notBlank(header)) continue;
+            if (header.equals("DATE")) out.put("DATE", entry.getKey());
+            else if (header.equals("MONTH")) out.put("MONTH", entry.getKey());
+            else if (header.equals("PLANT") || header.equals("PLANTCODE")) out.put("PLANT", entry.getKey());
+            else if (header.equals("MACHINE") || header.equals("ASSET") || header.equals("EQUIPMENT")) out.put("MACHINE", entry.getKey());
+            else if (header.contains("SPARESDESCRIPTION") || header.equals("DESCRIPTION") || header.contains("SPAREDESCRIPTION")) out.put("DESCRIPTION", entry.getKey());
+            else if (header.equals("PONUMBER") || header.equals("PONO") || header.equals("PO")) out.put("PO", entry.getKey());
+            else if (header.contains("MCSRNO") || header.contains("MACHINESRNO") || header.contains("SERIALNO")) out.put("SERIAL", entry.getKey());
+            else if (header.equals("COST") || header.equals("AMOUNT") || header.equals("TOTALCOST")) out.put("COST", entry.getKey());
+        }
+        return out;
+    }
+
+    private Map<String, String> readXlsxRow(Element row, List<String> sharedStrings) {
+        Map<String, String> cells = new LinkedHashMap<>();
+        NodeList cellNodes = row.getElementsByTagName("c");
+        for (int i = 0; i < cellNodes.getLength(); i++) {
+            Element cell = (Element) cellNodes.item(i);
+            String ref = cell.getAttribute("r");
+            String column = ref.replaceAll("[^A-Za-z]", "").toUpperCase(Locale.ROOT);
+            if (!notBlank(column)) continue;
+            cells.put(column, xlsxCellText(cell, sharedStrings));
+        }
+        return cells;
+    }
+
+    private String xlsxCellText(Element cell, List<String> sharedStrings) {
+        String type = cell.getAttribute("t");
+        if ("inlineStr".equals(type)) {
+            NodeList texts = cell.getElementsByTagName("t");
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i < texts.getLength(); i++) out.append(texts.item(i).getTextContent());
+            return out.toString().trim();
+        }
+        NodeList values = cell.getElementsByTagName("v");
+        if (values.getLength() == 0) return "";
+        String value = values.item(0).getTextContent();
+        if ("s".equals(type)) {
+            int index = parseInt(value, -1);
+            return index >= 0 && index < sharedStrings.size() ? sharedStrings.get(index).trim() : "";
+        }
+        return value == null ? "" : value.trim();
+    }
+
+    private Document parseXml(byte[] xml) throws IOException {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(false);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            try { factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, ""); } catch (IllegalArgumentException ignored) { }
+            try { factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, ""); } catch (IllegalArgumentException ignored) { }
+            try (InputStream in = new ByteArrayInputStream(xml)) {
+                return factory.newDocumentBuilder().parse(in);
+            }
+        } catch (Exception ex) {
+            throw new IOException("Invalid XLSX XML", ex);
+        }
+    }
+
+    private LocalDate parseLegacyCostDate(String raw) {
+        if (!notBlank(raw)) return null;
+        String text = clean(raw).replace("Febuary", "February").replace("FEBUARY", "FEBRUARY");
+        try {
+            BigDecimal serial = new BigDecimal(text);
+            long wholeDays = serial.longValue();
+            if (wholeDays > 0 && wholeDays < 100000) return LocalDate.of(1899, 12, 30).plusDays(wholeDays);
+        } catch (NumberFormatException ignored) { }
+        for (DateTimeFormatter formatter : List.of(
+                DateTimeFormatter.ISO_LOCAL_DATE,
+                DateTimeFormatter.ofPattern("d/M/uuuu"),
+                DateTimeFormatter.ofPattern("d-M-uuuu"),
+                DateTimeFormatter.ofPattern("d.M.uuuu"),
+                DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH),
+                DateTimeFormatter.ofPattern("d MMMM uuuu", Locale.ENGLISH))) {
+            try { return LocalDate.parse(text, formatter); } catch (Exception ignored) { }
+        }
+        return null;
+    }
+
+    private BigDecimal parseLegacyMoney(String raw) {
+        if (!notBlank(raw)) return null;
+        String cleaned = raw.replaceAll("[^0-9.\\-]", "");
+        if (!notBlank(cleaned) || "-".equals(cleaned)) return null;
+        try { return money(new BigDecimal(cleaned)); } catch (NumberFormatException ex) { return null; }
+    }
+
+    private int parseInt(String value, int fallback) {
+        try { return Integer.parseInt(String.valueOf(value).trim()); } catch (Exception ex) { return fallback; }
+    }
+
+    private String canonicalHeader(String value) {
+        return notBlank(value) ? value.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "") : "";
+    }
+
+    private String resolveLegacyPlant(String rawPlant, Set<String> allowedPlants) {
+        if (!notBlank(rawPlant) || allowedPlants == null || allowedPlants.isEmpty()) return null;
+        String exact = normalizePlant(rawPlant);
+        if (allowedPlants.contains(exact)) return exact;
+        String key = plantMatchKey(rawPlant);
+        List<String> matches = allowedPlants.stream().filter(p -> plantMatchKey(p).equals(key)).toList();
+        return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    private String plantMatchKey(String value) {
+        String key = clean(value).toUpperCase(Locale.ROOT).replace("WRIVER", "WR").replaceAll("[^A-Z0-9]", "");
+        return key.replaceAll("([A-Z])0+(\\d)", "$1$2");
+    }
+
+    private String machineMatchKey(String value) {
+        return notBlank(value) ? clean(value).toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "") : "";
+    }
+
+    private Equipment resolveLegacyEquipment(
+            String rawMachine,
+            String rawSerial,
+            String plant,
+            Map<String, Equipment> bySerial,
+            Map<String, List<Equipment>> byName) {
+        if (notBlank(rawSerial)) {
+            Equipment serial = bySerial.get(clean(rawSerial).toUpperCase(Locale.ROOT));
+            if (serial != null && (!notBlank(plant) || normalizePlant(serial.plantCode).equals(plant))) return serial;
+        }
+        if (!notBlank(rawMachine)) return null;
+        List<Equipment> candidates = byName.getOrDefault(machineMatchKey(rawMachine), List.of()).stream()
+                .filter(e -> !notBlank(plant) || normalizePlant(e.plantCode).equals(plant))
+                .toList();
+        return candidates.size() == 1 ? candidates.get(0) : null;
+    }
+
+    private CostBucket inferLegacyCostBucket(String description) {
+        String text = notBlank(description) ? clean(description).toUpperCase(Locale.ROOT) : "";
+        if (text.matches(".*(LABOUR|LABOR|MANPOWER|TECHNICIAN CHARGE|SERVICE ENGINEER).*")) return CostBucket.INTERNAL_LABOUR;
+        if (text.matches(".*(SERVICE|REPAIR|REWIND|INSTALL|CALIBRAT|AMC|GAS CHARG|COATING|EARTHING|WORK CHARGE|VENDOR).*")) return CostBucket.EXTERNAL_SERVICE;
+        if (text.matches(".*(BILL|UTILITY|PNG|ELECTRICITY).*")) return CostBucket.OTHER;
+        return CostBucket.MATERIAL;
+    }
+
+    private ExpenseCategory inferLegacyExpenseCategory(String description, CostBucket bucket) {
+        String text = notBlank(description) ? clean(description).toUpperCase(Locale.ROOT) : "";
+        if (text.contains("AMC")) return ExpenseCategory.AMC;
+        if (text.contains("CALIBRAT")) return ExpenseCategory.CALIBRATION;
+        if (text.contains("INSTALL")) return ExpenseCategory.INSTALLATION;
+        if (text.matches(".*(ELECTRIC|CABLE|EARTHING|MCB|CONTACTOR|RELAY).*")) return ExpenseCategory.ELECTRICAL;
+        if (text.matches(".*(SOFTWARE|LICENSE|LICENCE).*")) return ExpenseCategory.SOFTWARE_LICENSE;
+        if (text.matches(".*(LAPTOP|COMPUTER|PC |PRINTER|ROUTER|SWITCH|SSD|RAM|HDD).*")) return ExpenseCategory.IT_HARDWARE;
+        if (bucket == CostBucket.EXTERNAL_SERVICE) return ExpenseCategory.REPAIR_SERVICE;
+        if (bucket == CostBucket.MATERIAL && text.matches(".*(OIL|GREASE|CHEMICAL|GAS|FILTER|TAPE|CLEANER).*")) return ExpenseCategory.CONSUMABLE;
+        if (bucket == CostBucket.MATERIAL) return ExpenseCategory.SPARE_PART;
+        if (bucket == CostBucket.OTHER) return ExpenseCategory.FACILITY_UTILITY;
+        return ExpenseCategory.OTHER;
+    }
+
+    private String costFingerprint(MaintenanceCost c) {
+        return String.join("|",
+                String.valueOf(c.costDate),
+                normalizePlant(c.plantCode),
+                c.equipmentId == null ? machineMatchKey(firstNonBlank(c.equipmentCode, c.equipmentName, c.legacyMachineName)) : c.equipmentId.toString(),
+                machineMatchKey(c.description),
+                money(c.amount).toPlainString(),
+                machineMatchKey(c.poNumber));
+    }
+
+    private String previewFingerprint(Map<String, Object> row) {
+        Object equipmentId = row.get("equipmentId");
+        String equipmentCode = row.get("equipmentCode") == null ? null : String.valueOf(row.get("equipmentCode"));
+        String equipmentName = row.get("equipmentName") == null ? null : String.valueOf(row.get("equipmentName"));
+        String legacyMachineName = row.get("legacyMachineName") == null ? null : String.valueOf(row.get("legacyMachineName"));
+        String equipmentKey = equipmentId == null
+                ? machineMatchKey(firstNonBlank(equipmentCode, equipmentName, legacyMachineName))
+                : String.valueOf(equipmentId);
+        BigDecimal amount = row.get("amount") instanceof BigDecimal bd ? bd
+                : parseLegacyMoney(row.get("amount") == null ? null : String.valueOf(row.get("amount")));
+        return String.join("|",
+                String.valueOf(row.get("costDate")),
+                normalizePlant(row.get("plantCode") == null ? null : String.valueOf(row.get("plantCode"))),
+                equipmentKey,
+                machineMatchKey(row.get("description") == null ? null : String.valueOf(row.get("description"))),
+                money(amount).toPlainString(),
+                machineMatchKey(row.get("poNumber") == null ? null : String.valueOf(row.get("poNumber"))));
+    }
+
+    private boolean maintenanceCostDuplicateExists(MaintenanceCost candidate) {
+        List<MaintenanceCost> possible = em.createQuery(
+                        "select c from AssetFlowMaintenanceCost c where c.costDate=:date and c.plantCode=:plant and c.amount=:amount and c.status<>:voidStatus",
+                        MaintenanceCost.class)
+                .setParameter("date", candidate.costDate)
+                .setParameter("plant", candidate.plantCode)
+                .setParameter("amount", money(candidate.amount))
+                .setParameter("voidStatus", CostStatus.VOID)
+                .setMaxResults(100)
+                .getResultList();
+        String fingerprint = costFingerprint(candidate);
+        return possible.stream().map(this::costFingerprint).anyMatch(fingerprint::equals);
+    }
+
 
     private WorkOrder requireOrder(UUID id, boolean lock) {
         require(id != null, "Work order ID is required");
@@ -2445,6 +3779,9 @@ public class AssetFlowService {
         out.put("partsCost", w.partsCost);
         out.put("laborCost", w.laborCost);
         out.put("externalCost", w.externalCost);
+        List<MaintenanceCost> activeCosts = activeWorkOrderCosts(w.id);
+        out.put("costLines", activeCosts.stream().map(this::maintenanceCostView).toList());
+        out.put("costLedgerStatus", activeCosts.isEmpty() ? "LEGACY_SUMMARY_ONLY" : "LEDGER");
         out.put("verificationNote", w.verificationNote);
         out.put("preventivePlanId", w.preventivePlanId);
         out.put("createdBy", w.createdBy);
@@ -2503,7 +3840,45 @@ public class AssetFlowService {
         out.put("createdAt", e.createdAt);
         out.put("updatedBy", e.updatedBy);
         out.put("updatedAt", e.updatedAt);
+        User current = currentUserService.requireCurrentUser();
+        if (canViewReports(current)) {
+            out.put("costEconomics", equipmentCostEconomics(e));
+        }
         return out;
+    }
+
+    private Map<String, Object> equipmentCostEconomics(Equipment e) {
+        LocalDate today = LocalDate.now();
+        backfillLegacyWorkOrderCosts(Set.of(normalizePlant(e.plantCode)), Set.of(domainOf(e)), null, today);
+        List<MaintenanceCost> rows = findMaintenanceCostEntities(
+                Set.of(normalizePlant(e.plantCode)),
+                Set.of(domainOf(e)),
+                null,
+                today,
+                e.id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                MAX_COST_SUMMARY_ROWS);
+        List<MaintenanceCost> verified = rows.stream().filter(c -> c.status == CostStatus.VERIFIED).toList();
+        List<MaintenanceCost> pending = rows.stream().filter(c -> c.status == CostStatus.DRAFT).toList();
+        LocalDate yearStart = today.withDayOfYear(1);
+        LocalDate last12Start = today.minusMonths(12).plusDays(1);
+        return map(
+                "ytd", sumMaintenanceCosts(verified.stream().filter(c -> !c.costDate.isBefore(yearStart)).toList()),
+                "last12Months", sumMaintenanceCosts(verified.stream().filter(c -> !c.costDate.isBefore(last12Start)).toList()),
+                "lifetime", sumMaintenanceCosts(verified),
+                "pending", sumMaintenanceCosts(pending),
+                "verifiedEntries", verified.size(),
+                "recentCosts", rows.stream()
+                        .filter(c -> c.status != CostStatus.VOID)
+                        .sorted(Comparator.comparing((MaintenanceCost c) -> c.costDate).reversed().thenComparing(c -> c.createdAt, Comparator.reverseOrder()))
+                        .limit(10)
+                        .map(this::maintenanceCostView)
+                        .toList()
+        );
     }
 
     private Map<String, Object> teamView(Team t) {
@@ -3171,6 +4546,12 @@ public class AssetFlowService {
 
     private static String firstNonBlank(String first, String second) {
         return notBlank(first) ? clean(first) : clean(second);
+    }
+
+    private static String firstNonBlank(String first, String second, String third) {
+        if (notBlank(first)) return clean(first);
+        if (notBlank(second)) return clean(second);
+        return clean(third);
     }
 
     private static double round(double value, int scale) {

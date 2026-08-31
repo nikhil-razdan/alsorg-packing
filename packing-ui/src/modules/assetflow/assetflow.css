@@ -1137,3 +1137,183 @@
     max-width: 48%;
   }
 }
+
+/* ==========================================================================
+   AssetFlow Maintenance Costing
+   Dated transaction ledger, month/year analytics and XLSX import preview.
+   ========================================================================== */
+.af-cost-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  margin: -4px 0 18px;
+}
+.af-cost-kpi-strip .af-kpi { min-height: 104px; }
+.af-costing-page { min-width: 0; }
+.af-costing-toolbar {
+  display: grid;
+  grid-template-columns: 120px 170px repeat(3, minmax(170px, 1fr));
+  gap: 9px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--af-border);
+  border-radius: 12px;
+  background: var(--af-panel-solid);
+}
+.af-costing-toolbar label { display: grid; gap: 5px; min-width: 0; }
+.af-costing-toolbar label > span { color: var(--af-text-muted); font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+.af-costing-toolbar select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--af-border);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--af-field-bg);
+  color: var(--af-text);
+  font-size: 10.5px;
+  font-weight: 760;
+}
+.af-costing-toolbar select:focus { border-color: var(--af-primary); box-shadow: 0 0 0 2px var(--af-primary-soft); }
+.af-cost-kpi-grid { margin-bottom: 14px; }
+.af-costing-grid { margin-bottom: 14px; }
+.af-cost-month-chart {
+  height: 260px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(46px, 1fr));
+  gap: 7px;
+  align-items: end;
+  padding: 12px 0 4px;
+  overflow-x: auto;
+}
+.af-cost-month {
+  min-width: 46px;
+  height: 238px;
+  border: 0;
+  background: transparent;
+  color: var(--af-text);
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  gap: 5px;
+  align-items: end;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px;
+}
+.af-cost-month:hover, .af-cost-month.is-active { background: var(--af-hover); }
+.af-cost-month-stack {
+  width: min(30px, 72%);
+  height: 170px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  overflow: hidden;
+  border-radius: 7px 7px 3px 3px;
+  background: var(--af-soft-surface);
+  border: 1px solid var(--af-border);
+}
+.af-cost-month-stack i { display: block; width: 100%; min-height: 0; }
+.af-cost-month-stack .is-material, .af-cost-legend .is-material { background: var(--af-primary); }
+.af-cost-month-stack .is-labour, .af-cost-legend .is-labour { background: var(--af-teal); }
+.af-cost-month-stack .is-external, .af-cost-legend .is-external { background: var(--af-warning-text); }
+.af-cost-month-stack .is-other, .af-cost-legend .is-other { background: var(--af-purple-text); }
+.af-cost-month > strong { font-size: 8.5px; font-weight: 850; white-space: nowrap; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+.af-cost-month > span { color: var(--af-text-muted); font-size: 9px; font-weight: 800; text-align: center; }
+.af-cost-legend { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding-top: 9px; border-top: 1px solid var(--af-border); color: var(--af-text-muted); font-size: 10px; font-weight: 750; }
+.af-cost-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.af-cost-legend i { width: 8px; height: 8px; display: inline-block; border-radius: 2px; }
+.af-cost-mix-table { min-width: 430px; }
+.af-cost-register { margin-top: 14px; }
+.af-cost-register-table { min-width: 1280px; }
+.af-cost-register-table tr.is-void { opacity: .58; text-decoration-color: var(--af-danger-text); }
+.af-cost-register-table td:last-child { white-space: nowrap; }
+.af-cost-actions { display: inline-flex; gap: 5px; align-items: center; }
+.af-cost-actions .af-btn { padding: 6px 8px; font-size: 9.5px; }
+.af-cost-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--af-border); color: var(--af-text-muted); font-size: 10px; font-weight: 750; }
+.af-cost-pagination > div { display: flex; gap: 6px; }
+.af-cost-ledger-mini .af-table { min-width: 980px; }
+
+.af-cost-editor {
+  border: 1px solid var(--af-border);
+  border-radius: 12px;
+  background: var(--af-soft-surface);
+  overflow: hidden;
+}
+.af-cost-editor-head {
+  min-height: 54px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--af-border);
+  background: var(--af-panel-solid);
+}
+.af-cost-editor-head > div { display: grid; gap: 3px; }
+.af-cost-editor-head small { color: var(--af-text-muted); font-size: 9.5px; }
+.af-cost-editor-lines { display: grid; gap: 9px; padding: 10px; max-height: 460px; overflow-y: auto; }
+.af-cost-editor-line { border: 1px solid var(--af-border); border-radius: 10px; padding: 10px; background: var(--af-panel-solid); }
+.af-cost-line-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 9px; }
+.af-cost-line-top strong { font-size: 10.5px; }
+.af-cost-line-remove { border: 0; background: transparent; color: var(--af-danger-text) !important; font-size: 9.5px; font-weight: 850; cursor: pointer; }
+.af-cost-line-grid { display: grid; grid-template-columns: 120px 150px 170px minmax(180px, 1fr) 90px 90px 110px 120px 150px 130px; gap: 7px; align-items: end; overflow-x: auto; padding-bottom: 2px; }
+.af-cost-line-grid .af-field { min-width: 0; }
+.af-cost-line-grid input, .af-cost-line-grid select { min-width: 0; width: 100%; }
+.af-cost-editor-empty { min-height: 84px; display: grid; place-items: center; padding: 18px; border: 1px dashed var(--af-border); border-radius: 9px; color: var(--af-text-muted); font-size: 10.5px; text-align: center; }
+.af-cost-editor-totals { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 1px; border-top: 1px solid var(--af-border); background: var(--af-border); }
+.af-cost-editor-totals span { display: flex; justify-content: space-between; gap: 8px; padding: 10px; background: var(--af-panel-solid); color: var(--af-text-muted); font-size: 10px; }
+.af-cost-editor-totals strong { color: var(--af-text); }
+
+.af-import-drop {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 2fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 13px;
+  border: 1px dashed var(--af-border-strong);
+  border-radius: 12px;
+  background: var(--af-soft-surface);
+}
+.af-import-drop input[type="file"] { width: 100%; color: var(--af-text-secondary); font-size: 10px; }
+.af-import-drop > div { display: grid; gap: 3px; min-width: 0; }
+.af-import-drop > div strong { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-import-drop > div span { color: var(--af-text-muted); font-size: 9px; }
+.af-import-summary { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+.af-import-summary > span { display: grid; gap: 5px; padding: 10px; border: 1px solid var(--af-border); border-radius: 9px; background: var(--af-panel-solid); }
+.af-import-summary small { color: var(--af-text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.af-import-summary strong { font-size: 18px; }
+.af-import-preview-table { max-height: 480px; overflow: auto; border: 1px solid var(--af-border); border-radius: 10px; }
+.af-import-preview-table .af-table { min-width: 1180px; }
+.af-import-preview-table tr.is-review { background: var(--af-warning-soft); }
+.af-import-preview-table td small { max-width: 260px; }
+
+.af-equipment-cost-economics { margin: 5px 0 12px; }
+.af-cost-economics-grid { display: grid; grid-template-columns: repeat(4, minmax(125px, 1fr)); gap: 8px; }
+.af-cost-economics-grid .af-kpi { min-height: 96px; padding: 13px; }
+.af-cost-economics-grid .af-kpi > strong { font-size: 20px; }
+.af-recent-cost-list strong { display: block; }
+
+@media (max-width: 1250px) {
+  .af-costing-toolbar { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+  .af-cost-kpi-strip { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .af-costing-toolbar { grid-template-columns: repeat(2, minmax(145px, 1fr)); }
+  .af-cost-kpi-strip { grid-template-columns: 1fr; }
+  .af-cost-economics-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .af-import-drop { grid-template-columns: 1fr; }
+  .af-import-summary { grid-template-columns: repeat(2, minmax(110px, 1fr)); }
+  .af-cost-editor-totals { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .af-costing-toolbar { grid-template-columns: 1fr; }
+  .af-cost-economics-grid { grid-template-columns: 1fr; }
+  .af-import-summary { grid-template-columns: 1fr; }
+  .af-cost-editor-head { align-items: flex-start; flex-direction: column; }
+  .af-cost-editor-totals { grid-template-columns: 1fr; }
+  .af-cost-pagination { align-items: flex-start; flex-direction: column; }
+}

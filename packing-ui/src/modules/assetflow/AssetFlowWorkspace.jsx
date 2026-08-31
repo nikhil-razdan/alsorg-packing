@@ -9,6 +9,7 @@ import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
 import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import AppsIcon from "@mui/icons-material/Apps";
@@ -23,6 +24,7 @@ const TABS = [
   ["work", "Work Orders"],
   ["calendar", "Calendar"],
   ["equipment", "Equipment"],
+  ["costing", "Maintenance Costing"],
   ["reports", "Reports"],
   ["config", "Configuration"],
 ];
@@ -49,6 +51,44 @@ const SERVICE_DOMAIN_LABELS = {
   MACHINE: "Machine Maintenance",
   IT: "IT Support",
 };
+
+const COST_BUCKETS = ["MATERIAL", "INTERNAL_LABOUR", "EXTERNAL_SERVICE", "OTHER"];
+const EXPENSE_CATEGORIES = [
+  "SPARE_PART",
+  "CONSUMABLE",
+  "REPAIR_SERVICE",
+  "AMC",
+  "CALIBRATION",
+  "INSTALLATION",
+  "ELECTRICAL",
+  "FACILITY_UTILITY",
+  "SOFTWARE_LICENSE",
+  "IT_HARDWARE",
+  "OTHER",
+];
+const COST_STATUSES = ["DRAFT", "VERIFIED", "VOID"];
+
+const defaultExpenseCategory = (bucket) => ({
+  MATERIAL: "SPARE_PART",
+  INTERNAL_LABOUR: "OTHER",
+  EXTERNAL_SERVICE: "REPAIR_SERVICE",
+  OTHER: "OTHER",
+}[bucket] || "OTHER");
+
+const newCostLine = (bucket = "MATERIAL") => ({
+  costDate: dateInput(new Date()),
+  costBucket: bucket,
+  expenseCategory: defaultExpenseCategory(bucket),
+  description: "",
+  quantity: 1,
+  uom: bucket === "INTERNAL_LABOUR" ? "HR" : "NOS",
+  unitRate: "",
+  amount: "",
+  vendorName: "",
+  poNumber: "",
+  invoiceNumber: "",
+  remarks: "",
+});
 
 const EMPTY_WORK = {
   title: "",
@@ -533,7 +573,7 @@ function AssetFlowWorkspaceContent() {
 
   const visibleTabs = useMemo(
     () => TABS.filter(([key]) => {
-      if (key === "reports") return canViewReports;
+      if (key === "reports" || key === "costing") return canViewReports;
       if (key === "config") return canManageMasters || isAdmin;
       return true;
     }),
@@ -597,6 +637,7 @@ function AssetFlowWorkspaceContent() {
     work: <AssignmentOutlinedIcon />,
     calendar: <CalendarMonthOutlinedIcon />,
     equipment: <PrecisionManufacturingOutlinedIcon />,
+    costing: <PaidOutlinedIcon />,
     reports: <AssessmentOutlinedIcon />,
     config: <SettingsOutlinedIcon />,
   })[key] || <AssignmentOutlinedIcon />;
@@ -623,6 +664,7 @@ function AssetFlowWorkspaceContent() {
     work: ["Work Orders", "Requests, planning, assignment, execution and closure."],
     calendar: ["Maintenance Calendar", "Scheduled corrective and preventive work by date."],
     equipment: [tabLabel("equipment", "Equipment"), selectedDomain === "IT" ? "IT asset register and QR-linked support history." : selectedDomain === "MACHINE" ? "Machine register, QR-linked history and reliability health." : "Machine and IT asset masters remain department-separated."],
+    costing: [selectedDomain === "IT" ? "IT Maintenance Costing" : selectedDomain === "MACHINE" ? "Machine Maintenance Costing" : "Overall Maintenance Costing", "Verified month/year spend, cost ledger, PO/vendor references and asset economics."],
     reports: [selectedDomain === "IT" ? "IT Support Reports" : selectedDomain === "MACHINE" ? "Machine Maintenance Reports" : "Overall Maintenance Reports", "Performance, reliability, workload and management analytics."],
     config: ["AssetFlow Configuration", "Service routing, Reporter Passes, Service Desk QR and preventive plans."],
   }[tab] || ["AssetFlow", domainLabel];
@@ -668,6 +710,16 @@ function AssetFlowWorkspaceContent() {
           canManageMasters={canManageMasters}
           canEditAssets={canEditAssets}
           readOnly={isDirector}
+        />
+      )}
+
+      {tab === "costing" && canViewReports && (
+        <MaintenanceCosting
+          plantCode={plantCode}
+          serviceDomain={selectedDomain}
+          canWrite={!isDirector && canManageMasters}
+          notify={notify}
+          plants={plants.data || []}
         />
       )}
 
@@ -934,6 +986,14 @@ function Dashboard({ plantCode, serviceDomain, onNavigate, showDepartmentCompari
         <Kpi title={serviceDomain === "IT" ? "IT Asset Master" : serviceDomain === "MACHINE" ? "Machine Master" : "Total assets"} value={fmtNumber(m.equipmentCount)} detail={`${fmtNumber(m.warrantyRisk60)} warranties ≤ 60d`} tone="neutral" />
       </div>
 
+      {m.maintenanceSpendYtd != null && (
+        <div className="af-cost-kpi-strip">
+          <Kpi title="Maintenance spend · MTD" value={fmtMoney(m.maintenanceSpendMtd)} detail="Verified cost ledger" tone="teal" />
+          <Kpi title="Maintenance spend · YTD" value={fmtMoney(m.maintenanceSpendYtd)} detail="Derived from dated transactions" tone="violet" />
+          <Kpi title="Pending cost verification" value={fmtMoney(m.pendingCostYtd)} detail="Draft work-order cost lines" tone={Number(m.pendingCostYtd || 0) > 0 ? "amber" : "green"} />
+        </div>
+      )}
+
       {showDepartmentComparison && (data.departmentComparison || []).length > 0 && (
         <div className="af-department-comparison">
           {(data.departmentComparison || []).map((row) => (
@@ -946,6 +1006,7 @@ function Dashboard({ plantCode, serviceDomain, onNavigate, showDepartmentCompari
                 <span><small>Avg response</small><strong>{fmtNumber(row.avgResponseMinutes30, 1)} min</strong></span>
                 <span><small>Avg resolution</small><strong>{fmtNumber(row.avgResolutionHours30, 1)}h</strong></span>
                 <span><small>Assets / affected</small><strong>{fmtNumber(row.assets)} / {fmtNumber(row.assetsDown)}</strong></span>
+                {row.maintenanceCostYtd != null && <span><small>Cost · YTD</small><strong>{fmtMoney(row.maintenanceCostYtd)}</strong></span>}
               </div>
             </div>
           ))}
@@ -1388,6 +1449,27 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canCoordi
 
           <div className="af-cost-row"><span>Parts <strong>{fmtMoney(w.partsCost)}</strong></span><span>Labour <strong>{fmtMoney(w.laborCost)}</strong></span><span>External <strong>{fmtMoney(w.externalCost)}</strong></span><span>Total <strong>{fmtMoney(w.totalCost)}</strong></span></div>
 
+          {(w.costLines || []).length > 0 && (
+            <>
+              <div className="af-section-title"><h3>Maintenance cost ledger</h3><span>{w.costLines.length} active lines</span></div>
+              <div className="af-table-wrap af-cost-ledger-mini">
+                <table className="af-table">
+                  <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>PO / Vendor</th><th>Status</th><th>Amount</th></tr></thead>
+                  <tbody>{w.costLines.map((line) => (
+                    <tr key={line.id}>
+                      <td>{fmtDate(line.costDate)}</td>
+                      <td><strong>{human(line.costBucket)}</strong><small>{human(line.expenseCategory)}</small></td>
+                      <td><strong>{line.description}</strong><small>{[line.quantity, line.uom, line.unitRate != null ? `@ ${fmtMoney(line.unitRate)}` : ""].filter(Boolean).join(" · ")}</small></td>
+                      <td>{line.poNumber || "—"}<small>{line.vendorName || human(line.source)}</small></td>
+                      <td><Badge tone={line.status === "VERIFIED" ? "green" : "amber"}>{human(line.status)}</Badge></td>
+                      <td><strong>{fmtMoney(line.amount)}</strong></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </>
+          )}
+
           <div className="af-section-title"><h3>Activity timeline</h3><span>{w.audit?.length || 0} events</span></div>
           <div className="af-timeline">
             {(w.audit || []).map((a) => <div key={a.id} className="af-timeline-item"><i /><div><strong>{human(a.action)}</strong><span>{a.actor || "System"} · {fmtDate(a.createdAt, true)}</span>{a.fromStatus && a.toStatus && <p>{human(a.fromStatus)} → {human(a.toStatus)}</p>}{a.note && <p>{a.note}</p>}</div></div>)}
@@ -1411,6 +1493,32 @@ function WorkOrderDrawer({ id, onClose, onChanged, notify, canExecute, canCoordi
 }
 
 function StatusCompletionModal({ status, w, onClose, onSubmit }) {
+  const initialLines = () => {
+    const ledger = (w.costLines || [])
+      .filter((line) => ["WORK_ORDER", "LEGACY_WORK_ORDER_SUMMARY"].includes(line.source))
+      .map((line) => ({
+        costDate: dateInput(line.costDate || new Date()),
+        costBucket: line.costBucket || "MATERIAL",
+        expenseCategory: line.expenseCategory || defaultExpenseCategory(line.costBucket),
+        description: line.description || "",
+        quantity: line.quantity ?? 1,
+        uom: line.uom || (line.costBucket === "INTERNAL_LABOUR" ? "HR" : "NOS"),
+        unitRate: line.unitRate ?? "",
+        amount: line.amount ?? "",
+        vendorName: line.vendorName || "",
+        poNumber: line.poNumber || "",
+        invoiceNumber: line.invoiceNumber || "",
+        remarks: line.remarks || "",
+      }));
+    if (ledger.length) return ledger;
+    if ((w.costLines || []).length) return [];
+    const legacy = [];
+    if (Number(w.partsCost || 0) > 0) legacy.push({ ...newCostLine("MATERIAL"), description: "Parts / consumables", amount: w.partsCost });
+    if (Number(w.laborCost || 0) > 0) legacy.push({ ...newCostLine("INTERNAL_LABOUR"), description: "Internal labour", amount: w.laborCost, uom: "JOB" });
+    if (Number(w.externalCost || 0) > 0) legacy.push({ ...newCostLine("EXTERNAL_SERVICE"), description: "External / vendor service", amount: w.externalCost, uom: "JOB" });
+    return legacy;
+  };
+
   const [form, setForm] = useState({
     note: "",
     actualMinutes: w.actualMinutes ?? "",
@@ -1418,33 +1526,66 @@ function StatusCompletionModal({ status, w, onClose, onSubmit }) {
     rootCause: w.rootCause || "",
     actionTaken: w.actionTaken || "",
     partsUsed: w.partsUsed || "",
-    partsCost: w.partsCost ?? "",
-    laborCost: w.laborCost ?? "",
-    externalCost: w.externalCost ?? "",
     verificationNote: w.verificationNote || "",
   });
+  const [costLines, setCostLines] = useState(initialLines);
   const numericOrNull = (value) => value === "" || value == null ? null : Number(value);
   const isRepair = status === "REPAIRED";
   const isClose = status === "CLOSED";
   const needsReason = ["WAITING_PARTS", "CANCELLED", "SCRAPPED"].includes(status);
   const title = isRepair ? "Record repair completion" : isClose ? "Verify & close work" : status === "WAITING_PARTS" ? "Put job on hold for parts" : `${human(status)} request`;
   const subtitle = isRepair
-    ? "Capture diagnosis, work done, parts, cost and downtime. This drives MTTR and reliability analysis."
+    ? "Capture diagnosis, work done, detailed maintenance costs and downtime. Cost lines feed the month/year ledger without changing the existing work-order workflow."
     : isClose
-      ? "Head technician / maintenance management verifies test run and handover before closure."
+      ? "Head technician / maintenance management verifies test run, handover and any draft cost lines before closure."
       : "Record a clear reason so the maintenance timeline remains auditable.";
+
+  const updateCostLine = (index, key, value) => {
+    setCostLines((current) => current.map((line, i) => {
+      if (i !== index) return line;
+      const next = { ...line, [key]: value };
+      if (key === "costBucket") {
+        next.expenseCategory = defaultExpenseCategory(value);
+        if (!line.uom || ["NOS", "HR", "JOB"].includes(line.uom)) next.uom = value === "INTERNAL_LABOUR" ? "HR" : "NOS";
+      }
+      if (key === "quantity" || key === "unitRate") {
+        const qty = Number(key === "quantity" ? value : next.quantity || 0);
+        const rate = Number(key === "unitRate" ? value : next.unitRate || 0);
+        if (qty > 0 && rate >= 0) next.amount = Number((qty * rate).toFixed(2));
+      }
+      return next;
+    }));
+  };
+
+  const totals = costLines.reduce((acc, line) => {
+    const amount = Number(line.amount || 0);
+    if (line.costBucket === "MATERIAL") acc.parts += amount;
+    else if (line.costBucket === "INTERNAL_LABOUR") acc.labour += amount;
+    else acc.external += amount;
+    acc.total += amount;
+    return acc;
+  }, { parts: 0, labour: 0, external: 0, total: 0 });
 
   return (
     <Modal title={title} subtitle={subtitle} onClose={onClose} wide={isRepair}>
       <form onSubmit={(e) => {
         e.preventDefault();
+        const validLines = costLines
+          .filter((line) => String(line.description || "").trim() || Number(line.amount || 0) > 0)
+          .map((line) => ({
+            ...line,
+            quantity: numericOrNull(line.quantity) ?? 1,
+            unitRate: numericOrNull(line.unitRate),
+            amount: numericOrNull(line.amount),
+          }));
         onSubmit({
           ...form,
           actualMinutes: numericOrNull(form.actualMinutes),
           downtimeMinutes: numericOrNull(form.downtimeMinutes),
-          partsCost: numericOrNull(form.partsCost),
-          laborCost: numericOrNull(form.laborCost),
-          externalCost: numericOrNull(form.externalCost),
+          partsCost: Number(totals.parts.toFixed(2)),
+          laborCost: Number(totals.labour.toFixed(2)),
+          externalCost: Number(totals.external.toFixed(2)),
+          costLines: isRepair ? validLines : undefined,
         });
       }}>
         <div className="af-modal-body af-form-grid">
@@ -1453,10 +1594,43 @@ function StatusCompletionModal({ status, w, onClose, onSubmit }) {
             <Field label="Downtime minutes"><input type="number" min="0" value={form.downtimeMinutes} onChange={(e) => setForm({ ...form, downtimeMinutes: e.target.value })} /></Field>
             <Field label="Root cause / best-known cause"><textarea required={w.workType === "CORRECTIVE" || w.breakdown} rows="3" value={form.rootCause} onChange={(e) => setForm({ ...form, rootCause: e.target.value })} placeholder="Electrical failure, bearing seizure, loose terminal, operator misuse…" /></Field>
             <Field label="Work done / action taken"><textarea required rows="3" value={form.actionTaken} onChange={(e) => setForm({ ...form, actionTaken: e.target.value })} placeholder="Diagnosis, repair, replacement, adjustment and test performed" /></Field>
-            <Field label="Parts / consumables used"><textarea rows="3" value={form.partsUsed} onChange={(e) => setForm({ ...form, partsUsed: e.target.value })} placeholder="Bearing 6205 × 2, V-belt B52 × 1…" /></Field>
-            <Field label="Parts cost"><input type="number" min="0" step="0.01" value={form.partsCost} onChange={(e) => setForm({ ...form, partsCost: e.target.value })} /></Field>
-            <Field label="Labour cost"><input type="number" min="0" step="0.01" value={form.laborCost} onChange={(e) => setForm({ ...form, laborCost: e.target.value })} /></Field>
-            <Field label="External / vendor cost"><input type="number" min="0" step="0.01" value={form.externalCost} onChange={(e) => setForm({ ...form, externalCost: e.target.value })} /></Field>
+            <Field label="Parts / consumables used"><textarea rows="3" value={form.partsUsed} onChange={(e) => setForm({ ...form, partsUsed: e.target.value })} placeholder="Optional narrative. Detailed financial lines are captured below." /></Field>
+
+            <div className="af-full af-cost-editor">
+              <div className="af-cost-editor-head">
+                <div><span className="af-label">Detailed maintenance cost</span><small>Month/year is derived from each Cost Date. PO/vendor references remain traceable.</small></div>
+                <Button type="button" onClick={() => setCostLines((rows) => [...rows, newCostLine()])}>+ Add cost line</Button>
+              </div>
+              <div className="af-cost-editor-lines">
+                {costLines.map((line, index) => (
+                  <div className="af-cost-editor-line" key={`${index}-${line.costBucket}`}>
+                    <div className="af-cost-line-top">
+                      <strong>Cost line {index + 1}</strong>
+                      <button type="button" className="af-cost-line-remove" onClick={() => setCostLines((rows) => rows.filter((_, i) => i !== index))}>Remove</button>
+                    </div>
+                    <div className="af-cost-line-grid">
+                      <Field label="Cost date"><input type="date" required value={line.costDate} onChange={(e) => updateCostLine(index, "costDate", e.target.value)} /></Field>
+                      <Field label="Cost type"><select value={line.costBucket} onChange={(e) => updateCostLine(index, "costBucket", e.target.value)}>{COST_BUCKETS.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+                      <Field label="Category"><select value={line.expenseCategory} onChange={(e) => updateCostLine(index, "expenseCategory", e.target.value)}>{EXPENSE_CATEGORIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+                      <Field label="Description"><input required value={line.description} onChange={(e) => updateCostLine(index, "description", e.target.value)} placeholder="Bearing 6205, vendor calibration, rewinding…" /></Field>
+                      <Field label="Qty"><input type="number" min="0.001" step="0.001" value={line.quantity} onChange={(e) => updateCostLine(index, "quantity", e.target.value)} /></Field>
+                      <Field label="UOM"><input value={line.uom} onChange={(e) => updateCostLine(index, "uom", e.target.value)} placeholder="NOS / HR / JOB" /></Field>
+                      <Field label="Unit rate"><input type="number" min="0" step="0.01" value={line.unitRate} onChange={(e) => updateCostLine(index, "unitRate", e.target.value)} /></Field>
+                      <Field label="Amount"><input type="number" min="0" step="0.01" required value={line.amount} onChange={(e) => updateCostLine(index, "amount", e.target.value)} /></Field>
+                      <Field label="Vendor"><input value={line.vendorName} onChange={(e) => updateCostLine(index, "vendorName", e.target.value)} /></Field>
+                      <Field label="PO number"><input value={line.poNumber} onChange={(e) => updateCostLine(index, "poNumber", e.target.value)} /></Field>
+                    </div>
+                  </div>
+                ))}
+                {!costLines.length && <div className="af-cost-editor-empty">No cost incurred? Leave the ledger empty. Otherwise add each spare, labour or vendor-service line.</div>}
+              </div>
+              <div className="af-cost-editor-totals">
+                <span>Material <strong>{fmtMoney(totals.parts)}</strong></span>
+                <span>Labour <strong>{fmtMoney(totals.labour)}</strong></span>
+                <span>External / Other <strong>{fmtMoney(totals.external)}</strong></span>
+                <span>Total <strong>{fmtMoney(totals.total)}</strong></span>
+              </div>
+            </div>
           </>}
           {isClose && <Field label="Machine test / handover verification"><textarea required rows="4" value={form.verificationNote} onChange={(e) => setForm({ ...form, verificationNote: e.target.value })} placeholder="Test run completed, output verified, guards restored and machine handed back to production…" /></Field>}
           {needsReason && <Field label={status === "WAITING_PARTS" ? "Required part / hold reason" : "Reason"}><textarea required rows="4" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={status === "WAITING_PARTS" ? "Part name, quantity, expected source / ETA…" : "Enter clear reason"} /></Field>}
@@ -1894,6 +2068,17 @@ function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
         <div className="af-drawer-status"><StatusBadge status={e.status} /><Badge tone={h.score >= 85 ? "green" : h.score >= 65 ? "amber" : "red"}>Health {h.score ?? 0}/100 · {h.label || "No history"}</Badge>{e.qrEnabled && <Badge tone="teal">QR active</Badge>}</div>
         <div className="af-drawer-body">
           <div className="af-health-grid"><Kpi title="MTTR" value={`${fmtNumber(h.mttrHours, 1)}h`} detail="90-day average" tone="violet" /><Kpi title="MTBF" value={`${fmtNumber(h.mtbfDays, 1)}d`} detail="between failures" tone="teal" /><Kpi title="Open work" value={fmtNumber(h.openWorkOrders)} detail={`${fmtNumber(h.failures30)} failures / 30d`} tone={h.openWorkOrders ? "amber" : "green"} /></div>
+          {e.costEconomics && (
+            <div className="af-equipment-cost-economics">
+              <div className="af-section-title"><h3>Maintenance economics</h3><span>Verified financial ledger</span></div>
+              <div className="af-cost-economics-grid">
+                <Kpi title="Current year" value={fmtMoney(e.costEconomics.ytd)} detail="YTD verified" tone="violet" />
+                <Kpi title="Last 12 months" value={fmtMoney(e.costEconomics.last12Months)} detail="Rolling spend" tone="blue" />
+                <Kpi title="Lifetime" value={fmtMoney(e.costEconomics.lifetime)} detail={`${fmtNumber(e.costEconomics.verifiedEntries)} verified entries`} tone="teal" />
+                <Kpi title="Pending" value={fmtMoney(e.costEconomics.pending)} detail="Awaiting verification" tone={Number(e.costEconomics.pending || 0) > 0 ? "amber" : "green"} />
+              </div>
+            </div>
+          )}
           <div className="af-detail-grid">
             <Detail label="Category" value={e.category} /><Detail label="Plant" value={e.plantCode} />
             <Detail label="Work center" value={e.workCenter} /><Detail label="Location" value={e.location} />
@@ -1934,6 +2119,13 @@ function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
           <DetailBlock title="Description" text={e.description} />
           <DetailBlock title="Safety / isolation notes" text={e.safetyNotes} />
 
+          {e.costEconomics?.recentCosts?.length > 0 && (
+            <>
+              <div className="af-section-title"><h3>Recent maintenance costs</h3><span>{e.costEconomics.recentCosts.length} shown</span></div>
+              <div className="af-mini-list af-recent-cost-list">{e.costEconomics.recentCosts.map((cost) => <div key={cost.id}><strong>{fmtDate(cost.costDate)} · {cost.description}</strong><span>{human(cost.costBucket)} · {cost.status === "VERIFIED" ? "Verified" : "Pending"} · {fmtMoney(cost.amount)}</span></div>)}</div>
+            </>
+          )}
+
           <div className="af-section-title"><h3>Recent maintenance</h3><span>{e.recentWorkOrders?.length || 0} shown</span></div>
           <div className="af-mini-list">{(e.recentWorkOrders || []).map((w) => <div key={w.id}><strong>{w.workNumber} · {w.title}</strong><span>{human(w.status)} · {fmtDate(w.scheduledAt, true)} · {w.responsible || "Unassigned"}</span></div>)}</div>
 
@@ -1942,6 +2134,398 @@ function EquipmentDrawer({ id, onClose, onEdit, notify, canEditAssets }) {
         </div>
       </aside>
     </div>
+  );
+}
+
+
+/* ================================= MAINTENANCE COSTING ================================= */
+
+function MaintenanceCosting({ plantCode, serviceDomain, canWrite, notify, plants }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState("ALL");
+  const [status, setStatus] = useState("");
+  const [bucket, setBucket] = useState("");
+  const [category, setCategory] = useState("");
+  const [equipmentId, setEquipmentId] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [entryOpen, setEntryOpen] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  const range = useMemo(() => {
+    if (month === "ALL") return { from: `${year}-01-01`, to: `${year}-12-31` };
+    const monthNumber = Number(month);
+    const last = new Date(year, monthNumber, 0).getDate();
+    return { from: `${year}-${pad2(monthNumber)}-01`, to: `${year}-${pad2(monthNumber)}-${pad2(last)}` };
+  }, [year, month]);
+
+  useEffect(() => setPage(0), [year, month, status, bucket, category, equipmentId, debouncedSearch, plantCode, serviceDomain]);
+
+  const summaryState = useAsync(
+    () => assetFlowApi.costSummary({
+      plantCode,
+      serviceDomain: serviceDomain || undefined,
+      from: range.from,
+      to: range.to,
+      equipmentId: equipmentId || undefined,
+      costBucket: bucket || undefined,
+      expenseCategory: category || undefined,
+    }),
+    [plantCode, serviceDomain, range.from, range.to, equipmentId, bucket, category]
+  );
+
+  const listState = useAsync(
+    () => assetFlowApi.costs({
+      plantCode,
+      serviceDomain: serviceDomain || undefined,
+      from: range.from,
+      to: range.to,
+      equipmentId: equipmentId || undefined,
+      costBucket: bucket || undefined,
+      expenseCategory: category || undefined,
+      status: status || undefined,
+      search: debouncedSearch || undefined,
+      page,
+      size: 100,
+    }),
+    [plantCode, serviceDomain, range.from, range.to, equipmentId, bucket, category, status, debouncedSearch, page]
+  );
+
+  const equipmentState = useAsync(
+    () => assetFlowApi.equipment({ plantCode, serviceDomain: serviceDomain || undefined }),
+    [plantCode, serviceDomain]
+  );
+
+  const workOrdersState = useAsync(
+    () => entryOpen
+      ? assetFlowApi.workOrders({ plantCode, serviceDomain: serviceDomain || undefined, page: 0, size: 200 })
+      : Promise.resolve({ items: [] }),
+    [Boolean(entryOpen), plantCode, serviceDomain]
+  );
+
+  const refresh = async () => {
+    await Promise.allSettled([summaryState.reload(), listState.reload()]);
+  };
+
+  const verify = async (row) => {
+    try {
+      await assetFlowApi.verifyCost(row.id, row.version);
+      notify("Maintenance cost verified");
+      refresh();
+    } catch (error) { notify(errorText(error), "error"); }
+  };
+
+  const voidRow = async (row) => {
+    const reason = window.prompt("Reason for voiding this maintenance cost entry?");
+    if (!reason?.trim()) return;
+    try {
+      await assetFlowApi.voidCost(row.id, { reason: reason.trim(), version: row.version });
+      notify("Maintenance cost voided");
+      refresh();
+    } catch (error) { notify(errorText(error), "error"); }
+  };
+
+  const data = summaryState.data || {};
+  const summary = data.summary || {};
+  const items = listState.data?.items || [];
+  const equipment = equipmentState.data?.items || [];
+  const workOrders = workOrdersState.data?.items || [];
+  const months = useMemo(() => {
+    const byMonth = Object.fromEntries((data.monthly || []).map((row) => [row.month, row]));
+    return Array.from({ length: 12 }, (_, i) => {
+      const key = `${year}-${pad2(i + 1)}`;
+      return byMonth[key] || { month: key, materialCost: 0, laborCost: 0, externalCost: 0, otherCost: 0, totalCost: 0, pendingCost: 0, entries: 0 };
+    });
+  }, [data.monthly, year]);
+  const maxMonthly = Math.max(1, ...months.map((row) => Number(row.totalCost || 0)));
+  const years = Array.from({ length: 7 }, (_, i) => today.getFullYear() - i);
+
+  return (
+    <section className="af-page af-costing-page">
+      <div className="af-page-head compact">
+        <div>
+          <p className="af-eyebrow">Financial maintenance control</p>
+          <h1>{serviceDomain === "IT" ? "IT Maintenance Costing" : serviceDomain === "MACHINE" ? "Machine Maintenance Costing" : "Overall Maintenance Costing"}</h1>
+          <p>Verified maintenance spend is derived directly from dated ledger transactions. Month and Year are never stored as duplicate summary rows.</p>
+        </div>
+        {canWrite && <div className="af-inline-actions"><Button onClick={() => setImportOpen(true)}>Import XLSX</Button><Button variant="primary" onClick={() => setEntryOpen({ mode: "create" })}>+ Add cost entry</Button></div>}
+      </div>
+
+      <div className="af-costing-toolbar">
+        <label><span>Year</span><select value={year} onChange={(e) => setYear(Number(e.target.value))}>{years.map((y) => <option value={y} key={y}>{y}</option>)}</select></label>
+        <label><span>Period</span><select value={month} onChange={(e) => setMonth(e.target.value)}><option value="ALL">Full year</option>{Array.from({ length: 12 }, (_, i) => <option value={String(i + 1)} key={i}>{new Date(2000, i, 1).toLocaleDateString("en-IN", { month: "long" })}</option>)}</select></label>
+        <label><span>Cost type</span><select value={bucket} onChange={(e) => setBucket(e.target.value)}><option value="">All types</option>{COST_BUCKETS.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></label>
+        <label><span>Category</span><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="">All categories</option>{EXPENSE_CATEGORIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></label>
+        <label><span>Asset</span><select value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)}><option value="">All assets</option>{equipment.map((e) => <option key={e.id} value={e.id}>{e.assetCode} · {e.name}</option>)}</select></label>
+      </div>
+
+      {summaryState.error ? <ErrorBox error={summaryState.error} onRetry={summaryState.reload} /> : summaryState.loading ? <Loading /> : (
+        <>
+          <div className="af-kpi-grid af-cost-kpi-grid">
+            <Kpi title="Verified maintenance spend" value={fmtMoney(summary.totalCost)} detail={`${fmtNumber(summary.verifiedEntries)} ledger entries`} tone="violet" />
+            <Kpi title="Material / spares" value={fmtMoney(summary.materialCost)} detail="Spare parts + consumables" tone="blue" />
+            <Kpi title="Internal labour" value={fmtMoney(summary.laborCost)} detail="Costed maintenance labour" tone="teal" />
+            <Kpi title="External / vendor" value={fmtMoney(summary.externalCost)} detail="Repair, AMC & service" tone="amber" />
+            <Kpi title="Pending verification" value={fmtMoney(summary.pendingCost)} detail={`${fmtNumber(summary.pendingEntries)} draft entries`} tone={Number(summary.pendingCost || 0) > 0 ? "amber" : "green"} />
+            <Kpi title="Cost / work order" value={fmtMoney(summary.costPerWorkOrder)} detail={`${fmtNumber(summary.workOrders)} costed work orders`} tone="neutral" />
+          </div>
+
+          <div className="af-dashboard-grid af-costing-grid">
+            <div className="af-panel af-span-2">
+              <div className="af-panel-head"><div><h2>Monthly maintenance spend</h2><p>Material + labour + external + other verified cost</p></div><Badge tone="violet">{year}</Badge></div>
+              <div className="af-cost-month-chart">
+                {months.map((row) => {
+                  const total = Math.max(0, Number(row.totalCost || 0));
+                  const material = Number(row.materialCost || 0);
+                  const labour = Number(row.laborCost || 0);
+                  const external = Number(row.externalCost || 0);
+                  const other = Number(row.otherCost || 0);
+                  const scale = total > 0 ? (total / maxMonthly) * 100 : 0;
+                  const pct = (value) => total > 0 ? (value / total) * scale : 0;
+                  return (
+                    <button type="button" className={cx("af-cost-month", month !== "ALL" && Number(month) === Number(row.month.slice(5)) && "is-active")} key={row.month} onClick={() => setMonth(String(Number(row.month.slice(5))))} title={`${row.month}: ${fmtMoney(total)}`}>
+                      <div className="af-cost-month-stack">
+                        <i className="is-material" style={{ height: `${pct(material)}%` }} />
+                        <i className="is-labour" style={{ height: `${pct(labour)}%` }} />
+                        <i className="is-external" style={{ height: `${pct(external)}%` }} />
+                        <i className="is-other" style={{ height: `${pct(other)}%` }} />
+                      </div>
+                      <strong>{fmtMoney(total)}</strong>
+                      <span>{new Date(2000, Number(row.month.slice(5)) - 1, 1).toLocaleDateString("en-IN", { month: "short" })}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="af-cost-legend"><span><i className="is-material" />Material</span><span><i className="is-labour" />Labour</span><span><i className="is-external" />External</span><span><i className="is-other" />Other</span></div>
+            </div>
+
+            <div className="af-panel">
+              <div className="af-panel-head"><div><h2>Highest-cost assets</h2><p>Verified spend in selected period</p></div></div>
+              <div className="af-rank-list">{(data.byEquipment || []).slice(0, 8).map((row, index) => <div className="af-rank-row" key={row.equipmentId || `${row.plantCode}-${row.name}`}><span>{index + 1}</span><strong>{row.name}</strong><Badge tone="violet">{fmtMoney(row.cost)}</Badge></div>)}</div>
+              {!data.byEquipment?.length && <EmptyState title="No costed assets" text="Verified asset-linked cost entries will appear here." />}
+            </div>
+
+            <div className="af-panel af-span-2 af-table-wrap">
+              <div className="af-panel-head"><div><h2>Plant cost comparison</h2><p>Verified spend by authorised plant</p></div></div>
+              <table className="af-table"><thead><tr><th>Plant</th><th>Entries</th><th>Spend</th><th>% of total</th></tr></thead><tbody>{(data.byPlant || []).map((row) => <tr key={row.plantCode}><td><strong>{row.plantCode}</strong></td><td>{fmtNumber(row.entries)}</td><td>{fmtMoney(row.cost)}</td><td>{Number(summary.totalCost || 0) > 0 ? `${fmtNumber((Number(row.cost || 0) / Number(summary.totalCost)) * 100, 1)}%` : "0%"}</td></tr>)}</tbody></table>
+            </div>
+
+            <div className="af-panel af-table-wrap">
+              <div className="af-panel-head"><div><h2>Cost mix</h2><p>Expense-category composition</p></div></div>
+              <table className="af-table af-cost-mix-table"><thead><tr><th>Category</th><th>Entries</th><th>Spend</th></tr></thead><tbody>{(data.byCategory || []).map((row) => <tr key={row.category}><td>{human(row.category)}</td><td>{fmtNumber(row.entries)}</td><td>{fmtMoney(row.cost)}</td></tr>)}</tbody></table>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="af-panel af-cost-register">
+        <div className="af-panel-head"><div><h2>Maintenance cost ledger</h2><p>Dated transaction register · edit/verify/void remains audited</p></div><span>{fmtNumber(listState.data?.total || 0)} records</span></div>
+        <div className="af-toolbar">
+          <div className="af-search"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search description, asset, PO, vendor or work order…" /></div>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Active statuses</option>{COST_STATUSES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select>
+        </div>
+        {listState.error ? <ErrorBox error={listState.error} onRetry={listState.reload} /> : listState.loading ? <Loading /> : (
+          <div className="af-table-wrap">
+            <table className="af-table af-cost-register-table">
+              <thead><tr><th>Date</th><th>Plant / Asset</th><th>Work order</th><th>Type / Category</th><th>Description</th><th>PO / Vendor</th><th>Status</th><th>Amount</th>{canWrite && <th />}</tr></thead>
+              <tbody>{items.map((row) => (
+                <tr key={row.id} className={cx(row.status === "VOID" && "is-void")}> 
+                  <td>{fmtDate(row.costDate)}</td>
+                  <td><strong>{row.plantCode}</strong><small>{row.equipmentName ? `${row.equipmentCode || ""} ${row.equipmentName}`.trim() : row.legacyMachineName ? `${row.legacyMachineName} · legacy reference` : "General / no fixed asset"}</small></td>
+                  <td>{row.workNumber || "—"}<small>{human(row.source)}</small></td>
+                  <td><strong>{human(row.costBucket)}</strong><small>{human(row.expenseCategory)}</small></td>
+                  <td><strong>{row.description}</strong><small>{[row.quantity, row.uom, row.unitRate != null ? `@ ${fmtMoney(row.unitRate)}` : ""].filter(Boolean).join(" · ")}</small></td>
+                  <td>{row.poNumber || "—"}<small>{row.vendorName || row.invoiceNumber || ""}</small></td>
+                  <td><Badge tone={row.status === "VERIFIED" ? "green" : row.status === "DRAFT" ? "amber" : "red"}>{human(row.status)}</Badge></td>
+                  <td><strong>{fmtMoney(row.amount)}</strong></td>
+                  {canWrite && <td><div className="af-cost-actions"><Button onClick={() => setEntryOpen({ mode: "edit", row })} disabled={row.status === "VOID"}>Edit</Button>{row.status === "DRAFT" && <Button onClick={() => verify(row)}>Verify</Button>}{row.status !== "VOID" && <Button onClick={() => voidRow(row)}>Void</Button>}</div></td>}
+                </tr>
+              ))}</tbody>
+            </table>
+            {!items.length && <EmptyState title="No maintenance cost entries" text="Change the period/filters or add the first verified maintenance cost transaction." />}
+          </div>
+        )}
+        <div className="af-cost-pagination"><span>Page {page + 1} of {Math.max(1, Number(listState.data?.pages || 1))}</span><div><Button disabled={page <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>Previous</Button><Button disabled={page + 1 >= Number(listState.data?.pages || 1)} onClick={() => setPage((p) => p + 1)}>Next</Button></div></div>
+      </div>
+
+      {entryOpen && <MaintenanceCostEntryModal
+        initial={entryOpen.mode === "edit" ? entryOpen.row : null}
+        equipment={equipment}
+        workOrders={workOrders}
+        plants={plants}
+        defaultPlant={plantCode}
+        defaultDomain={serviceDomain}
+        onClose={() => setEntryOpen(null)}
+        onSave={async (payload) => {
+          try {
+            if (entryOpen.mode === "edit") await assetFlowApi.updateCost(entryOpen.row.id, payload);
+            else await assetFlowApi.createCost(payload);
+            notify(entryOpen.mode === "edit" ? "Maintenance cost updated" : "Maintenance cost added");
+            setEntryOpen(null);
+            refresh();
+          } catch (error) { notify(errorText(error), "error"); }
+        }}
+      />}
+
+      {importOpen && <MaintenanceCostImportModal onClose={() => setImportOpen(false)} onImported={() => { setImportOpen(false); refresh(); }} notify={notify} />}
+    </section>
+  );
+}
+
+function MaintenanceCostEntryModal({ initial, equipment, workOrders, plants, defaultPlant, defaultDomain, onClose, onSave }) {
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(() => ({
+    costDate: dateInput(initial?.costDate || new Date()),
+    equipmentId: initial?.equipmentId || "",
+    workOrderId: initial?.workOrderId || "",
+    serviceDomain: initial?.serviceDomain || defaultDomain || "MACHINE",
+    plantCode: initial?.plantCode || defaultPlant || (plants.length === 1 ? plants[0].name : ""),
+    costBucket: initial?.costBucket || "MATERIAL",
+    expenseCategory: initial?.expenseCategory || "SPARE_PART",
+    description: initial?.description || "",
+    quantity: initial?.quantity ?? 1,
+    uom: initial?.uom || "NOS",
+    unitRate: initial?.unitRate ?? "",
+    amount: initial?.amount ?? "",
+    vendorName: initial?.vendorName || "",
+    poNumber: initial?.poNumber || "",
+    invoiceNumber: initial?.invoiceNumber || "",
+    legacyMachineSerial: initial?.legacyMachineSerial || "",
+    legacyMachineName: initial?.legacyMachineName || "",
+    remarks: initial?.remarks || "",
+    status: initial?.status === "DRAFT" ? "DRAFT" : "VERIFIED",
+    version: initial?.version,
+  }));
+  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const recalc = (next) => {
+    const qty = Number(next.quantity || 0);
+    const rate = Number(next.unitRate || 0);
+    return qty > 0 && rate >= 0 ? { ...next, amount: Number((qty * rate).toFixed(2)) } : next;
+  };
+
+  const chooseEquipment = (id) => {
+    const e = equipment.find((item) => String(item.id) === String(id));
+    setForm((current) => ({ ...current, equipmentId: id, plantCode: e?.plantCode || current.plantCode, serviceDomain: e?.serviceDomain || current.serviceDomain }));
+  };
+  const chooseWorkOrder = (id) => {
+    const w = workOrders.find((item) => String(item.id) === String(id));
+    setForm((current) => ({ ...current, workOrderId: id, equipmentId: w?.equipmentId || current.equipmentId, plantCode: w?.plantCode || current.plantCode, serviceDomain: w?.serviceDomain || current.serviceDomain }));
+  };
+
+  return (
+    <Modal title={initial ? "Edit maintenance cost" : "Add maintenance cost"} subtitle="Standalone costs and work-order-linked costs use the same dated financial ledger." onClose={onClose} wide>
+      <form onSubmit={async (event) => {
+        event.preventDefault();
+        setSaving(true);
+        try {
+          await onSave({
+            ...form,
+            equipmentId: form.equipmentId || null,
+            workOrderId: form.workOrderId || null,
+            quantity: Number(form.quantity || 1),
+            unitRate: form.unitRate === "" ? null : Number(form.unitRate),
+            amount: Number(form.amount || 0),
+          });
+        } finally { setSaving(false); }
+      }}>
+        <div className="af-modal-body af-form-grid">
+          <Field label="Cost date"><input required type="date" value={form.costDate} onChange={(e) => set("costDate", e.target.value)} /></Field>
+          <Field label="Status"><select value={form.status} onChange={(e) => set("status", e.target.value)}><option value="VERIFIED">Verified</option><option value="DRAFT">Draft / pending verification</option></select></Field>
+          <Field label="Plant"><select required value={form.plantCode} onChange={(e) => set("plantCode", e.target.value)}><option value="">Select plant</option>{plants.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}</select></Field>
+          <Field label="Department"><select value={form.serviceDomain} onChange={(e) => set("serviceDomain", e.target.value)}>{SERVICE_DOMAINS.map((x) => <option value={x} key={x}>{SERVICE_DOMAIN_LABELS[x]}</option>)}</select></Field>
+          <Field label="Asset / equipment"><select value={form.equipmentId} onChange={(e) => chooseEquipment(e.target.value)}><option value="">General / no fixed asset</option>{equipment.filter((e) => !form.plantCode || e.plantCode === form.plantCode).map((e) => <option key={e.id} value={e.id}>{e.assetCode} · {e.name}</option>)}</select></Field>
+          <Field label="Work order (optional)"><select value={form.workOrderId} onChange={(e) => chooseWorkOrder(e.target.value)}><option value="">Standalone maintenance cost</option>{workOrders.filter((w) => !form.plantCode || w.plantCode === form.plantCode).map((w) => <option key={w.id} value={w.id}>{w.workNumber} · {w.title}</option>)}</select></Field>
+          <Field label="Cost type"><select value={form.costBucket} onChange={(e) => setForm((current) => ({ ...current, costBucket: e.target.value, expenseCategory: defaultExpenseCategory(e.target.value), uom: e.target.value === "INTERNAL_LABOUR" ? "HR" : current.uom || "NOS" }))}>{COST_BUCKETS.map((x) => <option value={x} key={x}>{human(x)}</option>)}</select></Field>
+          <Field label="Expense category"><select value={form.expenseCategory} onChange={(e) => set("expenseCategory", e.target.value)}>{EXPENSE_CATEGORIES.map((x) => <option key={x} value={x}>{human(x)}</option>)}</select></Field>
+          <div className="af-full"><Field label="Description"><input required maxLength={500} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Spare, repair service, AMC, calibration, utility or other maintenance expense" /></Field></div>
+          <Field label="Quantity"><input required type="number" min="0.001" step="0.001" value={form.quantity} onChange={(e) => setForm((current) => recalc({ ...current, quantity: e.target.value }))} /></Field>
+          <Field label="UOM"><input value={form.uom} onChange={(e) => set("uom", e.target.value)} placeholder="NOS / HR / JOB / LOT" /></Field>
+          <Field label="Unit rate"><input type="number" min="0" step="0.01" value={form.unitRate} onChange={(e) => setForm((current) => recalc({ ...current, unitRate: e.target.value }))} /></Field>
+          <Field label="Amount"><input required type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} /></Field>
+          <Field label="Vendor"><input value={form.vendorName} onChange={(e) => set("vendorName", e.target.value)} /></Field>
+          <Field label="PO number"><input value={form.poNumber} onChange={(e) => set("poNumber", e.target.value)} /></Field>
+          <Field label="Invoice / reference"><input value={form.invoiceNumber} onChange={(e) => set("invoiceNumber", e.target.value)} /></Field>
+          <Field label="Legacy machine serial"><input value={form.legacyMachineSerial} onChange={(e) => set("legacyMachineSerial", e.target.value)} /></Field>
+          <Field label="Legacy machine name / reference"><input value={form.legacyMachineName} onChange={(e) => set("legacyMachineName", e.target.value)} placeholder="Only for migrated/unmapped historical entries" /></Field>
+          <div className="af-full"><Field label="Remarks"><textarea rows="3" value={form.remarks} onChange={(e) => set("remarks", e.target.value)} /></Field></div>
+        </div>
+        <div className="af-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving}>{saving ? "Saving…" : initial ? "Save cost entry" : "Add cost entry"}</Button></div>
+      </form>
+    </Modal>
+  );
+}
+
+function MaintenanceCostImportModal({ onClose, onImported, notify }) {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runPreview = async () => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      setPreview(await assetFlowApi.previewCostImport(file));
+    } catch (error) { notify(errorText(error), "error"); }
+    finally { setLoading(false); }
+  };
+
+  const toggleRow = (index, checked) => setPreview((current) => ({
+    ...current,
+    rows: current.rows.map((row, i) => i === index ? { ...row, include: checked } : row),
+  }));
+
+  const confirm = async () => {
+    const rows = (preview?.rows || []).filter((row) => row.ready && row.include).map((row) => ({
+      rowNumber: row.rowNumber,
+      costDate: row.costDate,
+      plantCode: row.plantCode,
+      equipmentId: row.equipmentId || null,
+      equipmentName: row.equipmentName || row.legacyMachineName || row.rawMachine || null,
+      serviceDomain: row.serviceDomain,
+      costBucket: row.costBucket,
+      expenseCategory: row.expenseCategory,
+      description: row.description,
+      poNumber: row.poNumber || null,
+      legacyMachineSerial: row.legacyMachineSerial || null,
+      amount: row.amount,
+      include: true,
+    }));
+    if (!rows.length) { notify("No READY rows are selected for import.", "error"); return; }
+    setLoading(true);
+    try {
+      const result = await assetFlowApi.confirmCostImport(rows);
+      notify(`${result.created || 0} maintenance cost rows imported${result.skipped ? ` · ${result.skipped} skipped` : ""}`);
+      onImported();
+    } catch (error) { notify(errorText(error), "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <Modal title="Import Maintenance Costing XLSX" subtitle="Reads the SPARE ENTRY-style sheet, skips YEAR summary rows, normalises plants/assets and blocks duplicates before confirmation." onClose={onClose} wide>
+      <div className="af-modal-body">
+        <div className="af-import-drop">
+          <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => { setFile(e.target.files?.[0] || null); setPreview(null); }} />
+          <div><strong>{file?.name || "Choose Maintenance Costing.xlsx"}</strong><span>DATE · MONTH · PLANT · MACHINE · SPARES DESCRIPTION · PO NUMBER · M/C SR.No. · COST</span></div>
+          <Button type="button" disabled={!file || loading} onClick={runPreview}>{loading ? "Reading…" : "Preview import"}</Button>
+        </div>
+
+        {preview && <>
+          <div className="af-import-summary">
+            <span><small>Source rows</small><strong>{fmtNumber(preview.summary?.sourceRows)}</strong></span>
+            <span><small>Ready</small><strong>{fmtNumber(preview.summary?.ready)}</strong></span>
+            <span><small>Review / duplicate</small><strong>{fmtNumber(preview.summary?.review)}</strong></span>
+            <span><small>YEAR rows skipped</small><strong>{fmtNumber(preview.summary?.skippedYear)}</strong></span>
+          </div>
+          <div className="af-table-wrap af-import-preview-table">
+            <table className="af-table"><thead><tr><th>Use</th><th>Row</th><th>Date</th><th>Plant</th><th>Asset</th><th>Description</th><th>PO</th><th>Amount</th><th>Preview status</th></tr></thead><tbody>{(preview.rows || []).slice(0, 500).map((row, index) => <tr key={`${row.rowNumber}-${index}`} className={cx(!row.ready && "is-review")}><td><input type="checkbox" disabled={!row.ready} checked={Boolean(row.ready && row.include)} onChange={(e) => toggleRow(index, e.target.checked)} /></td><td>{row.rowNumber}</td><td>{row.costDate || row.rawDate || "—"}</td><td>{row.plantCode || row.rawPlant || "—"}</td><td>{row.equipmentName || row.legacyMachineName || row.rawMachine || "—"}{!row.equipmentName && (row.legacyMachineName || row.rawMachine) && <small>Legacy reference · not linked to Asset Master</small>}</td><td><strong>{row.description || "—"}</strong><small>{human(row.costBucket)} · {human(row.expenseCategory)}</small></td><td>{row.poNumber || "—"}</td><td>{row.amount != null ? fmtMoney(row.amount) : row.rawCost || "—"}</td><td><Badge tone={row.ready ? "green" : row.status === "SKIPPED_YEAR" ? "neutral" : "amber"}>{row.status}</Badge><small>{[...(row.issues || []), ...(row.warnings || [])].join(" · ")}</small></td></tr>)}</tbody></table>
+          </div>
+          {(preview.rows || []).length > 500 && <p className="af-hint">Preview shows the first 500 rows; confirmation still uses every selected READY row.</p>}
+        </>}
+      </div>
+      <div className="af-modal-actions"><Button type="button" onClick={onClose}>Cancel</Button>{preview && <Button variant="primary" disabled={loading || !(preview.rows || []).some((row) => row.ready && row.include)} onClick={confirm}>{loading ? "Importing…" : "Import READY rows"}</Button>}</div>
+    </Modal>
   );
 }
 

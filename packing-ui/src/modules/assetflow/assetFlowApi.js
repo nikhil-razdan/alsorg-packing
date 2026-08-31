@@ -155,6 +155,25 @@ export const assetFlowApi = {
 
   calendar: async (params = {}) =>
     data(await API.get("/assetflow/calendar", { params: compactParams(params) })),
+  costs: async (params = {}) =>
+    data(await API.get("/assetflow/costs", { params: compactParams(params) })),
+  costSummary: async (params = {}) =>
+    data(await API.get("/assetflow/costs/summary", { params: compactParams(params) })),
+  createCost: async (payload) => data(await API.post("/assetflow/costs", payload)),
+  updateCost: async (id, payload) =>
+    data(await API.put(`/assetflow/costs/${pathSegment(id)}`, payload)),
+  verifyCost: async (id, version) =>
+    data(await API.post(`/assetflow/costs/${pathSegment(id)}/verify`, null, { params: { version } })),
+  voidCost: async (id, payload) =>
+    data(await API.post(`/assetflow/costs/${pathSegment(id)}/void`, payload)),
+  previewCostImport: async (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return data(await API.post("/assetflow/costs/import/preview", form));
+  },
+  confirmCostImport: async (rows) =>
+    data(await API.post("/assetflow/costs/import/confirm", { rows })),
+
   reports: async (params = {}) =>
     data(await API.get("/assetflow/reports", { params: compactParams(params) })),
   categories: async (serviceDomain) =>

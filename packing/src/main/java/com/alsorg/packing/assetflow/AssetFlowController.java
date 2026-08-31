@@ -4,6 +4,12 @@ import com.alsorg.packing.assetflow.AssetFlowData.AssignmentRequest;
 import com.alsorg.packing.assetflow.AssetFlowData.AuthenticatedRequestCreate;
 import com.alsorg.packing.assetflow.AssetFlowData.EquipmentStatus;
 import com.alsorg.packing.assetflow.AssetFlowData.EquipmentUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.CostBucket;
+import com.alsorg.packing.assetflow.AssetFlowData.CostStatus;
+import com.alsorg.packing.assetflow.AssetFlowData.ExpenseCategory;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostImportConfirm;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostUpsert;
+import com.alsorg.packing.assetflow.AssetFlowData.MaintenanceCostVoidRequest;
 import com.alsorg.packing.assetflow.AssetFlowData.PreventivePlanUpsert;
 import com.alsorg.packing.assetflow.AssetFlowData.Priority;
 import com.alsorg.packing.assetflow.AssetFlowData.PublicRequestCreate;
@@ -28,6 +34,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * AssetFlow / ServiceFlow API.
@@ -56,6 +63,12 @@ public class AssetFlowController {
     private static final String REPORT_READ =
             "hasAnyAuthority('ADMIN','ASSETFLOW_DIRECTOR','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD',"
                     + "'ASSETFLOW_MANAGER','ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
+
+    private static final String COST_READ = REPORT_READ;
+
+    private static final String COST_WRITE =
+            "hasAnyAuthority('ADMIN','ASSETFLOW_MACHINE_HEAD','ASSETFLOW_IT_HEAD','ASSETFLOW_MANAGER',"
+                    + "'ASSETFLOW_PLANNER','ASSETFLOW_HEAD_TECHNICIAN')";
 
     private final AssetFlowService service;
 
@@ -334,6 +347,96 @@ public class AssetFlowController {
             @RequestParam(required = false) String plantCode,
             @RequestParam(required = false) ServiceDomain serviceDomain) {
         return service.calendar(from, to, plantCode, serviceDomain);
+    }
+
+    /* =========================== MAINTENANCE COSTING =========================== */
+
+    @GetMapping("/costs")
+    @PreAuthorize(COST_READ)
+    public Map<String, Object> costs(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) ServiceDomain serviceDomain,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) UUID workOrderId,
+            @RequestParam(required = false) CostBucket costBucket,
+            @RequestParam(required = false) ExpenseCategory expenseCategory,
+            @RequestParam(required = false) CostStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        return service.listMaintenanceCosts(
+                from, to, plantCode, serviceDomain, equipmentId, workOrderId,
+                costBucket, expenseCategory, status, search, page, size);
+    }
+
+    @GetMapping("/costs/summary")
+    @PreAuthorize(COST_READ)
+    public Map<String, Object> costSummary(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) String plantCode,
+            @RequestParam(required = false) ServiceDomain serviceDomain,
+            @RequestParam(required = false) UUID equipmentId,
+            @RequestParam(required = false) CostBucket costBucket,
+            @RequestParam(required = false) ExpenseCategory expenseCategory) {
+        return service.maintenanceCostSummary(
+                from, to, plantCode, serviceDomain, equipmentId, costBucket, expenseCategory);
+    }
+
+    @PostMapping("/costs")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> createCost(
+            @Valid @RequestBody MaintenanceCostUpsert request,
+            Authentication auth) {
+        return service.saveMaintenanceCost(null, request, auth);
+    }
+
+    @PutMapping("/costs/{id}")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> updateCost(
+            @PathVariable UUID id,
+            @Valid @RequestBody MaintenanceCostUpsert request,
+            Authentication auth) {
+        return service.saveMaintenanceCost(id, request, auth);
+    }
+
+    @PostMapping("/costs/{id}/verify")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> verifyCost(
+            @PathVariable UUID id,
+            @RequestParam Long version,
+            Authentication auth) {
+        return service.verifyMaintenanceCost(id, version, auth);
+    }
+
+    @PostMapping("/costs/{id}/void")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> voidCost(
+            @PathVariable UUID id,
+            @Valid @RequestBody MaintenanceCostVoidRequest request,
+            Authentication auth) {
+        return service.voidMaintenanceCost(id, request, auth);
+    }
+
+    @PostMapping(value = "/costs/import/preview", consumes = "multipart/form-data")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> previewCostImport(
+            @RequestPart("file") MultipartFile file) {
+        return service.previewMaintenanceCostWorkbook(file);
+    }
+
+    @PostMapping("/costs/import/confirm")
+    @PreAuthorize(COST_WRITE)
+    public Map<String, Object> confirmCostImport(
+            @Valid @RequestBody MaintenanceCostImportConfirm request,
+            Authentication auth) {
+        return service.confirmMaintenanceCostImport(request, auth);
     }
 
     @GetMapping("/reports")

@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -110,6 +111,45 @@ public final class AssetFlowData {
         STAFF,
         CONTRACTOR,
         OTHER
+    }
+
+    /**
+     * Financial grouping used by the maintenance cost ledger.  The existing
+     * WorkOrder parts/labour/external totals remain as compatibility summaries
+     * and are recalculated from these ledger rows.
+     */
+    public enum CostBucket {
+        MATERIAL,
+        INTERNAL_LABOUR,
+        EXTERNAL_SERVICE,
+        OTHER
+    }
+
+    public enum ExpenseCategory {
+        SPARE_PART,
+        CONSUMABLE,
+        REPAIR_SERVICE,
+        AMC,
+        CALIBRATION,
+        INSTALLATION,
+        ELECTRICAL,
+        FACILITY_UTILITY,
+        SOFTWARE_LICENSE,
+        IT_HARDWARE,
+        OTHER
+    }
+
+    public enum CostStatus {
+        DRAFT,
+        VERIFIED,
+        VOID
+    }
+
+    public enum CostSource {
+        WORK_ORDER,
+        DIRECT_ENTRY,
+        EXCEL_IMPORT,
+        LEGACY_WORK_ORDER_SUMMARY
     }
 
     @Entity(name = "AssetFlowEquipment")
@@ -452,6 +492,144 @@ public final class AssetFlowData {
         long version;
 
         public WorkOrder() {
+        }
+    }
+
+    @Entity(name = "AssetFlowMaintenanceCost")
+    @Table(
+            name = "assetflow_maintenance_cost",
+            indexes = {
+                    @Index(name = "idx_af_cost_date", columnList = "cost_date"),
+                    @Index(name = "idx_af_cost_plant", columnList = "plant_code"),
+                    @Index(name = "idx_af_cost_domain", columnList = "service_domain"),
+                    @Index(name = "idx_af_cost_equipment", columnList = "equipment_id"),
+                    @Index(name = "idx_af_cost_work_order", columnList = "work_order_id"),
+                    @Index(name = "idx_af_cost_status", columnList = "status"),
+                    @Index(name = "idx_af_cost_scope_date", columnList = "plant_code,service_domain,cost_date"),
+                    @Index(name = "idx_af_cost_work_source", columnList = "work_order_id,source,status")
+            }
+    )
+    public static class MaintenanceCost {
+        @Id
+        UUID id = UUID.randomUUID();
+
+        @Column(name = "cost_date", nullable = false)
+        LocalDate costDate;
+
+        @Enumerated(EnumType.STRING)
+        @Column(name = "service_domain", nullable = false, length = 40)
+        ServiceDomain serviceDomain = ServiceDomain.MACHINE;
+
+        @Column(name = "plant_code", nullable = false, length = 80)
+        String plantCode;
+
+        @Column(name = "equipment_id")
+        UUID equipmentId;
+
+        @Column(name = "equipment_code", length = 80)
+        String equipmentCode;
+
+        @Column(name = "equipment_name", length = 220)
+        String equipmentName;
+
+        @Column(name = "work_order_id")
+        UUID workOrderId;
+
+        @Column(name = "work_number", length = 60)
+        String workNumber;
+
+        @Enumerated(EnumType.STRING)
+        @Column(name = "cost_bucket", nullable = false, length = 40)
+        CostBucket costBucket = CostBucket.MATERIAL;
+
+        @Enumerated(EnumType.STRING)
+        @Column(name = "expense_category", nullable = false, length = 50)
+        ExpenseCategory expenseCategory = ExpenseCategory.SPARE_PART;
+
+        @Column(nullable = false, length = 500)
+        String description;
+
+        @Column(precision = 14, scale = 3)
+        BigDecimal quantity = BigDecimal.ONE;
+
+        @Column(length = 40)
+        String uom;
+
+        @Column(name = "unit_rate", precision = 14, scale = 2)
+        BigDecimal unitRate;
+
+        @Column(nullable = false, precision = 14, scale = 2)
+        BigDecimal amount = BigDecimal.ZERO;
+
+        @Column(name = "vendor_name", length = 220)
+        String vendorName;
+
+        @Column(name = "po_number", length = 120)
+        String poNumber;
+
+        @Column(name = "invoice_number", length = 120)
+        String invoiceNumber;
+
+        @Column(name = "legacy_machine_serial", length = 180)
+        String legacyMachineSerial;
+
+        /**
+         * Original MACHINE text preserved from the legacy Maintenance Costing workbook
+         * when it cannot be safely mapped to an AssetFlow equipment master. This keeps
+         * migration lossless without silently creating a new asset.
+         */
+        @Column(name = "legacy_machine_name", length = 220)
+        String legacyMachineName;
+
+        @Lob
+        String remarks;
+
+        @Enumerated(EnumType.STRING)
+        @Column(nullable = false, length = 30)
+        CostStatus status = CostStatus.DRAFT;
+
+        @Enumerated(EnumType.STRING)
+        @Column(nullable = false, length = 40)
+        CostSource source = CostSource.DIRECT_ENTRY;
+
+        @Column(name = "import_batch_id")
+        UUID importBatchId;
+
+        @Column(name = "legacy_row_number")
+        Integer legacyRowNumber;
+
+        @Column(name = "created_by", length = 180)
+        String createdBy;
+
+        @Column(name = "created_at", nullable = false)
+        LocalDateTime createdAt = LocalDateTime.now();
+
+        @Column(name = "updated_by", length = 180)
+        String updatedBy;
+
+        @Column(name = "updated_at", nullable = false)
+        LocalDateTime updatedAt = LocalDateTime.now();
+
+        @Column(name = "verified_by", length = 180)
+        String verifiedBy;
+
+        @Column(name = "verified_at")
+        LocalDateTime verifiedAt;
+
+        @Column(name = "voided_by", length = 180)
+        String voidedBy;
+
+        @Column(name = "voided_at")
+        LocalDateTime voidedAt;
+
+        @Lob
+        @Column(name = "void_reason")
+        String voidReason;
+
+        @Version
+        long version;
+
+        public MaintenanceCost() {
         }
     }
 
@@ -810,7 +988,79 @@ public final class AssetFlowData {
             @DecimalMin("0.00") BigDecimal laborCost,
             @DecimalMin("0.00") BigDecimal externalCost,
             @Size(max = 30000) String verificationNote,
+            @Size(max = 200) List<MaintenanceCostLineUpsert> costLines,
             @PositiveOrZero Long version
+    ) {
+    }
+
+    /** Detailed cost row submitted from work-order repair completion. */
+    public record MaintenanceCostLineUpsert(
+            LocalDate costDate,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory,
+            @Size(max = 500) String description,
+            @DecimalMin("0.000") BigDecimal quantity,
+            @Size(max = 40) String uom,
+            @DecimalMin("0.00") BigDecimal unitRate,
+            @DecimalMin("0.00") BigDecimal amount,
+            @Size(max = 220) String vendorName,
+            @Size(max = 120) String poNumber,
+            @Size(max = 120) String invoiceNumber,
+            @Size(max = 4000) String remarks
+    ) {
+    }
+
+    /** Create/update request for the standalone/management Costing register. */
+    public record MaintenanceCostUpsert(
+            LocalDate costDate,
+            UUID equipmentId,
+            UUID workOrderId,
+            ServiceDomain serviceDomain,
+            @Size(max = 80) String plantCode,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory,
+            @Size(max = 500) String description,
+            @DecimalMin("0.000") BigDecimal quantity,
+            @Size(max = 40) String uom,
+            @DecimalMin("0.00") BigDecimal unitRate,
+            @DecimalMin("0.00") BigDecimal amount,
+            @Size(max = 220) String vendorName,
+            @Size(max = 120) String poNumber,
+            @Size(max = 120) String invoiceNumber,
+            @Size(max = 180) String legacyMachineSerial,
+            @Size(max = 220) String legacyMachineName,
+            @Size(max = 10000) String remarks,
+            CostStatus status,
+            @PositiveOrZero Long version
+    ) {
+    }
+
+    public record MaintenanceCostVoidRequest(
+            @Size(max = 4000) String reason,
+            @PositiveOrZero Long version
+    ) {
+    }
+
+    /** Row returned by XLSX preview and accepted by import confirmation. */
+    public record MaintenanceCostImportRow(
+            @Positive Integer rowNumber,
+            LocalDate costDate,
+            @Size(max = 80) String plantCode,
+            UUID equipmentId,
+            @Size(max = 220) String equipmentName,
+            ServiceDomain serviceDomain,
+            CostBucket costBucket,
+            ExpenseCategory expenseCategory,
+            @Size(max = 500) String description,
+            @Size(max = 120) String poNumber,
+            @Size(max = 180) String legacyMachineSerial,
+            @DecimalMin("0.00") BigDecimal amount,
+            Boolean include
+    ) {
+    }
+
+    public record MaintenanceCostImportConfirm(
+            @Size(max = 5000) List<MaintenanceCostImportRow> rows
     ) {
     }
 
