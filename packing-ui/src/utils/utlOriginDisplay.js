@@ -2,13 +2,7 @@ import { API_BASE_URL } from "../config";
 import { secureFetch } from "../services/api";
 
 export const WR38_PLANT_CODE = "WR-38";
-
 const UTL_SUFFIX = " - UTL";
-
-/*
- * Keep GET query strings comfortably below browser / proxy request-line
- * limits. This affects presentation metadata only.
- */
 const UTL_METADATA_BATCH_SIZE = 50;
 
 export const normalizePackFlowPlantCode = (value) => {
@@ -32,26 +26,26 @@ export const normalizePackFlowPlantCode = (value) => {
 export const isWr38PackFlowRow = (row) =>
   normalizePackFlowPlantCode(
     row?.plantCode ||
-      row?.utlSourcePlantCode ||
-      row?.displayPlantCode
+    row?.utlSourcePlantCode ||
+    row?.displayPlantCode
   ) === WR38_PLANT_CODE;
 
 export const getPackFlowPacketItemId = (row) =>
   String(
     row?.packetItemId ||
-      row?.itemId ||
-      row?.packet_item_id ||
-      row?.zohoItemId ||
-      ""
+    row?.itemId ||
+    row?.packet_item_id ||
+    row?.zohoItemId ||
+    ""
   ).trim();
 
 export const getWriverProductCode = (row) =>
   String(
     row?.pdNo ||
-      row?.productCode ||
-      row?.product_code ||
-      row?.sku ||
-      ""
+    row?.productCode ||
+    row?.product_code ||
+    row?.sku ||
+    ""
   ).trim();
 
 export const getPackFlowSkuDisplayValue = (row) => {
@@ -59,9 +53,7 @@ export const getPackFlowSkuDisplayValue = (row) => {
     return getWriverProductCode(row);
   }
 
-  return String(
-    row?.sku || ""
-  ).trim();
+  return String(row?.sku || "").trim();
 };
 
 export const getUtlOriginMetadataForRow = (
@@ -70,32 +62,26 @@ export const getUtlOriginMetadataForRow = (
 ) => {
   const directOrigin =
     row?.utlOrigin === true ||
-    String(
-      row?.utlOrigin || ""
-    )
+    String(row?.utlOrigin || "")
       .trim()
       .toLowerCase() === "true";
 
   if (directOrigin) {
     return {
       utlOrigin: true,
-
       sourcePlantCode:
         row?.utlSourcePlantCode ||
         row?.sourcePlantCode ||
         row?.plantCode ||
         "",
-
       dispatchMode:
         row?.utlDispatchMode ||
         row?.dispatchMode ||
         "",
-
       dispatchTargetPlantCode:
         row?.utlDispatchTargetPlantCode ||
         row?.dispatchTargetPlantCode ||
         "",
-
       displayPlantCode:
         row?.displayPlantCode ||
         "",
@@ -108,9 +94,7 @@ export const getUtlOriginMetadataForRow = (
   if (
     packetItemId &&
     metadataByPacketItemId &&
-    metadataByPacketItemId[
-      packetItemId
-    ]
+    metadataByPacketItemId[packetItemId]
   ) {
     return metadataByPacketItemId[
       packetItemId
@@ -130,7 +114,7 @@ export const isUtlOriginPackFlowRow = (
       row,
       metadataByPacketItemId
     )?.utlOrigin ||
-      fallbackUtl
+    fallbackUtl
   );
 
 export const getPackFlowPlantDisplayLabel = (
@@ -138,8 +122,7 @@ export const getPackFlowPlantDisplayLabel = (
   metadataByPacketItemId = {},
   {
     fallbackUtl = false,
-    wr38NormalLabel =
-      "WR-38 • WRIVER",
+    wr38NormalLabel = "WR-38 • WRIVER",
   } = {}
 ) => {
   const metadata =
@@ -151,8 +134,8 @@ export const getPackFlowPlantDisplayLabel = (
   const plantCode =
     normalizePackFlowPlantCode(
       metadata?.sourcePlantCode ||
-        metadata?.displayPlantCode ||
-        row?.plantCode
+      metadata?.displayPlantCode ||
+      row?.plantCode
     );
 
   if (!plantCode) {
@@ -166,8 +149,7 @@ export const getPackFlowPlantDisplayLabel = (
     return `${plantCode}${UTL_SUFFIX}`;
   }
 
-  return plantCode ===
-    WR38_PLANT_CODE
+  return plantCode === WR38_PLANT_CODE
     ? wr38NormalLabel
     : plantCode;
 };
@@ -195,43 +177,10 @@ const chunk = (
 };
 
 /*
- * ============================================================
- * UTL ORIGIN PRESENTATION METADATA
- * ============================================================
- *
- * IMPORTANT:
- *
- * UTL origin remains persisted in UtlPacketRouting.
- *
- * This helper is READ-ONLY presentation enrichment. It does NOT:
- *
- * - change plantCode
- * - change dispatch routing
- * - change Warehouse state
- * - change FG state
- * - change Dispatch state
- * - change UTL assignment
- * - change packet ownership
- * - perform any mutation
- *
- * Browser reads use the backend's safe GET endpoint:
- *
- * GET
- * /api/operational-metadata/utl-origins?ids=<uuid>&ids=<uuid>
- *
- * POST compatibility remains on the backend for older clients.
- *
- * Abort behaviour:
- *
- * Warehouse / Dispatch may cancel a stale metadata refresh when their
- * visible rows change or when the component unmounts.
- *
- * Cancellation is expected lifecycle behaviour for this OPTIONAL
- * presentation request. It must not become an unhandled browser error.
- *
- * Therefore AbortError returns the metadata already resolved, if any.
- * A genuine HTTP/server/authentication error is still propagated.
- * ============================================================
+ * UTL origin is persisted in UtlPacketRouting, not in plantCode.
+ * This read-only metadata endpoint allows normal AL-P3 / WR-38 receivers
+ * to distinguish UTL-origin rows without corrupting the physical plant code
+ * used by permissions, FG, Warehouse and Dispatch routing.
  */
 export const fetchUtlOriginMetadataForRows =
   async (
@@ -270,10 +219,9 @@ export const fetchUtlOriginMetadataForRows =
       )
     ) {
       /*
-       * The caller may have cancelled this stale read between batches.
-       *
-       * That is not an application failure. Return whatever presentation
-       * metadata has already been resolved.
+       * UTL origin metadata is presentation-only. If the caller has already
+       * cancelled a stale refresh, return whatever was resolved so far instead
+       * of allowing an AbortError to escape into React's effect lifecycle.
        */
       if (signal?.aborted) {
         return result;
@@ -282,14 +230,12 @@ export const fetchUtlOriginMetadataForRows =
       const params =
         new URLSearchParams();
 
-      batch.forEach(
-        (packetItemId) => {
-          params.append(
-            "ids",
-            packetItemId
-          );
-        }
-      );
+      batch.forEach((packetItemId) => {
+        params.append(
+          "ids",
+          packetItemId
+        );
+      });
 
       let response;
 
@@ -299,81 +245,37 @@ export const fetchUtlOriginMetadataForRows =
             `${API_BASE_URL}/api/operational-metadata/utl-origins?${params.toString()}`,
             {
               method: "GET",
-
-              credentials:
-                "include",
-
-              cache:
-                "no-store",
-
+              credentials: "include",
+              cache: "no-store",
               headers: {
-                Accept:
-                  "application/json",
+                Accept: "application/json",
               },
-
               signal,
             }
           );
       } catch (error) {
-        /*
-         * Abort is an expected consequence of React replacing/unmounting
-         * a stale read-only request. Never surface it as an unhandled
-         * promise rejection.
-         */
         if (
-          error?.name ===
-            "AbortError" ||
+          error?.name === "AbortError" ||
           signal?.aborted
         ) {
           return result;
         }
 
-        /*
-         * Real network/auth/server errors remain visible to the caller.
-         */
         throw error;
-      }
-
-      /*
-       * The request may technically complete immediately before cleanup
-       * aborts the signal. Do not continue processing a stale response.
-       */
-      if (signal?.aborted) {
-        return result;
       }
 
       if (!response.ok) {
-        let text = "";
-
-        try {
-          text =
-            await response.text();
-        } catch {
-          text = "";
-        }
+        const text =
+          await response.text();
 
         throw new Error(
           text ||
-            "Failed to load UTL origin metadata"
+          "Failed to load UTL origin metadata"
         );
       }
 
-      let payload;
-
-      try {
-        payload =
-          await response.json();
-      } catch (error) {
-        if (
-          error?.name ===
-            "AbortError" ||
-          signal?.aborted
-        ) {
-          return result;
-        }
-
-        throw error;
-      }
+      const payload =
+        await response.json();
 
       (
         Array.isArray(payload)
@@ -383,16 +285,14 @@ export const fetchUtlOriginMetadataForRows =
         const packetItemId =
           String(
             entry?.packetItemId ||
-              ""
+            ""
           ).trim();
 
         if (!packetItemId) {
           return;
         }
 
-        result[
-          packetItemId
-        ] = {
+        result[packetItemId] = {
           ...entry,
           utlOrigin: true,
         };

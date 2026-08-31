@@ -1320,15 +1320,20 @@ function ClientNameAutocomplete({
 
           setOptions(rows);
         } catch (errorValue) {
-          if (
-            errorValue?.code !==
-            "ERR_CANCELED"
-          ) {
-            console.error(
-              "Client master search failed:",
-              errorValue
-            );
+          const cancelled =
+            controller.signal.aborted ||
+            errorValue?.name === "AbortError" ||
+            errorValue?.name === "CanceledError" ||
+            errorValue?.code === "ERR_CANCELED";
+
+          if (cancelled) {
+            return;
           }
+
+          console.error(
+            "Client master search failed:",
+            errorValue
+          );
 
           setOptions([]);
         } finally {
@@ -2483,15 +2488,34 @@ function ZohoItemsPage() {
       return undefined;
     }
 
+    let active = true;
     const controller = new AbortController();
 
     fetchUtlOriginMetadataForRows(
       visibleRows,
       { signal: controller.signal }
     )
-      .then(setUtlOriginMetadata)
+      .then((metadata) => {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
+        setUtlOriginMetadata(
+          metadata &&
+          typeof metadata === "object" &&
+          !Array.isArray(metadata)
+            ? metadata
+            : {}
+        );
+      })
       .catch((error) => {
-        if (error?.name !== "AbortError") {
+        if (
+          active &&
+          !controller.signal.aborted &&
+          error?.name !== "AbortError" &&
+          error?.name !== "CanceledError" &&
+          error?.code !== "ERR_CANCELED"
+        ) {
           console.debug(
             "UTL origin metadata refresh skipped:",
             error
@@ -2499,7 +2523,10 @@ function ZohoItemsPage() {
         }
       });
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [
     authLoading,
     currentUser?.id,

@@ -143,15 +143,34 @@ function WarehousePage() {
 			return undefined;
 		}
 
+		let active = true;
 		const controller = new AbortController();
 
 		fetchUtlOriginMetadataForRows(
 			rows,
 			{ signal: controller.signal }
 		)
-			.then(setUtlOriginMetadata)
+			.then((metadata) => {
+				if (!active || controller.signal.aborted) {
+					return;
+				}
+
+				setUtlOriginMetadata(
+					metadata &&
+					typeof metadata === "object" &&
+					!Array.isArray(metadata)
+						? metadata
+						: {}
+				);
+			})
 			.catch((error) => {
-				if (error?.name !== "AbortError") {
+				if (
+					active &&
+					!controller.signal.aborted &&
+					error?.name !== "AbortError" &&
+					error?.name !== "CanceledError" &&
+					error?.code !== "ERR_CANCELED"
+				) {
 					console.debug(
 						"Warehouse UTL origin metadata refresh skipped:",
 						error
@@ -159,7 +178,10 @@ function WarehousePage() {
 				}
 			});
 
-		return () => controller.abort();
+		return () => {
+			active = false;
+			controller.abort();
+		};
 	}, [canOpenWarehouse, rows]);
 
 	const getWarehousePlantDisplayLabel = (row) =>

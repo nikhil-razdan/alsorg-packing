@@ -5829,6 +5829,7 @@ export default function DispatchedItemsPage() {
 			return undefined;
 		}
 
+		let active = true;
 		const controller = new AbortController();
 
 		fetchUtlOriginMetadataForRows(
@@ -5836,6 +5837,10 @@ export default function DispatchedItemsPage() {
 			{ signal: controller.signal }
 		)
 			.then((metadata) => {
+				if (!active || controller.signal.aborted) {
+					return;
+				}
+
 				setUtlOriginMetadata(
 					metadata &&
 					typeof metadata === "object" &&
@@ -5845,7 +5850,13 @@ export default function DispatchedItemsPage() {
 				);
 			})
 			.catch((error) => {
-				if (error?.name !== "AbortError") {
+				if (
+					active &&
+					!controller.signal.aborted &&
+					error?.name !== "AbortError" &&
+					error?.name !== "CanceledError" &&
+					error?.code !== "ERR_CANCELED"
+				) {
 					console.debug(
 						"Dispatch UTL origin metadata refresh skipped:",
 						error
@@ -5853,7 +5864,10 @@ export default function DispatchedItemsPage() {
 				}
 			});
 
-		return () => controller.abort();
+		return () => {
+			active = false;
+			controller.abort();
+		};
 	}, [
 		authLoading,
 		currentUser?.id,
@@ -5879,10 +5893,15 @@ export default function DispatchedItemsPage() {
 			return undefined;
 		}
 
+		let active = true;
 		const controller = new AbortController();
 
 		fetchSiteLifecycleMetadata(packetItemIds, { signal: controller.signal })
 			.then((metadataRows) => {
+				if (!active || controller.signal.aborted) {
+					return;
+				}
+
 				const next = {};
 				(
 					Array.isArray(metadataRows)
@@ -5895,12 +5914,21 @@ export default function DispatchedItemsPage() {
 				setSiteLifecycleMetadata(next);
 			})
 			.catch((error) => {
-				if (error?.name !== "AbortError") {
+				if (
+					active &&
+					!controller.signal.aborted &&
+					error?.name !== "AbortError" &&
+					error?.name !== "CanceledError" &&
+					error?.code !== "ERR_CANCELED"
+				) {
 					console.debug("Dispatch site lifecycle metadata refresh skipped:", error);
 				}
 			});
 
-		return () => controller.abort();
+		return () => {
+			active = false;
+			controller.abort();
+		};
 	}, [
 		authLoading,
 		currentUser?.id,
