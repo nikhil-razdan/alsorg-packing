@@ -1682,6 +1682,42 @@ const getInventoryPacketNumber = (
   return 0;
 };
 
+const getInventoryMasterKey = (row) => {
+  if (!row) {
+    return "";
+  }
+
+  const masterItemId =
+    String(
+      row?.masterItemId ||
+      row?.masterId ||
+      ""
+    ).trim();
+
+  if (masterItemId) {
+    return masterItemId;
+  }
+
+  return [
+    getInventoryRowItemType(row),
+    row?.itemName,
+    row?.pdNo,
+    row?.drawingNo,
+  ]
+    .filter(Boolean)
+    .join("|");
+};
+
+const getInventoryRowIdentity = (row) =>
+  String(
+    row?.packetItemId ||
+    row?.itemId ||
+    row?.id ||
+    row?.zohoItemId ||
+    row?.sku ||
+    ""
+  ).trim();
+
 const INVENTORY_TABLE_COLUMNS = [
   {
     key: "generate",
@@ -2543,6 +2579,30 @@ function ZohoItemsPage() {
       utlOriginMetadata,
       { fallbackUtl: isUtlPacking }
     );
+
+  const isInventoryUtlOriginRow = (row) => {
+    if (isUtlPacking) {
+      return true;
+    }
+
+    const directOrigin =
+      row?.utlOrigin === true ||
+      String(row?.utlOrigin || "")
+        .trim()
+        .toLowerCase() === "true";
+
+    if (directOrigin) {
+      return true;
+    }
+
+    const packetItemId =
+      getInventoryRowIdentity(row);
+
+    return Boolean(
+      packetItemId &&
+      utlOriginMetadata?.[packetItemId]?.utlOrigin
+    );
+  };
 
   const getInventorySkuDisplayValue = (row) =>
     getPackFlowSkuDisplayValue(row) || "—";
@@ -5440,6 +5500,55 @@ function ZohoItemsPage() {
     ]);
 
   /*
+   * WR-38 deliberately uses Product Code as SKU, so its row SKU does not
+   * contain /Pkt-N. The current Inventory DTO can therefore leave the
+   * browser without a packet number even though the backend still has the
+   * master/packet identity. UTL rows can hit the same UI condition.
+   *
+   * Keep one deterministic append-action host per visible master. This map
+   * is used only as a fallback when the exact packet number is unavailable;
+   * normal AL rows continue to use the existing exact last-packet rule.
+   */
+  const visibleNormalMasterAppendHosts =
+    useMemo(() => {
+      const hosts = new Map();
+
+      (
+        Array.isArray(paginatedRows)
+          ? paginatedRows
+          : []
+      ).forEach((row) => {
+        if (
+          !row ||
+          isHardwarePacketRow(row) ||
+          !String(
+            row?.masterItemId || ""
+          ).trim()
+        ) {
+          return;
+        }
+
+        const masterKey =
+          getInventoryMasterKey(row);
+
+        const rowIdentity =
+          getInventoryRowIdentity(row);
+
+        if (
+          masterKey &&
+          rowIdentity
+        ) {
+          hosts.set(
+            masterKey,
+            rowIdentity
+          );
+        }
+      });
+
+      return hosts;
+    }, [paginatedRows]);
+
+  /*
    * "Last packet" is a workflow-facing UI rule.  Preserve it exactly:
    * - normal server pages receive a backend-computed visible-master maximum;
    * - hardware uses its complete cached visible set;
@@ -6376,15 +6485,7 @@ function ZohoItemsPage() {
     row
   ) => {
     const key =
-      row?.masterItemId ||
-      [
-        getInventoryRowItemType(row),
-        row?.itemName,
-        row?.pdNo,
-        row?.drawingNo,
-      ]
-        .filter(Boolean)
-        .join("|");
+      getInventoryMasterKey(row);
 
     const current =
       getInventoryPacketNumber(
@@ -6400,6 +6501,83 @@ function ZohoItemsPage() {
       current > 0 &&
       max > 0 &&
       current === max
+    );
+  };
+
+  const isVisibleNormalMasterAppendHost = (
+    row
+  ) => {
+    const masterKey =
+      getInventoryMasterKey(row);
+
+    const rowIdentity =
+      getInventoryRowIdentity(row);
+
+    if (
+      !masterKey ||
+      !rowIdentity
+    ) {
+      return false;
+    }
+
+    return (
+      visibleNormalMasterAppendHosts
+        .get(masterKey) ===
+      rowIdentity
+    );
+  };
+
+  const canRenderNormalPacketAppendActions = (
+    row
+  ) => {
+    if (
+      !row ||
+      isHardwarePacketRow(row) ||
+      !canCreateNormalPackets ||
+      !String(
+        row?.masterItemId || ""
+      ).trim()
+    ) {
+      return false;
+    }
+
+    /*
+     * Preferred path: exact packet identity is available. Preserve the
+     * original rule and expose Add / Custom only on the true last packet.
+     */
+    if (isLastPacket(row)) {
+      return true;
+    }
+
+    /*
+     * If a concrete packet number exists and this is not the last packet,
+     * do not widen the existing UI rule.
+     */
+    if (
+      getInventoryPacketNumber(row) > 0
+    ) {
+      return false;
+    }
+
+    /*
+     * WR-38 Product Code is intentionally its SKU, so SKU cannot be used to
+     * recover Pkt-N. UTL-origin rows may also arrive without packetNumber in
+     * the Inventory DTO. In those two cases, use one visible row per master
+     * as the append action host rather than hiding a valid master-level
+     * operation entirely.
+     *
+     * This changes presentation only. Existing backend ownership, role,
+     * plant, packet-number and duplicate checks remain authoritative.
+     */
+    if (
+      !isWr38Row(row) &&
+      !isInventoryUtlOriginRow(row)
+    ) {
+      return false;
+    }
+
+    return isVisibleNormalMasterAppendHost(
+      row
     );
   };
 
@@ -9038,6 +9216,13 @@ function ZohoItemsPage() {
       )
       : false;
 
+  const itemDetailsCanAppendNormalPackets =
+    itemDetailsRow
+      ? canRenderNormalPacketAppendActions(
+        itemDetailsRow
+      )
+      : false;
+
   const itemDetailsHardwareLines =
     Array.isArray(
       itemDetailsRow?.hardwareLines
@@ -9666,6 +9851,11 @@ function ZohoItemsPage() {
                   const lastPacket =
                     isLastPacket(row);
 
+                  const canAppendNormalPackets =
+                    canRenderNormalPacketAppendActions(
+                      row
+                    );
+
                   const rowDeleteId =
                     row.itemId || row.id || row.packetItemId;
 
@@ -9795,8 +9985,7 @@ function ZohoItemsPage() {
                             </span>
                           )
                         ) : (
-                          lastPacket &&
-                          canCreateNormalPackets
+                          canAppendNormalPackets
                         ) ? (
                           <Box sx={actionCell}>
                             <Button
@@ -10853,8 +11042,7 @@ function ZohoItemsPage() {
                   </Button>
                 )
               ) : (
-                itemDetailsLastPacket &&
-                canCreateNormalPackets && (
+                itemDetailsCanAppendNormalPackets && (
                   <>
                     <Button
                       size="small"
