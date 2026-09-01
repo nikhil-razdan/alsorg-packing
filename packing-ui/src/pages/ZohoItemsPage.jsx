@@ -3181,6 +3181,58 @@ function ZohoItemsPage() {
   const wr38CreateMode =
     isWr38PlantCode(form?.plantCode);
 
+  /*
+   * WR-38 uses the compact QR-only workflow. These identity fields are
+   * intentionally optional for WR-38 creation only. When omitted, send a
+   * neutral display value so the existing backend's WR-38 Product Code/SKU
+   * contract and downstream QR generation remain valid without changing any
+   * security, ownership, plant-routing or lifecycle behaviour.
+   */
+  const getCreationIdentityErrors = () => {
+    if (wr38CreateMode) {
+      return {};
+    }
+
+    const identityErrors = {};
+
+    if (!String(form.itemName || "").trim()) {
+      identityErrors.itemName = "Required";
+    }
+
+    if (!String(form.pdNo || "").trim()) {
+      identityErrors.pdNo = "Required";
+    }
+
+    if (!String(form.drawingNo || "").trim()) {
+      identityErrors.drawingNo = "Required";
+    }
+
+    if (!String(form.clientName || "").trim()) {
+      identityErrors.clientName = "Required";
+    }
+
+    if (!String(form.clientAddress || "").trim()) {
+      identityErrors.clientAddress = "Required";
+    }
+
+    return identityErrors;
+  };
+
+  const getCreationRequestForm = () => {
+    if (!wr38CreateMode) {
+      return form;
+    }
+
+    return {
+      ...form,
+      itemName: String(form.itemName || "").trim(),
+      pdNo: String(form.pdNo || "").trim() || "-",
+      drawingNo: String(form.drawingNo || "").trim(),
+      clientName: String(form.clientName || "").trim(),
+      clientAddress: String(form.clientAddress || "").trim(),
+    };
+  };
+
   const formatPacketDimensionValue = (
     dimension,
     useMillimetres = wr38CreateMode
@@ -3197,27 +3249,27 @@ function ZohoItemsPage() {
   const itemInfoFields = [
     {
       key: "itemName",
-      label: wr38CreateMode ? "Product / Package Content" : "Item Name",
+      label: wr38CreateMode ? "Product / Package Content (Optional)" : "Item Name",
       placeholder: wr38CreateMode ? "Example: Aero Chair" : "Enter item/product name",
     },
     {
       key: "pdNo",
-      label: wr38CreateMode ? "Product Code" : "PD No.",
+      label: wr38CreateMode ? "Product Code (Optional)" : "PD No.",
       placeholder: wr38CreateMode ? "Example: WR/PRIMO2/5067" : "Enter production/design number",
     },
     {
       key: "drawingNo",
-      label: wr38CreateMode ? "Drawing / Variant Ref." : "Drawing No.",
+      label: wr38CreateMode ? "Drawing / Variant Ref. (Optional)" : "Drawing No.",
       placeholder: wr38CreateMode ? "Optional drawing or variant reference" : "Enter drawing/reference number",
     },
     {
       key: "clientName",
-      label: "Client Name",
+      label: wr38CreateMode ? "Client Name (Optional)" : "Client Name",
       placeholder: "Enter client/customer name",
     },
     {
       key: "clientAddress",
-      label: "Client Address",
+      label: wr38CreateMode ? "Client Address (Optional)" : "Client Address",
       placeholder: "Enter client delivery/address details",
     },
     {
@@ -6792,17 +6844,12 @@ function ZohoItemsPage() {
   };
 
   const validateStep1 = () => {
-    let err = {};
+    const err = {
+      ...getCreationIdentityErrors(),
+    };
 
-    if (!form.itemName) err.itemName = "Required";
-    if (!form.plantCode) err.plantCode = "Plant location required";
-
-    if (
-      isWr38PlantCode(form.plantCode) &&
-      !String(form.pdNo || "").trim()
-    ) {
-      err.pdNo =
-        "Product Code is required for WR-38";
+    if (!form.plantCode) {
+      err.plantCode = "Plant location required";
     }
 
     const packingDateError =
@@ -6815,8 +6862,9 @@ function ZohoItemsPage() {
         packingDateError;
     }
 
-    if (!form.numberOfPackets || form.numberOfPackets <= 0)
+    if (!form.numberOfPackets || form.numberOfPackets <= 0) {
       err.numberOfPackets = "Invalid";
+    }
 
     setErrors(err);
     return Object.keys(err).length === 0;
@@ -11573,7 +11621,7 @@ function ZohoItemsPage() {
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
-                        ...form,
+                        ...getCreationRequestForm(),
                         descriptions,
                         weights,
                         dimensionsList: dimensionsList.map((d) =>
@@ -11726,17 +11774,17 @@ function ZohoItemsPage() {
                         return;
                       }
 
-                      if (
-                        isWr38PlantCode(form.plantCode) &&
-                        !String(form.pdNo || "").trim()
-                      ) {
+                      const identityErrors =
+                        getCreationIdentityErrors();
+
+                      if (Object.keys(identityErrors).length > 0) {
                         setErrors((previous) => ({
                           ...previous,
-                          pdNo: "Product Code is required for WR-38",
+                          ...identityErrors,
                         }));
                         showUiAlert(
                           "error",
-                          "Product Code is required for WR-38"
+                          "Please complete the required item information"
                         );
                         return;
                       }
@@ -11767,7 +11815,7 @@ function ZohoItemsPage() {
                           "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
-                          ...form,
+                          ...getCreationRequestForm(),
                           customPacketNumber: Number(customPacketNo),
                           descriptions,
                           weights,
