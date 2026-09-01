@@ -318,7 +318,6 @@ const formatDateTime = (value) => {
     });
 };
 
-
 const getCreatedBy = (row) =>
     row?.createdBy ||
     row?.generatedBy ||
@@ -426,6 +425,22 @@ const getTargetLabel = (target) => {
         target.targetId
     );
 };
+
+function MetadataCell({
+    label,
+    children,
+}) {
+    return (
+        <div style={metadataCellStyles}>
+            <span style={metadataLabelStyles}>
+                {label}
+            </span>
+            <strong style={metadataValueStyles}>
+                {children ?? "-"}
+            </strong>
+        </div>
+    );
+}
 
 function ResultPagination({
     page,
@@ -753,66 +768,49 @@ function SearchResultCard({
             </div>
 
             <div style={resultMetaGrid}>
-                <div>
-                    <span>PD No.</span>
-                    <strong>
-                        {target.pdNo || "-"}
-                    </strong>
-                </div>
+                <MetadataCell label="PD No.">
+                    {target.pdNo || "-"}
+                </MetadataCell>
 
-                <div>
-                    <span>Drawing</span>
-                    <strong>
-                        {target.drawingNo || "-"}
-                    </strong>
-                </div>
+                <MetadataCell label="Drawing">
+                    {target.drawingNo || "-"}
+                </MetadataCell>
 
-                <div>
-                    <span>
-                        {isMaster
+                <MetadataCell
+                    label={
+                        isMaster
                             ? "Total Packets"
                             : isWarehouse
                                 ? "Warehouse Record"
-                                : "Packet No."}
-                    </span>
-
-                    <strong>
-                        {isMaster
-                            ? Number(
-                                target.totalPackets || 0
-                            )
-                            : isWarehouse
-                                ? target.location ||
-                                target.plantCode ||
-                                "Warehouse"
-                                : target.packetNumber || "-"}
-                    </strong>
-                </div>
+                                : "Packet No."
+                    }
+                >
+                    {isMaster
+                        ? Number(
+                            target.totalPackets || 0
+                        )
+                        : isWarehouse
+                            ? target.location ||
+                            target.plantCode ||
+                            "Warehouse"
+                            : target.packetNumber || "-"}
+                </MetadataCell>
 
                 {!isMaster && (
                     <>
-                        <div>
-                            <span>SKU</span>
-                            <strong>
-                                {target.sku || "-"}
-                            </strong>
-                        </div>
+                        <MetadataCell label="SKU">
+                            {target.sku || "-"}
+                        </MetadataCell>
 
-                        <div>
-                            <span>Sticker</span>
-                            <strong>
-                                {target.stickerNumber || "-"}
-                            </strong>
-                        </div>
+                        <MetadataCell label="Sticker">
+                            {target.stickerNumber || "-"}
+                        </MetadataCell>
 
-                        <div>
-                            <span>Challan</span>
-                            <strong>
-                                {target.challanNumber ||
-                                    target.chalaanNumber ||
-                                    "-"}
-                            </strong>
-                        </div>
+                        <MetadataCell label="Challan">
+                            {target.challanNumber ||
+                                target.chalaanNumber ||
+                                "-"}
+                        </MetadataCell>
                     </>
                 )}
             </div>
@@ -873,7 +871,6 @@ function SearchResultCard({
         </button>
     );
 }
-
 
 function LifecycleMetaPanel({
     row,
@@ -1008,8 +1005,10 @@ function DeletionHistory({
             {!loading &&
                 !error &&
                 page.content.length > 0 && (
-                    <div style={historyList}
-                        className="admin-center-scroll">
+                    <div
+                        style={historyList}
+                        className="admin-center-scroll"
+                    >
                         {page.content.map(
                             (row) => {
                                 const affectedRows =
@@ -1034,11 +1033,7 @@ function DeletionHistory({
                                         key={row.id}
                                         style={historyCard}
                                     >
-                                        <div
-                                            style={
-                                                historyCardHeader
-                                            }
-                                        >
+                                        <div style={historyCardHeader}>
                                             <div>
                                                 <div
                                                     style={resultTypeBadge(
@@ -1057,58 +1052,31 @@ function DeletionHistory({
                                                     )}
                                                 </div>
 
-                                                <div
-                                                    style={
-                                                        historyTitle
-                                                    }
-                                                >
+                                                <div style={historyTitle}>
                                                     {row.displayName ||
                                                         row.targetId}
                                                 </div>
                                             </div>
 
-                                            <div
-                                                style={
-                                                    historyDeletedCount
-                                                }
-                                            >
+                                            <div style={historyDeletedCount}>
                                                 {deletedCount} rows
                                             </div>
                                         </div>
 
-                                        <div
-                                            style={
-                                                historyDetails
-                                            }
-                                        >
-                                            <div>
-                                                <span>
-                                                    Deleted By
-                                                </span>
-                                                <strong>
-                                                    {row.deletedBy ||
-                                                        "-"}
-                                                </strong>
-                                            </div>
+                                        <div style={historyDetails}>
+                                            <MetadataCell label="Deleted By">
+                                                {row.deletedBy || "-"}
+                                            </MetadataCell>
 
-                                            <div>
-                                                <span>
-                                                    Deleted At
-                                                </span>
-                                                <strong>
-                                                    {formatDateTime(
-                                                        row.deletedAt
-                                                    )}
-                                                </strong>
-                                            </div>
+                                            <MetadataCell label="Deleted At">
+                                                {formatDateTime(
+                                                    row.deletedAt
+                                                )}
+                                            </MetadataCell>
 
-                                            <div>
-                                                <span>Reason</span>
-                                                <strong>
-                                                    {row.reason ||
-                                                        "-"}
-                                                </strong>
-                                            </div>
+                                            <MetadataCell label="Reason">
+                                                {row.reason || "-"}
+                                            </MetadataCell>
                                         </div>
 
                                         <div style={historyTargetId}>
@@ -1518,24 +1486,18 @@ function AdminLifecycleRequestQueue({
                                 </div>
 
                                 <div style={requestQueueInfoGrid}>
-                                    <div>
-                                        <span>Packet</span>
-                                        <strong>{row.packetNumber || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>SKU</span>
-                                        <strong>{row.sku || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>PD / DWG</span>
-                                        <strong>
-                                            {row.pdNo || "-"} / {row.drawingNo || "-"}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <span>Plant</span>
-                                        <strong>{row.plantCode || "-"}</strong>
-                                    </div>
+                                    <MetadataCell label="Packet">
+                                        {row.packetNumber || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="SKU">
+                                        {row.sku || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="PD / DWG">
+                                        {row.pdNo || "-"} / {row.drawingNo || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="Plant">
+                                        {row.plantCode || "-"}
+                                    </MetadataCell>
                                 </div>
 
                                 <div style={requestReasonBox}>
@@ -2020,32 +1982,24 @@ function AdminDeletionRequestQueue({
                                 </div>
 
                                 <div style={requestQueueInfoGrid}>
-                                    <div>
-                                        <span>Packet</span>
-                                        <strong>{row.packetNumber || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>SKU</span>
-                                        <strong>{row.sku || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>PD / DWG</span>
-                                        <strong>
-                                            {row.pdNo || "-"} / {row.drawingNo || "-"}
-                                        </strong>
-                                    </div>
-                                    <div>
-                                        <span>Plant</span>
-                                        <strong>{row.plantCode || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>Requested Status</span>
-                                        <strong>{row.requestedStatus || "-"}</strong>
-                                    </div>
-                                    <div>
-                                        <span>Requested Location</span>
-                                        <strong>{row.requestedLocation || "-"}</strong>
-                                    </div>
+                                    <MetadataCell label="Packet">
+                                        {row.packetNumber || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="SKU">
+                                        {row.sku || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="PD / DWG">
+                                        {row.pdNo || "-"} / {row.drawingNo || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="Plant">
+                                        {row.plantCode || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="Requested Status">
+                                        {row.requestedStatus || "-"}
+                                    </MetadataCell>
+                                    <MetadataCell label="Requested Location">
+                                        {row.requestedLocation || "-"}
+                                    </MetadataCell>
                                 </div>
 
                                 <div style={requestReasonBox}>
@@ -2423,8 +2377,10 @@ function AdminPacketRollbackPanel({
 
                 {!searching &&
                     page.content.length > 0 && (
-                        <div style={searchResults}
-                            className="admin-center-scroll">
+                        <div
+                            style={searchResults}
+                            className="admin-center-scroll"
+                        >
                             {page.content.map(
                                 (target) => (
                                     <SearchResultCard
@@ -2490,19 +2446,12 @@ function AdminPacketRollbackPanel({
                         </div>
 
                         <div style={successMeta}>
-                            <div>
-                                <span>Changed By</span>
-                                <strong>
-                                    {result.changedBy}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Audit ID</span>
-                                <strong>
-                                    {result.auditId}
-                                </strong>
-                            </div>
+                            <MetadataCell label="Changed By">
+                                {result.changedBy || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Audit ID">
+                                {result.auditId || "-"}
+                            </MetadataCell>
                         </div>
                     </div>
                 )}
@@ -2552,8 +2501,10 @@ function AdminPacketRollbackPanel({
                 )}
 
                 {preview && (
-                    <div style={previewContent}
-                        className="admin-center-scroll">
+                    <div
+                        style={previewContent}
+                        className="admin-center-scroll"
+                    >
                         <div style={previewHeader}>
                             <div>
                                 <div
@@ -2616,69 +2567,32 @@ function AdminPacketRollbackPanel({
                         </div>
 
                         <div style={previewMetaGrid}>
-                            <div>
-                                <span>Packet</span>
-                                <strong>
-                                    {preview.packetNumber ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>PD No.</span>
-                                <strong>
-                                    {preview.pdNo ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Status</span>
-                                <strong>
-                                    {preview.persistedDispatchStatus ||
-                                        preview.persistedPacketStatus}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Current Location</span>
-                                <strong>
-                                    {preview.currentLocation ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Previous Location</span>
-                                <strong>
-                                    {preview.previousLocation ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Sticker</span>
-                                <strong>
-                                    {preview.stickerNumber ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Gate Pass</span>
-                                <strong>
-                                    {preview.gatePassNumber ||
-                                        "-"}
-                                </strong>
-                            </div>
-
-                            <div>
-                                <span>Challan</span>
-                                <strong>
-                                    {preview.challanNumber ||
-                                        "-"}
-                                </strong>
-                            </div>
+                            <MetadataCell label="Packet">
+                                {preview.packetNumber || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="PD No.">
+                                {preview.pdNo || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Status">
+                                {preview.persistedDispatchStatus ||
+                                    preview.persistedPacketStatus ||
+                                    "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Current Location">
+                                {preview.currentLocation || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Previous Location">
+                                {preview.previousLocation || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Sticker">
+                                {preview.stickerNumber || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Gate Pass">
+                                {preview.gatePassNumber || "-"}
+                            </MetadataCell>
+                            <MetadataCell label="Challan">
+                                {preview.challanNumber || "-"}
+                            </MetadataCell>
                         </div>
 
                         <LifecycleMetaPanel
@@ -2844,19 +2758,17 @@ function AdminRollbackHistory({
             {!loading &&
                 !error &&
                 page.content.length > 0 && (
-                    <div style={historyList}
-                        className="admin-center-scroll">
+                    <div
+                        style={historyList}
+                        className="admin-center-scroll"
+                    >
                         {page.content.map(
                             (row) => (
                                 <div
                                     key={row.id}
                                     style={historyCard}
                                 >
-                                    <div
-                                        style={
-                                            historyCardHeader
-                                        }
-                                    >
+                                    <div style={historyCardHeader}>
                                         <div>
                                             <div
                                                 style={resultTypeBadge(
@@ -2866,21 +2778,13 @@ function AdminRollbackHistory({
                                                 State Correction
                                             </div>
 
-                                            <div
-                                                style={
-                                                    historyTitle
-                                                }
-                                            >
+                                            <div style={historyTitle}>
                                                 {row.displayName ||
                                                     row.packetItemId}
                                             </div>
                                         </div>
 
-                                        <div
-                                            style={
-                                                historyDeletedCount
-                                            }
-                                        >
+                                        <div style={historyDeletedCount}>
                                             {formatLabel(
                                                 row.fromState
                                             )}
@@ -2891,51 +2795,23 @@ function AdminRollbackHistory({
                                         </div>
                                     </div>
 
-                                    <div
-                                        style={
-                                            historyDetails
-                                        }
-                                    >
-                                        <div>
-                                            <span>
-                                                Changed By
-                                            </span>
+                                    <div style={historyDetails}>
+                                        <MetadataCell label="Changed By">
+                                            {row.changedBy || "-"}
+                                        </MetadataCell>
 
-                                            <strong>
-                                                {row.changedBy ||
-                                                    "-"}
-                                            </strong>
-                                        </div>
+                                        <MetadataCell label="Changed At">
+                                            {formatDateTime(
+                                                row.changedAt
+                                            )}
+                                        </MetadataCell>
 
-                                        <div>
-                                            <span>
-                                                Changed At
-                                            </span>
-
-                                            <strong>
-                                                {formatDateTime(
-                                                    row.changedAt
-                                                )}
-                                            </strong>
-                                        </div>
-
-                                        <div>
-                                            <span>
-                                                Reason
-                                            </span>
-
-                                            <strong>
-                                                {row.reason ||
-                                                    "-"}
-                                            </strong>
-                                        </div>
+                                        <MetadataCell label="Reason">
+                                            {row.reason || "-"}
+                                        </MetadataCell>
                                     </div>
 
-                                    <div
-                                        style={
-                                            historyTargetId
-                                        }
-                                    >
+                                    <div style={historyTargetId}>
                                         Packet Item ID:{" "}
                                         {row.packetItemId}
                                     </div>
@@ -2960,7 +2836,6 @@ function AdminCenter({
     onChanged,
     onDeleted,
 }) {
-
     const notifyChanged =
         onChanged || onDeleted;
 
@@ -3138,11 +3013,6 @@ function AdminCenter({
             detail
         );
 
-        /*
-         * onDeleted remains supported for old parent code.
-         * onChanged is the preferred callback because rollback
-         * is not a deletion.
-         */
         const callback =
             onChanged ||
             onDeleted;
@@ -3369,6 +3239,7 @@ function AdminCenter({
     }, [
         open,
         workspaceTab,
+        loadHistory,
     ]);
 
     const handleTargetTypeChange = (
@@ -3915,6 +3786,7 @@ function AdminCenter({
                         the application.
                     </div>
                 )}
+
                 <div style={workspaceTabs}>
                     <button
                         type="button"
@@ -3989,7 +3861,10 @@ function AdminCenter({
                     </button>
                 </div>
 
-                <div style={modalBody} className="admin-center-scroll">
+                <div
+                    style={modalBody}
+                    className="admin-center-scroll"
+                >
                     {workspaceTab === "requests" && (
                         <AdminLifecycleRequestQueue
                             onChanged={notifyAdminDataChanged}
@@ -4261,11 +4136,7 @@ function AdminCenter({
                                         !searchError &&
                                         searchPage.content
                                             .length === 0 && (
-                                            <div
-                                                style={
-                                                    emptyState
-                                                }
-                                            >
+                                            <div style={emptyState}>
                                                 Search for a record
                                                 to begin.
                                             </div>
@@ -4274,18 +4145,12 @@ function AdminCenter({
                                     {!searchLoading &&
                                         searchPage.content
                                             .length > 0 && (
-                                            <div
-                                                style={
-                                                    searchResults
-                                                }
-                                            >
+                                            <div style={searchResults}>
                                                 {searchPage.content.map(
                                                     (target) => (
                                                         <SearchResultCard
                                                             key={`${resolveTargetType(target)}-${target.id}`}
-                                                            target={
-                                                                target
-                                                            }
+                                                            target={target}
                                                             selected={
                                                                 targetType ===
                                                                     "WAREHOUSE_ITEM" &&
@@ -4325,48 +4190,24 @@ function AdminCenter({
                                 <div style={previewColumn}>
                                     {deleteResult && (
                                         <div style={successBox}>
-                                            <div
-                                                style={
-                                                    successTitle
-                                                }
-                                            >
+                                            <div style={successTitle}>
                                                 ✓ Permanent deletion
                                                 completed
                                             </div>
 
-                                            <div
-                                                style={
-                                                    successMessage
-                                                }
-                                            >
+                                            <div style={successMessage}>
                                                 {deleteResult.message ||
                                                     "The selected record was deleted."}
                                             </div>
 
-                                            <div
-                                                style={
-                                                    successMeta
-                                                }
-                                            >
-                                                <div>
-                                                    <span>
-                                                        Deleted By
-                                                    </span>
-                                                    <strong>
-                                                        {deleteResult.deletedBy ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
+                                            <div style={successMeta}>
+                                                <MetadataCell label="Deleted By">
+                                                    {deleteResult.deletedBy || "-"}
+                                                </MetadataCell>
 
-                                                <div>
-                                                    <span>
-                                                        Audit ID
-                                                    </span>
-                                                    <strong>
-                                                        {deleteResult.deletionAuditId ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
+                                                <MetadataCell label="Audit ID">
+                                                    {deleteResult.deletionAuditId || "-"}
+                                                </MetadataCell>
                                             </div>
 
                                             <ImpactGrid
@@ -4380,24 +4221,12 @@ function AdminCenter({
 
                                     {!selectedTarget &&
                                         !deleteResult && (
-                                            <div
-                                                style={
-                                                    previewPlaceholder
-                                                }
-                                            >
-                                                <div
-                                                    style={
-                                                        previewPlaceholderIcon
-                                                    }
-                                                >
+                                            <div style={previewPlaceholder}>
+                                                <div style={previewPlaceholderIcon}>
                                                     ⚠
                                                 </div>
 
-                                                <div
-                                                    style={
-                                                        previewPlaceholderTitle
-                                                    }
-                                                >
+                                                <div style={previewPlaceholderTitle}>
                                                     {targetType ===
                                                         "WAREHOUSE_ITEM" &&
                                                     warehouseBulkMode
@@ -4405,11 +4234,7 @@ function AdminCenter({
                                                         : "Select a record"}
                                                 </div>
 
-                                                <div
-                                                    style={
-                                                        previewPlaceholderText
-                                                    }
-                                                >
+                                                <div style={previewPlaceholderText}>
                                                     {targetType ===
                                                         "WAREHOUSE_ITEM" &&
                                                     warehouseBulkMode
@@ -4433,13 +4258,11 @@ function AdminCenter({
                                     )}
 
                                     {preview && (
-                                        <div style={previewContent}
-                                            className="admin-center-scroll">
-                                            <div
-                                                style={
-                                                    previewHeader
-                                                }
-                                            >
+                                        <div
+                                            style={previewContent}
+                                            className="admin-center-scroll"
+                                        >
+                                            <div style={previewHeader}>
                                                 <div>
                                                     <div
                                                         style={resultTypeBadge(
@@ -4466,14 +4289,11 @@ function AdminCenter({
                                                         )}
                                                     </div>
 
-                                                    <div
-                                                        style={
-                                                            previewTitle
-                                                        }
-                                                    >
+                                                    <div style={previewTitle}>
                                                         {preview.displayName ||
                                                             preview.targetId}
                                                     </div>
+
                                                     {[
                                                         "PACKET_ITEM",
                                                         "WAREHOUSE_ITEM",
@@ -4483,99 +4303,51 @@ function AdminCenter({
                                                             targetType
                                                         )
                                                     ) && (
-                                                            <div style={previewDescription}>
-                                                                <div style={previewDescriptionLabel}>
-                                                                    {resolveTargetType(
-                                                                        preview,
-                                                                        targetType
-                                                                    ) === "WAREHOUSE_ITEM"
-                                                                        ? "Warehouse Item Description"
-                                                                        : "Packet Description"}
-                                                                </div>
-
-                                                                <div style={previewDescriptionText}>
-                                                                    {preview.description ||
-                                                                        preview.itemDescription ||
-                                                                        "No description available for this record."}
-                                                                </div>
+                                                        <div style={previewDescription}>
+                                                            <div style={previewDescriptionLabel}>
+                                                                {resolveTargetType(
+                                                                    preview,
+                                                                    targetType
+                                                                ) === "WAREHOUSE_ITEM"
+                                                                    ? "Warehouse Item Description"
+                                                                    : "Packet Description"}
                                                             </div>
-                                                        )}
+
+                                                            <div style={previewDescriptionText}>
+                                                                {preview.description ||
+                                                                    preview.itemDescription ||
+                                                                    "No description available for this record."}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
-                                                <div
-                                                    style={
-                                                        permanentBadge
-                                                    }
-                                                >
+                                                <div style={permanentBadge}>
                                                     Permanent
                                                 </div>
                                             </div>
 
-                                            <div
-                                                style={
-                                                    previewMetaGrid
-                                                }
-                                            >
-                                                <div>
-                                                    <span>
-                                                        PD No.
-                                                    </span>
-                                                    <strong>
-                                                        {preview.pdNo ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
-
-                                                <div>
-                                                    <span>
-                                                        Drawing
-                                                    </span>
-                                                    <strong>
-                                                        {preview.drawingNo ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
-
-                                                <div>
-                                                    <span>
-                                                        Packet
-                                                    </span>
-                                                    <strong>
-                                                        {preview.packetNumber ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
-
-                                                <div>
-                                                    <span>
-                                                        Status
-                                                    </span>
-                                                    <strong>
-                                                        {preview.currentStatus ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
-
-                                                <div>
-                                                    <span>
-                                                        Location
-                                                    </span>
-                                                    <strong>
-                                                        {preview.currentLocation ||
-                                                            "-"}
-                                                    </strong>
-                                                </div>
-
-                                                <div>
-                                                    <span>
-                                                        Deletes Master
-                                                    </span>
-                                                    <strong>
-                                                        {preview.deletesMasterItem
-                                                            ? "Yes"
-                                                            : "No"}
-                                                    </strong>
-                                                </div>
+                                            <div style={previewMetaGrid}>
+                                                <MetadataCell label="PD No.">
+                                                    {preview.pdNo || "-"}
+                                                </MetadataCell>
+                                                <MetadataCell label="Drawing">
+                                                    {preview.drawingNo || "-"}
+                                                </MetadataCell>
+                                                <MetadataCell label="Packet">
+                                                    {preview.packetNumber || "-"}
+                                                </MetadataCell>
+                                                <MetadataCell label="Status">
+                                                    {preview.currentStatus || "-"}
+                                                </MetadataCell>
+                                                <MetadataCell label="Location">
+                                                    {preview.currentLocation || "-"}
+                                                </MetadataCell>
+                                                <MetadataCell label="Deletes Master">
+                                                    {preview.deletesMasterItem
+                                                        ? "Yes"
+                                                        : "No"}
+                                                </MetadataCell>
                                             </div>
 
                                             {resolveTargetType(
@@ -4589,21 +4361,13 @@ function AdminCenter({
                                             )}
 
                                             {preview.warning && (
-                                                <div
-                                                    style={
-                                                        impactWarning
-                                                    }
-                                                >
+                                                <div style={impactWarning}>
                                                     {preview.warning}
                                                 </div>
                                             )}
 
                                             {pendingLifecycleRequests > 0 && (
-                                                <div
-                                                    style={
-                                                        impactWarning
-                                                    }
-                                                >
+                                                <div style={impactWarning}>
                                                     Permanent deletion is blocked while {pendingLifecycleRequests}{" "}
                                                     pending lifecycle request{pendingLifecycleRequests === 1 ? " is" : "s are"}{" "}
                                                     unresolved. Approve or reject {pendingLifecycleRequests === 1 ? "it" : "them"}{" "}
@@ -4612,11 +4376,7 @@ function AdminCenter({
                                             )}
 
                                             {pendingDeletionRequests > 0 && (
-                                                <div
-                                                    style={
-                                                        impactWarning
-                                                    }
-                                                >
+                                                <div style={impactWarning}>
                                                     Direct permanent deletion is blocked while {pendingDeletionRequests}{" "}
                                                     user deletion request{pendingDeletionRequests === 1 ? " is" : "s are"}{" "}
                                                     pending. Review {pendingDeletionRequests === 1 ? "it" : "them"}{" "}
@@ -4630,24 +4390,14 @@ function AdminCenter({
                                                 }
                                             />
 
-                                            <div
-                                                style={
-                                                    confirmationSection
-                                                }
-                                            >
-                                                <label
-                                                    style={
-                                                        fieldLabel
-                                                    }
-                                                >
+                                            <div style={confirmationSection}>
+                                                <label style={fieldLabel}>
                                                     Deletion Reason
                                                 </label>
 
                                                 <textarea
                                                     value={reason}
-                                                    onChange={(
-                                                        event
-                                                    ) =>
+                                                    onChange={(event) =>
                                                         setReason(
                                                             event.target
                                                                 .value
@@ -4661,29 +4411,17 @@ function AdminCenter({
                                                     style={reasonInput}
                                                 />
 
-                                                <div
-                                                    style={
-                                                        fieldHelper
-                                                    }
-                                                >
+                                                <div style={fieldHelper}>
                                                     Minimum 5 characters
                                                     • {reason.length}/1000
                                                 </div>
 
-                                                <label
-                                                    style={
-                                                        fieldLabel
-                                                    }
-                                                >
+                                                <label style={fieldLabel}>
                                                     Type the exact
                                                     confirmation
                                                 </label>
 
-                                                <div
-                                                    style={
-                                                        requiredConfirmationBox
-                                                    }
-                                                >
+                                                <div style={requiredConfirmationBox}>
                                                     {requiredConfirmation}
                                                 </div>
 
@@ -4691,9 +4429,7 @@ function AdminCenter({
                                                     value={
                                                         confirmation
                                                     }
-                                                    onChange={(
-                                                        event
-                                                    ) =>
+                                                    onChange={(event) =>
                                                         setConfirmation(
                                                             event.target
                                                                 .value
@@ -4715,11 +4451,7 @@ function AdminCenter({
                                                 {confirmation.length >
                                                     0 &&
                                                     !confirmationValid && (
-                                                        <div
-                                                            style={
-                                                                validationError
-                                                            }
-                                                        >
+                                                        <div style={validationError}>
                                                             Confirmation
                                                             text does not
                                                             match exactly.
@@ -4727,11 +4459,7 @@ function AdminCenter({
                                                     )}
 
                                                 {deleteError && (
-                                                    <div
-                                                        style={
-                                                            errorBox
-                                                        }
-                                                    >
+                                                    <div style={errorBox}>
                                                         {deleteError}
                                                     </div>
                                                 )}
@@ -5015,8 +4743,8 @@ const requestQueueStateBadge = {
 const requestQueueInfoGrid = {
     marginTop: 11,
     display: "grid",
-    gridTemplateColumns: "repeat(4,minmax(0,1fr))",
-    gap: 7,
+    gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))",
+    gap: 8,
 };
 
 const requestReasonBox = {
@@ -5047,11 +4775,8 @@ const overlay = {
     inset: 0,
     zIndex: 12000,
     padding: 20,
-
     background: "rgba(var(--pf-surface-deep-rgb),.78)",
-
     backdropFilter: "blur(14px)",
-
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -5062,35 +4787,24 @@ const modal = {
     width: "min(1280px, 100%)",
     height: "min(850px, calc(100vh - 40px))",
     minHeight: 0,
-
     display: "flex",
     flexDirection: "column",
-
     borderRadius: 28,
-
     background:
         "radial-gradient(circle at top right, rgba(239,68,68,.10), transparent 28%), linear-gradient(180deg, rgba(var(--pf-surface-rgb),.99), rgba(var(--pf-surface-rgb),.98))",
-
-    border:
-        "1px solid rgba(248,113,113,.20)",
-
-    boxShadow:
-        "0 30px 86px rgba(var(--pf-shadow-rgb),.26)",
-
+    border: "1px solid rgba(248,113,113,.20)",
+    boxShadow: "0 30px 86px rgba(var(--pf-shadow-rgb),.26)",
     color: "var(--pf-text-strong)",
     overflow: "hidden",
 };
 
 const modalHeader = {
     padding: "20px 22px 16px",
-
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 16,
-
-    borderBottom:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
+    borderBottom: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const headerIdentity = {
@@ -5103,17 +4817,11 @@ const dangerIcon = {
     width: 46,
     height: 46,
     borderRadius: 16,
-
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-
-    background:
-        "rgba(239,68,68,.14)",
-
-    border:
-        "1px solid rgba(248,113,113,.28)",
-
+    background: "rgba(239,68,68,.14)",
+    border: "1px solid rgba(248,113,113,.28)",
     fontSize: 21,
 };
 
@@ -5134,19 +4842,13 @@ const closeButton = (disabled) => ({
     width: 38,
     height: 38,
     borderRadius: 999,
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.10)",
-
-    background:
-        "rgba(var(--pf-fg-rgb),.055)",
-
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
+    background: "rgba(var(--pf-fg-rgb),.055)",
     color: "var(--pf-text-strong)",
     fontSize: 24,
     cursor: disabled
         ? "not-allowed"
         : "pointer",
-
     opacity: disabled ? 0.5 : 1,
 });
 
@@ -5154,13 +4856,8 @@ const permanentWarning = {
     margin: "14px 22px 0",
     padding: "11px 14px",
     borderRadius: 14,
-
-    background:
-        "rgba(239,68,68,.10)",
-
-    border:
-        "1px solid rgba(248,113,113,.20)",
-
+    background: "rgba(239,68,68,.10)",
+    border: "1px solid rgba(248,113,113,.20)",
     color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 12,
     fontWeight: 700,
@@ -5171,18 +4868,14 @@ const workspaceTabs = {
     margin: "14px 22px 0",
     padding: 4,
     width: "fit-content",
-
+    maxWidth: "calc(100% - 44px)",
     display: "flex",
     alignItems: "center",
     gap: 4,
-
+    flexWrap: "wrap",
     borderRadius: 14,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.045)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
+    background: "rgba(var(--pf-fg-rgb),.045)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const workspaceTabButton = (active) => ({
@@ -5190,19 +4883,15 @@ const workspaceTabButton = (active) => ({
     padding: "0 15px",
     borderRadius: 10,
     border: "none",
-
     background: active
         ? "linear-gradient(135deg,#b91c1c,#ef4444)"
         : "transparent",
-
     color: active
         ? "#fff"
         : "rgba(var(--pf-fg-rgb),.62)",
-
     fontSize: 12,
     fontWeight: 900,
     cursor: "pointer",
-
     boxShadow: active
         ? "0 10px 24px rgba(239,68,68,.22)"
         : "none",
@@ -5236,46 +4925,33 @@ const previewColumn = {
     minWidth: 0,
     padding: 18,
     borderRadius: 22,
-
     background:
         "linear-gradient(180deg, rgba(var(--pf-fg-rgb),.045), rgba(var(--pf-fg-rgb),.018))",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const typeTabs = {
     padding: 4,
-
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
     gap: 4,
-
     borderRadius: 14,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.04)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
+    background: "rgba(var(--pf-fg-rgb),.04)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const typeTabButton = (active) => ({
     minHeight: 38,
     borderRadius: 10,
-
     border: active
         ? "1px solid rgba(96,165,250,.25)"
         : "1px solid transparent",
-
     background: active
         ? "rgba(59,130,246,.16)"
         : "transparent",
-
     color: active
         ? "color-mix(in srgb,#2563eb 78%,var(--pf-text-strong))"
         : "rgba(var(--pf-fg-rgb),.58)",
-
     fontSize: 12,
     fontWeight: 900,
     cursor: "pointer",
@@ -5299,14 +4975,9 @@ const searchInput = {
     minWidth: 0,
     height: 44,
     padding: "0 13px",
-
     borderRadius: 13,
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.10)",
-
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
     background: "var(--pf-input)",
-
     color: "var(--pf-text-strong)",
     outline: "none",
     fontFamily: "inherit",
@@ -5318,18 +4989,14 @@ const searchButton = (disabled) => ({
     padding: "0 17px",
     borderRadius: 13,
     border: "none",
-
     background: disabled
         ? "rgba(148,163,184,.16)"
         : "linear-gradient(135deg,#2563eb,#3b82f6)",
-
     color: disabled
         ? "rgba(var(--pf-fg-rgb),.42)"
         : "#fff",
-
     fontWeight: 900,
     fontFamily: "inherit",
-
     cursor: disabled
         ? "not-allowed"
         : "pointer",
@@ -5338,11 +5005,9 @@ const searchButton = (disabled) => ({
 const searchSummary = {
     marginTop: 17,
     marginBottom: 9,
-
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-
     color: "rgba(var(--pf-fg-rgb),.60)",
     fontSize: 11,
     fontWeight: 900,
@@ -5369,23 +5034,18 @@ const searchResultCard = (
     width: "100%",
     padding: 14,
     borderRadius: 17,
-
     border: selected
         ? "1px solid rgba(96,165,250,.52)"
         : "1px solid rgba(var(--pf-fg-rgb),.065)",
-
     background: selected
         ? "linear-gradient(135deg, rgba(37,99,235,.16), rgba(var(--pf-fg-rgb),.035))"
         : "rgba(var(--pf-fg-rgb),.032)",
-
     color: "var(--pf-text-strong)",
     textAlign: "left",
     fontFamily: "inherit",
-
     cursor: disabled
         ? "not-allowed"
         : "pointer",
-
     opacity: disabled ? 0.65 : 1,
 });
 
@@ -5398,27 +5058,20 @@ const searchResultTop = {
 
 const resultDescriptionLabel = {
     marginBottom: 5,
-
     color: "rgba(var(--pf-fg-rgb),.42)",
-
     fontSize: 9,
     fontWeight: 900,
-
     textTransform: "uppercase",
     letterSpacing: ".06em",
 };
 
 const resultDescriptionText = {
     color: "rgba(var(--pf-fg-rgb),.72)",
-
     fontSize: 11.5,
     fontWeight: 650,
-
     lineHeight: 1.5,
-
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
-
     display: "-webkit-box",
     WebkitLineClamp: 3,
     WebkitBoxOrient: "vertical",
@@ -5430,13 +5083,10 @@ const resultTypeBadge = (accent) => ({
     minHeight: 22,
     padding: "0 8px",
     borderRadius: 999,
-
     alignItems: "center",
-
     background: `${accent}1F`,
     border: `1px solid ${accent}3D`,
     color: accent,
-
     fontSize: 9.5,
     fontWeight: 950,
     textTransform: "uppercase",
@@ -5448,35 +5098,30 @@ const resultTitle = {
     fontSize: 14,
     fontWeight: 900,
     color: "var(--pf-text-strong)",
+    overflowWrap: "anywhere",
 };
 
 const selectIndicator = (selected) => ({
     width: 28,
     height: 28,
     borderRadius: 999,
-
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-
     background: selected
         ? "rgba(34,197,94,.14)"
         : "rgba(var(--pf-fg-rgb),.06)",
-
     border: selected
         ? "1px solid rgba(74,222,128,.28)"
         : "1px solid rgba(var(--pf-fg-rgb),.08)",
-
     color: selected
         ? "color-mix(in srgb,#059669 78%,var(--pf-text-strong))"
         : "rgba(var(--pf-fg-rgb),.68)",
-
     fontWeight: 950,
 });
 
 const resultMetaGrid = {
     marginTop: 12,
-
     display: "grid",
     gridTemplateColumns:
         "repeat(3,minmax(0,1fr))",
@@ -5484,7 +5129,6 @@ const resultMetaGrid = {
 };
 
 const resultId = {
-    marginTop: 10,
     color: "rgba(var(--pf-fg-rgb),.34)",
     fontSize: 9.5,
     wordBreak: "break-all",
@@ -5492,12 +5136,10 @@ const resultId = {
 
 const previewPlaceholder = {
     minHeight: 430,
-
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-
     textAlign: "center",
     padding: 30,
 };
@@ -5506,17 +5148,11 @@ const previewPlaceholderIcon = {
     width: 64,
     height: 64,
     borderRadius: 22,
-
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-
-    background:
-        "rgba(245,158,11,.12)",
-
-    border:
-        "1px solid rgba(251,191,36,.22)",
-
+    background: "rgba(245,158,11,.12)",
+    border: "1px solid rgba(251,191,36,.22)",
     fontSize: 27,
 };
 
@@ -5529,7 +5165,6 @@ const previewPlaceholderTitle = {
 const previewPlaceholderText = {
     marginTop: 7,
     maxWidth: 360,
-
     color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 12.5,
     lineHeight: 1.6,
@@ -5559,18 +5194,14 @@ const previewTitle = {
     fontSize: 19,
     fontWeight: 950,
     color: "var(--pf-text-strong)",
+    overflowWrap: "anywhere",
 };
 
 const permanentBadge = {
     padding: "6px 10px",
     borderRadius: 999,
-
-    background:
-        "rgba(239,68,68,.13)",
-
-    border:
-        "1px solid rgba(248,113,113,.27)",
-
+    background: "rgba(239,68,68,.13)",
+    border: "1px solid rgba(248,113,113,.27)",
     color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 10,
     fontWeight: 950,
@@ -5588,13 +5219,8 @@ const previewMetaGrid = {
 const impactWarning = {
     padding: "11px 13px",
     borderRadius: 14,
-
-    background:
-        "rgba(245,158,11,.10)",
-
-    border:
-        "1px solid rgba(251,191,36,.20)",
-
+    background: "rgba(245,158,11,.10)",
+    border: "1px solid rgba(251,191,36,.20)",
     color: "color-mix(in srgb,#d97706 78%,var(--pf-text-strong))",
     fontSize: 11.5,
     fontWeight: 700,
@@ -5603,7 +5229,6 @@ const impactWarning = {
 
 const sectionHeading = {
     marginBottom: 9,
-
     color: "rgba(var(--pf-fg-rgb),.72)",
     fontSize: 11,
     fontWeight: 950,
@@ -5615,6 +5240,7 @@ const sectionDescription = {
     marginTop: 5,
     color: "rgba(var(--pf-fg-rgb),.46)",
     fontSize: 11.5,
+    lineHeight: 1.55,
 };
 
 const impactGrid = {
@@ -5627,12 +5253,8 @@ const impactGrid = {
 const impactItem = {
     padding: 11,
     borderRadius: 13,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.035)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.06)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.06)",
 };
 
 const impactLabel = {
@@ -5652,15 +5274,12 @@ const impactValue = {
 
 const confirmationSection = {
     paddingTop: 16,
-
-    borderTop:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
+    borderTop: "1px solid rgba(var(--pf-fg-rgb),.07)",
 };
 
 const fieldLabel = {
     display: "block",
     marginBottom: 7,
-
     color: "rgba(var(--pf-fg-rgb),.68)",
     fontSize: 11,
     fontWeight: 900,
@@ -5671,17 +5290,11 @@ const reasonInput = {
     minHeight: 82,
     padding: 12,
     resize: "vertical",
-
     borderRadius: 13,
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.10)",
-
+    border: "1px solid rgba(var(--pf-fg-rgb),.10)",
     background: "var(--pf-input)",
-
     color: "var(--pf-text-strong)",
     outline: "none",
-
     fontFamily: "inherit",
     fontSize: 12.5,
     lineHeight: 1.5,
@@ -5691,7 +5304,6 @@ const reasonInput = {
 const fieldHelper = {
     marginTop: 5,
     marginBottom: 15,
-
     color: "rgba(var(--pf-fg-rgb),.38)",
     fontSize: 10,
 };
@@ -5699,20 +5311,12 @@ const fieldHelper = {
 const requiredConfirmationBox = {
     padding: "10px 12px",
     marginBottom: 8,
-
     borderRadius: 12,
-
-    background:
-        "rgba(239,68,68,.10)",
-
-    border:
-        "1px dashed rgba(248,113,113,.32)",
-
+    background: "rgba(239,68,68,.10)",
+    border: "1px dashed rgba(248,113,113,.32)",
     color: "color-mix(in srgb,#dc2626 78%,var(--pf-text-strong))",
-
     fontFamily:
         "ui-monospace, SFMono-Regular, Menlo, monospace",
-
     fontSize: 11,
     fontWeight: 850,
     wordBreak: "break-all",
@@ -5723,12 +5327,9 @@ const rollbackIntro = {
     padding: 14,
     marginBottom: 14,
     borderRadius: 16,
-
     background:
         "linear-gradient(135deg, rgba(59,130,246,.12), rgba(var(--pf-fg-rgb),.025))",
-
-    border:
-        "1px solid rgba(96,165,250,.20)",
+    border: "1px solid rgba(96,165,250,.20)",
 };
 
 const rollbackIntroTitle = {
@@ -5754,6 +5355,10 @@ const stateTransitionRow = {
 
 const metadataCellStyles = {
     minWidth: 0,
+    padding: "9px 10px",
+    borderRadius: 11,
+    background: "rgba(var(--pf-surface-rgb),.22)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.05)",
 };
 
 const metadataLabelStyles = {
@@ -5762,6 +5367,7 @@ const metadataLabelStyles = {
     color: "rgba(var(--pf-fg-rgb),.40)",
     fontSize: 9,
     fontWeight: 900,
+    lineHeight: 1.25,
     textTransform: "uppercase",
     letterSpacing: ".05em",
 };
@@ -5779,13 +5385,8 @@ const metadataValueStyles = {
 const stateBox = {
     padding: 13,
     borderRadius: 14,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.04)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.07)",
-
+    background: "rgba(var(--pf-fg-rgb),.04)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.07)",
     display: "flex",
     flexDirection: "column",
     gap: 6,
@@ -5806,17 +5407,11 @@ const changeList = {
 const changeItem = {
     padding: "9px 11px",
     borderRadius: 12,
-
-    background:
-        "rgba(59,130,246,.07)",
-
-    border:
-        "1px solid rgba(96,165,250,.13)",
-
+    background: "rgba(59,130,246,.07)",
+    border: "1px solid rgba(96,165,250,.13)",
     color: "rgba(var(--pf-fg-rgb),.72)",
     fontSize: 11.5,
     fontWeight: 650,
-
     display: "flex",
     alignItems: "flex-start",
     gap: 8,
@@ -5826,26 +5421,20 @@ const rollbackButton = (disabled) => ({
     width: "100%",
     minHeight: 46,
     marginTop: 15,
-
     borderRadius: 14,
     border: "none",
-
     background: disabled
         ? "rgba(148,163,184,.14)"
         : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
-
     color: disabled
         ? "rgba(var(--pf-fg-rgb),.36)"
         : "#fff",
-
     fontFamily: "inherit",
     fontSize: 12.5,
     fontWeight: 950,
-
     cursor: disabled
         ? "not-allowed"
         : "pointer",
-
     boxShadow: disabled
         ? "none"
         : "0 16px 34px rgba(37,99,235,.28)",
@@ -5855,21 +5444,15 @@ const confirmationInput = (invalid) => ({
     width: "100%",
     height: 43,
     padding: "0 12px",
-
     borderRadius: 12,
-
     border: invalid
         ? "1px solid rgba(248,113,113,.58)"
         : "1px solid rgba(var(--pf-fg-rgb),.10)",
-
     background: "var(--pf-input)",
-
     color: "var(--pf-text-strong)",
     outline: "none",
-
     fontFamily:
         "ui-monospace, SFMono-Regular, Menlo, monospace",
-
     fontSize: 11.5,
     boxSizing: "border-box",
 });
@@ -5889,46 +5472,32 @@ const resultIdentity = {
 const resultDescription = {
     marginTop: 9,
     padding: "9px 10px",
-
     borderRadius: 11,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.035)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.055)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.055)",
 };
 
 const previewDescription = {
     padding: "13px 14px",
-
     borderRadius: 15,
-
     background:
         "linear-gradient(135deg, rgba(56,189,248,.08), rgba(var(--pf-fg-rgb),.025))",
-
-    border:
-        "1px solid rgba(56,189,248,.17)",
+    border: "1px solid rgba(56,189,248,.17)",
 };
 
 const previewDescriptionLabel = {
     marginBottom: 7,
-
     color: "#7dd3fc",
-
     fontSize: 10,
     fontWeight: 950,
-
     textTransform: "uppercase",
     letterSpacing: ".07em",
 };
 
 const previewDescriptionText = {
     color: "rgba(var(--pf-fg-rgb),.80)",
-
     fontSize: 12.5,
     fontWeight: 650,
-
     lineHeight: 1.6,
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
@@ -5938,26 +5507,20 @@ const deleteButton = (disabled) => ({
     width: "100%",
     minHeight: 46,
     marginTop: 15,
-
     borderRadius: 14,
     border: "none",
-
     background: disabled
         ? "rgba(148,163,184,.14)"
         : "linear-gradient(135deg,#b91c1c,#ef4444)",
-
     color: disabled
         ? "rgba(var(--pf-fg-rgb),.36)"
         : "#fff",
-
     fontFamily: "inherit",
     fontSize: 12.5,
     fontWeight: 950,
-
     cursor: disabled
         ? "not-allowed"
         : "pointer",
-
     boxShadow: disabled
         ? "none"
         : "0 16px 34px rgba(239,68,68,.25)",
@@ -5967,13 +5530,8 @@ const errorBox = {
     marginTop: 10,
     padding: "11px 13px",
     borderRadius: 13,
-
-    background:
-        "rgba(239,68,68,.10)",
-
-    border:
-        "1px solid rgba(248,113,113,.21)",
-
+    background: "rgba(239,68,68,.10)",
+    border: "1px solid rgba(248,113,113,.21)",
     color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 11.5,
     fontWeight: 750,
@@ -5983,13 +5541,8 @@ const errorBox = {
 const emptyState = {
     padding: 18,
     borderRadius: 15,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.03)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.055)",
-
+    background: "rgba(var(--pf-fg-rgb),.03)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.055)",
     color: "rgba(var(--pf-fg-rgb),.48)",
     fontSize: 12,
     textAlign: "center",
@@ -5997,33 +5550,27 @@ const emptyState = {
 
 const paginationRow = {
     marginTop: 13,
-
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    flexWrap: "wrap",
 };
 
 const paginationButton = (disabled) => ({
     minHeight: 34,
     padding: "0 12px",
     borderRadius: 10,
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.08)",
-
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     background: disabled
         ? "rgba(var(--pf-fg-rgb),.025)"
         : "rgba(var(--pf-fg-rgb),.06)",
-
     color: disabled
         ? "rgba(var(--pf-fg-rgb),.28)"
-        : "#fff",
-
+        : "var(--pf-text-strong)",
     fontFamily: "inherit",
     fontSize: 10.5,
     fontWeight: 850,
-
     cursor: disabled
         ? "not-allowed"
         : "pointer",
@@ -6039,15 +5586,10 @@ const successBox = {
     display: "flex",
     flexDirection: "column",
     gap: 14,
-
     padding: 17,
     borderRadius: 18,
-
-    background:
-        "rgba(34,197,94,.08)",
-
-    border:
-        "1px solid rgba(74,222,128,.20)",
+    background: "rgba(34,197,94,.08)",
+    border: "1px solid rgba(74,222,128,.20)",
 };
 
 const successTitle = {
@@ -6080,13 +5622,8 @@ const historyHeader = {
 const historyTotal = {
     padding: "7px 10px",
     borderRadius: 999,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.055)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.08)",
-
+    background: "rgba(var(--pf-fg-rgb),.055)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.08)",
     color: "rgba(var(--pf-fg-rgb),.66)",
     fontSize: 10.5,
     fontWeight: 850,
@@ -6107,12 +5644,8 @@ const historyList = {
 const historyCard = {
     padding: 15,
     borderRadius: 17,
-
-    background:
-        "rgba(var(--pf-fg-rgb),.035)",
-
-    border:
-        "1px solid rgba(var(--pf-fg-rgb),.065)",
+    background: "rgba(var(--pf-fg-rgb),.035)",
+    border: "1px solid rgba(var(--pf-fg-rgb),.065)",
 };
 
 const historyCardHeader = {
@@ -6126,18 +5659,16 @@ const historyTitle = {
     marginTop: 8,
     fontSize: 14,
     fontWeight: 900,
+    color: "var(--pf-text-strong)",
+    overflowWrap: "anywhere",
 };
 
 const historyDeletedCount = {
+    flexShrink: 0,
     padding: "6px 9px",
     borderRadius: 999,
-
-    background:
-        "rgba(239,68,68,.10)",
-
-    border:
-        "1px solid rgba(248,113,113,.18)",
-
+    background: "rgba(239,68,68,.10)",
+    border: "1px solid rgba(248,113,113,.18)",
     color: "color-mix(in srgb,#dc2626 80%,var(--pf-text-strong))",
     fontSize: 10,
     fontWeight: 900,
@@ -6145,11 +5676,10 @@ const historyDeletedCount = {
 
 const historyDetails = {
     marginTop: 12,
-
     display: "grid",
     gridTemplateColumns:
-        "repeat(3,minmax(0,1fr))",
-    gap: 9,
+        "repeat(auto-fit,minmax(220px,1fr))",
+    gap: 10,
 };
 
 const historyTargetId = {
@@ -6158,7 +5688,6 @@ const historyTargetId = {
     fontSize: 9.5,
     wordBreak: "break-all",
 };
-
 
 const resultBadgeRow = {
     display: "flex",

@@ -1682,42 +1682,6 @@ const getInventoryPacketNumber = (
   return 0;
 };
 
-const getInventoryMasterKey = (row) => {
-  if (!row) {
-    return "";
-  }
-
-  const masterItemId =
-    String(
-      row?.masterItemId ||
-      row?.masterId ||
-      ""
-    ).trim();
-
-  if (masterItemId) {
-    return masterItemId;
-  }
-
-  return [
-    getInventoryRowItemType(row),
-    row?.itemName,
-    row?.pdNo,
-    row?.drawingNo,
-  ]
-    .filter(Boolean)
-    .join("|");
-};
-
-const getInventoryRowIdentity = (row) =>
-  String(
-    row?.packetItemId ||
-    row?.itemId ||
-    row?.id ||
-    row?.zohoItemId ||
-    row?.sku ||
-    ""
-  ).trim();
-
 const INVENTORY_TABLE_COLUMNS = [
   {
     key: "generate",
@@ -2580,30 +2544,6 @@ function ZohoItemsPage() {
       { fallbackUtl: isUtlPacking }
     );
 
-  const isInventoryUtlOriginRow = (row) => {
-    if (isUtlPacking) {
-      return true;
-    }
-
-    const directOrigin =
-      row?.utlOrigin === true ||
-      String(row?.utlOrigin || "")
-        .trim()
-        .toLowerCase() === "true";
-
-    if (directOrigin) {
-      return true;
-    }
-
-    const packetItemId =
-      getInventoryRowIdentity(row);
-
-    return Boolean(
-      packetItemId &&
-      utlOriginMetadata?.[packetItemId]?.utlOrigin
-    );
-  };
-
   const getInventorySkuDisplayValue = (row) =>
     getPackFlowSkuDisplayValue(row) || "—";
 
@@ -3049,7 +2989,13 @@ function ZohoItemsPage() {
   const getPdfPreviewSrc = (url) => {
     if (!url) return "";
 
-    return `${url}#toolbar=0&navpanes=0&scrollbar=1`;
+    /*
+     * Keep the generated sticker readable inside the history workbench.
+     * Chromium's PDF viewer honours FitH/page-width and avoids opening with
+     * an arbitrary zoom that can make only the top strip of the 600x350
+     * sticker visible. The PDF itself and download path remain unchanged.
+     */
+    return `${url}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
   };
 
   const normalizePacketCount = (value) => {
@@ -5500,55 +5446,6 @@ function ZohoItemsPage() {
     ]);
 
   /*
-   * WR-38 deliberately uses Product Code as SKU, so its row SKU does not
-   * contain /Pkt-N. The current Inventory DTO can therefore leave the
-   * browser without a packet number even though the backend still has the
-   * master/packet identity. UTL rows can hit the same UI condition.
-   *
-   * Keep one deterministic append-action host per visible master. This map
-   * is used only as a fallback when the exact packet number is unavailable;
-   * normal AL rows continue to use the existing exact last-packet rule.
-   */
-  const visibleNormalMasterAppendHosts =
-    useMemo(() => {
-      const hosts = new Map();
-
-      (
-        Array.isArray(paginatedRows)
-          ? paginatedRows
-          : []
-      ).forEach((row) => {
-        if (
-          !row ||
-          isHardwarePacketRow(row) ||
-          !String(
-            row?.masterItemId || ""
-          ).trim()
-        ) {
-          return;
-        }
-
-        const masterKey =
-          getInventoryMasterKey(row);
-
-        const rowIdentity =
-          getInventoryRowIdentity(row);
-
-        if (
-          masterKey &&
-          rowIdentity
-        ) {
-          hosts.set(
-            masterKey,
-            rowIdentity
-          );
-        }
-      });
-
-      return hosts;
-    }, [paginatedRows]);
-
-  /*
    * "Last packet" is a workflow-facing UI rule.  Preserve it exactly:
    * - normal server pages receive a backend-computed visible-master maximum;
    * - hardware uses its complete cached visible set;
@@ -6485,7 +6382,15 @@ function ZohoItemsPage() {
     row
   ) => {
     const key =
-      getInventoryMasterKey(row);
+      row?.masterItemId ||
+      [
+        getInventoryRowItemType(row),
+        row?.itemName,
+        row?.pdNo,
+        row?.drawingNo,
+      ]
+        .filter(Boolean)
+        .join("|");
 
     const current =
       getInventoryPacketNumber(
@@ -6501,83 +6406,6 @@ function ZohoItemsPage() {
       current > 0 &&
       max > 0 &&
       current === max
-    );
-  };
-
-  const isVisibleNormalMasterAppendHost = (
-    row
-  ) => {
-    const masterKey =
-      getInventoryMasterKey(row);
-
-    const rowIdentity =
-      getInventoryRowIdentity(row);
-
-    if (
-      !masterKey ||
-      !rowIdentity
-    ) {
-      return false;
-    }
-
-    return (
-      visibleNormalMasterAppendHosts
-        .get(masterKey) ===
-      rowIdentity
-    );
-  };
-
-  const canRenderNormalPacketAppendActions = (
-    row
-  ) => {
-    if (
-      !row ||
-      isHardwarePacketRow(row) ||
-      !canCreateNormalPackets ||
-      !String(
-        row?.masterItemId || ""
-      ).trim()
-    ) {
-      return false;
-    }
-
-    /*
-     * Preferred path: exact packet identity is available. Preserve the
-     * original rule and expose Add / Custom only on the true last packet.
-     */
-    if (isLastPacket(row)) {
-      return true;
-    }
-
-    /*
-     * If a concrete packet number exists and this is not the last packet,
-     * do not widen the existing UI rule.
-     */
-    if (
-      getInventoryPacketNumber(row) > 0
-    ) {
-      return false;
-    }
-
-    /*
-     * WR-38 Product Code is intentionally its SKU, so SKU cannot be used to
-     * recover Pkt-N. UTL-origin rows may also arrive without packetNumber in
-     * the Inventory DTO. In those two cases, use one visible row per master
-     * as the append action host rather than hiding a valid master-level
-     * operation entirely.
-     *
-     * This changes presentation only. Existing backend ownership, role,
-     * plant, packet-number and duplicate checks remain authoritative.
-     */
-    if (
-      !isWr38Row(row) &&
-      !isInventoryUtlOriginRow(row)
-    ) {
-      return false;
-    }
-
-    return isVisibleNormalMasterAppendHost(
-      row
     );
   };
 
@@ -9216,13 +9044,6 @@ function ZohoItemsPage() {
       )
       : false;
 
-  const itemDetailsCanAppendNormalPackets =
-    itemDetailsRow
-      ? canRenderNormalPacketAppendActions(
-        itemDetailsRow
-      )
-      : false;
-
   const itemDetailsHardwareLines =
     Array.isArray(
       itemDetailsRow?.hardwareLines
@@ -9851,11 +9672,6 @@ function ZohoItemsPage() {
                   const lastPacket =
                     isLastPacket(row);
 
-                  const canAppendNormalPackets =
-                    canRenderNormalPacketAppendActions(
-                      row
-                    );
-
                   const rowDeleteId =
                     row.itemId || row.id || row.packetItemId;
 
@@ -9985,7 +9801,8 @@ function ZohoItemsPage() {
                             </span>
                           )
                         ) : (
-                          canAppendNormalPackets
+                          lastPacket &&
+                          canCreateNormalPackets
                         ) ? (
                           <Box sx={actionCell}>
                             <Button
@@ -11042,7 +10859,8 @@ function ZohoItemsPage() {
                   </Button>
                 )
               ) : (
-                itemDetailsCanAppendNormalPackets && (
+                itemDetailsLastPacket &&
+                canCreateNormalPackets && (
                   <>
                     <Button
                       size="small"
@@ -12895,7 +12713,17 @@ function ZohoItemsPage() {
                     </Box>
                   )}
 
-                <Box sx={historyTablePanelSx}>
+                <Box
+                  sx={
+                    historyPdfPreview?.url
+                      ? {
+                          ...historyTablePanelSx,
+                          gridColumn: "1 / 2",
+                          gridRow: "2 / 3",
+                        }
+                      : historyTablePanelSx
+                  }
+                >
                   {generatedHistoryReportMode !== "DETAILED" ? (
                     <Box sx={historyTableViewportSx}>
                       <Box sx={historyReportTitleSx}>
@@ -13309,7 +13137,13 @@ function ZohoItemsPage() {
                   )}
                 </Box>
                 {historyPdfPreview?.url && (
-                  <Box sx={historyInlinePdfSx}>
+                  <Box
+                    sx={{
+                      ...historyInlinePdfSx,
+                      gridColumn: "2 / 3",
+                      gridRow: "1 / span 2",
+                    }}
+                  >
                     <Box sx={historyInlinePdfHeaderSx}>
                       <Box>
                         <Box sx={historyInlinePdfTitleSx}>
@@ -13352,6 +13186,10 @@ function ZohoItemsPage() {
                         height="100%"
                         title="Generated Sticker PDF Preview"
                         style={{
+                          display: "block",
+                          width: "100%",
+                          height: "100%",
+                          minHeight: 0,
                           border: "1px solid rgba(var(--pf-fg-rgb),.08)",
                           borderRadius: 12,
                           background: "#fff",
@@ -17267,13 +17105,27 @@ const historyMainContentSplitSx = {
   flex: 1,
   minHeight: 0,
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1.15fr) minmax(420px, .85fr)",
+  gridTemplateColumns: "minmax(0, 1.12fr) minmax(480px, .88fr)",
+  /*
+   * Row 1 is the optional request-selection toolbar and row 2 is the history
+   * table. The PDF preview explicitly spans both rows in column 2. Without
+   * this row model CSS Grid auto-placement used to put the toolbar in column
+   * 1, the table in column 2 and the PDF underneath column 1.
+   */
+  gridTemplateRows: "auto minmax(0, 1fr)",
   gap: 1.6,
   alignItems: "stretch",
+  alignContent: "stretch",
   overflow: "hidden",
+
+  "@media (max-width: 1180px)": {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gridTemplateRows: "auto minmax(280px, 1fr) minmax(300px, .8fr)",
+  },
 };
 
 const historyTablePanelSx = {
+  minWidth: 0,
   minHeight: 0,
   overflow: "hidden",
   display: "flex",
@@ -17415,7 +17267,9 @@ const historyPageSizeSelectStyle = {
 };
 
 const historyInlinePdfSx = {
+  width: "100%",
   height: "100%",
+  minWidth: 0,
   minHeight: 0,
   display: "flex",
   flexDirection: "column",
@@ -17423,7 +17277,13 @@ const historyInlinePdfSx = {
   background:
     "linear-gradient(180deg,rgba(var(--pf-surface-rgb),.96),rgba(var(--pf-surface-deep-rgb),.96))",
   border: "1px solid rgba(96,165,250,.20)",
+  boxShadow: "0 18px 40px rgba(2,6,23,.22)",
   overflow: "hidden",
+
+  "@media (max-width: 1180px)": {
+    gridColumn: "1 / 2 !important",
+    gridRow: "3 / 4 !important",
+  },
 };
 
 const historyInlinePdfHeaderSx = {
@@ -17433,15 +17293,22 @@ const historyInlinePdfHeaderSx = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 1.4,
+  flexWrap: "wrap",
   borderBottom: "1px solid rgba(var(--pf-fg-rgb),.08)",
   background: "rgba(var(--pf-fg-rgb),.035)",
 };
 
 const historyInlinePdfFrameWrapSx = {
   flex: 1,
+  minWidth: 0,
   minHeight: 0,
   p: 1.2,
+  display: "flex",
   overflow: "hidden",
+
+  "& iframe": {
+    flex: 1,
+  },
 };
 
 const historyInlinePdfTitleSx = {
