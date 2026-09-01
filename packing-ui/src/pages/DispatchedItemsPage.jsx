@@ -5672,11 +5672,11 @@ const MASTER_CREATE_TARGET = {
 	ADMIN_BULK_EDIT: "ADMIN_BULK_EDIT",
 };
 
-const DISPATCH_BACKEND_BATCH_SIZE = 100;
+const DISPATCH_BACKEND_BATCH_SIZE = 200;
 
 /*
  * Four simultaneous requests means at most approximately
- * 400 dispatch rows are in transit at one time.
+ * 800 dispatch rows are in transit at one time.
  *
  * This is significantly faster than 43 sequential requests,
  * while remaining safe for a Render instance and database pool.
@@ -5711,8 +5711,8 @@ const DISPATCH_BACKEND_MAX_PAGES = 5000;
  *
  * Normal browsing is server-paged: only the visible 25/50 rows are loaded.
  * A small LRU page cache plus next-page prefetch keeps navigation instant.
- * Full-history row materialization is reserved only for the legacy explicit
- * Select All Matching action. Export now streams from the backend.
+ * Full-history downloads are reserved for explicit operations such as Export
+ * or Select All Matching.
  */
 const DISPATCH_SERVER_SEARCH_DEBOUNCE_MS = 220;
 const DISPATCH_PAGE_CACHE_LIMIT = 18;
@@ -6405,15 +6405,11 @@ export default function DispatchedItemsPage() {
 		useState(false);
 
 	/*
-	 * Export preview stays intentionally small. The full matching register is
-	 * streamed by the backend only after the user presses Export, so opening the
-	 * modal can never download thousands of Dispatch entities into browser RAM.
+	 * Full export data is loaded only while the Export modal is open.
+	 * Normal Dispatch browsing intentionally keeps only one server page in memory.
 	 */
 	const [dispatchExportSourceRows, setDispatchExportSourceRows] =
-		useState([]);
-
-	const [dispatchExportTotalRows, setDispatchExportTotalRows] =
-		useState(0);
+		useState(null);
 
 	const [dispatchExportSourceLoading, setDispatchExportSourceLoading] =
 		useState(false);
@@ -7330,7 +7326,7 @@ export default function DispatchedItemsPage() {
 	};
 
 	const getStickerHistoryListPath = (
-		row,
+		_row,
 		packetItemId
 	) => {
 		const cleanItemId =
@@ -7340,19 +7336,22 @@ export default function DispatchedItemsPage() {
 			return "";
 		}
 
-		if (isHardwareDispatchRow(row)) {
-			return `/api/hardware-packets/${encodeURIComponent(
-				cleanItemId
-			)}/history`;
-		}
-
+		/*
+		 * Normal and HARDWARE PacketItems share the same authoritative
+		 * StickerHistoryController read endpoint. The controller delegates
+		 * authorization to PacketService.requireStickerHistoryReadAccess(),
+		 * which already applies the correct hardware owner/plant/Dispatch rules.
+		 *
+		 * Do not route hardware history through /api/hardware-packets/.../history:
+		 * HardwarePacketController has no such endpoint.
+		 */
 		return `/api/stickers/${encodeURIComponent(
 			cleanItemId
 		)}/history`;
 	};
 
 	const getStickerHistoryPdfPath = (
-		row,
+		_row,
 		historyId
 	) => {
 		const cleanHistoryId =
@@ -7362,12 +7361,11 @@ export default function DispatchedItemsPage() {
 			return "";
 		}
 
-		if (isHardwareDispatchRow(row)) {
-			return `/api/hardware-packets/history/${encodeURIComponent(
-				cleanHistoryId
-			)}/download-pdf`;
-		}
-
+		/*
+		 * The shared StickerHistoryController PDF endpoint supports both
+		 * NORMAL and HARDWARE histories and performs packet-aware access checks
+		 * before rebuilding/serving the PDF snapshot.
+		 */
 		return `/api/stickers/history/${encodeURIComponent(
 			cleanHistoryId
 		)}/download-pdf`;
@@ -9407,11 +9405,7 @@ export default function DispatchedItemsPage() {
 			);
 
 			setDispatchExportSourceRows(
-				[]
-			);
-
-			setDispatchExportTotalRows(
-				0
+				null
 			);
 
 			setDispatchExportOpen(
@@ -9420,8 +9414,8 @@ export default function DispatchedItemsPage() {
 		};
 
 	/*
-	 * Load only a tiny server-side preview + exact count while the modal is open.
-	 * The complete result set is never retained in React state.
+	 * Export is the one place where a complete matching register is useful.
+	 * Load it only while this modal is open, never during normal page startup.
 	 */
 	useEffect(() => {
 		if (!dispatchExportOpen) {
@@ -9431,14 +9425,12 @@ export default function DispatchedItemsPage() {
 		let cancelled = false;
 		const exportAbortController = new AbortController();
 
-		const loadExportPreview = async () => {
+		const loadFullExportSource = async () => {
 			try {
 				setDispatchExportSourceLoading(true);
 
-				const preview =
-					await fetchDispatchServerPage({
-						backendPage: 0,
-						size: 20,
+				const fullRows =
+					await fetchAllMatchingDispatchRows({
 						searchValue: search,
 						statusValue: dispatchExportStatus,
 						plantValue: plantFilter,
@@ -9448,7 +9440,6 @@ export default function DispatchedItemsPage() {
 						timeFromValue: dateFilterTimeFrom,
 						timeToValue: dateFilterTimeTo,
 						groupByValue: groupBy,
-						includeTotal: true,
 						signal: exportAbortController.signal,
 					});
 
@@ -9456,30 +9447,19 @@ export default function DispatchedItemsPage() {
 					return;
 				}
 
-				const previewRows =
-					Array.isArray(preview?.items)
-						? preview.items
-						: [];
-
-				setDispatchExportSourceRows(previewRows);
-				setDispatchExportTotalRows(
-					Number.isFinite(Number(preview?.totalElements))
-						? Number(preview.totalElements)
-						: previewRows.length
+				setDispatchExportSourceRows(
+					fullRows
 				);
 
-				await loadDispatchExportDriverLookup(previewRows);
+				await loadDispatchExportDriverLookup(
+					fullRows
+				);
 			} catch (error) {
-				if (
-					!cancelled &&
-					error?.name !== "AbortError"
-				) {
+				if (!cancelled && error?.name !== "AbortError") {
 					console.error(
-						"Unable to load Dispatch export preview:",
+						"Unable to load complete Dispatch Report source:",
 						error
 					);
-					setDispatchExportSourceRows([]);
-					setDispatchExportTotalRows(0);
 				}
 			} finally {
 				if (!cancelled) {
@@ -9488,7 +9468,7 @@ export default function DispatchedItemsPage() {
 			}
 		};
 
-		loadExportPreview();
+		loadFullExportSource();
 
 		return () => {
 			cancelled = true;
@@ -10419,101 +10399,125 @@ export default function DispatchedItemsPage() {
 	const exportDispatchData =
 		async () => {
 			try {
-				setDispatchExportLoading(true);
-
-				const query = buildDispatchServerQuery({
-					backendPage: 0,
-					size: 1,
-					searchValue: search,
-					statusValue: dispatchExportStatus,
-					plantValue: plantFilter,
-					dateModeValue: dateFilterMode,
-					dateFromValue: dateFilterFrom,
-					dateToValue: dateFilterTo,
-					timeFromValue: dateFilterTimeFrom,
-					timeToValue: dateFilterTimeTo,
-					groupByValue: groupBy,
-					includeTotal: false,
-				});
-
-				[
-					"page",
-					"size",
-					"includeTotal",
-					"knownTotalElements",
-				].forEach((key) => query.delete(key));
-
-				const excel =
-					dispatchExportFormat === "EXCEL";
-
-				const endpoint = excel
-					? "/api/dispatched/export.xlsx"
-					: "/api/dispatched/export.csv";
-
-				const response = await authFetch(
-					`${API_BASE_URL}${endpoint}?${query.toString()}`,
-					{
-						method: "GET",
-						headers: {
-							Accept: excel
-								? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-								: "text/csv",
-						},
-						cache: "no-store",
-					}
+				setDispatchExportLoading(
+					true
 				);
 
-				if (!response.ok) {
+				/*
+				 * Always fetch fresh challan history immediately
+				 * before creating the file.
+				 *
+				 * Do not rely only on React state because setState
+				 * is asynchronous.
+				 */
+				let scopedSourceRows =
+					Array.isArray(dispatchExportSourceRows)
+						? dispatchExportSourceRows
+						: null;
+
+				if (!scopedSourceRows) {
+					scopedSourceRows =
+						await fetchAllMatchingDispatchRows({
+							searchValue: search,
+							statusValue: dispatchExportStatus,
+							plantValue: plantFilter,
+							dateModeValue: dateFilterMode,
+							dateFromValue: dateFilterFrom,
+							dateToValue: dateFilterTo,
+							timeFromValue: dateFilterTimeFrom,
+							timeToValue: dateFilterTimeTo,
+							groupByValue: groupBy,
+						});
+				}
+
+				const freshDriverLookup =
+					await loadDispatchExportDriverLookup(
+						scopedSourceRows
+					);
+
+				const exportRows =
+					buildDispatchExportRows(
+						dispatchExportStatus,
+						freshDriverLookup,
+						scopedSourceRows
+					);
+
+				if (exportRows.length === 0) {
 					throw new Error(
-						await readResponseError(
-							response,
-							"Dispatch export failed"
-						)
+						"No rows found for selected export status"
 					);
 				}
 
-				const blob = await response.blob();
-
-				if (!blob || blob.size === 0) {
-					throw new Error("Dispatch export returned an empty file");
-				}
-
-				const disposition = String(
-					response.headers.get("Content-Disposition") ||
-					response.headers.get("content-disposition") ||
-					""
-				);
-
-				const fileNameMatch = disposition.match(
-					/filename\*?=(?:UTF-8''|")?([^";]+)/i
-				);
-
-				let fileName = excel
-					? "Dispatch Register.xlsx"
-					: "Dispatch Register.csv";
-
-				if (fileNameMatch?.[1]) {
-					try {
-						fileName = decodeURIComponent(
-							fileNameMatch[1].trim()
+				if (
+					dispatchExportFormat ===
+					"CSV"
+				) {
+					const headers =
+						dispatchExportColumns.map(
+							(column) =>
+								column.header
 						);
-					} catch {
-						fileName = fileNameMatch[1].trim();
-					}
+
+					const csv =
+						"\uFEFF" +
+						[
+							headers
+								.map(csvEscape)
+								.join(","),
+
+							...exportRows.map(
+								(row) =>
+									dispatchExportColumns
+										.map(
+											(column) =>
+												csvEscape(
+													row[
+													column.key
+													]
+												)
+										)
+										.join(",")
+							),
+						].join("\n");
+
+					const csvBlob =
+						new Blob(
+							[csv],
+							{
+								type:
+									"text/csv;charset=utf-8;",
+							}
+						);
+
+					downloadDispatchBlob({
+						blob: csvBlob,
+						fileName:
+							"Dispatch Register.csv",
+					});
+				} else {
+					await exportDispatchExcelWorkbook(
+						freshDriverLookup,
+						scopedSourceRows
+					);
 				}
 
-				downloadDispatchBlob({ blob, fileName });
-
-				setDispatchExportOpen(false);
+				setDispatchExportOpen(
+					false
+				);
 			} catch (error) {
-				console.error("Dispatch export failed:", error);
+				console.error(
+					"Dispatch export failed:",
+					error
+				);
 
 				alert(
 					error?.message ||
 					"Dispatch export failed"
 				);
 			} finally {
-				setDispatchExportLoading(false);
+				setDispatchExportLoading(
+					false
+				);
 			}
 		};
 
@@ -10742,8 +10746,7 @@ export default function DispatchedItemsPage() {
 	/*
 	 * The former eager all-history loader was intentionally removed.
 	 * Full-result fetching now exists only in fetchAllMatchingDispatchRows(),
-	 * retained for the existing Select All Matching semantics. Export uses the
-	 * memory-bounded backend streaming endpoints instead.
+	 * which is invoked explicitly by Export / Select All Matching.
 	 */
 
 	const buildDispatchServerQuerySignature = ({
@@ -11060,8 +11063,8 @@ export default function DispatchedItemsPage() {
 	 * Explicit full-result loader.
 	 *
 	 * This is intentionally NOT used by normal page rendering.  It exists for
-	 * operations whose original semantics genuinely require all matching rows.
-	 * Export no longer uses this path; it streams from the backend.
+	 * operations whose original semantics genuinely require all matching rows,
+	 * such as Export and Select All Matching.
 	 */
 	const fetchAllMatchingDispatchRows =
 		async ({
@@ -13173,60 +13176,76 @@ export default function DispatchedItemsPage() {
 			setHistoryRows([]);
 
 			/*
-			 * Save the complete row.
-			 * The modal later needs itemType to choose
-			 * NORMAL or HARDWARE PDF endpoints.
+			 * Keep the selected Dispatch row immediately so the modal can render
+			 * its identity while history is loading.
 			 */
 			setHistoryItem(row);
 
 			/*
-			 * This endpoint repairs old dispatch records,
-			 * links packetItemId and rebuilds missing
-			 * sticker history when necessary.
+			 * Modern Dispatch rows, including hardware packets, already carry the
+			 * PacketItem UUID. Reading sticker history must therefore be a pure GET.
+			 *
+			 * This deliberately avoids POST /ensure-history on every modal open.
+			 * Besides being unnecessary for linked rows, that write endpoint requires
+			 * CSRF and was the source of the intermittent InvalidCsrfTokenException
+			 * seen while merely VIEWING history.
 			 */
-			const ensureRes =
-				await authFetch(
-					`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(
-						dispatchedItemId
-					)}/ensure-history`,
-					{
-						method: "POST",
-						cache: "no-store",
-					}
-				);
-
-			if (!ensureRes.ok) {
-				const message =
-					await readResponseError(
-						ensureRes,
-						"Sticker history rebuild failed"
-					);
-
-				throw new Error(message);
-			}
-
-			const ensureData =
-				await ensureRes.json();
-
-			const packetItemId =
+			let packetItemId =
 				String(
-					ensureData?.packetItemId ||
 					row?.packetItemId ||
 					row?.itemId ||
-					row?.id ||
+					row?.packet_item_id ||
 					""
 				).trim();
 
+			let ensureData = null;
+
+			/*
+			 * Preserve the existing legacy self-heal path only for old Dispatch rows
+			 * that genuinely do not have PacketItem linkage in the response.
+			 * Current normal/hardware rows never need this mutation just to view history.
+			 */
+			if (!packetItemId) {
+				const ensureRes =
+					await authFetch(
+						`${API_BASE_URL}/api/stickers/dispatched/${encodeURIComponent(
+							dispatchedItemId
+						)}/ensure-history`,
+						{
+							method: "POST",
+							cache: "no-store",
+						}
+					);
+
+				if (!ensureRes.ok) {
+					const message =
+						await readResponseError(
+							ensureRes,
+							"Sticker history rebuild failed"
+						);
+
+					throw new Error(message);
+				}
+
+				ensureData =
+					await ensureRes.json();
+
+				packetItemId =
+					String(
+						ensureData?.packetItemId ||
+						row?.packetItemId ||
+						row?.itemId ||
+						row?.id ||
+						""
+					).trim();
+			}
+
 			if (!packetItemId) {
 				throw new Error(
-					"Packet Item ID missing after history rebuild"
+					"Packet Item ID missing for sticker history"
 				);
 			}
 
-			/*
-			 * Prefer backend itemType because old dispatch
-			 * rows may not have itemType stored correctly.
-			 */
 			const resolvedItemType =
 				resolveDispatchItemType({
 					...row,
@@ -13307,8 +13326,8 @@ export default function DispatchedItemsPage() {
 			);
 
 			/*
-			 * Keep the corrected packetItemId and
-			 * item type in the Dispatch table state.
+			 * Keep any recovered PacketItem linkage in the browser row. No status,
+			 * movement, dispatch or hardware ownership field is changed here.
 			 */
 			setRows((previousRows) =>
 				previousRows.map((item) =>
@@ -23026,7 +23045,7 @@ export default function DispatchedItemsPage() {
 								<Box sx={historyStatsGridSx}>
 									<HistoryMiniStat
 										label="Rows to Export"
-										value={dispatchExportTotalRows}
+										value={dispatchExportPreviewRows.length}
 										accent="#10b981"
 									/>
 
@@ -23068,7 +23087,7 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									The Excel workbook contains two sheets: Dispatched and Other Status.
-									The full matching register is streamed by the backend, so pagination is ignored without loading the complete dataset into browser memory.
+									The global search and selected export statuses are applied. Pagination is ignored.
 								</Box>
 
 								<Box
@@ -23129,7 +23148,7 @@ export default function DispatchedItemsPage() {
 
 									{dispatchExportSourceLoading && (
 										<Box sx={modalEmptyStateSx}>
-											Loading a small server-side export preview…
+											Loading the complete matching Dispatch register for export…
 										</Box>
 									)}
 
@@ -23141,7 +23160,7 @@ export default function DispatchedItemsPage() {
 										)}
 								</Box>
 
-								{dispatchExportTotalRows > 20 && (
+								{dispatchExportPreviewRows.length > 20 && (
 									<Box
 										sx={{
 											mt: 1,
@@ -23151,7 +23170,7 @@ export default function DispatchedItemsPage() {
 										}}
 									>
 										Showing first 20 rows in preview. Full export will include{" "}
-										{dispatchExportTotalRows} rows.
+										{dispatchExportPreviewRows.length} rows.
 									</Box>
 								)}
 							</Box>
@@ -23171,7 +23190,7 @@ export default function DispatchedItemsPage() {
 									disabled={
 										dispatchExportLoading ||
 										dispatchExportSourceLoading ||
-										dispatchExportTotalRows === 0
+										dispatchExportPreviewRows.length === 0
 									}
 									onClick={exportDispatchData}
 									sx={{
@@ -23191,7 +23210,7 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									{dispatchExportSourceLoading
-										? "Loading Preview..."
+										? "Loading Full Register..."
 										: dispatchExportLoading
 											? "Preparing Report..."
 											: `Export ${dispatchExportFormat}`}
