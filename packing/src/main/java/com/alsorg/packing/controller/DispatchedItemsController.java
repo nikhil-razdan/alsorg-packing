@@ -9,6 +9,7 @@ import com.alsorg.packing.domain.dispatch.DispatchedItem;
 import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import com.alsorg.packing.repository.DispatchedItemRepository;
 import com.alsorg.packing.service.DispatchedItemService;
+import com.alsorg.packing.service.DispatchRegisterExportService;
 import com.alsorg.packing.service.LogisticsDispatchTripService;
 import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyRequest;
 import com.alsorg.packing.service.DispatchedItemService.DispatchImportApplyResponse;
@@ -41,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.time.temporal.ChronoUnit;
 
 import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/dispatched")
@@ -53,6 +55,14 @@ public class DispatchedItemsController {
 
         @org.springframework.beans.factory.annotation.Autowired(required = false)
         private UtlWorkflowService utlWorkflowService;
+
+        /*
+         * Read-only streaming export service. Optional injection preserves the
+         * existing controller constructor used by direct unit tests while the
+         * production Spring context wires this bean normally.
+         */
+        @org.springframework.beans.factory.annotation.Autowired(required = false)
+        private DispatchRegisterExportService dispatchRegisterExportService;
 
         /*
          * Optional synchronization bridge for challans that were created through
@@ -75,8 +85,8 @@ public class DispatchedItemsController {
 
         /* ===================== FETCH ===================== */
 
-        private static final int DEFAULT_DISPATCH_PAGE_SIZE = 200;
-        private static final int MAX_DISPATCH_PAGE_SIZE = 200;
+        private static final int DEFAULT_DISPATCH_PAGE_SIZE = 100;
+        private static final int MAX_DISPATCH_PAGE_SIZE = 100;
         private static final int DEFAULT_CHALLAN_PAGE_SIZE = 50;
         private static final int MAX_CHALLAN_PAGE_SIZE = 100;
         private static final int MAX_SEARCH_LENGTH = 300;
@@ -234,6 +244,189 @@ public class DispatchedItemsController {
                                                                 result.countReused()))
                                 .body(
                                                 result.items());
+        }
+
+        /*
+         * ============================================================
+         * MEMORY-BOUNDED DISPATCH REGISTER EXPORT / ID SELECTION
+         * ============================================================
+         *
+         * These are read-only companions to /search. They reuse exactly the
+         * same authorization, UTL routing, plant scope and filter builder, but
+         * stream batches instead of materializing the full register in Java or
+         * React memory.
+         */
+        @GetMapping(value = "/export.csv")
+        public ResponseEntity<StreamingResponseBody> exportDispatchedCsv(
+                        @RequestParam(defaultValue = "") String search,
+                        @RequestParam(defaultValue = "ALL") String statuses,
+                        @RequestParam(defaultValue = "ALL") String plant,
+                        @RequestParam(defaultValue = "ACTIVITY") String dateMode,
+                        @RequestParam(defaultValue = "") String dateFrom,
+                        @RequestParam(defaultValue = "") String dateTo,
+                        @RequestParam(defaultValue = "") String timeFrom,
+                        @RequestParam(defaultValue = "") String timeTo,
+                        @RequestParam(defaultValue = "NONE") String groupBy) {
+
+                DispatchRegisterExportService.ExportRequest request =
+                                buildDispatchExportRequest(
+                                                search,
+                                                statuses,
+                                                plant,
+                                                dateMode,
+                                                dateFrom,
+                                                dateTo,
+                                                timeFrom,
+                                                timeTo,
+                                                groupBy);
+
+                DispatchRegisterExportService exporter = requireDispatchExportService();
+
+                StreamingResponseBody body = outputStream ->
+                                exporter.writeCsv(outputStream, request);
+
+                return ResponseEntity.ok()
+                                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=\"ALSORG_Dispatch_Register.csv\"")
+                                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                                .header("X-Content-Type-Options", "nosniff")
+                                .body(body);
+        }
+
+        @GetMapping(value = "/export.xlsx")
+        public ResponseEntity<StreamingResponseBody> exportDispatchedXlsx(
+                        @RequestParam(defaultValue = "") String search,
+                        @RequestParam(defaultValue = "ALL") String statuses,
+                        @RequestParam(defaultValue = "ALL") String plant,
+                        @RequestParam(defaultValue = "ACTIVITY") String dateMode,
+                        @RequestParam(defaultValue = "") String dateFrom,
+                        @RequestParam(defaultValue = "") String dateTo,
+                        @RequestParam(defaultValue = "") String timeFrom,
+                        @RequestParam(defaultValue = "") String timeTo,
+                        @RequestParam(defaultValue = "NONE") String groupBy) {
+
+                DispatchRegisterExportService.ExportRequest request =
+                                buildDispatchExportRequest(
+                                                search,
+                                                statuses,
+                                                plant,
+                                                dateMode,
+                                                dateFrom,
+                                                dateTo,
+                                                timeFrom,
+                                                timeTo,
+                                                groupBy);
+
+                DispatchRegisterExportService exporter = requireDispatchExportService();
+
+                StreamingResponseBody body = outputStream ->
+                                exporter.writeXlsx(outputStream, request);
+
+                return ResponseEntity.ok()
+                                .contentType(MediaType.parseMediaType(
+                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                                .header(
+                                                HttpHeaders.CONTENT_DISPOSITION,
+                                                "attachment; filename=\"ALSORG_Dispatch_Register.xlsx\"")
+                                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                                .header("X-Content-Type-Options", "nosniff")
+                                .body(body);
+        }
+
+        @GetMapping(value = "/search/ids", produces = MediaType.APPLICATION_JSON_VALUE)
+        public ResponseEntity<StreamingResponseBody> searchDispatchedItemIds(
+                        @RequestParam(defaultValue = "") String search,
+                        @RequestParam(defaultValue = "ALL") String statuses,
+                        @RequestParam(defaultValue = "ALL") String plant,
+                        @RequestParam(defaultValue = "ACTIVITY") String dateMode,
+                        @RequestParam(defaultValue = "") String dateFrom,
+                        @RequestParam(defaultValue = "") String dateTo,
+                        @RequestParam(defaultValue = "") String timeFrom,
+                        @RequestParam(defaultValue = "") String timeTo,
+                        @RequestParam(defaultValue = "NONE") String groupBy) {
+
+                DispatchRegisterExportService.ExportRequest request =
+                                buildDispatchExportRequest(
+                                                search,
+                                                statuses,
+                                                plant,
+                                                dateMode,
+                                                dateFrom,
+                                                dateTo,
+                                                timeFrom,
+                                                timeTo,
+                                                groupBy);
+
+                DispatchRegisterExportService exporter = requireDispatchExportService();
+
+                StreamingResponseBody body = outputStream ->
+                                exporter.writeIdsJson(outputStream, request);
+
+                return ResponseEntity.ok()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                                .header("X-Content-Type-Options", "nosniff")
+                                .body(body);
+        }
+
+        private DispatchRegisterExportService.ExportRequest buildDispatchExportRequest(
+                        String search,
+                        String statuses,
+                        String plant,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        String groupBy) {
+
+                validateQueryText(search, MAX_SEARCH_LENGTH, "Search");
+                validateQueryText(statuses, MAX_FILTER_LENGTH, "Status filter");
+                validateQueryText(plant, 64, "Plant filter");
+                validateQueryText(dateMode, 32, "Date mode");
+                validateQueryText(dateFrom, 40, "Date from");
+                validateQueryText(dateTo, 40, "Date to");
+                validateQueryText(timeFrom, 20, "Time from");
+                validateQueryText(timeTo, 20, "Time to");
+                validateQueryText(groupBy, 32, "Group by");
+
+                User user = currentUserService.requireCurrentUser();
+                boolean admin = currentUserService.isAdmin(user);
+
+                Set<String> allowedPlants = admin
+                                ? Set.of()
+                                : currentUserService.allowedPlants(user);
+
+                String ownerUsername = shouldRestrictDispatchReadToOwner(user)
+                                ? user.getUsername()
+                                : null;
+
+                return new DispatchRegisterExportService.ExportRequest(
+                                search,
+                                parseDispatchStatusFilter(statuses),
+                                plant,
+                                dateMode,
+                                dateFrom,
+                                dateTo,
+                                timeFrom,
+                                timeTo,
+                                groupBy,
+                                admin,
+                                allowedPlants,
+                                ownerUsername,
+                                buildUtlReadContext(user));
+        }
+
+        private DispatchRegisterExportService requireDispatchExportService() {
+                if (dispatchRegisterExportService == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.SERVICE_UNAVAILABLE,
+                                        "Dispatch export service is unavailable");
+                }
+
+                return dispatchRegisterExportService;
         }
 
         /*

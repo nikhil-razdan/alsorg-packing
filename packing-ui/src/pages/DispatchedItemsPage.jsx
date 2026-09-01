@@ -5672,11 +5672,11 @@ const MASTER_CREATE_TARGET = {
 	ADMIN_BULK_EDIT: "ADMIN_BULK_EDIT",
 };
 
-const DISPATCH_BACKEND_BATCH_SIZE = 200;
+const DISPATCH_BACKEND_BATCH_SIZE = 100;
 
 /*
  * Four simultaneous requests means at most approximately
- * 800 dispatch rows are in transit at one time.
+ * 400 dispatch rows are in transit at one time.
  *
  * This is significantly faster than 43 sequential requests,
  * while remaining safe for a Render instance and database pool.
@@ -5711,8 +5711,8 @@ const DISPATCH_BACKEND_MAX_PAGES = 5000;
  *
  * Normal browsing is server-paged: only the visible 25/50 rows are loaded.
  * A small LRU page cache plus next-page prefetch keeps navigation instant.
- * Full-history downloads are reserved for explicit operations such as Export
- * or Select All Matching.
+ * Full-history row materialization is reserved only for the legacy explicit
+ * Select All Matching action. Export now streams from the backend.
  */
 const DISPATCH_SERVER_SEARCH_DEBOUNCE_MS = 220;
 const DISPATCH_PAGE_CACHE_LIMIT = 18;
@@ -6405,11 +6405,15 @@ export default function DispatchedItemsPage() {
 		useState(false);
 
 	/*
-	 * Full export data is loaded only while the Export modal is open.
-	 * Normal Dispatch browsing intentionally keeps only one server page in memory.
+	 * Export preview stays intentionally small. The full matching register is
+	 * streamed by the backend only after the user presses Export, so opening the
+	 * modal can never download thousands of Dispatch entities into browser RAM.
 	 */
 	const [dispatchExportSourceRows, setDispatchExportSourceRows] =
-		useState(null);
+		useState([]);
+
+	const [dispatchExportTotalRows, setDispatchExportTotalRows] =
+		useState(0);
 
 	const [dispatchExportSourceLoading, setDispatchExportSourceLoading] =
 		useState(false);
@@ -9403,7 +9407,11 @@ export default function DispatchedItemsPage() {
 			);
 
 			setDispatchExportSourceRows(
-				null
+				[]
+			);
+
+			setDispatchExportTotalRows(
+				0
 			);
 
 			setDispatchExportOpen(
@@ -9412,8 +9420,8 @@ export default function DispatchedItemsPage() {
 		};
 
 	/*
-	 * Export is the one place where a complete matching register is useful.
-	 * Load it only while this modal is open, never during normal page startup.
+	 * Load only a tiny server-side preview + exact count while the modal is open.
+	 * The complete result set is never retained in React state.
 	 */
 	useEffect(() => {
 		if (!dispatchExportOpen) {
@@ -9423,12 +9431,14 @@ export default function DispatchedItemsPage() {
 		let cancelled = false;
 		const exportAbortController = new AbortController();
 
-		const loadFullExportSource = async () => {
+		const loadExportPreview = async () => {
 			try {
 				setDispatchExportSourceLoading(true);
 
-				const fullRows =
-					await fetchAllMatchingDispatchRows({
+				const preview =
+					await fetchDispatchServerPage({
+						backendPage: 0,
+						size: 20,
 						searchValue: search,
 						statusValue: dispatchExportStatus,
 						plantValue: plantFilter,
@@ -9438,6 +9448,7 @@ export default function DispatchedItemsPage() {
 						timeFromValue: dateFilterTimeFrom,
 						timeToValue: dateFilterTimeTo,
 						groupByValue: groupBy,
+						includeTotal: true,
 						signal: exportAbortController.signal,
 					});
 
@@ -9445,19 +9456,30 @@ export default function DispatchedItemsPage() {
 					return;
 				}
 
-				setDispatchExportSourceRows(
-					fullRows
+				const previewRows =
+					Array.isArray(preview?.items)
+						? preview.items
+						: [];
+
+				setDispatchExportSourceRows(previewRows);
+				setDispatchExportTotalRows(
+					Number.isFinite(Number(preview?.totalElements))
+						? Number(preview.totalElements)
+						: previewRows.length
 				);
 
-				await loadDispatchExportDriverLookup(
-					fullRows
-				);
+				await loadDispatchExportDriverLookup(previewRows);
 			} catch (error) {
-				if (!cancelled && error?.name !== "AbortError") {
+				if (
+					!cancelled &&
+					error?.name !== "AbortError"
+				) {
 					console.error(
-						"Unable to load complete Dispatch Report source:",
+						"Unable to load Dispatch export preview:",
 						error
 					);
+					setDispatchExportSourceRows([]);
+					setDispatchExportTotalRows(0);
 				}
 			} finally {
 				if (!cancelled) {
@@ -9466,7 +9488,7 @@ export default function DispatchedItemsPage() {
 			}
 		};
 
-		loadFullExportSource();
+		loadExportPreview();
 
 		return () => {
 			cancelled = true;
@@ -10397,125 +10419,101 @@ export default function DispatchedItemsPage() {
 	const exportDispatchData =
 		async () => {
 			try {
-				setDispatchExportLoading(
-					true
+				setDispatchExportLoading(true);
+
+				const query = buildDispatchServerQuery({
+					backendPage: 0,
+					size: 1,
+					searchValue: search,
+					statusValue: dispatchExportStatus,
+					plantValue: plantFilter,
+					dateModeValue: dateFilterMode,
+					dateFromValue: dateFilterFrom,
+					dateToValue: dateFilterTo,
+					timeFromValue: dateFilterTimeFrom,
+					timeToValue: dateFilterTimeTo,
+					groupByValue: groupBy,
+					includeTotal: false,
+				});
+
+				[
+					"page",
+					"size",
+					"includeTotal",
+					"knownTotalElements",
+				].forEach((key) => query.delete(key));
+
+				const excel =
+					dispatchExportFormat === "EXCEL";
+
+				const endpoint = excel
+					? "/api/dispatched/export.xlsx"
+					: "/api/dispatched/export.csv";
+
+				const response = await authFetch(
+					`${API_BASE_URL}${endpoint}?${query.toString()}`,
+					{
+						method: "GET",
+						headers: {
+							Accept: excel
+								? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+								: "text/csv",
+						},
+						cache: "no-store",
+					}
 				);
 
-				/*
-				 * Always fetch fresh challan history immediately
-				 * before creating the file.
-				 *
-				 * Do not rely only on React state because setState
-				 * is asynchronous.
-				 */
-				let scopedSourceRows =
-					Array.isArray(dispatchExportSourceRows)
-						? dispatchExportSourceRows
-						: null;
-
-				if (!scopedSourceRows) {
-					scopedSourceRows =
-						await fetchAllMatchingDispatchRows({
-							searchValue: search,
-							statusValue: dispatchExportStatus,
-							plantValue: plantFilter,
-							dateModeValue: dateFilterMode,
-							dateFromValue: dateFilterFrom,
-							dateToValue: dateFilterTo,
-							timeFromValue: dateFilterTimeFrom,
-							timeToValue: dateFilterTimeTo,
-							groupByValue: groupBy,
-						});
-				}
-
-				const freshDriverLookup =
-					await loadDispatchExportDriverLookup(
-						scopedSourceRows
-					);
-
-				const exportRows =
-					buildDispatchExportRows(
-						dispatchExportStatus,
-						freshDriverLookup,
-						scopedSourceRows
-					);
-
-				if (exportRows.length === 0) {
+				if (!response.ok) {
 					throw new Error(
-						"No rows found for selected export status"
+						await readResponseError(
+							response,
+							"Dispatch export failed"
+						)
 					);
 				}
 
-				if (
-					dispatchExportFormat ===
-					"CSV"
-				) {
-					const headers =
-						dispatchExportColumns.map(
-							(column) =>
-								column.header
-						);
+				const blob = await response.blob();
 
-					const csv =
-						"\uFEFF" +
-						[
-							headers
-								.map(csvEscape)
-								.join(","),
-
-							...exportRows.map(
-								(row) =>
-									dispatchExportColumns
-										.map(
-											(column) =>
-												csvEscape(
-													row[
-													column.key
-													]
-												)
-										)
-										.join(",")
-							),
-						].join("\n");
-
-					const csvBlob =
-						new Blob(
-							[csv],
-							{
-								type:
-									"text/csv;charset=utf-8;",
-							}
-						);
-
-					downloadDispatchBlob({
-						blob: csvBlob,
-						fileName:
-							"Dispatch Register.csv",
-					});
-				} else {
-					await exportDispatchExcelWorkbook(
-						freshDriverLookup,
-						scopedSourceRows
-					);
+				if (!blob || blob.size === 0) {
+					throw new Error("Dispatch export returned an empty file");
 				}
 
-				setDispatchExportOpen(
-					false
+				const disposition = String(
+					response.headers.get("Content-Disposition") ||
+					response.headers.get("content-disposition") ||
+					""
 				);
+
+				const fileNameMatch = disposition.match(
+					/filename\*?=(?:UTF-8''|")?([^";]+)/i
+				);
+
+				let fileName = excel
+					? "Dispatch Register.xlsx"
+					: "Dispatch Register.csv";
+
+				if (fileNameMatch?.[1]) {
+					try {
+						fileName = decodeURIComponent(
+							fileNameMatch[1].trim()
+						);
+					} catch {
+						fileName = fileNameMatch[1].trim();
+					}
+				}
+
+				downloadDispatchBlob({ blob, fileName });
+
+				setDispatchExportOpen(false);
 			} catch (error) {
-				console.error(
-					"Dispatch export failed:",
-					error
-				);
+				console.error("Dispatch export failed:", error);
 
 				alert(
 					error?.message ||
 					"Dispatch export failed"
 				);
 			} finally {
-				setDispatchExportLoading(
-					false
-				);
+				setDispatchExportLoading(false);
 			}
 		};
 
@@ -10744,7 +10742,8 @@ export default function DispatchedItemsPage() {
 	/*
 	 * The former eager all-history loader was intentionally removed.
 	 * Full-result fetching now exists only in fetchAllMatchingDispatchRows(),
-	 * which is invoked explicitly by Export / Select All Matching.
+	 * retained for the existing Select All Matching semantics. Export uses the
+	 * memory-bounded backend streaming endpoints instead.
 	 */
 
 	const buildDispatchServerQuerySignature = ({
@@ -11061,8 +11060,8 @@ export default function DispatchedItemsPage() {
 	 * Explicit full-result loader.
 	 *
 	 * This is intentionally NOT used by normal page rendering.  It exists for
-	 * operations whose original semantics genuinely require all matching rows,
-	 * such as Export and Select All Matching.
+	 * operations whose original semantics genuinely require all matching rows.
+	 * Export no longer uses this path; it streams from the backend.
 	 */
 	const fetchAllMatchingDispatchRows =
 		async ({
@@ -23027,7 +23026,7 @@ export default function DispatchedItemsPage() {
 								<Box sx={historyStatsGridSx}>
 									<HistoryMiniStat
 										label="Rows to Export"
-										value={dispatchExportPreviewRows.length}
+										value={dispatchExportTotalRows}
 										accent="#10b981"
 									/>
 
@@ -23069,7 +23068,7 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									The Excel workbook contains two sheets: Dispatched and Other Status.
-									The global search and selected export statuses are applied. Pagination is ignored.
+									The full matching register is streamed by the backend, so pagination is ignored without loading the complete dataset into browser memory.
 								</Box>
 
 								<Box
@@ -23130,7 +23129,7 @@ export default function DispatchedItemsPage() {
 
 									{dispatchExportSourceLoading && (
 										<Box sx={modalEmptyStateSx}>
-											Loading the complete matching Dispatch register for export…
+											Loading a small server-side export preview…
 										</Box>
 									)}
 
@@ -23142,7 +23141,7 @@ export default function DispatchedItemsPage() {
 										)}
 								</Box>
 
-								{dispatchExportPreviewRows.length > 20 && (
+								{dispatchExportTotalRows > 20 && (
 									<Box
 										sx={{
 											mt: 1,
@@ -23152,7 +23151,7 @@ export default function DispatchedItemsPage() {
 										}}
 									>
 										Showing first 20 rows in preview. Full export will include{" "}
-										{dispatchExportPreviewRows.length} rows.
+										{dispatchExportTotalRows} rows.
 									</Box>
 								)}
 							</Box>
@@ -23172,7 +23171,7 @@ export default function DispatchedItemsPage() {
 									disabled={
 										dispatchExportLoading ||
 										dispatchExportSourceLoading ||
-										dispatchExportPreviewRows.length === 0
+										dispatchExportTotalRows === 0
 									}
 									onClick={exportDispatchData}
 									sx={{
@@ -23192,7 +23191,7 @@ export default function DispatchedItemsPage() {
 									}}
 								>
 									{dispatchExportSourceLoading
-										? "Loading Full Register..."
+										? "Loading Preview..."
 										: dispatchExportLoading
 											? "Preparing Report..."
 											: `Export ${dispatchExportFormat}`}

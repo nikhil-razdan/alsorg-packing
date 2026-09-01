@@ -25,6 +25,7 @@ import java.util.UUID;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 
 @Service
 @Transactional
@@ -317,13 +318,24 @@ public class CustomChallanService {
                         "Custom challan not found: " + cleanNumber));
     }
 
+    /*
+     * ============================================================
+     * MEMORY-SAFE CUSTOM CHALLAN SUMMARY READS
+     * ============================================================
+     *
+     * The old list methods loaded every CustomChallan entity and then called
+     * challan.getItems().size() for each row. With a lazy items collection that
+     * becomes an N+1 query pattern; with an eager collection it hydrates every
+     * child item into Java heap.
+     *
+     * This scalar GROUP BY query returns exactly the existing summary contract,
+     * including itemCount, without materializing CustomChallanItem entities.
+     * Create/edit/download behavior remains unchanged and still loads items when
+     * those workflows genuinely need them.
+     */
     @Transactional(readOnly = true)
     public List<CustomChallanSummaryResponse> listAll() {
-        return repository
-                .findAllByOrderByGeneratedAtDesc()
-                .stream()
-                .map(this::toSummary)
-                .toList();
+        return querySummaries(null, true);
     }
 
     @Transactional(readOnly = true)
@@ -384,6 +396,109 @@ public class CustomChallanService {
                 challan.getItems() == null
                         ? 0
                         : challan.getItems().size());
+    }
+
+    private List<CustomChallanSummaryResponse> querySummaries(
+            String username,
+            boolean admin) {
+
+        String currentUsername = cleanLower(username);
+
+        if (!admin && currentUsername.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Authenticated username is required");
+        }
+
+        String where = admin
+                ? ""
+                : " where lower(trim(coalesce(challan.generatedBy, ''))) = :username ";
+
+        String jpql = """
+                select challan.challanNumber,
+                       challan.challanType,
+                       challan.fromLocation,
+                       challan.toLocation,
+                       challan.pdNo,
+                       challan.clientName,
+                       challan.purpose,
+                       challan.movementMode,
+                       challan.driverName,
+                       challan.vehicleNumber,
+                       challan.handedOverTo,
+                       challan.generatedBy,
+                       challan.generatedAt,
+                       count(item)
+                from CustomChallan challan
+                left join challan.items item
+                """
+                + where
+                + """
+                group by challan.challanNumber,
+                         challan.challanType,
+                         challan.fromLocation,
+                         challan.toLocation,
+                         challan.pdNo,
+                         challan.clientName,
+                         challan.purpose,
+                         challan.movementMode,
+                         challan.driverName,
+                         challan.vehicleNumber,
+                         challan.handedOverTo,
+                         challan.generatedBy,
+                         challan.generatedAt
+                order by challan.generatedAt desc
+                """;
+
+        TypedQuery<Object[]> query = entityManager.createQuery(
+                jpql,
+                Object[].class);
+
+        if (!admin) {
+            query.setParameter("username", currentUsername);
+        }
+
+        List<Object[]> rows = query.getResultList();
+        List<CustomChallanSummaryResponse> result = new ArrayList<>(rows.size());
+
+        for (Object[] row : rows) {
+            String challanType = asString(row, 1);
+            Number itemCount = row != null && row.length > 13 && row[13] instanceof Number number
+                    ? number
+                    : 0;
+
+            result.add(
+                    new CustomChallanSummaryResponse(
+                            asString(row, 0),
+                            challanType,
+                            challanTypeLabel(challanType),
+                            asString(row, 2),
+                            asString(row, 3),
+                            asString(row, 4),
+                            asString(row, 5),
+                            asString(row, 6),
+                            asString(row, 7),
+                            asString(row, 8),
+                            asString(row, 9),
+                            asString(row, 10),
+                            asString(row, 11),
+                            row != null && row.length > 12 && row[12] instanceof LocalDateTime value
+                                    ? value
+                                    : null,
+                            Math.toIntExact(Math.min(
+                                    Integer.MAX_VALUE,
+                                    Math.max(0L, itemCount.longValue())))));
+        }
+
+        return result;
+    }
+
+    private String asString(Object[] row, int index) {
+        if (row == null || index < 0 || index >= row.length || row[index] == null) {
+            return null;
+        }
+
+        return String.valueOf(row[index]);
     }
 
     private void validateRequest(
@@ -495,35 +610,7 @@ public class CustomChallanService {
     public List<CustomChallanSummaryResponse> listForUser(
             String username,
             boolean admin) {
-        String currentUsername = cleanLower(username);
-
-        if (!admin && currentUsername.isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Authenticated username is required");
-        }
-
-        if (admin) {
-            return repository
-                    .findAllByOrderByGeneratedAtDesc()
-                    .stream()
-                    .map(this::toSummary)
-                    .toList();
-        }
-
-        return entityManager.createQuery(
-                        """
-                        select challan
-                        from CustomChallan challan
-                        where lower(trim(coalesce(challan.generatedBy, ''))) = :username
-                        order by challan.generatedAt desc
-                        """,
-                        CustomChallan.class)
-                .setParameter("username", currentUsername)
-                .getResultList()
-                .stream()
-                .map(this::toSummary)
-                .toList();
+        return querySummaries(username, admin);
     }
 
     @Transactional(readOnly = true)

@@ -1,5 +1,6 @@
 package com.alsorg.packing.service;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -74,6 +75,7 @@ public class DispatchedItemService {
         private static final int MAX_DISPATCH_SEARCH_LENGTH = 300;
         private static final int MAX_DISPATCH_SEARCH_TOKENS = 12;
         private static final int MAX_DISPATCH_PAGE_SIZE = 100;
+        private static final int MAX_DISPATCH_EXPORT_BATCH_SIZE = 500;
 
         /*
          * A generated challan must remain visible after downstream driver/mobile
@@ -660,6 +662,110 @@ public class DispatchedItemService {
                         int pageSize,
                         boolean hasNext,
                         boolean countReused) {
+        }
+
+        /**
+         * Low-memory sequential reader used by streamed CSV/XLSX exports.
+         *
+         * The normal register remains page based. Export deliberately avoids a
+         * COUNT query and never materializes the complete matching register: at
+         * most MAX_DISPATCH_EXPORT_BATCH_SIZE entities are managed at one time, and each
+         * batch is detached immediately after the writer consumes it.
+         */
+        @org.springframework.transaction.annotation.Transactional(readOnly = true)
+        public void forEachDispatchRegisterBatch(
+                        String search,
+                        Collection<ItemDispatchStatus> statuses,
+                        String plantFilter,
+                        String dateMode,
+                        String dateFrom,
+                        String dateTo,
+                        String timeFrom,
+                        String timeTo,
+                        boolean completeRegisterAccess,
+                        Set<String> allowedPlants,
+                        String ownerUsername,
+                        UtlReadContext utlReadContext,
+                        Sort sort,
+                        int requestedBatchSize,
+                        DispatchRegisterBatchConsumer consumer)
+                        throws IOException {
+
+                if (consumer == null) {
+                        throw new IllegalArgumentException(
+                                        "Dispatch export consumer is required");
+                }
+
+                int batchSize = Math.max(
+                                1,
+                                Math.min(
+                                                requestedBatchSize,
+                                                MAX_DISPATCH_EXPORT_BATCH_SIZE));
+
+                Specification<DispatchedItem> specification =
+                                buildDispatchRegisterSpecification(
+                                                search,
+                                                statuses,
+                                                plantFilter,
+                                                dateMode,
+                                                dateFrom,
+                                                dateTo,
+                                                timeFrom,
+                                                timeTo,
+                                                completeRegisterAccess,
+                                                allowedPlants,
+                                                ownerUsername,
+                                                utlReadContext);
+
+                Sort effectiveSort = sort == null || sort.isUnsorted()
+                                ? Sort.by(
+                                                Sort.Direction.DESC,
+                                                "createdAt")
+                                                .and(Sort.by(
+                                                                Sort.Direction.ASC,
+                                                                "zohoItemId"))
+                                : sort;
+
+                int pageNumber = 0;
+
+                while (true) {
+                        Pageable pageable = PageRequest.of(
+                                        pageNumber,
+                                        batchSize,
+                                        effectiveSort);
+
+                        List<DispatchedItem> batch = fetchDispatchRegisterRows(
+                                        specification,
+                                        pageable,
+                                        batchSize);
+
+                        if (batch.isEmpty()) {
+                                return;
+                        }
+
+                        consumer.accept(List.copyOf(batch));
+
+                        /*
+                         * Streaming must not let Hibernate's first-level cache grow
+                         * with the export. These are read-only rows.
+                         */
+                        for (DispatchedItem item : batch) {
+                                if (item != null && entityManager.contains(item)) {
+                                        entityManager.detach(item);
+                                }
+                        }
+
+                        if (batch.size() < batchSize) {
+                                return;
+                        }
+
+                        pageNumber += 1;
+                }
+        }
+
+        @FunctionalInterface
+        public interface DispatchRegisterBatchConsumer {
+                void accept(List<DispatchedItem> items) throws IOException;
         }
 
         private void appendDispatchAccessPredicate(
@@ -1321,6 +1427,26 @@ public class DispatchedItemService {
                         return;
                 }
 
+                /*
+                 * searchText/searchCompact are PostgreSQL-maintained, read-only
+                 * denormalized search caches. Normal production queries therefore
+                 * execute LIKE against two indexed text columns instead of running
+                 * lower/coalesce/replace across ~19 columns for every row.
+                 *
+                 * The legacy expression is retained only behind a NULL/blank-cache
+                 * predicate. That keeps rolling deployments and test schemas safe
+                 * if the database performance SQL has not been applied yet; after
+                 * the one-time backfill this branch has no qualifying rows.
+                 */
+                Expression<String> cachedNormal = root.<String>get("searchText");
+                Expression<String> cachedCompact = root.<String>get("searchCompact");
+
+                Predicate cacheMissing = cb.or(
+                                cb.isNull(cachedNormal),
+                                cb.equal(cb.trim(cachedNormal), ""),
+                                cb.isNull(cachedCompact),
+                                cb.equal(cb.trim(cachedCompact), ""));
+
                 String[] searchableFields = {
                                 "name",
                                 "sku",
@@ -1340,77 +1466,118 @@ public class DispatchedItemService {
                                 "gatePassNumber",
                                 "chalaanNumber",
                                 "driverName",
-                                "vehicleNumber",
-                                "status",
-                                "itemType"
+                                "vehicleNumber"
                 };
 
-                /*
-                 * Build the searchable row document once per SQL row instead of
-                 * generating normal + compact LIKE expressions independently for
-                 * every field and every token. With 21 fields, the previous query
-                 * could create 42 LIKE branches per token and repeatedly execute
-                 * the same replace/lower functions. The separator is deliberately
-                 * not removed by compact normalization, so a match still cannot
-                 * accidentally span from one field into the next.
-                 */
-                List<Expression<?>> searchDocumentParts = new ArrayList<>();
-                searchDocumentParts.add(cb.literal("§"));
+                Expression<String> legacyDocument = cb.literal("§");
+                boolean hasLegacySearchField = false;
 
                 for (String field : searchableFields) {
                         if (!hasDispatchAttribute(root, field)) {
                                 continue;
                         }
 
-                        searchDocumentParts.add(
-                                        dispatchSearchFieldExpression(
-                                                        root,
-                                                        cb,
-                                                        field));
+                        legacyDocument = cb.concat(
+                                        cb.concat(
+                                                        legacyDocument,
+                                                        dispatchSearchFieldExpression(
+                                                                        root,
+                                                                        cb,
+                                                                        field)),
+                                        cb.literal("§"));
+
+                        hasLegacySearchField = true;
                 }
 
-                if (searchDocumentParts.size() <= 1) {
-                        return;
-                }
+                Expression<String> legacyNormal = hasLegacySearchField
+                                ? dispatchNormalSearchExpression(cb, legacyDocument)
+                                : null;
 
-                Expression<String> searchDocument = cb.function(
-                                "concat_ws",
-                                String.class,
-                                searchDocumentParts.toArray(new Expression<?>[0]));
-
-                Expression<String> normalSearchDocument = dispatchNormalSearchExpression(
-                                cb,
-                                searchDocument);
-
-                Expression<String> compactSearchDocument = dispatchCompactSearchExpression(
-                                cb,
-                                searchDocument);
+                Expression<String> legacyCompact = hasLegacySearchField
+                                ? dispatchCompactSearchExpression(cb, legacyDocument)
+                                : null;
 
                 for (String token : tokens) {
                         String normalToken = normalizeDispatchServerSearch(token);
                         String compactToken = compactDispatchServerSearch(token);
 
-                        List<Predicate> tokenMatches = new ArrayList<>(3);
+                        List<Predicate> tokenMatches = new ArrayList<>(6);
 
                         if (!normalToken.isBlank()) {
-                                tokenMatches.add(
-                                                cb.like(
-                                                                normalSearchDocument,
-                                                                "%" + escapeDispatchLike(normalToken) + "%",
-                                                                '\\'));
+                                String pattern = "%" + escapeDispatchLike(normalToken) + "%";
+
+                                Predicate indexedMatch = cb.like(
+                                                cachedNormal,
+                                                pattern,
+                                                '\\');
+
+                                if (legacyNormal != null) {
+                                        tokenMatches.add(
+                                                        cb.or(
+                                                                        indexedMatch,
+                                                                        cb.and(
+                                                                                        cacheMissing,
+                                                                                        cb.like(
+                                                                                                        legacyNormal,
+                                                                                                        pattern,
+                                                                                                        '\\'))));
+                                } else {
+                                        tokenMatches.add(indexedMatch);
+                                }
                         }
 
                         if (!compactToken.isBlank()) {
-                                tokenMatches.add(
-                                                cb.like(
-                                                                compactSearchDocument,
-                                                                "%" + escapeDispatchLike(compactToken) + "%",
-                                                                '\\'));
+                                String compactPattern = "%" + escapeDispatchLike(compactToken) + "%";
+
+                                Predicate indexedCompactMatch = cb.like(
+                                                cachedCompact,
+                                                compactPattern,
+                                                '\\');
+
+                                if (legacyCompact != null) {
+                                        tokenMatches.add(
+                                                        cb.or(
+                                                                        indexedCompactMatch,
+                                                                        cb.and(
+                                                                                        cacheMissing,
+                                                                                        cb.like(
+                                                                                                        legacyCompact,
+                                                                                                        compactPattern,
+                                                                                                        '\\'))));
+                                } else {
+                                        tokenMatches.add(indexedCompactMatch);
+                                }
                         }
 
                         /*
-                         * Compatibility alias used by the existing smart search.
+                         * Preserve status/item-type smart-search compatibility.
+                         * These columns already have their native enum semantics and
+                         * do not need to be duplicated into the text cache.
                          */
+                        String enumToken = normalToken
+                                        .trim()
+                                        .toUpperCase(Locale.ROOT)
+                                        .replace('-', '_')
+                                        .replace(' ', '_');
+
+                        try {
+                                tokenMatches.add(
+                                                cb.equal(
+                                                                root.get("status"),
+                                                                ItemDispatchStatus.valueOf(enumToken)));
+                        } catch (IllegalArgumentException ignored) {
+                                /* Not a dispatch status token. */
+                        }
+
+                        try {
+                                tokenMatches.add(
+                                                cb.equal(
+                                                                root.get("itemType"),
+                                                                PacketItemType.valueOf(enumToken)));
+                        } catch (IllegalArgumentException ignored) {
+                                /* Not an item type token. */
+                        }
+
                         if ("hw".equals(compactToken)
                                         || "hardware".equals(compactToken)) {
                                 tokenMatches.add(
@@ -1431,7 +1598,7 @@ public class DispatchedItemService {
                         CriteriaBuilder cb,
                         String field) {
 
-                Expression<String> raw = root.get(field).as(String.class);
+                Expression<String> raw = root.<String>get(field);
 
                 return cb.lower(
                                 cb.coalesce(raw, ""));

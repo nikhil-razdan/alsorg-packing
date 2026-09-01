@@ -8,709 +8,734 @@ import com.alsorg.packing.domain.common.ItemDispatchStatus;
 import jakarta.persistence.*;
 
 import com.alsorg.packing.domain.common.PacketItemType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "dispatched_items")
 public class DispatchedItem {
 
-	@Id
-	@Column(name = "zoho_item_id", nullable = false)
-	private String zohoItemId;
-	private String stickerNumber;
-	@Column(name = "packet_item_id")
-	private UUID packetItemId;
+    @Id
+    @Column(name = "zoho_item_id", nullable = false)
+    private String zohoItemId;
+    private String stickerNumber;
+    @Column(name = "packet_item_id")
+    private UUID packetItemId;
+
+    @Column(name = "packet_id")
+    private UUID packetId;
+    private String location;
+    private String weight;
+    private String dimensions;
+    @Column(nullable = false)
+    private String name;
 
-	@Column(name = "packet_id")
-	private UUID packetId;
-	private String location;
-	private String weight;
-	private String dimensions;
-	@Column(nullable = false)
-	private String name;
+    @Column(nullable = true)
+    private String sku;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "item_type", nullable = false, length = 30)
+    private PacketItemType itemType = PacketItemType.NORMAL;
 
-	@Column(nullable = true)
-	private String sku;
-	@Enumerated(EnumType.STRING)
-	@Column(name = "item_type", nullable = false, length = 30)
-	private PacketItemType itemType = PacketItemType.NORMAL;
+    @Column(name = "linked_packet_item_id")
+    private UUID linkedPacketItemId;
 
-	@Column(name = "linked_packet_item_id")
-	private UUID linkedPacketItemId;
+    @Column(name = "linked_master_item_id")
+    private UUID linkedMasterItemId;
 
-	@Column(name = "linked_master_item_id")
-	private UUID linkedMasterItemId;
+    private String plantCode;
+    private String packedAreaCode;
+    private String fgAreaCode;
+    private String allowedWarehouseCodes;
+    @Column(name = "helper_loader_count")
+    private Integer helperLoaderCount;
+    private String currentLocationCode;
+    private String fgZoneCode;
 
-	private String plantCode;
-	private String packedAreaCode;
-	private String fgAreaCode;
-	private String allowedWarehouseCodes;
-	@Column(name = "helper_loader_count")
-	private Integer helperLoaderCount;
-	private String currentLocationCode;
-	private String fgZoneCode;
+    @Column(name = "client_name")
+    private String clientName;
+    private Integer quantity;
 
-	@Column(name = "client_name")
-	private String clientName;
-	private Integer quantity;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ItemDispatchStatus status;
 
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false)
-	private ItemDispatchStatus status;
+    @Column(name = "packed_at")
+    private LocalDateTime packedAt;
 
-	@Column(name = "packed_at")
-	private LocalDateTime packedAt;
+    private LocalDateTime createdAt;
 
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private Integer stock = 0;
 
-	@Column(nullable = false)
-	private Integer stock = 0;
+    /*
+     * Database-maintained search caches.
+     *
+     * They are deliberately read-only to JPA. The supplied PostgreSQL trigger
+     * refreshes them only when a searchable business field actually changes, so
+     * ordinary status/warehouse/logistics writes keep their existing workflow
+     * semantics and do not rebuild a large search expression in Java.
+     */
+    @JsonIgnore
+    @Column(name = "search_text", insertable = false, updatable = false, columnDefinition = "text")
+    private String searchText;
 
-	/* ===================== RESTORE / APPROVAL ===================== */
+    @JsonIgnore
+    @Column(name = "search_compact", insertable = false, updatable = false, columnDefinition = "text")
+    private String searchCompact;
 
-	@Enumerated(EnumType.STRING)
-	@Column(name = "approval_status")
-	private ApprovalStatus approvalStatus;
+    /* ===================== RESTORE / APPROVAL ===================== */
 
-	@Column(name = "approval_requested_by")
-	private String approvalRequestedBy;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status")
+    private ApprovalStatus approvalStatus;
 
-	@Column(name = "approval_requested_at")
-	private LocalDateTime approvalRequestedAt;
+    @Column(name = "approval_requested_by")
+    private String approvalRequestedBy;
 
-	private String packedBy;
+    @Column(name = "approval_requested_at")
+    private LocalDateTime approvalRequestedAt;
 
-	@Column(name = "approved_at")
-	private LocalDateTime approvedAt;
+    private String packedBy;
 
-	@Column(name = "approved_by")
-	private String approvedBy;
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
 
-	@Column(name = "restore_requested", nullable = false)
-	private boolean restoreRequested = false;
+    @Column(name = "approved_by")
+    private String approvedBy;
 
-	@Column(name = "requested_by")
-	private String requestedBy;
+    @Column(name = "restore_requested", nullable = false)
+    private boolean restoreRequested = false;
 
-	@Column(name = "requested_at")
-	private LocalDateTime requestedAt;
+    @Column(name = "requested_by")
+    private String requestedBy;
 
-	@Column(name = "rejection_reason")
-	private String rejectionReason;
+    @Column(name = "requested_at")
+    private LocalDateTime requestedAt;
 
-	/* ===================== DISPATCH ===================== */
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
 
-	@Column(name = "dispatched_by")
-	private String dispatchedBy;
+    /* ===================== DISPATCH ===================== */
 
-	@Column(name = "dispatched_at")
-	private LocalDateTime dispatchedAt;
+    @Column(name = "dispatched_by")
+    private String dispatchedBy;
 
-	@Column(name = "floor_location")
-	private String floorLocation;
+    @Column(name = "dispatched_at")
+    private LocalDateTime dispatchedAt;
 
-	@Column(name = "warehouse_code")
-	private String warehouseCode;
+    @Column(name = "floor_location")
+    private String floorLocation;
 
-	private LocalDateTime movedToFloorAt;
+    @Column(name = "warehouse_code")
+    private String warehouseCode;
 
-	private LocalDateTime storedAt;
+    private LocalDateTime movedToFloorAt;
 
-	private String chalaanNumber;
+    private LocalDateTime storedAt;
 
-	@Column(name = "factory_floor")
-	private String factoryFloor;
+    private String chalaanNumber;
 
-	private String description;
-	private String clientAddress;
-	private String drawingNo;
-	private String remarks;
-	private String floor;
-	private String pdNo;
-	private String gatePassNumber;
-	private String fromLocation;
-	private String createdBy;
-	private UUID logisticsTripId;
+    @Column(name = "factory_floor")
+    private String factoryFloor;
 
-	private UUID driverId;
+    private String description;
+    private String clientAddress;
+    private String drawingNo;
+    private String remarks;
+    private String floor;
+    private String pdNo;
+    private String gatePassNumber;
+    private String fromLocation;
+    private String createdBy;
+    private UUID logisticsTripId;
 
-	private String driverName;
+    private UUID driverId;
 
-	private UUID vehicleId;
+    private String driverName;
 
-	private String vehicleNumber;
+    private UUID vehicleId;
 
-	private LocalDateTime tripStartedAt;
+    private String vehicleNumber;
 
-	private LocalDateTime tripEndedAt;
+    private LocalDateTime tripStartedAt;
 
-	private LocalDateTime deliveredAt;
+    private LocalDateTime tripEndedAt;
 
-	private String receiverName;
+    private LocalDateTime deliveredAt;
 
-	private String receiverPhone;
+    private String receiverName;
 
-	private String podUrl;
+    private String receiverPhone;
 
-	private Double deliveryLatitude;
+    private String podUrl;
 
-	private Double deliveryLongitude;
+    private Double deliveryLatitude;
 
-	private Double deliveryLocationAccuracy;
+    private Double deliveryLongitude;
 
-	@Column(length = 1500)
-	private String deliveryRemarks;
+    private Double deliveryLocationAccuracy;
 
-	public DispatchedItem() {
-	}
+    @Column(length = 1500)
+    private String deliveryRemarks;
 
-	/* ===================== GETTERS / SETTERS ===================== */
+    public DispatchedItem() {
+    }
 
-	public String getZohoItemId() {
-		return zohoItemId;
-	}
+    /* ===================== GETTERS / SETTERS ===================== */
 
-	public void setZohoItemId(String zohoItemId) {
-		this.zohoItemId = zohoItemId;
-	}
+    public String getZohoItemId() {
+        return zohoItemId;
+    }
 
-	public String getName() {
-		return name;
-	}
+    public void setZohoItemId(String zohoItemId) {
+        this.zohoItemId = zohoItemId;
+    }
 
-	public void setName(String name) {
-		this.name = name;
-	}
+    public String getName() {
+        return name;
+    }
 
-	public String getPlantCode() {
-		return plantCode;
-	}
+    public void setName(String name) {
+        this.name = name;
+    }
 
-	public void setPlantCode(String plantCode) {
-		this.plantCode = plantCode;
-	}
+    public String getPlantCode() {
+        return plantCode;
+    }
 
-	public String getPackedAreaCode() {
-		return packedAreaCode;
-	}
+    public void setPlantCode(String plantCode) {
+        this.plantCode = plantCode;
+    }
 
-	public void setPackedAreaCode(String packedAreaCode) {
-		this.packedAreaCode = packedAreaCode;
-	}
+    public String getPackedAreaCode() {
+        return packedAreaCode;
+    }
 
-	public String getFgAreaCode() {
-		return fgAreaCode;
-	}
+    public void setPackedAreaCode(String packedAreaCode) {
+        this.packedAreaCode = packedAreaCode;
+    }
 
-	public void setFgAreaCode(String fgAreaCode) {
-		this.fgAreaCode = fgAreaCode;
-	}
+    public String getFgAreaCode() {
+        return fgAreaCode;
+    }
 
-	public String getAllowedWarehouseCodes() {
-		return allowedWarehouseCodes;
-	}
+    public void setFgAreaCode(String fgAreaCode) {
+        this.fgAreaCode = fgAreaCode;
+    }
 
-	public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
-		this.allowedWarehouseCodes = allowedWarehouseCodes;
-	}
+    public String getAllowedWarehouseCodes() {
+        return allowedWarehouseCodes;
+    }
 
-	public String getSku() {
-		return sku;
-	}
+    public void setAllowedWarehouseCodes(String allowedWarehouseCodes) {
+        this.allowedWarehouseCodes = allowedWarehouseCodes;
+    }
 
-	public void setSku(String sku) {
-		this.sku = sku;
-	}
+    public String getSku() {
+        return sku;
+    }
 
-	public String getClientName() {
-		return clientName;
-	}
+    public void setSku(String sku) {
+        this.sku = sku;
+    }
 
-	public void setClientName(String clientName) {
-		this.clientName = clientName;
-	}
+    public String getClientName() {
+        return clientName;
+    }
 
-	public ItemDispatchStatus getStatus() {
-		return status;
-	}
+    public void setClientName(String clientName) {
+        this.clientName = clientName;
+    }
 
-	public void setStatus(ItemDispatchStatus status) {
-		this.status = status;
-	}
+    public ItemDispatchStatus getStatus() {
+        return status;
+    }
 
-	public LocalDateTime getPackedAt() {
-		return packedAt;
-	}
+    public void setStatus(ItemDispatchStatus status) {
+        this.status = status;
+    }
 
-	public void setPackedAt(LocalDateTime packedAt) {
-		this.packedAt = packedAt;
-	}
+    public LocalDateTime getPackedAt() {
+        return packedAt;
+    }
 
-	public Integer getStock() {
-		return stock;
-	}
+    public void setPackedAt(LocalDateTime packedAt) {
+        this.packedAt = packedAt;
+    }
 
-	public void setStock(Integer stock) {
-		this.stock = stock;
-	}
+    public Integer getStock() {
+        return stock;
+    }
 
-	public ApprovalStatus getApprovalStatus() {
-		return approvalStatus;
-	}
+    public void setStock(Integer stock) {
+        this.stock = stock;
+    }
 
-	public void setApprovalStatus(ApprovalStatus approvalStatus) {
-		this.approvalStatus = approvalStatus;
-	}
+    public String getSearchText() {
+        return searchText;
+    }
 
-	public String getApprovalRequestedBy() {
-		return approvalRequestedBy;
-	}
+    public String getSearchCompact() {
+        return searchCompact;
+    }
 
-	public void setApprovalRequestedBy(String approvalRequestedBy) {
-		this.approvalRequestedBy = approvalRequestedBy;
-	}
+    public ApprovalStatus getApprovalStatus() {
+        return approvalStatus;
+    }
 
-	public LocalDateTime getApprovalRequestedAt() {
-		return approvalRequestedAt;
-	}
+    public void setApprovalStatus(ApprovalStatus approvalStatus) {
+        this.approvalStatus = approvalStatus;
+    }
 
-	public void setApprovalRequestedAt(LocalDateTime approvalRequestedAt) {
-		this.approvalRequestedAt = approvalRequestedAt;
-	}
+    public String getApprovalRequestedBy() {
+        return approvalRequestedBy;
+    }
 
-	public LocalDateTime getApprovedAt() {
-		return approvedAt;
-	}
+    public void setApprovalRequestedBy(String approvalRequestedBy) {
+        this.approvalRequestedBy = approvalRequestedBy;
+    }
 
-	public void setApprovedAt(LocalDateTime approvedAt) {
-		this.approvedAt = approvedAt;
-	}
+    public LocalDateTime getApprovalRequestedAt() {
+        return approvalRequestedAt;
+    }
 
-	public String getApprovedBy() {
-		return approvedBy;
-	}
+    public void setApprovalRequestedAt(LocalDateTime approvalRequestedAt) {
+        this.approvalRequestedAt = approvalRequestedAt;
+    }
 
-	public void setApprovedBy(String approvedBy) {
-		this.approvedBy = approvedBy;
-	}
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
+    }
 
-	public boolean isRestoreRequested() {
-		return restoreRequested;
-	}
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
 
-	public void setRestoreRequested(boolean restoreRequested) {
-		this.restoreRequested = restoreRequested;
-	}
+    public String getApprovedBy() {
+        return approvedBy;
+    }
 
-	public String getRequestedBy() {
-		return requestedBy;
-	}
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
+    }
 
-	public void setRequestedBy(String requestedBy) {
-		this.requestedBy = requestedBy;
-	}
+    public boolean isRestoreRequested() {
+        return restoreRequested;
+    }
 
-	public LocalDateTime getRequestedAt() {
-		return requestedAt;
-	}
+    public void setRestoreRequested(boolean restoreRequested) {
+        this.restoreRequested = restoreRequested;
+    }
 
-	public void setRequestedAt(LocalDateTime requestedAt) {
-		this.requestedAt = requestedAt;
-	}
+    public String getRequestedBy() {
+        return requestedBy;
+    }
 
-	public String getRejectionReason() {
-		return rejectionReason;
-	}
+    public void setRequestedBy(String requestedBy) {
+        this.requestedBy = requestedBy;
+    }
 
-	public void setRejectionReason(String rejectionReason) {
-		this.rejectionReason = rejectionReason;
-	}
+    public LocalDateTime getRequestedAt() {
+        return requestedAt;
+    }
 
-	public String getDispatchedBy() {
-		return dispatchedBy;
-	}
+    public void setRequestedAt(LocalDateTime requestedAt) {
+        this.requestedAt = requestedAt;
+    }
 
-	public void setDispatchedBy(String dispatchedBy) {
-		this.dispatchedBy = dispatchedBy;
-	}
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
 
-	public LocalDateTime getDispatchedAt() {
-		return dispatchedAt;
-	}
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
 
-	public void setDispatchedAt(LocalDateTime dispatchedAt) {
-		this.dispatchedAt = dispatchedAt;
-	}
+    public String getDispatchedBy() {
+        return dispatchedBy;
+    }
 
-	public String getPackedBy() {
-		return packedBy;
-	}
+    public void setDispatchedBy(String dispatchedBy) {
+        this.dispatchedBy = dispatchedBy;
+    }
 
-	public void setPackedBy(String packedBy) {
-		this.packedBy = packedBy;
-	}
+    public LocalDateTime getDispatchedAt() {
+        return dispatchedAt;
+    }
 
-	public String getFactoryFloor() {
-		return factoryFloor;
-	}
+    public void setDispatchedAt(LocalDateTime dispatchedAt) {
+        this.dispatchedAt = dispatchedAt;
+    }
 
-	public void setFactoryFloor(String factoryFloor) {
-		this.factoryFloor = factoryFloor;
-	}
+    public String getPackedBy() {
+        return packedBy;
+    }
 
-	public String getFloorLocation() {
-		return floorLocation;
-	}
+    public void setPackedBy(String packedBy) {
+        this.packedBy = packedBy;
+    }
 
-	public void setFloorLocation(String floorLocation) {
-		this.floorLocation = floorLocation;
-	}
+    public String getFactoryFloor() {
+        return factoryFloor;
+    }
 
-	public String getWarehouseCode() {
-		return warehouseCode;
-	}
+    public void setFactoryFloor(String factoryFloor) {
+        this.factoryFloor = factoryFloor;
+    }
 
-	public void setWarehouseCode(String warehouseCode) {
-		this.warehouseCode = warehouseCode;
-	}
+    public String getFloorLocation() {
+        return floorLocation;
+    }
 
-	public LocalDateTime getMovedToFloorAt() {
-		return movedToFloorAt;
-	}
+    public void setFloorLocation(String floorLocation) {
+        this.floorLocation = floorLocation;
+    }
 
-	public void setMovedToFloorAt(LocalDateTime movedToFloorAt) {
-		this.movedToFloorAt = movedToFloorAt;
-	}
+    public String getWarehouseCode() {
+        return warehouseCode;
+    }
 
-	public LocalDateTime getStoredAt() {
-		return storedAt;
-	}
+    public void setWarehouseCode(String warehouseCode) {
+        this.warehouseCode = warehouseCode;
+    }
 
-	public void setStoredAt(LocalDateTime storedAt) {
-		this.storedAt = storedAt;
-	}
+    public LocalDateTime getMovedToFloorAt() {
+        return movedToFloorAt;
+    }
 
-	public String getChalaanNumber() {
-		return chalaanNumber;
-	}
+    public void setMovedToFloorAt(LocalDateTime movedToFloorAt) {
+        this.movedToFloorAt = movedToFloorAt;
+    }
 
-	public void setChalaanNumber(String chalaanNumber) {
-		this.chalaanNumber = chalaanNumber;
-	}
+    public LocalDateTime getStoredAt() {
+        return storedAt;
+    }
 
-	public String getDescription() {
-		return description;
-	}
+    public void setStoredAt(LocalDateTime storedAt) {
+        this.storedAt = storedAt;
+    }
 
-	public void setDescription(String description) {
-		this.description = description;
-	}
+    public String getChalaanNumber() {
+        return chalaanNumber;
+    }
 
-	public String getClientAddress() {
-		return clientAddress;
-	}
+    public void setChalaanNumber(String chalaanNumber) {
+        this.chalaanNumber = chalaanNumber;
+    }
 
-	public void setClientAddress(String clientAddress) {
-		this.clientAddress = clientAddress;
-	}
+    public String getDescription() {
+        return description;
+    }
 
-	public String getDrawingNo() {
-		return drawingNo;
-	}
+    public void setDescription(String description) {
+        this.description = description;
+    }
 
-	public void setDrawingNo(String drawingNo) {
-		this.drawingNo = drawingNo;
-	}
+    public String getClientAddress() {
+        return clientAddress;
+    }
 
-	public String getRemarks() {
-		return remarks;
-	}
+    public void setClientAddress(String clientAddress) {
+        this.clientAddress = clientAddress;
+    }
 
-	public void setRemarks(String remarks) {
-		this.remarks = remarks;
-	}
+    public String getDrawingNo() {
+        return drawingNo;
+    }
 
-	public String getFloor() {
-		return floor;
-	}
+    public void setDrawingNo(String drawingNo) {
+        this.drawingNo = drawingNo;
+    }
 
-	public void setFloor(String floor) {
-		this.floor = floor;
-	}
+    public String getRemarks() {
+        return remarks;
+    }
 
-	public String getPdNo() {
-		return pdNo;
-	}
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
+    }
 
-	public void setPdNo(String pdNo) {
-		this.pdNo = pdNo;
-	}
+    public String getFloor() {
+        return floor;
+    }
 
-	public String getGatePassNumber() {
-		return gatePassNumber;
-	}
+    public void setFloor(String floor) {
+        this.floor = floor;
+    }
 
-	public void setGatePassNumber(String gatePassNumber) {
-		this.gatePassNumber = gatePassNumber;
-	}
+    public String getPdNo() {
+        return pdNo;
+    }
 
-	public String getFromLocation() {
-		return fromLocation;
-	}
+    public void setPdNo(String pdNo) {
+        this.pdNo = pdNo;
+    }
 
-	public void setFromLocation(String fromLocation) {
-		this.fromLocation = fromLocation;
-	}
+    public String getGatePassNumber() {
+        return gatePassNumber;
+    }
 
-	public String getCreatedBy() {
-		return createdBy;
-	}
+    public void setGatePassNumber(String gatePassNumber) {
+        this.gatePassNumber = gatePassNumber;
+    }
 
-	public void setCreatedBy(String createdBy) {
-		this.createdBy = createdBy;
-	}
+    public String getFromLocation() {
+        return fromLocation;
+    }
 
-	public String getLocation() {
-		return location;
-	}
+    public void setFromLocation(String fromLocation) {
+        this.fromLocation = fromLocation;
+    }
 
-	public void setLocation(String location) {
-		this.location = location;
-	}
+    public String getCreatedBy() {
+        return createdBy;
+    }
 
-	public String getStickerNumber() {
-		return stickerNumber;
-	}
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
 
-	public void setStickerNumber(String stickerNumber) {
-		this.stickerNumber = stickerNumber;
-	}
+    public String getLocation() {
+        return location;
+    }
 
-	public UUID getPacketItemId() {
-		return packetItemId;
-	}
+    public void setLocation(String location) {
+        this.location = location;
+    }
 
-	public void setPacketItemId(UUID packetItemId) {
-		this.packetItemId = packetItemId;
-	}
+    public String getStickerNumber() {
+        return stickerNumber;
+    }
 
-	public UUID getPacketId() {
-		return packetId;
-	}
+    public void setStickerNumber(String stickerNumber) {
+        this.stickerNumber = stickerNumber;
+    }
 
-	public void setPacketId(UUID packetId) {
-		this.packetId = packetId;
-	}
+    public UUID getPacketItemId() {
+        return packetItemId;
+    }
 
-	public Integer getQuantity() {
-		return quantity;
-	}
+    public void setPacketItemId(UUID packetItemId) {
+        this.packetItemId = packetItemId;
+    }
 
-	public void setQuantity(Integer quantity) {
-		this.quantity = quantity;
-	}
+    public UUID getPacketId() {
+        return packetId;
+    }
 
-	public String getWeight() {
-		return weight;
-	}
+    public void setPacketId(UUID packetId) {
+        this.packetId = packetId;
+    }
 
-	public void setWeight(String weight) {
-		this.weight = weight;
-	}
+    public Integer getQuantity() {
+        return quantity;
+    }
 
-	public String getDimensions() {
-		return dimensions;
-	}
+    public void setQuantity(Integer quantity) {
+        this.quantity = quantity;
+    }
 
-	public void setDimensions(String dimensions) {
-		this.dimensions = dimensions;
-	}
+    public String getWeight() {
+        return weight;
+    }
 
-	public LocalDateTime getCreatedAt() {
-		return createdAt;
-	}
+    public void setWeight(String weight) {
+        this.weight = weight;
+    }
 
-	public void setCreatedAt(LocalDateTime createdAt) {
-		this.createdAt = createdAt;
-	}
+    public String getDimensions() {
+        return dimensions;
+    }
 
-	public String getCurrentLocationCode() {
-		return currentLocationCode;
-	}
+    public void setDimensions(String dimensions) {
+        this.dimensions = dimensions;
+    }
 
-	public void setCurrentLocationCode(String currentLocationCode) {
-		this.currentLocationCode = currentLocationCode;
-	}
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 
-	public String getFgZoneCode() {
-		return fgZoneCode;
-	}
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
-	public void setFgZoneCode(String fgZoneCode) {
-		this.fgZoneCode = fgZoneCode;
-	}
+    public String getCurrentLocationCode() {
+        return currentLocationCode;
+    }
 
-	public UUID getLogisticsTripId() {
-		return logisticsTripId;
-	}
+    public void setCurrentLocationCode(String currentLocationCode) {
+        this.currentLocationCode = currentLocationCode;
+    }
 
-	public void setLogisticsTripId(UUID logisticsTripId) {
-		this.logisticsTripId = logisticsTripId;
-	}
+    public String getFgZoneCode() {
+        return fgZoneCode;
+    }
 
-	public UUID getDriverId() {
-		return driverId;
-	}
+    public void setFgZoneCode(String fgZoneCode) {
+        this.fgZoneCode = fgZoneCode;
+    }
 
-	public void setDriverId(UUID driverId) {
-		this.driverId = driverId;
-	}
+    public UUID getLogisticsTripId() {
+        return logisticsTripId;
+    }
 
-	public String getDriverName() {
-		return driverName;
-	}
+    public void setLogisticsTripId(UUID logisticsTripId) {
+        this.logisticsTripId = logisticsTripId;
+    }
 
-	public void setDriverName(String driverName) {
-		this.driverName = driverName;
-	}
+    public UUID getDriverId() {
+        return driverId;
+    }
 
-	public UUID getVehicleId() {
-		return vehicleId;
-	}
+    public void setDriverId(UUID driverId) {
+        this.driverId = driverId;
+    }
 
-	public void setVehicleId(UUID vehicleId) {
-		this.vehicleId = vehicleId;
-	}
+    public String getDriverName() {
+        return driverName;
+    }
 
-	public String getVehicleNumber() {
-		return vehicleNumber;
-	}
+    public void setDriverName(String driverName) {
+        this.driverName = driverName;
+    }
 
-	public void setVehicleNumber(String vehicleNumber) {
-		this.vehicleNumber = vehicleNumber;
-	}
+    public UUID getVehicleId() {
+        return vehicleId;
+    }
 
-	public LocalDateTime getTripStartedAt() {
-		return tripStartedAt;
-	}
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
+    }
 
-	public void setTripStartedAt(LocalDateTime tripStartedAt) {
-		this.tripStartedAt = tripStartedAt;
-	}
+    public String getVehicleNumber() {
+        return vehicleNumber;
+    }
 
-	public LocalDateTime getTripEndedAt() {
-		return tripEndedAt;
-	}
+    public void setVehicleNumber(String vehicleNumber) {
+        this.vehicleNumber = vehicleNumber;
+    }
 
-	public void setTripEndedAt(LocalDateTime tripEndedAt) {
-		this.tripEndedAt = tripEndedAt;
-	}
+    public LocalDateTime getTripStartedAt() {
+        return tripStartedAt;
+    }
 
-	public LocalDateTime getDeliveredAt() {
-		return deliveredAt;
-	}
+    public void setTripStartedAt(LocalDateTime tripStartedAt) {
+        this.tripStartedAt = tripStartedAt;
+    }
 
-	public void setDeliveredAt(LocalDateTime deliveredAt) {
-		this.deliveredAt = deliveredAt;
-	}
+    public LocalDateTime getTripEndedAt() {
+        return tripEndedAt;
+    }
 
-	public String getReceiverName() {
-		return receiverName;
-	}
+    public void setTripEndedAt(LocalDateTime tripEndedAt) {
+        this.tripEndedAt = tripEndedAt;
+    }
 
-	public void setReceiverName(String receiverName) {
-		this.receiverName = receiverName;
-	}
+    public LocalDateTime getDeliveredAt() {
+        return deliveredAt;
+    }
 
-	public String getReceiverPhone() {
-		return receiverPhone;
-	}
+    public void setDeliveredAt(LocalDateTime deliveredAt) {
+        this.deliveredAt = deliveredAt;
+    }
 
-	public void setReceiverPhone(String receiverPhone) {
-		this.receiverPhone = receiverPhone;
-	}
+    public String getReceiverName() {
+        return receiverName;
+    }
 
-	public String getPodUrl() {
-		return podUrl;
-	}
+    public void setReceiverName(String receiverName) {
+        this.receiverName = receiverName;
+    }
 
-	public void setPodUrl(String podUrl) {
-		this.podUrl = podUrl;
-	}
+    public String getReceiverPhone() {
+        return receiverPhone;
+    }
 
-	public Double getDeliveryLatitude() {
-		return deliveryLatitude;
-	}
+    public void setReceiverPhone(String receiverPhone) {
+        this.receiverPhone = receiverPhone;
+    }
 
-	public void setDeliveryLatitude(Double deliveryLatitude) {
-		this.deliveryLatitude = deliveryLatitude;
-	}
+    public String getPodUrl() {
+        return podUrl;
+    }
 
-	public Double getDeliveryLongitude() {
-		return deliveryLongitude;
-	}
+    public void setPodUrl(String podUrl) {
+        this.podUrl = podUrl;
+    }
 
-	public void setDeliveryLongitude(Double deliveryLongitude) {
-		this.deliveryLongitude = deliveryLongitude;
-	}
+    public Double getDeliveryLatitude() {
+        return deliveryLatitude;
+    }
 
-	public Double getDeliveryLocationAccuracy() {
-		return deliveryLocationAccuracy;
-	}
+    public void setDeliveryLatitude(Double deliveryLatitude) {
+        this.deliveryLatitude = deliveryLatitude;
+    }
 
-	public void setDeliveryLocationAccuracy(Double deliveryLocationAccuracy) {
-		this.deliveryLocationAccuracy = deliveryLocationAccuracy;
-	}
+    public Double getDeliveryLongitude() {
+        return deliveryLongitude;
+    }
 
-	public String getDeliveryRemarks() {
-		return deliveryRemarks;
-	}
+    public void setDeliveryLongitude(Double deliveryLongitude) {
+        this.deliveryLongitude = deliveryLongitude;
+    }
 
-	public void setDeliveryRemarks(String deliveryRemarks) {
-		this.deliveryRemarks = deliveryRemarks;
-	}
+    public Double getDeliveryLocationAccuracy() {
+        return deliveryLocationAccuracy;
+    }
 
-	public PacketItemType getItemType() {
-		return itemType;
-	}
+    public void setDeliveryLocationAccuracy(Double deliveryLocationAccuracy) {
+        this.deliveryLocationAccuracy = deliveryLocationAccuracy;
+    }
 
-	public void setItemType(PacketItemType itemType) {
-		this.itemType = itemType;
-	}
+    public String getDeliveryRemarks() {
+        return deliveryRemarks;
+    }
 
-	public UUID getLinkedPacketItemId() {
-		return linkedPacketItemId;
-	}
+    public void setDeliveryRemarks(String deliveryRemarks) {
+        this.deliveryRemarks = deliveryRemarks;
+    }
 
-	public void setLinkedPacketItemId(UUID linkedPacketItemId) {
-		this.linkedPacketItemId = linkedPacketItemId;
-	}
+    public PacketItemType getItemType() {
+        return itemType;
+    }
 
-	public UUID getLinkedMasterItemId() {
-		return linkedMasterItemId;
-	}
+    public void setItemType(PacketItemType itemType) {
+        this.itemType = itemType;
+    }
 
-	public void setLinkedMasterItemId(UUID linkedMasterItemId) {
-		this.linkedMasterItemId = linkedMasterItemId;
-	}
+    public UUID getLinkedPacketItemId() {
+        return linkedPacketItemId;
+    }
 
-	@PrePersist
-	@PreUpdate
-	private void applyDispatchDefaults() {
-		if (itemType == null) {
-			itemType = PacketItemType.NORMAL;
-		}
+    public void setLinkedPacketItemId(UUID linkedPacketItemId) {
+        this.linkedPacketItemId = linkedPacketItemId;
+    }
 
-		if (stock == null) {
-			stock = 0;
-		}
-	}
+    public UUID getLinkedMasterItemId() {
+        return linkedMasterItemId;
+    }
 
-	public Integer getHelperLoaderCount() {
-		return helperLoaderCount;
-	}
+    public void setLinkedMasterItemId(UUID linkedMasterItemId) {
+        this.linkedMasterItemId = linkedMasterItemId;
+    }
 
-	public void setHelperLoaderCount(
-			Integer helperLoaderCount) {
-		this.helperLoaderCount = helperLoaderCount;
-	}
+    @PrePersist
+    @PreUpdate
+    private void applyDispatchDefaults() {
+        if (itemType == null) {
+            itemType = PacketItemType.NORMAL;
+        }
+
+        if (stock == null) {
+            stock = 0;
+        }
+    }
+
+    public Integer getHelperLoaderCount() {
+        return helperLoaderCount;
+    }
+
+    public void setHelperLoaderCount(
+            Integer helperLoaderCount) {
+        this.helperLoaderCount = helperLoaderCount;
+    }
 }
