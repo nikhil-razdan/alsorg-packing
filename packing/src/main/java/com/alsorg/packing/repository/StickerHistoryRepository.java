@@ -190,6 +190,89 @@ public interface StickerHistoryRepository
             @Param("generatedBy") String generatedBy,
             Pageable pageable);
 
+    @Query(
+            value = """
+                    SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                        h.id,
+                        h.packetItem.id,
+                        h.stickerNumber,
+                        h.printIteration,
+                        h.reason,
+                        h.generatedAt,
+                        h.generatedBy,
+                        h.packetItem.itemName,
+                        h.packetItem.sku,
+                        h.packetItem.pdNo,
+                        h.packetItem.drawingNo,
+                        h.packetItem.clientName,
+                        h.packetItem.description,
+                        h.packetItem.packetNumber,
+                        h.packetItem.floor,
+                        h.packetItem.weight,
+                        h.packetItem.dimensions,
+                        h.packetItem.remarks
+                    )
+                    FROM StickerHistory h
+                    WHERE h.packetItem IS NOT NULL
+                      AND h.generatedAt >= :from
+                      AND h.generatedAt <= :to
+                    ORDER BY h.generatedAt DESC, h.id DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(h.id)
+                    FROM StickerHistory h
+                    WHERE h.packetItem IS NOT NULL
+                      AND h.generatedAt >= :from
+                      AND h.generatedAt <= :to
+                    """)
+    Page<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryAllPageBetween(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
+    @Query(
+            value = """
+                    SELECT new com.alsorg.packing.controller.dto.GeneratedPacketHistoryResponse(
+                        h.id,
+                        h.packetItem.id,
+                        h.stickerNumber,
+                        h.printIteration,
+                        h.reason,
+                        h.generatedAt,
+                        h.generatedBy,
+                        h.packetItem.itemName,
+                        h.packetItem.sku,
+                        h.packetItem.pdNo,
+                        h.packetItem.drawingNo,
+                        h.packetItem.clientName,
+                        h.packetItem.description,
+                        h.packetItem.packetNumber,
+                        h.packetItem.floor,
+                        h.packetItem.weight,
+                        h.packetItem.dimensions,
+                        h.packetItem.remarks
+                    )
+                    FROM StickerHistory h
+                    WHERE h.packetItem IS NOT NULL
+                      AND LOWER(h.generatedBy) = LOWER(:generatedBy)
+                      AND h.generatedAt >= :from
+                      AND h.generatedAt <= :to
+                    ORDER BY h.generatedAt DESC, h.id DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(h.id)
+                    FROM StickerHistory h
+                    WHERE h.packetItem IS NOT NULL
+                      AND LOWER(h.generatedBy) = LOWER(:generatedBy)
+                      AND h.generatedAt >= :from
+                      AND h.generatedAt <= :to
+                    """)
+    Page<GeneratedPacketHistoryResponse> findGeneratedPacketHistoryByUserPageBetween(
+            @Param("generatedBy") String generatedBy,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            Pageable pageable);
+
     /*
      * =====================================================
      * USER DROPDOWN

@@ -1,5 +1,6 @@
 package com.alsorg.packing.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -8,6 +9,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -58,32 +60,23 @@ public class StickerHistoryController {
 
     /*
      * =====================================================
-     * GENERATED HISTORY
+     * GENERATED HISTORY - LEGACY CONTRACT
      * =====================================================
      *
+     * Kept unchanged for existing PackFlow callers. High-volume intelligence
+     * screens use /generated-history/search below.
+     *
      * ADMIN:
-     * - Can page through all generated sticker history.
+     * - All generated sticker history.
      * - Optional generatedBy filter is preserved.
      *
      * OTHER USERS:
-     * - Can page only through their own generated history.
-     * - A forged generatedBy request parameter is ignored.
-     *
-     * IMPORTANT:
-     * - Response BODY deliberately remains a JSON array for frontend/backward
-     *   compatibility.
-     * - Paging metadata is returned through headers already exposed by FlowSuite
-     *   CORS configuration.
-     * - The page size is server-clamped so this endpoint can never reintroduce
-     *   the old full-table Hibernate materialization / Java-heap failure.
+     * - Own generated history only.
      */
 
-    @Transactional(readOnly = true)
     @GetMapping("/generated-history")
     public ResponseEntity<List<GeneratedPacketHistoryResponse>> generatedHistory(
             @RequestParam(required = false) String generatedBy,
-            @RequestParam(defaultValue = "0") Integer page,
-            @RequestParam(defaultValue = "250") Integer size,
             @RequestHeader(
                     value = "Authorization",
                     required = false
@@ -92,27 +85,115 @@ public class StickerHistoryController {
         User user =
                 currentUserService.getCurrentUserFromAuth(auth);
 
-        Pageable pageable = PageRequest.of(
-                safePage(page),
-                safeGeneratedHistoryPageSize(size));
-
-        Page<GeneratedPacketHistoryResponse> result;
-
         if (currentUserService.isAdmin(user)) {
             if (generatedBy != null
                     && !generatedBy.isBlank()
                     && !"ALL".equalsIgnoreCase(generatedBy)) {
-                result = repository.findGeneratedPacketHistoryByUserPage(
-                        generatedBy.trim(),
-                        pageable);
-            } else {
-                result = repository.findGeneratedPacketHistoryAllPage(
-                        pageable);
+                return ResponseEntity.ok(
+                        repository.findGeneratedPacketHistoryByUser(
+                                generatedBy.trim())
+                );
             }
+
+            return ResponseEntity.ok(
+                    repository.findGeneratedPacketHistoryAll()
+            );
+        }
+
+        return ResponseEntity.ok(
+                repository.findGeneratedPacketHistoryByUser(
+                        user.getUsername())
+        );
+    }
+
+    /*
+     * =====================================================
+     * GENERATED HISTORY - BOUNDED SEARCH/PAGING
+     * =====================================================
+     *
+     * Additive endpoint for high-volume dashboards/intelligence.
+     * The legacy /generated-history contract above is intentionally unchanged.
+     *
+     * ADMIN:
+     * - Can page through all generated history or filter by generatedBy.
+     *
+     * OTHER USERS:
+     * - Can page only through their own generated history.
+     * - A forged generatedBy parameter cannot expand access.
+     */
+
+    @Transactional(readOnly = true)
+    @GetMapping(value = "/generated-history/search", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<GeneratedPacketHistoryResponse>> generatedHistorySearch(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "250") Integer size,
+            @RequestParam(required = false) String generatedBy,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime to,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String auth
+    ) {
+        User user =
+                currentUserService.getCurrentUserFromAuth(auth);
+
+        if ((from == null) != (to == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Both from and to are required when filtering sticker history by date"
+            );
+        }
+
+        if (from != null && from.isAfter(to)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Sticker history 'from' must not be after 'to'"
+            );
+        }
+
+        Pageable pageable = PageRequest.of(
+                safePage(page),
+                safeGeneratedHistoryPageSize(size));
+
+        String requestedGeneratedBy = generatedBy == null
+                ? ""
+                : generatedBy.trim();
+
+        String effectiveGeneratedBy;
+
+        if (currentUserService.isAdmin(user)) {
+            effectiveGeneratedBy = requestedGeneratedBy.isBlank()
+                    || "ALL".equalsIgnoreCase(requestedGeneratedBy)
+                            ? null
+                            : requestedGeneratedBy;
         } else {
-            result = repository.findGeneratedPacketHistoryByUserPage(
-                    user.getUsername(),
-                    pageable);
+            effectiveGeneratedBy = user.getUsername();
+        }
+
+        Page<GeneratedPacketHistoryResponse> result;
+
+        if (from != null) {
+            result = effectiveGeneratedBy == null
+                    ? repository.findGeneratedPacketHistoryAllPageBetween(
+                            from,
+                            to,
+                            pageable)
+                    : repository.findGeneratedPacketHistoryByUserPageBetween(
+                            effectiveGeneratedBy,
+                            from,
+                            to,
+                            pageable);
+        } else {
+            result = effectiveGeneratedBy == null
+                    ? repository.findGeneratedPacketHistoryAllPage(pageable)
+                    : repository.findGeneratedPacketHistoryByUserPage(
+                            effectiveGeneratedBy,
+                            pageable);
         }
 
         HttpHeaders headers = generatedHistoryHeaders(result);

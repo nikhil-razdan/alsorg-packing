@@ -2,6 +2,7 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import usePackFlowDataRefresh from "../dashboard/hooks/usePackFlowDataRefresh";
@@ -349,6 +350,24 @@ const DEFAULT_FORM = {
 };
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+/*
+ * Resource-safety limits for Smart User Management intelligence.
+ *
+ * The previous implementation requested several complete history datasets in
+ * parallel.  These constants preserve the same data coverage while forcing
+ * large histories through bounded server pages / sequential batches so one
+ * Users Page cannot exhaust the backend JVM heap. Inventory trace intentionally
+ * matches the repository's existing 500-row hard ceiling.
+ */
+const USER_INTELLIGENCE_TRACE_PAGE_SIZE = 250;
+const USER_INTELLIGENCE_TRACE_TOTAL_LIMIT = 500;
+const USER_INTELLIGENCE_ACTIVITY_LIMIT = 50;
+const USER_INTELLIGENCE_STICKER_PAGE_SIZE = 250;
+const USER_INTELLIGENCE_CHALLAN_PAGE_SIZE = 100;
+const USER_INTELLIGENCE_MAX_PAGES = 10000;
+const USER_INTELLIGENCE_REFRESH_MS = 120000;
+const ALL_HISTORY_FIRST_YEAR = 2000;
 
 const PERFORMANCE_PERIOD_OPTIONS = [
 	{ value: "TODAY", label: "Today" },
@@ -1082,6 +1101,291 @@ const extractApiRows = (payload) => {
 	return candidates.find(Array.isArray) || [];
 };
 
+
+const responseHeader = (response, name) => {
+	if (!response?.headers || !name) {
+		return "";
+	}
+
+	const key = String(name).toLowerCase();
+	const headers = response.headers;
+
+	if (typeof headers.get === "function") {
+		return headers.get(name) ?? headers.get(key) ?? "";
+	}
+
+	return headers[key] ?? headers[name] ?? "";
+};
+
+const responseHasNextPage = (
+	response,
+	page,
+	pageSize,
+	rowCount
+) => {
+	const explicit = String(
+		responseHeader(response, "X-Has-Next")
+	)
+		.trim()
+		.toLowerCase();
+
+	if (explicit === "true") return true;
+	if (explicit === "false") return false;
+
+	const totalPages = Number(
+		responseHeader(response, "X-Total-Pages")
+	);
+
+	if (Number.isFinite(totalPages) && totalPages >= 0) {
+		return page + 1 < totalPages;
+	}
+
+	return Number(rowCount || 0) >= Number(pageSize || 1);
+};
+
+const fetchPagedRows = async ({
+	url,
+	pageSize,
+	params = {},
+	maxRows = Number.POSITIVE_INFINITY,
+}) => {
+	const rows = [];
+	let page = 0;
+
+	while (
+		page < USER_INTELLIGENCE_MAX_PAGES &&
+		rows.length < maxRows
+	) {
+		const remaining = Number.isFinite(maxRows)
+			? Math.max(1, maxRows - rows.length)
+			: pageSize;
+
+		const requestedSize = Math.min(pageSize, remaining);
+		const response = await API.get(url, {
+			params: {
+				...params,
+				page,
+				size: requestedSize,
+			},
+		});
+
+		const pageRows = extractApiRows(response?.data);
+
+		if (pageRows.length > 0) {
+			rows.push(
+				...pageRows.slice(
+					0,
+					Math.max(0, maxRows - rows.length)
+				)
+			);
+		}
+
+		if (
+			pageRows.length === 0 ||
+			rows.length >= maxRows ||
+			!responseHasNextPage(
+				response,
+				page,
+				requestedSize,
+				pageRows.length
+			)
+		) {
+			break;
+		}
+
+		page += 1;
+	}
+
+	return rows;
+};
+
+const fetchInventoryTraceSafely = async (window) => {
+	const rows = [];
+	let offset = 0;
+
+	while (
+		rows.length < USER_INTELLIGENCE_TRACE_TOTAL_LIMIT &&
+		offset < USER_INTELLIGENCE_TRACE_TOTAL_LIMIT
+	) {
+		const limit = Math.min(
+			USER_INTELLIGENCE_TRACE_PAGE_SIZE,
+			USER_INTELLIGENCE_TRACE_TOTAL_LIMIT - rows.length
+		);
+
+		const params = {
+			type: "all",
+			limit,
+			offset,
+		};
+
+		if (window?.fromParam) {
+			params.from = window.fromParam;
+		}
+
+		if (window?.toParam) {
+			params.to = window.toParam;
+		}
+
+		const response = await API.get(
+			"/reports/dashboard/inventory-trace",
+			{ params }
+		);
+
+		const pageRows = extractApiRows(response?.data);
+
+		if (pageRows.length === 0) {
+			break;
+		}
+
+		rows.push(...pageRows.slice(0, limit));
+
+		if (pageRows.length < limit) {
+			break;
+		}
+
+		offset += pageRows.length;
+	}
+
+	return rows.slice(0, USER_INTELLIGENCE_TRACE_TOTAL_LIMIT);
+};
+
+const fetchStickerHistorySafely = async (window) => {
+	const params = {};
+
+	if (window?.fromParam) {
+		params.from = window.fromParam;
+	}
+
+	if (window?.toParam) {
+		params.to = window.toParam;
+	}
+
+	return fetchPagedRows({
+		url: "/stickers/generated-history/search",
+		pageSize: USER_INTELLIGENCE_STICKER_PAGE_SIZE,
+		params,
+	});
+};
+
+const fetchDispatchChallansSafely = async (window) => {
+	const rows = [];
+	let page = 0;
+
+	while (page < USER_INTELLIGENCE_MAX_PAGES) {
+		const response = await API.get(
+			"/dispatched/challans/search",
+			{
+				params: {
+					page,
+					size: USER_INTELLIGENCE_CHALLAN_PAGE_SIZE,
+				},
+			}
+		);
+
+		const pageRows = extractApiRows(response?.data);
+
+		if (pageRows.length === 0) {
+			break;
+		}
+
+		rows.push(
+			...pageRows.filter((row) =>
+				isWithinPerformanceWindow(
+					dispatchTimestamp(row),
+					window
+				)
+			)
+		);
+
+		/*
+		 * The backend search endpoint is ordered by latest dispatchedAt DESC.
+		 * Once a complete page is older than the selected period, no later page
+		 * can contain an in-period challan. Missing timestamps deliberately disable
+		 * this optimization so no legacy row is accidentally skipped.
+		 */
+		if (window?.key !== "ALL" && window?.start) {
+			const pageDates = pageRows.map((row) =>
+				parseSmartDate(dispatchTimestamp(row))
+			);
+
+			if (
+				pageDates.length > 0 &&
+				pageDates.every(Boolean) &&
+				pageDates.every(
+					(date) => date.getTime() < window.start.getTime()
+				)
+			) {
+				break;
+			}
+		}
+
+		if (
+			!responseHasNextPage(
+				response,
+				page,
+				USER_INTELLIGENCE_CHALLAN_PAGE_SIZE,
+				pageRows.length
+			)
+		) {
+			break;
+		}
+
+		page += 1;
+	}
+
+	return rows;
+};
+
+const fetchReportRange = async (url, from, to) => {
+	const response = await API.get(url, {
+		params: { from, to },
+	});
+
+	return extractApiRows(response?.data);
+};
+
+const fetchPeriodReportSafely = async (url, window) => {
+	if (window?.key !== "ALL") {
+		return fetchReportRange(
+			url,
+			window?.fromParam,
+			window?.toParam
+		);
+	}
+
+	/*
+	 * Preserve the existing "All Available" feature without issuing one
+	 * multi-year query/JSON response.  Calendar-year batches are non-overlapping
+	 * and are processed sequentially, keeping peak backend memory bounded.
+	 */
+	const allRows = [];
+	const now = new Date();
+	let year = now.getFullYear();
+
+	/*
+	 * Report repositories already return newest-first rows. Walk years newest to
+	 * oldest as well, so the combined ALL result keeps the same global ordering
+	 * as the original one-shot report used by the UI and Excel export.
+	 */
+	while (year >= ALL_HISTORY_FIRST_YEAR) {
+		const from = new Date(year, 0, 1, 0, 0, 0, 0);
+		const to = year === now.getFullYear()
+			? now
+			: new Date(year, 11, 31, 23, 59, 59, 0);
+
+		const rows = await fetchReportRange(
+			url,
+			toLocalDateTimeParam(from),
+			toLocalDateTimeParam(to)
+		);
+
+		allRows.push(...rows);
+		year -= 1;
+	}
+
+	return allRows;
+};
+
 const stickerTimestamp = (row) =>
 	row?.generatedAt || row?.createdAt || row?.updatedAt || null;
 
@@ -1434,6 +1738,14 @@ function UsersPageContent() {
 			sources: {},
 		});
 
+	/*
+	 * A single Users Page must never start a second intelligence snapshot while
+	 * the previous one is still running.  This protects both manual refresh and
+	 * automatic polling without changing any authorization or business workflow.
+	 */
+	const performanceLoadRef = useRef(null);
+	const performanceLoadedKeyRef = useRef("");
+
 	const [performanceOpen, setPerformanceOpen] =
 		useState(false);
 
@@ -1599,174 +1911,261 @@ function UsersPageContent() {
 
 	const loadPerformance = useCallback(
 		async ({ background = false } = {}) => {
+			const requestKey = [
+				performanceWindow.key,
+				performanceWindow.fromParam || "",
+				performanceWindow.toParam || "",
+			].join("|");
+
+			/*
+			 * Coalesce overlapping automatic/manual runs.  If the period changed
+			 * while another snapshot was loading, wait for it and then load the new
+			 * period exactly once.
+			 */
+			if (performanceLoadRef.current) {
+				try {
+					await performanceLoadRef.current;
+				} catch {
+					/* The completed request already recorded source-level errors. */
+				}
+
+				if (performanceLoadedKeyRef.current === requestKey) {
+					return;
+				}
+			}
+
 			if (!background) {
 				setPerformanceLoading(true);
 			}
 
-			const traceParams = {
-				type: "all",
-				limit: 2000,
-				offset: 0,
-			};
+			const task = (async () => {
+				const errors = [];
+				const sources = {};
 
-			if (performanceWindow.fromParam) {
-				traceParams.from = performanceWindow.fromParam;
-			}
+				const loadRows = async (
+					label,
+					sourceKey,
+					loader,
+					filter = null
+				) => {
+					try {
+						const loaded = extractApiRows(
+							await loader()
+						);
 
-			if (performanceWindow.toParam) {
-				traceParams.to = performanceWindow.toParam;
-			}
+						const rows = typeof filter === "function"
+							? loaded.filter(filter)
+							: loaded;
 
-			const reportFrom =
-				performanceWindow.fromParam ||
-				"2000-01-01T00:00:00";
+						sources[sourceKey] = {
+							ok: true,
+							count: rows.length,
+						};
 
-			const reportTo =
-				performanceWindow.toParam ||
-				toLocalDateTimeParam(new Date());
+						return rows;
+					} catch (error) {
+						const message = readError(
+							error,
+							"Unavailable"
+						);
 
-			const [
-				packingResult,
-				dispatchResult,
-				packingReportResult,
-				dispatchReportResult,
-				traceResult,
-				recentActivityResult,
-				stickerResult,
-				dispatchChallanResult,
-				customChallanResult,
-			] = await Promise.allSettled([
-				API.get("/reports/dashboard/daily-throughput/users", {
-					params: { type: "packing" },
-				}),
-				API.get("/reports/dashboard/daily-throughput/users", {
-					params: { type: "dispatch" },
-				}),
-				API.get("/reports/packing", {
-					params: { from: reportFrom, to: reportTo },
-				}),
-				API.get("/reports/dispatch", {
-					params: { from: reportFrom, to: reportTo },
-				}),
-				API.get("/reports/dashboard/inventory-trace", {
-					params: traceParams,
-				}),
-				API.get("/reports/dashboard/activity", {
-					params: { limit: 500 },
-				}),
-				API.get("/stickers/generated-history"),
-				API.get("/dispatched/challans"),
-				API.get("/chalaan/custom"),
-			]);
+						errors.push(`${label}: ${message}`);
+						sources[sourceKey] = {
+							ok: false,
+							count: 0,
+							message,
+						};
 
-			const errors = [];
-			const sources = {};
+						return [];
+					}
+				};
 
-			const unpackRows = (result, label, sourceKey) => {
-				if (result.status === "fulfilled") {
-					const rows = extractApiRows(result.value?.data);
-					sources[sourceKey] = {
-						ok: true,
-						count: rows.length,
-					};
-					return rows;
+				/*
+				 * IMPORTANT: heavyweight history/report sources are intentionally
+				 * sequential.  The former Promise.allSettled fan-out kept multiple
+				 * Hibernate/Jackson/GZIP responses resident at once and was the direct
+				 * heap-pressure trigger on the Users Page.
+				 */
+				const packingRows = await loadRows(
+					"Packing throughput today",
+					"packingToday",
+					async () => {
+						const response = await API.get(
+							"/reports/dashboard/daily-throughput/users",
+							{ params: { type: "packing" } }
+						);
+						return response?.data;
+					}
+				);
+
+				const dispatchRows = await loadRows(
+					"Dispatch throughput today",
+					"dispatchToday",
+					async () => {
+						const response = await API.get(
+							"/reports/dashboard/daily-throughput/users",
+							{ params: { type: "dispatch" } }
+						);
+						return response?.data;
+					}
+				);
+
+				const packingReportRows = await loadRows(
+					"Period packing report",
+					"packingReport",
+					() => fetchPeriodReportSafely(
+						"/reports/packing",
+						performanceWindow
+					)
+				);
+
+				const dispatchReportRows = await loadRows(
+					"Period dispatch report",
+					"dispatchReport",
+					() => fetchPeriodReportSafely(
+						"/reports/dispatch",
+						performanceWindow
+					)
+				);
+
+				const traceRows = await loadRows(
+					"Inventory trace",
+					"trace",
+					() => fetchInventoryTraceSafely(
+						performanceWindow
+					)
+				);
+
+				const recentRows = await loadRows(
+					"Recent activity",
+					"activity",
+					async () => {
+						const response = await API.get(
+							"/reports/dashboard/activity",
+							{
+								params: {
+									limit: USER_INTELLIGENCE_ACTIVITY_LIMIT,
+									offset: 0,
+								},
+							}
+						);
+						return response?.data;
+					},
+					(row) =>
+						isWithinPerformanceWindow(
+							performanceTimestamp(row),
+							performanceWindow
+						)
+				);
+
+				const stickerRows = await loadRows(
+					"Sticker history",
+					"stickers",
+					() => fetchStickerHistorySafely(
+						performanceWindow
+					)
+				);
+
+				const dispatchChallans = await loadRows(
+					"Dispatch challans",
+					"challans",
+					() => fetchDispatchChallansSafely(
+						performanceWindow
+					)
+				);
+
+				const customChallans = await loadRows(
+					"Custom challans",
+					"customChallans",
+					async () => {
+						const response = await API.get(
+							"/chalaan/custom"
+						);
+						return response?.data;
+					},
+					(row) =>
+						isWithinPerformanceWindow(
+							customChallanTimestamp(row),
+							performanceWindow
+						)
+				);
+
+				/*
+				 * Trace remains the preferred actor-aware source, exactly as before.
+				 * The repository already enforces a 500-row hard cap, so we preserve that
+				 * effective coverage and obtain it in bounded 250-row requests.
+				 */
+				const actorTraceRows = traceRows.filter((row) =>
+					Boolean(
+						normalizeUsernameKey(
+							performanceActor(row)
+						)
+					)
+				);
+
+				const activityRows = actorTraceRows.length > 0
+					? actorTraceRows
+					: recentRows;
+
+				setPerformanceData({
+					packingRows,
+					dispatchRows,
+					packingReportRows,
+					dispatchReportRows,
+					activityRows,
+					stickerRows,
+					dispatchChallans,
+					customChallans,
+					loadedAt: new Date(),
+					errors,
+					sources,
+				});
+
+				performanceLoadedKeyRef.current = requestKey;
+			})();
+
+			performanceLoadRef.current = task;
+
+			try {
+				await task;
+			} finally {
+				if (performanceLoadRef.current === task) {
+					performanceLoadRef.current = null;
 				}
 
-				const message = readError(result.reason, "Unavailable");
-				errors.push(`${label}: ${message}`);
-				sources[sourceKey] = {
-					ok: false,
-					count: 0,
-					message,
-				};
-				return [];
-			};
-
-			const traceRows = unpackRows(
-				traceResult,
-				"Inventory trace",
-				"trace"
-			);
-
-			const recentRows = unpackRows(
-				recentActivityResult,
-				"Recent activity",
-				"activity"
-			);
-
-			/*
-			 * Trace is the preferred period-aware source. The dashboard activity
-			 * feed remains a safe fallback and also fills gaps when trace rows do
-			 * not expose an actor/action shape.
-			 */
-			const actorTraceRows = traceRows.filter((row) =>
-				Boolean(normalizeUsernameKey(performanceActor(row)))
-			);
-
-			const activityRows =
-				actorTraceRows.length > 0 ? actorTraceRows : recentRows;
-
-			setPerformanceData({
-				packingRows: unpackRows(
-					packingResult,
-					"Packing throughput today",
-					"packingToday"
-				),
-				dispatchRows: unpackRows(
-					dispatchResult,
-					"Dispatch throughput today",
-					"dispatchToday"
-				),
-				packingReportRows: unpackRows(
-					packingReportResult,
-					"Period packing report",
-					"packingReport"
-				),
-				dispatchReportRows: unpackRows(
-					dispatchReportResult,
-					"Period dispatch report",
-					"dispatchReport"
-				),
-				activityRows,
-				stickerRows: unpackRows(
-					stickerResult,
-					"Sticker history",
-					"stickers"
-				),
-				dispatchChallans: unpackRows(
-					dispatchChallanResult,
-					"Dispatch challans",
-					"challans"
-				),
-				customChallans: unpackRows(
-					customChallanResult,
-					"Custom challans",
-					"customChallans"
-				),
-				loadedAt: new Date(),
-				errors,
-				sources,
-			});
-
-			if (!background) {
-				setPerformanceLoading(false);
+				if (!background) {
+					setPerformanceLoading(false);
+				}
 			}
 		},
 		[performanceWindow]
 	);
 
 	useEffect(() => {
-		loadPageData();
-		loadPerformance();
+		let active = true;
+
+		const initialize = async () => {
+			await loadPageData();
+
+			if (active) {
+				await loadPerformance();
+			}
+		};
+
+		initialize();
+
+		return () => {
+			active = false;
+		};
 	}, [
 		loadPageData,
 		loadPerformance,
 	]);
 
 	/*
-	 * User/access changes are much lower frequency than inventory movement, so
-	 * poll more gently.  Performance analytics is heavier and refreshes on a
-	 * slower cadence while still updating automatically in an open page.
+	 * User/access changes remain automatically refreshed.  Heavy intelligence
+	 * also remains automatic, but at a production-safe cadence and with the
+	 * in-flight coalescing above, so a slow snapshot can never overlap itself.
 	 */
 	usePackFlowDataRefresh(
 		"users",
@@ -1788,7 +2187,7 @@ function UsersPageContent() {
 			});
 		},
 		{
-			intervalMs: 30000,
+			intervalMs: USER_INTELLIGENCE_REFRESH_MS,
 		}
 	);
 
@@ -3237,7 +3636,7 @@ function UsersPageContent() {
 								startIcon={
 									<RefreshOutlinedIcon />
 								}
-								onClick={loadPerformance}
+								onClick={() => loadPerformance()}
 								disabled={performanceLoading}
 								sx={secondaryButtonSx}
 							>
