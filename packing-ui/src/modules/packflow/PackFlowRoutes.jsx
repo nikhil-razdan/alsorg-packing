@@ -24,6 +24,7 @@ const dispatchElement = (
       "WAREHOUSE",
       "PACKING",
       "UTL_PACKING",
+      "HARDWARE_PACKING",
     ]}
   >
     <DispatchedItemsPage />

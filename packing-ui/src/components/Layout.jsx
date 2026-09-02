@@ -112,7 +112,8 @@ function PackFlowNavigation({
       "UTL_DISPATCH",
       "WAREHOUSE",
       "PACKING",
-      "UTL_PACKING"
+      "UTL_PACKING",
+      "HARDWARE_PACKING"
     );
 
   const canOpenLogistics =

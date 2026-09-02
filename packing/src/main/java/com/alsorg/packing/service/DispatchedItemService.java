@@ -784,6 +784,45 @@ public class DispatchedItemService {
 
                 Predicate basePlantAccess = buildDispatchPlantAccessPredicate(
                                 root, cb, allowedPlants);
+
+                /*
+                 * HARDWARE_PACKING is a personal packet-creation role, not a
+                 * plant-wide Dispatch operational role. Once this role is allowed
+                 * to open the Dispatch page, its database read must remain tied to
+                 * the same PacketItem.createdByUserId ownership boundary used by
+                 * Hardware Inventory.
+                 *
+                 * Apply this before the ordinary/UTL branches so a hardware-only
+                 * account can never inherit another user's plant queue through a
+                 * direct API call. Combined profiles (for example a real DISPATCH
+                 * user that also has HARDWARE_PACKING) keep their existing
+                 * operational visibility because isHardwareOnlyPackingUser() is
+                 * deliberately strict.
+                 */
+                Long hardwareOwnerUserId = resolveHardwareOnlyDispatchOwnerUserId();
+
+                if (hardwareOwnerUserId != null && query != null) {
+                        Subquery<UUID> ownedHardwarePacketItemIds = query.subquery(UUID.class);
+                        Root<PacketItem> packetItem = ownedHardwarePacketItemIds.from(PacketItem.class);
+
+                        ownedHardwarePacketItemIds.select(packetItem.get("id"));
+                        ownedHardwarePacketItemIds.where(
+                                        cb.and(
+                                                        cb.equal(
+                                                                        packetItem.get("itemType"),
+                                                                        PacketItemType.HARDWARE),
+                                                        cb.equal(
+                                                                        packetItem.get("createdByUserId"),
+                                                                        hardwareOwnerUserId)));
+
+                        predicates.add(
+                                        cb.and(
+                                                        basePlantAccess,
+                                                        root.get("packetItemId").in(
+                                                                        ownedHardwarePacketItemIds)));
+                        return;
+                }
+
                 Predicate baseOwnerAccess = buildDispatchOwnerPredicate(
                                 root, cb, ownerUsername);
                 Predicate ordinaryAccess = cb.and(basePlantAccess, baseOwnerAccess);
@@ -957,6 +996,33 @@ public class DispatchedItemService {
                 return cb.or(createdOwner, packedOwner, legacyDispatchOwner);
         }
 
+        private Long resolveHardwareOnlyDispatchOwnerUserId() {
+
+                if (currentUserService == null) {
+                        return null;
+                }
+
+                try {
+                        User user = currentUserService.requireCurrentUser();
+
+                        if (user == null
+                                        || user.getId() == null
+                                        || !currentUserService.isHardwareOnlyPackingUser(user)) {
+                                return null;
+                        }
+
+                        return user.getId();
+
+                } catch (RuntimeException exception) {
+                        /*
+                         * Preserve compatibility for tests/direct service calls that
+                         * run without a web SecurityContext. Production requests still
+                         * resolve the authenticated hardware owner here.
+                         */
+                        return null;
+                }
+        }
+
         private UtlReadContext resolveEffectiveUtlReadContext(
                         boolean completeRegisterAccess,
                         Set<String> allowedPlants,
@@ -1079,6 +1145,146 @@ public class DispatchedItemService {
                                         ? ""
                                         : username.trim().toLowerCase(Locale.ROOT);
                 }
+        }
+
+        /**
+         * Personal challan history for a hardware-only packing user.
+         *
+         * Ownership is derived from PacketItem.createdByUserId and itemType, not
+         * from DispatchedItem.dispatchedBy. The latter correctly identifies the
+         * Dispatch operator who generated the challan, while the hardware creator
+         * must still be able to inspect their own packets after that hand-off.
+         *
+         * The query is intentionally read-only in business terms and keeps the
+         * existing plant boundary in addition to owner isolation.
+         */
+        @Transactional
+        public Page<String> searchHardwareOwnerChallanNumbers(
+                        Long ownerUserId,
+                        Set<String> allowedPlants,
+                        Pageable pageable) {
+
+                if (ownerUserId == null) {
+                        return Page.empty(pageable);
+                }
+
+                if (pageable == null) {
+                        throw new ResponseStatusException(
+                                        HttpStatus.BAD_REQUEST,
+                                        "Challan page request is required");
+                }
+
+                if (allowedPlants == null || allowedPlants.isEmpty()) {
+                        return Page.empty(pageable);
+                }
+
+                String selectJpql = """
+                                select d.chalaanNumber
+                                from DispatchedItem d
+                                where d.status in :statuses
+                                  and d.chalaanNumber is not null
+                                  and trim(d.chalaanNumber) <> ''
+                                  and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
+                                  and exists (
+                                        select p.id
+                                        from PacketItem p
+                                        where p.id = d.packetItemId
+                                          and p.itemType = :hardwareType
+                                          and p.createdByUserId = :ownerUserId
+                                  )
+                                group by d.chalaanNumber
+                                order by max(d.dispatchedAt) desc, d.chalaanNumber desc
+                                """;
+
+                String countJpql = """
+                                select count(distinct d.chalaanNumber)
+                                from DispatchedItem d
+                                where d.status in :statuses
+                                  and d.chalaanNumber is not null
+                                  and trim(d.chalaanNumber) <> ''
+                                  and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
+                                  and exists (
+                                        select p.id
+                                        from PacketItem p
+                                        where p.id = d.packetItemId
+                                          and p.itemType = :hardwareType
+                                          and p.createdByUserId = :ownerUserId
+                                  )
+                                """;
+
+                TypedQuery<String> query = entityManager.createQuery(
+                                selectJpql,
+                                String.class);
+
+                query.setParameter("statuses", CHALLAN_HISTORY_STATUSES);
+                query.setParameter("plants", allowedPlants);
+                query.setParameter("hardwareType", PacketItemType.HARDWARE);
+                query.setParameter("ownerUserId", ownerUserId);
+                query.setFirstResult(
+                                (int) Math.min(
+                                                Integer.MAX_VALUE,
+                                                Math.max(0L, pageable.getOffset())));
+                query.setMaxResults(Math.max(1, pageable.getPageSize()));
+
+                Long total = entityManager.createQuery(
+                                countJpql,
+                                Long.class)
+                                .setParameter("statuses", CHALLAN_HISTORY_STATUSES)
+                                .setParameter("plants", allowedPlants)
+                                .setParameter("hardwareType", PacketItemType.HARDWARE)
+                                .setParameter("ownerUserId", ownerUserId)
+                                .getSingleResult();
+
+                return new PageImpl<>(
+                                query.getResultList(),
+                                pageable,
+                                total == null ? 0L : Math.max(0L, total));
+        }
+
+        /**
+         * Returns only the authenticated hardware creator's packet rows from one
+         * normal Dispatch challan. A mixed challan therefore never exposes another
+         * creator's hardware packet or a normal packing user's packet.
+         */
+        @Transactional
+        public List<DispatchedItem> findHardwareOwnerChallanItems(
+                        Long ownerUserId,
+                        Set<String> allowedPlants,
+                        String challanNumber) {
+
+                if (ownerUserId == null
+                                || challanNumber == null
+                                || challanNumber.trim().isBlank()
+                                || allowedPlants == null
+                                || allowedPlants.isEmpty()) {
+                        return List.of();
+                }
+
+                String jpql = """
+                                select d
+                                from DispatchedItem d
+                                where d.status in :statuses
+                                  and d.chalaanNumber = :challanNumber
+                                  and (d.plantCode in :plants or d.plantCode is null or trim(d.plantCode) = '')
+                                  and exists (
+                                        select p.id
+                                        from PacketItem p
+                                        where p.id = d.packetItemId
+                                          and p.itemType = :hardwareType
+                                          and p.createdByUserId = :ownerUserId
+                                  )
+                                order by d.dispatchedAt asc, d.zohoItemId asc
+                                """;
+
+                return entityManager.createQuery(
+                                jpql,
+                                DispatchedItem.class)
+                                .setParameter("statuses", CHALLAN_HISTORY_STATUSES)
+                                .setParameter("challanNumber", challanNumber.trim())
+                                .setParameter("plants", allowedPlants)
+                                .setParameter("hardwareType", PacketItemType.HARDWARE)
+                                .setParameter("ownerUserId", ownerUserId)
+                                .getResultList();
         }
 
         @Transactional

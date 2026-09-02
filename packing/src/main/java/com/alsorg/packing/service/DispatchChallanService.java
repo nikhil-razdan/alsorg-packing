@@ -659,6 +659,100 @@ public class DispatchChallanService {
                                                                 item.getName()));
         }
 
+        /**
+         * Re-render an already-generated normal Dispatch challan from an explicitly
+         * authorized subset of rows. This is used by the hardware-owner read-only
+         * controller after it has filtered the challan to that creator's own
+         * hardware packets.
+         *
+         * No dispatch state, trip state, driver/vehicle assignment or challan
+         * metadata is changed here. The same existing ChalaanPdfService and
+         * buildChallanItem() mapping are reused so packet-number, grouping and
+         * layout behaviour stay identical to the working challan workflow.
+         */
+        @Transactional(readOnly = true)
+        public byte[] renderExistingChallanForVisibleItems(
+                        String challanNumber,
+                        List<DispatchedItem> visibleItems) {
+
+                String cleanChallanNumber = cleanNullable(challanNumber);
+
+                if (cleanChallanNumber == null || cleanChallanNumber.isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Challan number is required");
+                }
+
+                List<DispatchedItem> items = visibleItems == null
+                                ? List.of()
+                                : visibleItems
+                                                .stream()
+                                                .filter(java.util.Objects::nonNull)
+                                                .toList();
+
+                if (items.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                        "No visible items found for challan: "
+                                                        + cleanChallanNumber);
+                }
+
+                if (items.size() > MAX_CHALLAN_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A maximum of " + MAX_CHALLAN_ITEMS
+                                                        + " items can be rendered in one challan");
+                }
+
+                DispatchedItem first = items.get(0);
+
+                LocalDateTime dispatchTime = items
+                                .stream()
+                                .map(DispatchedItem::getDispatchedAt)
+                                .filter(java.util.Objects::nonNull)
+                                .min(LocalDateTime::compareTo)
+                                .orElse(null);
+
+                ChalaanPdfData data = new ChalaanPdfData();
+
+                data.setVoucherNo(cleanChallanNumber);
+                data.setDispatchTime(dispatchTime);
+                data.setDesignerName("-");
+                data.setOt("-");
+                data.setDriverName(cleanNullable(first.getDriverName()));
+                data.setVehicleNumber(cleanNullable(first.getVehicleNumber()));
+                data.setHelperLoaderCount(first.getHelperLoaderCount());
+
+                /*
+                 * Existing challans are final documents. "preview" on the HTTP
+                 * endpoint controls inline vs attachment only; it must not add the
+                 * draft PREVIEW watermark.
+                 */
+                data.setPreview(false);
+
+                Map<UUID, PacketItem> packetItemsById = loadPacketItemsById(items);
+                List<ChalaanItem> challanItems = new ArrayList<>();
+
+                for (DispatchedItem item : items) {
+                        PacketItem packetItem = item.getPacketItemId() == null
+                                        ? null
+                                        : packetItemsById.get(item.getPacketItemId());
+
+                        challanItems.add(
+                                        buildChallanItem(
+                                                        item,
+                                                        packetItem));
+                }
+
+                data.setItems(challanItems);
+
+                if (!challanItems.isEmpty()) {
+                        data.setAddress(
+                                        safe(challanItems.get(0).getClientAddress()));
+                } else {
+                        data.setAddress("-");
+                }
+
+                return pdfService.generateChalaan(data);
+        }
+
         private ChalaanPdfData buildPdfData(
                         String challanNo,
                         Driver driver,

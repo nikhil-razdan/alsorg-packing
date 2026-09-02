@@ -261,6 +261,7 @@ function App() {
                     "DISPATCH",
                     "UTL_DISPATCH",
                     "WAREHOUSE",
+                    "HARDWARE_PACKING",
                   ]}
                 >
                   <DispatchedItemsPage />
@@ -279,6 +280,7 @@ function App() {
                     "DISPATCH",
                     "UTL_DISPATCH",
                     "WAREHOUSE",
+                    "HARDWARE_PACKING",
                   ]}
                 >
                   <DispatchedItemsPage />

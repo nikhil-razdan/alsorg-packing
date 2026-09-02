@@ -5821,6 +5821,38 @@ export default function DispatchedItemsPage() {
 	const isLogistics =
 		hasRole("LOGISTICS");
 
+	const isHardwarePacking =
+		hasRole("HARDWARE_PACKING");
+
+	/*
+	 * A pure HARDWARE_PACKING account receives a personal, read-only Dispatch
+	 * view. Combined profiles keep their existing operational role behaviour.
+	 */
+	const isHardwareOnlyPacking =
+		isHardwarePacking &&
+		!isAdmin &&
+		!isPacking &&
+		!isUtlPacking &&
+		!isWarehouse &&
+		!isDispatch &&
+		!isUtlDispatch &&
+		!isLogistics;
+
+	const dispatchChallanHistoryReadBase =
+		isHardwareOnlyPacking
+			? `${API_BASE_URL}/api/hardware-owner-dispatch/challans`
+			: `${API_BASE_URL}/api/dispatched/challans`;
+
+	const existingDispatchChallanPdfPath = (challanNumber, preview = false) => {
+		const cleanNumber = encodeURIComponent(
+			String(challanNumber || "").trim()
+		);
+
+		return isHardwareOnlyPacking
+			? `/api/hardware-owner-dispatch/challans/${cleanNumber}/download?preview=${preview ? "true" : "false"}`
+			: `/api/chalaan/dispatched/${cleanNumber}/download?preview=${preview ? "true" : "false"}`;
+	};
+
 	useEffect(() => {
 		if (authLoading || !currentUser || rows.length === 0) {
 			if (rows.length === 0) {
@@ -17343,9 +17375,7 @@ export default function DispatchedItemsPage() {
 		 * preview route and keeps Dispatch/Admin preview behavior consistent.
 		 */
 		await previewProtectedPdfPath(
-			`/api/chalaan/dispatched/${encodeURIComponent(
-				cleanNumber
-			)}/download?preview=true`,
+			existingDispatchChallanPdfPath(cleanNumber, true),
 			cleanNumber
 		);
 	};
@@ -17359,9 +17389,10 @@ export default function DispatchedItemsPage() {
 		try {
 			const res =
 				await authFetch(
-					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
-						challanNumber
-					)}/download?preview=false`,
+					`${API_BASE_URL}${existingDispatchChallanPdfPath(
+						challanNumber,
+						false
+					)}`,
 					{
 						method: "GET",
 						headers: {
@@ -17509,7 +17540,7 @@ export default function DispatchedItemsPage() {
 
 		const res =
 			await authFetch(
-				`${API_BASE_URL}/api/dispatched/challans/search?${params.toString()}`,
+				`${dispatchChallanHistoryReadBase}/search?${params.toString()}`,
 				{
 					method: "GET",
 					headers: {
@@ -17575,7 +17606,7 @@ export default function DispatchedItemsPage() {
 		}
 
 		const res = await authFetch(
-			`${API_BASE_URL}/api/dispatched/challans/${encodeURIComponent(cleanNumber)}`,
+			`${dispatchChallanHistoryReadBase}/${encodeURIComponent(cleanNumber)}`,
 			{
 				method: "GET",
 				headers: {
@@ -17604,14 +17635,23 @@ export default function DispatchedItemsPage() {
 			setChallanHistoryServerTotal(0);
 			setChallanHistoryHasMore(false);
 
+			const customHistoryRequest =
+				isHardwareOnlyPacking
+					? Promise.resolve([])
+					: loadCustomChallans();
+
 			const [normalResult] =
 				await Promise.all([
 					fetchChallanHistoryRows({
 						page: 0,
 						size: CHALLAN_HISTORY_SERVER_PAGE_SIZE,
 					}),
-					loadCustomChallans(),
+					customHistoryRequest,
 				]);
+
+			if (isHardwareOnlyPacking) {
+				setCustomChallans([]);
+			}
 
 			setChallanHistoryRows(
 				Array.isArray(normalResult?.rows)
@@ -17689,9 +17729,10 @@ export default function DispatchedItemsPage() {
 		try {
 			const res =
 				await authFetch(
-					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
-						challanNumber
-					)}/download?preview=true`,
+					`${API_BASE_URL}${existingDispatchChallanPdfPath(
+						challanNumber,
+						true
+					)}`,
 					{
 						method: "GET",
 						headers: {
@@ -17731,9 +17772,10 @@ export default function DispatchedItemsPage() {
 		try {
 			const res =
 				await authFetch(
-					`${API_BASE_URL}/api/chalaan/dispatched/${encodeURIComponent(
-						challanNumber
-					)}/download?preview=false`,
+					`${API_BASE_URL}${existingDispatchChallanPdfPath(
+						challanNumber,
+						false
+					)}`,
 					{
 						method: "GET",
 						headers: {
@@ -29213,7 +29255,9 @@ export default function DispatchedItemsPage() {
 										</Box>
 
 										<Box sx={modalSubtitleSx}>
-											Master item wise challan history. Admin sees all, users see their own only.
+											{isHardwareOnlyPacking
+												? "Your hardware packets and the connected dispatch challans only."
+												: "Master item wise challan history. Admin sees all, users see their own only."}
 										</Box>
 									</Box>
 								</Box>
@@ -29269,11 +29313,13 @@ export default function DispatchedItemsPage() {
 										accent="#22c55e"
 									/>
 
-									<ChallanHistoryStat
-										label="Custom Challans"
-										value={customChallanHistoryRows.length}
-										accent="#8b5cf6"
-									/>
+									{!isHardwareOnlyPacking && (
+										<ChallanHistoryStat
+											label="Custom Challans"
+											value={customChallanHistoryRows.length}
+											accent="#8b5cf6"
+										/>
+									)}
 
 									<ChallanHistoryStat
 										label="Total Items"
@@ -29283,10 +29329,13 @@ export default function DispatchedItemsPage() {
 													sum + Number(challan.totalItems || 0),
 												0
 											) +
-											customChallanHistoryRows.reduce(
-												(sum, challan) =>
-													sum + Number(challan.totalItems || 0),
-												0
+											(isHardwareOnlyPacking
+												? 0
+												: customChallanHistoryRows.reduce(
+												  	(sum, challan) =>
+												  		sum + Number(challan.totalItems || 0),
+												  	0
+												  )
 											)
 										}
 										accent="#f59e0b"
@@ -29519,6 +29568,8 @@ export default function DispatchedItemsPage() {
 											</Box>
 										)}
 
+										{!isHardwareOnlyPacking && (
+											<>
 										<Box
 											sx={{
 												...challanHistorySectionHeaderSx,
@@ -29684,6 +29735,8 @@ export default function DispatchedItemsPage() {
 													</Box>
 												</Box>
 											))}
+											</>
+										)}
 									</Box>
 								)}
 							</Box>
