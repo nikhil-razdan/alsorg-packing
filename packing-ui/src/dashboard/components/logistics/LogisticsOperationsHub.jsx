@@ -29,10 +29,8 @@ import useLogisticsLiveRefresh from "./useLogisticsLiveRefresh";
 
 import {
     getCachedDispatchChallanWindow,
-    getCachedDispatchChallans,
     getCachedShifts,
     mergeChallanRows,
-    scheduleLogisticsIdleWork,
 } from "./logisticsReadCache";
 
 import {
@@ -207,21 +205,15 @@ function LogisticsOperationsHub({
             return undefined;
         }
 
+        /*
+         * Overview is intentionally a bounded operational window.
+         * Do not walk complete dispatch history automatically when the user
+         * opens Logistics. Full challan history remains in Dispatch Challans,
+         * where it is loaded through the dedicated paged workflow.
+         */
         void loadOverview();
 
-        const cancelHydration = scheduleLogisticsIdleWork(() => {
-            void getCachedDispatchChallans(cacheScope)
-                .then((fullRows) => {
-                    if (Array.isArray(fullRows)) {
-                        setChallans(fullRows);
-                    }
-                })
-                .catch(() => {
-                    /* Recent operational window stays usable if history hydration fails. */
-                });
-        }, 1400);
-
-        return cancelHydration;
+        return undefined;
     }, [view, loadOverview, cacheScope]);
 
     const operations =

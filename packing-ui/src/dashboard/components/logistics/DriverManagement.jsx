@@ -19,11 +19,9 @@ import {
 
 import {
   getCachedDispatchChallanWindow,
-  getCachedDispatchChallans,
   getCachedDrivers,
   getCachedShifts,
   invalidateLogisticsResources,
-  scheduleLogisticsIdleWork,
 } from "./logisticsReadCache";
 
 import CreateDriverModal from "./modals/CreateDriverModal";
@@ -199,21 +197,13 @@ function DriverManagement({
   );
 
   useEffect(() => {
+    /*
+     * Keep Driver Management on the bounded operational challan window.
+     * Complete challan history remains available through the dedicated
+     * history/360° workflows, but is intentionally not hydrated merely
+     * because this management page was opened.
+     */
     void loadDrivers({ force: false });
-
-    const cancelHydration = scheduleLogisticsIdleWork(() => {
-      void getCachedDispatchChallans(cacheScope)
-        .then((fullRows) => {
-          if (Array.isArray(fullRows)) {
-            setChallans(fullRows);
-          }
-        })
-        .catch(() => {
-          /* Keep recent activity visible when deep history cannot hydrate. */
-        });
-    }, 1200);
-
-    return cancelHydration;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheScope]);
 

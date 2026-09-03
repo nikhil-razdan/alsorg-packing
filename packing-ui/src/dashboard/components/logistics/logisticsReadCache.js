@@ -24,6 +24,9 @@ import {
 
 const entries = new Map();
 
+const MAX_FULL_CHALLAN_PAGES = 1000;
+const FULL_HISTORY_YIELD_EVERY_PAGES = 5;
+
 const TTL = Object.freeze({
   CHALLAN_PAGE: 7000,
   CHALLAN_FULL: 20000,
@@ -40,6 +43,16 @@ const buildKey = (scope, resource, variant = "") =>
   `${cleanScope(scope)}|${resource}|${variant}`;
 
 const now = () => Date.now();
+
+const yieldToBrowser = () =>
+  new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve();
+      return;
+    }
+
+    window.setTimeout(resolve, 0);
+  });
 
 async function readScoped({
   scope,
@@ -256,14 +269,19 @@ export function getCachedDispatchChallans(
   {
     force = false,
     pageSize = 100,
+    maxPages = MAX_FULL_CHALLAN_PAGES,
   } = {}
 ) {
   const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 100));
+  const safeMaxPages = Math.max(1, Math.min(
+    MAX_FULL_CHALLAN_PAGES,
+    Number(maxPages) || MAX_FULL_CHALLAN_PAGES
+  ));
 
   return readScoped({
     scope,
     resource: "challan-full",
-    variant: String(safePageSize),
+    variant: `${safePageSize}:${safeMaxPages}`,
     ttlMs: TTL.CHALLAN_FULL,
     force,
     loader: async () => {
@@ -271,11 +289,16 @@ export function getCachedDispatchChallans(
       let page = 0;
       let previousPage = -1;
 
-      while (true) {
-        const result = await getCachedDispatchChallanPage(scope, {
+      while (page < safeMaxPages) {
+        /*
+         * Full-history walking is an explicit compatibility path only.
+         * Fetch pages directly so a deep walk does not also retain hundreds
+         * of intermediate page-cache entries. Page callers still use the
+         * normal cached primitive above.
+         */
+        const result = await fetchDispatchChallansPage({
           page,
           size: safePageSize,
-          force,
         });
 
         const pageRows = Array.isArray(result?.rows) ? result.rows : [];
@@ -300,7 +323,18 @@ export function getCachedDispatchChallans(
 
         previousPage = page;
         page = nextPage;
+
+        if (
+          page > 0 &&
+          page % FULL_HISTORY_YIELD_EVERY_PAGES === 0
+        ) {
+          await yieldToBrowser();
+        }
       }
+
+      throw new Error(
+        "Dispatch challan history exceeded the configured paging safety limit"
+      );
     },
   });
 }
