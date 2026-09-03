@@ -4786,7 +4786,7 @@ function ZohoItemsPage() {
       }
 
       const res = await API.get(
-        "/stickers/generated-history",
+        "/stickers/generated-history/search",
         { params }
       );
 

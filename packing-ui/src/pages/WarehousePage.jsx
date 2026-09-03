@@ -319,20 +319,18 @@ function WarehousePage() {
 		}
 
 		try {
-			const [res1, res2] = await Promise.all([
-				secureFetch(`${warehouseApiBase}/floor`, {
-					credentials: "include",
-				}),
-				secureFetch(`${warehouseApiBase}/items`, {
-					credentials: "include",
-				}),
-			]);
+			/*
+			 * These are legacy complete-register endpoints. Keep their exact response
+			 * contract, but never ask the backend to materialize/serialize both large
+			 * lists at the same time. Parse and release the floor response before the
+			 * warehouse response starts; the combined UI dataset below is unchanged.
+			 */
+			const res1 = await secureFetch(`${warehouseApiBase}/floor`, {
+				credentials: "include",
+			});
 
-			if (!res1.ok || !res2.ok) {
-				if (
-					!background &&
-					(res1.status === 403 || res2.status === 403)
-				) {
+			if (!res1.ok) {
+				if (!background && res1.status === 403) {
 					alert("Warehouse access not allowed for this user");
 				}
 
@@ -340,6 +338,19 @@ function WarehousePage() {
 			}
 
 			const floorData = await res1.json();
+
+			const res2 = await secureFetch(`${warehouseApiBase}/items`, {
+				credentials: "include",
+			});
+
+			if (!res2.ok) {
+				if (!background && res2.status === 403) {
+					alert("Warehouse access not allowed for this user");
+				}
+
+				throw new Error("Warehouse fetch failed");
+			}
+
 			const warehouseData = await res2.json();
 
 			const combined = [
