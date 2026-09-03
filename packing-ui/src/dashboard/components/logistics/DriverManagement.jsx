@@ -857,6 +857,7 @@ const filterCount = {
 const table = {
   borderRadius: 14,
   overflowX: "auto",
+  overscrollBehaviorY: "auto",
   background: "var(--pf-surface)",
   border: "1px solid var(--pf-border)",
 };
