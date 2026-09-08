@@ -91,6 +91,13 @@ public class ChalaanPdfService {
         private static final int MAX_STANDARD_ITEMS = 1000;
         private static final int MAX_CUSTOM_ITEMS = 500;
 
+        /*
+         * The UTL Movers AL-P3 consignment-note layout is intentionally isolated
+         * from the established Alsorg challan renderer. Only the dedicated
+         * UTL_DISPATCH + AL-P3 controller path calls it.
+         */
+        private static final int UTL_AL_P3_ROWS_PER_PAGE = 17;
+
         public byte[] generateChalaan(
                         ChalaanPdfData data) {
 
@@ -355,6 +362,945 @@ public class ChalaanPdfService {
                 } catch (IOException e) {
                         throw new RuntimeException("Failed to generate challan PDF", e);
                 }
+        }
+
+        /**
+         * UTL Movers challan format used only by the UTL_DISPATCH identity at
+         * AL-P3. This is a presentation-only renderer: it reads the same transient
+         * ChalaanPdfData used by the normal challan and does not change dispatch,
+         * warehouse, packet, sticker, logistics or challan state.
+         *
+         * Reference layout mirrored from the supplied physical UTL challan:
+         * - Sr. No. / Date / UTL MOVERS WORLDWIDE SERVICES (P) LTD
+         * - Consignor / Consignee / Destination Address
+         * - Sr. No. | Goods Description | Pkt. No. | Remark
+         * - Authorized receiver information and packed/unpacked acknowledgement
+         * - UTL footer/signature/contact area
+         */
+        public byte[] generateUtlAlP3Chalaan(
+                        ChalaanPdfData data) {
+
+                List<ChalaanItem> sourceItems = data != null && data.getItems() != null
+                                ? data.getItems()
+                                : Collections.emptyList();
+
+                if (sourceItems.size() > MAX_STANDARD_ITEMS) {
+                        throw new IllegalArgumentException(
+                                        "A challan cannot contain more than "
+                                                        + MAX_STANDARD_ITEMS
+                                                        + " items");
+                }
+
+                List<ChalaanItem> items = new ArrayList<>();
+
+                for (ChalaanItem item : sourceItems) {
+                        if (item != null) {
+                                items.add(item);
+                        }
+                }
+
+                /*
+                 * Reuse the existing canonical packet-number enrichment so the UTL
+                 * Pkt. No. column shows the real PacketItem identity and never a
+                 * made-up row sequence.
+                 */
+                enrichStandardPacketIdentityFromPacketItems(items);
+
+                Map<UUID, PacketItem> packetItemsById = loadUtlAlP3PacketItems(items);
+
+                ChalaanItem firstItem = findFirstValidChalaanItem(items);
+
+                String challanNo = safe(
+                                data != null
+                                                ? data.getVoucherNo()
+                                                : null);
+
+                String date = formatUtlAlP3Date(
+                                data != null
+                                                ? data.getDispatchTime()
+                                                : null);
+
+                String consignee = firstItem == null
+                                ? "-"
+                                : safe(firstItem.getClientName());
+
+                String destinationAddress = firstItem != null
+                                && firstItem.getClientAddress() != null
+                                && !firstItem.getClientAddress().trim().isBlank()
+                                                ? firstItem.getClientAddress().trim()
+                                                : safe(data != null
+                                                                ? data.getAddress()
+                                                                : null);
+
+                int totalPages = Math.max(
+                                1,
+                                (int) Math.ceil(
+                                                items.size()
+                                                                / (double) UTL_AL_P3_ROWS_PER_PAGE));
+
+                try (PDDocument doc = new PDDocument()) {
+                        PDFont bold = PDType1Font.HELVETICA_BOLD;
+                        PDFont regular = PDType1Font.HELVETICA;
+
+                        for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+                                int fromIndex = Math.min(
+                                                pageIndex * UTL_AL_P3_ROWS_PER_PAGE,
+                                                items.size());
+
+                                int toIndex = Math.min(
+                                                fromIndex + UTL_AL_P3_ROWS_PER_PAGE,
+                                                items.size());
+
+                                List<ChalaanItem> pageItems = items.subList(
+                                                fromIndex,
+                                                toIndex);
+
+                                PDPage page = new PDPage(PDRectangle.A4);
+                                doc.addPage(page);
+
+                                try (PDPageContentStream cs = new PDPageContentStream(
+                                                doc,
+                                                page)) {
+                                        drawUtlAlP3ChallanPage(
+                                                        cs,
+                                                        page,
+                                                        bold,
+                                                        regular,
+                                                        challanNo,
+                                                        date,
+                                                        consignee,
+                                                        destinationAddress,
+                                                        pageItems,
+                                                        packetItemsById,
+                                                        fromIndex,
+                                                        pageIndex + 1,
+                                                        totalPages);
+                                }
+                        }
+
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        doc.save(out);
+                        return out.toByteArray();
+
+                } catch (IOException exception) {
+                        throw new RuntimeException(
+                                        "Failed to generate UTL AL-P3 challan PDF",
+                                        exception);
+                }
+        }
+
+        private void drawUtlAlP3ChallanPage(
+                        PDPageContentStream cs,
+                        PDPage page,
+                        PDFont bold,
+                        PDFont regular,
+                        String challanNo,
+                        String date,
+                        String consignee,
+                        String destinationAddress,
+                        List<ChalaanItem> pageItems,
+                        Map<UUID, PacketItem> packetItemsById,
+                        int rowOffset,
+                        int pageNo,
+                        int totalPages) throws IOException {
+
+                PDRectangle mediaBox = page.getMediaBox();
+                float pageWidth = mediaBox.getWidth();
+                float pageHeight = mediaBox.getHeight();
+
+                float left = 28f;
+                float right = pageWidth - 28f;
+                float top = pageHeight - 24f;
+                float bottom = 24f;
+
+                cs.setLineWidth(0.72f);
+
+                /* Full printed-form border. */
+                drawLine(cs, left, top, right, top);
+                drawLine(cs, left, bottom, right, bottom);
+                drawLine(cs, left, bottom, left, top);
+                drawLine(cs, right, bottom, right, top);
+
+                float topRowBottom = top - 27f;
+                float consignorBottom = topRowBottom - 24f;
+                float consigneeBottom = consignorBottom - 24f;
+                float destinationBottom = consigneeBottom - 28f;
+
+                drawLine(cs, left, topRowBottom, right, topRowBottom);
+                drawLine(cs, left, consignorBottom, right, consignorBottom);
+                drawLine(cs, left, consigneeBottom, right, consigneeBottom);
+                drawLine(cs, left, destinationBottom, right, destinationBottom);
+
+                float srSectionRight = left + 165f;
+                float dateSectionRight = left + 265f;
+
+                drawLine(cs, srSectionRight, topRowBottom, srSectionRight, top);
+                drawLine(cs, dateSectionRight, topRowBottom, dateSectionRight, top);
+
+                drawText(cs, bold, 8, left + 5f, top - 17f, "Sr. No.");
+                drawUtlAlP3FittedText(
+                                cs,
+                                bold,
+                                9,
+                                left + 44f,
+                                top - 18f,
+                                srSectionRight - (left + 49f),
+                                challanNo);
+
+                drawText(cs, bold, 8, srSectionRight + 5f, top - 17f, "DATE:");
+                drawUtlAlP3FittedText(
+                                cs,
+                                regular,
+                                8,
+                                srSectionRight + 37f,
+                                top - 17f,
+                                dateSectionRight - (srSectionRight + 42f),
+                                date);
+
+                drawUtlAlP3CenteredText(
+                                cs,
+                                bold,
+                                10,
+                                dateSectionRight,
+                                right,
+                                top - 17f,
+                                "UTL MOVERS WORLDWIDE SERVICES (P) LTD");
+
+                if (totalPages > 1) {
+                        drawText(
+                                        cs,
+                                        regular,
+                                        6,
+                                        right - 48f,
+                                        topRowBottom + 4f,
+                                        "Page " + pageNo + "/" + totalPages);
+                }
+
+                drawUtlAlP3HeaderField(
+                                cs,
+                                bold,
+                                regular,
+                                left,
+                                topRowBottom,
+                                consignorBottom,
+                                "CONSIGNORS",
+                                "ALSORG");
+
+                drawUtlAlP3HeaderField(
+                                cs,
+                                bold,
+                                regular,
+                                left,
+                                consignorBottom,
+                                consigneeBottom,
+                                "CONSIGNEE",
+                                consignee);
+
+                drawUtlAlP3HeaderField(
+                                cs,
+                                bold,
+                                regular,
+                                left,
+                                consigneeBottom,
+                                destinationBottom,
+                                "DEST. ADD.",
+                                destinationAddress);
+
+                float tableTop = destinationBottom;
+                float tableHeaderBottom = tableTop - 22f;
+                float rowHeight = 22.5f;
+                float tableBottom = tableHeaderBottom
+                                - (UTL_AL_P3_ROWS_PER_PAGE * rowHeight);
+
+                float srRight = left + 42f;
+                float descriptionRight = right - 112f;
+                float packetRight = right - 65f;
+
+                drawLine(cs, left, tableHeaderBottom, right, tableHeaderBottom);
+                drawLine(cs, srRight, tableBottom, srRight, tableTop);
+                drawLine(cs, descriptionRight, tableBottom, descriptionRight, tableTop);
+                drawLine(cs, packetRight, tableBottom, packetRight, tableTop);
+                drawLine(cs, left, tableBottom, right, tableBottom);
+
+                drawUtlAlP3CenteredText(
+                                cs,
+                                bold,
+                                7,
+                                left,
+                                srRight,
+                                tableTop - 14f,
+                                "Sr. No.");
+
+                drawUtlAlP3CenteredText(
+                                cs,
+                                bold,
+                                8,
+                                srRight,
+                                descriptionRight,
+                                tableTop - 14f,
+                                "GOODS DESCRIPTION");
+
+                drawUtlAlP3CenteredText(
+                                cs,
+                                bold,
+                                6,
+                                descriptionRight,
+                                packetRight,
+                                tableTop - 14f,
+                                "PKT. NO.");
+
+                drawUtlAlP3CenteredText(
+                                cs,
+                                bold,
+                                7,
+                                packetRight,
+                                right,
+                                tableTop - 14f,
+                                "REMARK");
+
+                for (int row = 0; row <= UTL_AL_P3_ROWS_PER_PAGE; row++) {
+                        float y = tableHeaderBottom - (row * rowHeight);
+                        drawLine(cs, left, y, right, y);
+                }
+
+                for (int row = 0; row < pageItems.size(); row++) {
+                        ChalaanItem item = pageItems.get(row);
+
+                        float rowTop = tableHeaderBottom - (row * rowHeight);
+                        float rowBottom = rowTop - rowHeight;
+                        float baseline = rowTop - 13f;
+
+                        drawUtlAlP3CenteredText(
+                                        cs,
+                                        regular,
+                                        8,
+                                        left,
+                                        srRight,
+                                        baseline,
+                                        String.valueOf(rowOffset + row + 1));
+
+                        drawUtlAlP3WrappedText(
+                                        cs,
+                                        regular,
+                                        7,
+                                        srRight + 5f,
+                                        rowTop - 9f,
+                                        descriptionRight - srRight - 10f,
+                                        buildUtlAlP3GoodsDescription(item),
+                                        2,
+                                        8.3f);
+
+                        drawUtlAlP3CenteredText(
+                                        cs,
+                                        regular,
+                                        8,
+                                        descriptionRight,
+                                        packetRight,
+                                        baseline,
+                                        formatUtlAlP3PacketNumber(
+                                                        resolveStandardPacketNumber(
+                                                                        item,
+                                                                        rowOffset + row + 1)));
+
+                        drawUtlAlP3WrappedText(
+                                        cs,
+                                        regular,
+                                        6,
+                                        packetRight + 3f,
+                                        rowTop - 9f,
+                                        right - packetRight - 6f,
+                                        buildUtlAlP3Remark(
+                                                        item,
+                                                        packetItemsById),
+                                        2,
+                                        8f);
+
+                        /* Keep rowBottom referenced so later layout edits remain obvious. */
+                        if (rowBottom < tableBottom - 0.5f) {
+                                break;
+                        }
+                }
+
+                drawUtlAlP3ReceiverArea(
+                                cs,
+                                bold,
+                                regular,
+                                left,
+                                right,
+                                tableBottom,
+                                bottom);
+        }
+
+        private void drawUtlAlP3HeaderField(
+                        PDPageContentStream cs,
+                        PDFont bold,
+                        PDFont regular,
+                        float left,
+                        float rowTop,
+                        float rowBottom,
+                        String label,
+                        String value) throws IOException {
+
+                float labelWidth = 82f;
+                float textY = rowTop - 15f;
+
+                drawText(
+                                cs,
+                                bold,
+                                8,
+                                left + 5f,
+                                textY,
+                                label);
+
+                drawUtlAlP3WrappedText(
+                                cs,
+                                regular,
+                                8,
+                                left + labelWidth,
+                                textY,
+                                455f,
+                                value,
+                                rowTop - rowBottom >= 27f
+                                                ? 2
+                                                : 1,
+                                8f);
+        }
+
+        private void drawUtlAlP3ReceiverArea(
+                        PDPageContentStream cs,
+                        PDFont bold,
+                        PDFont regular,
+                        float left,
+                        float right,
+                        float tableBottom,
+                        float pageBottom) throws IOException {
+
+                float receiverTop = tableBottom - 8f;
+
+                drawText(
+                                cs,
+                                bold,
+                                7,
+                                left + 4f,
+                                receiverTop - 10f,
+                                "AUTHORISED RECEIVERS INFORMATION:-");
+
+                float signatureLineY = receiverTop - 2f;
+                drawLine(
+                                cs,
+                                right - 118f,
+                                signatureLineY,
+                                right - 4f,
+                                signatureLineY);
+                drawText(
+                                cs,
+                                regular,
+                                6,
+                                right - 91f,
+                                receiverTop - 10f,
+                                "Receiver's Signature");
+
+                float nameY = receiverTop - 25f;
+                drawText(cs, bold, 6, left + 7f, nameY, "* RECEIVER'S NAME :");
+                drawLine(cs, left + 105f, nameY - 1f, left + 322f, nameY - 1f);
+                drawText(cs, bold, 6, left + 329f, nameY, "CONTACT NO.");
+                drawLine(cs, left + 397f, nameY - 1f, right - 4f, nameY - 1f);
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                nameY - 14f,
+                                "* UTL WILL NOT BE RESPONSIBLE FOR ANY DAMAGES AFTER THE DELIVERY DONE.");
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                nameY - 27f,
+                                "* UNPACKING WILL BE DONE AT THE TIME OF DELIVERY ONLY.");
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                nameY - 40f,
+                                "* REASON IF/FOR NOT UNPACKING THE GOODS:");
+                drawLine(
+                                cs,
+                                left + 215f,
+                                nameY - 41f,
+                                right - 104f,
+                                nameY - 41f);
+
+                drawText(cs, regular, 6, right - 92f, nameY - 27f, "DATE:");
+                drawLine(cs, right - 60f, nameY - 28f, right - 5f, nameY - 28f);
+                drawText(cs, regular, 6, right - 92f, nameY - 40f, "TIME:");
+                drawLine(cs, right - 60f, nameY - 41f, right - 5f, nameY - 41f);
+
+                float ackTop = nameY - 53f;
+                float ackHeaderBottom = ackTop - 18f;
+                float ackRowHeight = 21f;
+                float ackBottom = ackHeaderBottom - (3f * ackRowHeight);
+                float yesLeft = right - 72f;
+                float noLeft = right - 36f;
+
+                drawLine(cs, left, ackTop, right, ackTop);
+                drawLine(cs, left, ackBottom, right, ackBottom);
+                drawLine(cs, left, ackTop, left, ackBottom);
+                drawLine(cs, right, ackTop, right, ackBottom);
+                drawLine(cs, yesLeft, ackTop, yesLeft, ackBottom);
+                drawLine(cs, noLeft, ackTop, noLeft, ackBottom);
+                drawLine(cs, left, ackHeaderBottom, right, ackHeaderBottom);
+
+                for (int row = 1; row <= 2; row++) {
+                        float y = ackHeaderBottom - (row * ackRowHeight);
+                        drawLine(cs, left, y, right, y);
+                }
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                ackTop - 12f,
+                                "KINDLY PLEASE MARK YES/NO FOR THE FOLLOWING REQUIREMENT");
+                drawUtlAlP3CenteredText(cs, bold, 6, yesLeft, noLeft, ackTop - 12f, "YES");
+                drawUtlAlP3CenteredText(cs, bold, 6, noLeft, right, ackTop - 12f, "NO");
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                ackHeaderBottom - 14f,
+                                "* GOODS RECEIVED IN PACKED CONDITION");
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                ackHeaderBottom - ackRowHeight - 14f,
+                                "* GOODS RECEIVED IN UNPACKED CONDITION");
+
+                drawText(
+                                cs,
+                                bold,
+                                6,
+                                left + 7f,
+                                ackHeaderBottom - (2f * ackRowHeight) - 14f,
+                                "* GOODS UNPACKED : NO. OF DAYS : __________  HOURS : __________");
+
+                float noteY = ackBottom - 12f;
+
+                drawText(
+                                cs,
+                                regular,
+                                5,
+                                left + 4f,
+                                noteY,
+                                "Kindly Please Fill Up all the columns so that our effort worthwhile and inspires us to strive");
+                drawText(
+                                cs,
+                                regular,
+                                5,
+                                left + 4f,
+                                noteY - 8f,
+                                "To achieve higher level of Client Satisfaction.");
+
+                drawText(
+                                cs,
+                                bold,
+                                8,
+                                left + 4f,
+                                noteY - 20f,
+                                "For UTL MOVERS WORLDWIDE SERVICES (P) LTD");
+
+                drawText(
+                                cs,
+                                bold,
+                                10,
+                                left + 4f,
+                                pageBottom + 48f,
+                                "Auth. Signature");
+
+                drawUtlAlP3FittedText(
+                                cs,
+                                bold,
+                                5,
+                                left + 4f,
+                                pageBottom + 34f,
+                                right - left - 8f,
+                                "Head Off.: Unit No. 20, Bharat Bazar Gandhi Nagar, Worli Mumbai - 400018");
+
+                drawUtlAlP3FittedText(
+                                cs,
+                                bold,
+                                5,
+                                left + 4f,
+                                pageBottom + 24f,
+                                right - left - 8f,
+                                "Branch Off.: Khasra No. 90/25/2 - 90/24/2, 100 Feet Road, Ghitorni, M.G. Road New Delhi-110030");
+
+                drawUtlAlP3FittedText(
+                                cs,
+                                bold,
+                                5,
+                                left + 4f,
+                                pageBottom + 14f,
+                                right - left - 8f,
+                                "Mob.: 9555311955, 9560516030 - e-mail : utl@utlworld.com  Website : www.utlworld.com");
+        }
+
+        private Map<UUID, PacketItem> loadUtlAlP3PacketItems(
+                        List<ChalaanItem> items) {
+
+                if (packetItemRepository == null || items == null || items.isEmpty()) {
+                        return Map.of();
+                }
+
+                LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+
+                for (ChalaanItem item : items) {
+                        if (item == null) {
+                                continue;
+                        }
+
+                        UUID id = parsePacketItemUuid(item.getZohoItemId());
+
+                        if (id != null) {
+                                ids.add(id);
+                        }
+                }
+
+                if (ids.isEmpty()) {
+                        return Map.of();
+                }
+
+                Map<UUID, PacketItem> result = new LinkedHashMap<>();
+
+                for (PacketItem packetItem : packetItemRepository.findAllById(ids)) {
+                        if (packetItem != null && packetItem.getId() != null) {
+                                result.put(packetItem.getId(), packetItem);
+                        }
+                }
+
+                return result;
+        }
+
+        private String buildUtlAlP3GoodsDescription(
+                        ChalaanItem item) {
+
+                if (item == null) {
+                        return "-";
+                }
+
+                List<String> parts = new ArrayList<>();
+
+                String pdNo = cleanUtlAlP3Value(item.getPdNo());
+                String drawingNo = cleanUtlAlP3Value(item.getDrawingNo());
+                String itemName = cleanUtlAlP3Value(item.getItemName());
+                String description = cleanUtlAlP3Value(item.getDescription());
+
+                if (pdNo != null && drawingNo != null) {
+                        if (pdNo.equalsIgnoreCase(drawingNo)) {
+                                parts.add(pdNo);
+                        } else {
+                                parts.add(pdNo + " / " + drawingNo);
+                        }
+                } else if (drawingNo != null) {
+                        parts.add(drawingNo);
+                } else if (pdNo != null) {
+                        parts.add(pdNo);
+                }
+
+                if (itemName != null) {
+                        parts.add(itemName);
+                }
+
+                if (description != null
+                                && (itemName == null
+                                                || !description.equalsIgnoreCase(itemName))) {
+                        parts.add(description);
+                }
+
+                String qty = cleanUtlAlP3Value(item.getQty());
+
+                if (qty != null && !isUtlAlP3SingleQuantity(qty)) {
+                        parts.add(formatUtlAlP3Quantity(qty));
+                }
+
+                return parts.isEmpty()
+                                ? "-"
+                                : String.join(" - ", parts);
+        }
+
+        private String buildUtlAlP3Remark(
+                        ChalaanItem item,
+                        Map<UUID, PacketItem> packetItemsById) {
+
+                PacketItem packetItem = null;
+
+                if (item != null && packetItemsById != null) {
+                        UUID id = parsePacketItemUuid(item.getZohoItemId());
+                        packetItem = id == null
+                                        ? null
+                                        : packetItemsById.get(id);
+                }
+
+                String dimensions = cleanUtlAlP3Value(
+                                packetItem == null
+                                                ? null
+                                                : packetItem.getDimensions());
+
+                String remarks = cleanUtlAlP3Value(
+                                item == null
+                                                ? null
+                                                : item.getRemarks());
+
+                if (remarks == null && packetItem != null) {
+                        remarks = cleanUtlAlP3Value(packetItem.getRemarks());
+                }
+
+                if (dimensions != null && remarks != null
+                                && !dimensions.equalsIgnoreCase(remarks)) {
+                        return dimensions + " | " + remarks;
+                }
+
+                if (dimensions != null) {
+                        return dimensions;
+                }
+
+                return remarks == null
+                                ? "-"
+                                : remarks;
+        }
+
+        private String formatUtlAlP3PacketNumber(
+                        String value) {
+
+                String clean = cleanUtlAlP3Value(value);
+
+                if (clean == null) {
+                        return "-";
+                }
+
+                if (clean.matches("[0-9]+")) {
+                        try {
+                                long number = Long.parseLong(clean);
+                                return number < 100
+                                                ? String.format(Locale.ROOT, "%02d", number)
+                                                : String.valueOf(number);
+                        } catch (NumberFormatException ignored) {
+                                return clean;
+                        }
+                }
+
+                return clean;
+        }
+
+        private String formatUtlAlP3Date(
+                        LocalDateTime value) {
+
+                LocalDateTime finalValue = value != null
+                                ? value
+                                : LocalDateTime.now(TimeZoneConfig.APP_ZONE);
+
+                return finalValue.format(
+                                DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        }
+
+        private String formatUtlAlP3Quantity(
+                        String value) {
+
+                String clean = cleanUtlAlP3Value(value);
+
+                if (clean == null) {
+                        return "-";
+                }
+
+                String normalized = clean.replaceAll("(?i)\\s*(PC|PCS|PIECE|PIECES)$", "")
+                                .trim();
+
+                return normalized.isBlank()
+                                ? clean
+                                : normalized + " PC";
+        }
+
+        private boolean isUtlAlP3SingleQuantity(
+                        String value) {
+
+                String clean = cleanUtlAlP3Value(value);
+
+                if (clean == null) {
+                        return true;
+                }
+
+                String normalized = clean.replaceAll("(?i)\\s*(PC|PCS|PIECE|PIECES)$", "")
+                                .trim();
+
+                try {
+                        return Math.abs(Double.parseDouble(normalized) - 1D) < 0.000001D;
+                } catch (NumberFormatException ignored) {
+                        return false;
+                }
+        }
+
+        private String cleanUtlAlP3Value(
+                        Object value) {
+
+                if (value == null) {
+                        return null;
+                }
+
+                String text = value.toString()
+                                .trim();
+
+                if (text.isBlank()
+                                || "-".equals(text)
+                                || "null".equalsIgnoreCase(text)
+                                || "undefined".equalsIgnoreCase(text)) {
+                        return null;
+                }
+
+                return text;
+        }
+
+        private void drawUtlAlP3CenteredText(
+                        PDPageContentStream cs,
+                        PDFont font,
+                        int fontSize,
+                        float x1,
+                        float x2,
+                        float y,
+                        String text) throws IOException {
+
+                String finalText = cleanPdfText(safe(text));
+                float width = pdfTextWidth(font, fontSize, finalText);
+                float available = Math.max(1f, x2 - x1);
+
+                if (width > available - 4f) {
+                        finalText = trimUtlAlP3TextToWidth(
+                                        font,
+                                        fontSize,
+                                        finalText,
+                                        available - 4f);
+                        width = pdfTextWidth(font, fontSize, finalText);
+                }
+
+                drawText(
+                                cs,
+                                font,
+                                fontSize,
+                                x1 + Math.max(2f, (available - width) / 2f),
+                                y,
+                                finalText);
+        }
+
+        private void drawUtlAlP3FittedText(
+                        PDPageContentStream cs,
+                        PDFont font,
+                        int fontSize,
+                        float x,
+                        float y,
+                        float maxWidth,
+                        String text) throws IOException {
+
+                drawText(
+                                cs,
+                                font,
+                                fontSize,
+                                x,
+                                y,
+                                trimUtlAlP3TextToWidth(
+                                                font,
+                                                fontSize,
+                                                cleanPdfText(safe(text)),
+                                                maxWidth));
+        }
+
+        private void drawUtlAlP3WrappedText(
+                        PDPageContentStream cs,
+                        PDFont font,
+                        int fontSize,
+                        float x,
+                        float y,
+                        float maxWidth,
+                        String text,
+                        int maxLines,
+                        float lineHeight) throws IOException {
+
+                List<String> lines = wrapTextWithFirstLineWidth(
+                                font,
+                                fontSize,
+                                maxWidth,
+                                maxWidth,
+                                cleanPdfText(safe(text)));
+
+                int count = Math.min(
+                                Math.max(1, maxLines),
+                                lines.size());
+
+                for (int index = 0; index < count; index++) {
+                        String line = lines.get(index);
+
+                        if (index == count - 1 && lines.size() > count) {
+                                line = trimUtlAlP3TextToWidth(
+                                                font,
+                                                fontSize,
+                                                line + "...",
+                                                maxWidth);
+                        } else {
+                                line = trimUtlAlP3TextToWidth(
+                                                font,
+                                                fontSize,
+                                                line,
+                                                maxWidth);
+                        }
+
+                        drawText(
+                                        cs,
+                                        font,
+                                        fontSize,
+                                        x,
+                                        y - (index * lineHeight),
+                                        line);
+                }
+        }
+
+        private String trimUtlAlP3TextToWidth(
+                        PDFont font,
+                        int fontSize,
+                        String text,
+                        float maxWidth) throws IOException {
+
+                String clean = cleanPdfText(safe(text));
+
+                if (pdfTextWidth(font, fontSize, clean) <= maxWidth) {
+                        return clean;
+                }
+
+                String suffix = "...";
+                String value = clean;
+
+                while (value.length() > 1
+                                && pdfTextWidth(
+                                                font,
+                                                fontSize,
+                                                value + suffix) > maxWidth) {
+                        value = value.substring(
+                                        0,
+                                        value.length() - 1)
+                                        .trim();
+                }
+
+                return value.isBlank()
+                                ? "-"
+                                : value + suffix;
         }
 
         public byte[] generateCustomChalaan(

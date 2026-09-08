@@ -226,14 +226,23 @@ public class UtlDispatchController {
                 request,
                 context.plants());
 
-        DispatchTripPdfResult result = dispatchChallanService.previewDispatchChallan(
-                itemIds,
-                request.driverId(),
-                request.vehicleId(),
-                firstNonNull(request.dispatchTime(), request.tripStart()),
-                normalizeHelperLoaderCount(request.helperLoaderCount()),
-                context.user().getUsername(),
-                context.plants());
+        DispatchTripPdfResult result = isAlP3Context(context)
+                ? dispatchChallanService.previewUtlAlP3DispatchChallan(
+                        itemIds,
+                        request.driverId(),
+                        request.vehicleId(),
+                        firstNonNull(request.dispatchTime(), request.tripStart()),
+                        normalizeHelperLoaderCount(request.helperLoaderCount()),
+                        context.user().getUsername(),
+                        context.plants())
+                : dispatchChallanService.previewDispatchChallan(
+                        itemIds,
+                        request.driverId(),
+                        request.vehicleId(),
+                        firstNonNull(request.dispatchTime(), request.tripStart()),
+                        normalizeHelperLoaderCount(request.helperLoaderCount()),
+                        context.user().getUsername(),
+                        context.plants());
 
         byte[] pdf = requirePdf(result);
 
@@ -268,14 +277,23 @@ public class UtlDispatchController {
                 request,
                 context.plants());
 
-        DispatchTripPdfResult result = dispatchChallanService.generateAndDispatch(
-                itemIds,
-                request.driverId(),
-                request.vehicleId(),
-                firstNonNull(request.dispatchTime(), request.tripStart()),
-                normalizeHelperLoaderCount(request.helperLoaderCount()),
-                context.user().getUsername(),
-                context.plants());
+        DispatchTripPdfResult result = isAlP3Context(context)
+                ? dispatchChallanService.generateAndDispatchUtlAlP3(
+                        itemIds,
+                        request.driverId(),
+                        request.vehicleId(),
+                        firstNonNull(request.dispatchTime(), request.tripStart()),
+                        normalizeHelperLoaderCount(request.helperLoaderCount()),
+                        context.user().getUsername(),
+                        context.plants())
+                : dispatchChallanService.generateAndDispatch(
+                        itemIds,
+                        request.driverId(),
+                        request.vehicleId(),
+                        firstNonNull(request.dispatchTime(), request.tripStart()),
+                        normalizeHelperLoaderCount(request.helperLoaderCount()),
+                        context.user().getUsername(),
+                        context.plants());
 
         byte[] pdf = requirePdf(result);
         String challanNo = cleanChallanNumber(result.getChallanNumber());
@@ -297,6 +315,17 @@ public class UtlDispatchController {
                         "X-Challan-No, Content-Disposition")
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
+    }
+
+    /**
+     * Only the UTL_DISPATCH identity assigned to AL-P3 receives the UTL Movers
+     * consignment-style PDF. WR-38 UTL stays on the existing standard renderer.
+     */
+    private boolean isAlP3Context(
+            UtlContext context) {
+        return context != null
+                && context.plants() != null
+                && context.plants().contains(UtlWorkflowService.AL_P3);
     }
 
     private List<String> validateChallanRequest(

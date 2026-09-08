@@ -110,6 +110,55 @@ public class DispatchChallanService {
                         Integer helperLoaderCount,
                         String username,
                         Set<String> allowedPlants) {
+
+                return generateAndDispatchInternal(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                helperLoaderCount,
+                                username,
+                                allowedPlants,
+                                false);
+        }
+
+        /**
+         * UTL AL-P3 uses the same dispatch transaction, locking, validation,
+         * metadata, status transitions and challan numbering as the established
+         * Dispatch flow. Only the returned PDF renderer is different.
+         *
+         * Keeping this as an explicit method prevents the UTL document style from
+         * leaking into normal Dispatch or WR-38 UTL challans.
+         */
+        public DispatchTripPdfResult generateAndDispatchUtlAlP3(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
+                        String username,
+                        Set<String> allowedPlants) {
+
+                return generateAndDispatchInternal(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                helperLoaderCount,
+                                username,
+                                allowedPlants,
+                                true);
+        }
+
+        private DispatchTripPdfResult generateAndDispatchInternal(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
+                        String username,
+                        Set<String> allowedPlants,
+                        boolean utlAlP3Pdf) {
                 if (rawItemIds == null || rawItemIds.isEmpty()) {
                         throw new RuntimeException("No items selected for challan");
                 }
@@ -200,7 +249,9 @@ public class DispatchChallanService {
                                 finalHelperLoaderCount,
                                 false);
 
-                byte[] pdf = pdfService.generateChalaan(data);
+                byte[] pdf = renderDispatchPdf(
+                                data,
+                                utlAlP3Pdf);
 
                 /*
                  * Save challan metadata before marking DISPATCHED.
@@ -319,6 +370,52 @@ public class DispatchChallanService {
                         String username,
                         Set<String> allowedPlants) {
 
+                return previewDispatchChallanInternal(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                helperLoaderCount,
+                                username,
+                                allowedPlants,
+                                false);
+        }
+
+        /**
+         * Read-only UTL AL-P3 preview. The eligibility and plant checks are
+         * identical to the normal preview path; only PDF presentation changes.
+         */
+        @Transactional(readOnly = true)
+        public DispatchTripPdfResult previewUtlAlP3DispatchChallan(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
+                        String username,
+                        Set<String> allowedPlants) {
+
+                return previewDispatchChallanInternal(
+                                rawItemIds,
+                                driverId,
+                                vehicleId,
+                                dispatchTime,
+                                helperLoaderCount,
+                                username,
+                                allowedPlants,
+                                true);
+        }
+
+        private DispatchTripPdfResult previewDispatchChallanInternal(
+                        List<String> rawItemIds,
+                        UUID driverId,
+                        UUID vehicleId,
+                        LocalDateTime dispatchTime,
+                        Integer helperLoaderCount,
+                        String username,
+                        Set<String> allowedPlants,
+                        boolean utlAlP3Pdf) {
+
                 List<String> itemIds = cleanUniqueItemIds(
                                 rawItemIds);
 
@@ -356,8 +453,9 @@ public class DispatchChallanService {
                                 finalHelperLoaderCount,
                                 true);
 
-                byte[] pdf = pdfService.generateChalaan(
-                                data);
+                byte[] pdf = renderDispatchPdf(
+                                data,
+                                utlAlP3Pdf);
 
                 return new DispatchTripPdfResult(
                                 null,
@@ -751,6 +849,15 @@ public class DispatchChallanService {
                 }
 
                 return pdfService.generateChalaan(data);
+        }
+
+        private byte[] renderDispatchPdf(
+                        ChalaanPdfData data,
+                        boolean utlAlP3Pdf) {
+
+                return utlAlP3Pdf
+                                ? pdfService.generateUtlAlP3Chalaan(data)
+                                : pdfService.generateChalaan(data);
         }
 
         private ChalaanPdfData buildPdfData(
