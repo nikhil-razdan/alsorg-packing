@@ -67,6 +67,7 @@ import {
 	fetchUtlOriginMetadataForRows,
 	getPackFlowPlantDisplayLabel,
 	getPackFlowSkuDisplayValue,
+	isUtlOriginPackFlowRow,
 } from "../utils/utlOriginDisplay";
 
 /*
@@ -5405,6 +5406,9 @@ const createEmptyCustomChallanLine = () => ({
 	remarks: "",
 });
 
+const DISPATCH_UTL_PLANT_FILTER = "UTL";
+const DISPATCH_UTL_SOURCE_PLANTS = ["AL-P3", "WR-38"];
+
 const PLANT_LOCATION_MAP = {
 	"AL-P1": {
 		label: "AL-P1 (AKG)",
@@ -5500,6 +5504,19 @@ const dispatchPlantMatches = (
 		normalizeDispatchPlantCode(
 			row?.plantCode
 		);
+
+	if (
+		cleanSelection ===
+		DISPATCH_UTL_PLANT_FILTER
+	) {
+		return Boolean(
+			row?.__utlOriginFilterMatch === true ||
+			row?.utlOrigin === true ||
+			String(row?.utlOrigin || "")
+				.trim()
+				.toLowerCase() === "true"
+		);
+	}
 
 	if (
 		cleanSelection ===
@@ -6185,6 +6202,12 @@ export default function DispatchedItemsPage() {
 		});
 
 	const dispatchPageCacheRef = useRef(new Map());
+	/*
+	 * UTL is an origin/workflow filter, not a physical plantCode. Cache the
+	 * fully-resolved authorized UTL result briefly so changing UI pages does not
+	 * repeatedly scan every matching server page.
+	 */
+	const dispatchUtlFilterCacheRef = useRef(new Map());
 	const dispatchPrefetchAbortRef = useRef(null);
 	const dispatchSelectedRowCacheRef = useRef(new Map());
 	const dispatchSelectAllScopeRef = useRef({
@@ -6241,6 +6264,45 @@ export default function DispatchedItemsPage() {
 	const [pendingQrFgZone, setPendingQrFgZone] = useState("");
 	const [qrMoveFgLoading, setQrMoveFgLoading] = useState(false);
 	const [plantConfigs, setPlantConfigs] = useState([]);
+
+	const assignedUtlPlantCodes = useMemo(() => {
+		const codes = (Array.isArray(plantConfigs) ? plantConfigs : [])
+			.map((plant) =>
+				normalizeDispatchPlantCode(
+					plant?.plantCode ||
+					plant?.code ||
+					plant?.name
+				)
+			)
+			.filter((code) =>
+				DISPATCH_UTL_SOURCE_PLANTS.includes(code)
+			);
+
+		return Array.from(new Set(codes));
+	}, [plantConfigs]);
+
+	const utlFilterPlantCodes = useMemo(() => {
+		if (isAdmin) {
+			return [...DISPATCH_UTL_SOURCE_PLANTS];
+		}
+
+		return assignedUtlPlantCodes.length > 0
+			? assignedUtlPlantCodes
+			: [...DISPATCH_UTL_SOURCE_PLANTS];
+	}, [isAdmin, assignedUtlPlantCodes]);
+
+	const canUseUtlPlantFilter =
+		(isAdmin || isDispatch || isUtlDispatch || isUtlPacking) &&
+		(
+			isAdmin ||
+			assignedUtlPlantCodes.length > 0 ||
+			isUtlDispatch ||
+			isUtlPacking
+		);
+
+	const utlPlantFilterLabel =
+		`UTL • ${utlFilterPlantCodes.join(" / ")}`;
+
 	const [logisticsDrivers, setLogisticsDrivers] = useState([]);
 	const [logisticsVehicles, setLogisticsVehicles] = useState([]);
 
@@ -11118,13 +11180,32 @@ export default function DispatchedItemsPage() {
 
 			const signal = externalSignal || controller.signal;
 
+			const cleanLogicalPlant = String(
+				plantValue || "ALL"
+			)
+				.trim()
+				.toUpperCase();
+
+			const utlOriginFilterActive =
+				cleanLogicalPlant ===
+				DISPATCH_UTL_PLANT_FILTER;
+
+			/*
+			 * The backend plant predicate intentionally remains physical-code based.
+			 * UTL origin lives in UtlPacketRouting, so query the caller's already
+			 * authorized register with plant=ALL and resolve UTL origin afterward.
+			 */
+			const serverPlantValue = utlOriginFilterActive
+				? "ALL"
+				: plantValue;
+
 			const firstPage = await fetchDispatchServerPage({
 				backendPage: 0,
 				size: DISPATCH_BACKEND_BATCH_SIZE,
 				signal,
 				searchValue,
 				statusValue,
-				plantValue,
+				plantValue: serverPlantValue,
 				dateModeValue,
 				dateFromValue,
 				dateToValue,
@@ -11170,7 +11251,7 @@ export default function DispatchedItemsPage() {
 							signal,
 							searchValue,
 							statusValue,
-							plantValue,
+							plantValue: serverPlantValue,
 							dateModeValue,
 							dateFromValue,
 							dateToValue,
@@ -11223,7 +11304,66 @@ export default function DispatchedItemsPage() {
 					});
 				});
 
-			return Array.from(rowsById.values());
+			const mergedRows = Array.from(
+				rowsById.values()
+			);
+
+			if (!utlOriginFilterActive) {
+				return mergedRows;
+			}
+
+			if (mergedRows.length === 0) {
+				return [];
+			}
+
+			const originMetadata =
+				await fetchUtlOriginMetadataForRows(
+					mergedRows,
+					{ signal }
+				);
+
+			const allowedUtlPlants = new Set(
+				utlFilterPlantCodes
+			);
+
+			return mergedRows
+				.filter((row) => {
+					if (
+						!isUtlOriginPackFlowRow(
+							row,
+							originMetadata,
+							false
+						)
+					) {
+						return false;
+					}
+
+					const sourcePlant =
+						normalizeDispatchPlantCode(
+							getPackFlowPlantDisplayLabel(
+								row,
+								originMetadata,
+								{
+									fallbackUtl: false,
+									wr38NormalLabel: "WR-38",
+								}
+							)
+						);
+
+					return (
+						DISPATCH_UTL_SOURCE_PLANTS.includes(
+							sourcePlant
+						) &&
+						(
+							allowedUtlPlants.size === 0 ||
+							allowedUtlPlants.has(sourcePlant)
+						)
+					);
+				})
+				.map((row) => ({
+					...row,
+					__utlOriginFilterMatch: true,
+				}));
 		};
 
 	const fetchData =
@@ -11282,6 +11422,144 @@ export default function DispatchedItemsPage() {
 					).trim()
 				)
 			);
+
+			const utlOriginFilterActive =
+				String(plantFilter || "ALL")
+					.trim()
+					.toUpperCase() ===
+				DISPATCH_UTL_PLANT_FILTER;
+
+			if (utlOriginFilterActive) {
+				const abortController = new AbortController();
+				dispatchFetchAbortRef.current = abortController;
+
+				const cachedFull =
+					dispatchUtlFilterCacheRef.current.get(
+						signature
+					);
+
+				const useCachedFull =
+					preferCache &&
+					!forceRevalidate &&
+					Array.isArray(cachedFull?.rows) &&
+					Number(cachedFull?.cachedAt || 0) > 0 &&
+					Date.now() - Number(cachedFull.cachedAt) <=
+						DISPATCH_PAGE_CACHE_FRESH_MS;
+
+				setLoading(!useCachedFull);
+
+				try {
+					const matchingRows = useCachedFull
+						? cachedFull.rows
+						: await fetchAllMatchingDispatchRows({
+							searchValue: dispatchServerSearch,
+							statusValue: statusFilter,
+							plantValue: DISPATCH_UTL_PLANT_FILTER,
+							dateModeValue: dateFilterMode,
+							dateFromValue: dateFilterFrom,
+							dateToValue: dateFilterTo,
+							timeFromValue: dateFilterTimeFrom,
+							timeToValue: dateFilterTimeTo,
+							groupByValue: groupBy,
+							signal: abortController.signal,
+							onProgress: setDispatchLoadProgress,
+						});
+
+					if (
+						requestId !== dispatchFetchRequestRef.current
+					) {
+						return matchingRows;
+					}
+
+					if (!useCachedFull) {
+						dispatchUtlFilterCacheRef.current.set(
+							signature,
+							{
+								rows: matchingRows,
+								cachedAt: Date.now(),
+							}
+						);
+
+						while (
+							dispatchUtlFilterCacheRef.current.size > 4
+						) {
+							const oldestKey =
+								dispatchUtlFilterCacheRef.current
+									.keys()
+									.next().value;
+
+							if (oldestKey === undefined) break;
+							dispatchUtlFilterCacheRef.current.delete(oldestKey);
+						}
+					}
+
+					const totalRows = matchingRows.length;
+					const totalPages = Math.max(
+						1,
+						Math.ceil(totalRows / pageSize)
+					);
+
+					const safeBackendPage = Math.min(
+						backendPage,
+						totalPages - 1
+					);
+
+					const start = safeBackendPage * pageSize;
+					const pageItems = matchingRows.slice(
+						start,
+						start + pageSize
+					);
+
+					pageItems.forEach((row) => {
+						const id = String(row?.zohoItemId || "").trim();
+						if (id && selectionIdSet.has(id)) {
+							dispatchSelectedRowCacheRef.current.set(id, row);
+						}
+					});
+
+					setRows(pageItems);
+					setDispatchServerMeta({
+						totalElements: totalRows,
+						totalPages,
+						pageNumber: safeBackendPage,
+						pageSize,
+						signature,
+					});
+
+					setDispatchLoadProgress({
+						loadedRows: pageItems.length,
+						totalRows,
+						loadedPages: 1,
+						totalPages,
+					});
+
+					return pageItems;
+				} catch (error) {
+					if (error?.name === "AbortError") {
+						return existingRowsSnapshot;
+					}
+
+					console.error(
+						"Dispatch UTL-origin filter fetch failed:",
+						error
+					);
+
+					if (existingRowsSnapshot.length === 0) {
+						setRows([]);
+					}
+
+					return existingRowsSnapshot;
+				} finally {
+					if (requestId === dispatchFetchRequestRef.current) {
+						setLoading(false);
+						setDispatchSearchNetworkPending(false);
+					}
+
+					if (dispatchFetchAbortRef.current === abortController) {
+						dispatchFetchAbortRef.current = null;
+					}
+				}
+			}
 
 			/*
 			 * A prefetched page that is still fresh is already an authoritative
@@ -21241,6 +21519,12 @@ export default function DispatchedItemsPage() {
 						<MenuItem value="ALL">
 							🌐 All Plants
 						</MenuItem>
+
+						{canUseUtlPlantFilter && (
+							<MenuItem value={DISPATCH_UTL_PLANT_FILTER}>
+								🟣 {utlPlantFilterLabel}
+							</MenuItem>
+						)}
 
 						{dispatchPlantOptions.map(
 							(option) => (

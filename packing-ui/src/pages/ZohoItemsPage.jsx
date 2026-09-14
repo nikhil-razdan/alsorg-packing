@@ -39,6 +39,7 @@ import {
   fetchUtlOriginMetadataForRows,
   getPackFlowPlantDisplayLabel,
   getPackFlowSkuDisplayValue,
+  isUtlOriginPackFlowRow,
 } from "../utils/utlOriginDisplay";
 
 /*
@@ -1536,6 +1537,34 @@ function ClientNameAutocomplete({
   );
 }
 
+const INVENTORY_UTL_PLANT_FILTER = "UTL";
+const INVENTORY_UTL_SOURCE_PLANTS = ["AL-P3", "WR-38"];
+const INVENTORY_PLANT_FILTER_OPTIONS = [
+  { value: "AL-P1", label: "AL-P1 (AKG)" },
+  { value: "AL-P2", label: "AL-P2 (Sofa)" },
+  { value: "AL-P3", label: "AL-P3 (K&W)" },
+  { value: "AL-P4", label: "AL-P4 (Basement)" },
+  { value: "WR-38", label: "WR-38 (Wriver)" },
+];
+
+const normalizeInventoryPlantCode = (value) => {
+  const text = String(value || "")
+    .trim()
+    .toUpperCase();
+
+  if (!text) {
+    return "";
+  }
+
+  const match = text.match(
+    /\b(?:AL-P\d+|WR-38)\b/
+  );
+
+  return match
+    ? match[0]
+    : text.split(/\s+/)[0].trim();
+};
+
 const normalizeInventoryItemType = (
   value
 ) => {
@@ -2238,6 +2267,20 @@ function ZohoItemsPage() {
   const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState("NONE");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [plantFilter, setPlantFilter] = useState("ALL");
+
+  /*
+   * The normal Inventory search endpoint is server-paged but has no UTL-origin
+   * plant predicate. ADMIN plant filtering therefore switches only the filtered
+   * view to the existing complete-register loader; all default browsing remains
+   * server-paged and unchanged.
+   */
+  const inventoryPlantFilterRequiresClientMode =
+    isAdmin &&
+    String(plantFilter || "ALL")
+      .trim()
+      .toUpperCase() !== "ALL";
+
   const [createOpen, setCreateOpen] = useState(false);
   const [pageNo, setPageNo] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -2476,8 +2519,21 @@ function ZohoItemsPage() {
       return undefined;
     }
 
+    const needsFullRegisterUtlMetadata =
+      isAdmin &&
+      String(plantFilter || "ALL")
+        .trim()
+        .toUpperCase() ===
+        INVENTORY_UTL_PLANT_FILTER;
+
     const visibleRows = [
       ...(Array.isArray(rows) ? rows : []),
+      ...(needsFullRegisterUtlMetadata && Array.isArray(inventoryFullModeRows)
+        ? inventoryFullModeRows
+        : []),
+      ...(needsFullRegisterUtlMetadata && Array.isArray(inventoryHardwareRows)
+        ? inventoryHardwareRows
+        : []),
       ...(Array.isArray(masterWorkbenchRows) ? masterWorkbenchRows : []),
       ...(itemDetailsRow ? [itemDetailsRow] : []),
       ...(selectedItem ? [selectedItem] : []),
@@ -2531,7 +2587,11 @@ function ZohoItemsPage() {
     authLoading,
     currentUser?.id,
     currentUser?.username,
+    isAdmin,
+    plantFilter,
     rows,
+    inventoryFullModeRows,
+    inventoryHardwareRows,
     masterWorkbenchRows,
     itemDetailsRow,
     selectedItem,
@@ -2543,6 +2603,69 @@ function ZohoItemsPage() {
       utlOriginMetadata,
       { fallbackUtl: isUtlPacking }
     );
+
+  const inventoryRowMatchesPlantFilter = (
+    row,
+    selectedPlant
+  ) => {
+    const cleanSelection = String(
+      selectedPlant || "ALL"
+    )
+      .trim()
+      .toUpperCase();
+
+    if (
+      !cleanSelection ||
+      cleanSelection === "ALL"
+    ) {
+      return true;
+    }
+
+    if (
+      cleanSelection ===
+      INVENTORY_UTL_PLANT_FILTER
+    ) {
+      if (
+        !isUtlOriginPackFlowRow(
+          row,
+          utlOriginMetadata,
+          false
+        )
+      ) {
+        return false;
+      }
+
+      const sourcePlant =
+        normalizeInventoryPlantCode(
+          getPackFlowPlantDisplayLabel(
+            row,
+            utlOriginMetadata,
+            {
+              fallbackUtl: false,
+              wr38NormalLabel: "WR-38",
+            }
+          )
+        );
+
+      return INVENTORY_UTL_SOURCE_PLANTS.includes(
+        sourcePlant
+      );
+    }
+
+    const rowPlant =
+      normalizeInventoryPlantCode(
+        row?.plantCode
+      );
+
+    if (
+      cleanSelection ===
+      "UNASSIGNED"
+    ) {
+      return !rowPlant;
+    }
+
+    return rowPlant === cleanSelection;
+  };
 
   const getInventorySkuDisplayValue = (row) =>
     getPackFlowSkuDisplayValue(row) || "—";
@@ -3665,6 +3788,8 @@ function ZohoItemsPage() {
       inventoryServerSearch,
       statusValue =
       statusFilter,
+      plantValue =
+      plantFilter,
       groupValue =
       groupBy,
     } = {}) => {
@@ -3678,6 +3803,14 @@ function ZohoItemsPage() {
         isAdmin
           ? String(
             statusValue ||
+            "ALL"
+          )
+            .trim()
+            .toUpperCase()
+          : "ALL",
+        isAdmin
+          ? String(
+            plantValue ||
             "ALL"
           )
             .trim()
@@ -4173,7 +4306,8 @@ function ZohoItemsPage() {
 
       const useServerPaging =
         groupBy ===
-        "NONE";
+        "NONE" &&
+        !inventoryPlantFilterRequiresClientMode;
 
       if (
         !useServerPaging
@@ -5237,8 +5371,11 @@ function ZohoItemsPage() {
       inventorySearchNetworkPending ||
       inventoryHardwareLoading ||
       (
-        groupBy !==
-        "NONE" &&
+        (
+          groupBy !==
+          "NONE" ||
+          inventoryPlantFilterRequiresClientMode
+        ) &&
         String(
           deferredInventoryClientSearch || ""
         ).trim() !==
@@ -5253,7 +5390,8 @@ function ZohoItemsPage() {
       sourceRows,
       searchValue,
       statusValue,
-      groupValue
+      groupValue,
+      plantValue = plantFilter
     ) => {
       let list =
         Array.isArray(
@@ -5278,6 +5416,20 @@ function ZohoItemsPage() {
                 query
               )
           );
+      }
+
+      if (
+        isAdmin &&
+        String(plantValue || "ALL")
+          .trim()
+          .toUpperCase() !== "ALL"
+      ) {
+        list = list.filter((row) =>
+          inventoryRowMatchesPlantFilter(
+            row,
+            plantValue
+          )
+        );
       }
 
       if (
@@ -5341,18 +5493,22 @@ function ZohoItemsPage() {
         inventoryHardwareRows,
         inventoryServerSearch,
         statusFilter,
-        "NONE"
+        "NONE",
+        plantFilter
       );
     }, [
       inventoryHardwareRows,
       inventoryServerSearch,
       statusFilter,
+      plantFilter,
+      utlOriginMetadata,
       isAdmin,
     ]);
 
   const inventoryUsesServerPaging =
     groupBy ===
-    "NONE";
+    "NONE" &&
+    !inventoryPlantFilterRequiresClientMode;
 
   /*
    * Render only the active sidebar register. Normal Inventory uses the
@@ -5414,7 +5570,8 @@ function ZohoItemsPage() {
         inventoryFullModeRows,
         deferredInventoryClientSearch,
         statusFilter,
-        groupBy
+        groupBy,
+        plantFilter
       );
     }, [
       inventoryUsesServerPaging,
@@ -5422,6 +5579,8 @@ function ZohoItemsPage() {
       deferredInventoryClientSearch,
       statusFilter,
       groupBy,
+      plantFilter,
+      utlOriginMetadata,
       isAdmin,
     ]);
 
@@ -5662,13 +5821,16 @@ function ZohoItemsPage() {
         masterWorkbenchRows,
         deferredInventoryClientSearch,
         statusFilter,
-        groupBy
+        groupBy,
+        plantFilter
       );
     }, [
       masterWorkbenchRows,
       deferredInventoryClientSearch,
       statusFilter,
       groupBy,
+      plantFilter,
+      utlOriginMetadata,
       isAdmin,
     ]);
 
@@ -8726,6 +8888,10 @@ function ZohoItemsPage() {
       "ALL"
     );
 
+    setPlantFilter(
+      "ALL"
+    );
+
     setMasterWorkbenchOpen(
       false
     );
@@ -8777,7 +8943,8 @@ function ZohoItemsPage() {
 
     if (
       groupBy !==
-      "NONE"
+      "NONE" ||
+      inventoryPlantFilterRequiresClientMode
     ) {
       if (
         inventoryFullModeRows.length ===
@@ -8804,6 +8971,7 @@ function ZohoItemsPage() {
     currentUser?.id,
     effectiveRoleKey,
     groupBy,
+    plantFilter,
     pageNo,
     pageSize,
     inventoryServerSearch,
@@ -9359,6 +9527,60 @@ function ZohoItemsPage() {
             <MenuItem value="SKU">Group by SKU</MenuItem>
             <MenuItem value="NAME">Group by Name</MenuItem>
           </TextField>
+          {!authLoading && isAdmin && (
+            <Box
+              sx={{
+                width: 180,
+                minWidth: 180,
+                flex: "0 0 180px",
+              }}
+            >
+              <TextField
+                select
+                size="small"
+                value={plantFilter}
+                onChange={(event) => {
+                  setPlantFilter(
+                    event.target.value
+                  );
+                  setPageNo(1);
+                }}
+                sx={{
+                  ...selectFieldSx,
+                  width: "100%",
+                }}
+                slotProps={selectMenuSlotProps}
+                SelectProps={{
+                  MenuProps:
+                    selectMenuSlotProps.select.MenuProps,
+                }}
+              >
+                <MenuItem value="ALL">
+                  🌐 All Plants
+                </MenuItem>
+
+                <MenuItem value={INVENTORY_UTL_PLANT_FILTER}>
+                  🟣 UTL • AL-P3 / WR-38
+                </MenuItem>
+
+                {INVENTORY_PLANT_FILTER_OPTIONS.map(
+                  (option) => (
+                    <MenuItem
+                      key={option.value}
+                      value={option.value}
+                    >
+                      🏭 {option.label}
+                    </MenuItem>
+                  )
+                )}
+
+                <MenuItem value="UNASSIGNED">
+                  ◌ Legacy / Unassigned
+                </MenuItem>
+              </TextField>
+            </Box>
+          )}
+
           <Box
             sx={{
               width: 180,
