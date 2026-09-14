@@ -1230,7 +1230,7 @@ export function MatFlowProjectsPage() {
                     {engineeringContextLoading ? <LoadingBlock /> : (
                         <>
                             <Alert severity="info" sx={{ mb: 1 }}>
-                                This is the Product-level document-control view. Design submissions, exact drawing revisions, Engineering assignments, checklists and the BOM handover all remain linked to this same Product record.
+                                This is the Product-level document-control view. Designing submissions, the 32-point Wardrobe Designing checklist, exact drawing revisions, Engineering assignments, the separate PYTHA Engineering checklist and the BOM handover all remain linked to this same Product record.
                             </Alert>
                             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,1fr)" }, gap: 1, mb: 1 }}>
                                 <SummaryCard label="Design Submissions" value={engineeringContext?.data?.submissions?.length || 0} />
@@ -1253,7 +1253,7 @@ export function MatFlowProjectsPage() {
                                                 <Box><Typography sx={mainTextSx}>{row.submissionNumber} · Design Rev {row.designDrawingRevision}</Typography><Typography sx={subTextSx}>{row.designer || "-"} → {row.engineeringHead || "Engineering"}</Typography></Box>
                                                 <MatFlowStatusChip status={row.status} />
                                             </Box>
-                                            <Typography sx={{ ...subTextSx, mt: .6 }}>Checklist {row.checklistProgress?.percent ?? 0}% · Drawing {row.designDrawing?.available ? "attached" : "missing"} · {formatDate(row.updatedAt)}</Typography>
+                                            <Typography sx={{ ...subTextSx, mt: .6 }}>Wardrobe Designing checklist {row.checklistProgress?.percent ?? 0}% · Drawing {row.designDrawing?.available ? "attached" : "missing"} · {formatDate(row.updatedAt)}</Typography>
                                             {row.returnReason && <Alert severity="warning" sx={{ mt: .6, py: 0 }}>{row.returnReason}</Alert>}
                                             <Button onClick={() => { setEngineeringContext(null); navigate(`/matflow/work?submissionId=${encodeURIComponent(row.id)}`); }} sx={{ ...secondaryBtnSx, mt: .6 }}>Open in Work Center</Button>
                                         </Card>
@@ -1269,7 +1269,7 @@ export function MatFlowProjectsPage() {
                                                 <Box><Typography sx={mainTextSx}>{row.taskNumber} · {row.assignedTo || "Awaiting assignment"}</Typography><Typography sx={subTextSx}>Design Rev {row.designDrawingRevision || "-"} · Production Rev {row.engineeringDrawingRevision || "-"}</Typography></Box>
                                                 <MatFlowStatusChip status={row.status} />
                                             </Box>
-                                            <Typography sx={{ ...subTextSx, mt: .6 }}>Checklist {row.checklistProgress?.percent ?? 0}% · Production recipient {row.productionRecipient || "-"}</Typography>
+                                            <Typography sx={{ ...subTextSx, mt: .6 }}>PYTHA Engineering checklist {row.checklistProgress?.percent ?? 0}% · Production recipient {row.productionRecipient || "-"}</Typography>
                                             {row.revisionReviewRequired && <Alert severity="warning" sx={{ mt: .6, py: 0 }}>New Design Rev {row.pendingDesignRevision} requires review.</Alert>}
                                             <Button onClick={() => { setEngineeringContext(null); navigate(`/matflow/work?taskId=${encodeURIComponent(row.id)}`); }} sx={{ ...secondaryBtnSx, mt: .6 }}>Open Task</Button>
                                         </Card>

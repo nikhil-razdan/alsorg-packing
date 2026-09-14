@@ -63,9 +63,14 @@ public class MatFlowWorkspaceService {
     public static final String TASK_ENTITY = "MATFLOW_ENGINEERING_TASK";
     public static final String RECEIPT_ENTITY = "MATFLOW_NOTIFICATION_RECEIPT";
 
-    public static final String DESIGN_TEMPLATE = "DESIGN_SUBMISSION_V1";
-    public static final String WARDROBE_TEMPLATE = "WARDROBE_ENGINEERING_V1";
+    /** Current Designing-team checklist captured from the supplied Wardrobe checklist. */
+    public static final String DESIGN_TEMPLATE = "WARDROBE_DESIGN_V1";
+    private static final String LEGACY_DESIGN_TEMPLATE = "DESIGN_SUBMISSION_V1";
+    /** Current Engineering-team checklist captured from the supplied PYTHA Engg. Detail sheet. */
+    public static final String PYTHA_ENGINEERING_TEMPLATE = "PYTHA_ENGINEERING_V1";
     public static final String GENERAL_ENGINEERING_TEMPLATE = "GENERAL_ENGINEERING_V1";
+    /** Compatibility key used by the earlier misunderstood package. New tasks never use it. */
+    private static final String LEGACY_WARDROBE_ENGINEERING_TEMPLATE = "WARDROBE_ENGINEERING_V1";
 
     private static final Set<String> PRIORITIES = Set.of("LOW", "NORMAL", "HIGH", "URGENT");
     private static final Set<String> COMPANY_CODES = Set.of("ALSORG", "CALLISTO");
@@ -84,56 +89,103 @@ public class MatFlowWorkspaceService {
     private static final long DRAWING_MAX_BYTES = 20L * 1024L * 1024L;
     private static final Set<String> DRAWING_EXTENSIONS = Set.of("pdf", "jpg", "jpeg", "png", "webp", "dwg", "dxf");
 
-    private static final List<CheckDefinition> DESIGN_CHECKLIST = List.of(
-            check("DES-01", "Product identification, PD / Project and Product / Drawing are confirmed.", false),
-            check("DES-02", "Drawing number and the submission revision are confirmed.", false),
-            check("DES-03", "Product dimensions are complete as L × B × H with the correct unit.", false),
-            check("DES-04", "Material and finish specifications required for Engineering are identified.", true),
-            check("DES-05", "Hardware requirements, codes or specifications required for Engineering are identified.", true),
-            check("DES-06", "Relevant site measurement, interface and installation details are attached or confirmed.", true),
-            check("DES-07", "Unresolved design queries are listed, with enough information for Engineering to proceed.", true));
+    /*
+     * Designing-team checklist. This is the 32-point Wardrobe checklist supplied
+     * before the PYTHA sheet. It belongs to the pre-Engineering submission gate,
+     * not to the Engineering task. Keep its source-specific limits exactly as
+     * supplied (for example 3000 mm shutter height).
+     */
+    private static final List<CheckDefinition> WARDROBE_DESIGN_CHECKLIST = List.of(
+            check("WDES-01", "WARDROBE DESIGN CHECKLIST", 1, "Production drawings must be as per site measurements.", false),
+            check("WDES-02", "WARDROBE DESIGN CHECKLIST", 2, "Production drawings must be signed by the site supervisor.", true),
+            check("WDES-03", "WARDROBE DESIGN CHECKLIST", 3, "Shutter height should not exceed 3000 mm (add loft if required).", true),
+            check("WDES-04", "WARDROBE DESIGN CHECKLIST", 4, "Shutter width should not exceed 600 mm.", true),
+            check("WDES-05", "WARDROBE DESIGN CHECKLIST", 5, "Maximum thickness of a solid shutter should be 26 mm.", true),
+            check("WDES-06", "WARDROBE DESIGN CHECKLIST", 6, "Carcass height should not exceed 2400 mm (add loft if required).", true),
+            check("WDES-07", "WARDROBE DESIGN CHECKLIST", 7, "Back Ply should not exceed 1200 mm.", true),
+            check("WDES-08", "WARDROBE DESIGN CHECKLIST", 8, "Dummy side finish must be confirmed.", true),
+            check("WDES-09", "WARDROBE DESIGN CHECKLIST", 9, "Veneer grain direction must always be shown.", true),
+            check("WDES-10", "WARDROBE DESIGN CHECKLIST", 10, "Fluting detail blow-ups must always be shown.", true),
+            check("WDES-11", "WARDROBE DESIGN CHECKLIST", 11, "Handle cut blow-up details must always be shown.", true),
+            check("WDES-12", "WARDROBE DESIGN CHECKLIST", 12, "Sliding fitting code must be mentioned.", true),
+            check("WDES-13", "WARDROBE DESIGN CHECKLIST", 13, "Add joint lines in fillers if size exceeds 3000 mm.", true),
+            check("WDES-14", "WARDROBE DESIGN CHECKLIST", 14, "External shutter and drawer handle codes and sizes are required.", true),
+            check("WDES-15", "WARDROBE DESIGN CHECKLIST", 15, "External lock dimensions must be specified from floor level.", true),
+            check("WDES-16", "WARDROBE DESIGN CHECKLIST", 16, "Backside finish of mirror shutters must be specified.", true),
+            check("WDES-17", "WARDROBE DESIGN CHECKLIST", 17, "Backside finish of leather, fabric, wallpaper, and tile shutters must be specified.", true),
+            check("WDES-18", "WARDROBE DESIGN CHECKLIST", 18, "Cross-check all elevation dimensions with plans and sections.", false),
+            check("WDES-19", "WARDROBE DESIGN CHECKLIST", 19, "Internal laminate company name and code must be properly mentioned.", true),
+            check("WDES-20", "WARDROBE DESIGN CHECKLIST", 20, "Internal handle codes must be specified.", true),
+            check("WDES-21", "WARDROBE DESIGN CHECKLIST", 21, "Wooden part in glass pull-out must be a minimum of 95 mm in height.", true),
+            check("WDES-22", "WARDROBE DESIGN CHECKLIST", 22, "Key lock/digital lock is not possible on drawer fronts in case of end-to-end handle cuts.", true),
+            check("WDES-23", "WARDROBE DESIGN CHECKLIST", 23, "Lucas shelf (metal & glass) must be confirmed.", true),
+            check("WDES-24", "WARDROBE DESIGN CHECKLIST", 24, "Confirm whether Lucas shelf lighting is required on one side or both sides.", true),
+            check("WDES-25", "WARDROBE DESIGN CHECKLIST", 25, "Toughened glass shelf thickness should be 8 mm.", true),
+            check("WDES-26", "WARDROBE DESIGN CHECKLIST", 26, "Internal lit-up shelf lighting detail blow-ups are required.", true),
+            check("WDES-27", "WARDROBE DESIGN CHECKLIST", 27, "Trouser pull-out available sizes: 564 mm and 864 mm.", true),
+            check("WDES-28", "WARDROBE DESIGN CHECKLIST", 28, "Locker & watch winder (by Alsorg or client) must be specified.", true),
+            check("WDES-29", "WARDROBE DESIGN CHECKLIST", 29, "Accessory drawer suede code must be mentioned.", true),
+            check("WDES-30", "WARDROBE DESIGN CHECKLIST", 30, "Hanging rod name/specification must be mentioned.", true),
+            check("WDES-31", "WARDROBE DESIGN CHECKLIST", 31, "Hanging Rod height from floor level must be specified.", true),
+            check("WDES-32", "WARDROBE DESIGN CHECKLIST", 32, "In case of single shutter wardrobe - Runner panel of the drawer will be only one side (only hinge side).", true));
+
+    /*
+     * Engineering-team PYTHA checklist from the newly supplied "PYTHA Engg. Detail"
+     * sheet. The printed source has two independent 1..20 sections, therefore
+     * section + displayNo are stored with every task snapshot instead of flattening
+     * away that structure. Source-specific wording/limits are intentionally retained
+     * and are not reconciled with the Designing checklist.
+     */
+    private static final List<CheckDefinition> PYTHA_ENGINEERING_CHECKLIST = List.of(
+            check("PYD-01", "PYTHA ENGINEERING DETAILS", 1, "Creating 3D Model Pytha", false),
+            check("PYD-02", "PYTHA ENGINEERING DETAILS", 2, "Pasting List Carcass", false),
+            check("PYD-03", "PYTHA ENGINEERING DETAILS", 3, "Pasting List Shutter", true),
+            check("PYD-04", "PYTHA ENGINEERING DETAILS", 4, "Material List", false),
+            check("PYD-05", "PYTHA ENGINEERING DETAILS", 5, "Hardware List", true),
+            check("PYD-06", "PYTHA ENGINEERING DETAILS", 6, "Glass List", true),
+            check("PYD-07", "PYTHA ENGINEERING DETAILS", 7, "Metal List", true),
+            check("PYD-08", "PYTHA ENGINEERING DETAILS", 8, "Cutting Prog. Beam Saw", true),
+            check("PYD-09", "PYTHA ENGINEERING DETAILS", 9, "Cutting Prog. Nesting Machine", true),
+            check("PYD-10", "PYTHA ENGINEERING DETAILS", 10, "Drilling Prog. KDT", true),
+            check("PYD-11", "PYTHA ENGINEERING DETAILS", 11, "CNC Prog. Router", true),
+            check("PYD-12", "PYTHA ENGINEERING DETAILS", 12, "Carcass Cutting List", false),
+            check("PYD-13", "PYTHA ENGINEERING DETAILS", 13, "Shutter Cutting List", true),
+            check("PYD-14", "PYTHA ENGINEERING DETAILS", 14, "Manual Cutting List", true),
+            check("PYD-15", "PYTHA ENGINEERING DETAILS", 15, "Acc. Cutting List", true),
+            check("PYD-16", "PYTHA ENGINEERING DETAILS", 16, "Lucas Shelf Cutting List", true),
+            check("PYD-17", "PYTHA ENGINEERING DETAILS", 17, "Shutter Construction Detail", true),
+            check("PYD-18", "PYTHA ENGINEERING DETAILS", 18, "Metal Construction Detail", true),
+            check("PYD-19", "PYTHA ENGINEERING DETAILS", 19, "Sparta Software Uploading", false),
+            check("PYD-20", "PYTHA ENGINEERING DETAILS", 20, "Create Barcode from Sparta", false),
+
+            check("PYC-01", "DRAWINGS CHECK LIST", 1, "Plan & Ele. Sizes should match", false),
+            check("PYC-02", "DRAWINGS CHECK LIST", 2, "Front Ele./Internal Ele./Section Should Match", false),
+            check("PYC-03", "DRAWINGS CHECK LIST", 3, "Internal Laminate brand name must be mentioned", true),
+            check("PYC-04", "DRAWINGS CHECK LIST", 4, "Dummy Side finishes should be mentioned", true),
+            check("PYC-05", "DRAWINGS CHECK LIST", 5, "Shutter Height cannot be exceed 2950mm", true),
+            check("PYC-06", "DRAWINGS CHECK LIST", 6, "Shutter Width cannot be exceed 600mm", true),
+            check("PYC-07", "DRAWINGS CHECK LIST", 7, "Carcass Ht. Max 2400mm", true),
+            check("PYC-08", "DRAWINGS CHECK LIST", 8, "Lucas Shelf Glass finish must be mentioned", true),
+            check("PYC-09", "DRAWINGS CHECK LIST", 9, "Shutter Back finish mentioned of Mirror/Leather/Fabric/Wallpaper/Tile Shutter", true),
+            check("PYC-10", "DRAWINGS CHECK LIST", 10, "Toughned Glass Shelf thk. 8mm", true),
+            check("PYC-11", "DRAWINGS CHECK LIST", 11, "Shutter Handle Code/Image/Details/Sizes must be mentioned", true),
+            check("PYC-12", "DRAWINGS CHECK LIST", 12, "Drawer Handle Code/Image/Details/Sizes must be mentioned", true),
+            check("PYC-13", "DRAWINGS CHECK LIST", 13, "Readymade Acc. Standard sizes are 564mm,864mm,1164mm", true),
+            check("PYC-14", "DRAWINGS CHECK LIST", 14, "Glass Drawer solid front min. is 95mm ht.", true),
+            check("PYC-15", "DRAWINGS CHECK LIST", 15, "Any type of Lock is coming pls discuss with Nikhil", true),
+            check("PYC-16", "DRAWINGS CHECK LIST", 16, "Please Mentioned Slidding Fitting Name / Code / Brand Name", true),
+            check("PYC-17", "DRAWINGS CHECK LIST", 17, "Acc. Drawer details / Finish should be mentioned", true),
+            check("PYC-18", "DRAWINGS CHECK LIST", 18, "Any type of Acc. Is coming please check by Alsorg / By Client before order", true),
+            check("PYC-19", "DRAWINGS CHECK LIST", 19, "Hanging Rode Brand Name", true),
+            check("PYC-20", "DRAWINGS CHECK LIST", 20, "Please Mentioned Lock/Handle/Hanging & each of the Standard Dimensions", true));
 
     private static final List<CheckDefinition> GENERAL_ENGINEERING_CHECKLIST = List.of(
-            check("ENG-01", "Drawing dimensions have been checked against the approved design / site information.", false),
-            check("ENG-02", "Manufacturing and construction details required for Production are complete.", false),
-            check("ENG-03", "Operational BOM material quantities and UOMs have been checked.", false),
-            check("ENG-04", "Hardware, finish and specification details match the Production drawing and BOM.", true),
-            check("ENG-05", "Relevant Processing / Production requirements and routing requirements have been checked.", true),
-            check("ENG-06", "The correct Production drawing revision and BOM revision are selected for handover.", false));
-
-    private static final List<CheckDefinition> WARDROBE_CHECKLIST = List.of(
-            check("WRD-01", "Production drawings must be as per site measurements.", false),
-            check("WRD-02", "Production drawings must be signed by the site supervisor.", true),
-            check("WRD-03", "Shutter height should not exceed 3000 mm (add loft if required).", true),
-            check("WRD-04", "Shutter width should not exceed 600 mm.", true),
-            check("WRD-05", "Maximum thickness of a solid shutter should be 26 mm.", true),
-            check("WRD-06", "Carcass height should not exceed 2400 mm (add loft if required).", true),
-            check("WRD-07", "Back Ply should not exceed 1200 mm.", true),
-            check("WRD-08", "Dummy side finish must be confirmed.", true),
-            check("WRD-09", "Veneer grain direction must always be shown.", true),
-            check("WRD-10", "Fluting detail blow-ups must always be shown.", true),
-            check("WRD-11", "Handle cut blow-up details must always be shown.", true),
-            check("WRD-12", "Sliding fitting code must be mentioned.", true),
-            check("WRD-13", "Add joint lines in fillers if size exceeds 3000 mm.", true),
-            check("WRD-14", "External shutter and drawer handle codes and sizes are required.", true),
-            check("WRD-15", "External lock dimensions must be specified from floor level.", true),
-            check("WRD-16", "Backside finish of mirror shutters must be specified.", true),
-            check("WRD-17", "Backside finish of leather, fabric, wallpaper, and tile shutters must be specified.", true),
-            check("WRD-18", "Cross-check all elevation dimensions with plans and sections.", false),
-            check("WRD-19", "Internal laminate company name and code must be properly mentioned.", true),
-            check("WRD-20", "Internal handle codes must be specified.", true),
-            check("WRD-21", "Wooden part in glass pull-out must be a minimum of 95 mm in height.", true),
-            check("WRD-22", "Key lock/digital lock is not possible on drawer fronts in case of end-to-end handle cuts.", true),
-            check("WRD-23", "Lucas shelf (metal & glass) must be confirmed.", true),
-            check("WRD-24", "Confirm whether Lucas shelf lighting is required on one side or both sides.", true),
-            check("WRD-25", "Toughened glass shelf thickness should be 8 mm.", true),
-            check("WRD-26", "Internal lit-up shelf lighting detail blow-ups are required.", true),
-            check("WRD-27", "Trouser pull-out available sizes: 564 mm and 864 mm.", true),
-            check("WRD-28", "Locker & watch winder (by Alsorg or client) must be specified.", true),
-            check("WRD-29", "Accessory drawer suede code must be mentioned.", true),
-            check("WRD-30", "Hanging rod name/specification must be mentioned.", true),
-            check("WRD-31", "Hanging Rod height from floor level must be specified.", true),
-            check("WRD-32", "In case of single shutter wardrobe - Runner panel of the drawer will be only one side (only hinge side).", true));
+            check("ENG-01", "GENERAL ENGINEERING", 1, "Drawing dimensions have been checked against the approved design / site information.", false),
+            check("ENG-02", "GENERAL ENGINEERING", 2, "Manufacturing and construction details required for Production are complete.", false),
+            check("ENG-03", "GENERAL ENGINEERING", 3, "Operational BOM material quantities and UOMs have been checked.", false),
+            check("ENG-04", "GENERAL ENGINEERING", 4, "Hardware, finish and specification details match the Production drawing and BOM.", true),
+            check("ENG-05", "GENERAL ENGINEERING", 5, "Relevant Processing / Production requirements and routing requirements have been checked.", true),
+            check("ENG-06", "GENERAL ENGINEERING", 6, "The correct Production drawing revision and BOM revision are selected for handover.", false));
 
     private final MatFlowAuditLogRepository auditRepository;
     private final MatFlowAuditService auditService;
@@ -242,6 +294,7 @@ public class MatFlowWorkspaceService {
         applyProjectProductSnapshot(state, ref);
         state.put("productMasterRevisionAtCreation", ref.product().drawingRevision());
         state.put("designDrawingRevision", designRevision);
+        state.put("designChecklistTemplateKey", DESIGN_TEMPLATE);
         state.put("designer", designer);
         state.put("engineeringHead", engineeringHead);
         state.put("productionRecipient", productionRecipient);
@@ -250,7 +303,7 @@ public class MatFlowWorkspaceService {
         state.put("companyCode", companyCode(request.companyCode()));
         state.put("remarks", clean(request.remarks()));
         state.put("designDrawing", emptyFile());
-        state.put("checklist", newChecklist(DESIGN_CHECKLIST));
+        state.put("checklist", newChecklist(WARDROBE_DESIGN_CHECKLIST));
         state.put("taskId", null);
         state.put("version", 1);
         state.put("createdBy", actor);
@@ -677,12 +730,12 @@ public class MatFlowWorkspaceService {
     public List<ChecklistTemplateResponse> templates() {
         accessService.requireRead();
         return List.of(
-                template(DESIGN_TEMPLATE, "Design Submission Checklist", "DESIGN", DESIGN_CHECKLIST,
-                        "Mandatory at Submit to Engineering; Product may still be saved as a normal approval-free draft."),
-                template(WARDROBE_TEMPLATE, "Wardrobe Engineering Checklist", "ENGINEERING / WARDROBE", WARDROBE_CHECKLIST,
-                        "32-point Wardrobe production-drawing checklist captured from the supplied Engineering standard."),
-                template(GENERAL_ENGINEERING_TEMPLATE, "General Engineering Handover Checklist", "ENGINEERING", GENERAL_ENGINEERING_CHECKLIST,
-                        "Generic Engineering handover controls for non-Wardrobe Products. Template definitions can be extended without rewriting old task snapshots."));
+                template(DESIGN_TEMPLATE, "Wardrobe Designing Checklist", "DESIGN / WARDROBE", WARDROBE_DESIGN_CHECKLIST,
+                        "32-point Wardrobe checklist used by the Designing team before Submit to Engineering. Product remains approval-free until this explicit submit action."),
+                template(PYTHA_ENGINEERING_TEMPLATE, "PYTHA Engg. Detail", "ENGINEERING / PYTHA", PYTHA_ENGINEERING_CHECKLIST,
+                        "Engineering task checklist from the supplied PYTHA Engg. Detail sheet: 20 PYTHA deliverables + 20 Drawing Check List controls."),
+                template(GENERAL_ENGINEERING_TEMPLATE, "General Engineering Handover Checklist", "ENGINEERING / GENERAL", GENERAL_ENGINEERING_CHECKLIST,
+                        "Reserved generic fallback for non-PYTHA work. New PYTHA Engineering tasks default to the supplied 40-control PYTHA checklist."));
     }
 
     /* =============================== NOTIFICATIONS =============================== */
@@ -776,7 +829,8 @@ public class MatFlowWorkspaceService {
                 string(state.get("projectName")), string(state.get("clientName")), string(state.get("plantCode")),
                 string(state.get("productName")), string(state.get("drawingNo")), string(state.get("productMasterRevisionAtCreation")),
                 string(state.get("designDrawingRevision")), string(state.get("designer")), string(state.get("engineeringHead")),
-                string(state.get("productionRecipient")), string(state.get("engineeringChecklistTemplateKey")),
+                string(state.get("productionRecipient")), designChecklistTemplateForState(state),
+                string(state.get("engineeringChecklistTemplateKey")),
                 string(state.get("reference")), string(state.get("companyCode")), string(state.get("remarks")),
                 string(state.get("submittedBy")), string(state.get("submittedAt")), string(state.get("reviewedBy")),
                 string(state.get("reviewedAt")), string(state.get("returnReason")), uuid(state.get("taskId")),
@@ -1055,6 +1109,8 @@ public class MatFlowWorkspaceService {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("key", definition.key());
             row.put("no", no++);
+            row.put("section", definition.section());
+            row.put("displayNo", definition.displayNo());
             row.put("text", definition.text());
             row.put("naAllowed", definition.naAllowed());
             row.put("state", "PENDING");
@@ -1086,30 +1142,41 @@ public class MatFlowWorkspaceService {
     private List<ChecklistItemResponse> checklistResponse(Map<String, Object> state) {
         return checklistMaps(state).stream()
                 .map(row -> new ChecklistItemResponse(
-                        string(row.get("key")), integer(row.get("no"), 0), string(row.get("text")),
-                        bool(row.get("naAllowed")), firstNonBlank(string(row.get("state")), "PENDING"),
+                        string(row.get("key")), integer(row.get("no"), 0),
+                        string(row.get("section")), integer(row.get("displayNo"), integer(row.get("no"), 0)),
+                        string(row.get("text")), bool(row.get("naAllowed")),
+                        firstNonBlank(string(row.get("state")), "PENDING"),
                         string(row.get("naReason")), string(row.get("remarks")), string(row.get("checkedBy")), string(row.get("checkedAt"))))
                 .toList();
     }
 
     private List<CheckDefinition> checkDefinitions(String template) {
         String key = engineeringTemplate(template);
-        return WARDROBE_TEMPLATE.equals(key) ? WARDROBE_CHECKLIST : GENERAL_ENGINEERING_CHECKLIST;
+        return PYTHA_ENGINEERING_TEMPLATE.equals(key) ? PYTHA_ENGINEERING_CHECKLIST : GENERAL_ENGINEERING_CHECKLIST;
     }
 
     private ChecklistTemplateResponse template(
             String key, String name, String area, List<CheckDefinition> definitions, String description) {
         return new ChecklistTemplateResponse(
                 key, name, area, true, true, description, definitions.size(),
-                definitions.stream().map(def -> Map.<String, Object>of(
-                        "key", def.key(), "text", def.text(), "naAllowed", def.naAllowed())).toList());
+                definitions.stream().map(def -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("key", def.key());
+                    item.put("section", def.section());
+                    item.put("displayNo", def.displayNo());
+                    item.put("text", def.text());
+                    item.put("naAllowed", def.naAllowed());
+                    return item;
+                }).toList());
     }
 
-    private static CheckDefinition check(String key, String text, boolean naAllowed) {
-        return new CheckDefinition(key, text, naAllowed);
+    private static CheckDefinition check(
+            String key, String section, int displayNo, String text, boolean naAllowed) {
+        return new CheckDefinition(key, section, displayNo, text, naAllowed);
     }
 
-    private record CheckDefinition(String key, String text, boolean naAllowed) {}
+    private record CheckDefinition(
+            String key, String section, int displayNo, String text, boolean naAllowed) {}
 
     /* =============================== FILE HELPERS =============================== */
 
@@ -1446,7 +1513,7 @@ public class MatFlowWorkspaceService {
         }
 
         if (!checklistProgress(checklistMaps(state)).complete()) {
-            throw conflict("Complete the Design submission checklist before Submit to Engineering");
+            throw conflict("Complete the Wardrobe Designing checklist before Submit to Engineering");
         }
         Map<String, Object> file = map(state.get("designDrawing"));
         if (!bool(file.get("available"))) {
@@ -1602,10 +1669,28 @@ public class MatFlowWorkspaceService {
         catch (Exception ignored) { return new LinkedHashMap<>(); }
     }
 
+    private String designChecklistTemplateForState(Map<String, Object> state) {
+        String explicit = cleanUpper(string(state.get("designChecklistTemplateKey")));
+        if (explicit != null) return explicit;
+        boolean current = checklistMaps(state).stream()
+                .map(row -> cleanUpper(string(row.get("key"))))
+                .filter(Objects::nonNull)
+                .anyMatch(key -> key.startsWith("WDES-"));
+        return current ? DESIGN_TEMPLATE : LEGACY_DESIGN_TEMPLATE;
+    }
+
     private String engineeringTemplate(String value) {
         String key = cleanUpper(value);
-        if (key == null) return GENERAL_ENGINEERING_TEMPLATE;
-        if (WARDROBE_TEMPLATE.equals(key) || GENERAL_ENGINEERING_TEMPLATE.equals(key)) return key;
+        if (key == null) return PYTHA_ENGINEERING_TEMPLATE;
+        /*
+         * The earlier package incorrectly used the Wardrobe Designing checklist as
+         * the Engineering task template. If a draft/submission created by that
+         * package is accepted after this fix, map the legacy key to the corrected
+         * PYTHA Engineering checklist. Already-created historical task snapshots
+         * are not rewritten.
+         */
+        if (LEGACY_WARDROBE_ENGINEERING_TEMPLATE.equals(key)) return PYTHA_ENGINEERING_TEMPLATE;
+        if (PYTHA_ENGINEERING_TEMPLATE.equals(key) || GENERAL_ENGINEERING_TEMPLATE.equals(key)) return key;
         throw badRequest("Unsupported Engineering checklist template: " + value);
     }
 

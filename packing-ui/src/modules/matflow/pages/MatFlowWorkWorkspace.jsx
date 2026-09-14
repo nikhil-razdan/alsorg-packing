@@ -87,10 +87,27 @@ const EMPTY_DESIGN = {
     designDrawingRevision: "",
     engineeringHead: "",
     productionRecipient: "",
-    engineeringChecklistTemplateKey: "WARDROBE_ENGINEERING_V1",
+    engineeringChecklistTemplateKey: "PYTHA_ENGINEERING_V1",
     reference: "",
     companyCode: "ALSORG",
     remarks: "",
+};
+
+const checklistTemplateLabel = (value) => {
+    const key = String(value || "").trim().toUpperCase();
+    if (key === "PYTHA_ENGINEERING_V1") return "PYTHA Engg. Detail";
+    if (key === "GENERAL_ENGINEERING_V1") return "General Engineering Handover Checklist";
+    if (key === "WARDROBE_ENGINEERING_V1") return "Legacy Wardrobe Engineering Checklist";
+    return readable(value || "Engineering Checklist");
+};
+
+const checklistSectionLabel = (value) => {
+    const text = clean(value);
+    if (!text) return "CHECKLIST";
+    if (text === "PYTHA ENGINEERING DETAILS") return "PYTHA Engineering Details";
+    if (text === "DRAWINGS CHECK LIST") return "Drawings Check List";
+    if (text === "WARDROBE DESIGN CHECKLIST") return "Wardrobe Designing Checklist";
+    return readable(text);
 };
 
 const toDateTime = (value) => {
@@ -617,7 +634,7 @@ export function MatFlowWorkWorkspacePage() {
                 <DialogTitle sx={dialogTitleSx}>Create Design Submission Draft</DialogTitle>
                 <DialogContent sx={dialogContentSx}>
                     <Typography sx={{ color: "var(--mf-text-secondary)", fontSize: 12.5, mb: 1.5 }}>
-                        Saving this draft does not approve the Product. The mandatory drawing/checklist gate applies only when you press Submit to Engineering.
+                        Saving this draft does not approve the Product. The mandatory Wardrobe Designing checklist + drawing gate applies only when you press Submit to Engineering; the later Engineering task uses the separate PYTHA Engg. Detail checklist.
                     </Typography>
                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
                         <TextField select label="PD / Project *" value={designForm.projectId} onChange={(e) => setDesignForm((c) => ({ ...c, projectId: e.target.value, productId: "" }))} sx={fieldSx}>
@@ -644,7 +661,7 @@ export function MatFlowWorkWorkspacePage() {
                         <TextField select label="Production recipient (required at submit)" value={designForm.productionRecipient} onChange={(e) => setDesignForm((c) => ({ ...c, productionRecipient: e.target.value }))} sx={fieldSx}>
                             {productionPeople.map((row) => <MenuItem key={row.username} value={row.username}>{row.displayName}</MenuItem>)}
                         </TextField>
-                        <TextField select label="Engineering checklist" value={designForm.engineeringChecklistTemplateKey} onChange={(e) => setDesignForm((c) => ({ ...c, engineeringChecklistTemplateKey: e.target.value }))} sx={fieldSx}>
+                        <TextField select label="Engineering task checklist" value={designForm.engineeringChecklistTemplateKey} onChange={(e) => setDesignForm((c) => ({ ...c, engineeringChecklistTemplateKey: e.target.value }))} sx={fieldSx}>
                             {engineeringTemplates.map((row) => <MenuItem key={row.key} value={row.key}>{row.name}</MenuItem>)}
                         </TextField>
                         <TextField select label="Callisto / Alsorg" value={designForm.companyCode} onChange={(e) => setDesignForm((c) => ({ ...c, companyCode: e.target.value }))} sx={fieldSx}>
@@ -746,7 +763,7 @@ function DesignCard({ row, onOpen }) {
                 <Mini label="Production" value={row.productionRecipient || "-"} />
             </Box>
             <Box sx={{ mt: 1 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between" }}><Typography sx={smallSx}>Design checklist</Typography><Typography sx={{ ...smallSx, color: progressTone(progress.complete) }}>{progress.percent ?? 0}%</Typography></Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}><Typography sx={smallSx}>Wardrobe Designing checklist</Typography><Typography sx={{ ...smallSx, color: progressTone(progress.complete) }}>{progress.percent ?? 0}%</Typography></Box>
                 <LinearProgress variant="determinate" value={progress.percent || 0} sx={{ mt: .5, height: 6, borderRadius: 9 }} />
             </Box>
             {row.returnReason && <Alert severity="warning" sx={{ mt: 1, py: 0 }}>{row.returnReason}</Alert>}
@@ -790,7 +807,7 @@ function DesignDetail({ detail, canDesign, canHead, designPeople, heads, enginee
         designDrawingRevision: row.designDrawingRevision || "",
         engineeringHead: row.engineeringHead || "",
         productionRecipient: row.productionRecipient || "",
-        engineeringChecklistTemplateKey: row.engineeringChecklistTemplateKey || "WARDROBE_ENGINEERING_V1",
+        engineeringChecklistTemplateKey: row.engineeringChecklistTemplateKey || "PYTHA_ENGINEERING_V1",
         reference: row.reference || "",
         companyCode: row.companyCode || "ALSORG",
         remarks: row.remarks || "",
@@ -801,7 +818,7 @@ function DesignDetail({ detail, canDesign, canHead, designPeople, heads, enginee
             designDrawingRevision: row.designDrawingRevision || "",
             engineeringHead: row.engineeringHead || "",
             productionRecipient: row.productionRecipient || "",
-            engineeringChecklistTemplateKey: row.engineeringChecklistTemplateKey || "WARDROBE_ENGINEERING_V1",
+            engineeringChecklistTemplateKey: row.engineeringChecklistTemplateKey || "PYTHA_ENGINEERING_V1",
             reference: row.reference || "",
             companyCode: row.companyCode || "ALSORG",
             remarks: row.remarks || "",
@@ -842,7 +859,7 @@ function DesignDetail({ detail, canDesign, canHead, designPeople, heads, enginee
                             <MenuItem value=""><em>Not selected yet</em></MenuItem>
                             {productionPeople.map((person) => <MenuItem key={person.username} value={person.username}>{person.displayName}</MenuItem>)}
                         </TextField>
-                        <TextField select label="Engineering checklist template" value={setup.engineeringChecklistTemplateKey} onChange={(e) => setSetup((c) => ({ ...c, engineeringChecklistTemplateKey: e.target.value }))} sx={fieldSx}>
+                        <TextField select label="Engineering task checklist template" value={setup.engineeringChecklistTemplateKey} onChange={(e) => setSetup((c) => ({ ...c, engineeringChecklistTemplateKey: e.target.value }))} sx={fieldSx}>
                             {engineeringTemplates.map((template) => <MenuItem key={template.key} value={template.key}>{template.name}</MenuItem>)}
                         </TextField>
                         <TextField select label="Callisto / Alsorg" value={setup.companyCode} onChange={(e) => setSetup((c) => ({ ...c, companyCode: e.target.value }))} sx={fieldSx}>
@@ -868,14 +885,14 @@ function DesignDetail({ detail, canDesign, canHead, designPeople, heads, enginee
                 </Box>}
             </Section>
 
-            <ChecklistSection type="DESIGN" title="Design Submission Checklist" row={row} editable={editable && canDesign} working={working} onChecklist={onChecklist} onNa={onNa} />
+            <ChecklistSection type="DESIGN" title="Wardrobe Designing Checklist" row={row} editable={editable && canDesign} working={working} onChecklist={onChecklist} onNa={onNa} />
 
             {row.returnReason && <Alert severity="warning" sx={{ mt: 1 }}>{row.returnReason}</Alert>}
 
             {editable && canDesign && (
                 <Card sx={{ ...panelSx, mt: 1, m: 0 }}>
                     <Typography sx={titleSx}>Submit to Engineering</Typography>
-                    <Typography sx={smallSx}>Submission is blocked until Designer, Design revision, Engineering Head and Production recipient are set, the drawing is attached, and every required Design checklist point is Done or validly N/A.</Typography>
+                    <Typography sx={smallSx}>Submission is blocked until Designer, Design revision, Engineering Head and Production recipient are set, the drawing is attached, and the 32-point Wardrobe Designing checklist is Done or validly N/A. The Engineering task receives its separate PYTHA checklist only after Engineering Head acceptance.</Typography>
                     <Button startIcon={<SendOutlinedIcon />} disabled={working || !routingComplete || !row.designDrawing?.available || !row.checklistProgress?.complete} onClick={onSubmit} sx={{ ...primaryBtnSx, mt: 1 }}>Submit to Engineering Head</Button>
                 </Card>
             )}
@@ -965,7 +982,7 @@ function TaskDetail({ detail, canHead, canEngineer, canHandover, engineers, prod
                 )}
             </Section>
 
-            <ChecklistSection type="TASK" title={readable(row.checklistTemplateKey)} row={row} editable={canEngineer && !checklistLocked} working={working} onChecklist={onChecklist} onNa={onNa} />
+            <ChecklistSection type="TASK" title={checklistTemplateLabel(row.checklistTemplateKey)} row={row} editable={canEngineer && !checklistLocked} working={working} onChecklist={onChecklist} onNa={onNa} />
 
             {canEngineer && ["ASSIGNED", "IN_PROGRESS", "AWAITING_CLARIFICATION", "RETURNED"].includes(row.status) && (
                 <Section title="Task Progress" subtitle="Human task progress remains separate from BOM approval / release.">
@@ -1012,27 +1029,54 @@ function TaskDetail({ detail, canHead, canEngineer, canHandover, engineers, prod
 
 function ChecklistSection({ type, title, row, editable, working, onChecklist, onNa }) {
     const progress = row.checklistProgress || {};
+    const items = Array.isArray(row.checklist) ? row.checklist : [];
+    const groups = items.reduce((result, item) => {
+        const section = clean(item.section) || "CHECKLIST";
+        if (!result.has(section)) result.set(section, []);
+        result.get(section).push(item);
+        return result;
+    }, new Map());
+    const showSectionHeaders = groups.size > 1 || [...groups.keys()].some((section) => section !== "CHECKLIST");
+
     return (
         <Section title={title} subtitle={`${progress.done || 0} Done · ${progress.notApplicable || 0} N/A · ${progress.pending || 0} Pending`}>
             <Box sx={{ display: "flex", justifyContent: "space-between", mb: .5 }}><Typography sx={smallSx}>Completion</Typography><Typography sx={{ ...smallSx, color: progressTone(progress.complete) }}>{progress.percent || 0}%</Typography></Box>
             <LinearProgress variant="determinate" value={progress.percent || 0} sx={{ height: 7, borderRadius: 9, mb: 1 }} />
-            <Box sx={{ display: "grid", gap: .65 }}>
-                {(row.checklist || []).map((item) => (
-                    <Card key={item.key} sx={{ p: .75, boxShadow: "none", background: "var(--mf-surface)" }}>
-                        <Box sx={{ display: "flex", gap: .7, justifyContent: "space-between", alignItems: "flex-start" }}>
-                            <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ color: "var(--mf-text)", fontSize: 12, fontWeight: 800 }}>{item.no}. {item.text}</Typography>
-                                {item.state === "NA" && <Typography sx={{ ...smallSx, color: "var(--mf-warning-text)" }}>N/A: {item.naReason}</Typography>}
-                                {item.checkedBy && <Typography sx={smallSx}>{readable(item.state)} · {item.checkedBy} · {toDateTime(item.checkedAt)}</Typography>}
+            <Box sx={{ display: "grid", gap: .9 }}>
+                {[...groups.entries()].map(([section, sectionItems]) => (
+                    <Box key={section}>
+                        {showSectionHeaders && (
+                            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: .7, mb: .55, mt: .2 }}>
+                                <Typography sx={{ color: "var(--mf-text)", fontSize: 11.2, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase" }}>
+                                    {checklistSectionLabel(section)}
+                                </Typography>
+                                {type === "TASK" && section === "PYTHA ENGINEERING DETAILS" && <Chip size="small" label="20 deliverables" sx={statusChipSx("DRAFT")} />}
+                                {type === "TASK" && section === "DRAWINGS CHECK LIST" && <Chip size="small" label="20 drawing checks" sx={statusChipSx("DRAFT")} />}
                             </Box>
-                            <Chip label={item.state === "NA" ? "N/A" : readable(item.state)} sx={statusChipSx(item.state === "DONE" ? "ACCEPTED" : item.state === "NA" ? "RETURNED" : "DRAFT")} />
+                        )}
+                        <Box sx={{ display: "grid", gap: .65 }}>
+                            {sectionItems.map((item) => {
+                                const itemNo = Number(item.displayNo || item.no || 0);
+                                return (
+                                    <Card key={item.key} sx={{ p: .75, boxShadow: "none", background: "var(--mf-surface)" }}>
+                                        <Box sx={{ display: "flex", gap: .7, justifyContent: "space-between", alignItems: "flex-start" }}>
+                                            <Box sx={{ minWidth: 0 }}>
+                                                <Typography sx={{ color: "var(--mf-text)", fontSize: 12, fontWeight: 800 }}>{itemNo ? `${itemNo}. ` : ""}{item.text}</Typography>
+                                                {item.state === "NA" && <Typography sx={{ ...smallSx, color: "var(--mf-warning-text)" }}>N/A: {item.naReason}</Typography>}
+                                                {item.checkedBy && <Typography sx={smallSx}>{readable(item.state)} · {item.checkedBy} · {toDateTime(item.checkedAt)}</Typography>}
+                                            </Box>
+                                            <Chip label={item.state === "NA" ? "N/A" : readable(item.state)} sx={statusChipSx(item.state === "DONE" ? "ACCEPTED" : item.state === "NA" ? "RETURNED" : "DRAFT")} />
+                                        </Box>
+                                        {editable && <Box sx={{ display: "flex", gap: .5, flexWrap: "wrap", mt: .6 }}>
+                                            <Button disabled={working || item.state === "DONE"} onClick={() => onChecklist(type, item, "DONE")} sx={secondaryBtnSx}>Done</Button>
+                                            {item.naAllowed && <Button disabled={working || item.state === "NA"} onClick={() => onNa(type, item)} sx={secondaryBtnSx}>N/A</Button>}
+                                            <Button disabled={working || item.state === "PENDING"} onClick={() => onChecklist(type, item, "PENDING")} sx={secondaryBtnSx}>Reset</Button>
+                                        </Box>}
+                                    </Card>
+                                );
+                            })}
                         </Box>
-                        {editable && <Box sx={{ display: "flex", gap: .5, flexWrap: "wrap", mt: .6 }}>
-                            <Button disabled={working || item.state === "DONE"} onClick={() => onChecklist(type, item, "DONE")} sx={secondaryBtnSx}>Done</Button>
-                            {item.naAllowed && <Button disabled={working || item.state === "NA"} onClick={() => onNa(type, item)} sx={secondaryBtnSx}>N/A</Button>}
-                            <Button disabled={working || item.state === "PENDING"} onClick={() => onChecklist(type, item, "PENDING")} sx={secondaryBtnSx}>Reset</Button>
-                        </Box>}
-                    </Card>
+                    </Box>
                 ))}
             </Box>
         </Section>

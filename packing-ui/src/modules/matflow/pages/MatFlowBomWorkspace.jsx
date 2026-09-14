@@ -1269,7 +1269,7 @@ function EngineeringPackagePanel({ context, loading, currentBomId, currentBomSta
             <Box sx={builderSideTitleRowSx}>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography sx={builderSideTitleSx}>Design & Engineering Package</Typography>
-                    <Typography sx={builderAssistantSubSx}>Same Product, exact Design/Production drawing revisions, checklist and task handover.</Typography>
+                    <Typography sx={builderAssistantSubSx}>Same Product, exact Designing/Production drawing revisions, Wardrobe submission checklist, PYTHA Engineering checklist and task handover.</Typography>
                 </Box>
                 <FactCheckOutlinedIcon sx={{ color: "#93c5fd" }} />
             </Box>
@@ -1303,7 +1303,7 @@ function EngineeringPackagePanel({ context, loading, currentBomId, currentBomSta
                                     <Typography sx={builderAssistantSubSx}>{linkedTask.productionDrawing?.available ? "Attached" : "Not attached"}</Typography>
                                 </Box>
                                 <Box sx={builderProductDetailItemSx}>
-                                    <Typography sx={builderAttachmentLabelSx}>CHECKLIST</Typography>
+                                    <Typography sx={builderAttachmentLabelSx}>PYTHA CHECKLIST</Typography>
                                     <Typography sx={builderProductDetailValueSx}>{linkedTask.checklistProgress?.percent ?? 0}%</Typography>
                                     <Typography sx={builderAssistantSubSx}>{linkedTask.checklistProgress?.complete ? "Complete" : `${linkedTask.checklistProgress?.pending ?? 0} pending`}</Typography>
                                 </Box>

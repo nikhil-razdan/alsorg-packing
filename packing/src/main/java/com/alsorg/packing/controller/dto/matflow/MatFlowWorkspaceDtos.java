@@ -22,6 +22,8 @@ public final class MatFlowWorkspaceDtos {
     public record ChecklistItemResponse(
             String key,
             int no,
+            String section,
+            int displayNo,
             String text,
             boolean naAllowed,
             String state,
@@ -45,6 +47,7 @@ public final class MatFlowWorkspaceDtos {
             String designDrawingRevision,
             String engineeringHead,
             String productionRecipient,
+            String designChecklistTemplateKey,
             String engineeringChecklistTemplateKey,
             String reference,
             String companyCode,
