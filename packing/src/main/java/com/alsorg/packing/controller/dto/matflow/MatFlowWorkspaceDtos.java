@@ -98,6 +98,7 @@ public final class MatFlowWorkspaceDtos {
             String designer,
             String engineeringHead,
             String productionRecipient,
+            String designChecklistTemplateKey,
             String engineeringChecklistTemplateKey,
             String reference,
             String companyCode,
