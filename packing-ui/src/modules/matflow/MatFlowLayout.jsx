@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+    Badge,
     Box,
     Button,
     Divider,
+    Drawer,
     MenuItem,
     TextField,
     Tooltip,
@@ -23,6 +25,8 @@ import {
     useMatFlow,
     useMatFlowTheme,
 } from "./matflowUi";
+import { readMatFlowError } from "./api/matflowApi";
+import { matflowWorkApi } from "./api/matflowWorkApi";
 
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
@@ -43,9 +47,13 @@ import AppsIcon from "@mui/icons-material/Apps";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
+import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
+import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
+import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
+    ["Work Center", "/matflow/work", "work", <AssignmentTurnedInOutlinedIcon />],
     ["Projects", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
@@ -65,10 +73,10 @@ const NAV = [
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const PRIMARY_SCREENS = Object.freeze({
-    [MATFLOW_ROLES.ADMIN]: new Set(["projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
-    [MATFLOW_ROLES.MANAGER]: new Set(["projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
-    [MATFLOW_ROLES.ENGINEERING]: new Set(["projects", "boms", "processing-units"]),
-    [MATFLOW_ROLES.PRODUCTION]: new Set(["production", "production-execution", "returns"]),
+    [MATFLOW_ROLES.ADMIN]: new Set(["work", "projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
+    [MATFLOW_ROLES.MANAGER]: new Set(["work", "projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
+    [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "processing-units"]),
+    [MATFLOW_ROLES.PRODUCTION]: new Set(["work", "production", "production-execution", "returns"]),
     [MATFLOW_ROLES.STORE]: new Set(["store", "receiving", "returns"]),
     [MATFLOW_ROLES.PURCHASE]: new Set(["purchase"]),
     [MATFLOW_ROLES.QC]: new Set(["qc"]),
@@ -81,6 +89,7 @@ const REFERENCE_SCREENS = new Set(["projects", "materials", "boms", "processing-
 
 const HEADER = [
     ["/matflow/dashboard", "MatFlow Dashboard", "Overall workflow, tracker and bottlenecks."],
+    ["/matflow/work", "Design & Engineering Work Center", "Design submission, Engineering assignment, revision control, checklists and Production handover."],
     ["/matflow/production-execution", "Production", "Receive material, start work and close material accounting."],
     ["/matflow/boms", "BOMs", "Engineering BOM creation and Production review."],
     ["/matflow/store", "Store", "Forward MR, check availability, allocate and hand over material."],
@@ -108,6 +117,7 @@ const sectionLabel = (section) => ({
 
 const sectionFor = (item, role) => {
     if (item.screen === "dashboard") return "HOME";
+    if (item.screen === "work") return "PRIMARY";
     if (PRIMARY_SCREENS[role]?.has(item.screen)) return "PRIMARY";
     if (CONTROL_SCREENS.has(item.screen)) return "CONTROL";
     if (REFERENCE_SCREENS.has(item.screen)) return "REFERENCE";
@@ -129,6 +139,41 @@ export default function MatFlowLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const [collapsed, setCollapsed] = useState(false);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [notificationFeed, setNotificationFeed] = useState({ unreadCount: 0, notifications: [] });
+    const [notificationError, setNotificationError] = useState("");
+
+    const loadNotifications = useCallback(async ({ quiet = false } = {}) => {
+        try {
+            const response = await matflowWorkApi.notifications({
+                plantCode: selectedPlantParam,
+                limit: 30,
+            });
+            setNotificationFeed(response?.data || { unreadCount: 0, notifications: [] });
+            if (!quiet) setNotificationError("");
+        } catch (requestError) {
+            if (!quiet) {
+                setNotificationError(readMatFlowError(requestError, "Unable to load task notifications."));
+            }
+        }
+    }, [selectedPlantParam]);
+
+    useEffect(() => {
+        loadNotifications();
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === "visible") loadNotifications({ quiet: true });
+        }, 10000);
+        const onVisible = () => {
+            if (document.visibilityState === "visible") loadNotifications({ quiet: true });
+        };
+        window.addEventListener("focus", onVisible);
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener("focus", onVisible);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, [loadNotifications]);
 
     const items = useMemo(
         () => NAV.filter((item) => canAccessMatFlowScreenForContext(
@@ -154,6 +199,31 @@ export default function MatFlowLayout() {
     const handleLogout = async () => {
         await logout();
         navigate("/login", { replace: true });
+    };
+
+    const openTaskNotification = async (notification) => {
+        try {
+            const response = await matflowWorkApi.markNotificationRead(
+                notification.referenceType,
+                notification.referenceId,
+                { plantCode: selectedPlantParam }
+            );
+            if (response?.data) setNotificationFeed(response.data);
+        } catch {
+            // Opening the linked work item is more important than the read receipt.
+        }
+        setNotificationsOpen(false);
+        navigate(notification.path || `/matflow/work?taskId=${encodeURIComponent(notification.referenceId || "")}`);
+    };
+
+    const markAllNotificationsRead = async () => {
+        try {
+            const response = await matflowWorkApi.markAllNotificationsRead({ plantCode: selectedPlantParam });
+            setNotificationFeed(response?.data || { unreadCount: 0, notifications: [] });
+            setNotificationError("");
+        } catch (requestError) {
+            setNotificationError(readMatFlowError(requestError, "Unable to mark notifications as read."));
+        }
     };
 
     const renderNavItem = (item) => (
@@ -235,6 +305,24 @@ export default function MatFlowLayout() {
                                 {availablePlants.map((plant) => <MenuItem key={plant} value={plant}>{plant}</MenuItem>)}
                             </TextField>
                         )}
+                        <Tooltip title="Task notifications">
+                            <Button
+                                onClick={() => {
+                                    setNotificationsOpen(true);
+                                    loadNotifications();
+                                }}
+                                sx={{ ...secondaryBtnSx, minWidth: 38, px: .8 }}
+                            >
+                                <Badge
+                                    color="error"
+                                    badgeContent={Math.min(Number(notificationFeed?.unreadCount || 0), 99)}
+                                    invisible={!notificationFeed?.unreadCount}
+                                    max={99}
+                                >
+                                    <NotificationsNoneOutlinedIcon />
+                                </Badge>
+                            </Button>
+                        </Tooltip>
                         <Button
                             startIcon={<WarningAmberOutlinedIcon />}
                             onClick={() => navigate(`/matflow/exceptions?new=1&from=${encodeURIComponent(location.pathname)}`)}
@@ -262,9 +350,93 @@ export default function MatFlowLayout() {
 
                 <Box component="main" sx={contentSx}><Outlet /></Box>
             </Box>
+
+            <Drawer
+                anchor="right"
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                PaperProps={{
+                    sx: {
+                        width: { xs: "100%", sm: 410 },
+                        maxWidth: "100vw",
+                        background: "var(--mf-page-bg)",
+                        color: "var(--mf-text)",
+                        borderLeft: "1px solid var(--mf-border)",
+                    },
+                }}
+            >
+                <Box sx={{ p: 1.4, position: "sticky", top: 0, zIndex: 2, background: "var(--mf-header-bg)", backdropFilter: "blur(14px)", borderBottom: "1px solid var(--mf-border)" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                        <Box>
+                            <Typography sx={{ fontSize: 14, fontWeight: 950, color: "var(--mf-text)" }}>Notifications</Typography>
+                            <Typography sx={mutedSx}>{notificationFeed?.unreadCount || 0} unread · near-real-time refresh every 10s + on focus</Typography>
+                        </Box>
+                        <Button
+                            startIcon={<DoneAllOutlinedIcon />}
+                            onClick={markAllNotificationsRead}
+                            disabled={!notificationFeed?.unreadCount}
+                            sx={secondaryBtnSx}
+                        >
+                            Read all
+                        </Button>
+                    </Box>
+                    {notificationError && (
+                        <Typography sx={{ mt: .8, fontSize: 9.5, fontWeight: 750, color: "#ef4444" }}>
+                            {notificationError}
+                        </Typography>
+                    )}
+                </Box>
+
+                <Box sx={{ p: 1, display: "grid", gap: .65 }}>
+                    {(notificationFeed?.notifications || []).length === 0 ? (
+                        <Box sx={{ p: 2.4, textAlign: "center", border: "1px dashed var(--mf-border)", borderRadius: 2 }}>
+                            <NotificationsNoneOutlinedIcon sx={{ color: "var(--mf-text-muted)" }} />
+                            <Typography sx={{ mt: .4, fontSize: 10, fontWeight: 800, color: "var(--mf-text-muted)" }}>No task notifications</Typography>
+                        </Box>
+                    ) : (notificationFeed?.notifications || []).map((notification) => (
+                        <Box
+                            key={`${notification.referenceId}-${notification.updatedAt}`}
+                            component="button"
+                            type="button"
+                            onClick={() => openTaskNotification(notification)}
+                            sx={{
+                                width: "100%",
+                                textAlign: "left",
+                                p: 1,
+                                borderRadius: 2,
+                                border: notification.read ? "1px solid var(--mf-border)" : "1px solid var(--mf-primary-border)",
+                                background: notification.read ? "var(--mf-panel-bg)" : "var(--mf-primary-soft)",
+                                color: "inherit",
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                                "&:hover": { borderColor: "var(--mf-primary)" },
+                            }}
+                        >
+                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: .7 }}>
+                                <Typography sx={{ fontSize: 9, fontWeight: 950, color: "var(--mf-text-muted)", letterSpacing: ".04em" }}>
+                                    {notification.referenceNumber || "TASK"}
+                                </Typography>
+                                {!notification.read && <Box sx={{ mt: .25, width: 7, height: 7, borderRadius: 99, bgcolor: "var(--mf-primary)" }} />}
+                            </Box>
+                            <Typography sx={{ mt: .25, fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>
+                                {notification.title || notification.productName || "Engineering task"}
+                            </Typography>
+                            <Typography sx={{ mt: .25, fontSize: 9.5, lineHeight: 1.45, fontWeight: 700, color: "var(--mf-text-secondary)" }}>
+                                {notification.message}
+                            </Typography>
+                            <Typography sx={{ mt: .55, fontSize: 8.7, fontWeight: 700, color: "var(--mf-text-muted)" }}>
+                                {[notification.projectCode, notification.productName, readableNotificationStatus(notification.status)].filter(Boolean).join(" · ")}
+                            </Typography>
+                        </Box>
+                    ))}
+                </Box>
+            </Drawer>
         </Box>
     );
 }
+
+const readableNotificationStatus = (value) => String(value || "").trim().toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Updated";
+
 
 const shellSx = {
     minHeight: "100vh",

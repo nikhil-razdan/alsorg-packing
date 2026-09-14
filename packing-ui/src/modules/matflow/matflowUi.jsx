@@ -490,8 +490,8 @@ const ROLE_PRIORITY = [
   MATFLOW_ROLES.ADMIN,
   MATFLOW_ROLES.MANAGER,
   MATFLOW_ROLES.DIRECTOR,
-  MATFLOW_ROLES.PRODUCTION,
   MATFLOW_ROLES.ENGINEERING,
+  MATFLOW_ROLES.PRODUCTION,
   MATFLOW_ROLES.STORE,
   MATFLOW_ROLES.PURCHASE,
   MATFLOW_ROLES.QC,
@@ -507,6 +507,7 @@ const MATFLOW_SCREEN_ROLES = Object.freeze({
   dashboard: ALL_MATFLOW_ROLES,
   tracking: ALL_MATFLOW_ROLES,
   exceptions: ALL_MATFLOW_ROLES,
+  work: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
   projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
   materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE, MATFLOW_ROLES.QC],
   "processing-units": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
@@ -580,8 +581,8 @@ export const defaultMatFlowPathForRole = (roleOrRoles) => {
     roles.includes(MATFLOW_ROLES.DIRECTOR)) {
     return "/matflow/dashboard";
   }
+  if (roles.includes(MATFLOW_ROLES.ENGINEERING)) return "/matflow/work";
   if (roles.includes(MATFLOW_ROLES.PRODUCTION)) return "/matflow/production";
-  if (roles.includes(MATFLOW_ROLES.ENGINEERING)) return "/matflow/boms";
   if (roles.includes(MATFLOW_ROLES.STORE)) return "/matflow/store";
   // Purchase and QC are AL-P1-only desks, so their safe landing stays the
   // plant-aware Dashboard; the sidebar exposes the desk when AL-P1 is active.

@@ -8,6 +8,7 @@ import com.alsorg.packing.domain.matflow.MatFlowBom;
 import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
 import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
+import com.alsorg.packing.repository.matflow.MatFlowAuditLogRepository;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
 import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
@@ -67,6 +68,7 @@ public class MatFlowProjectService {
     private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowBomRepository bomRepository;
     private final MatFlowMaterialRequisitionRepository requisitionRepository;
+    private final MatFlowAuditLogRepository auditLogRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
     private final Path attachmentRoot;
@@ -76,6 +78,7 @@ public class MatFlowProjectService {
             MatFlowProjectDrawingRepository productRepository,
             MatFlowBomRepository bomRepository,
             MatFlowMaterialRequisitionRepository requisitionRepository,
+            MatFlowAuditLogRepository auditLogRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
             @Value("${matflow.product-attachment-dir:}") String configuredAttachmentDirectory) {
@@ -83,6 +86,7 @@ public class MatFlowProjectService {
         this.productRepository = productRepository;
         this.bomRepository = bomRepository;
         this.requisitionRepository = requisitionRepository;
+        this.auditLogRepository = auditLogRepository;
         this.accessService = accessService;
         this.auditService = auditService;
         this.attachmentRoot = resolveAttachmentRoot(configuredAttachmentDirectory);
@@ -1038,16 +1042,34 @@ public class MatFlowProjectService {
                 .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
                 .isEmpty();
 
-        if (hasBom || hasRequisition) {
-            String dependencies = hasBom && hasRequisition
-                    ? "BOM and material requisition history"
-                    : hasBom
-                            ? "BOM history"
-                            : "material requisition history";
+        /*
+         * Design / Engineering workspace history is append-only in mf_audit_logs.
+         * A Product with a Design submission or Engineering task must therefore
+         * be protected exactly like a Product with BOM/MR history; otherwise the
+         * Product master and its revision-controlled drawings could be deleted
+         * while workflow history still points to that Product ID.
+         *
+         * This scan is intentionally deletion-only (rare) so normal Project reads
+         * stay as fast as before and no new repository query/API is required.
+         */
+        String productToken = product.getId().toString();
+        boolean hasDesignEngineeringHistory = auditLogRepository.findAll().stream()
+                .filter(java.util.Objects::nonNull)
+                .filter(row -> "MATFLOW_DESIGN_SUBMISSION".equalsIgnoreCase(row.getEntityType())
+                        || "MATFLOW_ENGINEERING_TASK".equalsIgnoreCase(row.getEntityType()))
+                .map(row -> row.getDetailsJson())
+                .filter(java.util.Objects::nonNull)
+                .anyMatch(json -> json.contains(productToken));
+
+        if (hasBom || hasRequisition || hasDesignEngineeringHistory) {
+            java.util.List<String> dependencies = new java.util.ArrayList<>();
+            if (hasDesignEngineeringHistory) dependencies.add("Design / Engineering workflow history");
+            if (hasBom) dependencies.add("BOM history");
+            if (hasRequisition) dependencies.add("material requisition history");
 
             throw conflict(
                     "Cannot delete Product '" + product.getProductName() + "' because it already has "
-                            + dependencies
+                            + String.join(", ", dependencies)
                             + ". Mark the Product inactive instead so MatFlow traceability is preserved.");
         }
     }

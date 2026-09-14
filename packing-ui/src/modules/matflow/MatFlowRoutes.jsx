@@ -49,6 +49,7 @@ import {
     MatFlowProcessingPage,
     MatFlowProductionExecutionPage,
 } from "./pages/MatFlowExecutionWorkspace";
+import { MatFlowWorkWorkspacePage } from "./pages/MatFlowWorkWorkspace";
 
 function Guard({ screen, children }) {
     const location = useLocation();
@@ -61,11 +62,7 @@ function Guard({ screen, children }) {
             <Navigate
                 to="/login"
                 replace
-                state={{
-                    from:
-                        location.pathname +
-                        location.search,
-                }}
+                state={{ from: location.pathname + location.search }}
             />
         );
     }
@@ -94,8 +91,14 @@ function Guard({ screen, children }) {
         role,
         user?.role,
     ]);
-    if (!canAccessMatFlowScreen(screen, effectiveRoles) ||
-        !canAccessMatFlowScreenForContext(screen, effectiveRoles, selectedPlantParam ? [selectedPlantParam] : availablePlants)) {
+    if (
+        !canAccessMatFlowScreen(screen, effectiveRoles) ||
+        !canAccessMatFlowScreenForContext(
+            screen,
+            effectiveRoles,
+            selectedPlantParam ? [selectedPlantParam] : availablePlants
+        )
+    ) {
         return <Navigate to={defaultMatFlowPathForRole(effectiveRoles)} replace />;
     }
     return children;
@@ -103,29 +106,15 @@ function Guard({ screen, children }) {
 
 function HomeRedirect() {
     const location = useLocation();
+    const { role, roles, user, authLoading, isLoggedIn } = useAuth();
 
-    const {
-        role,
-        roles,
-        user,
-        authLoading,
-        isLoggedIn,
-    } = useAuth();
-
-    if (authLoading) {
-        return null;
-    }
-
+    if (authLoading) return null;
     if (!isLoggedIn) {
         return (
             <Navigate
                 to="/login"
                 replace
-                state={{
-                    from:
-                        location.pathname +
-                        location.search,
-                }}
+                state={{ from: location.pathname + location.search }}
             />
         );
     }
@@ -145,7 +134,12 @@ function HomeRedirect() {
 
 function LegacyMaterialTrackerRedirect() {
     const { materialId } = useParams();
-    return <Navigate to={`/matflow/dashboard?view=materials${materialId ? `&materialId=${encodeURIComponent(materialId)}` : ""}`} replace />;
+    return (
+        <Navigate
+            to={`/matflow/dashboard?view=materials${materialId ? `&materialId=${encodeURIComponent(materialId)}` : ""}`}
+            replace
+        />
+    );
 }
 
 const guarded = (screen, element) => <Guard screen={screen}>{element}</Guard>;
@@ -158,6 +152,7 @@ export default function MatFlowRoutes() {
                     <Route element={<MatFlowLayout />}>
                         <Route index element={<HomeRedirect />} />
                         <Route path="dashboard" element={guarded("dashboard", <MatFlowDashboardPage />)} />
+                        <Route path="work" element={guarded("work", <MatFlowWorkWorkspacePage />)} />
                         <Route path="tracker" element={guarded("tracking", <Navigate to="/matflow/dashboard?view=projects" replace />)} />
                         <Route path="tracker/materials" element={guarded("tracking", <Navigate to="/matflow/dashboard?view=materials" replace />)} />
                         <Route path="tracker/materials/:materialId" element={guarded("tracking", <LegacyMaterialTrackerRedirect />)} />
@@ -191,7 +186,7 @@ export default function MatFlowRoutes() {
                         <Route path="ledger" element={guarded("ledger", <MatFlowLedgerPage />)} />
                         <Route path="reports" element={guarded("reports", <MatFlowReportsPage />)} />
 
-                        {/* Legacy URLs redirect into the current Universal Dashboard / workflow. */}
+                        {/* Legacy URLs continue to resolve exactly as before. */}
                         <Route path="bom-approvals" element={<Navigate to="/matflow/boms" replace />} />
                         <Route path="approvals" element={<Navigate to="/matflow/purchase" replace />} />
                         <Route path="transfers" element={<Navigate to="/matflow/dashboard?view=projects" replace />} />

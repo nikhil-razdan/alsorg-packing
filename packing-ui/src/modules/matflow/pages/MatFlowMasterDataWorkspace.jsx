@@ -12,6 +12,8 @@ import {
     IconButton,
     MenuItem,
     Switch,
+    Tab,
+    Tabs,
     TextField,
     Tooltip,
     Typography,
@@ -32,6 +34,7 @@ import {
     useMatFlow,
 } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
+import { matflowWorkApi } from "../api/matflowWorkApi";
 import {
     downloadMatFlowExcel,
     downloadMaterialImportTemplate,
@@ -259,6 +262,9 @@ export function MatFlowProjectsPage() {
     const [productImageFile, setProductImageFile] = useState(null);
     const [productDrawingFile, setProductDrawingFile] = useState(null);
     const [productAttachmentMap, setProductAttachmentMap] = useState({});
+    const [engineeringContext, setEngineeringContext] = useState(null);
+    const [engineeringContextLoading, setEngineeringContextLoading] = useState(false);
+    const [engineeringTab, setEngineeringTab] = useState("DESIGN");
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -702,6 +708,21 @@ export function MatFlowProjectsPage() {
         setWorking(false);
     };
 
+    const openEngineeringContext = async (project, product) => {
+        if (!project?.id || !product?.id) return;
+        setEngineeringContextLoading(true);
+        setError("");
+        try {
+            const response = await matflowWorkApi.productContext(project.id, product.id);
+            setEngineeringContext({ project, product, data: response?.data || null });
+            setEngineeringTab("DESIGN");
+        } catch (requestError) {
+            setError(readMatFlowError(requestError, "Unable to load Design & Engineering history for this Product."));
+        } finally {
+            setEngineeringContextLoading(false);
+        }
+    };
+
     const confirmDelete = async () => {
         const target = deleteDialog;
         if (!target) return;
@@ -974,6 +995,13 @@ export function MatFlowProjectsPage() {
                                                                 Drawing
                                                             </Button>
                                                         )}
+                                                        <Button
+                                                            onClick={() => openEngineeringContext(project, product)}
+                                                            disabled={engineeringContextLoading}
+                                                            sx={secondaryBtnSx}
+                                                        >
+                                                            Design & Engineering
+                                                        </Button>
                                                         {canManage && <Button onClick={() => openProduct(project, product)} sx={secondaryBtnSx}>Edit</Button>}
                                                         {canManage && product.rowVersion != null && (
                                                             <IconButton
@@ -1185,6 +1213,87 @@ export function MatFlowProjectsPage() {
                                 ? "Save Product"
                                 : `Add ${Math.max(1, productBatchRows.filter((row) => clean(row.productName) || clean(row.drawingNo)).length)} Product${productBatchRows.filter((row) => clean(row.productName) || clean(row.drawingNo)).length === 1 ? "" : "s"}`}
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog
+                open={Boolean(engineeringContext)}
+                onClose={() => setEngineeringContext(null)}
+                fullWidth
+                maxWidth="lg"
+                PaperProps={{ sx: dialogPaperSx }}
+            >
+                <DialogTitle sx={dialogTitleSx}>
+                    Design & Engineering · {engineeringContext?.data?.projectCode || engineeringContext?.project?.projectCode || "-"} · {engineeringContext?.data?.productName || engineeringContext?.product?.productName || "-"}
+                </DialogTitle>
+                <DialogContent sx={dialogContentSx}>
+                    {engineeringContextLoading ? <LoadingBlock /> : (
+                        <>
+                            <Alert severity="info" sx={{ mb: 1 }}>
+                                This is the Product-level document-control view. Design submissions, exact drawing revisions, Engineering assignments, checklists and the BOM handover all remain linked to this same Product record.
+                            </Alert>
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,1fr)" }, gap: 1, mb: 1 }}>
+                                <SummaryCard label="Design Submissions" value={engineeringContext?.data?.submissions?.length || 0} />
+                                <SummaryCard label="Engineering Tasks" value={engineeringContext?.data?.tasks?.length || 0} />
+                                <SummaryCard label="BOM Revisions" value={engineeringContext?.data?.boms?.length || 0} />
+                                <SummaryCard label="Current Product Rev" value={engineeringContext?.data?.currentProductDrawingRevision || "0"} />
+                            </Box>
+                            <Card sx={{ ...panelSx, p: .4, m: 0 }}>
+                                <Tabs value={engineeringTab} onChange={(_, value) => setEngineeringTab(value)}>
+                                    <Tab value="DESIGN" label="Design Submissions" />
+                                    <Tab value="ENGINEERING" label="Engineering Tasks" />
+                                    <Tab value="BOM" label="BOM / Handover" />
+                                </Tabs>
+                            </Card>
+                            {engineeringTab === "DESIGN" && (
+                                <Box sx={{ display: "grid", gap: .7, mt: 1 }}>
+                                    {(engineeringContext?.data?.submissions || []).map((row) => (
+                                        <Card key={row.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
+                                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                                                <Box><Typography sx={mainTextSx}>{row.submissionNumber} · Design Rev {row.designDrawingRevision}</Typography><Typography sx={subTextSx}>{row.designer || "-"} → {row.engineeringHead || "Engineering"}</Typography></Box>
+                                                <MatFlowStatusChip status={row.status} />
+                                            </Box>
+                                            <Typography sx={{ ...subTextSx, mt: .6 }}>Checklist {row.checklistProgress?.percent ?? 0}% · Drawing {row.designDrawing?.available ? "attached" : "missing"} · {formatDate(row.updatedAt)}</Typography>
+                                            {row.returnReason && <Alert severity="warning" sx={{ mt: .6, py: 0 }}>{row.returnReason}</Alert>}
+                                            <Button onClick={() => { setEngineeringContext(null); navigate(`/matflow/work?submissionId=${encodeURIComponent(row.id)}`); }} sx={{ ...secondaryBtnSx, mt: .6 }}>Open in Work Center</Button>
+                                        </Card>
+                                    ))}
+                                    {!(engineeringContext?.data?.submissions || []).length && <EmptyState>No Design submissions yet.</EmptyState>}
+                                </Box>
+                            )}
+                            {engineeringTab === "ENGINEERING" && (
+                                <Box sx={{ display: "grid", gap: .7, mt: 1 }}>
+                                    {(engineeringContext?.data?.tasks || []).map((row) => (
+                                        <Card key={row.id} sx={{ ...panelSx, m: 0, boxShadow: "none" }}>
+                                            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
+                                                <Box><Typography sx={mainTextSx}>{row.taskNumber} · {row.assignedTo || "Awaiting assignment"}</Typography><Typography sx={subTextSx}>Design Rev {row.designDrawingRevision || "-"} · Production Rev {row.engineeringDrawingRevision || "-"}</Typography></Box>
+                                                <MatFlowStatusChip status={row.status} />
+                                            </Box>
+                                            <Typography sx={{ ...subTextSx, mt: .6 }}>Checklist {row.checklistProgress?.percent ?? 0}% · Production recipient {row.productionRecipient || "-"}</Typography>
+                                            {row.revisionReviewRequired && <Alert severity="warning" sx={{ mt: .6, py: 0 }}>New Design Rev {row.pendingDesignRevision} requires review.</Alert>}
+                                            <Button onClick={() => { setEngineeringContext(null); navigate(`/matflow/work?taskId=${encodeURIComponent(row.id)}`); }} sx={{ ...secondaryBtnSx, mt: .6 }}>Open Task</Button>
+                                        </Card>
+                                    ))}
+                                    {!(engineeringContext?.data?.tasks || []).length && <EmptyState>No Engineering tasks yet.</EmptyState>}
+                                </Box>
+                            )}
+                            {engineeringTab === "BOM" && (
+                                <Box sx={{ display: "grid", gap: .7, mt: 1 }}>
+                                    {(engineeringContext?.data?.boms || []).map((row) => (
+                                        <Card key={row.id} sx={{ ...panelSx, m: 0, boxShadow: "none", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                                            <Box><Typography sx={mainTextSx}>{row.bomNumber} · Rev {row.revisionNo ?? "-"}</Typography><Typography sx={subTextSx}>{readable(row.status)}{row.effective ? " · Effective" : ""}</Typography></Box>
+                                            <Button onClick={() => navigate(`/matflow/boms/${row.id}`)} sx={secondaryBtnSx}>Open BOM</Button>
+                                        </Card>
+                                    ))}
+                                    {!(engineeringContext?.data?.boms || []).length && <EmptyState>No BOM revisions yet.</EmptyState>}
+                                </Box>
+                            )}
+                        </>
+                    )}
+                </DialogContent>
+                <DialogActions sx={dialogActionsSx}>
+                    <Button onClick={() => setEngineeringContext(null)} sx={secondaryBtnSx}>Close</Button>
+                    <Button onClick={() => { setEngineeringContext(null); navigate(`/matflow/work`); }} sx={primaryBtnSx}>Open Work Center</Button>
                 </DialogActions>
             </Dialog>
 

@@ -27,6 +27,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
@@ -41,6 +42,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { MATFLOW_ROLES, useMatFlow } from "../matflowUi";
 import { extractMatFlowPage, matflowApi, readMatFlowError } from "../api/matflowApi";
+import { matflowWorkApi } from "../api/matflowWorkApi";
 import { downloadMatFlowBomExcel, downloadMatFlowExcel } from "../api/matflowExcel";
 import {
     EmptyState,
@@ -1255,6 +1257,80 @@ export function MatFlowBomCreatePage() {
     );
 }
 
+function EngineeringPackagePanel({ context, loading, currentBomId, currentBomStatus, onOpenWork }) {
+    const submissions = Array.isArray(context?.submissions) ? context.submissions : [];
+    const tasks = Array.isArray(context?.tasks) ? context.tasks : [];
+    const linkedTask = tasks.find((row) => String(row?.linkedBom?.id || "") === String(currentBomId || "")) || tasks[0] || null;
+    const latestDesign = submissions[0] || null;
+    const productionReview = String(currentBomStatus || "").toUpperCase() === "SUBMITTED";
+
+    return (
+        <Card sx={builderSidePanelSx}>
+            <Box sx={builderSideTitleRowSx}>
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={builderSideTitleSx}>Design & Engineering Package</Typography>
+                    <Typography sx={builderAssistantSubSx}>Same Product, exact Design/Production drawing revisions, checklist and task handover.</Typography>
+                </Box>
+                <FactCheckOutlinedIcon sx={{ color: "#93c5fd" }} />
+            </Box>
+
+            {loading ? (
+                <Typography sx={{ ...builderAssistantSubSx, mt: 1 }}>Loading linked Engineering package...</Typography>
+            ) : !latestDesign && !linkedTask ? (
+                <Box sx={{ ...builderAttachmentEmptySx, mt: 1 }}>
+                    <Typography sx={builderAssistantSubSx}>No Design submission / Engineering task is linked to this Product yet.</Typography>
+                </Box>
+            ) : (
+                <Box sx={{ mt: 1, display: "grid", gap: .8 }}>
+                    {latestDesign && (
+                        <Box sx={builderProductDetailItemSx}>
+                            <Typography sx={builderAttachmentLabelSx}>DESIGN SUBMISSION</Typography>
+                            <Typography sx={builderProductDetailValueSx}>Rev {latestDesign.designDrawingRevision || "-"}</Typography>
+                            <Typography sx={builderAssistantSubSx}>{latestDesign.submissionNumber || "-"} · {readable(latestDesign.status)}</Typography>
+                        </Box>
+                    )}
+                    {linkedTask && (
+                        <>
+                            <Box sx={builderProductDetailItemSx}>
+                                <Typography sx={builderAttachmentLabelSx}>ENGINEERING TASK</Typography>
+                                <Typography sx={builderProductDetailValueSx}>{linkedTask.taskNumber || "-"}</Typography>
+                                <Typography sx={builderAssistantSubSx}>{linkedTask.assignedTo || "Awaiting assignment"} · {readable(linkedTask.status)}</Typography>
+                            </Box>
+                            <Box sx={builderProductDetailGridSx}>
+                                <Box sx={builderProductDetailItemSx}>
+                                    <Typography sx={builderAttachmentLabelSx}>PRODUCTION DRAWING</Typography>
+                                    <Typography sx={builderProductDetailValueSx}>Rev {linkedTask.engineeringDrawingRevision || "-"}</Typography>
+                                    <Typography sx={builderAssistantSubSx}>{linkedTask.productionDrawing?.available ? "Attached" : "Not attached"}</Typography>
+                                </Box>
+                                <Box sx={builderProductDetailItemSx}>
+                                    <Typography sx={builderAttachmentLabelSx}>CHECKLIST</Typography>
+                                    <Typography sx={builderProductDetailValueSx}>{linkedTask.checklistProgress?.percent ?? 0}%</Typography>
+                                    <Typography sx={builderAssistantSubSx}>{linkedTask.checklistProgress?.complete ? "Complete" : `${linkedTask.checklistProgress?.pending ?? 0} pending`}</Typography>
+                                </Box>
+                            </Box>
+                            {linkedTask.handoverRemarks && (
+                                <Alert severity="info" sx={{ borderRadius: 2 }}>{linkedTask.handoverRemarks}</Alert>
+                            )}
+                            {linkedTask.revisionReviewRequired && (
+                                <Alert severity="warning" sx={{ borderRadius: 2 }}>New Design Rev {linkedTask.pendingDesignRevision} requires Engineering review.</Alert>
+                            )}
+                            {productionReview && (
+                                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                                    Production review context: verify this exact Engineering package alongside the BOM before Reviewed / Return.
+                                </Alert>
+                            )}
+                            <Button onClick={() => onOpenWork({ type: "TASK", id: linkedTask.id })} sx={secondaryBtnSx}>Open Linked Engineering Task</Button>
+                        </>
+                    )}
+                    {!linkedTask && latestDesign && (
+                        <Button onClick={() => onOpenWork({ type: "DESIGN", id: latestDesign.id })} sx={secondaryBtnSx}>Open Design Submission</Button>
+                    )}
+                </Box>
+            )}
+        </Card>
+    );
+}
+
 export function MatFlowBomDetailPage() {
     const { bomId } = useParams();
     const navigate = useNavigate();
@@ -1285,6 +1361,8 @@ export function MatFlowBomDetailPage() {
     const [productOwnerPortfolio, setProductOwnerPortfolio] = useState(null);
     const [productOwnerProduct, setProductOwnerProduct] = useState(null);
     const [productOwnerLookupDone, setProductOwnerLookupDone] = useState(false);
+    const [engineeringContext, setEngineeringContext] = useState(null);
+    const [engineeringContextLoading, setEngineeringContextLoading] = useState(false);
 
     const load = useCallback(async () => {
         if (!bomId) return;
@@ -1411,6 +1489,21 @@ export function MatFlowBomDetailPage() {
         canManage: canManageProductFiles,
         setError,
     });
+
+    useEffect(() => {
+        let active = true;
+        if (!productOwnerProjectId || !resolvedProductId) {
+            setEngineeringContext(null);
+            setEngineeringContextLoading(false);
+            return () => { active = false; };
+        }
+        setEngineeringContextLoading(true);
+        matflowWorkApi.productContext(productOwnerProjectId, resolvedProductId)
+            .then((response) => { if (active) setEngineeringContext(response?.data || null); })
+            .catch(() => { if (active) setEngineeringContext(null); })
+            .finally(() => { if (active) setEngineeringContextLoading(false); });
+        return () => { active = false; };
+    }, [productOwnerProjectId, resolvedProductId, bom?.status, bom?.updatedAt]);
 
     const canEdit = hasRole(EDIT_ROLES) && bom?.latestRevision === true && ["DRAFT", "RETURNED"].includes(status);
     const canReview = hasRole(REVIEW_ROLES) && status === "SUBMITTED" && bom?.rowVersion != null;
@@ -1924,6 +2017,14 @@ export function MatFlowBomDetailPage() {
                         files={productFiles}
                         canManage={canManageProductFiles}
                         contextUnavailable={productOwnerLookupDone && !productOwnerProduct}
+                    />
+
+                    <EngineeringPackagePanel
+                        context={engineeringContext}
+                        loading={engineeringContextLoading}
+                        currentBomId={bom?.id}
+                        currentBomStatus={status}
+                        onOpenWork={(target) => navigate(`/matflow/work?${target.type === "DESIGN" ? "submissionId" : "taskId"}=${encodeURIComponent(target.id)}`)}
                     />
 
                     <Card sx={builderSidePanelSx}>
