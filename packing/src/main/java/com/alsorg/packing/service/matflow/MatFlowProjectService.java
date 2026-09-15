@@ -1,1386 +1,305 @@
 package com.alsorg.packing.service.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductPortfolioRow;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectRequest;
-import com.alsorg.packing.domain.matflow.MatFlowBom;
-import com.alsorg.packing.domain.matflow.MatFlowPlanningTypes.ProjectProductApprovalStatus;
+import static com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.*;
+
+import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
 import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
-import com.alsorg.packing.repository.matflow.MatFlowAuditLogRepository;
-import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
-import com.alsorg.packing.repository.matflow.MatFlowMaterialRequisitionRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectDrawingRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProjectRepository;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * First-class Project aggregate boundary.
- *
- * Project/Product creation is immediate and approval-free. The legacy
- * field/property name projectCode is retained for compatibility, but its
- * business meaning is PD No. / Project No. Existing material execution foreign
- * keys
- * attached to MatFlowProjectDrawing (the Product/Item child). The parent
- * Project
- * is a portfolio/ownership aggregate, while every BOM/requisition/stock
- * movement
- * remains traceable to the exact product and drawing that consumed it.
- */
+/** Project/PD and Product/Drawing master. A Production File is created automatically for every Product. */
 @Service
 public class MatFlowProjectService {
-
-    private static final long PRODUCT_IMAGE_MAX_BYTES = 8L * 1024L * 1024L;
-    private static final long DRAWING_MAX_BYTES = 20L * 1024L * 1024L;
-
-    private static final List<String> PRODUCT_IMAGE_EXTENSIONS = List.of("jpg", "jpeg", "png", "webp");
-    private static final List<String> PRODUCT_DRAWING_EXTENSIONS = List.of("pdf", "jpg", "jpeg", "png", "webp", "dwg",
-            "dxf");
-
-    private static final Set<String> PRODUCT_IMAGE_EXTENSION_SET = Set.copyOf(PRODUCT_IMAGE_EXTENSIONS);
-    private static final Set<String> PRODUCT_DRAWING_EXTENSION_SET = Set.copyOf(PRODUCT_DRAWING_EXTENSIONS);
-
+    private static final long IMAGE_MAX_BYTES = 8L * 1024L * 1024L;
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectDrawingRepository productRepository;
-    private final MatFlowBomRepository bomRepository;
-    private final MatFlowMaterialRequisitionRepository requisitionRepository;
-    private final MatFlowAuditLogRepository auditLogRepository;
+    private final MatFlowProductionFileRepository productionFileRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
-    private final Path attachmentRoot;
+    private final MatFlowWorkflowTemplateService templateService;
+    private final Path imageRoot;
 
     public MatFlowProjectService(
             MatFlowProjectRepository projectRepository,
             MatFlowProjectDrawingRepository productRepository,
-            MatFlowBomRepository bomRepository,
-            MatFlowMaterialRequisitionRepository requisitionRepository,
-            MatFlowAuditLogRepository auditLogRepository,
+            MatFlowProductionFileRepository productionFileRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
-            @Value("${matflow.product-attachment-dir:}") String configuredAttachmentDirectory) {
+            MatFlowWorkflowTemplateService templateService,
+            @Value("${matflow.product-image-dir:}") String configuredImageDir) {
         this.projectRepository = projectRepository;
         this.productRepository = productRepository;
-        this.bomRepository = bomRepository;
-        this.requisitionRepository = requisitionRepository;
-        this.auditLogRepository = auditLogRepository;
+        this.productionFileRepository = productionFileRepository;
         this.accessService = accessService;
         this.auditService = auditService;
-        this.attachmentRoot = resolveAttachmentRoot(configuredAttachmentDirectory);
-
-        try {
-            Files.createDirectories(this.attachmentRoot);
-        } catch (IOException ex) {
-            throw new IllegalStateException(
-                    "Unable to initialize MatFlow Product attachment directory: " + this.attachmentRoot,
-                    ex);
-        }
+        this.templateService = templateService;
+        this.imageRoot = resolveRoot(configuredImageDir);
+        try { Files.createDirectories(imageRoot); }
+        catch (IOException ex) { throw new IllegalStateException("Unable to initialize MatFlow product-image directory", ex); }
     }
 
     @Transactional(readOnly = true)
-    public List<ProjectPortfolioResponse> list(String search, Boolean active, String plantCode) {
+    public List<ProjectResponse> list(String search, Boolean active, String plantCode) {
         accessService.requireRead();
-
-        String query = normalizeSearch(search);
-        String requestedPlant = cleanUpper(plantCode);
-        if (requestedPlant != null)
-            accessService.requirePlantAccess(requestedPlant);
-
+        String q = clean(search).toLowerCase(Locale.ROOT);
+        String plant = upperOrNull(plantCode);
+        if (plant != null) accessService.requirePlantAccess(plant);
         return projectRepository.findAllByOrderByUpdatedAtDesc().stream()
-                .filter(project -> accessService.canAccessPlant(project.getPlantCode()))
-                .filter(project -> requestedPlant == null || requestedPlant.equals(cleanUpper(project.getPlantCode())))
-                .filter(project -> active == null || project.isActive() == active)
-                .filter(project -> query.isBlank()
-                        || contains(project.getProjectCode(), query)
-                        || contains(project.getProjectName(), query)
-                        || contains(project.getClientName(), query)
-                        || productsOf(project).stream().anyMatch(product -> contains(product.getProductName(), query)
-                                || contains(product.getDrawingNo(), query)
-                                || contains(formatDimensions(product), query)))
-                .map(this::toPortfolio)
-                .toList();
+                .filter(p -> accessService.canAccessPlant(p.getPlantCode()))
+                .filter(p -> plant == null || plant.equalsIgnoreCase(p.getPlantCode()))
+                .filter(p -> active == null || p.isActive() == active)
+                .filter(p -> q.isBlank() || contains(p.getProjectCode(), q) || contains(p.getProjectName(), q)
+                        || contains(p.getClientName(), q) || productsOf(p.getId()).stream().anyMatch(x -> contains(x.getProductName(), q) || contains(x.getDrawingNo(), q)))
+                .map(this::toProject).toList();
     }
 
     @Transactional(readOnly = true)
-    public ProjectPortfolioResponse get(UUID id) {
+    public ProjectResponse get(UUID projectId) {
         accessService.requireRead();
-        return toPortfolio(requireProject(id));
-    }
-
-    /**
-     * Returns optional Engineering attachments for every Product in one Project.
-     * Files are stored outside the transactional business tables; the Product
-     * remains the durable business record and no new attachment table is needed.
-     */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> productAttachments(UUID projectId) {
-        accessService.requireRead();
-
         MatFlowProject project = requireProject(projectId);
-        return productsOf(project).stream()
-                .map(product -> productAttachmentStatus(project, product))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public Map<String, Object> productAttachmentStatus(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        return productAttachmentStatus(project, product);
+        accessService.requirePlantAccess(project.getPlantCode());
+        return toProject(project);
     }
 
     @Transactional
-    public Map<String, Object> saveProductImage(
-            UUID projectId,
-            UUID productId,
-            MultipartFile file) {
-
+    public ProjectResponse create(ProjectRequest request) {
         accessService.requireProjectWrite();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        saveAttachment(product, ProductAttachmentKind.PRODUCT_IMAGE, file);
-
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PRODUCT_IMAGE_UPLOADED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details(
-                        "productName", product.getProductName(),
-                        "drawingRevision", product.getDrawingRevision(),
-                        "fileName", clean(file == null ? null : file.getOriginalFilename()),
-                        "sizeBytes", file == null ? null : file.getSize()));
-
-        return productAttachmentStatus(project, product);
+        String plant = upper(request.plantCode());
+        accessService.requirePlantAccess(plant);
+        String code = upper(request.projectCode());
+        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCase(plant, code)) {
+            throw conflict("PD / Project No. already exists for this plant: " + code);
+        }
+        MatFlowProject row = new MatFlowProject();
+        applyProject(row, request);
+        row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor());
+        projectRepository.save(row);
+        auditService.log("PROJECT", row.getId(), "PROJECT_CREATED", null,
+                auditService.details("projectCode", row.getProjectCode(), "plantCode", row.getPlantCode()));
+        return toProject(row);
     }
 
     @Transactional
-    public Map<String, Object> saveProductDrawing(
-            UUID projectId,
-            UUID productId,
-            MultipartFile file) {
-
+    public ProjectResponse update(UUID projectId, ProjectRequest request) {
         accessService.requireProjectWrite();
+        MatFlowProject row = requireProject(projectId);
+        accessService.requirePlantAccess(row.getPlantCode());
+        requireVersion(row.getRowVersion(), request.rowVersion());
+        String plant = upper(request.plantCode());
+        accessService.requirePlantAccess(plant);
+        String code = upper(request.projectCode());
+        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndIdNot(plant, code, row.getId())) {
+            throw conflict("PD / Project No. already exists for this plant: " + code);
+        }
+        applyProject(row, request); row.setUpdatedBy(accessService.actor());
+        projectRepository.save(row);
+        for (MatFlowProjectDrawing product : productsOf(row.getId())) {
+            product.setProject(row); product.setUpdatedBy(accessService.actor()); productRepository.save(product);
+            productionFileRepository.findByProduct_Id(product.getId()).ifPresent(file -> {
+                syncSnapshots(file, row, product); file.setUpdatedBy(accessService.actor()); productionFileRepository.save(file);
+            });
+        }
+        auditService.log("PROJECT", row.getId(), "PROJECT_UPDATED", null, auditService.details("projectCode", row.getProjectCode()));
+        return toProject(row);
+    }
 
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        saveAttachment(product, ProductAttachmentKind.DRAWING, file);
+    @Transactional
+    public ProjectResponse deactivateProject(UUID projectId, Long rowVersion) {
+        accessService.requireProjectWrite();
+        MatFlowProject row = requireProject(projectId); accessService.requirePlantAccess(row.getPlantCode()); requireVersion(row.getRowVersion(), rowVersion);
+        row.setActive(false); row.setUpdatedBy(accessService.actor()); projectRepository.save(row);
+        for (MatFlowProjectDrawing product : productsOf(row.getId())) { product.setActive(false); product.setUpdatedBy(accessService.actor()); productRepository.save(product); }
+        auditService.log("PROJECT", row.getId(), "PROJECT_DEACTIVATED", null, auditService.details("projectCode", row.getProjectCode()));
+        return toProject(row);
+    }
 
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PRODUCT_DRAWING_UPLOADED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details(
-                        "productName", product.getProductName(),
-                        "drawingRevision", product.getDrawingRevision(),
-                        "fileName", clean(file == null ? null : file.getOriginalFilename()),
-                        "sizeBytes", file == null ? null : file.getSize()));
+    @Transactional
+    public ProjectResponse addProduct(UUID projectId, ProductRequest request) {
+        return addProducts(projectId, new ProductBulkCreateRequest(List.of(request)));
+    }
 
-        return productAttachmentStatus(project, product);
+    @Transactional
+    public ProjectResponse addProducts(UUID projectId, ProductBulkCreateRequest request) {
+        accessService.requireProjectWrite();
+        MatFlowProject project = requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode());
+        for (ProductRequest item : request.products()) {
+            String drawingNo = upper(item.drawingNo());
+            if (productRepository.existsByProject_IdAndDrawingNoIgnoreCase(projectId, drawingNo)) {
+                throw conflict("Drawing No. already exists in this project: " + drawingNo);
+            }
+        }
+        for (ProductRequest item : request.products()) {
+            MatFlowProjectDrawing product = new MatFlowProjectDrawing();
+            product.setProject(project); applyProduct(product, item);
+            product.setCreatedBy(accessService.actor()); product.setUpdatedBy(accessService.actor());
+            productRepository.save(product);
+            MatFlowProductionFile file = createProductionFile(project, product);
+            auditService.log("PRODUCTION_FILE", file.getId(), "PRODUCTION_FILE_CREATED", file,
+                    auditService.details("source", "PRODUCT_CREATED", "productionFileNo", file.getProductionFileNo()));
+        }
+        return toProject(project);
+    }
+
+    @Transactional
+    public ProjectResponse updateProduct(UUID projectId, UUID productId, ProductRequest request) {
+        accessService.requireProjectWrite();
+        MatFlowProject project = requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode());
+        MatFlowProjectDrawing product = requireProduct(projectId, productId); requireVersion(product.getRowVersion(), request.rowVersion());
+        String drawingNo = upper(request.drawingNo());
+        if (productRepository.existsByProject_IdAndDrawingNoIgnoreCaseAndIdNot(projectId, drawingNo, productId)) {
+            throw conflict("Drawing No. already exists in this project: " + drawingNo);
+        }
+        String previousDrawing = product.getDrawingNo();
+        applyProduct(product, request); product.setProject(project); product.setUpdatedBy(accessService.actor()); productRepository.save(product);
+        MatFlowProductionFile file = productionFileRepository.findByProduct_Id(productId).orElseGet(() -> createProductionFile(project, product));
+        syncSnapshots(file, project, product); file.setUpdatedBy(accessService.actor()); productionFileRepository.save(file);
+        auditService.log("PRODUCT", product.getId(), "PRODUCT_UPDATED", file,
+                auditService.details("previousDrawingNo", previousDrawing, "drawingNo", product.getDrawingNo()));
+        return toProject(project);
+    }
+
+    @Transactional
+    public ProjectResponse deactivateProduct(UUID projectId, UUID productId, Long rowVersion) {
+        accessService.requireProjectWrite();
+        MatFlowProject project = requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode());
+        MatFlowProjectDrawing product = requireProduct(projectId, productId); requireVersion(product.getRowVersion(), rowVersion);
+        product.setActive(false); product.setUpdatedBy(accessService.actor()); productRepository.save(product);
+        productionFileRepository.findByProduct_Id(productId).ifPresent(file -> { file.setActive(false); file.setUpdatedBy(accessService.actor()); productionFileRepository.save(file); });
+        return toProject(project);
+    }
+
+    @Transactional
+    public ProductResponse uploadProductImage(UUID projectId, UUID productId, MultipartFile file) {
+        accessService.requireProjectWrite();
+        MatFlowProject project = requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode());
+        MatFlowProjectDrawing product = requireProduct(projectId, productId);
+        if (file == null || file.isEmpty()) throw badRequest("Product image is required");
+        if (file.getSize() > IMAGE_MAX_BYTES) throw badRequest("Product image cannot exceed 8 MB");
+        String contentType = clean(file.getContentType());
+        if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) throw badRequest("Only image files are allowed");
+        String ext = safeExtension(file.getOriginalFilename());
+        Path folder = imageRoot.resolve(projectId.toString()).normalize();
+        Path target = folder.resolve(productId + (ext.isBlank() ? ".img" : "." + ext)).normalize();
+        if (!target.startsWith(imageRoot)) throw badRequest("Invalid image path");
+        try { Files.createDirectories(folder); Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING); }
+        catch (IOException ex) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to save product image"); }
+        product.setProductImageFileName(safeFileName(file.getOriginalFilename(), "product-image"));
+        product.setProductImageContentType(contentType); product.setProductImageStoragePath(target.toString()); product.setUpdatedBy(accessService.actor()); productRepository.save(product);
+        return toProduct(product);
     }
 
     @Transactional(readOnly = true)
     public Resource loadProductImage(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        Path path = requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE);
+        MatFlowProject project = requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode());
+        MatFlowProjectDrawing product = requireProduct(projectId, productId);
+        if (clean(product.getProductImageStoragePath()) == null) throw notFound("Product image not found");
+        Path path = Path.of(product.getProductImageStoragePath()).normalize();
+        if (!Files.exists(path) || !Files.isRegularFile(path)) throw notFound("Product image not found");
         return new FileSystemResource(path);
     }
 
     @Transactional(readOnly = true)
-    public Resource loadProductDrawing(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        Path path = requireAttachmentPath(product, ProductAttachmentKind.DRAWING);
-        return new FileSystemResource(path);
-    }
-
+    public String productImageFileName(UUID projectId, UUID productId) { return requireProduct(projectId, productId).getProductImageFileName(); }
     @Transactional(readOnly = true)
-    public String productImageContentType(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        return attachmentContentType(
-                requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE));
-    }
-
-    @Transactional(readOnly = true)
-    public String productDrawingContentType(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        return attachmentContentType(
-                requireAttachmentPath(product, ProductAttachmentKind.DRAWING));
-    }
-
-    @Transactional(readOnly = true)
-    public String productImageFileName(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        Path path = requireAttachmentPath(product, ProductAttachmentKind.PRODUCT_IMAGE);
-        return downloadFileName(product, ProductAttachmentKind.PRODUCT_IMAGE, path);
-    }
-
-    @Transactional(readOnly = true)
-    public String productDrawingFileName(UUID projectId, UUID productId) {
-        accessService.requireRead();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        Path path = requireAttachmentPath(product, ProductAttachmentKind.DRAWING);
-        return downloadFileName(product, ProductAttachmentKind.DRAWING, path);
-    }
+    public String productImageContentType(UUID projectId, UUID productId) { String v=requireProduct(projectId, productId).getProductImageContentType(); return v == null ? "application/octet-stream" : v; }
 
     @Transactional
-    public Map<String, Object> deleteProductImage(UUID projectId, UUID productId) {
-        return deleteProductAttachment(projectId, productId, ProductAttachmentKind.PRODUCT_IMAGE);
+    public ProductResponse deleteProductImage(UUID projectId, UUID productId) {
+        accessService.requireProjectWrite(); MatFlowProject project=requireProject(projectId); accessService.requirePlantAccess(project.getPlantCode()); MatFlowProjectDrawing product=requireProduct(projectId, productId);
+        String path=product.getProductImageStoragePath(); if (path != null) try { Files.deleteIfExists(Path.of(path)); } catch (IOException ignored) {}
+        product.setProductImageFileName(null); product.setProductImageContentType(null); product.setProductImageStoragePath(null); product.setUpdatedBy(accessService.actor()); productRepository.save(product); return toProduct(product);
     }
 
-    @Transactional
-    public Map<String, Object> deleteProductDrawing(UUID projectId, UUID productId) {
-        return deleteProductAttachment(projectId, productId, ProductAttachmentKind.DRAWING);
+    private MatFlowProductionFile createProductionFile(MatFlowProject project, MatFlowProjectDrawing product) {
+        MatFlowProductionFile file = new MatFlowProductionFile();
+        file.setProductionFileNo(buildFileNo(project.getProjectCode(), product.getDrawingNo()));
+        file.setProject(project); file.setProduct(product); syncSnapshots(file, project, product);
+        file.setPlannedDispatchDate(product.getRequiredDate() != null ? product.getRequiredDate() : project.getRequiredDate());
+        file.setCreatedBy(accessService.actor()); file.setUpdatedBy(accessService.actor());
+        file = productionFileRepository.save(file);
+        templateService.seedDesignChecklist(file);
+        return file;
     }
 
-    @Transactional
-    public ProjectPortfolioResponse create(ProjectRequest request) {
-        accessService.requireProjectWrite();
-        validateProjectRequest(request, false);
-
-        String plantCode = requiredUpper(request.plantCode(), "Plant");
-        String projectCode = requiredUpper(request.projectCode(), "PD No.");
-        accessService.requirePlantAccess(plantCode);
-
-        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCase(plantCode, projectCode)) {
-            throw conflict("PD No. already exists in plant " + plantCode + ": " + projectCode);
-        }
-
-        String actor = accessService.actor();
-        MatFlowProject project = new MatFlowProject();
-        applyProject(project, request, true);
-        project.setCreatedBy(actor);
-        project.setUpdatedBy(actor);
-        project = projectRepository.save(project);
-
-        auditService.record(
-                "PROJECT",
-                project.getId(),
-                "PROJECT_CREATED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                null,
-                auditService.details(
-                        "projectName", project.getProjectName(),
-                        "clientName", project.getClientName(),
-                        "priority", project.getPriority()));
-
-        return toPortfolio(project);
+    private void syncSnapshots(MatFlowProductionFile file, MatFlowProject project, MatFlowProjectDrawing product) {
+        file.setProject(project); file.setProduct(product); file.setProjectCode(project.getProjectCode()); file.setProjectName(project.getProjectName());
+        file.setClientName(project.getClientName()); file.setProductName(product.getProductName()); file.setDrawingNo(product.getDrawingNo()); file.setPlantCode(project.getPlantCode());
     }
 
-    @Transactional
-    public ProjectPortfolioResponse update(UUID id, ProjectRequest request) {
-        accessService.requireProjectWrite();
-        validateProjectRequest(request, true);
-
-        MatFlowProject project = requireProject(id);
-        assertVersion(request.rowVersion(), project.getRowVersion(), "Project");
-
-        List<MatFlowProjectDrawing> products = productsOf(project);
-        String nextCode = requiredUpper(request.projectCode(), "PD No.");
-        String nextPlant = requiredUpper(request.plantCode(), "Plant");
-
-        if (!products.isEmpty()
-                && (!same(project.getProjectCode(), nextCode) || !same(project.getPlantCode(), nextPlant))) {
-            throw conflict(
-                    "PD No. and plant cannot be changed after products have been created. Create a new Project instead.");
-        }
-
-        accessService.requirePlantAccess(nextPlant);
-        if (projectRepository.existsByPlantCodeIgnoreCaseAndProjectCodeIgnoreCaseAndIdNot(nextPlant, nextCode,
-                project.getId())) {
-            throw conflict("PD No. already exists in plant " + nextPlant + ": " + nextCode);
-        }
-
-        applyProject(project, request, false);
-        String actor = accessService.actor();
-        project.setUpdatedBy(actor);
-        project = projectRepository.save(project);
-
-        /* Keep compatibility snapshots in child Product rows synchronized. */
-        for (MatFlowProjectDrawing product : products) {
-            product.setProject(project);
-            product.setUpdatedBy(actor);
-            productRepository.save(product);
-        }
-
-        auditService.record(
-                "PROJECT",
-                project.getId(),
-                "PROJECT_UPDATED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                null,
-                auditService.details(
-                        "projectName", project.getProjectName(),
-                        "clientName", project.getClientName(),
-                        "active", project.isActive()));
-
-        return toPortfolio(project);
+    private String buildFileNo(String projectCode, String drawingNo) {
+        String raw = "PF-" + upper(projectCode) + "-" + upper(drawingNo);
+        return raw.replaceAll("[^A-Z0-9._-]+", "-").replaceAll("-+", "-");
     }
 
-    @Transactional
-    public ProjectPortfolioResponse addProduct(UUID projectId, ProductRequest request) {
-        if (request == null) {
-            throw badRequest("Product request is required");
-        }
-        return addProducts(projectId, List.of(request));
+    private void applyProject(MatFlowProject row, ProjectRequest request) {
+        row.setProjectCode(request.projectCode()); row.setProjectName(request.projectName()); row.setClientName(request.clientName()); row.setPlantCode(request.plantCode());
+        row.setRequiredDate(request.requiredDate()); row.setPriority(request.priority()); row.setProjectManager(request.projectManager()); row.setRemarks(request.remarks());
+        if (request.active() != null) row.setActive(request.active());
     }
 
-    /**
-     * Adds multiple Products to one Project in a single database transaction.
-     * All rows are validated, including duplicate drawing/revision keys, before
-     * the first Product is inserted. A validation failure therefore leaves the
-     * Project unchanged rather than partially creating a batch. Optional Product
-     * image/drawing files continue to use their existing per-Product endpoints.
-     */
-    @Transactional
-    public ProjectPortfolioResponse addProducts(UUID projectId, List<ProductRequest> requests) {
-        accessService.requireProjectWrite();
-
-        if (requests == null || requests.isEmpty()) {
-            throw badRequest("At least one Product is required");
-        }
-        if (requests.size() > 100) {
-            throw badRequest("A maximum of 100 Products can be added in one batch");
-        }
-
-        MatFlowProject project = requireProject(projectId);
-        if (!project.isActive()) {
-            throw conflict("Cannot add Products to an inactive Project");
-        }
-
-        List<MatFlowProjectDrawing> existingProducts = productsOf(project);
-        Set<String> existingKeys = new LinkedHashSet<>();
-        for (MatFlowProjectDrawing existing : existingProducts) {
-            existingKeys.add(productKey(existing.getDrawingNo(), existing.getDrawingRevision()));
-        }
-
-        Set<String> batchKeys = new LinkedHashSet<>();
-        for (int index = 0; index < requests.size(); index++) {
-            ProductRequest request = requests.get(index);
-            validateProductRequest(request, false);
-
-            String drawingNo = requiredUpper(request.drawingNo(), "Drawing number");
-            String drawingRevision = defaultRevision(request.drawingRevision());
-            String key = productKey(drawingNo, drawingRevision);
-
-            if (existingKeys.contains(key)) {
-                throw conflict("Drawing/revision already exists in this Project: "
-                        + drawingNo + " Rev " + drawingRevision);
-            }
-            if (!batchKeys.add(key)) {
-                throw conflict("Drawing/revision is repeated in this Product batch: "
-                        + drawingNo + " Rev " + drawingRevision);
-            }
-        }
-
-        String actor = accessService.actor();
-        LocalDateTime now = LocalDateTime.now();
-
-        try {
-            for (ProductRequest request : requests) {
-                MatFlowProjectDrawing product = new MatFlowProjectDrawing();
-                product.setProject(project);
-                applyProduct(product, request);
-                product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
-                product.setProductApprovedBy(actor);
-                product.setProductApprovedAt(now);
-                product.setProductReturnedBy(null);
-                product.setProductReturnedAt(null);
-                product.setProductApprovalRemarks(null);
-                product.setCreatedBy(actor);
-                product.setUpdatedBy(actor);
-                product = productRepository.save(product);
-
-                auditService.record(
-                        "PROJECT_PRODUCT",
-                        product.getId(),
-                        "PROJECT_PRODUCT_CREATED",
-                        project.getPlantCode(),
-                        project.getProjectCode(),
-                        product.getDrawingNo(),
-                        auditService.details(
-                                "projectId", project.getId(),
-                                "productName", product.getProductName(),
-                                "drawingRevision", product.getDrawingRevision(),
-                                "dimensions", formatDimensions(product),
-                                "batchCreate", requests.size() > 1,
-                                "executionEligible", true));
-            }
-
-            // Force unique/DB validation inside this service boundary so a
-            // concurrent duplicate becomes a controlled 409 and the whole batch rolls back.
-            productRepository.flush();
-        } catch (DataIntegrityViolationException ex) {
-            throw conflict(
-                    "One or more Products conflict with an existing Drawing / Revision. "
-                            + "Refresh the Project and retry the batch.");
-        }
-
-        return toPortfolio(project);
+    private void applyProduct(MatFlowProjectDrawing row, ProductRequest request) {
+        row.setProductName(request.productName()); row.setProductType(request.productType()); row.setDrawingNo(request.drawingNo()); row.setDrawingRevision(request.drawingRevision());
+        row.setUnitQuantity(request.unitQuantity()); row.setDimensionLength(request.dimensionLength()); row.setDimensionBreadth(request.dimensionBreadth()); row.setDimensionHeight(request.dimensionHeight());
+        row.setRequiredDate(request.requiredDate()); row.setRemarks(request.remarks()); if (request.active() != null) row.setActive(request.active());
     }
 
-    @Transactional
-    public ProjectPortfolioResponse updateProduct(UUID projectId, UUID productId, ProductRequest request) {
-        accessService.requireProjectWrite();
-        validateProductRequest(request, true);
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        assertVersion(request.rowVersion(), product.getRowVersion(), "Project Product");
-
-        String nextName = required(request.productName(), "Product name");
-        String nextDrawing = requiredUpper(request.drawingNo(), "Drawing number");
-        String nextRevision = defaultRevision(request.drawingRevision());
-
-        boolean identityChanged = !same(product.getProductName(), nextName)
-                || !same(product.getDrawingNo(), nextDrawing)
-                || !same(product.getDrawingRevision(), nextRevision)
-                || !sameDimension(product.getDimensionLength(), request.dimensionLength())
-                || !sameDimension(product.getDimensionBreadth(), request.dimensionBreadth())
-                || !sameDimension(product.getDimensionHeight(), request.dimensionHeight());
-
-        boolean hasBom = !bomRepository
-                .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
-                .isEmpty();
-
-        if (hasBom && identityChanged) {
-            throw conflict(
-                    "Product identity, drawing or dimensions cannot be changed after a BOM exists. Create a new Product/Drawing revision instead.");
-        }
-
-        boolean duplicate = productsOf(project).stream()
-                .filter(other -> !other.getId().equals(product.getId()))
-                .anyMatch(other -> same(other.getDrawingNo(), nextDrawing)
-                        && same(other.getDrawingRevision(), nextRevision));
-        if (duplicate)
-            throw conflict("Drawing/revision already exists in this Project");
-
-        applyProduct(product, request);
-        product.setProject(project);
-
-        String actor = accessService.actor();
-        if (identityChanged) {
-            product.setProductApprovalStatus(ProjectProductApprovalStatus.APPROVED);
-            product.setProductApprovedBy(actor);
-            product.setProductApprovedAt(LocalDateTime.now());
-            product.setProductReturnedBy(null);
-            product.setProductReturnedAt(null);
-            product.setProductApprovalRemarks(null);
-        }
-
-        product.setUpdatedBy(actor);
-        productRepository.save(product);
-
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PROJECT_PRODUCT_UPDATED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details(
-                        "productName", product.getProductName(),
-                        "dimensions", formatDimensions(product),
-                        "executionEligible", true,
-                        "identityChanged", identityChanged));
-
-        return toPortfolio(project);
+    private ProjectResponse toProject(MatFlowProject project) {
+        List<ProductResponse> products = productsOf(project.getId()).stream().map(this::toProduct).toList();
+        return new ProjectResponse(project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(), project.getPlantCode(), project.getRequiredDate(),
+                project.getPriority(), project.getProjectManager(), project.getRemarks(), project.isActive(), products.size(), project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
     }
 
-    /**
-     * Permanently removes a setup-only Project aggregate.
-     *
-     * Historical execution is deliberately protected: once any Product owns a
-     * BOM or material requisition, the Project must be deactivated instead of
-     * deleted so audit and material traceability remain intact.
-     */
-    @Transactional
-    public void deleteProject(UUID projectId, Long rowVersion) {
-        accessService.requireProjectWrite();
-
-        MatFlowProject project = requireProject(projectId);
-        assertVersion(rowVersion, project.getRowVersion(), "Project");
-
-        List<MatFlowProjectDrawing> products = productsOf(project);
-        for (MatFlowProjectDrawing product : products) {
-            assertProductCanBeDeleted(product);
-        }
-
-        String actor = accessService.actor();
-
-        for (MatFlowProjectDrawing product : products) {
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    product.getId(),
-                    "PROJECT_PRODUCT_DELETED",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    product.getDrawingNo(),
-                    auditService.details(
-                            "projectId", project.getId(),
-                            "productName", product.getProductName(),
-                            "drawingRevision", product.getDrawingRevision(),
-                            "deletedBy", actor));
-        }
-
-        auditService.record(
-                "PROJECT",
-                project.getId(),
-                "PROJECT_DELETED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                null,
-                auditService.details(
-                        "projectName", project.getProjectName(),
-                        "clientName", project.getClientName(),
-                        "productCount", products.size(),
-                        "deletedBy", actor));
-
-        try {
-            if (!products.isEmpty()) {
-                productRepository.deleteAll(products);
-                /*
-                 * Force FK/constraint validation inside this service method so a
-                 * protected historical reference becomes a controlled 409 rather
-                 * than an uncaught transaction-commit 500.
-                 */
-                productRepository.flush();
-            }
-
-            projectRepository.delete(project);
-            projectRepository.flush();
-
-            for (MatFlowProjectDrawing product : products) {
-                deleteProductAttachmentDirectoryQuietly(product.getId());
-            }
-        } catch (DataIntegrityViolationException ex) {
-            throw conflict(
-                    "Cannot delete Project '" + project.getProjectCode()
-                            + "' because another MatFlow record still references the Project or one of its Products. "
-                            + "Deactivate it instead so historical traceability is preserved.");
-        }
+    private ProductResponse toProduct(MatFlowProjectDrawing product) {
+        MatFlowProductionFile file = productionFileRepository.findByProduct_Id(product.getId()).orElse(null);
+        return new ProductResponse(product.getId(), product.getProject().getId(), product.getProductName(), product.getProductType(), product.getDrawingNo(), product.getDrawingRevision(),
+                product.getUnitQuantity() == null ? 1 : product.getUnitQuantity(), product.getDimensionLength(), product.getDimensionBreadth(), product.getDimensionHeight(), product.getDimensionUom(), dimensions(product),
+                product.getRequiredDate(), product.getRemarks(), product.isActive(), clean(product.getProductImageStoragePath()) != null,
+                file == null ? null : file.getId(), file == null ? null : file.getProductionFileNo(), file == null ? null : file.getStage().name(), file == null ? null : file.getReleaseHealth().name(),
+                product.getRowVersion(), product.getCreatedAt(), product.getUpdatedAt());
     }
 
-    /**
-     * Permanently removes one setup-only Product/Drawing child.
-     * Products that already own BOM or material-requisition history are kept
-     * immutable from a deletion perspective and should be deactivated instead.
-     */
-    @Transactional
-    public ProjectPortfolioResponse deleteProduct(
-            UUID projectId,
-            UUID productId,
-            Long rowVersion) {
-
-        accessService.requireProjectWrite();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        assertVersion(rowVersion, product.getRowVersion(), "Project Product");
-        assertProductCanBeDeleted(product);
-
-        String actor = accessService.actor();
-
-        auditService.record(
-                "PROJECT_PRODUCT",
-                product.getId(),
-                "PROJECT_PRODUCT_DELETED",
-                project.getPlantCode(),
-                project.getProjectCode(),
-                product.getDrawingNo(),
-                auditService.details(
-                        "projectId", project.getId(),
-                        "productName", product.getProductName(),
-                        "drawingRevision", product.getDrawingRevision(),
-                        "deletedBy", actor));
-
-        try {
-            productRepository.delete(product);
-            /* See deleteProject(): force the physical constraint check here. */
-            productRepository.flush();
-            deleteProductAttachmentDirectoryQuietly(product.getId());
-        } catch (DataIntegrityViolationException ex) {
-            throw conflict(
-                    "Cannot delete Product '" + product.getProductName()
-                            + "' because another MatFlow record still references it. "
-                            + "Deactivate it instead so historical traceability is preserved.");
-        }
-
-        return toPortfolio(project);
+    private List<MatFlowProjectDrawing> productsOf(UUID projectId) { return productRepository.findByProject_IdOrderByCreatedAtAsc(projectId); }
+    private MatFlowProject requireProject(UUID id) { return projectRepository.findById(id).orElseThrow(() -> notFound("Project not found")); }
+    private MatFlowProjectDrawing requireProduct(UUID projectId, UUID productId) {
+        MatFlowProjectDrawing p = productRepository.findById(productId).orElseThrow(() -> notFound("Product not found"));
+        if (p.getProject() == null || !projectId.equals(p.getProject().getId())) throw notFound("Product not found in this project");
+        return p;
     }
-
-    private Map<String, Object> deleteProductAttachment(
-            UUID projectId,
-            UUID productId,
-            ProductAttachmentKind kind) {
-
-        accessService.requireProjectWrite();
-
-        MatFlowProject project = requireProject(projectId);
-        MatFlowProjectDrawing product = requireProduct(project, productId);
-        Path path = findAttachmentPath(product.getId(), kind);
-
-        if (path != null) {
-            try {
-                Files.deleteIfExists(path);
-                deleteDirectoryIfEmpty(path.getParent());
-            } catch (IOException ex) {
-                throw new ResponseStatusException(
-                        HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Unable to remove " + kind.label,
-                        ex);
-            }
-
-            auditService.record(
-                    "PROJECT_PRODUCT",
-                    product.getId(),
-                    kind == ProductAttachmentKind.PRODUCT_IMAGE
-                            ? "PRODUCT_IMAGE_REMOVED"
-                            : "PRODUCT_DRAWING_REMOVED",
-                    project.getPlantCode(),
-                    project.getProjectCode(),
-                    product.getDrawingNo(),
-                    auditService.details(
-                            "productName", product.getProductName(),
-                            "drawingRevision", product.getDrawingRevision()));
-        }
-
-        return productAttachmentStatus(project, product);
+    private String dimensions(MatFlowProjectDrawing p) {
+        if (p.getDimensionLength() == null || p.getDimensionBreadth() == null || p.getDimensionHeight() == null) return null;
+        return strip(p.getDimensionLength()) + " x " + strip(p.getDimensionBreadth()) + " x " + strip(p.getDimensionHeight()) + " " + p.getDimensionUom();
     }
-
-    private Map<String, Object> productAttachmentStatus(
-            MatFlowProject project,
-            MatFlowProjectDrawing product) {
-
-        Path image = findAttachmentPath(product == null ? null : product.getId(),
-                ProductAttachmentKind.PRODUCT_IMAGE);
-        Path drawing = findAttachmentPath(product == null ? null : product.getId(),
-                ProductAttachmentKind.DRAWING);
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("projectId", project == null ? null : project.getId());
-        response.put("productId", product == null ? null : product.getId());
-        response.put("productImageAvailable", image != null);
-        response.put("drawingAvailable", drawing != null);
-        response.put("productImageFileName",
-                image == null || product == null
-                        ? null
-                        : downloadFileName(product, ProductAttachmentKind.PRODUCT_IMAGE, image));
-        response.put("drawingFileName",
-                drawing == null || product == null
-                        ? null
-                        : downloadFileName(product, ProductAttachmentKind.DRAWING, drawing));
-        return response;
+    private String strip(BigDecimal value) { return value.stripTrailingZeros().toPlainString(); }
+    private Path resolveRoot(String configured) {
+        String c=clean(configured); Path root=c==null ? Path.of(System.getProperty("java.io.tmpdir"), "alsorg", "matflow", "product-images") : Path.of(c); return root.toAbsolutePath().normalize();
     }
-
-    private void saveAttachment(
-            MatFlowProjectDrawing product,
-            ProductAttachmentKind kind,
-            MultipartFile file) {
-
-        validateAttachment(kind, file);
-
-        UUID productId = product == null ? null : product.getId();
-        if (productId == null) {
-            throw badRequest("Product ID is required before an attachment can be saved");
-        }
-
-        String ext = extension(file.getOriginalFilename());
-        Path directory = productAttachmentDirectory(productId);
-        Path target = directory.resolve(kind.baseName + "." + ext).normalize();
-
-        if (!target.getParent().equals(directory)) {
-            throw badRequest("Invalid Product attachment path");
-        }
-
-        Path temporary = null;
-        try {
-            Files.createDirectories(directory);
-            temporary = directory.resolve(
-                    kind.baseName + ".upload-" + UUID.randomUUID() + ".tmp");
-
-            Files.copy(
-                    file.getInputStream(),
-                    temporary,
-                    StandardCopyOption.REPLACE_EXISTING);
-
-            try {
-                Files.move(
-                        temporary,
-                        target,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING);
-            } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
-                Files.move(
-                        temporary,
-                        target,
-                        StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            for (String otherExtension : kind.extensions) {
-                Path old = directory.resolve(kind.baseName + "." + otherExtension);
-                if (!old.equals(target)) {
-                    Files.deleteIfExists(old);
-                }
-            }
-        } catch (IOException ex) {
-            if (temporary != null) {
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                    // best-effort cleanup
-                }
-            }
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Unable to store " + kind.label,
-                    ex);
-        }
-    }
-
-    private void validateAttachment(
-            ProductAttachmentKind kind,
-            MultipartFile file) {
-
-        if (file == null || file.isEmpty()) {
-            throw badRequest("Select a " + kind.label + " to upload");
-        }
-
-        if (file.getSize() > kind.maxBytes) {
-            throw badRequest(
-                    kind.label + " cannot exceed " + (kind.maxBytes / (1024L * 1024L)) + " MB");
-        }
-
-        String ext = extension(file.getOriginalFilename());
-        if (!kind.extensionSet.contains(ext)) {
-            throw badRequest(
-                    kind.label + " must be one of: " + String.join(", ", kind.extensions));
-        }
-
-        String contentType = clean(file.getContentType());
-        if (kind == ProductAttachmentKind.PRODUCT_IMAGE
-                && contentType != null
-                && !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
-            throw badRequest("Product image must be an image file");
-        }
-    }
-
-    private Path requireAttachmentPath(
-            MatFlowProjectDrawing product,
-            ProductAttachmentKind kind) {
-
-        Path path = findAttachmentPath(product == null ? null : product.getId(), kind);
-        if (path == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    kind.label + " not found");
-        }
-        return path;
-    }
-
-    private Path findAttachmentPath(
-            UUID productId,
-            ProductAttachmentKind kind) {
-
-        if (productId == null) {
-            return null;
-        }
-
-        Path directory = productAttachmentDirectory(productId);
-        for (String ext : kind.extensions) {
-            Path candidate = directory.resolve(kind.baseName + "." + ext);
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    private Path productAttachmentDirectory(UUID productId) {
-        if (productId == null) {
-            throw badRequest("Product ID is required");
-        }
-        Path directory = attachmentRoot.resolve(productId.toString()).normalize();
-        if (!directory.getParent().equals(attachmentRoot)) {
-            throw badRequest("Invalid Product attachment directory");
-        }
-        return directory;
-    }
-
-    private String attachmentContentType(Path path) {
-        if (path == null) {
-            return "application/octet-stream";
-        }
-
-        try {
-            String detected = Files.probeContentType(path);
-            if (detected != null && !detected.isBlank()) {
-                return detected;
-            }
-        } catch (IOException ignored) {
-            // fallback below
-        }
-
-        return mediaTypeForExtension(extension(path.getFileName().toString()));
-    }
-
-    private String downloadFileName(
-            MatFlowProjectDrawing product,
-            ProductAttachmentKind kind,
-            Path path) {
-
-        String ext = extension(path == null ? null : path.getFileName().toString());
-        String stem;
-
-        if (kind == ProductAttachmentKind.PRODUCT_IMAGE) {
-            stem = safeFileStem(
-                    (product == null ? "product" : product.getProductName()) + "-image");
-        } else {
-            stem = safeFileStem(
-                    (product == null ? "drawing" : product.getDrawingNo())
-                            + "-Rev-"
-                            + (product == null ? "0" : defaultRevision(product.getDrawingRevision())));
-        }
-
-        return stem + (ext.isBlank() ? "" : "." + ext);
-    }
-
-    private String safeFileStem(String value) {
-        String cleaned = clean(value);
-        if (cleaned == null) {
-            return "matflow-file";
-        }
-
-        String safe = cleaned
-                .replaceAll("[^A-Za-z0-9._-]+", "_")
-                .replaceAll("_+", "_")
-                .replaceAll("^[_\\.]+|[_\\.]+$", "");
-
-        return safe.isBlank() ? "matflow-file" : safe;
-    }
-
-    private String extension(String fileName) {
-        String name = clean(fileName);
-        if (name == null) {
-            return "";
-        }
-
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
-            return "";
-        }
-
-        return name.substring(dot + 1).toLowerCase(Locale.ROOT);
-    }
-
-    private String mediaTypeForExtension(String ext) {
-        return switch (ext) {
-            case "png" -> "image/png";
-            case "jpg", "jpeg" -> "image/jpeg";
-            case "webp" -> "image/webp";
-            case "pdf" -> "application/pdf";
-            case "dwg" -> "image/vnd.dwg";
-            case "dxf" -> "image/vnd.dxf";
-            default -> "application/octet-stream";
-        };
-    }
-
-    private Path resolveAttachmentRoot(String configured) {
-        String directory = clean(configured);
-        if (directory != null) {
-            return Path.of(directory).toAbsolutePath().normalize();
-        }
-
-        return Path.of(
-                System.getProperty("user.home"),
-                ".flowsuite",
-                "matflow",
-                "product-attachments")
-                .toAbsolutePath()
-                .normalize();
-    }
-
-    private void deleteProductAttachmentDirectoryQuietly(UUID productId) {
-        if (productId == null) {
-            return;
-        }
-
-        Path directory;
-        try {
-            directory = productAttachmentDirectory(productId);
-        } catch (RuntimeException ignored) {
-            return;
-        }
-
-        try {
-            if (!Files.isDirectory(directory)) {
-                return;
-            }
-
-            try (var paths = Files.list(directory)) {
-                paths.forEach(path -> {
-                    try {
-                        Files.deleteIfExists(path);
-                    } catch (IOException ignored) {
-                        // setup-record deletion must not fail because evidence cleanup failed
-                    }
-                });
-            }
-            Files.deleteIfExists(directory);
-        } catch (IOException ignored) {
-            // best-effort orphan cleanup
-        }
-    }
-
-    private void deleteDirectoryIfEmpty(Path directory) throws IOException {
-        if (directory == null || !Files.isDirectory(directory)) {
-            return;
-        }
-
-        boolean empty;
-        try (var paths = Files.list(directory)) {
-            empty = paths.findAny().isEmpty();
-        }
-
-        if (empty) {
-            Files.deleteIfExists(directory);
-        }
-    }
-
-    private enum ProductAttachmentKind {
-        PRODUCT_IMAGE(
-                "Product image",
-                "product-image",
-                PRODUCT_IMAGE_MAX_BYTES,
-                PRODUCT_IMAGE_EXTENSIONS,
-                PRODUCT_IMAGE_EXTENSION_SET),
-        DRAWING(
-                "Product drawing",
-                "drawing",
-                DRAWING_MAX_BYTES,
-                PRODUCT_DRAWING_EXTENSIONS,
-                PRODUCT_DRAWING_EXTENSION_SET);
-
-        private final String label;
-        private final String baseName;
-        private final long maxBytes;
-        private final List<String> extensions;
-        private final Set<String> extensionSet;
-
-        ProductAttachmentKind(
-                String label,
-                String baseName,
-                long maxBytes,
-                List<String> extensions,
-                Set<String> extensionSet) {
-            this.label = label;
-            this.baseName = baseName;
-            this.maxBytes = maxBytes;
-            this.extensions = extensions;
-            this.extensionSet = extensionSet;
-        }
-    }
-
-    private void assertProductCanBeDeleted(MatFlowProjectDrawing product) {
-        if (product == null || product.getId() == null) {
-            throw badRequest("Project Product is required");
-        }
-
-        boolean hasBom = !bomRepository
-                .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
-                .isEmpty();
-        boolean hasRequisition = !requisitionRepository
-                .findByProjectDrawing_IdOrderByCreatedAtDesc(product.getId())
-                .isEmpty();
-
-        /*
-         * Design / Engineering workspace history is append-only in mf_audit_logs.
-         * A Product with a Design submission or Engineering task must therefore
-         * be protected exactly like a Product with BOM/MR history; otherwise the
-         * Product master and its revision-controlled drawings could be deleted
-         * while workflow history still points to that Product ID.
-         *
-         * This scan is intentionally deletion-only (rare) so normal Project reads
-         * stay as fast as before and no new repository query/API is required.
-         */
-        String productToken = product.getId().toString();
-        boolean hasDesignEngineeringHistory = auditLogRepository.findAll().stream()
-                .filter(java.util.Objects::nonNull)
-                .filter(row -> "MATFLOW_DESIGN_SUBMISSION".equalsIgnoreCase(row.getEntityType())
-                        || "MATFLOW_ENGINEERING_TASK".equalsIgnoreCase(row.getEntityType()))
-                .map(row -> row.getDetailsJson())
-                .filter(java.util.Objects::nonNull)
-                .anyMatch(json -> json.contains(productToken));
-
-        if (hasBom || hasRequisition || hasDesignEngineeringHistory) {
-            java.util.List<String> dependencies = new java.util.ArrayList<>();
-            if (hasDesignEngineeringHistory) dependencies.add("Design / Engineering workflow history");
-            if (hasBom) dependencies.add("BOM history");
-            if (hasRequisition) dependencies.add("material requisition history");
-
-            throw conflict(
-                    "Cannot delete Product '" + product.getProductName() + "' because it already has "
-                            + String.join(", ", dependencies)
-                            + ". Mark the Product inactive instead so MatFlow traceability is preserved.");
-        }
-    }
-
-    /**
-     * Project Portfolio is an administrative/master view, not the execution
-     * tracker. Keep this response intentionally shallow: Project -> Product ->
-     * latest BOM readiness only. Material demand, reservation, shortage, transfer,
-     * QC, processing and production quantities belong to the Tracker endpoint.
-     *
-     * This also avoids unnecessarily traversing live requisition graphs from the
-     * Projects & Products page, which makes the portfolio read faster and removes
-     * Hibernate proxy sensitivity from a master-data screen.
-     */
-    private ProjectPortfolioResponse toPortfolio(MatFlowProject project) {
-        List<ProductPortfolioRow> products = productsOf(project).stream()
-                .sorted(Comparator.comparing(
-                        MatFlowProjectDrawing::getCreatedAt,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .map(this::toAdministrativeProductRow)
-                .toList();
-
-        String portfolioStage = derivePortfolioStage(products);
-        String portfolioHealth = derivePortfolioHealth(project, products);
-
-        return new ProjectPortfolioResponse(
-                project.getId(),
-                project.getProjectCode(),
-                project.getProjectName(),
-                project.getClientName(),
-                project.getPlantCode(),
-                project.getRequiredDate(),
-                project.getPriority(),
-                project.getProjectManager(),
-                project.getRemarks(),
-                project.isActive(),
-                products.size(),
-                portfolioStage,
-                portfolioHealth,
-                project.getRowVersion(),
-                project.getCreatedAt(),
-                project.getUpdatedAt(),
-                products);
-    }
-
-    private ProductPortfolioRow toAdministrativeProductRow(MatFlowProjectDrawing product) {
-        MatFlowBom latestBom = bomRepository
-                .findByProjectDrawing_IdOrderByRevisionNoDesc(product.getId())
-                .stream()
-                .findFirst()
-                .orElse(null);
-
-        return new ProductPortfolioRow(
-                product.getId(),
-                product.getProductName(),
-                product.getDrawingNo(),
-                product.getDrawingRevision(),
-                product.getDimensionLength(),
-                product.getDimensionBreadth(),
-                product.getDimensionHeight(),
-                product.getDimensionUom(),
-                formatDimensions(product),
-                product.getRequiredDate(),
-                product.isActive(),
-                latestBom == null ? null : latestBom.getId(),
-                latestBom == null ? null : latestBom.getBomNumber(),
-                latestBom == null ? null : latestBom.getRevisionNo(),
-                latestBom == null || latestBom.getStatus() == null
-                        ? null
-                        : latestBom.getStatus().name(),
-                latestBom != null && latestBom.isEffective(),
-                deriveProductPortfolioStage(product, latestBom),
-                product.getRowVersion(),
-                product.getCreatedAt(),
-                product.getUpdatedAt());
-    }
-
-    private String deriveProductPortfolioStage(
-            MatFlowProjectDrawing product,
-            MatFlowBom latestBom) {
-
-        if (product == null || !product.isActive())
-            return "INACTIVE";
-
-        if (latestBom == null)
-            return "ENGINEERING / BOM";
-        if (!latestBom.isEffective())
-            return "BOM REVIEW";
-        return "READY FOR EXECUTION";
-    }
-
-    private String derivePortfolioStage(List<ProductPortfolioRow> products) {
-        if (products == null || products.isEmpty())
-            return "PROJECT SETUP";
-
-        if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
-            return "ENGINEERING / BOM";
-        }
-
-        return "BOM ADMINISTRATION";
-    }
-
-    private String derivePortfolioHealth(
-            MatFlowProject project,
-            List<ProductPortfolioRow> products) {
-
-        if (project == null || !project.isActive())
-            return "INACTIVE";
-        if (products == null || products.isEmpty())
-            return "SETUP";
-
-        if (project.getRequiredDate() != null
-                && project.getRequiredDate().isBefore(java.time.LocalDate.now())) {
-            return "OVERDUE";
-        }
-
-        if (products.stream().anyMatch(p -> p.latestBomId() == null)) {
-            return "BOM_PENDING";
-        }
-
-        return "READY";
-    }
-
-    private List<MatFlowProjectDrawing> productsOf(MatFlowProject project) {
-        UUID id = project == null ? null : project.getId();
-        if (id == null)
-            return List.of();
-        return productRepository.findByProject_IdOrderByCreatedAtAsc(id);
-    }
-
-    private MatFlowProject requireProject(UUID id) {
-        if (id == null)
-            throw badRequest("Project ID is required");
-        MatFlowProject project = projectRepository.findById(id)
-                .orElseThrow(() -> notFound("MatFlow Project not found"));
-        accessService.requirePlantAccess(project.getPlantCode());
-        return project;
-    }
-
-    private MatFlowProjectDrawing requireProduct(MatFlowProject project, UUID productId) {
-        if (productId == null)
-            throw badRequest("Product ID is required");
-        MatFlowProjectDrawing product = productRepository.findById(productId)
-                .orElseThrow(() -> notFound("Project Product not found"));
-        if (product.getProject() == null || !project.getId().equals(product.getProject().getId())) {
-            throw conflict("Product does not belong to the selected Project");
-        }
-        return product;
-    }
-
-    private void applyProject(MatFlowProject project, ProjectRequest request, boolean creating) {
-        project.setProjectCode(requiredUpper(request.projectCode(), "PD No."));
-        project.setProjectName(required(request.projectName(), "Project name"));
-        project.setClientName(required(request.clientName(), "Client name"));
-        project.setPlantCode(requiredUpper(request.plantCode(), "Plant"));
-        project.setRequiredDate(request.requiredDate());
-        project.setPriority(request.priority());
-        project.setProjectManager(request.projectManager());
-        project.setRemarks(request.remarks());
-        project.setActive(request.active() == null ? creating || project.isActive() : request.active());
-    }
-
-    private void applyProduct(MatFlowProjectDrawing product, ProductRequest request) {
-        product.setProductName(required(request.productName(), "Product name"));
-        product.setDrawingNo(requiredUpper(request.drawingNo(), "Drawing number"));
-        product.setDrawingRevision(defaultRevision(request.drawingRevision()));
-        product.setDimensionLength(normalizeDimension(request.dimensionLength()));
-        product.setDimensionBreadth(normalizeDimension(request.dimensionBreadth()));
-        product.setDimensionHeight(normalizeDimension(request.dimensionHeight()));
-        product.setDimensionUom("MM");
-        product.setRequiredDate(request.requiredDate());
-        product.setRemarks(request.remarks());
-        product.setActive(request.active() == null || request.active());
-    }
-
-    private void validateProjectRequest(ProjectRequest request, boolean update) {
-        if (request == null)
-            throw badRequest("Project request is required");
-        required(request.projectCode(), "PD No.");
-        required(request.projectName(), "Project name");
-        required(request.clientName(), "Client name");
-        required(request.plantCode(), "Plant");
-        if (update && request.rowVersion() == null)
-            throw badRequest("Project rowVersion is required");
-    }
-
-    private void validateProductRequest(ProductRequest request, boolean update) {
-        if (request == null)
-            throw badRequest("Product request is required");
-        required(request.productName(), "Product name");
-        required(request.drawingNo(), "Drawing number");
-        validateDimensions(request.dimensionLength(), request.dimensionBreadth(), request.dimensionHeight());
-        if (update && request.rowVersion() == null)
-            throw badRequest("Project Product rowVersion is required");
-    }
-
-    private void validateDimensions(BigDecimal length, BigDecimal breadth, BigDecimal height) {
-        boolean any = length != null || breadth != null || height != null;
-        if (!any) {
-            return;
-        }
-        if (length == null || breadth == null || height == null) {
-            throw badRequest("Enter complete Product dimensions as L x B x H, or leave all three blank");
-        }
-        if (length.compareTo(BigDecimal.ZERO) <= 0
-                || breadth.compareTo(BigDecimal.ZERO) <= 0
-                || height.compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest("Product dimensions L x B x H must all be greater than zero");
-        }
-    }
-
-    private BigDecimal normalizeDimension(BigDecimal value) {
-        return value == null ? null : value.setScale(3, RoundingMode.HALF_UP);
-    }
-
-    private boolean sameDimension(BigDecimal left, BigDecimal right) {
-        BigDecimal a = normalizeDimension(left);
-        BigDecimal b = normalizeDimension(right);
-        if (a == null || b == null) {
-            return a == null && b == null;
-        }
-        return a.compareTo(b) == 0;
-    }
-
-    private String productKey(String drawingNo, String drawingRevision) {
-        return requiredUpper(drawingNo, "Drawing number") + "|" + defaultRevision(drawingRevision);
-    }
-
-    private String formatDimensions(MatFlowProjectDrawing product) {
-        if (product == null
-                || product.getDimensionLength() == null
-                || product.getDimensionBreadth() == null
-                || product.getDimensionHeight() == null) {
-            return null;
-        }
-        return dimensionText(product.getDimensionLength())
-                + " x " + dimensionText(product.getDimensionBreadth())
-                + " x " + dimensionText(product.getDimensionHeight())
-                + " " + (cleanUpper(product.getDimensionUom()) == null ? "MM" : cleanUpper(product.getDimensionUom()));
-    }
-
-    private String dimensionText(BigDecimal value) {
-        if (value == null) {
-            return "";
-        }
-        BigDecimal normalized = value.stripTrailingZeros();
-        return normalized.scale() < 0
-                ? normalized.setScale(0).toPlainString()
-                : normalized.toPlainString();
-    }
-
-    private void assertVersion(Long requested, Long current, String entity) {
-        if (requested == null)
-            throw badRequest(entity + " rowVersion is required");
-        if (!requested.equals(current))
-            throw conflict(entity + " was modified by another user. Refresh and retry.");
-    }
-
-    private boolean same(String a, String b) {
-        return cleanUpper(a) != null && cleanUpper(a).equals(cleanUpper(b));
-    }
-
-    private String defaultRevision(String value) {
-        String v = cleanUpper(value);
-        return v == null ? "0" : v;
-    }
-
-    private String requiredUpper(String value, String field) {
-        String v = cleanUpper(value);
-        if (v == null)
-            throw badRequest(field + " is required");
-        return v;
-    }
-
-    private String required(String value, String field) {
-        String v = clean(value);
-        if (v == null)
-            throw badRequest(field + " is required");
-        return v;
-    }
-
-    private String cleanUpper(String value) {
-        String v = clean(value);
-        return v == null ? null : v.toUpperCase(Locale.ROOT);
-    }
-
-    private String clean(String value) {
-        if (value == null)
-            return null;
-        String v = value.trim();
-        return v.isBlank() ? null : v;
-    }
-
-    private String normalizeSearch(String value) {
-        String v = clean(value);
-        return v == null ? "" : v.toLowerCase(Locale.ROOT);
-    }
-
-    private boolean contains(String value, String query) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(query);
-    }
-
-    private ResponseStatusException badRequest(String message) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
-    }
-
-    private ResponseStatusException conflict(String message) {
-        return new ResponseStatusException(HttpStatus.CONFLICT, message);
-    }
-
-    private ResponseStatusException notFound(String message) {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
-    }
+    private String safeExtension(String name) { String n=clean(name); if (n==null || !n.contains(".")) return ""; String ext=n.substring(n.lastIndexOf('.')+1).toLowerCase(Locale.ROOT); return ext.matches("[a-z0-9]{1,8}") ? ext : ""; }
+    private String safeFileName(String value, String fallback) { String c=clean(value); if (c==null) c=fallback; return c.replaceAll("[\\/\r\n\"]", "_"); }
+    private void requireVersion(Long actual, Long supplied) { if (supplied == null || !supplied.equals(actual)) throw conflict("Record changed. Refresh and retry."); }
+    private String clean(String value) { if (value==null) return null; String v=value.trim(); return v.isBlank()?null:v; }
+    private String upper(String value) { String v=clean(value); return v==null?"":v.toUpperCase(Locale.ROOT); }
+    private String upperOrNull(String value) { String v=clean(value); return v==null?null:v.toUpperCase(Locale.ROOT); }
+    private boolean contains(String value, String q) { return value != null && value.toLowerCase(Locale.ROOT).contains(q); }
+    private ResponseStatusException notFound(String m) { return new ResponseStatusException(HttpStatus.NOT_FOUND, m); }
+    private ResponseStatusException conflict(String m) { return new ResponseStatusException(HttpStatus.CONFLICT, m); }
+    private ResponseStatusException badRequest(String m) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, m); }
 }

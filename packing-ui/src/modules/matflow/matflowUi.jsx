@@ -505,26 +505,12 @@ export const getMatFlowRole = (roleOrRoles, extraRoles = []) => {
 
 const MATFLOW_SCREEN_ROLES = Object.freeze({
   dashboard: ALL_MATFLOW_ROLES,
-  tracking: ALL_MATFLOW_ROLES,
-  exceptions: ALL_MATFLOW_ROLES,
-  work: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
-  projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
-  materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE, MATFLOW_ROLES.QC],
-  "processing-units": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
-  boms: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
+  work: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
+  projects: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
+  materials: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
+  boms: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.DIRECTOR],
   "bom-create": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
-  "bom-edit": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING],
-  production: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION],
-  "production-execution": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PRODUCTION],
-  store: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE],
-  returns: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PRODUCTION],
-  purchase: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PURCHASE],
-  receiving: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE],
-  qc: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.QC],
-  processing: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.PROCESSING],
-  "material-register": [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.PURCHASE, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
-  ledger: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.STORE, MATFLOW_ROLES.DIRECTOR],
-  reports: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR],
+  release: [MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.PRODUCTION, MATFLOW_ROLES.DIRECTOR],
 });
 
 export const canAccessMatFlowScreen = (screen, roleOrRoles) => {
@@ -540,19 +526,8 @@ export const canAccessMatFlowScreen = (screen, roleOrRoles) => {
  * physically exist only at AL-P1 Main Store.
  */
 export const canAccessMatFlowScreenForContext = (screen, roleOrRoles, plantCodes = []) => {
-  const roles = getMatFlowRoles(roleOrRoles);
-  if (!canAccessMatFlowScreen(screen, roles)) return false;
-  if (roles.includes(MATFLOW_ROLES.ADMIN) || roles.includes(MATFLOW_ROLES.MANAGER)) return true;
-
-  const plants = Array.from(new Set((Array.isArray(plantCodes) ? plantCodes : [plantCodes])
-    .map((value) => String(value ?? "").trim().toUpperCase())
-    .filter(Boolean)));
-
-  // Purchase, GRN and QC are centralized at AL-P1 Main Store in the four-plant workflow.
-  if (["purchase", "receiving", "qc"].includes(screen)) {
-    return plants.includes("AL-P1");
-  }
-  return true;
+  void plantCodes;
+  return canAccessMatFlowScreen(screen, roleOrRoles);
 };
 
 export const matFlowRoleLabel = (roleOrRoles) => {
@@ -573,21 +548,8 @@ export const matFlowRoleLabel = (roleOrRoles) => {
 export const defaultMatFlowPathForRole = (roleOrRoles) => {
   const roles = getMatFlowRoles(roleOrRoles);
   if (!roles.length) return "/modules";
-
-  // Managers keep the universal command center. Department users land directly
-  // on the desk where they actually work, while Dashboard stays one click away.
-  if (roles.includes(MATFLOW_ROLES.ADMIN) ||
-    roles.includes(MATFLOW_ROLES.MANAGER) ||
-    roles.includes(MATFLOW_ROLES.DIRECTOR)) {
-    return "/matflow/dashboard";
-  }
   if (roles.includes(MATFLOW_ROLES.ENGINEERING)) return "/matflow/work";
-  if (roles.includes(MATFLOW_ROLES.PRODUCTION)) return "/matflow/production";
-  if (roles.includes(MATFLOW_ROLES.STORE)) return "/matflow/store";
-  // Purchase and QC are AL-P1-only desks, so their safe landing stays the
-  // plant-aware Dashboard; the sidebar exposes the desk when AL-P1 is active.
-  if (roles.includes(MATFLOW_ROLES.PURCHASE) || roles.includes(MATFLOW_ROLES.QC)) return "/matflow/dashboard";
-  if (roles.includes(MATFLOW_ROLES.PROCESSING)) return "/matflow/processing";
+  if (roles.includes(MATFLOW_ROLES.PRODUCTION)) return "/matflow/release";
   return "/matflow/dashboard";
 };
 

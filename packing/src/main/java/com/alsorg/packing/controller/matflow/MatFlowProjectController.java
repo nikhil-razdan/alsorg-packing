@@ -1,231 +1,46 @@
 package com.alsorg.packing.controller.matflow;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductBulkCreateRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectRequest;
+import static com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.*;
+
 import com.alsorg.packing.service.matflow.MatFlowProjectService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
-/** Canonical approval-free Project -> Products aggregate API. */
 @RestController
 @RequestMapping("/api/matflow/projects")
 @PreAuthorize("isAuthenticated()")
 public class MatFlowProjectController {
-
     private final MatFlowProjectService service;
+    public MatFlowProjectController(MatFlowProjectService service){this.service=service;}
 
-    public MatFlowProjectController(MatFlowProjectService service) {
-        this.service = service;
-    }
+    @GetMapping public List<ProjectResponse> list(@RequestParam(required=false)String search,@RequestParam(required=false)Boolean active,@RequestParam(required=false)String plantCode){return service.list(search,active,plantCode);}
+    @GetMapping("/{projectId}") public ProjectResponse get(@PathVariable UUID projectId){return service.get(projectId);}
+    @PostMapping public ProjectResponse create(@Valid @RequestBody ProjectRequest request){return service.create(request);}
+    @PutMapping("/{projectId}") public ProjectResponse update(@PathVariable UUID projectId,@Valid @RequestBody ProjectRequest request){return service.update(projectId,request);}
+    @DeleteMapping("/{projectId}") public ProjectResponse deactivate(@PathVariable UUID projectId,@RequestParam Long rowVersion){return service.deactivateProject(projectId,rowVersion);}
+    @PostMapping("/{projectId}/products") public ProjectResponse addProduct(@PathVariable UUID projectId,@Valid @RequestBody ProductRequest request){return service.addProduct(projectId,request);}
+    @PostMapping("/{projectId}/products/bulk") public ProjectResponse addProducts(@PathVariable UUID projectId,@Valid @RequestBody ProductBulkCreateRequest request){return service.addProducts(projectId,request);}
+    @PutMapping("/{projectId}/products/{productId}") public ProjectResponse updateProduct(@PathVariable UUID projectId,@PathVariable UUID productId,@Valid @RequestBody ProductRequest request){return service.updateProduct(projectId,productId,request);}
+    @DeleteMapping("/{projectId}/products/{productId}") public ProjectResponse deactivateProduct(@PathVariable UUID projectId,@PathVariable UUID productId,@RequestParam Long rowVersion){return service.deactivateProduct(projectId,productId,rowVersion);}
 
-    @GetMapping
-    public List<ProjectPortfolioResponse> list(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) Boolean active,
-            @RequestParam(required = false) String plantCode) {
-        validateText(search, 300, "Search");
-        validateText(plantCode, 32, "Plant code");
-        return service.list(search, active, plantCode);
-    }
-
-    @GetMapping("/{projectId}")
-    public ProjectPortfolioResponse get(@PathVariable UUID projectId) {
-        return service.get(projectId);
-    }
-
-    @PostMapping
-    public ProjectPortfolioResponse create(@Valid @RequestBody ProjectRequest request) {
-        return service.create(request);
-    }
-
-    @PutMapping("/{projectId}")
-    public ProjectPortfolioResponse update(
-            @PathVariable UUID projectId,
-            @Valid @RequestBody ProjectRequest request) {
-        return service.update(projectId, request);
-    }
-
-    @DeleteMapping("/{projectId}")
-    public void deleteProject(
-            @PathVariable UUID projectId,
-            @RequestParam Long rowVersion) {
-        service.deleteProject(projectId, rowVersion);
-    }
-
-    @PostMapping("/{projectId}/products")
-    public ProjectPortfolioResponse addProduct(
-            @PathVariable UUID projectId,
-            @Valid @RequestBody ProductRequest request) {
-        return service.addProduct(projectId, request);
-    }
-
-    @PostMapping("/{projectId}/products/bulk")
-    public ProjectPortfolioResponse addProducts(
-            @PathVariable UUID projectId,
-            @Valid @RequestBody ProductBulkCreateRequest request) {
-        return service.addProducts(projectId, request.products());
-    }
-
-    @PutMapping("/{projectId}/products/{productId}")
-    public ProjectPortfolioResponse updateProduct(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @Valid @RequestBody ProductRequest request) {
-        return service.updateProduct(projectId, productId, request);
-    }
-
-    @GetMapping("/{projectId}/product-attachments")
-    public List<Map<String, Object>> productAttachments(
-            @PathVariable UUID projectId) {
-        return service.productAttachments(projectId);
-    }
-
-    @GetMapping("/{projectId}/products/{productId}/attachments")
-    public Map<String, Object> productAttachmentStatus(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId) {
-        return service.productAttachmentStatus(projectId, productId);
-    }
-
-    @PostMapping(
-            value = "/{projectId}/products/{productId}/image",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String, Object> uploadProductImage(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @RequestPart("file") MultipartFile file) {
-        return service.saveProductImage(projectId, productId, file);
-    }
-
+    @PostMapping(value="/{projectId}/products/{productId}/image",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProductResponse uploadImage(@PathVariable UUID projectId,@PathVariable UUID productId,@RequestParam("file")MultipartFile file){return service.uploadProductImage(projectId,productId,file);}
     @GetMapping("/{projectId}/products/{productId}/image")
-    public ResponseEntity<Resource> productImage(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId) {
-
-        Resource resource = service.loadProductImage(projectId, productId);
-        String fileName = safeFileName(
-                service.productImageFileName(projectId, productId),
-                "product-image");
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(
-                        service.productImageContentType(projectId, productId)))
-                .cacheControl(CacheControl.noStore())
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.inline()
-                                .filename(fileName)
-                                .build()
-                                .toString())
-                .body(resource);
+    public ResponseEntity<Resource> image(@PathVariable UUID projectId,@PathVariable UUID productId){
+        Resource resource=service.loadProductImage(projectId,productId); MediaType type; try{type=MediaType.parseMediaType(service.productImageContentType(projectId,productId));}catch(Exception ex){type=MediaType.APPLICATION_OCTET_STREAM;}
+        String name=service.productImageFileName(projectId,productId); if(name==null||name.isBlank())name="product-image";
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(type).header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.inline().filename(name,StandardCharsets.UTF_8).build().toString()).body(resource);
     }
-
-    @DeleteMapping("/{projectId}/products/{productId}/image")
-    public Map<String, Object> deleteProductImage(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId) {
-        return service.deleteProductImage(projectId, productId);
-    }
-
-    @PostMapping(
-            value = "/{projectId}/products/{productId}/drawing",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Map<String, Object> uploadProductDrawing(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @RequestPart("file") MultipartFile file) {
-        return service.saveProductDrawing(projectId, productId, file);
-    }
-
-    @GetMapping("/{projectId}/products/{productId}/drawing")
-    public ResponseEntity<Resource> productDrawing(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId) {
-
-        Resource resource = service.loadProductDrawing(projectId, productId);
-        String fileName = safeFileName(
-                service.productDrawingFileName(projectId, productId),
-                "product-drawing");
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(
-                        service.productDrawingContentType(projectId, productId)))
-                .cacheControl(CacheControl.noStore())
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.inline()
-                                .filename(fileName)
-                                .build()
-                                .toString())
-                .body(resource);
-    }
-
-    @DeleteMapping("/{projectId}/products/{productId}/drawing")
-    public Map<String, Object> deleteProductDrawing(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId) {
-        return service.deleteProductDrawing(projectId, productId);
-    }
-
-    @DeleteMapping("/{projectId}/products/{productId}")
-    public ProjectPortfolioResponse deleteProduct(
-            @PathVariable UUID projectId,
-            @PathVariable UUID productId,
-            @RequestParam Long rowVersion) {
-        return service.deleteProduct(projectId, productId, rowVersion);
-    }
-
-    private void validateText(
-            String value,
-            int maxLength,
-            String fieldName) {
-        if (value != null && value.length() > maxLength) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    fieldName + " cannot exceed " + maxLength + " characters");
-        }
-    }
-
-    private String safeFileName(
-            String value,
-            String fallback) {
-        String clean = value == null ? "" : value.trim();
-        clean = clean
-                .replace("\r", "_")
-                .replace("\n", "_")
-                .replace("\"", "_")
-                .replace("\\", "_")
-                .replace("/", "_");
-
-        if (clean.isBlank()) {
-            clean = fallback;
-        }
-
-        return clean.length() > 180
-                ? clean.substring(0, 180)
-                : clean;
-    }
-
+    @DeleteMapping("/{projectId}/products/{productId}/image") public ProductResponse deleteImage(@PathVariable UUID projectId,@PathVariable UUID productId){return service.deleteProductImage(projectId,productId);}
 }

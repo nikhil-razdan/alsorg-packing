@@ -2,36 +2,39 @@ package com.alsorg.packing.service.matflow;
 
 import static com.alsorg.packing.controller.dto.matflow.MatFlowWorkspaceDtos.*;
 
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomActionRequest;
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomDetailResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowDtos.BomSummaryResponse;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProductPortfolioRow;
-import com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.ProjectPortfolioResponse;
+import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.matflow.MatFlowAuditLog;
-import com.alsorg.packing.domain.users.User;
-import com.alsorg.packing.repository.matflow.MatFlowAuditLogRepository;
-import com.alsorg.packing.service.UserService;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.alsorg.packing.domain.matflow.MatFlowBom;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.BomStatus;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.Criticality;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.EngineeringDecision;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ProductionFileStage;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ReleaseHealth;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.RevisionStatus;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.RevisionType;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemStatus;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemType;
+import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
+import com.alsorg.packing.domain.matflow.MatFlowRevision;
+import com.alsorg.packing.domain.matflow.MatFlowWorkItem;
+import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
+import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
+import com.alsorg.packing.repository.matflow.MatFlowRevisionRepository;
+import com.alsorg.packing.repository.matflow.MatFlowWorkItemRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -42,1798 +45,447 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Design -> Engineering -> Production handover workspace for MatFlow.
- *
- * <p>The workspace is deliberately an append-only document/task layer over the
- * existing Project/Product and BOM aggregates. It does not change Store,
- * Purchase, GRN, QC, Processing, Production, Return or stock movement state.
- * BOM handover calls the existing MatFlowBomService submission action so the
- * existing Production technical-review state machine remains authoritative.</p>
- *
- * <p>State is stored as immutable snapshots in mf_audit_logs. Drawing files are
- * stored under the existing matflow.product-attachment-dir, inside a product
- * scoped workflow-drawings folder. Every submitted design and every Production
- * handover therefore keeps its exact revision/file instead of overwriting an
- * older released drawing.</p>
+ * MatFlow V1 workflow engine. This service intentionally ends at
+ * PRODUCTION_RELEASED. Production execution through Final QC remains a later,
+ * validated workflow plugged into that durable handoff state.
  */
 @Service
 public class MatFlowWorkspaceService {
+    private static final long REVISION_MAX_BYTES = 30L * 1024L * 1024L;
+    private static final Set<WorkItemStatus> OPEN_QUERY_STATUSES = Set.of(WorkItemStatus.OPEN, WorkItemStatus.RESPONDED);
+    private static final Set<WorkItemStatus> OPEN_TASK_STATUSES = Set.of(WorkItemStatus.TODO, WorkItemStatus.ASSIGNED, WorkItemStatus.IN_PROGRESS, WorkItemStatus.BLOCKED);
 
-    public static final String DESIGN_ENTITY = "MATFLOW_DESIGN_SUBMISSION";
-    public static final String TASK_ENTITY = "MATFLOW_ENGINEERING_TASK";
-    public static final String RECEIPT_ENTITY = "MATFLOW_NOTIFICATION_RECEIPT";
-
-    /** Current Designing-team checklist captured from the supplied Wardrobe checklist. */
-    public static final String DESIGN_TEMPLATE = "WARDROBE_DESIGN_V1";
-    private static final String LEGACY_DESIGN_TEMPLATE = "DESIGN_SUBMISSION_V1";
-    /** Current Engineering-team checklist captured from the supplied PYTHA Engg. Detail sheet. */
-    public static final String PYTHA_ENGINEERING_TEMPLATE = "PYTHA_ENGINEERING_V1";
-    public static final String GENERAL_ENGINEERING_TEMPLATE = "GENERAL_ENGINEERING_V1";
-    /** Compatibility key used by the earlier misunderstood package. New tasks never use it. */
-    private static final String LEGACY_WARDROBE_ENGINEERING_TEMPLATE = "WARDROBE_ENGINEERING_V1";
-
-    private static final Set<String> PRIORITIES = Set.of("LOW", "NORMAL", "HIGH", "URGENT");
-    private static final Set<String> COMPANY_CODES = Set.of("ALSORG", "CALLISTO");
-    private static final Set<String> DESIGN_STATUSES = Set.of(
-            "DRAFT", "SUBMITTED_TO_ENGINEERING", "RETURNED_FOR_CLARIFICATION", "ACCEPTED", "CANCELLED");
-    private static final Set<String> TASK_STATUSES = Set.of(
-            "AWAITING_ASSIGNMENT", "ASSIGNED", "IN_PROGRESS", "AWAITING_CLARIFICATION",
-            "SUBMITTED_TO_PRODUCTION", "RETURNED", "COMPLETED", "SUPERSEDED", "CANCELLED");
-    private static final Set<String> OPEN_TASK_STATUSES = Set.of(
-            "AWAITING_ASSIGNMENT", "ASSIGNED", "IN_PROGRESS", "AWAITING_CLARIFICATION",
-            "SUBMITTED_TO_PRODUCTION", "RETURNED");
-    private static final Set<String> SUPERSEDABLE_TASK_STATUSES = Set.of(
-            "AWAITING_ASSIGNMENT", "ASSIGNED", "IN_PROGRESS", "AWAITING_CLARIFICATION", "RETURNED");
-    private static final Set<String> CHECK_STATES = Set.of("PENDING", "DONE", "NA");
-
-    private static final long DRAWING_MAX_BYTES = 20L * 1024L * 1024L;
-    private static final Set<String> DRAWING_EXTENSIONS = Set.of("pdf", "jpg", "jpeg", "png", "webp", "dwg", "dxf");
-
-    /*
-     * Designing-team checklist. This is the 32-point Wardrobe checklist supplied
-     * before the PYTHA sheet. It belongs to the pre-Engineering submission gate,
-     * not to the Engineering task. Keep its source-specific limits exactly as
-     * supplied (for example 3000 mm shutter height).
-     */
-    private static final List<CheckDefinition> WARDROBE_DESIGN_CHECKLIST = List.of(
-            check("WDES-01", "WARDROBE DESIGN CHECKLIST", 1, "Production drawings must be as per site measurements.", false),
-            check("WDES-02", "WARDROBE DESIGN CHECKLIST", 2, "Production drawings must be signed by the site supervisor.", true),
-            check("WDES-03", "WARDROBE DESIGN CHECKLIST", 3, "Shutter height should not exceed 3000 mm (add loft if required).", true),
-            check("WDES-04", "WARDROBE DESIGN CHECKLIST", 4, "Shutter width should not exceed 600 mm.", true),
-            check("WDES-05", "WARDROBE DESIGN CHECKLIST", 5, "Maximum thickness of a solid shutter should be 26 mm.", true),
-            check("WDES-06", "WARDROBE DESIGN CHECKLIST", 6, "Carcass height should not exceed 2400 mm (add loft if required).", true),
-            check("WDES-07", "WARDROBE DESIGN CHECKLIST", 7, "Back Ply should not exceed 1200 mm.", true),
-            check("WDES-08", "WARDROBE DESIGN CHECKLIST", 8, "Dummy side finish must be confirmed.", true),
-            check("WDES-09", "WARDROBE DESIGN CHECKLIST", 9, "Veneer grain direction must always be shown.", true),
-            check("WDES-10", "WARDROBE DESIGN CHECKLIST", 10, "Fluting detail blow-ups must always be shown.", true),
-            check("WDES-11", "WARDROBE DESIGN CHECKLIST", 11, "Handle cut blow-up details must always be shown.", true),
-            check("WDES-12", "WARDROBE DESIGN CHECKLIST", 12, "Sliding fitting code must be mentioned.", true),
-            check("WDES-13", "WARDROBE DESIGN CHECKLIST", 13, "Add joint lines in fillers if size exceeds 3000 mm.", true),
-            check("WDES-14", "WARDROBE DESIGN CHECKLIST", 14, "External shutter and drawer handle codes and sizes are required.", true),
-            check("WDES-15", "WARDROBE DESIGN CHECKLIST", 15, "External lock dimensions must be specified from floor level.", true),
-            check("WDES-16", "WARDROBE DESIGN CHECKLIST", 16, "Backside finish of mirror shutters must be specified.", true),
-            check("WDES-17", "WARDROBE DESIGN CHECKLIST", 17, "Backside finish of leather, fabric, wallpaper, and tile shutters must be specified.", true),
-            check("WDES-18", "WARDROBE DESIGN CHECKLIST", 18, "Cross-check all elevation dimensions with plans and sections.", false),
-            check("WDES-19", "WARDROBE DESIGN CHECKLIST", 19, "Internal laminate company name and code must be properly mentioned.", true),
-            check("WDES-20", "WARDROBE DESIGN CHECKLIST", 20, "Internal handle codes must be specified.", true),
-            check("WDES-21", "WARDROBE DESIGN CHECKLIST", 21, "Wooden part in glass pull-out must be a minimum of 95 mm in height.", true),
-            check("WDES-22", "WARDROBE DESIGN CHECKLIST", 22, "Key lock/digital lock is not possible on drawer fronts in case of end-to-end handle cuts.", true),
-            check("WDES-23", "WARDROBE DESIGN CHECKLIST", 23, "Lucas shelf (metal & glass) must be confirmed.", true),
-            check("WDES-24", "WARDROBE DESIGN CHECKLIST", 24, "Confirm whether Lucas shelf lighting is required on one side or both sides.", true),
-            check("WDES-25", "WARDROBE DESIGN CHECKLIST", 25, "Toughened glass shelf thickness should be 8 mm.", true),
-            check("WDES-26", "WARDROBE DESIGN CHECKLIST", 26, "Internal lit-up shelf lighting detail blow-ups are required.", true),
-            check("WDES-27", "WARDROBE DESIGN CHECKLIST", 27, "Trouser pull-out available sizes: 564 mm and 864 mm.", true),
-            check("WDES-28", "WARDROBE DESIGN CHECKLIST", 28, "Locker & watch winder (by Alsorg or client) must be specified.", true),
-            check("WDES-29", "WARDROBE DESIGN CHECKLIST", 29, "Accessory drawer suede code must be mentioned.", true),
-            check("WDES-30", "WARDROBE DESIGN CHECKLIST", 30, "Hanging rod name/specification must be mentioned.", true),
-            check("WDES-31", "WARDROBE DESIGN CHECKLIST", 31, "Hanging Rod height from floor level must be specified.", true),
-            check("WDES-32", "WARDROBE DESIGN CHECKLIST", 32, "In case of single shutter wardrobe - Runner panel of the drawer will be only one side (only hinge side).", true));
-
-    /*
-     * Engineering-team PYTHA checklist from the newly supplied "PYTHA Engg. Detail"
-     * sheet. The printed source has two independent 1..20 sections, therefore
-     * section + displayNo are stored with every task snapshot instead of flattening
-     * away that structure. Source-specific wording/limits are intentionally retained
-     * and are not reconciled with the Designing checklist.
-     */
-    private static final List<CheckDefinition> PYTHA_ENGINEERING_CHECKLIST = List.of(
-            check("PYD-01", "PYTHA ENGINEERING DETAILS", 1, "Creating 3D Model Pytha", false),
-            check("PYD-02", "PYTHA ENGINEERING DETAILS", 2, "Pasting List Carcass", false),
-            check("PYD-03", "PYTHA ENGINEERING DETAILS", 3, "Pasting List Shutter", true),
-            check("PYD-04", "PYTHA ENGINEERING DETAILS", 4, "Material List", false),
-            check("PYD-05", "PYTHA ENGINEERING DETAILS", 5, "Hardware List", true),
-            check("PYD-06", "PYTHA ENGINEERING DETAILS", 6, "Glass List", true),
-            check("PYD-07", "PYTHA ENGINEERING DETAILS", 7, "Metal List", true),
-            check("PYD-08", "PYTHA ENGINEERING DETAILS", 8, "Cutting Prog. Beam Saw", true),
-            check("PYD-09", "PYTHA ENGINEERING DETAILS", 9, "Cutting Prog. Nesting Machine", true),
-            check("PYD-10", "PYTHA ENGINEERING DETAILS", 10, "Drilling Prog. KDT", true),
-            check("PYD-11", "PYTHA ENGINEERING DETAILS", 11, "CNC Prog. Router", true),
-            check("PYD-12", "PYTHA ENGINEERING DETAILS", 12, "Carcass Cutting List", false),
-            check("PYD-13", "PYTHA ENGINEERING DETAILS", 13, "Shutter Cutting List", true),
-            check("PYD-14", "PYTHA ENGINEERING DETAILS", 14, "Manual Cutting List", true),
-            check("PYD-15", "PYTHA ENGINEERING DETAILS", 15, "Acc. Cutting List", true),
-            check("PYD-16", "PYTHA ENGINEERING DETAILS", 16, "Lucas Shelf Cutting List", true),
-            check("PYD-17", "PYTHA ENGINEERING DETAILS", 17, "Shutter Construction Detail", true),
-            check("PYD-18", "PYTHA ENGINEERING DETAILS", 18, "Metal Construction Detail", true),
-            check("PYD-19", "PYTHA ENGINEERING DETAILS", 19, "Sparta Software Uploading", false),
-            check("PYD-20", "PYTHA ENGINEERING DETAILS", 20, "Create Barcode from Sparta", false),
-
-            check("PYC-01", "DRAWINGS CHECK LIST", 1, "Plan & Ele. Sizes should match", false),
-            check("PYC-02", "DRAWINGS CHECK LIST", 2, "Front Ele./Internal Ele./Section Should Match", false),
-            check("PYC-03", "DRAWINGS CHECK LIST", 3, "Internal Laminate brand name must be mentioned", true),
-            check("PYC-04", "DRAWINGS CHECK LIST", 4, "Dummy Side finishes should be mentioned", true),
-            check("PYC-05", "DRAWINGS CHECK LIST", 5, "Shutter Height cannot be exceed 2950mm", true),
-            check("PYC-06", "DRAWINGS CHECK LIST", 6, "Shutter Width cannot be exceed 600mm", true),
-            check("PYC-07", "DRAWINGS CHECK LIST", 7, "Carcass Ht. Max 2400mm", true),
-            check("PYC-08", "DRAWINGS CHECK LIST", 8, "Lucas Shelf Glass finish must be mentioned", true),
-            check("PYC-09", "DRAWINGS CHECK LIST", 9, "Shutter Back finish mentioned of Mirror/Leather/Fabric/Wallpaper/Tile Shutter", true),
-            check("PYC-10", "DRAWINGS CHECK LIST", 10, "Toughned Glass Shelf thk. 8mm", true),
-            check("PYC-11", "DRAWINGS CHECK LIST", 11, "Shutter Handle Code/Image/Details/Sizes must be mentioned", true),
-            check("PYC-12", "DRAWINGS CHECK LIST", 12, "Drawer Handle Code/Image/Details/Sizes must be mentioned", true),
-            check("PYC-13", "DRAWINGS CHECK LIST", 13, "Readymade Acc. Standard sizes are 564mm,864mm,1164mm", true),
-            check("PYC-14", "DRAWINGS CHECK LIST", 14, "Glass Drawer solid front min. is 95mm ht.", true),
-            check("PYC-15", "DRAWINGS CHECK LIST", 15, "Any type of Lock is coming pls discuss with Nikhil", true),
-            check("PYC-16", "DRAWINGS CHECK LIST", 16, "Please Mentioned Slidding Fitting Name / Code / Brand Name", true),
-            check("PYC-17", "DRAWINGS CHECK LIST", 17, "Acc. Drawer details / Finish should be mentioned", true),
-            check("PYC-18", "DRAWINGS CHECK LIST", 18, "Any type of Acc. Is coming please check by Alsorg / By Client before order", true),
-            check("PYC-19", "DRAWINGS CHECK LIST", 19, "Hanging Rode Brand Name", true),
-            check("PYC-20", "DRAWINGS CHECK LIST", 20, "Please Mentioned Lock/Handle/Hanging & each of the Standard Dimensions", true));
-
-    private static final List<CheckDefinition> GENERAL_ENGINEERING_CHECKLIST = List.of(
-            check("ENG-01", "GENERAL ENGINEERING", 1, "Drawing dimensions have been checked against the approved design / site information.", false),
-            check("ENG-02", "GENERAL ENGINEERING", 2, "Manufacturing and construction details required for Production are complete.", false),
-            check("ENG-03", "GENERAL ENGINEERING", 3, "Operational BOM material quantities and UOMs have been checked.", false),
-            check("ENG-04", "GENERAL ENGINEERING", 4, "Hardware, finish and specification details match the Production drawing and BOM.", true),
-            check("ENG-05", "GENERAL ENGINEERING", 5, "Relevant Processing / Production requirements and routing requirements have been checked.", true),
-            check("ENG-06", "GENERAL ENGINEERING", 6, "The correct Production drawing revision and BOM revision are selected for handover.", false));
-
-    private final MatFlowAuditLogRepository auditRepository;
-    private final MatFlowAuditService auditService;
+    private final MatFlowProductionFileRepository fileRepository;
+    private final MatFlowWorkItemRepository workRepository;
+    private final MatFlowRevisionRepository revisionRepository;
+    private final MatFlowBomRepository bomRepository;
     private final MatFlowAccessService accessService;
-    private final MatFlowProjectService projectService;
-    private final MatFlowBomService bomService;
-    private final UserService userService;
-    private final ObjectMapper objectMapper;
-    private final Path attachmentRoot;
+    private final MatFlowAuditService auditService;
+    private final MatFlowWorkflowTemplateService templateService;
+    private final Path revisionRoot;
 
     public MatFlowWorkspaceService(
-            MatFlowAuditLogRepository auditRepository,
-            MatFlowAuditService auditService,
+            MatFlowProductionFileRepository fileRepository,
+            MatFlowWorkItemRepository workRepository,
+            MatFlowRevisionRepository revisionRepository,
+            MatFlowBomRepository bomRepository,
             MatFlowAccessService accessService,
-            MatFlowProjectService projectService,
-            MatFlowBomService bomService,
-            UserService userService,
-            ObjectMapper objectMapper,
-            @Value("${matflow.product-attachment-dir:}") String configuredAttachmentDirectory) {
-        this.auditRepository = auditRepository;
-        this.auditService = auditService;
+            MatFlowAuditService auditService,
+            MatFlowWorkflowTemplateService templateService,
+            @Value("${matflow.revision-attachment-dir:}") String configuredRevisionDir) {
+        this.fileRepository = fileRepository;
+        this.workRepository = workRepository;
+        this.revisionRepository = revisionRepository;
+        this.bomRepository = bomRepository;
         this.accessService = accessService;
-        this.projectService = projectService;
-        this.bomService = bomService;
-        this.userService = userService;
-        this.objectMapper = objectMapper;
-        this.attachmentRoot = resolveAttachmentRoot(configuredAttachmentDirectory);
-        try {
-            Files.createDirectories(this.attachmentRoot);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to initialize MatFlow workflow drawing directory", ex);
-        }
+        this.auditService = auditService;
+        this.templateService = templateService;
+        this.revisionRoot = resolveRoot(configuredRevisionDir);
+        try { Files.createDirectories(revisionRoot); }
+        catch (IOException ex) { throw new IllegalStateException("Unable to initialize MatFlow revision directory", ex); }
     }
 
-    /* =============================== DESIGN SUBMISSIONS =============================== */
-
     @Transactional(readOnly = true)
-    public List<DesignSubmissionResponse> listDesignSubmissions(
-            String plantCode, String status, String search, UUID productId) {
+    public List<ProductionFileResponse> list(String plantCode, String stage, String health, String search) {
         accessService.requireRead();
-        String plant = cleanUpper(plantCode);
+        String plant = upperOrNull(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
-        String wantedStatus = cleanUpper(status);
-        String query = cleanLower(search);
-        return latestStates(DESIGN_ENTITY).stream()
-                .map(this::toDesignResponse)
-                .filter(Objects::nonNull)
-                .filter(row -> canReadPlant(row.plantCode()))
-                .filter(row -> plant == null || plant.equals(cleanUpper(row.plantCode())))
-                .filter(row -> wantedStatus == null || wantedStatus.equals(cleanUpper(row.status())))
-                .filter(row -> productId == null || productId.equals(row.productId()))
-                .filter(row -> designMatches(row, query))
-                .sorted(Comparator.comparing(DesignSubmissionResponse::updatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())))
-                .toList();
+        ProductionFileStage stageFilter = enumOrNull(ProductionFileStage.class, stage);
+        ReleaseHealth healthFilter = enumOrNull(ReleaseHealth.class, health);
+        String q = clean(search);
+        q = q == null ? "" : q.toLowerCase(Locale.ROOT);
+        final String term = q;
+        return fileRepository.findAllByOrderByUpdatedAtDesc().stream()
+                .filter(f -> f.isActive() && accessService.canAccessPlant(f.getPlantCode()))
+                .filter(f -> plant == null || plant.equalsIgnoreCase(f.getPlantCode()))
+                .filter(f -> stageFilter == null || f.getStage() == stageFilter)
+                .filter(f -> healthFilter == null || f.getReleaseHealth() == healthFilter)
+                .filter(f -> term.isBlank() || contains(f.getProductionFileNo(), term) || contains(f.getProjectCode(), term)
+                        || contains(f.getProjectName(), term) || contains(f.getProductName(), term) || contains(f.getDrawingNo(), term)
+                        || contains(f.getCurrentOwner(), term))
+                .map(this::toFileResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public DesignSubmissionDetailResponse getDesignSubmission(UUID id) {
+    public ProductionFileDetailResponse get(UUID fileId) {
         accessService.requireRead();
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        DesignSubmissionResponse response = toDesignResponse(state);
-        requireCanReadPlant(response.plantCode());
-        return new DesignSubmissionDetailResponse(response, history(DESIGN_ENTITY, id));
+        MatFlowProductionFile file = requireFile(fileId);
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse createDesignSubmission(DesignSubmissionCreateRequest request) {
-        requireDesignWrite();
-        if (request == null || request.projectId() == null || request.productId() == null) {
-            throw badRequest("Project and Product are required");
-        }
-        ProjectProductRef ref = requireProduct(request.projectId(), request.productId());
-        accessService.requirePlantAccess(ref.project().plantCode());
-
-        /*
-         * Draft means draft: Project/Product are the only hard requirements at
-         * creation time. Designing can attach/complete the drawing revision,
-         * Head/Production routing and checklist later. The strict gate is the
-         * Submit to Engineering action below, not Product/submission creation.
-         */
-        String actor = accessService.actor();
-        String designer = clean(request.designer());
-        if (designer == null) designer = actor;
-        requirePersonRole(designer, ref.project().plantCode(),
-                Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"), "Designer / Designing owner");
-
-        String designRevision = clean(request.designDrawingRevision());
-        String engineeringHead = clean(request.engineeringHead());
-        String productionRecipient = clean(request.productionRecipient());
-        if (engineeringHead != null) {
-            requirePersonRole(engineeringHead, ref.project().plantCode(),
-                    Set.of("ADMIN", "MATFLOW_MANAGER"), "Engineering Head");
-        }
-        if (productionRecipient != null) {
-            requirePersonRole(productionRecipient, ref.project().plantCode(),
-                    Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION"), "Production recipient");
-        }
-
-        UUID id = UUID.randomUUID();
-        String now = LocalDateTime.now().toString();
-        Map<String, Object> state = new LinkedHashMap<>();
-        state.put("id", id.toString());
-        state.put("submissionNumber", submissionNumber(id));
-        state.put("status", "DRAFT");
-        applyProjectProductSnapshot(state, ref);
-        state.put("productMasterRevisionAtCreation", ref.product().drawingRevision());
-        state.put("designDrawingRevision", designRevision);
-        state.put("designChecklistTemplateKey", DESIGN_TEMPLATE);
-        state.put("designer", designer);
-        state.put("engineeringHead", engineeringHead);
-        state.put("productionRecipient", productionRecipient);
-        state.put("engineeringChecklistTemplateKey", engineeringTemplate(request.engineeringChecklistTemplateKey()));
-        state.put("reference", clean(request.reference()));
-        state.put("companyCode", companyCode(request.companyCode()));
-        state.put("remarks", clean(request.remarks()));
-        state.put("designDrawing", emptyFile());
-        state.put("checklist", newChecklist(WARDROBE_DESIGN_CHECKLIST));
-        state.put("taskId", null);
-        state.put("version", 1);
-        state.put("createdBy", actor);
-        state.put("createdAt", now);
-        state.put("updatedBy", actor);
-        state.put("updatedAt", now);
-        record(DESIGN_ENTITY, id, "DESIGN_SUBMISSION_DRAFT_CREATED", state);
-        return getDesignSubmission(id);
+    public ProductionFileDetailResponse updateSetup(UUID fileId, ProductionFileSetupRequest request) {
+        accessService.requireDesignerWrite();
+        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
+        if (request.designer() != null) file.setDesigner(request.designer());
+        if (request.ppcOwner() != null) file.setPpcOwner(request.ppcOwner());
+        if (request.engineeringHead() != null) file.setEngineeringHead(request.engineeringHead());
+        if (request.assignedEngineer() != null) file.setAssignedEngineer(request.assignedEngineer());
+        file.setPlannedProductionReleaseDate(request.plannedProductionReleaseDate());
+        file.setPlannedDispatchDate(request.plannedDispatchDate());
+        if (request.remarks() != null) file.setRemarks(request.remarks());
+        if (file.getCurrentOwner() == null) file.setCurrentOwner(file.getDesigner());
+        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("PRODUCTION_FILE", file.getId(), "FILE_SETUP_UPDATED", file,
+                auditService.details("designer", file.getDesigner(), "ppcOwner", file.getPpcOwner(), "engineeringHead", file.getEngineeringHead(), "assignedEngineer", file.getAssignedEngineer()));
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse updateDesignSubmission(UUID id, DesignSubmissionUpdateRequest request) {
-        requireDesignWrite();
-        if (request == null) throw badRequest("Design submission update is required");
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireDesignOwnerOrManager(state);
-        assertVersion(request.version(), integer(state.get("version"), 0), "Design submission");
-        requireDesignEditable(state);
-
-        String plant = string(state.get("plantCode"));
-        if (request.designer() != null) {
-            String designer = requiredText(request.designer(), "Designer / Designing owner");
-            requirePersonRole(designer, plant,
-                    Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"),
-                    "Designer / Designing owner");
-            state.put("designer", designer);
+    public ProductionFileDetailResponse updateChecklist(UUID fileId, String area, String itemKey, ChecklistUpdateRequest request) {
+        MatFlowProductionFile file = requireFile(fileId);
+        WorkItemType type = "DESIGN".equalsIgnoreCase(area) ? WorkItemType.DESIGN_CHECK : WorkItemType.ENGINEERING_CHECK;
+        if (type == WorkItemType.DESIGN_CHECK) {
+            accessService.requireDesignerWrite();
+            requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
+        } else {
+            accessService.requireEngineeringWrite();
+            requireStage(file, ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY);
         }
-        if (request.designDrawingRevision() != null) state.put("designDrawingRevision", requiredText(request.designDrawingRevision(), "Design drawing revision"));
-        if (request.engineeringHead() != null) {
-            String head = requiredText(request.engineeringHead(), "Engineering Head");
-            requirePersonRole(head, plant, Set.of("ADMIN", "MATFLOW_MANAGER"), "Engineering Head");
-            state.put("engineeringHead", head);
+        MatFlowWorkItem item = workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, type, itemKey)
+                .orElseThrow(() -> notFound("Checklist item not found"));
+        requireVersion(item.getRowVersion(), request.rowVersion());
+        WorkItemStatus next = enumValue(WorkItemStatus.class, request.status(), "Invalid checklist status");
+        if (!Set.of(WorkItemStatus.PENDING, WorkItemStatus.COMPLETE, WorkItemStatus.NOT_APPLICABLE).contains(next)) {
+            throw badRequest("Checklist status must be PENDING, COMPLETE or NOT_APPLICABLE");
         }
-        if (request.productionRecipient() != null) {
-            String recipient = requiredText(request.productionRecipient(), "Production recipient");
-            requirePersonRole(recipient, plant, Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION"), "Production recipient");
-            state.put("productionRecipient", recipient);
+        if (next == WorkItemStatus.NOT_APPLICABLE && item.getCriticality() == Criticality.CRITICAL) {
+            throw conflict("Critical checklist item cannot be marked Not Applicable");
         }
-        if (request.engineeringChecklistTemplateKey() != null) {
-            state.put("engineeringChecklistTemplateKey", engineeringTemplate(request.engineeringChecklistTemplateKey()));
-        }
-        if (request.reference() != null) state.put("reference", clean(request.reference()));
-        if (request.companyCode() != null) state.put("companyCode", companyCode(request.companyCode()));
-        if (request.remarks() != null) state.put("remarks", clean(request.remarks()));
-        touch(state);
-        record(DESIGN_ENTITY, id, "DESIGN_SUBMISSION_UPDATED", state);
-        return getDesignSubmission(id);
+        item.setStatus(next); item.setRemarks(request.remarks()); item.setUpdatedBy(accessService.actor());
+        if (next == WorkItemStatus.COMPLETE || next == WorkItemStatus.NOT_APPLICABLE) {
+            item.setCompletedBy(accessService.actor()); item.setCompletedAt(now());
+        } else { item.setCompletedBy(null); item.setCompletedAt(null); }
+        workRepository.save(item); refreshHealth(file); file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
+        auditService.log("WORK_ITEM", item.getId(), "CHECKLIST_UPDATED", file,
+                auditService.details("area", area, "key", item.getItemKey(), "status", item.getStatus().name(), "remarks", item.getRemarks()));
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse updateDesignChecklist(
-            UUID id, String itemKey, ChecklistItemUpdateRequest request) {
-        requireDesignWrite();
-        if (request == null) throw badRequest("Checklist update is required");
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireDesignOwnerOrManager(state);
-        assertVersion(request.version(), integer(state.get("version"), 0), "Design submission");
-        requireDesignEditable(state);
-        updateChecklistItem(state, itemKey, request);
-        touch(state);
-        record(DESIGN_ENTITY, id, "DESIGN_CHECKLIST_UPDATED", state);
-        return getDesignSubmission(id);
+    public ProductionFileDetailResponse submitDesign(UUID fileId, DesignSubmitRequest request) {
+        accessService.requireDesignerWrite();
+        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
+        requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
+        ChecklistProgress progress = progress(fileId, WorkItemType.DESIGN_CHECK);
+        ReleaseHealth health = releaseHealth(progress);
+        if (health == ReleaseHealth.RED) throw conflict("Design cannot be submitted: critical information is still pending");
+        if (health == ReleaseHealth.AMBER && clean(request.controlledReleaseReason()) == null) {
+            throw badRequest("Controlled Release reason is mandatory for AMBER submission");
+        }
+        if (activeRevision(fileId, RevisionType.DESIGN_DRAWING) == null) throw conflict("Upload an active Design Drawing revision before submission");
+        if (clean(file.getPpcOwner()) == null) throw conflict("Assign the PPC owner before Designer submission");
+        file.setControlledReleaseReason(health == ReleaseHealth.AMBER ? request.controlledReleaseReason() : null);
+        file.setReleaseHealth(health); file.setStage(ProductionFileStage.PPC_GATE_1); file.setCurrentDepartment("PPC");
+        file.setCurrentOwner(file.getPpcOwner()); file.setDesignSubmittedBy(accessService.actor()); file.setDesignSubmittedAt(now());
+        file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
+        auditService.log("PRODUCTION_FILE", file.getId(), "DESIGN_SUBMITTED", file,
+                auditService.details("health", health.name(), "controlledReleaseReason", file.getControlledReleaseReason()));
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse uploadDesignDrawing(
-            UUID id, String revision, MultipartFile file, Integer version) {
-        requireDesignWrite();
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireDesignOwnerOrManager(state);
-        assertVersion(version, integer(state.get("version"), 0), "Design submission");
-        requireDesignEditable(state);
-        String cleanRevision = requiredText(revision, "Design drawing revision");
-        state.put("designDrawingRevision", cleanRevision);
-        state.put("designDrawing", saveWorkflowFile(state, "design", cleanRevision, file));
-        touch(state);
-        record(DESIGN_ENTITY, id, "DESIGN_DRAWING_UPLOADED", state);
-        return getDesignSubmission(id);
+    public ProductionFileDetailResponse ppcGate1(UUID fileId, GateDecisionRequest request) {
+        accessService.requirePpcWrite();
+        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
+        requireStage(file, ProductionFileStage.DESIGN_SUBMITTED, ProductionFileStage.PPC_GATE_1);
+        String decision = upper(request.decision());
+        if (!Set.of("ACCEPT", "RETURN").contains(decision)) throw badRequest("PPC Gate 1 decision must be ACCEPT or RETURN");
+        file.setPpcGate1Decision(decision); file.setPpcGate1By(accessService.actor()); file.setPpcGate1At(now()); file.setPpcGate1Remarks(request.remarks());
+        if ("RETURN".equals(decision)) {
+            if (clean(request.remarks()) == null) throw badRequest("Return remarks are required");
+            file.setStage(ProductionFileStage.DESIGN_CLARIFICATION); file.setCurrentDepartment("DESIGN"); file.setCurrentOwner(file.getDesigner());
+        } else {
+            if (file.getReleaseHealth() == ReleaseHealth.RED) throw conflict("RED file cannot pass PPC Gate 1");
+            if (clean(request.assignedTo()) != null) file.setAssignedEngineer(request.assignedTo());
+            if (clean(file.getAssignedEngineer()) == null) throw conflict("Assign an Engineer before accepting PPC Gate 1");
+            templateService.seedEngineeringChecklist(file);
+            file.setEngineeringDecision(EngineeringDecision.PENDING); file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING");
+            file.setCurrentOwner(clean(file.getAssignedEngineer()) != null ? file.getAssignedEngineer() : file.getEngineeringHead());
+        }
+        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("PRODUCTION_FILE", file.getId(), "PPC_GATE_1_" + decision, file,
+                auditService.details("remarks", request.remarks(), "assignedTo", request.assignedTo()));
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse submitDesignSubmission(UUID id, Integer version) {
-        requireDesignWrite();
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireDesignOwnerOrManager(state);
-        assertVersion(version, integer(state.get("version"), 0), "Design submission");
-        String status = cleanUpper(string(state.get("status")));
-        if (!Set.of("DRAFT", "RETURNED_FOR_CLARIFICATION").contains(status)) {
-            throw conflict("Only Draft or Returned-for-Clarification design submissions can be submitted");
+    public ProductionFileDetailResponse engineeringDecision(UUID fileId, EngineeringDecisionRequest request) {
+        accessService.requireEngineeringWrite();
+        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
+        requireStage(file, ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY);
+        String decision = upper(request.decision());
+        if ("QUERY_RAISED".equals(decision)) {
+            if (openQueryCount(fileId) == 0) throw conflict("Create at least one Engineering Query before selecting QUERY_RAISED");
+            file.setEngineeringDecision(EngineeringDecision.QUERY_RAISED); file.setStage(ProductionFileStage.ENGINEERING_QUERY); file.setCurrentDepartment("DESIGN / ENGINEERING QUERY");
+        } else if ("APPROVED".equals(decision)) {
+            ChecklistProgress p = progress(fileId, WorkItemType.ENGINEERING_CHECK);
+            if (p.criticalPending() > 0 || p.requiredPending() > 0) throw conflict("Complete the Engineering checklist before approval");
+            if (openQueryCount(fileId) > 0) throw conflict("Close all Engineering Queries before approval");
+            file.setEngineeringDecision(EngineeringDecision.APPROVED); templateService.seedEngineeringTasks(file);
+            file.setStage(ProductionFileStage.ENGINEERING_WORK); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
+        } else {
+            throw badRequest("Engineering decision must be APPROVED or QUERY_RAISED");
         }
-        requireSubmissionReady(state);
-        state.put("status", "SUBMITTED_TO_ENGINEERING");
-        state.put("submittedBy", accessService.actor());
-        state.put("submittedAt", LocalDateTime.now().toString());
-        state.put("returnReason", null);
-        touch(state);
-        record(DESIGN_ENTITY, id, "DESIGN_SUBMITTED_TO_ENGINEERING", state);
-        flagOpenTasksForNewRevision(state);
-        return getDesignSubmission(id);
+        file.setEngineeringDecisionBy(accessService.actor()); file.setEngineeringDecisionAt(now()); file.setEngineeringDecisionRemarks(request.remarks());
+        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("PRODUCTION_FILE", file.getId(), "ENGINEERING_" + decision, file, auditService.details("remarks", request.remarks()));
+        return toDetail(file);
     }
 
     @Transactional
-    public DesignSubmissionDetailResponse reviewDesignSubmission(UUID id, DesignSubmissionActionRequest request) {
-        requireEngineeringHead();
-        if (request == null) throw badRequest("Design review action is required");
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireCanReadPlant(string(state.get("plantCode")));
-        assertVersion(request.version(), integer(state.get("version"), 0), "Design submission");
-        if (!"SUBMITTED_TO_ENGINEERING".equals(cleanUpper(string(state.get("status"))))) {
-            throw conflict("Only a Design submission waiting with Engineering can be reviewed");
+    public ProductionFileDetailResponse createQuery(UUID fileId, QueryCreateRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId);
+        if (!Set.of(ProductionFileStage.ENGINEERING_REVIEW, ProductionFileStage.ENGINEERING_QUERY, ProductionFileStage.ENGINEERING_WORK).contains(file.getStage())) {
+            throw conflict("Engineering Query can only be raised while the file is with Engineering");
         }
-        String actor = accessService.actor();
-        String assignedHead = clean(string(state.get("engineeringHead")));
-        if (!isManager() && !same(actor, assignedHead)) {
-            throw forbidden("This Design submission is assigned to Engineering Head " + assignedHead);
-        }
-
-        String action = cleanUpper(request.action());
-        if ("RETURN".equals(action)) {
-            String reason = requiredText(request.note(), "Return / clarification reason");
-            state.put("status", "RETURNED_FOR_CLARIFICATION");
-            state.put("returnReason", reason);
-            state.put("reviewedBy", actor);
-            state.put("reviewedAt", LocalDateTime.now().toString());
-            touch(state);
-            record(DESIGN_ENTITY, id, "DESIGN_RETURNED_FOR_CLARIFICATION", state);
-            clearRevisionReviewFlagsForSubmission(id, "DESIGN_REVISION_REVIEW_CLEARED_AFTER_RETURN");
-            return getDesignSubmission(id);
-        }
-        if (!"ACCEPT".equals(action)) {
-            throw badRequest("Design review action must be ACCEPT or RETURN");
-        }
-
-        UUID taskId = uuid(state.get("taskId"));
-        if (taskId == null) {
-            taskId = createTaskFromSubmission(state, request);
-            state.put("taskId", taskId.toString());
-        }
-        supersedeOlderTasksForAcceptedRevision(state, taskId);
-        state.put("status", "ACCEPTED");
-        state.put("reviewedBy", actor);
-        state.put("reviewedAt", LocalDateTime.now().toString());
-        state.put("returnReason", null);
-        touch(state);
-        record(DESIGN_ENTITY, id, "DESIGN_ACCEPTED_BY_ENGINEERING", state);
-        return getDesignSubmission(id);
+        MatFlowWorkItem item = new MatFlowWorkItem(); item.setProductionFile(file); item.setItemType(WorkItemType.ENGINEERING_QUERY);
+        item.setItemKey("Q-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT)); item.setSection("Engineering Query"); item.setTitle(request.title()); item.setDescription(request.description());
+        item.setCriticality(Criticality.REQUIRED); item.setBlocking(true); item.setStatus(WorkItemStatus.OPEN); item.setAssignedTo(request.assignedTo()); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
+        item.setDisplayOrder((int) (openQueryCount(fileId) + 1)); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        file.setEngineeringDecision(EngineeringDecision.QUERY_RAISED); file.setStage(ProductionFileStage.ENGINEERING_QUERY); file.setCurrentDepartment("DESIGN / ENGINEERING QUERY"); file.setCurrentOwner(request.assignedTo()); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("WORK_ITEM", item.getId(), "ENGINEERING_QUERY_RAISED", file, auditService.details("title", item.getTitle(), "assignedTo", item.getAssignedTo(), "dueAt", item.getDueAt()));
+        return toDetail(file);
     }
 
-    /* =============================== ENGINEERING TASKS =============================== */
+    @Transactional
+    public ProductionFileDetailResponse respondQuery(UUID fileId, UUID queryId, QueryResponseRequest request) {
+        accessService.requireDesignerWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
+        if (!Set.of(WorkItemStatus.OPEN, WorkItemStatus.RESPONDED).contains(item.getStatus())) throw conflict("Query is already closed");
+        item.setResponseText(request.response()); item.setRespondedBy(accessService.actor()); item.setRespondedAt(now()); item.setStatus(WorkItemStatus.RESPONDED); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer()); file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
+        auditService.log("WORK_ITEM", item.getId(), "ENGINEERING_QUERY_RESPONDED", file, auditService.details("response", request.response()));
+        return toDetail(file);
+    }
 
-    @Transactional(readOnly = true)
-    public List<EngineeringTaskResponse> listTasks(String plantCode, String status, String scope, String search) {
-        accessService.requireRead();
-        String plant = cleanUpper(plantCode);
-        if (plant != null) accessService.requirePlantAccess(plant);
-        String wantedStatus = cleanUpper(status);
-        String actor = accessService.actor();
-        String wantedScope = cleanUpper(scope);
-        String query = cleanLower(search);
-        boolean manager = isManager() || isEngineeringHead();
+    @Transactional
+    public ProductionFileDetailResponse closeQuery(UUID fileId, UUID queryId, QueryCloseRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, queryId, WorkItemType.ENGINEERING_QUERY); requireVersion(item.getRowVersion(), request.rowVersion());
+        if (item.getStatus() != WorkItemStatus.RESPONDED && item.getStatus() != WorkItemStatus.OPEN) throw conflict("Query is already closed");
+        item.setStatus(WorkItemStatus.CLOSED); item.setCompletionNote(request.note()); item.setClosedBy(accessService.actor()); item.setClosedAt(now()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        if (openQueryCount(fileId) == 0) {
+            file.setEngineeringDecision(EngineeringDecision.PENDING); file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
+        }
+        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("WORK_ITEM", item.getId(), "ENGINEERING_QUERY_CLOSED", file, auditService.details("note", request.note()));
+        return toDetail(file);
+    }
 
-        return latestStates(TASK_ENTITY).stream()
-                .map(state -> toTaskResponse(state, false))
-                .filter(Objects::nonNull)
-                .filter(row -> canReadPlant(row.plantCode()))
-                .filter(row -> plant == null || plant.equals(cleanUpper(row.plantCode())))
-                .filter(row -> wantedStatus == null || wantedStatus.equals(cleanUpper(row.status())))
-                .filter(row -> taskScopeAllows(row, wantedScope, actor, manager))
-                .filter(row -> taskMatches(row, query))
-                .sorted(taskComparator(actor))
-                .toList();
+    @Transactional
+    public ProductionFileDetailResponse createTask(UUID fileId, TaskCreateRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId);
+        if (file.getEngineeringDecision() != EngineeringDecision.APPROVED) throw conflict("Engineering must be approved before documentation tasks are added");
+        String key=upper(request.taskKey());
+        if (workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, WorkItemType.ENGINEERING_TASK, key).isPresent()) throw conflict("Engineering task key already exists: " + key);
+        List<MatFlowWorkItem> tasks=items(fileId, WorkItemType.ENGINEERING_TASK);
+        MatFlowWorkItem item=new MatFlowWorkItem(); item.setProductionFile(file); item.setItemType(WorkItemType.ENGINEERING_TASK); item.setItemKey(key); item.setSection("Engineering documentation"); item.setTitle(request.title()); item.setDescription(request.description());
+        item.setCriticality(Criticality.REQUIRED); item.setBlocking(request.blocking()==null || request.blocking()); item.setDisplayOrder(tasks.size()+1);
+        String taskOwner = clean(request.assignedTo()) == null ? file.getAssignedEngineer() : request.assignedTo();
+        item.setAssignedTo(taskOwner); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
+        item.setStatus(clean(taskOwner)==null?WorkItemStatus.TODO:WorkItemStatus.ASSIGNED); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        refreshHealth(file); file.setUpdatedBy(accessService.actor()); fileRepository.save(file); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_CREATED",file,auditService.details("key",key,"title",item.getTitle())); return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse updateTask(UUID fileId, UUID taskId, TaskUpdateRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, taskId, WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
+        if (request.assignedTo()!=null) item.setAssignedTo(request.assignedTo()); if (request.dueAt()!=null) item.setDueAt(request.dueAt()); if (request.priority()!=null) item.setPriority(request.priority()); if (request.remarks()!=null) item.setRemarks(request.remarks());
+        if (item.getStatus()==WorkItemStatus.TODO && clean(item.getAssignedTo())!=null) item.setStatus(WorkItemStatus.ASSIGNED); item.setUpdatedBy(accessService.actor()); workRepository.save(item); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_UPDATED",file,auditService.details("assignedTo",item.getAssignedTo(),"dueAt",item.getDueAt())); return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse setTaskStatus(UUID fileId, UUID taskId, TaskStatusRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId,taskId,WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
+        WorkItemStatus next=enumValue(WorkItemStatus.class,request.status(),"Invalid task status");
+        if (!Set.of(WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED,WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE,WorkItemStatus.CANCELLED).contains(next)) throw badRequest("Unsupported Engineering task status");
+        if (next==WorkItemStatus.NOT_APPLICABLE && clean(request.note())==null) throw badRequest("Reason is required when a task is Not Applicable");
+        if (next == WorkItemStatus.IN_PROGRESS && item.getStartedAt() == null) {
+            item.setStartedAt(now());
+            MatFlowRevision designRevision = activeRevision(fileId, RevisionType.DESIGN_DRAWING);
+            if (designRevision != null) item.setRevisionContext("DESIGN:" + designRevision.getRevisionNo());
+        }
+        if ((next == WorkItemStatus.COMPLETE || next == WorkItemStatus.NOT_APPLICABLE) && item.getStartedAt() == null) {
+            item.setStartedAt(now());
+            MatFlowRevision designRevision = activeRevision(fileId, RevisionType.DESIGN_DRAWING);
+            if (designRevision != null) item.setRevisionContext("DESIGN:" + designRevision.getRevisionNo());
+        }
+        if (next == WorkItemStatus.TODO || next == WorkItemStatus.ASSIGNED) { item.setStartedAt(null); item.setRevisionContext(null); }
+        item.setStatus(next); item.setCompletionNote(request.note()); item.setUpdatedBy(accessService.actor());
+        if (next==WorkItemStatus.COMPLETE || next==WorkItemStatus.NOT_APPLICABLE) { item.setCompletedBy(accessService.actor()); item.setCompletedAt(now()); }
+        else { item.setCompletedBy(null); item.setCompletedAt(null); }
+        workRepository.save(item); if (allBlockingTasksDone(fileId)) file.setStage(ProductionFileStage.PPC_GATE_2); else file.setStage(ProductionFileStage.ENGINEERING_WORK); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+        auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_STATUS_CHANGED",file,auditService.details("status",next.name(),"note",request.note())); return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse uploadRevision(UUID fileId, String typeValue, String revisionNo, String changeSummary, MultipartFile upload) {
+        accessService.requireDesignerWrite(); MatFlowProductionFile file=requireFile(fileId); RevisionType type=enumValue(RevisionType.class,typeValue,"Invalid revision type");
+        if (type==RevisionType.ENGINEERING_DRAWING) accessService.requireEngineeringWrite();
+        if (upload==null || upload.isEmpty()) throw badRequest("Revision file is required"); if (upload.getSize()>REVISION_MAX_BYTES) throw badRequest("Revision file cannot exceed 30 MB");
+        String rev=upper(revisionNo); if (rev.isBlank()) throw badRequest("Revision number is required"); if (revisionRepository.existsByProductionFile_IdAndRevisionTypeAndRevisionNoIgnoreCase(fileId,type,rev)) throw conflict("Revision already exists: "+rev);
+        String original=safeFileName(upload.getOriginalFilename(), type.name()+"-"+rev); String content=clean(upload.getContentType()); if(content==null)content="application/octet-stream";
+        Path folder=revisionRoot.resolve(fileId.toString()).resolve(type.name()).normalize(); Path target=folder.resolve(UUID.randomUUID()+"-"+original).normalize(); if(!target.startsWith(revisionRoot))throw badRequest("Invalid revision path");
+        try { Files.createDirectories(folder); Files.copy(upload.getInputStream(),target,StandardCopyOption.REPLACE_EXISTING); } catch(IOException ex){ throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to save revision file"); }
+        MatFlowRevision row=new MatFlowRevision(); row.setProductionFile(file); row.setRevisionType(type); row.setRevisionNo(rev); row.setOriginalFileName(original); row.setContentType(content); row.setStoragePath(target.toString()); row.setSizeBytes(upload.getSize()); row.setChangeSummary(changeSummary); row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor());
+        boolean impact=requiresImpactReview(file,type); row.setRevisionStatus(impact?RevisionStatus.PENDING_IMPACT_REVIEW:RevisionStatus.ACTIVE); if(!impact)row.setActivatedAt(now()); revisionRepository.save(row);
+        if(impact){ file.setRevisionReviewRequired(true); file.setStage(ProductionFileStage.REVISION_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getEngineeringHead()); }
+        else activateRevision(file,row,false);
+        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file); auditService.log("REVISION",row.getId(),impact?"REVISION_IMPACT_REVIEW_REQUIRED":"REVISION_ACTIVATED",file,auditService.details("type",type.name(),"revisionNo",rev,"changeSummary",changeSummary)); return toDetail(file);
     }
 
     @Transactional(readOnly = true)
-    public EngineeringTaskDetailResponse getTask(UUID id) {
-        accessService.requireRead();
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse response = toTaskResponse(state, true);
-        requireCanReadTask(response);
-        return new EngineeringTaskDetailResponse(response, history(TASK_ENTITY, id));
+    public RevisionFileResource revisionFile(UUID fileId, UUID revisionId) {
+        MatFlowProductionFile file=requireFile(fileId); MatFlowRevision row=revisionRepository.findById(revisionId).orElseThrow(()->notFound("Revision not found")); if(!fileId.equals(row.getProductionFile().getId()))throw notFound("Revision not found");
+        Path path=Path.of(row.getStoragePath()).normalize(); if(!Files.exists(path)||!Files.isRegularFile(path))throw notFound("Revision file not found"); return new RevisionFileResource(new FileSystemResource(path),row.getOriginalFileName(),row.getContentType());
     }
 
     @Transactional
-    public EngineeringTaskDetailResponse assignTask(UUID id, EngineeringTaskAssignRequest request) {
-        requireEngineeringHead();
-        if (request == null) throw badRequest("Task assignment is required");
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, false);
-        requireCanReadPlant(current.plantCode());
-        assertVersion(request.version(), current.version(), "Engineering task");
-        if (Set.of("COMPLETED", "SUPERSEDED", "CANCELLED", "SUBMITTED_TO_PRODUCTION").contains(cleanUpper(current.status()))) {
-            throw conflict("This task cannot be reassigned in its current status");
-        }
-        String assignedTo = requiredText(request.assignedTo(), "Assigned engineer");
-        requirePersonRole(assignedTo, current.plantCode(),
-                Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"),
-                "Engineering assignee");
-        state.put("assignedTo", assignedTo);
-        state.put("dueDate", request.dueDate() == null ? string(state.get("dueDate")) : isoDate(request.dueDate(), "Due date"));
-        state.put("priority", request.priority() == null ? string(state.get("priority")) : priority(request.priority()));
-        state.put("status", "ASSIGNED");
-        appendNote(state, request.note(), "assignmentNote");
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_TASK_ASSIGNED", state);
-        return getTask(id);
+    public ProductionFileDetailResponse reviewRevisionImpact(UUID fileId, UUID revisionId, RevisionImpactRequest request) {
+        accessService.requireEngineeringWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowRevision row=revisionRepository.findById(revisionId).orElseThrow(()->notFound("Revision not found")); if(!fileId.equals(row.getProductionFile().getId()))throw notFound("Revision not found"); requireVersion(row.getRowVersion(),request.rowVersion());
+        if(row.getRevisionStatus()!=RevisionStatus.PENDING_IMPACT_REVIEW)throw conflict("Revision does not require impact review"); String decision=upper(request.decision()); row.setImpactNote(request.impactNote()); row.setImpactReviewedBy(accessService.actor()); row.setImpactReviewedAt(now()); row.setUpdatedBy(accessService.actor());
+        if("ACCEPT".equals(decision)){
+            activateRevision(file,row,true); row.setRevisionStatus(RevisionStatus.ACTIVE); row.setActivatedAt(now());
+            file.setRevisionReviewRequired(false); file.setPpcGate2Decision(null); file.setPpcGate2By(null); file.setPpcGate2At(null); file.setPpcGate2Remarks(null);
+            if(row.getRevisionType()==RevisionType.DESIGN_DRAWING){ resetEngineeringForDesignRevision(file); }
+            else { file.setStage(ProductionFileStage.ENGINEERING_WORK); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer()); }
+            file.setDownstreamWorkflowStatus(file.getProductionReleasedAt()!=null?"RELEASE_INVALIDATED_BY_REVISION":file.getDownstreamWorkflowStatus());
+        } else if("REJECT".equals(decision)){
+            row.setRevisionStatus(RevisionStatus.REJECTED); file.setRevisionReviewRequired(false); restoreAfterRejectedRevision(file);
+        } else throw badRequest("Revision impact decision must be ACCEPT or REJECT");
+        revisionRepository.save(row); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file); auditService.log("REVISION",row.getId(),"REVISION_IMPACT_"+decision,file,auditService.details("impactNote",request.impactNote())); return toDetail(file);
     }
 
     @Transactional
-    public EngineeringTaskDetailResponse updateTask(UUID id, EngineeringTaskUpdateRequest request) {
-        if (request == null) throw badRequest("Task update is required");
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, false);
-        requireTaskWorkerOrHead(current);
-        assertVersion(request.version(), current.version(), "Engineering task");
-        if (Set.of("SUBMITTED_TO_PRODUCTION", "COMPLETED", "SUPERSEDED", "CANCELLED").contains(cleanUpper(current.status()))) {
-            throw conflict("Submitted / completed / superseded / cancelled tasks are read-only");
+    public ProductionFileDetailResponse ppcGate2(UUID fileId, GateDecisionRequest request) {
+        accessService.requirePpcWrite(); MatFlowProductionFile file=requireFile(fileId); requireVersion(file.getRowVersion(),request.rowVersion());
+        requireStage(file, ProductionFileStage.ENGINEERING_WORK, ProductionFileStage.PPC_GATE_2);
+        String decision=upper(request.decision());
+        if(!Set.of("RELEASE","RETURN").contains(decision))throw badRequest("PPC Gate 2 decision must be RELEASE or RETURN");
+        if("RETURN".equals(decision)){
+            if(clean(request.remarks())==null)throw badRequest("Return remarks are required"); file.setPpcGate2Decision("RETURN"); file.setPpcGate2By(accessService.actor()); file.setPpcGate2At(now()); file.setPpcGate2Remarks(request.remarks()); file.setStage(ProductionFileStage.ENGINEERING_WORK); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
+        } else {
+            List<String> blockers=gate2Blockers(file); if(!blockers.isEmpty())throw conflict("Production Release is blocked: "+String.join("; ",blockers));
+            file.setPpcGate2Decision("RELEASE"); file.setPpcGate2By(accessService.actor()); file.setPpcGate2At(now()); file.setPpcGate2Remarks(request.remarks()); file.setStage(ProductionFileStage.PRODUCTION_RELEASED); file.setCurrentDepartment("PRODUCTION RELEASE"); file.setCurrentOwner(null); file.setProductionReleasedBy(accessService.actor()); file.setProductionReleasedAt(now());
+            file.setDownstreamWorkflowKey("PENDING_VALIDATED_PRODUCTION_WORKFLOW"); file.setDownstreamWorkflowStatus("NOT_CONFIGURED"); file.setReleaseHealth(ReleaseHealth.GREEN);
+            MatFlowBom bom=latestBom(file.getId()); if(bom!=null && bom.getStatus()==BomStatus.READY_FOR_RELEASE){ bom.setStatus(BomStatus.RELEASED); bom.setReleasedBy(accessService.actor()); bom.setReleasedAt(now()); bom.setUpdatedBy(accessService.actor()); bomRepository.save(bom); }
         }
-        if (request.dueDate() != null) state.put("dueDate", isoDate(request.dueDate(), "Due date"));
-        if (request.priority() != null) state.put("priority", priority(request.priority()));
-        if (request.outstandingIssues() != null) state.put("outstandingIssues", clean(request.outstandingIssues()));
-        if (request.remarks() != null) state.put("remarks", clean(request.remarks()));
-        if (request.productionRecipient() != null) {
-            if (!isManager() && !isEngineeringHead()) throw forbidden("Only Engineering Head / Manager can change the Production recipient");
-            String recipient = requiredText(request.productionRecipient(), "Production recipient");
-            requirePersonRole(recipient, current.plantCode(), Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION"), "Production recipient");
-            state.put("productionRecipient", recipient);
-        }
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_TASK_UPDATED", state);
-        return getTask(id);
-    }
-
-    @Transactional
-    public EngineeringTaskDetailResponse updateTaskChecklist(
-            UUID id, String itemKey, ChecklistItemUpdateRequest request) {
-        if (request == null) throw badRequest("Checklist update is required");
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, false);
-        requireTaskWorkerOrHead(current);
-        assertVersion(request.version(), current.version(), "Engineering task");
-        if (Set.of("SUBMITTED_TO_PRODUCTION", "COMPLETED", "SUPERSEDED", "CANCELLED").contains(cleanUpper(current.status()))) {
-            throw conflict("Engineering checklist is locked after Production handover / supersession");
-        }
-        updateChecklistItem(state, itemKey, request);
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_CHECKLIST_UPDATED", state);
-        return getTask(id);
-    }
-
-    @Transactional
-    public EngineeringTaskDetailResponse setTaskStatus(UUID id, EngineeringTaskStatusRequest request) {
-        if (request == null) throw badRequest("Task status action is required");
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, true);
-        requireTaskWorkerOrHead(current);
-        assertVersion(request.version(), current.version(), "Engineering task");
-        String next = cleanUpper(request.status());
-        if (!TASK_STATUSES.contains(next)) throw badRequest("Unsupported Engineering task status: " + request.status());
-        String before = cleanUpper(current.status());
-        if (Objects.equals(before, next)) return getTask(id);
-        validateTaskTransition(current, next);
-
-        if ("IN_PROGRESS".equals(next) && state.get("startedAt") == null) {
-            state.put("startedAt", LocalDateTime.now().toString());
-        }
-        if ("AWAITING_CLARIFICATION".equals(next)) {
-            state.put("outstandingIssues", firstNonBlank(request.note(), string(state.get("outstandingIssues"))));
-        }
-        if ("RETURNED".equals(next)) {
-            if (!current.productionReturnPending() && !"AWAITING_CLARIFICATION".equals(before)) {
-                throw conflict("Returned status is available when Production has returned the linked BOM or when clarification work is being resumed");
-            }
-        }
-        if ("COMPLETED".equals(next)) {
-            ensureTaskRevisionCurrent(current, "Engineering task closure");
-            LinkedBomResponse linked = current.linkedBom();
-            if (linked == null || !linked.effective() || !"APPROVED".equals(cleanUpper(linked.status()))) {
-                throw conflict("Engineering task can be completed only after the linked BOM is Production-reviewed and effective");
-            }
-            state.put("completedBy", accessService.actor());
-            state.put("completedAt", LocalDateTime.now().toString());
-        }
-        state.put("status", next);
-        appendNote(state, request.note(), "statusNote");
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_TASK_STATUS_" + next, state);
-        return getTask(id);
-    }
-
-    @Transactional
-    public EngineeringTaskDetailResponse uploadProductionDrawing(
-            UUID id, String revision, MultipartFile file, Integer version) {
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, false);
-        requireTaskWorkerOrHead(current);
-        assertVersion(version, current.version(), "Engineering task");
-        if (Set.of("SUBMITTED_TO_PRODUCTION", "COMPLETED", "SUPERSEDED", "CANCELLED").contains(cleanUpper(current.status()))) {
-            throw conflict("Production drawing is locked after handover / supersession");
-        }
-        String cleanRevision = requiredText(revision, "Engineering Production drawing revision");
-        state.put("engineeringDrawingRevision", cleanRevision);
-        state.put("productionDrawing", saveWorkflowFile(state, "engineering", cleanRevision, file));
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_PRODUCTION_DRAWING_UPLOADED", state);
-        return getTask(id);
-    }
-
-    @Transactional
-    public EngineeringTaskDetailResponse handoverToProduction(UUID id, EngineeringHandoverRequest request) {
-        if (request == null || request.bomId() == null) throw badRequest("BOM is required for Production handover");
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        EngineeringTaskResponse current = toTaskResponse(state, false);
-        requireTaskWorkerOrHead(current);
-        /*
-         * The existing MatFlowBomService.submit(...) gate is Engineering-owned.
-         * Keep this handover aligned with that unchanged BOM workflow: an
-         * Engineering Head may manage/review the task, but a head-only profile
-         * does not silently gain BOM-edit/submission authority.
-         */
-        requireAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING");
-        assertVersion(request.version(), current.version(), "Engineering task");
-        String status = cleanUpper(current.status());
-        if (!Set.of("ASSIGNED", "IN_PROGRESS", "RETURNED", "AWAITING_CLARIFICATION").contains(status)) {
-            throw conflict("Task is not in an Engineering-working status");
-        }
-        ensureTaskRevisionCurrent(current, "Production handover");
-        if (!checklistProgress(checklistMaps(state)).complete()) {
-            throw conflict("Complete the Engineering checklist before Production handover");
-        }
-        Map<String, Object> file = map(state.get("productionDrawing"));
-        String engineeringRevision = clean(string(state.get("engineeringDrawingRevision")));
-        if (!bool(file.get("available")) || engineeringRevision == null) {
-            throw conflict("Upload the exact Engineering Production drawing revision before handover");
-        }
-        String uploadedEngineeringRevision = clean(string(file.get("revision")));
-        if (uploadedEngineeringRevision == null || !same(engineeringRevision, uploadedEngineeringRevision)) {
-            throw conflict("The uploaded Engineering Production drawing revision does not match the handover revision. Upload the exact revision before handover");
-        }
-
-        BomDetailResponse bom = bomService.get(request.bomId());
-        if (bom.project() == null || !Objects.equals(current.productId(), bom.project().id())) {
-            throw conflict("Selected BOM does not belong to this Engineering task Product / Drawing");
-        }
-        if (!bom.latestRevision()) {
-            throw conflict("Only the latest BOM revision can be handed over to Production");
-        }
-        String bomStatus = bom.status() == null ? "" : bom.status().name();
-        if (!Set.of("DRAFT", "RETURNED").contains(bomStatus)) {
-            throw conflict("Only a Draft or Production-returned BOM can be handed over");
-        }
-        if (request.bomRowVersion() == null || !Objects.equals(request.bomRowVersion(), bom.rowVersion())) {
-            throw conflict("BOM changed after it was selected. Refresh and retry the handover");
-        }
-
-        BomDetailResponse submitted = bomService.submit(
-                request.bomId(),
-                new BomActionRequest(request.bomRowVersion(), clean(request.handoverRemarks())));
-
-        state.put("linkedBomId", submitted.id().toString());
-        state.put("linkedBomNumber", submitted.bomNumber());
-        state.put("linkedBomRevision", submitted.revisionNo());
-        state.put("linkedBomStatusAtHandover", submitted.status() == null ? null : submitted.status().name());
-        state.put("handoverRemarks", clean(request.handoverRemarks()));
-        state.put("handedOverBy", accessService.actor());
-        state.put("handedOverAt", LocalDateTime.now().toString());
-        state.put("status", "SUBMITTED_TO_PRODUCTION");
-        state.put("revisionReviewRequired", false);
-        state.put("pendingDesignSubmissionId", null);
-        state.put("pendingDesignRevision", null);
-        touch(state);
-        record(TASK_ENTITY, id, "ENGINEERING_PACKAGE_SUBMITTED_TO_PRODUCTION", state);
-        return getTask(id);
-    }
-
-    /* =============================== CONTEXT / PEOPLE / TEMPLATES =============================== */
-
-    @Transactional(readOnly = true)
-    public ProductEngineeringContextResponse productContext(UUID projectId, UUID productId) {
-        accessService.requireRead();
-        ProjectProductRef ref = requireProduct(projectId, productId);
-        List<DesignSubmissionResponse> submissions = listDesignSubmissions(ref.project().plantCode(), null, null, productId);
-        List<EngineeringTaskResponse> tasks = latestStates(TASK_ENTITY).stream()
-                .filter(state -> productId.equals(uuid(state.get("productId"))))
-                .map(state -> toTaskResponse(state, true))
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparing(EngineeringTaskResponse::updatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())))
-                .toList();
-        List<LinkedBomResponse> boms = bomService.list(null, null, false).stream()
-                .filter(row -> productId.equals(row.projectDrawingId()))
-                .sorted(Comparator.comparing(BomSummaryResponse::revisionNo, Comparator.nullsLast(Comparator.reverseOrder())))
-                .map(this::linkedBomFromSummary)
-                .toList();
-        return new ProductEngineeringContextResponse(
-                ref.project().id(), ref.product().id(), ref.project().projectCode(), ref.project().projectName(),
-                ref.project().clientName(), ref.project().plantCode(), ref.product().productName(), ref.product().drawingNo(),
-                ref.product().drawingRevision(), submissions, tasks, boms, LocalDateTime.now().toString());
+        file.setUpdatedBy(accessService.actor()); fileRepository.save(file); auditService.log("PRODUCTION_FILE",file.getId(),"PPC_GATE_2_"+decision,file,auditService.details("remarks",request.remarks(),"downstreamWorkflowStatus",file.getDownstreamWorkflowStatus())); return toDetail(file);
     }
 
     @Transactional(readOnly = true)
-    public List<WorkspacePerson> people(String plantCode) {
-        accessService.requireRead();
-        String plant = cleanUpper(plantCode);
-        if (plant != null) accessService.requirePlantAccess(plant);
-        return userService.getAllUsers().stream()
-                .filter(User::isEnabled)
-                .filter(this::isMatFlowPerson)
-                .filter(user -> plant == null || canUserAccessPlant(user, plant))
-                .map(user -> {
-                    Set<String> roles = normalizedRoles(user);
-                    return new WorkspacePerson(
-                            user.getUsername(), user.getUsername(), roles.stream().sorted().toList(),
-                            user.getEffectivePlantCodes().stream().sorted().toList(),
-                            hasAny(roles, "ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"),
-                            hasAny(roles, "ADMIN", "MATFLOW_MANAGER"),
-                            hasAny(roles, "ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"),
-                            hasAny(roles, "ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION"));
-                })
-                .sorted(Comparator.comparing(WorkspacePerson::username, String.CASE_INSENSITIVE_ORDER))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<ChecklistTemplateResponse> templates() {
-        accessService.requireRead();
-        return List.of(
-                template(DESIGN_TEMPLATE, "Wardrobe Designing Checklist", "DESIGN / WARDROBE", WARDROBE_DESIGN_CHECKLIST,
-                        "32-point Wardrobe checklist used by the Designing team before Submit to Engineering. Product remains approval-free until this explicit submit action."),
-                template(PYTHA_ENGINEERING_TEMPLATE, "PYTHA Engg. Detail", "ENGINEERING / PYTHA", PYTHA_ENGINEERING_CHECKLIST,
-                        "Engineering task checklist from the supplied PYTHA Engg. Detail sheet: 20 PYTHA deliverables + 20 Drawing Check List controls."),
-                template(GENERAL_ENGINEERING_TEMPLATE, "General Engineering Handover Checklist", "ENGINEERING / GENERAL", GENERAL_ENGINEERING_CHECKLIST,
-                        "Reserved generic fallback for non-PYTHA work. New PYTHA Engineering tasks default to the supplied 40-control PYTHA checklist."));
-    }
-
-    /* =============================== NOTIFICATIONS =============================== */
-
-    @Transactional(readOnly = true)
-    public WorkspaceNotificationFeedResponse notifications(String plantCode, Integer limit) {
-        accessService.requireRead();
-        String plant = cleanUpper(plantCode);
-        if (plant != null) accessService.requirePlantAccess(plant);
-        int max = Math.max(1, Math.min(limit == null ? 40 : limit, 100));
-        String actor = accessService.actor();
-        List<WorkspaceNotificationResponse> all = new ArrayList<>();
-
-        for (Map<String, Object> state : latestStates(DESIGN_ENTITY)) {
-            DesignSubmissionResponse row = toDesignResponse(state);
-            if (row == null || !canReadPlant(row.plantCode()) || (plant != null && !plant.equals(cleanUpper(row.plantCode())))) continue;
-            if (!designNotificationRelevant(row, actor)) continue;
-            all.add(designNotification(row, actor));
-        }
-        for (Map<String, Object> state : latestStates(TASK_ENTITY)) {
-            EngineeringTaskResponse row = toTaskResponse(state, false);
-            if (row == null || !canReadPlant(row.plantCode()) || (plant != null && !plant.equals(cleanUpper(row.plantCode())))) continue;
-            if (!taskNotificationRelevant(row, actor)) continue;
-            all.add(taskNotification(row, actor));
-        }
-        all.sort(Comparator.comparing(WorkspaceNotificationResponse::updatedAt,
-                Comparator.nullsLast(Comparator.reverseOrder())));
-        int unread = (int) all.stream().filter(row -> !row.read()).count();
-        return new WorkspaceNotificationFeedResponse(unread, all.stream().limit(max).toList(), LocalDateTime.now().toString());
+    public NotificationFeedResponse notifications(Integer limit) {
+        accessService.requireRead(); String actor=accessService.actor(); int max=limit==null?30:Math.max(1,Math.min(100,limit));
+        List<WorkItemStatus> open=List.of(WorkItemStatus.OPEN,WorkItemStatus.RESPONDED,WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED);
+        List<NotificationResponse> rows=workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open).stream().filter(w->accessService.canAccessPlant(w.getProductionFile().getPlantCode())).limit(max).map(w->{
+            MatFlowProductionFile f=w.getProductionFile(); String message=w.getItemType()==WorkItemType.ENGINEERING_QUERY?"Engineering query requires attention":w.getTitle()+" is pending";
+            return new NotificationResponse(w.getItemType().name(),w.getId(),w.getTitle(),message,w.getPriority(),w.getDueAt(),f.getProjectCode(),f.getProductionFileNo(),"/matflow/work?fileId="+f.getId(),w.getReadAt()!=null); }).toList();
+        int unread=(int)rows.stream().filter(r->!r.read()).count(); return new NotificationFeedResponse(unread,rows,now());
     }
 
     @Transactional
-    public WorkspaceNotificationFeedResponse markNotificationRead(
-            String referenceType, UUID referenceId, String plantCode) {
-        accessService.requireRead();
-        String entityType = notificationEntity(referenceType);
-        Map<String, Object> state = requireState(entityType, referenceId, "Notification source");
-        requireCanReadPlant(string(state.get("plantCode")));
-        String actor = accessService.actor();
-        auditService.record(
-                RECEIPT_ENTITY,
-                receiptId(entityType, referenceId, actor),
-                "READ",
-                string(state.get("plantCode")),
-                string(state.get("projectCode")),
-                string(state.get("drawingNo")),
-                auditService.details(
-                        "referenceType", entityType,
-                        "referenceId", referenceId.toString(),
-                        "username", actor,
-                        "readAt", LocalDateTime.now().toString(),
-                        "sourceUpdatedAt", string(state.get("updatedAt"))));
-        return notifications(plantCode, 40);
+    public NotificationFeedResponse markNotificationRead(UUID workItemId, Integer limit) {
+        accessService.requireRead(); MatFlowWorkItem item=workRepository.findById(workItemId).orElseThrow(()->notFound("Work item not found")); requireFile(item.getProductionFile().getId());
+        if(item.getAssignedTo()!=null && item.getAssignedTo().equalsIgnoreCase(accessService.actor())){ item.setReadAt(now()); item.setUpdatedBy(accessService.actor()); workRepository.save(item); }
+        return notifications(limit);
     }
 
     @Transactional
-    public WorkspaceNotificationFeedResponse markAllNotificationsRead(String plantCode) {
-        WorkspaceNotificationFeedResponse feed = notifications(plantCode, 100);
-        for (WorkspaceNotificationResponse row : feed.notifications()) {
-            if (!row.read()) markNotificationRead(row.referenceType(), row.referenceId(), plantCode);
+    public NotificationFeedResponse markAllNotificationsRead(Integer limit) {
+        accessService.requireRead(); String actor=accessService.actor();
+        List<WorkItemStatus> open=List.of(WorkItemStatus.OPEN,WorkItemStatus.RESPONDED,WorkItemStatus.TODO,WorkItemStatus.ASSIGNED,WorkItemStatus.IN_PROGRESS,WorkItemStatus.BLOCKED);
+        for(MatFlowWorkItem item:workRepository.findByAssignedToIgnoreCaseAndStatusInOrderByDueAtAsc(actor,open)){
+            if(accessService.canAccessPlant(item.getProductionFile().getPlantCode())){item.setReadAt(now());item.setUpdatedBy(actor);workRepository.save(item);}
         }
-        return notifications(plantCode, 40);
+        return notifications(limit);
     }
 
-    /* =============================== DRAWING DOWNLOAD =============================== */
-
-    @Transactional(readOnly = true)
-    public WorkspaceFileResource designDrawing(UUID id) {
-        Map<String, Object> state = requireState(DESIGN_ENTITY, id, "Design submission");
-        requireCanReadPlant(string(state.get("plantCode")));
-        return fileResource(map(state.get("designDrawing")));
-    }
-
-    @Transactional(readOnly = true)
-    public WorkspaceFileResource productionDrawing(UUID id) {
-        Map<String, Object> state = requireState(TASK_ENTITY, id, "Engineering task");
-        requireCanReadPlant(string(state.get("plantCode")));
-        return fileResource(map(state.get("productionDrawing")));
-    }
-
-    public record WorkspaceFileResource(Resource resource, String contentType, String fileName) {}
-
-    /* =============================== RESPONSE MAPPING =============================== */
-
-    private DesignSubmissionResponse toDesignResponse(Map<String, Object> state) {
-        if (state == null || state.isEmpty() || uuid(state.get("id")) == null) return null;
-        List<ChecklistItemResponse> checklist = checklistResponse(state);
-        return new DesignSubmissionResponse(
-                uuid(state.get("id")), string(state.get("submissionNumber")), string(state.get("status")),
-                uuid(state.get("projectId")), uuid(state.get("productId")), string(state.get("projectCode")),
-                string(state.get("projectName")), string(state.get("clientName")), string(state.get("plantCode")),
-                string(state.get("productName")), string(state.get("drawingNo")), string(state.get("productMasterRevisionAtCreation")),
-                string(state.get("designDrawingRevision")), string(state.get("designer")), string(state.get("engineeringHead")),
-                string(state.get("productionRecipient")), designChecklistTemplateForState(state),
-                string(state.get("engineeringChecklistTemplateKey")),
-                string(state.get("reference")), string(state.get("companyCode")), string(state.get("remarks")),
-                string(state.get("submittedBy")), string(state.get("submittedAt")), string(state.get("reviewedBy")),
-                string(state.get("reviewedAt")), string(state.get("returnReason")), uuid(state.get("taskId")),
-                integer(state.get("version"), 1), string(state.get("createdBy")), string(state.get("createdAt")),
-                string(state.get("updatedBy")), string(state.get("updatedAt")), fileResponse(map(state.get("designDrawing"))),
-                checklistProgress(checklistMaps(state)), checklist);
-    }
-
-    private EngineeringTaskResponse toTaskResponse(Map<String, Object> state, boolean hydrateBom) {
-        if (state == null || state.isEmpty() || uuid(state.get("id")) == null) return null;
-        LinkedBomResponse linked = hydrateBom ? liveLinkedBom(state) : snapshotLinkedBom(state);
-        boolean returned = linked != null && "RETURNED".equals(cleanUpper(linked.status()))
-                && "SUBMITTED_TO_PRODUCTION".equals(cleanUpper(string(state.get("status"))));
-        String due = string(state.get("dueDate"));
-        String status = string(state.get("status"));
-        return new EngineeringTaskResponse(
-                uuid(state.get("id")), string(state.get("taskNumber")), status, string(state.get("priority")),
-                uuid(state.get("submissionId")), uuid(state.get("projectId")), uuid(state.get("productId")),
-                string(state.get("projectCode")), string(state.get("projectName")), string(state.get("clientName")),
-                string(state.get("plantCode")), string(state.get("productName")), string(state.get("drawingNo")),
-                string(state.get("designDrawingRevision")), string(state.get("engineeringDrawingRevision")),
-                string(state.get("engineeringHead")), string(state.get("assignedTo")), string(state.get("productionRecipient")),
-                due, string(state.get("startedAt")), string(state.get("outstandingIssues")), string(state.get("remarks")),
-                string(state.get("handoverRemarks")), string(state.get("handedOverBy")), string(state.get("handedOverAt")),
-                bool(state.get("revisionReviewRequired")), uuid(state.get("pendingDesignSubmissionId")), string(state.get("pendingDesignRevision")),
-                string(state.get("checklistTemplateKey")), checklistProgress(checklistMaps(state)), checklistResponse(state),
-                fileResponse(map(state.get("designDrawing"))), fileResponse(map(state.get("productionDrawing"))),
-                linked, returned, isOverdue(due, status), integer(state.get("version"), 1),
-                string(state.get("createdBy")), string(state.get("createdAt")), string(state.get("updatedBy")), string(state.get("updatedAt")));
-    }
-
-    private LinkedBomResponse liveLinkedBom(Map<String, Object> state) {
-        UUID bomId = uuid(state.get("linkedBomId"));
-        if (bomId == null) return null;
-        try {
-            return linkedBom(bomService.get(bomId));
-        } catch (RuntimeException ignored) {
-            return snapshotLinkedBom(state);
-        }
-    }
-
-    private LinkedBomResponse snapshotLinkedBom(Map<String, Object> state) {
-        UUID id = uuid(state.get("linkedBomId"));
-        if (id == null) return null;
-        return new LinkedBomResponse(id, string(state.get("linkedBomNumber")), integerObject(state.get("linkedBomRevision")),
-                string(state.get("linkedBomStatusAtHandover")), false, null, null, null, null, null, null, null, null, null);
-    }
-
-    private LinkedBomResponse linkedBom(BomDetailResponse bom) {
-        if (bom == null) return null;
-        return new LinkedBomResponse(
-                bom.id(), bom.bomNumber(), bom.revisionNo(), bom.status() == null ? null : bom.status().name(), bom.effective(),
-                bom.submittedBy(), bom.submittedAt() == null ? null : bom.submittedAt().toString(),
-                bom.productionReviewedBy(), bom.productionReviewedAt() == null ? null : bom.productionReviewedAt().toString(),
-                bom.productionReviewRemarks(), bom.returnedBy(), bom.returnedAt() == null ? null : bom.returnedAt().toString(),
-                bom.returnRemarks(), bom.rowVersion());
-    }
-
-    private LinkedBomResponse linkedBomFromSummary(BomSummaryResponse bom) {
-        if (bom == null) return null;
-        return new LinkedBomResponse(
-                bom.id(), bom.bomNumber(), bom.revisionNo(), bom.status() == null ? null : bom.status().name(), bom.effective(),
-                null, null, bom.productionReviewedBy(),
-                bom.productionReviewedAt() == null ? null : bom.productionReviewedAt().toString(),
-                bom.productionReviewRemarks(), null, null, null, bom.rowVersion());
-    }
-
-    /* =============================== TASK / SUBMISSION CREATION HELPERS =============================== */
-
-    private UUID createTaskFromSubmission(Map<String, Object> submission, DesignSubmissionActionRequest request) {
-        UUID id = UUID.randomUUID();
-        String assignee = clean(request.assignedTo());
-        if (assignee != null) {
-            requirePersonRole(assignee, string(submission.get("plantCode")),
-                    Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"),
-                    "Engineering assignee");
-        }
-        String template = engineeringTemplate(string(submission.get("engineeringChecklistTemplateKey")));
-        Map<String, Object> task = new LinkedHashMap<>();
-        task.put("id", id.toString());
-        task.put("taskNumber", taskNumber(id));
-        task.put("status", assignee == null ? "AWAITING_ASSIGNMENT" : "ASSIGNED");
-        task.put("priority", priority(request.priority()));
-        task.put("submissionId", string(submission.get("id")));
-        copyProjectProductSnapshot(submission, task);
-        task.put("designDrawingRevision", string(submission.get("designDrawingRevision")));
-        task.put("engineeringDrawingRevision", null);
-        task.put("engineeringHead", string(submission.get("engineeringHead")));
-        task.put("assignedTo", assignee);
-        task.put("productionRecipient", string(submission.get("productionRecipient")));
-        task.put("dueDate", isoDate(request.dueDate(), "Due date"));
-        task.put("startedAt", null);
-        task.put("outstandingIssues", null);
-        task.put("remarks", clean(request.note()));
-        task.put("handoverRemarks", null);
-        task.put("handedOverBy", null);
-        task.put("handedOverAt", null);
-        task.put("revisionReviewRequired", false);
-        task.put("pendingDesignSubmissionId", null);
-        task.put("pendingDesignRevision", null);
-        task.put("checklistTemplateKey", template);
-        task.put("checklist", newChecklist(checkDefinitions(template)));
-        task.put("designDrawing", deepCopyMap(map(submission.get("designDrawing"))));
-        task.put("productionDrawing", emptyFile());
-        task.put("linkedBomId", null);
-        task.put("version", 1);
-        String actor = accessService.actor();
-        String now = LocalDateTime.now().toString();
-        task.put("createdBy", actor);
-        task.put("createdAt", now);
-        task.put("updatedBy", actor);
-        task.put("updatedAt", now);
-        record(TASK_ENTITY, id, assignee == null ? "ENGINEERING_TASK_CREATED" : "ENGINEERING_TASK_CREATED_AND_ASSIGNED", task);
-        return id;
-    }
-
-    private void flagOpenTasksForNewRevision(Map<String, Object> submitted) {
-        UUID productId = uuid(submitted.get("productId"));
-        UUID submissionId = uuid(submitted.get("id"));
-        String revision = string(submitted.get("designDrawingRevision"));
-        if (productId == null || submissionId == null) return;
-        for (Map<String, Object> task : latestStates(TASK_ENTITY)) {
-            if (!productId.equals(uuid(task.get("productId")))) continue;
-            if (!OPEN_TASK_STATUSES.contains(cleanUpper(string(task.get("status"))))) continue;
-            if (same(revision, string(task.get("designDrawingRevision")))) continue;
-            task = new LinkedHashMap<>(task);
-            task.put("revisionReviewRequired", true);
-            task.put("pendingDesignSubmissionId", submissionId.toString());
-            task.put("pendingDesignRevision", revision);
-            touch(task);
-            record(TASK_ENTITY, uuid(task.get("id")), "NEW_DESIGN_REVISION_REQUIRES_REVIEW", task);
-        }
-    }
-
-    /**
-     * Returning a proposed Design revision is an explicit Engineering-Head
-     * decision that the pending revision is not yet the active Engineering
-     * input. Clear only the task flags created by that exact submission so the
-     * earlier accepted revision can continue without silently adopting the
-     * returned drawing.
-     */
-    private void clearRevisionReviewFlagsForSubmission(UUID submissionId, String action) {
-        if (submissionId == null) return;
-        for (Map<String, Object> raw : latestStates(TASK_ENTITY)) {
-            if (!submissionId.equals(uuid(raw.get("pendingDesignSubmissionId")))) continue;
-            if (!bool(raw.get("revisionReviewRequired"))) continue;
-            Map<String, Object> task = new LinkedHashMap<>(raw);
-            task.put("revisionReviewRequired", false);
-            task.put("pendingDesignSubmissionId", null);
-            task.put("pendingDesignRevision", null);
-            touch(task);
-            UUID taskId = uuid(task.get("id"));
-            if (taskId != null) record(TASK_ENTITY, taskId, action, task);
-        }
-    }
-
-    /**
-     * Once Engineering accepts a newer Design revision, the task created from
-     * that accepted submission becomes the active work item. Older open tasks
-     * that were explicitly flagged by this revision are archived as
-     * SUPERSEDED. Their immutable snapshots, linked drawings and any BOM already
-     * submitted to Production remain untouched for traceability.
-     */
-    private void supersedeOlderTasksForAcceptedRevision(
-            Map<String, Object> acceptedSubmission,
-            UUID replacementTaskId) {
-        UUID productId = uuid(acceptedSubmission.get("productId"));
-        UUID submissionId = uuid(acceptedSubmission.get("id"));
-        String revision = string(acceptedSubmission.get("designDrawingRevision"));
-        if (productId == null || submissionId == null) return;
-
-        for (Map<String, Object> raw : latestStates(TASK_ENTITY)) {
-            UUID taskId = uuid(raw.get("id"));
-            if (taskId == null || taskId.equals(replacementTaskId)) continue;
-            if (!productId.equals(uuid(raw.get("productId")))) continue;
-            if (!SUPERSEDABLE_TASK_STATUSES.contains(cleanUpper(string(raw.get("status"))))) continue;
-            if (!submissionId.equals(uuid(raw.get("pendingDesignSubmissionId")))) continue;
-
-            Map<String, Object> task = new LinkedHashMap<>(raw);
-            task.put("status", "SUPERSEDED");
-            task.put("revisionReviewRequired", false);
-            task.put("pendingDesignSubmissionId", null);
-            task.put("pendingDesignRevision", null);
-            task.put("supersededByTaskId", replacementTaskId == null ? null : replacementTaskId.toString());
-            task.put("supersededByDesignSubmissionId", submissionId.toString());
-            task.put("supersededByDesignRevision", revision);
-            task.put("supersededBy", accessService.actor());
-            task.put("supersededAt", LocalDateTime.now().toString());
-            task.put("statusNote", "Superseded after Engineering accepted Design revision " + firstNonBlank(revision, "-"));
-            touch(task);
-            record(TASK_ENTITY, taskId, "ENGINEERING_TASK_SUPERSEDED_BY_DESIGN_REVISION", task);
-        }
-    }
-
-    /**
-     * Server-side stale-revision lock. UI warning flags are helpful, but the
-     * Production handover/closure gate must not trust the browser or one prior
-     * task snapshot. Re-read the latest Design submissions for the same Product
-     * and block whenever a newer submitted/accepted revision exists.
-     */
-    private void ensureTaskRevisionCurrent(EngineeringTaskResponse task, String operation) {
-        if (task == null) throw conflict((operation == null ? "Engineering action" : operation) + " requires a valid task");
-        if (task.revisionReviewRequired()) {
-            throw conflict((operation == null ? "Engineering action" : operation)
-                    + " is blocked because Design revision " + firstNonBlank(task.pendingDesignRevision(), "-")
-                    + " is waiting for Engineering review. Review that Design submission first.");
-        }
-
-        UUID productId = task.productId();
-        UUID sourceSubmissionId = task.submissionId();
-        if (productId == null || sourceSubmissionId == null) return;
-
-        Map<String, Object> source = requireState(DESIGN_ENTITY, sourceSubmissionId, "Task source Design submission");
-        String sourceRevision = string(source.get("designDrawingRevision"));
-        String sourceMoment = submissionSequenceMoment(source);
-
-        Map<String, Object> newer = latestStates(DESIGN_ENTITY).stream()
-                .filter(candidate -> productId.equals(uuid(candidate.get("productId"))))
-                .filter(candidate -> !sourceSubmissionId.equals(uuid(candidate.get("id"))))
-                .filter(candidate -> Set.of("SUBMITTED_TO_ENGINEERING", "ACCEPTED")
-                        .contains(cleanUpper(string(candidate.get("status")))))
-                .filter(candidate -> !same(sourceRevision, string(candidate.get("designDrawingRevision"))))
-                .filter(candidate -> isLater(submissionSequenceMoment(candidate), sourceMoment))
-                .max(Comparator.comparing(this::submissionSequenceMoment,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .orElse(null);
-
-        if (newer != null) {
-            throw conflict((operation == null ? "Engineering action" : operation)
-                    + " is blocked because a newer Design revision "
-                    + firstNonBlank(string(newer.get("designDrawingRevision")), "-")
-                    + " has been submitted/accepted for this Product. Open the Design & Engineering workspace and review it first.");
-        }
-    }
-
-    private String submissionSequenceMoment(Map<String, Object> state) {
-        return firstNonBlank(
-                string(state.get("submittedAt")),
-                string(state.get("reviewedAt")),
-                string(state.get("createdAt")),
-                string(state.get("updatedAt")));
-    }
-
-    private boolean isLater(String candidate, String baseline) {
-        if (candidate == null) return false;
-        if (baseline == null) return true;
-        return candidate.compareTo(baseline) > 0;
-    }
-
-    /* =============================== CHECKLIST HELPERS =============================== */
-
-    private void updateChecklistItem(Map<String, Object> state, String itemKey, ChecklistItemUpdateRequest request) {
-        String key = requiredText(itemKey, "Checklist item key");
-        String nextState = cleanUpper(request.state());
-        if (!CHECK_STATES.contains(nextState)) throw badRequest("Checklist state must be PENDING, DONE or NA");
-        List<Map<String, Object>> items = checklistMaps(state);
-        Map<String, Object> item = items.stream().filter(row -> same(key, string(row.get("key")))).findFirst()
-                .orElseThrow(() -> notFound("Checklist item not found: " + key));
-        if ("NA".equals(nextState) && !bool(item.get("naAllowed"))) {
-            throw conflict("This mandatory checklist point cannot be marked Not applicable");
-        }
-        String naReason = clean(request.naReason());
-        if ("NA".equals(nextState) && naReason == null) throw badRequest("Not applicable reason is required");
-        item.put("state", nextState);
-        item.put("naReason", "NA".equals(nextState) ? naReason : null);
-        item.put("remarks", clean(request.remarks()));
-        item.put("checkedBy", "PENDING".equals(nextState) ? null : accessService.actor());
-        item.put("checkedAt", "PENDING".equals(nextState) ? null : LocalDateTime.now().toString());
-        state.put("checklist", items);
-    }
-
-    private List<Map<String, Object>> newChecklist(List<CheckDefinition> definitions) {
-        List<Map<String, Object>> rows = new ArrayList<>();
-        int no = 1;
-        for (CheckDefinition definition : definitions) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("key", definition.key());
-            row.put("no", no++);
-            row.put("section", definition.section());
-            row.put("displayNo", definition.displayNo());
-            row.put("text", definition.text());
-            row.put("naAllowed", definition.naAllowed());
-            row.put("state", "PENDING");
-            row.put("naReason", null);
-            row.put("remarks", null);
-            row.put("checkedBy", null);
-            row.put("checkedAt", null);
-            rows.add(row);
-        }
-        return rows;
-    }
-
-    private ChecklistProgress checklistProgress(List<Map<String, Object>> items) {
-        int total = items == null ? 0 : items.size();
-        int done = 0;
-        int na = 0;
-        if (items != null) {
-            for (Map<String, Object> item : items) {
-                String state = cleanUpper(string(item.get("state")));
-                if ("DONE".equals(state)) done++;
-                else if ("NA".equals(state)) na++;
-            }
-        }
-        int pending = Math.max(0, total - done - na);
-        int percent = total == 0 ? 100 : Math.round(((done + na) * 100f) / total);
-        return new ChecklistProgress(total, done, na, pending, percent, pending == 0);
-    }
-
-    private List<ChecklistItemResponse> checklistResponse(Map<String, Object> state) {
-        return checklistMaps(state).stream()
-                .map(row -> new ChecklistItemResponse(
-                        string(row.get("key")), integer(row.get("no"), 0),
-                        string(row.get("section")), integer(row.get("displayNo"), integer(row.get("no"), 0)),
-                        string(row.get("text")), bool(row.get("naAllowed")),
-                        firstNonBlank(string(row.get("state")), "PENDING"),
-                        string(row.get("naReason")), string(row.get("remarks")), string(row.get("checkedBy")), string(row.get("checkedAt"))))
-                .toList();
-    }
-
-    private List<CheckDefinition> checkDefinitions(String template) {
-        String key = engineeringTemplate(template);
-        return PYTHA_ENGINEERING_TEMPLATE.equals(key) ? PYTHA_ENGINEERING_CHECKLIST : GENERAL_ENGINEERING_CHECKLIST;
-    }
-
-    private ChecklistTemplateResponse template(
-            String key, String name, String area, List<CheckDefinition> definitions, String description) {
-        return new ChecklistTemplateResponse(
-                key, name, area, true, true, description, definitions.size(),
-                definitions.stream().map(def -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("key", def.key());
-                    item.put("section", def.section());
-                    item.put("displayNo", def.displayNo());
-                    item.put("text", def.text());
-                    item.put("naAllowed", def.naAllowed());
-                    return item;
-                }).toList());
-    }
-
-    private static CheckDefinition check(
-            String key, String section, int displayNo, String text, boolean naAllowed) {
-        return new CheckDefinition(key, section, displayNo, text, naAllowed);
-    }
-
-    private record CheckDefinition(
-            String key, String section, int displayNo, String text, boolean naAllowed) {}
-
-    /* =============================== FILE HELPERS =============================== */
-
-    private Map<String, Object> saveWorkflowFile(
-            Map<String, Object> state, String kind, String revision, MultipartFile file) {
-        if (file == null || file.isEmpty()) throw badRequest("Drawing file is required");
-        if (file.getSize() <= 0 || file.getSize() > DRAWING_MAX_BYTES) {
-            throw badRequest("Drawing file must be greater than 0 bytes and not exceed 20 MB");
-        }
-        String original = clean(file.getOriginalFilename());
-        String extension = extension(original);
-        if (!DRAWING_EXTENSIONS.contains(extension)) {
-            throw badRequest("Drawing must be PDF, JPG, JPEG, PNG, WEBP, DWG or DXF");
-        }
-        UUID productId = uuid(state.get("productId"));
-        UUID entityId = uuid(state.get("id"));
-        if (productId == null || entityId == null) throw conflict("Workflow drawing has no Product / record identity");
-        Path directory = attachmentRoot.resolve(productId.toString()).resolve("workflow-drawings")
-                .resolve(kind).resolve(entityId.toString()).normalize();
-        if (!directory.startsWith(attachmentRoot)) throw conflict("Invalid workflow drawing path");
-        try {
-            Files.createDirectories(directory);
-            String storedName = "drawing-" + safeFileToken(revision) + "." + extension;
-            Path target = directory.resolve(storedName).normalize();
-            if (!target.startsWith(directory)) throw conflict("Invalid workflow drawing file name");
-            try (var input = file.getInputStream()) {
-                Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("available", true);
-            result.put("originalFileName", original == null ? target.getFileName().toString() : original);
-            result.put("contentType", firstNonBlank(clean(file.getContentType()), contentType(target)));
-            result.put("sizeBytes", Files.size(target));
-            result.put("revision", revision);
-            result.put("uploadedBy", accessService.actor());
-            result.put("uploadedAt", LocalDateTime.now().toString());
-            result.put("relativePath", attachmentRoot.relativize(target).toString().replace('\\', '/'));
-            return result;
-        } catch (IOException ex) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to store workflow drawing", ex);
-        }
-    }
-
-    private WorkspaceFileResource fileResource(Map<String, Object> file) {
-        if (!bool(file.get("available"))) throw notFound("Drawing file is not available");
-        String relative = clean(string(file.get("relativePath")));
-        if (relative == null) throw notFound("Drawing storage reference is missing");
-        Path path = attachmentRoot.resolve(relative).normalize();
-        if (!path.startsWith(attachmentRoot) || !Files.isRegularFile(path)) throw notFound("Drawing file was not found");
-        return new WorkspaceFileResource(
-                new FileSystemResource(path), firstNonBlank(string(file.get("contentType")), contentType(path)),
-                firstNonBlank(string(file.get("originalFileName")), path.getFileName().toString()));
-    }
-
-    private WorkspaceFileResponse fileResponse(Map<String, Object> file) {
-        return new WorkspaceFileResponse(
-                bool(file.get("available")), string(file.get("originalFileName")), string(file.get("contentType")),
-                longObject(file.get("sizeBytes")), string(file.get("revision")), string(file.get("uploadedBy")), string(file.get("uploadedAt")));
-    }
-
-    private Map<String, Object> emptyFile() {
-        Map<String, Object> file = new LinkedHashMap<>();
-        file.put("available", false);
-        return file;
-    }
-
-    private String contentType(Path path) {
-        try {
-            String value = Files.probeContentType(path);
-            return value == null ? "application/octet-stream" : value;
-        } catch (IOException ignored) {
-            return "application/octet-stream";
-        }
-    }
-
-    /* =============================== NOTIFICATION HELPERS =============================== */
-
-    private boolean designNotificationRelevant(DesignSubmissionResponse row, String actor) {
-        if (isManager()) return true;
-        String status = cleanUpper(row.status());
-        if ("SUBMITTED_TO_ENGINEERING".equals(status) && same(actor, row.engineeringHead())) return true;
-        if ("RETURNED_FOR_CLARIFICATION".equals(status) && (same(actor, row.createdBy()) || same(actor, row.designer()))) return true;
-        return same(actor, row.createdBy());
-    }
-
-    private boolean taskNotificationRelevant(EngineeringTaskResponse row, String actor) {
-        if (isManager()) return true;
-        if (same(actor, row.engineeringHead()) || same(actor, row.assignedTo())) return true;
-        return "SUBMITTED_TO_PRODUCTION".equals(cleanUpper(row.status())) && same(actor, row.productionRecipient());
-    }
-
-    private WorkspaceNotificationResponse designNotification(DesignSubmissionResponse row, String actor) {
-        String message = switch (cleanUpper(row.status())) {
-            case "SUBMITTED_TO_ENGINEERING" -> "Design submission is waiting for Engineering review / assignment.";
-            case "RETURNED_FOR_CLARIFICATION" -> "Engineering returned the design submission for clarification.";
-            case "ACCEPTED" -> "Design submission was accepted and linked to an Engineering task.";
-            default -> "Design submission updated.";
-        };
-        return new WorkspaceNotificationResponse(
-                "DESIGN_SUBMISSION", row.id(), row.submissionNumber(), "Design submission · " + row.productName(), row.status(), null,
-                row.projectCode(), row.productName(), row.plantCode(), message, row.updatedAt(),
-                "/matflow/work?submissionId=" + row.id(), isRead(DESIGN_ENTITY, row.id(), actor, row.updatedAt()));
-    }
-
-    private WorkspaceNotificationResponse taskNotification(EngineeringTaskResponse row, String actor) {
-        String message = row.revisionReviewRequired()
-                ? "A newer Design revision is available and this Engineering task requires review."
-                : switch (cleanUpper(row.status())) {
-                    case "AWAITING_ASSIGNMENT" -> "Engineering task is waiting for assignment.";
-                    case "ASSIGNED" -> "Engineering task was assigned.";
-                    case "AWAITING_CLARIFICATION" -> "Engineering task is waiting for design clarification.";
-                    case "SUBMITTED_TO_PRODUCTION" -> "Engineering package and BOM were submitted to Production review.";
-                    case "RETURNED" -> "Engineering package requires correction after return.";
-                    case "COMPLETED" -> "Engineering task is complete.";
-                    case "SUPERSEDED" -> "Engineering accepted a newer Design revision; this task is archived for traceability.";
-                    default -> "Engineering task updated.";
-                };
-        return new WorkspaceNotificationResponse(
-                "ENGINEERING_TASK", row.id(), row.taskNumber(), "Engineering · " + row.productName(), row.status(), row.priority(),
-                row.projectCode(), row.productName(), row.plantCode(), message, row.updatedAt(),
-                "/matflow/work?taskId=" + row.id(), isRead(TASK_ENTITY, row.id(), actor, row.updatedAt()));
-    }
-
-    private boolean isRead(String sourceType, UUID sourceId, String actor, String updatedAt) {
-        UUID receiptId = receiptId(sourceType, sourceId, actor);
-        List<MatFlowAuditLog> receipts = auditRepository.findByEntityTypeAndEntityIdOrderByActionAtAsc(RECEIPT_ENTITY, receiptId);
-        if (receipts.isEmpty()) return false;
-        Map<String, Object> latest = parse(receipts.get(receipts.size() - 1).getDetailsJson());
-        LocalDateTime readAt = dateTime(latest.get("readAt"));
-        LocalDateTime sourceAt = dateTime(updatedAt);
-        return readAt != null && (sourceAt == null || !readAt.isBefore(sourceAt));
-    }
-
-    private String notificationEntity(String referenceType) {
-        String value = cleanUpper(referenceType);
-        if ("DESIGN_SUBMISSION".equals(value) || DESIGN_ENTITY.equals(value)) return DESIGN_ENTITY;
-        if ("ENGINEERING_TASK".equals(value) || TASK_ENTITY.equals(value)) return TASK_ENTITY;
-        throw badRequest("Unsupported notification reference type");
-    }
-
-    /* =============================== AUDIT / STATE HELPERS =============================== */
-
-    private List<Map<String, Object>> latestStates(String entityType) {
-        Map<UUID, Map<String, Object>> latest = new LinkedHashMap<>();
-        for (MatFlowAuditLog row : auditRepository.findByEntityTypeOrderByActionAtDesc(entityType)) {
-            if (row == null || row.getEntityId() == null || latest.containsKey(row.getEntityId())) continue;
-            Map<String, Object> state = parse(row.getDetailsJson());
-            if (!state.isEmpty()) latest.put(row.getEntityId(), state);
-        }
-        return new ArrayList<>(latest.values());
-    }
-
-    private Map<String, Object> requireState(String entityType, UUID id, String label) {
-        if (id == null) throw badRequest(label + " ID is required");
-        List<MatFlowAuditLog> rows = auditRepository.findByEntityTypeAndEntityIdOrderByActionAtAsc(entityType, id);
-        if (rows.isEmpty()) throw notFound(label + " not found");
-        Map<String, Object> state = parse(rows.get(rows.size() - 1).getDetailsJson());
-        if (state.isEmpty()) throw conflict(label + " history exists but latest state is unreadable");
-        return new LinkedHashMap<>(state);
-    }
-
-    private List<WorkspaceHistoryRow> history(String entityType, UUID id) {
-        return auditRepository.findByEntityTypeAndEntityIdOrderByActionAtAsc(entityType, id).stream()
-                .map(row -> {
-                    Map<String, Object> state = parse(row.getDetailsJson());
-                    return new WorkspaceHistoryRow(
-                            row.getAction(), row.getActor(), row.getActionAt() == null ? null : row.getActionAt().toString(),
-                            string(state.get("status")), firstNonBlank(string(state.get("statusNote")), string(state.get("assignmentNote")),
-                                    string(state.get("returnReason")), string(state.get("handoverRemarks")), string(state.get("remarks"))));
-                }).toList();
-    }
-
-    private void record(String entityType, UUID id, String action, Map<String, Object> state) {
-        auditService.record(entityType, id, action,
-                string(state.get("plantCode")), string(state.get("projectCode")), string(state.get("drawingNo")), state);
-    }
-
-    private void touch(Map<String, Object> state) {
-        state.put("version", integer(state.get("version"), 0) + 1);
-        state.put("updatedBy", accessService.actor());
-        state.put("updatedAt", LocalDateTime.now().toString());
-    }
-
-    /* =============================== SECURITY / VALIDATION =============================== */
-
-    private void requireDesignWrite() {
-        requireAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING");
-    }
-
-    private void requireEngineeringHead() {
-        requireAnyRole("ADMIN", "MATFLOW_MANAGER");
-    }
-
-    private void requireDesignOwnerOrManager(Map<String, Object> state) {
-        requireCanReadPlant(string(state.get("plantCode")));
-        if (isManager()) return;
-        String actor = accessService.actor();
-        if (!same(actor, string(state.get("createdBy"))) && !same(actor, string(state.get("designer")))) {
-            throw forbidden("Only the Designing owner or MatFlow Manager can change this submission");
-        }
+    private void resetEngineeringForDesignRevision(MatFlowProductionFile file) {
+        file.setEngineeringDecision(EngineeringDecision.PENDING); file.setEngineeringDecisionBy(null); file.setEngineeringDecisionAt(null); file.setEngineeringDecisionRemarks(null); file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer());
+        for(MatFlowWorkItem item:items(file.getId(),WorkItemType.ENGINEERING_CHECK)){ item.setStatus(WorkItemStatus.PENDING); item.setCompletedAt(null); item.setCompletedBy(null); item.setUpdatedBy(accessService.actor()); workRepository.save(item); }
+        for(MatFlowWorkItem item:items(file.getId(),WorkItemType.ENGINEERING_TASK)){ if(item.getStatus()!=WorkItemStatus.CANCELLED){ item.setStatus(clean(item.getAssignedTo()) == null ? WorkItemStatus.TODO : WorkItemStatus.ASSIGNED); item.setStartedAt(null); item.setRevisionContext(null); item.setCompletedAt(null); item.setCompletedBy(null); item.setUpdatedBy(accessService.actor()); workRepository.save(item); } }
+        MatFlowBom bom=latestBom(file.getId()); if(bom!=null){ bom.setStatus(BomStatus.SUPERSEDED); bom.setLatestRevision(false); bom.setUpdatedBy(accessService.actor()); bomRepository.save(bom); }
     }
 
-    private void requireTaskWorkerOrHead(EngineeringTaskResponse task) {
-        requireCanReadTask(task);
-        if (isManager()) return;
-        String actor = accessService.actor();
-        if (same(actor, task.assignedTo()) || same(actor, task.engineeringHead())) return;
-        throw forbidden("Only the assigned Engineer or Engineering Head can change this task");
+    private void restoreAfterRejectedRevision(MatFlowProductionFile file){
+        if(file.getProductionReleasedAt()!=null){ file.setStage(ProductionFileStage.PRODUCTION_RELEASED); file.setCurrentDepartment("PRODUCTION RELEASE"); file.setCurrentOwner(null); }
+        else if(file.getEngineeringDecision()==EngineeringDecision.APPROVED){ file.setStage(allBlockingTasksDone(file.getId())?ProductionFileStage.PPC_GATE_2:ProductionFileStage.ENGINEERING_WORK); file.setCurrentDepartment(allBlockingTasksDone(file.getId())?"PPC":"ENGINEERING"); file.setCurrentOwner(allBlockingTasksDone(file.getId())?file.getPpcOwner():file.getAssignedEngineer()); }
+        else if("ACCEPT".equalsIgnoreCase(file.getPpcGate1Decision())){ file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer()); }
+        else { file.setStage(ProductionFileStage.DESIGN_DRAFT); file.setCurrentDepartment("DESIGN"); file.setCurrentOwner(file.getDesigner()); }
     }
 
-    private void requireCanReadTask(EngineeringTaskResponse task) {
-        if (task == null) throw notFound("Engineering task not found");
-        requireCanReadPlant(task.plantCode());
+    private void activateRevision(MatFlowProductionFile file, MatFlowRevision row, boolean keepRowStatus) {
+        MatFlowRevision active=activeRevision(file.getId(),row.getRevisionType());
+        if(active!=null && !Objects.equals(active.getId(),row.getId())){ active.setRevisionStatus(RevisionStatus.SUPERSEDED); active.setSupersededAt(now()); active.setUpdatedBy(accessService.actor()); revisionRepository.save(active); }
+        if(!keepRowStatus){ row.setRevisionStatus(RevisionStatus.ACTIVE); row.setActivatedAt(now()); revisionRepository.save(row); }
+        if(row.getRevisionType()==RevisionType.DESIGN_DRAWING){ file.getProduct().setDrawingRevision(row.getRevisionNo()); file.getProduct().setUpdatedBy(accessService.actor()); }
     }
 
-    private void requireCanReadPlant(String plantCode) {
-        if (!canReadPlant(plantCode)) accessService.requirePlantAccess(plantCode);
+    private boolean requiresImpactReview(MatFlowProductionFile file, RevisionType type){
+        if(type==RevisionType.DESIGN_DRAWING){ return Set.of(ProductionFileStage.ENGINEERING_REVIEW,ProductionFileStage.ENGINEERING_QUERY,ProductionFileStage.ENGINEERING_WORK,ProductionFileStage.PPC_GATE_2,ProductionFileStage.PRODUCTION_RELEASED,ProductionFileStage.REVISION_REVIEW).contains(file.getStage()); }
+        return Set.of(ProductionFileStage.PPC_GATE_2,ProductionFileStage.PRODUCTION_RELEASED,ProductionFileStage.REVISION_REVIEW).contains(file.getStage());
     }
 
-    private boolean canReadPlant(String plantCode) {
-        return plantCode != null && accessService.canAccessPlant(plantCode);
+    private List<String> gate2Blockers(MatFlowProductionFile file){
+        List<String> blockers=new ArrayList<>(); if(file.isRevisionReviewRequired())blockers.add("Revision impact review is pending"); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)blockers.add("Engineering is not approved");
+        ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK); if(ep.criticalPending()>0||ep.requiredPending()>0)blockers.add("Engineering checklist is incomplete"); if(openQueryCount(file.getId())>0)blockers.add("Engineering Queries are still open");
+        List<MatFlowWorkItem> pending=items(file.getId(),WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).filter(x->!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).toList(); if(!pending.isEmpty())blockers.add("Engineering documentation tasks pending: "+pending.stream().map(MatFlowWorkItem::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
+        MatFlowBom bom=latestBom(file.getId()); if(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE)blockers.add("BOM is not Ready for Release"); if(activeRevision(file.getId(),RevisionType.ENGINEERING_DRAWING)==null)blockers.add("Active Production/Engineering Drawing revision is missing"); return blockers;
     }
 
-    private void requireAnyRole(String... allowed) {
-        Set<String> roles = currentRoles();
-        if (!hasAny(roles, allowed)) throw forbidden("You do not have permission for this MatFlow workspace action");
-    }
-
-    private Set<String> currentRoles() {
-        return normalizedRoles(accessService.currentUser());
-    }
-
-    private boolean isManager() {
-        return hasAny(currentRoles(), "ADMIN", "MATFLOW_MANAGER");
-    }
-
-    private boolean isEngineeringHead() {
-        return hasAny(currentRoles(), "ADMIN", "MATFLOW_MANAGER");
-    }
-
-    private Set<String> normalizedRoles(User user) {
-        if (user == null) return Set.of();
-        Set<String> roles = new LinkedHashSet<>();
-        if (user.getEffectiveRoles() != null) {
-            user.getEffectiveRoles().forEach(role -> {
-                String value = cleanUpper(role);
-                if (value != null) roles.add(value.replaceFirst("^ROLE_", ""));
-            });
-        }
-        String primary = cleanUpper(user.getRole());
-        if (primary != null) roles.add(primary.replaceFirst("^ROLE_", ""));
-        return roles;
-    }
-
-    private boolean hasAny(Set<String> roles, String... allowed) {
-        if (roles == null) return false;
-        for (String role : allowed) if (roles.contains(cleanUpper(role))) return true;
-        return false;
-    }
-
-    private void requirePersonRole(String username, String plantCode, Set<String> allowedRoles, String label) {
-        String wanted = requiredText(username, label);
-        User user = userService.getAllUsers().stream()
-                .filter(User::isEnabled)
-                .filter(candidate -> same(candidate.getUsername(), wanted))
-                .findFirst()
-                .orElseThrow(() -> badRequest(label + " user not found or disabled: " + wanted));
-        Set<String> roles = normalizedRoles(user);
-        boolean allowed = allowedRoles.stream().anyMatch(roles::contains);
-        if (!allowed) throw badRequest(label + " does not have the required MatFlow role: " + wanted);
-        if (!canUserAccessPlant(user, cleanUpper(plantCode))) throw badRequest(label + " has no access to plant " + plantCode);
-    }
-
-    private boolean isMatFlowPerson(User user) {
-        return normalizedRoles(user).stream().anyMatch(role -> role.equals("ADMIN") || role.startsWith("MATFLOW_"));
-    }
-
-    private boolean canUserAccessPlant(User user, String plant) {
-        if (user == null || plant == null) return false;
-        Set<String> roles = normalizedRoles(user);
-        if (roles.contains("ADMIN")) return true;
-        Set<String> plants = user.getEffectivePlantCodes();
-        return plants != null && plants.stream().map(this::cleanUpper).anyMatch(plant::equals);
-    }
-
-    private void validateTaskTransition(EngineeringTaskResponse current, String next) {
-        String before = cleanUpper(current.status());
-        Map<String, Set<String>> allowed = Map.ofEntries(
-                Map.entry("AWAITING_ASSIGNMENT", Set.of("ASSIGNED", "CANCELLED")),
-                Map.entry("ASSIGNED", Set.of("IN_PROGRESS", "AWAITING_CLARIFICATION", "CANCELLED")),
-                Map.entry("IN_PROGRESS", Set.of("AWAITING_CLARIFICATION", "RETURNED", "CANCELLED")),
-                Map.entry("AWAITING_CLARIFICATION", Set.of("IN_PROGRESS", "RETURNED", "CANCELLED")),
-                Map.entry("SUBMITTED_TO_PRODUCTION", Set.of("RETURNED", "COMPLETED")),
-                Map.entry("RETURNED", Set.of("IN_PROGRESS", "AWAITING_CLARIFICATION", "CANCELLED")),
-                Map.entry("COMPLETED", Set.of()),
-                Map.entry("SUPERSEDED", Set.of()),
-                Map.entry("CANCELLED", Set.of()));
-        if (!allowed.getOrDefault(before, Set.of()).contains(next)) {
-            throw conflict("Engineering task cannot move from " + before + " to " + next);
-        }
-        if (Set.of("ASSIGNED", "IN_PROGRESS", "AWAITING_CLARIFICATION", "RETURNED").contains(next)
-                && clean(current.assignedTo()) == null) {
-            throw conflict("Assign the Engineering task before moving it forward");
-        }
-    }
-
-    private void requireDesignEditable(Map<String, Object> state) {
-        String status = cleanUpper(string(state.get("status")));
-        if (!Set.of("DRAFT", "RETURNED_FOR_CLARIFICATION").contains(status)) {
-            throw conflict("Submitted / accepted Design revisions are immutable. Create a new submission for a new Design revision.");
-        }
-    }
-
-    private void requireSubmissionReady(Map<String, Object> state) {
-        /*
-         * Product creation itself stays approval-free. At the actual
-         * Submit-to-Engineering gate, however, refresh the same canonical
-         * Project/Product so the submitted snapshot cannot carry stale
-         * dimensions, drawing identity or Plant information from an older draft.
-         */
-        UUID projectId = uuid(state.get("projectId"));
-        UUID productId = uuid(state.get("productId"));
-        if (projectId == null || productId == null) {
-            throw conflict("Design submission is no longer linked to a valid Project / Product");
-        }
-        ProjectProductRef currentRef = requireProduct(projectId, productId);
-        applyProjectProductSnapshot(state, currentRef);
-
-        if (state.get("dimensionLength") == null
-                || state.get("dimensionBreadth") == null
-                || state.get("dimensionHeight") == null
-                || clean(string(state.get("dimensionUom"))) == null) {
-            throw conflict("Complete the Product dimensions as L × B × H with unit before Submit to Engineering");
-        }
-
-        if (!checklistProgress(checklistMaps(state)).complete()) {
-            throw conflict("Complete the Wardrobe Designing checklist before Submit to Engineering");
-        }
-        Map<String, Object> file = map(state.get("designDrawing"));
-        if (!bool(file.get("available"))) {
-            throw conflict("Upload the initial Design drawing before Submit to Engineering");
-        }
-
-        String revision = requiredText(string(state.get("designDrawingRevision")), "Design drawing revision");
-        String uploadedRevision = clean(string(file.get("revision")));
-        if (uploadedRevision == null || !same(revision, uploadedRevision)) {
-            throw conflict("The uploaded Design drawing revision does not match the submission revision. Upload the exact revision before Submit to Engineering");
-        }
-
-        UUID currentSubmissionId = uuid(state.get("id"));
-        boolean duplicateReleasedRevision = latestStates(DESIGN_ENTITY).stream()
-                .filter(other -> currentSubmissionId == null || !currentSubmissionId.equals(uuid(other.get("id"))))
-                .filter(other -> productId.equals(uuid(other.get("productId"))))
-                .filter(other -> Set.of("SUBMITTED_TO_ENGINEERING", "ACCEPTED")
-                        .contains(cleanUpper(string(other.get("status")))))
-                .anyMatch(other -> same(revision, string(other.get("designDrawingRevision"))));
-        if (duplicateReleasedRevision) {
-            throw conflict("Design revision " + revision
-                    + " is already submitted/accepted for this Product. Continue the existing returned submission or use a new drawing revision so revision history remains unambiguous");
-        }
-
-        String plant = requiredText(string(state.get("plantCode")), "Plant");
-        String designer = requiredText(string(state.get("designer")), "Designer / Designing owner");
-        String head = requiredText(string(state.get("engineeringHead")), "Engineering Head");
-        String productionRecipient = requiredText(string(state.get("productionRecipient")), "Production recipient");
-        requirePersonRole(designer, plant,
-                Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"), "Designer / Designing owner");
-        requirePersonRole(head, plant,
-                Set.of("ADMIN", "MATFLOW_MANAGER"), "Engineering Head");
-        requirePersonRole(productionRecipient, plant,
-                Set.of("ADMIN", "MATFLOW_MANAGER", "MATFLOW_PRODUCTION"), "Production recipient");
-    }
-
-    /* =============================== PROJECT / PRODUCT HELPERS =============================== */
-
-    private ProjectProductRef requireProduct(UUID projectId, UUID productId) {
-        ProjectPortfolioResponse project = projectService.get(projectId);
-        accessService.requirePlantAccess(project.plantCode());
-        ProductPortfolioRow product = (project.products() == null ? List.<ProductPortfolioRow>of() : project.products()).stream()
-                .filter(row -> row != null && productId.equals(row.id()))
-                .findFirst()
-                .orElseThrow(() -> badRequest("Selected Product / Drawing does not belong to this Project"));
-        if (!project.active() || !product.active()) throw conflict("Inactive Project / Product cannot enter the Design & Engineering workflow");
-        return new ProjectProductRef(project, product);
-    }
-
-    private void applyProjectProductSnapshot(Map<String, Object> state, ProjectProductRef ref) {
-        ProjectPortfolioResponse project = ref.project();
-        ProductPortfolioRow product = ref.product();
-        state.put("projectId", project.id().toString());
-        state.put("productId", product.id().toString());
-        state.put("projectCode", project.projectCode());
-        state.put("projectName", project.projectName());
-        state.put("clientName", project.clientName());
-        state.put("plantCode", cleanUpper(project.plantCode()));
-        state.put("productName", product.productName());
-        state.put("drawingNo", product.drawingNo());
-        state.put("dimensionLength", product.dimensionLength());
-        state.put("dimensionBreadth", product.dimensionBreadth());
-        state.put("dimensionHeight", product.dimensionHeight());
-        state.put("dimensionUom", product.dimensionUom());
-    }
-
-    private void copyProjectProductSnapshot(Map<String, Object> source, Map<String, Object> target) {
-        for (String key : List.of(
-                "projectId", "productId", "projectCode", "projectName", "clientName", "plantCode", "productName", "drawingNo",
-                "dimensionLength", "dimensionBreadth", "dimensionHeight", "dimensionUom")) {
-            target.put(key, source.get(key));
-        }
-    }
-
-    private record ProjectProductRef(ProjectPortfolioResponse project, ProductPortfolioRow product) {}
-
-    /* =============================== FILTERS / SORT =============================== */
-
-    private boolean designMatches(DesignSubmissionResponse row, String query) {
-        if (query == null) return true;
-        return searchText(row.submissionNumber(), row.projectCode(), row.projectName(), row.clientName(), row.productName(),
-                row.drawingNo(), row.designDrawingRevision(), row.designer(), row.engineeringHead(), row.productionRecipient()).contains(query);
-    }
-
-    private boolean taskMatches(EngineeringTaskResponse row, String query) {
-        if (query == null) return true;
-        return searchText(row.taskNumber(), row.projectCode(), row.projectName(), row.clientName(), row.productName(), row.drawingNo(),
-                row.designDrawingRevision(), row.engineeringDrawingRevision(), row.assignedTo(), row.engineeringHead(), row.productionRecipient()).contains(query);
-    }
-
-    private boolean taskScopeAllows(EngineeringTaskResponse row, String scope, String actor, boolean manager) {
-        if (scope == null || "ALL".equals(scope)) return manager || same(actor, row.assignedTo()) || same(actor, row.engineeringHead()) || same(actor, row.productionRecipient());
-        if ("MY".equals(scope)) return same(actor, row.assignedTo());
-        if ("HEAD".equals(scope)) return same(actor, row.engineeringHead());
-        if ("PRODUCTION".equals(scope)) return same(actor, row.productionRecipient());
-        if ("UNASSIGNED".equals(scope)) return row.assignedTo() == null && manager;
-        return true;
-    }
-
-    private Comparator<EngineeringTaskResponse> taskComparator(String actor) {
-        return Comparator
-                .comparing((EngineeringTaskResponse row) -> !same(actor, row.assignedTo()))
-                .thenComparing((EngineeringTaskResponse row) -> !row.revisionReviewRequired())
-                .thenComparing(EngineeringTaskResponse::overdue, Comparator.reverseOrder())
-                .thenComparing(row -> priorityRank(row.priority()), Comparator.reverseOrder())
-                .thenComparing(EngineeringTaskResponse::updatedAt, Comparator.nullsLast(Comparator.reverseOrder()));
-    }
-
-    private int priorityRank(String priority) {
-        return switch (cleanUpper(priority)) {
-            case "URGENT" -> 4;
-            case "HIGH" -> 3;
-            case "NORMAL" -> 2;
-            case "LOW" -> 1;
-            default -> 0;
-        };
-    }
-
-    private boolean isOverdue(String dueDate, String status) {
-        if (dueDate == null || Set.of("COMPLETED", "SUPERSEDED", "CANCELLED").contains(cleanUpper(status))) return false;
-        try { return LocalDate.parse(dueDate).isBefore(LocalDate.now()); }
-        catch (DateTimeParseException ignored) { return false; }
-    }
-
-    /* =============================== GENERIC CONVERSIONS =============================== */
-
-    private List<Map<String, Object>> checklistMaps(Map<String, Object> state) {
-        Object value = state.get("checklist");
-        if (!(value instanceof List<?> list)) return new ArrayList<>();
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (Object item : list) rows.add(new LinkedHashMap<>(map(item)));
-        return rows;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> map(Object value) {
-        if (value instanceof Map<?, ?> raw) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            raw.forEach((key, item) -> { if (key != null) result.put(String.valueOf(key), item); });
-            return result;
-        }
-        return new LinkedHashMap<>();
-    }
-
-    private Map<String, Object> deepCopyMap(Map<String, Object> source) {
-        if (source == null || source.isEmpty()) return new LinkedHashMap<>();
-        return objectMapper.convertValue(source, new TypeReference<LinkedHashMap<String, Object>>() {});
-    }
-
-    private Map<String, Object> parse(String json) {
-        if (json == null || json.isBlank()) return new LinkedHashMap<>();
-        try { return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {}); }
-        catch (Exception ignored) { return new LinkedHashMap<>(); }
-    }
-
-    private String designChecklistTemplateForState(Map<String, Object> state) {
-        String explicit = cleanUpper(string(state.get("designChecklistTemplateKey")));
-        if (explicit != null) return explicit;
-        boolean current = checklistMaps(state).stream()
-                .map(row -> cleanUpper(string(row.get("key"))))
-                .filter(Objects::nonNull)
-                .anyMatch(key -> key.startsWith("WDES-"));
-        return current ? DESIGN_TEMPLATE : LEGACY_DESIGN_TEMPLATE;
-    }
-
-    private String engineeringTemplate(String value) {
-        String key = cleanUpper(value);
-        if (key == null) return PYTHA_ENGINEERING_TEMPLATE;
-        /*
-         * The earlier package incorrectly used the Wardrobe Designing checklist as
-         * the Engineering task template. If a draft/submission created by that
-         * package is accepted after this fix, map the legacy key to the corrected
-         * PYTHA Engineering checklist. Already-created historical task snapshots
-         * are not rewritten.
-         */
-        if (LEGACY_WARDROBE_ENGINEERING_TEMPLATE.equals(key)) return PYTHA_ENGINEERING_TEMPLATE;
-        if (PYTHA_ENGINEERING_TEMPLATE.equals(key) || GENERAL_ENGINEERING_TEMPLATE.equals(key)) return key;
-        throw badRequest("Unsupported Engineering checklist template: " + value);
-    }
-
-    private String companyCode(String value) {
-        String normalized = cleanUpper(value);
-        if (normalized == null) return "ALSORG";
-        if (!COMPANY_CODES.contains(normalized)) {
-            throw badRequest("Callisto / Alsorg must be ALSORG or CALLISTO");
-        }
-        return normalized;
-    }
-
-    private String priority(String value) {
-        String clean = cleanUpper(value);
-        if (clean == null) return "NORMAL";
-        if (!PRIORITIES.contains(clean)) throw badRequest("Unsupported priority: " + value);
-        return clean;
-    }
-
-    private String isoDate(String value, String label) {
-        String clean = clean(value);
-        if (clean == null) return null;
-        try { return LocalDate.parse(clean).toString(); }
-        catch (DateTimeParseException ex) { throw badRequest(label + " must use yyyy-MM-dd"); }
-    }
-
-    private String requiredText(String value, String label) {
-        String clean = clean(value);
-        if (clean == null) throw badRequest(label + " is required");
-        return clean;
-    }
-
-    private void assertVersion(Integer requested, Integer current, String label) {
-        if (requested == null) throw badRequest(label + " version is required");
-        if (!Objects.equals(requested, current)) throw conflict(label + " changed. Refresh and retry.");
-    }
+    private boolean allBlockingTasksDone(UUID fileId){ List<MatFlowWorkItem> rows=items(fileId,WorkItemType.ENGINEERING_TASK); return !rows.isEmpty() && rows.stream().filter(MatFlowWorkItem::isBlocking).allMatch(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())); }
+    private long openQueryCount(UUID fileId){ return workRepository.countByProductionFile_IdAndItemTypeAndStatusIn(fileId,WorkItemType.ENGINEERING_QUERY,OPEN_QUERY_STATUSES); }
 
-    private String taskNumber(UUID id) { return "ENG-" + LocalDate.now().getYear() + "-" + shortId(id); }
-    private String submissionNumber(UUID id) { return "DES-" + LocalDate.now().getYear() + "-" + shortId(id); }
-    private String shortId(UUID id) { return id.toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT); }
-
-    private UUID receiptId(String sourceType, UUID sourceId, String actor) {
-        return UUID.nameUUIDFromBytes((sourceType + "|" + sourceId + "|" + cleanLower(actor)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private Path resolveAttachmentRoot(String configured) {
-        String clean = clean(configured);
-        if (clean != null) return Path.of(clean).toAbsolutePath().normalize();
-        return Path.of(System.getProperty("user.home"), ".flowsuite", "matflow", "product-attachments").toAbsolutePath().normalize();
-    }
-
-    private String extension(String fileName) {
-        String clean = clean(fileName);
-        if (clean == null || !clean.contains(".")) return "";
-        return clean.substring(clean.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
-    }
-
-    private String safeFileToken(String value) {
-        String clean = requiredText(value, "Drawing revision").replaceAll("[^A-Za-z0-9._-]", "_");
-        return clean.length() > 80 ? clean.substring(0, 80) : clean;
-    }
-
-    private void appendNote(Map<String, Object> state, String note, String key) {
-        String value = clean(note);
-        if (value != null) state.put(key, value);
-    }
-
-    private String searchText(Object... values) {
-        StringBuilder out = new StringBuilder();
-        for (Object value : values) if (value != null) out.append(' ').append(value);
-        return out.toString().toLowerCase(Locale.ROOT);
-    }
-
-    private String clean(String value) {
-        if (value == null) return null;
-        String out = value.trim();
-        return out.isBlank() ? null : out;
-    }
-
-    private String cleanUpper(String value) {
-        String out = clean(value);
-        return out == null ? null : out.toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
-    }
-
-    private String cleanLower(String value) {
-        String out = clean(value);
-        return out == null ? null : out.toLowerCase(Locale.ROOT);
-    }
-
-    private String string(Object value) { return value == null ? null : String.valueOf(value); }
-
-    private UUID uuid(Object value) {
-        String text = clean(string(value));
-        if (text == null) return null;
-        try { return UUID.fromString(text); }
-        catch (IllegalArgumentException ignored) { return null; }
-    }
-
-    private int integer(Object value, int fallback) {
-        if (value instanceof Number number) return number.intValue();
-        try { return value == null ? fallback : Integer.parseInt(String.valueOf(value)); }
-        catch (NumberFormatException ignored) { return fallback; }
+    private void refreshHealth(MatFlowProductionFile file){
+        ChecklistProgress dp=progress(file.getId(),WorkItemType.DESIGN_CHECK); ReleaseHealth health=releaseHealth(dp);
+        if(file.isRevisionReviewRequired()||openQueryCount(file.getId())>0)health=ReleaseHealth.RED;
+        else if(file.getEngineeringDecision()==EngineeringDecision.APPROVED && !gate2BlockersWithoutRecursion(file).isEmpty() && health==ReleaseHealth.GREEN)health=ReleaseHealth.AMBER;
+        if(file.getStage()==ProductionFileStage.PRODUCTION_RELEASED && !file.isRevisionReviewRequired())health=ReleaseHealth.GREEN; file.setReleaseHealth(health);
     }
 
-    private Integer integerObject(Object value) {
-        if (value == null) return null;
-        return integer(value, 0);
+    private List<String> gate2BlockersWithoutRecursion(MatFlowProductionFile file){
+        List<String>b=new ArrayList<>(); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)b.add("engineering"); if(openQueryCount(file.getId())>0)b.add("query");
+        if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&!allBlockingTasksDone(file.getId()))b.add("tasks"); MatFlowBom bom=latestBom(file.getId()); if(file.getEngineeringDecision()==EngineeringDecision.APPROVED&&(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE))b.add("bom"); return b;
     }
 
-    private Long longObject(Object value) {
-        if (value instanceof Number number) return number.longValue();
-        try { return value == null ? null : Long.valueOf(String.valueOf(value)); }
-        catch (NumberFormatException ignored) { return null; }
+    private ReleaseHealth releaseHealth(ChecklistProgress p){ if(p.criticalPending()>0)return ReleaseHealth.RED; if(p.requiredPending()>0)return ReleaseHealth.AMBER; return ReleaseHealth.GREEN; }
+    private ChecklistProgress progress(UUID fileId, WorkItemType type){
+        List<MatFlowWorkItem> rows=items(fileId,type); int complete=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.COMPLETE).count(); int na=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.NOT_APPLICABLE).count(); int pending=rows.size()-complete-na;
+        int critical=(int)rows.stream().filter(x->x.getCriticality()==Criticality.CRITICAL&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int required=(int)rows.stream().filter(x->x.getCriticality()==Criticality.REQUIRED&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int percent=rows.isEmpty()?0:(int)Math.round(((complete+na)*100.0)/rows.size()); return new ChecklistProgress(rows.size(),complete,na,pending,critical,required,percent);
     }
 
-    private boolean bool(Object value) {
-        if (value instanceof Boolean b) return b;
-        return value != null && Boolean.parseBoolean(String.valueOf(value));
+    private ProductionFileDetailResponse toDetail(MatFlowProductionFile file){
+        List<String> blockers=gate2Blockers(file); return new ProductionFileDetailResponse(toFileResponse(file),mapItems(items(file.getId(),WorkItemType.DESIGN_CHECK)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_CHECK)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK)),revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream().map(this::toRevision).toList(),auditService.timeline(file.getId()).stream().map(this::toAudit).toList(),blockers.isEmpty(),blockers);
     }
 
-    private LocalDateTime dateTime(Object value) {
-        String text = clean(string(value));
-        if (text == null) return null;
-        try { return LocalDateTime.parse(text); }
-        catch (DateTimeParseException ignored) { return null; }
+    private ProductionFileResponse toFileResponse(MatFlowProductionFile file){
+        List<MatFlowWorkItem> tasks=items(file.getId(),WorkItemType.ENGINEERING_TASK); int completed=(int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int pending=tasks.size()-completed; MatFlowBom bom=latestBom(file.getId());
+        return new ProductionFileResponse(file.getId(),file.getProductionFileNo(),file.getProject().getId(),file.getProduct().getId(),file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProductName(),file.getDrawingNo(),file.getPlantCode(),file.getStage().name(),file.getReleaseHealth().name(),file.getEngineeringDecision().name(),file.getCurrentDepartment(),file.getCurrentOwner(),file.getDesigner(),file.getPpcOwner(),file.getEngineeringHead(),file.getAssignedEngineer(),file.getControlledReleaseReason(),file.getPlannedProductionReleaseDate(),file.getPlannedDispatchDate(),file.getPpcGate1Decision(),file.getPpcGate2Decision(),file.isRevisionReviewRequired(),file.getDownstreamWorkflowKey(),file.getDownstreamWorkflowStatus(),file.getProductionReleasedAt(),file.getProjectCode(),progress(file.getId(),WorkItemType.DESIGN_CHECK),progress(file.getId(),WorkItemType.ENGINEERING_CHECK),(int)openQueryCount(file.getId()),pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
     }
 
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            String clean = clean(value);
-            if (clean != null) return clean;
-        }
-        return null;
-    }
+    private List<WorkItemResponse> mapItems(List<MatFlowWorkItem> rows){ return rows.stream().map(this::toWork).toList(); }
+    private WorkItemResponse toWork(MatFlowWorkItem x){ return new WorkItemResponse(x.getId(),x.getItemType().name(),x.getItemKey(),x.getSection(),x.getTitle(),x.getDescription(),x.getCriticality().name(),x.isBlocking(),x.getDisplayOrder(),x.getStatus().name(),x.getAssignedTo(),x.getDueAt(),x.getStartedAt(),x.getRevisionContext(),x.getPriority(),x.getResponseText(),x.getRemarks(),x.getCompletionNote(),x.getCompletedBy(),x.getCompletedAt(),x.getRespondedBy(),x.getRespondedAt(),x.getClosedBy(),x.getClosedAt(),x.getRowVersion(),x.getUpdatedAt()); }
+    private RevisionResponse toRevision(MatFlowRevision x){ return new RevisionResponse(x.getId(),x.getRevisionType().name(),x.getRevisionNo(),x.getRevisionStatus().name(),x.getOriginalFileName(),x.getContentType(),x.getSizeBytes()==null?0:x.getSizeBytes(),x.getChangeSummary(),x.getImpactNote(),x.getImpactReviewedBy(),x.getImpactReviewedAt(),x.getActivatedAt(),x.getRowVersion(),x.getCreatedAt()); }
+    private AuditEventResponse toAudit(MatFlowAuditLog x){ return new AuditEventResponse(x.getEntityType(),x.getEntityId(),x.getAction(),x.getActor(),x.getActionAt(),x.getDetailsJson()); }
 
-    private boolean same(String left, String right) {
-        String a = clean(left);
-        String b = clean(right);
-        return a != null && b != null && a.equalsIgnoreCase(b);
-    }
+    private MatFlowProductionFile requireFile(UUID id){ MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found")); accessService.requirePlantAccess(file.getPlantCode()); return file; }
+    private MatFlowWorkItem requireWork(UUID fileId,UUID id,WorkItemType type){ MatFlowWorkItem x=workRepository.findById(id).orElseThrow(()->notFound("Work item not found")); if(!fileId.equals(x.getProductionFile().getId())||x.getItemType()!=type)throw notFound("Work item not found"); return x; }
+    private List<MatFlowWorkItem> items(UUID fileId,WorkItemType type){ return workRepository.findByProductionFile_IdAndItemTypeOrderByDisplayOrderAscCreatedAtAsc(fileId,type); }
+    private MatFlowRevision activeRevision(UUID fileId,RevisionType type){ return revisionRepository.findFirstByProductionFile_IdAndRevisionTypeAndRevisionStatusOrderByActivatedAtDesc(fileId,type,RevisionStatus.ACTIVE).orElse(null); }
+    private MatFlowBom latestBom(UUID fileId){ return bomRepository.findFirstByProductionFile_IdAndLatestRevisionTrue(fileId).orElse(null); }
+    private void requireStage(MatFlowProductionFile file,ProductionFileStage...allowed){ if(java.util.Arrays.stream(allowed).noneMatch(x->x==file.getStage()))throw conflict("Action is not allowed while file is at stage "+file.getStage()); }
+    private void requireVersion(Long actual,Long supplied){ if(supplied==null||!supplied.equals(actual))throw conflict("Record changed. Refresh and retry."); }
+    private boolean contains(String value,String term){ return value!=null&&value.toLowerCase(Locale.ROOT).contains(term); }
+    private String clean(String value){ if(value==null)return null; String x=value.trim(); return x.isBlank()?null:x; }
+    private String upper(String value){ String x=clean(value); return x==null?"":x.toUpperCase(Locale.ROOT); }
+    private String upperOrNull(String value){ String x=clean(value); return x==null?null:x.toUpperCase(Locale.ROOT); }
+    private <E extends Enum<E>> E enumValue(Class<E> type,String value,String message){ try{return Enum.valueOf(type,upper(value));}catch(Exception ex){throw badRequest(message+": "+value);} }
+    private <E extends Enum<E>> E enumOrNull(Class<E> type,String value){ String x=clean(value); if(x==null)return null; return enumValue(type,x,"Invalid filter"); }
+    private LocalDateTime now(){ return LocalDateTime.now(TimeZoneConfig.APP_ZONE); }
+    private Path resolveRoot(String configured){ String x=clean(configured); Path p=x==null?Path.of(System.getProperty("java.io.tmpdir"),"alsorg","matflow","revisions"):Path.of(x); return p.toAbsolutePath().normalize(); }
+    private String safeFileName(String value,String fallback){ String x=clean(value); if(x==null)x=fallback; x=x.replaceAll("[\\/\r\n\"]","_"); return x.length()>180?x.substring(0,180):x; }
+    private ResponseStatusException badRequest(String m){ return new ResponseStatusException(HttpStatus.BAD_REQUEST,m); }
+    private ResponseStatusException notFound(String m){ return new ResponseStatusException(HttpStatus.NOT_FOUND,m); }
+    private ResponseStatusException conflict(String m){ return new ResponseStatusException(HttpStatus.CONFLICT,m); }
 
-    private ResponseStatusException badRequest(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
-    private ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
-    private ResponseStatusException notFound(String message) { return new ResponseStatusException(HttpStatus.NOT_FOUND, message); }
-    private ResponseStatusException forbidden(String message) { return new ResponseStatusException(HttpStatus.FORBIDDEN, message); }
+    public record RevisionFileResource(Resource resource,String fileName,String contentType) {}
 }

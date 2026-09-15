@@ -25,8 +25,7 @@ import {
     useMatFlow,
     useMatFlowTheme,
 } from "./matflowUi";
-import { readMatFlowError } from "./api/matflowApi";
-import { matflowWorkApi } from "./api/matflowWorkApi";
+import { matflowApi, readMatFlowError } from "./api/matflowApi";
 
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
@@ -53,59 +52,31 @@ import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
-    ["Work Center", "/matflow/work", "work", <AssignmentTurnedInOutlinedIcon />],
+    ["Production Control", "/matflow/work", "work", <AssignmentTurnedInOutlinedIcon />],
     ["Projects", "/matflow/projects", "projects", <FolderOutlinedIcon />],
-    ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
-    ["Requisitions", "/matflow/production", "production", <EngineeringOutlinedIcon />],
-    ["Store", "/matflow/store", "store", <StorefrontOutlinedIcon />],
-    ["Purchase", "/matflow/purchase", "purchase", <ShoppingCartOutlinedIcon />],
-    ["Receiving", "/matflow/receiving", "receiving", <LocalShippingOutlinedIcon />],
-    ["QC", "/matflow/qc", "qc", <FactCheckOutlinedIcon />],
-    ["Processing", "/matflow/processing", "processing", <PrecisionManufacturingOutlinedIcon />],
-    ["Processing Units", "/matflow/processing-units", "processing-units", <PrecisionManufacturingOutlinedIcon />],
-    ["Production", "/matflow/production-execution", "production-execution", <PrecisionManufacturingOutlinedIcon />],
-    ["Returns", "/matflow/returns", "returns", <KeyboardReturnOutlinedIcon />],
-    ["Exceptions", "/matflow/exceptions", "exceptions", <WarningAmberOutlinedIcon />],
-    ["Usage Register", "/matflow/material-register", "material-register", <ReceiptLongOutlinedIcon />],
-    ["Movement Audit", "/matflow/ledger", "ledger", <ReceiptLongOutlinedIcon />],
-    ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
+    ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
+    ["Production Release", "/matflow/release", "release", <EngineeringOutlinedIcon />],
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const PRIMARY_SCREENS = Object.freeze({
-    [MATFLOW_ROLES.ADMIN]: new Set(["work", "projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
-    [MATFLOW_ROLES.MANAGER]: new Set(["work", "projects", "boms", "production", "store", "purchase", "receiving", "qc", "processing", "production-execution", "returns"]),
-    [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "processing-units"]),
-    [MATFLOW_ROLES.PRODUCTION]: new Set(["work", "production", "production-execution", "returns"]),
-    [MATFLOW_ROLES.STORE]: new Set(["store", "receiving", "returns"]),
-    [MATFLOW_ROLES.PURCHASE]: new Set(["purchase"]),
-    [MATFLOW_ROLES.QC]: new Set(["qc"]),
-    [MATFLOW_ROLES.PROCESSING]: new Set(["processing"]),
+    [MATFLOW_ROLES.ADMIN]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.MANAGER]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.PRODUCTION]: new Set(["release"]),
     [MATFLOW_ROLES.DIRECTOR]: new Set([]),
 });
 
-const CONTROL_SCREENS = new Set(["exceptions", "ledger", "reports"]);
-const REFERENCE_SCREENS = new Set(["projects", "materials", "boms", "processing-units", "material-register"]);
+const CONTROL_SCREENS = new Set(["release"]);
+const REFERENCE_SCREENS = new Set(["projects", "materials", "boms"]);
 
 const HEADER = [
-    ["/matflow/dashboard", "MatFlow Dashboard", "Overall workflow, tracker and bottlenecks."],
-    ["/matflow/work", "Design & Engineering Work Center", "Design submission, Engineering assignment, revision control, checklists and Production handover."],
-    ["/matflow/production-execution", "Production", "Receive material, start work and close material accounting."],
-    ["/matflow/boms", "BOMs", "Engineering BOM creation and Production review."],
-    ["/matflow/store", "Store", "Forward MR, check availability, allocate and hand over material."],
-    ["/matflow/production", "Requisitions", "Production material demand against an effective BOM."],
-    ["/matflow/purchase", "Purchase", "Shortage PI to vendor PO."],
-    ["/matflow/receiving", "Receiving", "GRN at AL-P1 Main Store."],
-    ["/matflow/qc", "Quality Control", "Simple MR-linked material check."],
-    ["/matflow/processing-units", "Processing Units", "Approved Processing Unit master."],
-    ["/matflow/processing", "Processing", "Start and complete BOM-routed processing jobs."],
-    ["/matflow/returns", "Returns", "Unused/excess material back through the fixed plant route."],
-    ["/matflow/exceptions", "Exceptions & Recovery", "Record, contain, recover and close operational mistakes."],
-    ["/matflow/material-register", "Usage Register", "Purchased, issued, consumed, waste and returned quantities."],
-    ["/matflow/ledger", "Movement Audit", "Immutable material movement and actor/time trail."],
-    ["/matflow/reports", "Reports", "Management and workflow reports."],
-    ["/matflow/projects", "Projects", "PD / Project and Product / Drawing setup."],
-    ["/matflow/materials", "Materials", "Material catalogue and usage reference."],
+    ["/matflow/dashboard", "MatFlow Dashboard", "Director-level view of design, PPC and engineering control."],
+    ["/matflow/work", "Production Control", "Designer submission, PPC gates, engineering queries, revisions and documentation."],
+    ["/matflow/projects", "Projects & Products", "PD / Project and Product / Drawing master."],
+    ["/matflow/boms", "Engineering BOM", "BOM authoring and readiness before PPC Production Release."],
+    ["/matflow/materials", "Material Reference", "Engineering material catalogue used by BOM."],
+    ["/matflow/release", "Production Release", "Validated handoff boundary. Downstream production execution is intentionally not configured yet."],
 ];
 
 const sectionLabel = (section) => ({
@@ -145,7 +116,7 @@ export default function MatFlowLayout() {
 
     const loadNotifications = useCallback(async ({ quiet = false } = {}) => {
         try {
-            const response = await matflowWorkApi.notifications({
+            const response = await matflowApi.notifications({
                 plantCode: selectedPlantParam,
                 limit: 30,
             });
@@ -192,7 +163,7 @@ export default function MatFlowLayout() {
 
     const header = useMemo(
         () => HEADER.find(([path]) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ||
-            ["", "MatFlow", "Material workflow"],
+            ["", "MatFlow", "Production control"],
         [location.pathname]
     );
 
@@ -203,7 +174,7 @@ export default function MatFlowLayout() {
 
     const openTaskNotification = async (notification) => {
         try {
-            const response = await matflowWorkApi.markNotificationRead(
+            const response = await matflowApi.markNotificationRead(
                 notification.referenceType,
                 notification.referenceId,
                 { plantCode: selectedPlantParam }
@@ -218,7 +189,7 @@ export default function MatFlowLayout() {
 
     const markAllNotificationsRead = async () => {
         try {
-            const response = await matflowWorkApi.markAllNotificationsRead({ plantCode: selectedPlantParam });
+            const response = await matflowApi.markAllNotificationsRead({ plantCode: selectedPlantParam });
             setNotificationFeed(response?.data || { unreadCount: 0, notifications: [] });
             setNotificationError("");
         } catch (requestError) {
