@@ -1,5 +1,6 @@
 package com.alsorg.packing.controller.dto.matflow;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -9,10 +10,12 @@ public final class MatFlowInsightDtos {
     private MatFlowInsightDtos() {}
 
     public record DashboardResponse(
+            long activeProjects,
             long totalProductionFiles,
             long green,
             long amber,
             long red,
+            long needsAttention,
             long design,
             long ppcGate1,
             long engineering,
@@ -28,12 +31,18 @@ public final class MatFlowInsightDtos {
             UUID productionFileId,
             String productionFileNo,
             String projectCode,
+            String projectName,
             String productName,
+            String drawingNo,
             String stage,
             String health,
+            String currentDepartment,
             String currentOwner,
+            LocalDate plannedProductionReleaseDate,
+            LocalDate plannedDispatchDate,
             int openQueries,
             int pendingTasks,
+            int overdueItems,
             List<String> blockers,
             LocalDateTime updatedAt) {}
 

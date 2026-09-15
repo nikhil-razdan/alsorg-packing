@@ -60,7 +60,8 @@ public class MatFlowProjectService {
     @Transactional(readOnly = true)
     public List<ProjectResponse> list(String search, Boolean active, String plantCode) {
         accessService.requireRead();
-        String q = clean(search).toLowerCase(Locale.ROOT);
+        String rawSearch = clean(search);
+        final String q = rawSearch == null ? "" : rawSearch.toLowerCase(Locale.ROOT);
         String plant = upperOrNull(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
         return projectRepository.findAllByOrderByUpdatedAtDesc().stream()
