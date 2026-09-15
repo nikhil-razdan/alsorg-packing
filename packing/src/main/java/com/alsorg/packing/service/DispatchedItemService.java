@@ -1056,7 +1056,7 @@ public class DispatchedItemService {
                                 currentUserService.isUtlUser(user);
 
                 boolean creatorRead =
-                                currentUserService.isUtlPacking(user);
+                                currentUserService.isUtlPackingCreator(user);
 
                 boolean assignedDispatcherRead =
                                 currentUserService.isUtlDispatch(user)

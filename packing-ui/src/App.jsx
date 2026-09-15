@@ -43,6 +43,8 @@ const routeForPackFlowRole = (role) => {
   switch (cleanRole(role)) {
     case "UTL_PACKING":
       return "/packflow/zoho-items?view=normal";
+    case "UTL_HARDWARE_PACKING":
+      return "/packflow/zoho-items?view=hardware";
     case "UTL_DISPATCH":
       return "/packflow/dispatched-items";
     case "PACKING":
@@ -82,6 +84,7 @@ const resolvePackFlowLanding = (
 
   for (const role of [
     "UTL_PACKING",
+    "UTL_HARDWARE_PACKING",
     "UTL_DISPATCH",
     "PACKING",
     "HARDWARE_PACKING",
@@ -234,6 +237,7 @@ function App() {
                     "PACKING",
                     "UTL_PACKING",
                     "HARDWARE_PACKING",
+                    "UTL_HARDWARE_PACKING",
                   ]}
                 >
                   <ZohoItemsPage />
@@ -258,10 +262,10 @@ function App() {
                     "ADMIN",
                     "PACKING",
                     "UTL_PACKING",
+                    "UTL_HARDWARE_PACKING",
                     "DISPATCH",
                     "UTL_DISPATCH",
                     "WAREHOUSE",
-                    "HARDWARE_PACKING",
                   ]}
                 >
                   <DispatchedItemsPage />
@@ -277,10 +281,10 @@ function App() {
                     "ADMIN",
                     "PACKING",
                     "UTL_PACKING",
+                    "UTL_HARDWARE_PACKING",
                     "DISPATCH",
                     "UTL_DISPATCH",
                     "WAREHOUSE",
-                    "HARDWARE_PACKING",
                   ]}
                 >
                   <DispatchedItemsPage />

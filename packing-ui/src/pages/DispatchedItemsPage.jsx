@@ -5807,6 +5807,12 @@ export default function DispatchedItemsPage() {
 	const isUtlPacking =
 		hasRole("UTL_PACKING");
 
+	const isUtlHardwarePacking =
+		hasRole("UTL_HARDWARE_PACKING");
+
+	const isUtlPackingIdentity =
+		isUtlPacking || isUtlHardwarePacking;
+
 	/*
 	 * UTL Warehouse / Dispatch writes use dedicated assignment-scoped APIs.
 	 * Normal PackFlow dispatch/challan endpoints stay completely unchanged.
@@ -5849,7 +5855,7 @@ export default function DispatchedItemsPage() {
 		isHardwarePacking &&
 		!isAdmin &&
 		!isPacking &&
-		!isUtlPacking &&
+		!isUtlPackingIdentity &&
 		!isWarehouse &&
 		!isDispatch &&
 		!isUtlDispatch &&
@@ -6079,7 +6085,7 @@ export default function DispatchedItemsPage() {
 			{
 				fallbackUtl:
 					isUtlDispatch ||
-					isUtlPacking,
+					isUtlPackingIdentity,
 			}
 		);
 
@@ -6292,12 +6298,12 @@ export default function DispatchedItemsPage() {
 	}, [isAdmin, assignedUtlPlantCodes]);
 
 	const canUseUtlPlantFilter =
-		(isAdmin || isDispatch || isUtlDispatch || isUtlPacking) &&
+		(isAdmin || isDispatch || isUtlDispatch || isUtlPackingIdentity) &&
 		(
 			isAdmin ||
 			assignedUtlPlantCodes.length > 0 ||
 			isUtlDispatch ||
-			isUtlPacking
+			isUtlPackingIdentity
 		);
 
 	const utlPlantFilterLabel =
@@ -15508,6 +15514,7 @@ export default function DispatchedItemsPage() {
 		if (
 			normalizedRole === "PACKING" ||
 			normalizedRole === "UTL_PACKING" ||
+			normalizedRole === "UTL_HARDWARE_PACKING" ||
 			normalizedRole === "USER"
 		) {
 			return {

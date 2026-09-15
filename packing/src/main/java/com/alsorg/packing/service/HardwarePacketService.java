@@ -794,6 +794,28 @@ public class HardwarePacketService {
                                 currentUserService.allowedPlants(user));
         }
 
+        /**
+         * UTL hardware uses the same hardware packet/sticker implementation,
+         * but final generation must create UTL routing before the row enters
+         * Dispatch. Ordinary HARDWARE_PACKING never calls this method.
+         */
+        public byte[] generateUtlSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        User user,
+                        String dispatchMode,
+                        String dispatchTargetUsername,
+                        String dispatchTargetPlantCode) {
+                return packetService.generateUtlHardwareSticker(
+                                itemId,
+                                factoryFloor,
+                                user,
+                                currentUserService.allowedPlants(user),
+                                dispatchMode,
+                                dispatchTargetUsername,
+                                dispatchTargetPlantCode);
+        }
+
         public byte[] getLatestSticker(
                         UUID itemId,
                         User user) {
@@ -831,7 +853,7 @@ public class HardwarePacketService {
                         return;
                 }
 
-                if (!currentUserService.isHardwarePacking(user)) {
+                if (!currentUserService.canWriteHardwarePackets(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing access required");
                 }
@@ -1185,7 +1207,7 @@ public class HardwarePacketService {
                         return;
                 }
 
-                if (!currentUserService.isHardwarePacking(user)) {
+                if (!currentUserService.canWriteHardwarePackets(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing access required");
                 }

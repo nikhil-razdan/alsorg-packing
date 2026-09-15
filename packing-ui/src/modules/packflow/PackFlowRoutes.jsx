@@ -24,7 +24,7 @@ const dispatchElement = (
       "WAREHOUSE",
       "PACKING",
       "UTL_PACKING",
-      "HARDWARE_PACKING",
+      "UTL_HARDWARE_PACKING",
     ]}
   >
     <DispatchedItemsPage />
@@ -44,15 +44,21 @@ const resolveUtlLanding = ({
   const cleanPrimaryRole = normalizeRole(primaryRole);
 
   /*
-   * UTL_PACKING + UTL_DISPATCH may be assigned together. Respect the Admin
-   * selected primary/default profile first so a dual-profile user lands on the
-   * intended workspace instead of always being forced into packing.
+   * UTL packing, UTL hardware packing and UTL dispatch may be assigned
+   * together. Respect the Admin-selected primary/default profile first.
    */
   if (
     cleanPrimaryRole === "UTL_DISPATCH" &&
     hasRole("UTL_DISPATCH")
   ) {
     return "/packflow/dispatched-items";
+  }
+
+  if (
+    cleanPrimaryRole === "UTL_HARDWARE_PACKING" &&
+    hasRole("UTL_HARDWARE_PACKING")
+  ) {
+    return "/packflow/zoho-items?view=hardware";
   }
 
   if (
@@ -64,6 +70,10 @@ const resolveUtlLanding = ({
 
   if (hasRole("UTL_PACKING")) {
     return "/packflow/zoho-items?view=normal";
+  }
+
+  if (hasRole("UTL_HARDWARE_PACKING")) {
+    return "/packflow/zoho-items?view=hardware";
   }
 
   if (hasRole("UTL_DISPATCH")) {
@@ -92,6 +102,7 @@ function PackFlowDefaultRedirect() {
       "ADMIN",
       "PACKING",
       "UTL_PACKING",
+      "UTL_HARDWARE_PACKING",
       "WAREHOUSE",
       "DISPATCH",
       "UTL_DISPATCH",
@@ -137,6 +148,7 @@ function PackFlowDashboardAccess({
       "ADMIN",
       "PACKING",
       "UTL_PACKING",
+      "UTL_HARDWARE_PACKING",
       "WAREHOUSE",
       "DISPATCH",
       "UTL_DISPATCH",
@@ -258,6 +270,7 @@ export default function PackFlowRoutes() {
               "PACKING",
               "UTL_PACKING",
               "HARDWARE_PACKING",
+              "UTL_HARDWARE_PACKING",
             ]}
           >
             <ZohoItemsPage />

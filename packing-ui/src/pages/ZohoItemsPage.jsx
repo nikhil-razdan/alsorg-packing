@@ -2111,6 +2111,13 @@ function ZohoItemsPage() {
   const isHardwarePacking =
     hasRole("HARDWARE_PACKING");
 
+  const isUtlHardwarePacking =
+    hasRole("UTL_HARDWARE_PACKING");
+
+  const isUtlPackingIdentity =
+    isUtlPacking ||
+    isUtlHardwarePacking;
+
   /*
    * Inventory and Hardware are intentionally separate sidebar views.
    *
@@ -2129,7 +2136,8 @@ function ZohoItemsPage() {
 
   const canOpenHardwareInventory =
     isAdmin ||
-    isHardwarePacking;
+    isHardwarePacking ||
+    isUtlHardwarePacking;
 
   const requestedInventoryView =
     useMemo(() => {
@@ -2182,7 +2190,8 @@ function ZohoItemsPage() {
    */
   const canManageHardwarePackets =
     isAdmin ||
-    isHardwarePacking;
+    isHardwarePacking ||
+    isUtlHardwarePacking;
 
   /*
    * Sticker generation follows the packet type.
@@ -2224,13 +2233,14 @@ function ZohoItemsPage() {
     !isAdmin;
 
   /*
-   * ADMIN, PACKING and HARDWARE_PACKING can use
-   * the master workbench.
+   * Inventory creators can use the master workbench for the workspace they
+   * are authorized to open. UTL hardware still uses its isolated API base.
    */
   const canUseMasterWorkbench =
     isAdmin ||
     isPacking ||
-    isHardwarePacking;
+    isHardwarePacking ||
+    isUtlHardwarePacking;
 
 
   const authFetch = (
@@ -2380,7 +2390,7 @@ function ZohoItemsPage() {
     remarks: "",
     numberOfPackets: 1,
     packingDate: getIndiaTodayDateInputValue(),
-    showCompanyHeader: !isUtlPacking,
+    showCompanyHeader: !isUtlPackingIdentity,
   });
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -2601,7 +2611,7 @@ function ZohoItemsPage() {
     getPackFlowPlantDisplayLabel(
       row,
       utlOriginMetadata,
-      { fallbackUtl: isUtlPacking }
+      { fallbackUtl: isUtlPackingIdentity }
     );
 
   const inventoryRowMatchesPlantFilter = (
@@ -2848,7 +2858,9 @@ function ZohoItemsPage() {
     isWr38PlantCode(row?.plantCode);
 
   const hardwarePacketBasePath =
-    "/api/hardware-packets";
+    isUtlHardwarePacking
+      ? "/api/utl/hardware-packets"
+      : "/api/hardware-packets";
 
   const getStickerPreviewPath = (
     row
@@ -2997,7 +3009,7 @@ function ZohoItemsPage() {
   };
 
   const fetchUtlDispatchTargets = async () => {
-    if (!isUtlPacking) {
+    if (!isUtlPackingIdentity) {
       setUtlDispatchTargets([]);
       setUtlDispatchTargetUsername("");
       return [];
@@ -3006,8 +3018,13 @@ function ZohoItemsPage() {
     setUtlDispatchTargetsLoading(true);
 
     try {
+      const targetBasePath =
+        isUtlPacking
+          ? normalPacketBasePath
+          : hardwarePacketBasePath;
+
       const res = await authFetch(
-        `${API_BASE_URL}${normalPacketBasePath}/dispatch-targets`,
+        `${API_BASE_URL}${targetBasePath}/dispatch-targets`,
         {
           method: "GET",
           headers: { Accept: "application/json" },
@@ -3269,7 +3286,7 @@ function ZohoItemsPage() {
     remarks: "",
     numberOfPackets: 1,
     packingDate: getIndiaTodayDateInputValue(),
-    showCompanyHeader: !isUtlPacking,
+    showCompanyHeader: !isUtlPackingIdentity,
     factoryFloor: "",
   });
 
@@ -4165,7 +4182,7 @@ function ZohoItemsPage() {
 
       const promise =
         fetchInventoryRowsFromPath(
-          "/api/hardware-packets",
+          hardwarePacketBasePath,
           controller.signal
         )
           .then((hardwareRows) => {
@@ -7135,7 +7152,7 @@ function ZohoItemsPage() {
     }
 
     if (isHardwarePacketRow(rowOrId)) {
-      return `/api/hardware-packets/${encodeURIComponent(
+      return `${hardwarePacketBasePath}/${encodeURIComponent(
         packetItemId
       )}/sticker`;
     }
@@ -7355,7 +7372,7 @@ function ZohoItemsPage() {
     setUtlDispatchTargetUsername("");
     setDrawerOpen(true);
 
-    if (isUtlPacking) {
+    if (isUtlPackingIdentity) {
       void fetchUtlDispatchTargets();
     }
   };
@@ -7393,7 +7410,7 @@ function ZohoItemsPage() {
           row.floor || ""
         )}` +
         `&showCompanyHeader=${encodeURIComponent(
-          isUtlPacking ? false : form.showCompanyHeader
+          isUtlPackingIdentity ? false : form.showCompanyHeader
         )}`;
 
       const res = await authFetch(
@@ -7769,7 +7786,7 @@ function ZohoItemsPage() {
       }
 
       path =
-        `/api/hardware-packets/${encodeURIComponent(
+        `${hardwarePacketBasePath}/${encodeURIComponent(
           editingItemId
         )}`;
 
@@ -7789,7 +7806,7 @@ function ZohoItemsPage() {
 
     } else if (addingToMaster) {
       path =
-        `/api/hardware-packets/masters/${encodeURIComponent(
+        `${hardwarePacketBasePath}/masters/${encodeURIComponent(
           hardwareAddMaster
             .masterItemId
         )}/packets`;
@@ -7830,7 +7847,7 @@ function ZohoItemsPage() {
       }
 
       path =
-        "/api/hardware-packets";
+        hardwarePacketBasePath;
 
       method = "POST";
 
@@ -11358,7 +11375,7 @@ function ZohoItemsPage() {
                 dimensions, package content and customer data stay in PackFlow and
                 are resolved after scanning; the approved Illustrator label remains unchanged.
               </Box>
-            ) : isUtlPacking ? (
+            ) : isUtlPackingIdentity ? (
               <Box sx={stickerOptionRowSx}>
                 <Box>
                   <Box sx={optionMainTextSx}>
@@ -11401,7 +11418,7 @@ function ZohoItemsPage() {
               </Box>
             )}
 
-            {isUtlPacking && (
+            {isUtlPackingIdentity && (
               <Box sx={{ mt: 2 }}>
                 <TextField
                   select
@@ -11450,7 +11467,7 @@ function ZohoItemsPage() {
           <Button
             disabled={
               generating ||
-              (isUtlPacking && !utlDispatchTargetUsername)
+              (isUtlPackingIdentity && !utlDispatchTargetUsername)
             }
             onClick={async () => {
               const itemId = getPacketItemId(selectedItem);
@@ -11485,13 +11502,13 @@ function ZohoItemsPage() {
                 query.set(
                   "showCompanyHeader",
                   String(
-                    isUtlPacking
+                    isUtlPackingIdentity
                       ? false
                       : form.showCompanyHeader
                   )
                 );
 
-                if (isUtlPacking) {
+                if (isUtlPackingIdentity) {
                   if (!utlDispatchTargetUsername) {
                     showUiAlert(
                       "error",
@@ -11597,8 +11614,8 @@ function ZohoItemsPage() {
                   "success",
                   isWr38Row(selectedItem)
                     ? "WR-38 QR generated and downloaded successfully"
-                    : isUtlPacking
-                      ? "UTL sticker generated without company header and downloaded successfully"
+                    : isUtlPackingIdentity
+                      ? "UTL sticker / QR generated with same-plant routing and downloaded successfully"
                       : "Sticker generated and downloaded successfully"
                 );
 
@@ -13748,7 +13765,7 @@ function ZohoItemsPage() {
           )}
         </InventoryModal>
 
-        {(isHardwarePacking || isAdmin) && (
+        {canManageHardwarePackets && (
           <InventoryModal
             open={hardwarePacketOpen}
             onClose={

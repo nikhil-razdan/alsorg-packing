@@ -1533,7 +1533,7 @@ public class PacketService {
 
                 java.util.Optional<UtlPacketRouting> utlRouting = java.util.Optional.empty();
 
-                if (user != null && currentUserService.isUtlPacking(user)) {
+                if (user != null && currentUserService.isUtlPackingCreator(user)) {
                         if (utlWorkflowService == null) {
                                 throw new IllegalStateException(
                                                 "UTL workflow service is not available");
@@ -2625,7 +2625,8 @@ public class PacketService {
                         return;
                 }
 
-                if (!currentUserService.isHardwarePacking(user)) {
+                if (!currentUserService.isHardwarePacking(user)
+                                && !currentUserService.isUtlHardwarePacking(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing access required");
                 }
@@ -2658,7 +2659,8 @@ public class PacketService {
                 /*
                  * DISPATCH deliberately does not pass this check.
                  */
-                if (!currentUserService.isHardwarePacking(user)) {
+                if (!currentUserService.isHardwarePacking(user)
+                                && !currentUserService.isUtlHardwarePacking(user)) {
                         throw new AccessDeniedException(
                                         "Hardware packing write access required");
                 }
@@ -3626,6 +3628,28 @@ public class PacketService {
                                 allowedPlants,
                                 PacketItemType.HARDWARE,
                                 null);
+        }
+
+        @Transactional
+        public byte[] generateUtlHardwareSticker(
+                        UUID itemId,
+                        String factoryFloor,
+                        User user,
+                        Set<String> allowedPlants,
+                        String dispatchMode,
+                        String dispatchTargetUsername,
+                        String dispatchTargetPlantCode) {
+                return generateStickerInternalWithRouting(
+                                itemId,
+                                factoryFloor,
+                                false,
+                                user,
+                                allowedPlants,
+                                PacketItemType.HARDWARE,
+                                null,
+                                dispatchMode,
+                                dispatchTargetUsername,
+                                dispatchTargetPlantCode);
         }
 
         private String formatDimensionWithVolume(String dim) {
@@ -4604,7 +4628,7 @@ public class PacketService {
                 return previewStickerInternal(
                                 item,
                                 factoryFloor,
-                                currentUserService.isUtlPacking(user)
+                                currentUserService.isUtlPackingCreator(user)
                                                 ? false
                                                 : showCompanyHeader);
         }
@@ -4627,7 +4651,9 @@ public class PacketService {
                 return previewStickerInternal(
                                 item,
                                 factoryFloor,
-                                showCompanyHeader);
+                                currentUserService.isUtlHardwarePacking(user)
+                                                ? false
+                                                : showCompanyHeader);
         }
 
         @Transactional(readOnly = true)

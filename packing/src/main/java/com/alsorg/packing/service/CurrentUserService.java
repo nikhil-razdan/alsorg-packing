@@ -176,6 +176,18 @@ public class CurrentUserService {
         return hasRole(user, UtlWorkflowService.ROLE_UTL_PACKING);
     }
 
+    public boolean isUtlHardwarePacking(User user) {
+        return hasRole(user, UtlWorkflowService.ROLE_UTL_HARDWARE_PACKING);
+    }
+
+    /**
+     * Any UTL-side packet creator. This intentionally excludes UTL_DISPATCH,
+     * which receives routed work but does not create Packing records.
+     */
+    public boolean isUtlPackingCreator(User user) {
+        return isUtlPacking(user) || isUtlHardwarePacking(user);
+    }
+
     public boolean isDispatch(User user) {
         return hasRole(user, "DISPATCH");
     }
@@ -185,7 +197,7 @@ public class CurrentUserService {
     }
 
     public boolean isUtlUser(User user) {
-        return isUtlPacking(user) || isUtlDispatch(user);
+        return isUtlPackingCreator(user) || isUtlDispatch(user);
     }
 
     public boolean isLogistics(User user) {
@@ -462,7 +474,8 @@ public class CurrentUserService {
         return user != null
                 && (isAdmin(user)
                         || isDispatch(user)
-                        || isHardwarePacking(user));
+                        || isHardwarePacking(user)
+                        || isUtlHardwarePacking(user));
     }
 
     /*
@@ -473,7 +486,8 @@ public class CurrentUserService {
             User user) {
         return user != null
                 && (isAdmin(user)
-                        || isHardwarePacking(user));
+                        || isHardwarePacking(user)
+                        || isUtlHardwarePacking(user));
     }
 
     public void requireHardwareReadAccess(

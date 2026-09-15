@@ -37,6 +37,7 @@ import com.alsorg.packing.repository.PacketItemRepository;
 public class UtlWorkflowService {
 
     public static final String ROLE_UTL_PACKING = "UTL_PACKING";
+    public static final String ROLE_UTL_HARDWARE_PACKING = "UTL_HARDWARE_PACKING";
     public static final String ROLE_UTL_DISPATCH = "UTL_DISPATCH";
 
     public static final String MODE_UTL = "UTL";
@@ -88,9 +89,9 @@ public class UtlWorkflowService {
         }
 
         if (!currentUserService.isAdmin(packingUser)
-                && !currentUserService.isUtlPacking(packingUser)) {
+                && !currentUserService.isUtlPackingCreator(packingUser)) {
             throw new AccessDeniedException(
-                    "UTL dispatch target selection requires UTL_PACKING access");
+                    "UTL dispatch target selection requires UTL packing access");
         }
 
         String sourcePlant = requireUtlSourcePlant(sourcePlantCode);
@@ -170,7 +171,7 @@ public class UtlWorkflowService {
             String requestedTargetUsername,
             String requestedTargetPlantCode) {
 
-        if (packingUser == null || !currentUserService.isUtlPacking(packingUser)) {
+        if (packingUser == null || !currentUserService.isUtlPackingCreator(packingUser)) {
             return Optional.empty();
         }
 
@@ -638,7 +639,7 @@ public class UtlWorkflowService {
                                     creatorUsername.toLowerCase(Locale.ROOT));
 
                     if (creator == null
-                            || !currentUserService.isUtlPacking(creator)) {
+                            || !currentUserService.isUtlPackingCreator(creator)) {
                         continue;
                     }
 
@@ -685,7 +686,7 @@ public class UtlWorkflowService {
             return true;
         }
 
-        if (!currentUserService.isUtlPacking(user)) {
+        if (!currentUserService.isUtlPackingCreator(user)) {
             return false;
         }
 

@@ -130,6 +130,12 @@ const ACCESS_GROUPS = [
 					"External UTL packing at AL-P3 K&W or WR-38. Final output must be routed to a same-plant normal Dispatch user or UTL Warehouse / Dispatch user. AL-P3 prints the PackFlow sticker + QR without company header; WR-38 remains QR-only.",
 			},
 			{
+				value: "UTL_HARDWARE_PACKING",
+				label: "UTL Hardware Packing",
+				description:
+					"Create and manage creator-isolated UTL hardware packets at AL-P3 K&W or WR-38. Final sticker / QR generation requires a same-plant Dispatch or UTL Warehouse / Dispatch assignment, separate from normal hardware packing.",
+			},
+			{
 				value: "HARDWARE_PACKING",
 				label: "Hardware Packing",
 				description:
@@ -525,16 +531,19 @@ const isAllowedRoleCombination = (roles) => {
 
 	const hasUtlRole =
 		cleanRoles.includes("UTL_PACKING") ||
+		cleanRoles.includes("UTL_HARDWARE_PACKING") ||
 		cleanRoles.includes("UTL_DISPATCH");
 
 	if (hasUtlRole) {
 		/*
 		 * UTL is an external-team security boundary. A UTL identity may carry
-		 * UTL_PACKING + UTL_DISPATCH together, but cannot be mixed with normal
+		 * UTL_PACKING + UTL_HARDWARE_PACKING + UTL_DISPATCH together, but cannot be mixed with normal
 		 * Alsorg/FlowSuite operational roles or another module.
 		 */
 		return cleanRoles.every((role) =>
-			role === "UTL_PACKING" || role === "UTL_DISPATCH"
+			role === "UTL_PACKING" ||
+			role === "UTL_HARDWARE_PACKING" ||
+			role === "UTL_DISPATCH"
 		);
 	}
 
@@ -1459,7 +1468,7 @@ const getPackFlowAccessMatrix = (user) => {
 		{
 			key: "HARDWARE_INVENTORY",
 			label: "Hardware Inventory",
-			granted: has("ADMIN", "HARDWARE_PACKING"),
+			granted: has("ADMIN", "HARDWARE_PACKING", "UTL_HARDWARE_PACKING"),
 		},
 		{
 			key: "WAREHOUSE",
@@ -1469,7 +1478,7 @@ const getPackFlowAccessMatrix = (user) => {
 		{
 			key: "DISPATCH",
 			label: "Dispatched Items",
-			granted: has("ADMIN", "DISPATCH", "UTL_DISPATCH", "WAREHOUSE", "PACKING", "UTL_PACKING"),
+			granted: has("ADMIN", "DISPATCH", "UTL_DISPATCH", "WAREHOUSE", "PACKING", "UTL_PACKING", "UTL_HARDWARE_PACKING"),
 		},
 		{
 			key: "LOGISTICS",
@@ -1568,6 +1577,7 @@ const getUserAccessHealth = (user) => {
 
 	const utlIdentity =
 		roles.includes("UTL_PACKING") ||
+		roles.includes("UTL_HARDWARE_PACKING") ||
 		roles.includes("UTL_DISPATCH");
 
 	if (utlIdentity) {
@@ -2372,6 +2382,7 @@ function UsersPageContent() {
 
 			const utlIdentity =
 				cleanRoles.includes("UTL_PACKING") ||
+				cleanRoles.includes("UTL_HARDWARE_PACKING") ||
 				cleanRoles.includes("UTL_DISPATCH");
 
 			if (utlIdentity) {
@@ -2446,8 +2457,8 @@ function UsersPageContent() {
 				return "PackFlow Director can be combined with other FlowSuite modules, but cannot be combined with Packing, Hardware Packing, Warehouse, Dispatch, Logistics or Driver access.";
 			}
 
-			if (roles.includes("UTL_PACKING") || roles.includes("UTL_DISPATCH")) {
-				return "UTL is an external-team profile. UTL Packing and UTL Dispatch may be combined with each other, but not with normal Alsorg/FlowSuite roles.";
+			if (roles.includes("UTL_PACKING") || roles.includes("UTL_HARDWARE_PACKING") || roles.includes("UTL_DISPATCH")) {
+				return "UTL is an external-team profile. UTL Packing, UTL Hardware Packing and UTL Dispatch may be combined with each other, but not with normal Alsorg/FlowSuite roles.";
 			}
 
 			return "Invalid role combination.";
@@ -2464,7 +2475,7 @@ function UsersPageContent() {
 			return "Select at least one plant.";
 		}
 
-		const utlIdentity = roles.includes("UTL_PACKING") || roles.includes("UTL_DISPATCH");
+		const utlIdentity = roles.includes("UTL_PACKING") || roles.includes("UTL_HARDWARE_PACKING") || roles.includes("UTL_DISPATCH");
 		if (utlIdentity) {
 			const utlPlants = normalizeArray(form.plantCodes);
 			if (utlPlants.length !== 1) {
@@ -4903,7 +4914,7 @@ function UserEditorDrawer({
 							Plant Access
 						</Typography>
 
-						{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) ? (
+						{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_HARDWARE_PACKING") || selectedRoles.includes("UTL_DISPATCH")) ? (
 							<TextField
 								select
 								fullWidth
@@ -5029,7 +5040,7 @@ function UserEditorDrawer({
 						</Alert>
 					)}
 
-				{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_DISPATCH")) && (
+				{(selectedRoles.includes("UTL_PACKING") || selectedRoles.includes("UTL_HARDWARE_PACKING") || selectedRoles.includes("UTL_DISPATCH")) && (
 					<Alert severity="warning" sx={infoAlertSx}>
 						UTL is an external-team boundary. This account can operate only one of AL-P3 K&W or WR-38, receives no Warehouse access, and sees/acts only on UTL work assigned to its role.
 					</Alert>

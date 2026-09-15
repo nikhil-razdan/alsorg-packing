@@ -62,6 +62,7 @@ public class UserService {
                         "PACKING",
                         "HARDWARE_PACKING",
                         "UTL_PACKING",
+                        "UTL_HARDWARE_PACKING",
                         "WAREHOUSE",
                         "DISPATCH",
                         "UTL_DISPATCH",
@@ -380,6 +381,7 @@ public class UserService {
                 }
 
                 if (containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_HARDWARE_PACKING")
                                 || containsRole(roles, "UTL_DISPATCH")) {
                         finalWarehouseAccess = false;
                 }
@@ -410,6 +412,7 @@ public class UserService {
                 Set<String> cleanPlants = cleanPlantCodes(plantCodes);
 
                 boolean utlIdentity = containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_HARDWARE_PACKING")
                                 || containsRole(roles, "UTL_DISPATCH");
 
                 if (utlIdentity) {
@@ -685,11 +688,13 @@ public class UserService {
                 }
 
                 boolean hasUtlRole = containsRole(roles, "UTL_PACKING")
+                                || containsRole(roles, "UTL_HARDWARE_PACKING")
                                 || containsRole(roles, "UTL_DISPATCH");
 
                 if (hasUtlRole) {
                         return roles.stream()
                                         .allMatch(role -> "UTL_PACKING".equals(role)
+                                                        || "UTL_HARDWARE_PACKING".equals(role)
                                                         || "UTL_DISPATCH".equals(role));
                 }
 
@@ -709,6 +714,7 @@ public class UserService {
                                 "PACKING".equals(role) ||
                                 "HARDWARE_PACKING".equals(role) ||
                                 "UTL_PACKING".equals(role) ||
+                                "UTL_HARDWARE_PACKING".equals(role) ||
                                 "WAREHOUSE".equals(role) ||
                                 "DISPATCH".equals(role) ||
                                 "UTL_DISPATCH".equals(role) ||
