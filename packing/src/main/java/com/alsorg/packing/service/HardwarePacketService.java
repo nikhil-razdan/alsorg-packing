@@ -86,9 +86,52 @@ public class HardwarePacketService {
         public List<HardwarePacketResponse> createPackets(
                         HardwarePacketCreateRequest request,
                         User user) {
+                return createPacketsInternal(
+                                request,
+                                user,
+                                null,
+                                false);
+        }
+
+        /**
+         * UTL-only creation variant. Normal HARDWARE_PACKING keeps the established
+         * sequential numbering contract. UTL hardware may optionally provide one
+         * explicit positive packet number per packet draft (for example packet 5
+         * without first creating packets 1-4).
+         */
+        @Transactional
+        public List<HardwarePacketResponse> createUtlPackets(
+                        HardwarePacketCreateRequest request,
+                        User user,
+                        List<Integer> requestedPacketNumbers) {
+
+                if (!currentUserService.isUtlHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "UTL_HARDWARE_PACKING access required for custom UTL packet numbering");
+                }
+
+                return createPacketsInternal(
+                                request,
+                                user,
+                                requestedPacketNumbers,
+                                true);
+        }
+
+        private List<HardwarePacketResponse> createPacketsInternal(
+                        HardwarePacketCreateRequest request,
+                        User user,
+                        List<Integer> requestedPacketNumbers,
+                        boolean customPacketNumbersAllowed) {
                 currentUserService.requireHardwarePackingOrAdmin(user);
 
                 validateCreateRequest(request);
+
+                List<Integer> packetNumbers = resolvePacketNumbers(
+                                request.packets().size(),
+                                requestedPacketNumbers,
+                                customPacketNumbersAllowed,
+                                1,
+                                Set.of());
 
                 LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
@@ -147,7 +190,7 @@ public class HardwarePacketService {
 
                         HardwarePacketDraftRequest packetDraft = request.packets().get(packetIndex);
 
-                        int packetNumber = packetIndex + 1;
+                        int packetNumber = packetNumbers.get(packetIndex);
 
                         PacketItem item = new PacketItem();
 
@@ -231,6 +274,45 @@ public class HardwarePacketService {
                         UUID masterItemId,
                         HardwarePacketAddRequest request,
                         User user) {
+                return addPacketsInternal(
+                                masterItemId,
+                                request,
+                                user,
+                                null,
+                                false);
+        }
+
+        /**
+         * UTL-only append variant. The requested numbers are validated against
+         * both the other drafts in this request and every packet already present
+         * on the hardware master, so a custom number can never silently collide.
+         */
+        @Transactional
+        public List<HardwarePacketResponse> addUtlPackets(
+                        UUID masterItemId,
+                        HardwarePacketAddRequest request,
+                        User user,
+                        List<Integer> requestedPacketNumbers) {
+
+                if (!currentUserService.isUtlHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "UTL_HARDWARE_PACKING access required for custom UTL packet numbering");
+                }
+
+                return addPacketsInternal(
+                                masterItemId,
+                                request,
+                                user,
+                                requestedPacketNumbers,
+                                true);
+        }
+
+        private List<HardwarePacketResponse> addPacketsInternal(
+                        UUID masterItemId,
+                        HardwarePacketAddRequest request,
+                        User user,
+                        List<Integer> requestedPacketNumbers,
+                        boolean customPacketNumbersAllowed) {
                 currentUserService.requireHardwareWriteAccess(user);
 
                 validateAddRequest(request);
@@ -272,6 +354,18 @@ public class HardwarePacketService {
                                 .max()
                                 .orElse(0);
 
+                Set<Integer> existingPacketNumbers = existingItems.stream()
+                                .map(item -> extractPacketNoOrZero(item.getPacketNumber()))
+                                .filter(number -> number > 0)
+                                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+
+                List<Integer> packetNumbers = resolvePacketNumbers(
+                                request.packets().size(),
+                                requestedPacketNumbers,
+                                customPacketNumbersAllowed,
+                                highestPacketNumber + 1,
+                                existingPacketNumbers);
+
                 LocalDateTime now = LocalDateTime.now(APP_ZONE);
 
                 String actor = safeActor(user);
@@ -304,7 +398,7 @@ public class HardwarePacketService {
                 for (int index = 0; index < request.packets().size(); index++) {
                         HardwarePacketDraftRequest draft = request.packets().get(index);
 
-                        int packetNumber = highestPacketNumber + index + 1;
+                        int packetNumber = packetNumbers.get(index);
 
                         PacketItem item = new PacketItem();
 
@@ -1218,6 +1312,80 @@ public class HardwarePacketService {
                         throw new AccessDeniedException(
                                         "You cannot add packets to another user's hardware master");
                 }
+        }
+
+        /**
+         * Resolves packet numbers without changing the normal hardware contract.
+         *
+         * Normal flow (customPacketNumbersAllowed=false): always sequential from
+         * defaultStart and ignores any optional values.
+         *
+         * UTL flow: an omitted list still behaves sequentially, while an explicit
+         * list must contain exactly one unique positive integer per packet and may
+         * not reuse a number already present on the same hardware master.
+         */
+        private List<Integer> resolvePacketNumbers(
+                        int packetCount,
+                        List<Integer> requestedPacketNumbers,
+                        boolean customPacketNumbersAllowed,
+                        int defaultStart,
+                        Set<Integer> existingPacketNumbers) {
+
+                if (packetCount <= 0) {
+                        throw new IllegalArgumentException(
+                                        "At least one hardware packet is required");
+                }
+
+                int safeStart = Math.max(1, defaultStart);
+
+                if (!customPacketNumbersAllowed
+                                || requestedPacketNumbers == null
+                                || requestedPacketNumbers.isEmpty()) {
+                        List<Integer> defaults = new ArrayList<>(packetCount);
+                        for (int index = 0; index < packetCount; index++) {
+                                defaults.add(safeStart + index);
+                        }
+                        return List.copyOf(defaults);
+                }
+
+                if (requestedPacketNumbers.size() != packetCount) {
+                        throw new IllegalArgumentException(
+                                        "Provide exactly one packet number for each UTL hardware packet");
+                }
+
+                Set<Integer> occupied = existingPacketNumbers == null
+                                ? Set.of()
+                                : existingPacketNumbers;
+
+                Set<Integer> seen = new HashSet<>();
+                List<Integer> resolved = new ArrayList<>(packetCount);
+
+                for (Integer requested : requestedPacketNumbers) {
+                        if (requested == null || requested <= 0) {
+                                throw new IllegalArgumentException(
+                                                "UTL hardware packet number must be a positive whole number");
+                        }
+
+                        if (requested > 999999) {
+                                throw new IllegalArgumentException(
+                                                "UTL hardware packet number cannot exceed 999999");
+                        }
+
+                        if (!seen.add(requested)) {
+                                throw new IllegalArgumentException(
+                                                "Duplicate UTL hardware packet number: " + requested);
+                        }
+
+                        if (occupied.contains(requested)) {
+                                throw new IllegalArgumentException(
+                                                "Hardware packet number " + requested
+                                                                + " already exists for this hardware master");
+                        }
+
+                        resolved.add(requested);
+                }
+
+                return List.copyOf(resolved);
         }
 
         private int extractPacketNoOrZero(

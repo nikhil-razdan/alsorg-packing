@@ -71,19 +71,28 @@ public class UtlHardwarePacketController {
 
     @PostMapping
     public ResponseEntity<List<HardwarePacketResponse>> create(
-            @RequestBody HardwarePacketCreateRequest request) {
+            @RequestBody HardwarePacketCreateRequest request,
+            @RequestParam(required = false) List<Integer> packetNumbers) {
         User user = requireUtlHardwareUser();
         return ResponseEntity.ok(
-                hardwarePacketService.createPackets(request, user));
+                hardwarePacketService.createUtlPackets(
+                        request,
+                        user,
+                        packetNumbers));
     }
 
     @PostMapping("/masters/{masterItemId}/packets")
     public ResponseEntity<List<HardwarePacketResponse>> addPackets(
             @PathVariable UUID masterItemId,
-            @RequestBody HardwarePacketAddRequest request) {
+            @RequestBody HardwarePacketAddRequest request,
+            @RequestParam(required = false) List<Integer> packetNumbers) {
         User user = requireUtlHardwareUser();
         return ResponseEntity.ok(
-                hardwarePacketService.addPackets(masterItemId, request, user));
+                hardwarePacketService.addUtlPackets(
+                        masterItemId,
+                        request,
+                        user,
+                        packetNumbers));
     }
 
     @GetMapping

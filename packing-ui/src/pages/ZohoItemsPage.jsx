@@ -1070,9 +1070,22 @@ const createHardwareDraftKey = () =>
     .slice(2)}`;
 
 const createEmptyHardwarePacketDraft =
-  () => ({
+  (packetNumber = 1) => ({
     key:
       createHardwareDraftKey(),
+
+    /*
+     * UTL_HARDWARE_PACKING may override this value before creation.
+     * Ordinary HARDWARE_PACKING continues to ignore it and keeps the
+     * established backend sequential numbering contract.
+     */
+    packetNumber:
+      String(
+        Number.isInteger(Number(packetNumber)) &&
+          Number(packetNumber) > 0
+          ? Math.trunc(Number(packetNumber))
+          : 1
+      ),
 
     items: [
       createEmptyHardwareLine(1),
@@ -7874,6 +7887,39 @@ function ZohoItemsPage() {
         } created successfully`;
     }
 
+    /*
+     * Custom packet numbering is UTL-only and travels as query metadata,
+     * keeping HardwarePacketCreateRequest / HardwarePacketAddRequest unchanged.
+     * Normal hardware creation therefore keeps its existing API contract.
+     */
+    if (
+      !editing &&
+      isUtlHardwarePacking
+    ) {
+      const packetNumberQuery =
+        new URLSearchParams();
+
+      hardwarePacketDrafts.forEach(
+        (packetDraft) => {
+          packetNumberQuery.append(
+            "packetNumbers",
+            String(
+              Number(
+                packetDraft?.packetNumber
+              )
+            )
+          );
+        }
+      );
+
+      const queryString =
+        packetNumberQuery.toString();
+
+      if (queryString) {
+        path = `${path}?${queryString}`;
+      }
+    }
+
     try {
       setHardwareSaving(true);
 
@@ -8127,6 +8173,35 @@ function ZohoItemsPage() {
     }));
   };
 
+  const updateHardwarePacketNumber = (
+    packetIndex,
+    value
+  ) => {
+    const digitsOnly =
+      String(value ?? "")
+        .replace(/[^0-9]/g, "")
+        .slice(0, 6);
+
+    setHardwarePacketDrafts(
+      (previous) =>
+        previous.map(
+          (packet, currentIndex) =>
+            currentIndex === packetIndex
+              ? {
+                ...packet,
+                packetNumber: digitsOnly,
+              }
+              : packet
+        )
+    );
+
+    setErrors((previous) => ({
+      ...previous,
+      [`hardware-packet-${packetIndex}-number`]:
+        "",
+    }));
+  };
+
   const addHardwarePacketDraft =
     () => {
       setHardwarePacketDrafts(
@@ -8142,9 +8217,47 @@ function ZohoItemsPage() {
             return previous;
           }
 
+          let suggestedPacketNumber = 1;
+
+          if (isUtlHardwarePacking) {
+            const masterKey =
+              hardwareAddMaster?.masterItemId ||
+              hardwareAddMaster?.itemName ||
+              "";
+
+            const existingMasterMax =
+              Number(
+                maxPacketMap[masterKey]
+              ) || 0;
+
+            const draftMax =
+              previous.reduce(
+                (maximum, packet) => {
+                  const value =
+                    Number(
+                      packet?.packetNumber
+                    );
+
+                  return Number.isInteger(value) &&
+                    value > maximum
+                    ? value
+                    : maximum;
+                },
+                0
+              );
+
+            suggestedPacketNumber =
+              Math.max(
+                existingMasterMax,
+                draftMax
+              ) + 1;
+          }
+
           return [
             ...previous,
-            createEmptyHardwarePacketDraft(),
+            createEmptyHardwarePacketDraft(
+              suggestedPacketNumber
+            ),
           ];
         }
       );
@@ -8495,8 +8608,50 @@ function ZohoItemsPage() {
           "Add at least one packet";
       }
 
+      const seenUtlPacketNumbers =
+        new Set();
+
       hardwarePacketDrafts.forEach(
         (packet, packetIndex) => {
+          if (isUtlHardwarePacking) {
+            const rawPacketNumber =
+              String(
+                packet?.packetNumber ?? ""
+              ).trim();
+
+            const packetNumber =
+              Number(rawPacketNumber);
+
+            if (
+              !/^\d+$/.test(
+                rawPacketNumber
+              ) ||
+              !Number.isInteger(
+                packetNumber
+              ) ||
+              packetNumber <= 0 ||
+              packetNumber > 999999
+            ) {
+              nextErrors[
+                `hardware-packet-${packetIndex}-number`
+              ] =
+                "Enter a whole packet number from 1 to 999999";
+            } else if (
+              seenUtlPacketNumbers.has(
+                packetNumber
+              )
+            ) {
+              nextErrors[
+                `hardware-packet-${packetIndex}-number`
+              ] =
+                `Packet No. ${packetNumber} is already used in this request`;
+            } else {
+              seenUtlPacketNumbers.add(
+                packetNumber
+              );
+            }
+          }
+
           validateHardwareItemRows(
             packet.items,
             `hardware-packet-${packetIndex}`,
@@ -8591,8 +8746,26 @@ function ZohoItemsPage() {
         row.plantCode || "",
     });
 
+    const masterPacketKey =
+      row.masterItemId ||
+      row.itemName ||
+      "";
+
+    const nextUtlPacketNumber =
+      (
+        Number(
+          maxPacketMap[
+            masterPacketKey
+          ]
+        ) || 0
+      ) + 1;
+
     setHardwarePacketDrafts([
-      createEmptyHardwarePacketDraft(),
+      createEmptyHardwarePacketDraft(
+        isUtlHardwarePacking
+          ? nextUtlPacketNumber
+          : 1
+      ),
     ]);
 
     setErrors({});
@@ -13788,7 +13961,9 @@ function ZohoItemsPage() {
                     hardwareAddMaster.itemName
                   ] || 0) + 1
                   } onward to ${hardwareAddMaster.itemName}`
-                  : "Create one master item with multiple packets and independent hardware contents"
+                  : isUtlHardwarePacking
+                    ? "Create UTL hardware packets with independent contents. Packet No. defaults to 1 and can be set directly to a specific number."
+                    : "Create one master item with multiple packets and independent hardware contents"
             }
             width={820}
             height="92vh"
@@ -14310,7 +14485,12 @@ function ZohoItemsPage() {
                               }}
                             >
                               Packet{" "}
-                              {packetIndex + 1}
+                              {isUtlHardwarePacking
+                                ? (
+                                  packetDraft?.packetNumber ||
+                                  "—"
+                                )
+                                : packetIndex + 1}
                             </Box>
 
                             <Box
@@ -14318,8 +14498,50 @@ function ZohoItemsPage() {
                                 display: "flex",
                                 gap: 1,
                                 flexWrap: "wrap",
+                                alignItems: "flex-start",
                               }}
                             >
+                              {isUtlHardwarePacking && (
+                                <TextField
+                                  label="Packet No."
+                                  type="number"
+                                  size="small"
+                                  value={
+                                    packetDraft?.packetNumber ??
+                                    ""
+                                  }
+                                  onChange={(event) =>
+                                    updateHardwarePacketNumber(
+                                      packetIndex,
+                                      event.target.value
+                                    )
+                                  }
+                                  inputProps={{
+                                    min: 1,
+                                    max: 999999,
+                                    step: 1,
+                                    inputMode: "numeric",
+                                  }}
+                                  error={
+                                    Boolean(
+                                      errors[
+                                      `hardware-packet-${packetIndex}-number`
+                                      ]
+                                    )
+                                  }
+                                  helperText={
+                                    errors[
+                                    `hardware-packet-${packetIndex}-number`
+                                    ] ||
+                                    "Default 1; enter a specific packet number if required"
+                                  }
+                                  sx={{
+                                    ...formFieldSx(),
+                                    width: 210,
+                                    mb: 0,
+                                  }}
+                                />
+                              )}
                               <Button
                                 type="button"
                                 size="small"
