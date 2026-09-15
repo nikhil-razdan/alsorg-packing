@@ -13,7 +13,6 @@ import {
 } from "./matflowUi";
 
 import {
-    MatFlowDashboardPage,
     MatFlowTrackerDetailPage,
     MatFlowMaterialRegisterPage,
     MatFlowReportsPage,
@@ -50,6 +49,7 @@ import {
     MatFlowProductionExecutionPage,
 } from "./pages/MatFlowExecutionWorkspace";
 import { MatFlowWorkWorkspacePage } from "./pages/MatFlowWorkWorkspace";
+import MatFlowManagementDashboardPage from "./pages/MatFlowManagementDashboard";
 
 function Guard({ screen, children }) {
     const location = useLocation();
@@ -149,9 +149,15 @@ export default function MatFlowRoutes() {
         <MatFlowThemeProvider>
             <MatFlowProvider>
                 <Routes>
+                    {/*
+                     * The management dashboard intentionally owns its full-width top-navigation shell.
+                     * Operational desks continue to use MatFlowLayout and its role-oriented sidebar,
+                     * so this dashboard redesign does not disturb existing workflow screens.
+                     */}
+                    <Route path="dashboard" element={guarded("dashboard", <MatFlowManagementDashboardPage />)} />
+
                     <Route element={<MatFlowLayout />}>
                         <Route index element={<HomeRedirect />} />
-                        <Route path="dashboard" element={guarded("dashboard", <MatFlowDashboardPage />)} />
                         <Route path="work" element={guarded("work", <MatFlowWorkWorkspacePage />)} />
                         <Route path="tracker" element={guarded("tracking", <Navigate to="/matflow/dashboard?view=projects" replace />)} />
                         <Route path="tracker/materials" element={guarded("tracking", <Navigate to="/matflow/dashboard?view=materials" replace />)} />
