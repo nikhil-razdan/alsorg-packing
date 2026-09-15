@@ -5,11 +5,8 @@ import {
     CircularProgress,
     Divider,
     MenuItem,
-    ScopedCssBaseline,
     TextField,
-    ThemeProvider,
     Typography,
-    createTheme,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -26,71 +23,31 @@ import { downloadMatFlowExcel } from "../api/matflowExcel";
 import { clean, normalize, numeric, readable, useMatFlow } from "../matflowUi";
 
 const C = Object.freeze({
-    page: "#ffffff",
-    shell: "#fbfcfe",
-    text: "#172033",
-    muted: "#65748b",
-    faint: "#8b98aa",
-    border: "#dfe5ec",
-    borderStrong: "#cfd7e1",
-    primary: "#0868b7",
-    primaryDark: "#0d4e80",
-    primarySoft: "#eef6fc",
-    rowHover: "#f7fafc",
-    selected: "#eaf4fb",
-    success: "#13824b",
-    warning: "#c97900",
-    danger: "#d92d32",
-    dot: "#24364a",
-});
-
-const managementTheme = createTheme({
-    palette: {
-        mode: "light",
-        primary: { main: C.primary },
-        background: { default: C.page, paper: C.page },
-        text: { primary: C.text, secondary: C.muted },
-        divider: C.border,
-        success: { main: C.success },
-        warning: { main: C.warning },
-        error: { main: C.danger },
-    },
-    typography: {
-        fontFamily: 'Inter, "Segoe UI", Roboto, Arial, sans-serif',
-        button: { textTransform: "none", fontWeight: 700 },
-    },
-    shape: { borderRadius: 6 },
-    components: {
-        MuiButton: {
-            defaultProps: { disableElevation: true },
-            styleOverrides: {
-                root: {
-                    minHeight: 36,
-                    borderRadius: 5,
-                    textTransform: "none",
-                    fontSize: 14,
-                    fontWeight: 700,
-                },
-            },
-        },
-        MuiOutlinedInput: {
-            styleOverrides: {
-                root: {
-                    borderRadius: 5,
-                    background: "#fff",
-                    fontSize: 14,
-                    "& .MuiOutlinedInput-notchedOutline": { borderColor: C.borderStrong },
-                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#b6c2d1" },
-                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: C.primary, borderWidth: 1 },
-                },
-            },
-        },
-        MuiMenuItem: {
-            styleOverrides: {
-                root: { minHeight: 34, fontSize: 14 },
-            },
-        },
-    },
+    page: "var(--mf-page-bg)",
+    panel: "var(--mf-card-bg)",
+    panelElevated: "var(--mf-card-bg-elevated)",
+    surface: "var(--mf-surface)",
+    surfaceStrong: "var(--mf-surface-strong)",
+    field: "var(--mf-field-bg)",
+    text: "var(--mf-text)",
+    muted: "var(--mf-text-secondary)",
+    faint: "var(--mf-text-muted)",
+    border: "var(--mf-border)",
+    borderStrong: "var(--mf-border-strong)",
+    primary: "var(--mf-primary)",
+    primaryDark: "var(--mf-primary-hover)",
+    primaryHover: "var(--mf-primary-hover)",
+    primarySoft: "var(--mf-primary-soft)",
+    rowHover: "var(--mf-hover)",
+    selected: "var(--mf-primary-soft)",
+    success: "var(--mf-success-text)",
+    warning: "var(--mf-warning-text)",
+    danger: "var(--mf-danger-text)",
+    dangerSoft: "var(--mf-danger-soft)",
+    dangerBorder: "var(--mf-danger-border)",
+    dot: "var(--mf-text-secondary)",
+    tableHead: "var(--mf-table-head)",
+    shadow: "var(--mf-card-shadow)",
 });
 
 const NAV_TABS = [
@@ -312,71 +269,94 @@ function PlantSelect() {
 }
 
 function ManagementDashboardFrame({ view, onViewChange, children }) {
+    /*
+     * IMPORTANT: do not create a second light-only MUI theme here.
+     * MatFlowLayout already sits inside MatFlowThemeProvider, which owns the
+     * persisted light/dark setting and publishes the --mf-* design tokens.
+     * Keeping this dashboard on that same provider makes it switch modes at
+     * exactly the same time as every other MatFlow workspace.
+     */
     return (
-        <ThemeProvider theme={managementTheme}>
-            <ScopedCssBaseline>
-                <Box
-                    sx={{
-                        width: "100%",
-                        minHeight: "calc(100vh - 128px)",
-                        bgcolor: C.page,
-                        color: C.text,
-                        border: `1px solid ${C.border}`,
-                        borderRadius: 1.4,
-                        overflow: "hidden",
-                        boxShadow: "0 1px 2px rgba(15,23,42,.03)",
-                    }}
-                >
-                    <Box
-                        sx={{
-                            minHeight: 56,
-                            px: { xs: 1.25, md: 2.25 },
-                            display: "flex",
-                            alignItems: "stretch",
-                            borderBottom: `1px solid ${C.border}`,
-                            bgcolor: "#fff",
-                            overflowX: "auto",
-                        }}
-                    >
-                        <Box component="nav" sx={{ display: "flex", alignItems: "stretch", gap: { xs: .4, md: 1.1 } }}>
-                            {NAV_TABS.map(([key, label]) => {
-                                const active = view === key || (view === "work" && key === "overview");
-                                return (
-                                    <Button
-                                        key={key}
-                                        onClick={() => onViewChange(key)}
-                                        sx={{
-                                            minWidth: { xs: 88, md: 104 },
-                                            px: { xs: 1, md: 1.4 },
-                                            borderRadius: 0,
-                                            color: active ? C.primaryDark : C.text,
-                                            fontSize: { xs: 13.5, md: 15 },
-                                            fontWeight: active ? 800 : 550,
-                                            borderBottom: active ? `3px solid ${C.primary}` : "3px solid transparent",
-                                            "&:hover": { bgcolor: "transparent", color: C.primaryDark },
-                                        }}
-                                    >
-                                        {label}
-                                    </Button>
-                                );
-                            })}
-                        </Box>
-                    </Box>
-
-                    <Box
-                        component="main"
-                        sx={{
-                            width: "100%",
-                            px: { xs: 1.5, md: 2.5, xl: 3 },
-                            py: { xs: 2, md: 2.7 },
-                            bgcolor: C.page,
-                        }}
-                    >
-                        {children}
-                    </Box>
+        <Box
+            sx={{
+                width: "100%",
+                minHeight: "calc(100vh - 128px)",
+                bgcolor: C.page,
+                color: C.text,
+                border: `1px solid ${C.border}`,
+                borderRadius: 1.4,
+                overflow: "hidden",
+                boxShadow: C.shadow,
+                transition: "background-color .18s ease, color .18s ease, border-color .18s ease",
+                // Preserve the compact management-dashboard geometry from the
+                // approved light UI while inheriting MatFlow's active mode.
+                "& .MuiButton-root": {
+                    minHeight: 36,
+                    borderRadius: "5px",
+                    textTransform: "none",
+                    fontSize: 14,
+                    fontWeight: 700,
+                },
+                "& .MuiOutlinedInput-root": {
+                    borderRadius: "5px",
+                    bgcolor: C.field,
+                    fontSize: 14,
+                    color: C.text,
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: C.borderStrong },
+                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: C.borderStrong },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: C.primary, borderWidth: 1 },
+                },
+                "& .MuiInputBase-input::placeholder": { color: C.faint, opacity: 1 },
+            }}
+        >
+            <Box
+                sx={{
+                    minHeight: 56,
+                    px: { xs: 1.25, md: 2.25 },
+                    display: "flex",
+                    alignItems: "stretch",
+                    borderBottom: `1px solid ${C.border}`,
+                    bgcolor: C.panel,
+                    overflowX: "auto",
+                }}
+            >
+                <Box component="nav" sx={{ display: "flex", alignItems: "stretch", gap: { xs: .4, md: 1.1 } }}>
+                    {NAV_TABS.map(([key, label]) => {
+                        const active = view === key || (view === "work" && key === "overview");
+                        return (
+                            <Button
+                                key={key}
+                                onClick={() => onViewChange(key)}
+                                sx={{
+                                    minWidth: { xs: 88, md: 104 },
+                                    px: { xs: 1, md: 1.4 },
+                                    borderRadius: 0,
+                                    color: active ? C.primary : C.text,
+                                    fontSize: { xs: 13.5, md: 15 },
+                                    fontWeight: active ? 800 : 550,
+                                    borderBottom: active ? `3px solid ${C.primary}` : "3px solid transparent",
+                                    "&:hover": { bgcolor: "transparent", color: C.primary },
+                                }}
+                            >
+                                {label}
+                            </Button>
+                        );
+                    })}
                 </Box>
-            </ScopedCssBaseline>
-        </ThemeProvider>
+            </Box>
+
+            <Box
+                component="main"
+                sx={{
+                    width: "100%",
+                    px: { xs: 1.5, md: 2.5, xl: 3 },
+                    py: { xs: 2, md: 2.7 },
+                    bgcolor: C.page,
+                }}
+            >
+                {children}
+            </Box>
+        </Box>
     );
 }
 
@@ -402,7 +382,7 @@ function ThinButton({ children, onClick, startIcon = null, endIcon = null, disab
             endIcon={endIcon}
             onClick={onClick}
             disabled={disabled}
-            sx={{ borderColor: C.borderStrong, color: C.text, bgcolor: "#fff", px: 1.6, "&:hover": { borderColor: "#aebaca", bgcolor: C.rowHover }, ...sx }}
+            sx={{ borderColor: C.borderStrong, color: C.text, bgcolor: C.panel, px: 1.6, "&:hover": { borderColor: C.borderStrong, bgcolor: C.rowHover }, ...sx }}
         >
             {children}
         </Button>
@@ -454,9 +434,9 @@ const tableHeaderSx = (columns) => ({
     gridTemplateColumns: columns,
     alignItems: "center",
     minHeight: 50,
-    bgcolor: "#f4f6f8",
+    bgcolor: C.tableHead,
     borderBottom: `1px solid ${C.border}`,
-    color: "#394a61",
+    color: C.muted,
     fontSize: 13,
     fontWeight: 700,
 });
@@ -467,7 +447,7 @@ const tableRowSx = (columns, selected = false) => ({
     alignItems: "center",
     minHeight: 73,
     borderBottom: `1px solid ${C.border}`,
-    bgcolor: selected ? C.selected : "#fff",
+    bgcolor: selected ? C.selected : C.panel,
     "&:hover": { bgcolor: selected ? C.selected : C.rowHover },
 });
 
@@ -487,7 +467,7 @@ function LoadingView() {
 function ErrorBanner({ error }) {
     if (!error) return null;
     return (
-        <Box sx={{ border: "1px solid #f1c7c9", bgcolor: "#fff5f5", color: C.danger, px: 1.5, py: 1.1, mb: 2, borderRadius: 1, fontSize: 13.5, fontWeight: 600 }}>
+        <Box sx={{ border: `1px solid ${C.dangerBorder}`, bgcolor: C.dangerSoft, color: C.danger, px: 1.5, py: 1.1, mb: 2, borderRadius: 1, fontSize: 13.5, fontWeight: 600 }}>
             {error}
         </Box>
     );
@@ -573,7 +553,7 @@ function OperationsCard({ row, onOpen }) {
     const action = nextActionForRow(row);
     const due = dueLabel(row.requiredDate);
     return (
-        <Box sx={{ border: `1px solid ${C.borderStrong}`, borderRadius: 1, p: 2, bgcolor: "#fff", minHeight: 177, display: "flex", flexDirection: "column" }}>
+        <Box sx={{ border: `1px solid ${C.borderStrong}`, borderRadius: 1, p: 2, bgcolor: C.panel, minHeight: 177, display: "flex", flexDirection: "column" }}>
             <Typography sx={{ fontSize: 16, fontWeight: 750 }}>{row.projectName || row.projectCode || "Project"}</Typography>
             <Typography sx={{ color: C.muted, fontSize: 13.5, mt: .5 }}>{row.productName || row.drawingNo || "Product"} · {row.requisitionNumber || "MR"}</Typography>
             <Typography sx={{ color: C.muted, fontSize: 13.5, mt: .35 }}>{ownerForRow(row)} · {row.productionPlantCode || "—"}</Typography>
@@ -779,7 +759,7 @@ function ProjectsView({ projects, allRows, navigate, searchParams, setSearchPara
         return (
             <Box sx={{ mx: { xs: -2, md: -3.2 }, mt: { xs: -2.5, md: -3.5 }, mb: { xs: -2.5, md: -3.5 } }}>
                 <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "350px minmax(0,1fr)" }, minHeight: "calc(100vh - 68px)" }}>
-                    <Box sx={{ borderRight: { lg: `1px solid ${C.border}` }, bgcolor: "#fff" }}>
+                    <Box sx={{ borderRight: { lg: `1px solid ${C.border}` }, bgcolor: C.panel }}>
                         <Box sx={{ px: 3.2, pt: 3.2, pb: 1.6, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                             <Typography sx={{ fontSize: 30, fontWeight: 800, letterSpacing: "-.03em" }}>Projects</Typography>
                             <Typography sx={{ color: C.muted, fontSize: 18 }}>{summaries.length}</Typography>
@@ -793,7 +773,7 @@ function ProjectsView({ projects, allRows, navigate, searchParams, setSearchPara
                                     <Box
                                         key={projectKey(project)}
                                         onClick={() => chooseProject(project)}
-                                        sx={{ px: 3.2, py: 2, borderBottom: `1px solid ${C.border}`, borderLeft: selected ? `5px solid ${C.primary}` : "5px solid transparent", bgcolor: selected ? C.selected : "#fff", cursor: "pointer", "&:hover": { bgcolor: selected ? C.selected : C.rowHover } }}
+                                        sx={{ px: 3.2, py: 2, borderBottom: `1px solid ${C.border}`, borderLeft: selected ? `5px solid ${C.primary}` : "5px solid transparent", bgcolor: selected ? C.selected : C.panel, cursor: "pointer", "&:hover": { bgcolor: selected ? C.selected : C.rowHover } }}
                                     >
                                         <Typography sx={{ fontSize: 15.5, fontWeight: selected ? 750 : 600 }}>{project.projectCode || "—"} · {project.projectName || "Project"}</Typography>
                                         <Typography sx={{ color: C.muted, mt: .35, fontSize: 13.5 }}>{summary.productCount} products</Typography>
@@ -849,7 +829,7 @@ function ProjectsView({ projects, allRows, navigate, searchParams, setSearchPara
                                 </Box>
                                 <Typography sx={{ mt: 1.5, fontSize: 15.5 }}>{action ? action.label + "." : "Review Product readiness and engineering handover."}</Typography>
                                 <Box sx={{ mt: 1.5, display: "flex", gap: 2.4, alignItems: "center", flexWrap: "wrap" }}>
-                                    {action && <Button onClick={() => navigate(action.path)} variant="contained" sx={{ bgcolor: C.primaryDark, px: 2.4, "&:hover": { bgcolor: "#083d64" } }}>{action.label}</Button>}
+                                    {action && <Button onClick={() => navigate(action.path)} variant="contained" sx={{ bgcolor: C.primaryDark, px: 2.4, "&:hover": { bgcolor: C.primaryHover } }}>{action.label}</Button>}
                                     {selectedRow?.requisitionId && <LinkAction endIcon={null} onClick={() => navigate(`/matflow/tracker/${selectedRow.requisitionId}`)}>Material history</LinkAction>}
                                 </Box>
                                 <Box sx={{ borderTop: `1px solid ${C.border}`, mt: 1.7, pt: 1.3, display: "flex", gap: 2.2, flexWrap: "wrap" }}>
@@ -953,7 +933,7 @@ function WorkQueueView({ activeRows, needsActionRows, navigate, onViewChange }) 
                         ["ALL", `All  ${needsActionRows.length}`],
                         ["OVERDUE", `Overdue  ${needsActionRows.filter((row) => (dueLabel(row.requiredDate).days ?? 999) < 0).length}`],
                         ["TODAY", `Today  ${needsActionRows.filter((row) => dueLabel(row.requiredDate).days === 0).length}`],
-                    ].map(([key, label]) => <Button key={key} onClick={() => setTab(key)} sx={{ borderRadius: 0, px: .2, color: tab === key ? C.text : C.muted, borderBottom: tab === key ? `3px solid #0d6f73` : "3px solid transparent" }}>{label}</Button>)}
+                    ].map(([key, label]) => <Button key={key} onClick={() => setTab(key)} sx={{ borderRadius: 0, px: .2, color: tab === key ? C.text : C.muted, borderBottom: tab === key ? `3px solid ${C.primary}` : "3px solid transparent" }}>{label}</Button>)}
                 </Box>
                 <HeaderSearch value={search} onChange={setSearch} placeholder="Find a task" sx={{ width: { xs: "100%", sm: 310 } }} />
             </Box>
@@ -963,13 +943,13 @@ function WorkQueueView({ activeRows, needsActionRows, navigate, onViewChange }) 
                     <Box sx={tableHeaderSx("minmax(300px,1fr) minmax(270px,1fr) 200px 150px 45px")}>{["Task", "Project · Product · MR", "Owner · Plant", "Due date", ""].map((h) => <Box key={h || "open"} sx={cellSx}>{h}</Box>)}</Box>
                     {groups.map((group) => group.rows.length ? (
                         <Box key={group.key}>
-                            <Box sx={{ px: 2, py: 1.25, bgcolor: "#f8fafb", borderBottom: `1px solid ${C.border}`, fontSize: 14, fontWeight: 700 }}>{group.label}</Box>
+                            <Box sx={{ px: 2, py: 1.25, bgcolor: C.surface, borderBottom: `1px solid ${C.border}`, fontSize: 14, fontWeight: 700 }}>{group.label}</Box>
                             {group.rows.map((row) => {
                                 const action = nextActionForRow(row);
                                 const due = dueLabel(row.requiredDate);
                                 return (
                                     <Box key={`${group.key}:${row.requisitionId || row.requisitionNumber}`} onClick={() => navigate(action.path)} sx={{ ...tableRowSx("minmax(300px,1fr) minmax(270px,1fr) 200px 150px 45px"), cursor: "pointer" }}>
-                                        <Box sx={cellSx}><Box sx={{ display: "flex", alignItems: "center", gap: 1.6 }}><Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: due.tone === "danger" ? C.danger : due.tone === "warning" ? "#28a765" : "#f0ae1d" }} /><Typography sx={{ fontSize: 15.5 }}>{action.label}</Typography></Box></Box>
+                                        <Box sx={cellSx}><Box sx={{ display: "flex", alignItems: "center", gap: 1.6 }}><Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: due.tone === "danger" ? C.danger : due.tone === "warning" ? C.success : C.warning }} /><Typography sx={{ fontSize: 15.5 }}>{action.label}</Typography></Box></Box>
                                         <Box sx={cellSx}>{row.projectCode || "—"} · {row.productName || row.drawingNo || "Product"} · {row.requisitionNumber || "MR"}</Box>
                                         <Box sx={cellSx}>{ownerForRow(row)} · {row.productionPlantCode || "—"}</Box>
                                         <Box sx={cellSx}><Typography sx={{ color: toneColor(due.tone), fontWeight: due.tone === "danger" ? 700 : 500 }}>{due.label}</Typography></Box>
