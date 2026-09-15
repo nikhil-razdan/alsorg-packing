@@ -546,6 +546,50 @@ public class HardwarePacketService {
                         HardwarePacketUpdateRequest request,
                         User user) {
 
+                return updatePacketInternal(
+                                itemId,
+                                request,
+                                user,
+                                null,
+                                false);
+        }
+
+        /**
+         * UTL-only edit variant.
+         *
+         * Normal HARDWARE_PACKING keeps its established edit contract and cannot
+         * change packet identity. UTL_HARDWARE_PACKING may optionally replace the
+         * selected unprinted packet number (for example Pkt-5 -> Pkt-7). The
+         * packet number and SKU are changed in the same transaction so sticker,
+         * Inventory and downstream Dispatch identity cannot drift apart.
+         */
+        @Transactional
+        public HardwarePacketResponse updateUtlPacket(
+                        UUID itemId,
+                        HardwarePacketUpdateRequest request,
+                        User user,
+                        Integer requestedPacketNumber) {
+
+                if (!currentUserService.isUtlHardwarePacking(user)) {
+                        throw new AccessDeniedException(
+                                        "UTL_HARDWARE_PACKING access required to edit a UTL hardware packet number");
+                }
+
+                return updatePacketInternal(
+                                itemId,
+                                request,
+                                user,
+                                requestedPacketNumber,
+                                true);
+        }
+
+        private HardwarePacketResponse updatePacketInternal(
+                        UUID itemId,
+                        HardwarePacketUpdateRequest request,
+                        User user,
+                        Integer requestedPacketNumber,
+                        boolean customPacketNumberAllowed) {
+
                 /*
                  * Controller authorization is not enough.
                  * Protect direct service usage as well.
@@ -679,6 +723,41 @@ public class HardwarePacketService {
                 if (!selectedItemIncluded) {
                         masterPackets.add(
                                         item);
+                }
+
+                /*
+                 * =====================================================
+                 * UTL-ONLY PACKET NUMBER EDIT
+                 * =====================================================
+                 *
+                 * The ordinary hardware edit path deliberately never enters this
+                 * block. UTL hardware may replace only the selected unprinted
+                 * packet's identity. Sparse numbering remains valid, but another
+                 * packet under the same hardware master may not already use the
+                 * requested number.
+                 */
+                if (customPacketNumberAllowed && requestedPacketNumber != null) {
+                        int requested = validateUtlPacketNumber(
+                                        requestedPacketNumber);
+
+                        boolean duplicatePacketNumber = masterPackets.stream()
+                                        .filter(Objects::nonNull)
+                                        .filter(packet -> packet.getItemType() == PacketItemType.HARDWARE)
+                                        .filter(packet -> !Objects.equals(
+                                                        packet.getId(),
+                                                        item.getId()))
+                                        .map(PacketItem::getPacketNumber)
+                                        .mapToInt(this::extractPacketNoOrZero)
+                                        .anyMatch(existingPacketNumber -> existingPacketNumber == requested);
+
+                        if (duplicatePacketNumber) {
+                                throw new IllegalArgumentException(
+                                                "Hardware packet number " + requested
+                                                                + " already exists for this hardware master");
+                        }
+
+                        item.setPacketNumber(
+                                        "Pkt-" + requested);
                 }
 
                 /*
@@ -1314,6 +1393,21 @@ public class HardwarePacketService {
                 }
         }
 
+        private int validateUtlPacketNumber(
+                        Integer packetNumber) {
+                if (packetNumber == null || packetNumber <= 0) {
+                        throw new IllegalArgumentException(
+                                        "UTL hardware packet number must be a positive whole number");
+                }
+
+                if (packetNumber > 999999) {
+                        throw new IllegalArgumentException(
+                                        "UTL hardware packet number cannot exceed 999999");
+                }
+
+                return packetNumber;
+        }
+
         /**
          * Resolves packet numbers without changing the normal hardware contract.
          *
@@ -1360,16 +1454,9 @@ public class HardwarePacketService {
                 Set<Integer> seen = new HashSet<>();
                 List<Integer> resolved = new ArrayList<>(packetCount);
 
-                for (Integer requested : requestedPacketNumbers) {
-                        if (requested == null || requested <= 0) {
-                                throw new IllegalArgumentException(
-                                                "UTL hardware packet number must be a positive whole number");
-                        }
-
-                        if (requested > 999999) {
-                                throw new IllegalArgumentException(
-                                                "UTL hardware packet number cannot exceed 999999");
-                        }
+                for (Integer requestedValue : requestedPacketNumbers) {
+                        int requested = validateUtlPacketNumber(
+                                        requestedValue);
 
                         if (!seen.add(requested)) {
                                 throw new IllegalArgumentException(

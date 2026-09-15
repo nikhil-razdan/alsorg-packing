@@ -2493,6 +2493,15 @@ function ZohoItemsPage() {
     setHardwareEditingItem,
   ] = useState(null);
 
+  /*
+   * UTL-only edit identity. Normal HARDWARE_PACKING never reads or sends this
+   * value, so the established hardware edit contract remains unchanged.
+   */
+  const [
+    hardwareEditPacketNumber,
+    setHardwareEditPacketNumber,
+  ] = useState("1");
+
   const [
     hardwareAddMaster,
     setHardwareAddMaster,
@@ -7803,6 +7812,27 @@ function ZohoItemsPage() {
           editingItemId
         )}`;
 
+      /*
+       * Only the isolated UTL hardware endpoint receives editable packet
+       * identity. Normal hardware edit sends the exact same URL as before.
+       */
+      if (isUtlHardwarePacking) {
+        const packetNumber =
+          Number(
+            hardwareEditPacketNumber
+          );
+
+        const packetNumberQuery =
+          new URLSearchParams();
+
+        packetNumberQuery.set(
+          "packetNumber",
+          String(packetNumber)
+        );
+
+        path = `${path}?${packetNumberQuery.toString()}`;
+      }
+
       method = "PUT";
 
       payload = {
@@ -8128,6 +8158,7 @@ function ZohoItemsPage() {
 
   function resetHardwarePacketForm(plants = myPlants) {
     setHardwareEditingItem(null);
+    setHardwareEditPacketNumber("1");
     setHardwareAddMaster(null);
 
     setHardwareForm(
@@ -8592,6 +8623,26 @@ function ZohoItemsPage() {
     }
 
     if (hardwareEditingItem) {
+      if (isUtlHardwarePacking) {
+        const rawPacketNumber =
+          String(
+            hardwareEditPacketNumber ?? ""
+          ).trim();
+
+        const packetNumber =
+          Number(rawPacketNumber);
+
+        if (
+          !/^\d+$/.test(rawPacketNumber) ||
+          !Number.isInteger(packetNumber) ||
+          packetNumber <= 0 ||
+          packetNumber > 999999
+        ) {
+          nextErrors.hardwareEditPacketNumber =
+            "Enter a whole packet number from 1 to 999999";
+        }
+      }
+
       validateHardwareItemRows(
         hardwareLines,
         "hardware-edit",
@@ -8838,6 +8889,12 @@ function ZohoItemsPage() {
           : [];
 
     setHardwareEditingItem(row);
+
+    setHardwareEditPacketNumber(
+      String(
+        getInventoryPacketNumber(row) || 1
+      )
+    );
 
     setHardwareForm({
       itemName: row?.itemName || "",
@@ -13954,7 +14011,9 @@ function ZohoItemsPage() {
             }
             subtitle={
               hardwareEditingItem
-                ? "Update hardware contents for this packet"
+                ? isUtlHardwarePacking
+                  ? "Update hardware contents and, if required, the UTL packet number"
+                  : "Update hardware contents for this packet"
                 : hardwareAddMaster
                   ? `Add packet ${(maxPacketMap[
                     hardwareAddMaster.masterItemId ||
@@ -14223,6 +14282,52 @@ function ZohoItemsPage() {
                           cursor: "pointer",
                         },
                       }}
+                    />
+                  )}
+
+                {hardwareEditingItem &&
+                  isUtlHardwarePacking && (
+                    <TextField
+                      label="Packet No."
+                      type="number"
+                      fullWidth
+                      value={
+                        hardwareEditPacketNumber
+                      }
+                      onChange={(event) => {
+                        const digitsOnly =
+                          String(
+                            event.target.value ?? ""
+                          )
+                            .replace(/[^0-9]/g, "")
+                            .slice(0, 6);
+
+                        setHardwareEditPacketNumber(
+                          digitsOnly
+                        );
+
+                        setErrors((previous) => ({
+                          ...previous,
+                          hardwareEditPacketNumber:
+                            "",
+                        }));
+                      }}
+                      inputProps={{
+                        min: 1,
+                        max: 999999,
+                        step: 1,
+                        inputMode: "numeric",
+                      }}
+                      error={
+                        Boolean(
+                          errors.hardwareEditPacketNumber
+                        )
+                      }
+                      helperText={
+                        errors.hardwareEditPacketNumber ||
+                        "UTL only: change this unprinted packet to any unused packet number (for example 5 → 7)."
+                      }
+                      sx={formFieldSx()}
                     />
                   )}
 

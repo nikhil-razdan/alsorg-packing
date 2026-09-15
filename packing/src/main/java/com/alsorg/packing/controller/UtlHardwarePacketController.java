@@ -106,9 +106,14 @@ public class UtlHardwarePacketController {
     @PutMapping("/{itemId}")
     public HardwarePacketResponse update(
             @PathVariable UUID itemId,
-            @RequestBody HardwarePacketUpdateRequest request) {
+            @RequestBody HardwarePacketUpdateRequest request,
+            @RequestParam(required = false) Integer packetNumber) {
         User user = requireUtlHardwareUser();
-        return hardwarePacketService.updatePacket(itemId, request, user);
+        return hardwarePacketService.updateUtlPacket(
+                itemId,
+                request,
+                user,
+                packetNumber);
     }
 
     @DeleteMapping("/{itemId}")
