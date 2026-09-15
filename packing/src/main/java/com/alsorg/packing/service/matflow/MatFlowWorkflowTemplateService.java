@@ -71,11 +71,29 @@ public class MatFlowWorkflowTemplateService {
             new Seed("ASSEMBLY_DRAWING", "Engineering documentation", "Assembly Drawing", Criticality.REQUIRED, true),
             new Seed("SHUTTER_DRAWING", "Engineering documentation", "Shutter Drawing", Criticality.REQUIRED, true));
 
-    public void seedDesignChecklist(MatFlowProductionFile file) { seed(file, WorkItemType.DESIGN_CHECK, DESIGN, WorkItemStatus.PENDING); }
-    public void seedEngineeringChecklist(MatFlowProductionFile file) { seed(file, WorkItemType.ENGINEERING_CHECK, ENGINEERING, WorkItemStatus.PENDING); }
-    public void seedEngineeringTasks(MatFlowProductionFile file) { seed(file, WorkItemType.ENGINEERING_TASK, TASKS, WorkItemStatus.TODO); }
+    public void seedDesignChecklist(MatFlowProductionFile file) {
+        seed(file, WorkItemType.DESIGN_CHECK, DESIGN, WorkItemStatus.PENDING, accessService.actor());
+    }
 
-    private void seed(MatFlowProductionFile file, WorkItemType type, List<Seed> seeds, WorkItemStatus initial) {
+    public void seedEngineeringChecklist(MatFlowProductionFile file) {
+        seed(file, WorkItemType.ENGINEERING_CHECK, ENGINEERING, WorkItemStatus.PENDING, accessService.actor());
+    }
+
+    public void seedEngineeringTasks(MatFlowProductionFile file) {
+        seed(file, WorkItemType.ENGINEERING_TASK, TASKS, WorkItemStatus.TODO, accessService.actor());
+    }
+
+    /**
+     * Migration-safe overload. Existing project/product rows can be converted to
+     * the new Production File model at application startup before a user exists.
+     */
+    public void seedDesignChecklist(MatFlowProductionFile file, String actor) {
+        seed(file, WorkItemType.DESIGN_CHECK, DESIGN, WorkItemStatus.PENDING, actor);
+    }
+
+    private void seed(MatFlowProductionFile file, WorkItemType type, List<Seed> seeds,
+            WorkItemStatus initial, String actor) {
+        String effectiveActor = actor == null || actor.isBlank() ? "SYSTEM" : actor.trim();
         int order = 0;
         for (Seed seed : seeds) {
             order++;
@@ -89,7 +107,7 @@ public class MatFlowWorkflowTemplateService {
             } else {
                 row.setStatus(initial);
             }
-            row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor()); repository.save(row);
+            row.setCreatedBy(effectiveActor); row.setUpdatedBy(effectiveActor); repository.save(row);
         }
     }
 }

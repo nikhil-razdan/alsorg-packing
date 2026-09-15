@@ -136,7 +136,6 @@ export function MatFlowBomListPage() {
       const [bomsResponse, filesResponse] = await Promise.all([
         matflowApi.listBoms(),
         matflowApi.listProductionFiles({
-          stage: "ENGINEERING_WORK",
           plantCode: selectedPlantParam,
         }),
       ]);
@@ -187,7 +186,20 @@ export function MatFlowBomListPage() {
     [rows]
   );
 
-  const availableFiles = useMemo(
+  const bomEligibleFiles = useMemo(
+    () =>
+      files.filter(
+        (file) =>
+          file.stage === "ENGINEERING_WORK" &&
+          file.engineeringDecision === "APPROVED" &&
+          !activeBomFileIds.has(file.id)
+      ),
+    [files, activeBomFileIds]
+  );
+
+  const availableFiles = bomEligibleFiles;
+
+  const pendingBomFiles = useMemo(
     () => files.filter((file) => !activeBomFileIds.has(file.id)),
     [files, activeBomFileIds]
   );
@@ -196,8 +208,15 @@ export function MatFlowBomListPage() {
     const latest = rows.filter((row) => row.latestRevision).length;
     const drafts = rows.filter((row) => row.status === "DRAFT").length;
     const ready = rows.filter((row) => row.status === "READY_FOR_RELEASE").length;
-    return { total: rows.length, latest, drafts, ready };
-  }, [rows]);
+    return {
+      total: rows.length,
+      latest,
+      drafts,
+      ready,
+      productionFiles: files.length,
+      eligible: bomEligibleFiles.length,
+    };
+  }, [rows, files.length, bomEligibleFiles.length]);
 
   const create = async () => {
     if (!fileId) return;
@@ -259,9 +278,9 @@ export function MatFlowBomListPage() {
           gap: 1,
         }}
       >
+        <MiniMetric label="Production Files" value={stats.productionFiles} />
         <MiniMetric label="BOMs" value={stats.total} />
-        <MiniMetric label="Current Revisions" value={stats.latest} />
-        <MiniMetric label="Draft" value={stats.drafts} />
+        <MiniMetric label="BOM Eligible" value={stats.eligible} />
         <MiniMetric label="Ready for Release" value={stats.ready} />
       </Box>
 
@@ -341,6 +360,71 @@ export function MatFlowBomListPage() {
         )}
       </Card>
 
+      <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+        <Box sx={{ px: 1.5, py: 1.25, borderBottom: "1px solid var(--mf-border)" }}>
+          <Typography sx={{ fontSize: 12.5, fontWeight: 950, color: "var(--mf-text)" }}>
+            Production File BOM Readiness
+          </Typography>
+          <Typography sx={{ mt: 0.2, fontSize: 9.8, color: "var(--mf-text-muted)" }}>
+            Every migrated/new Product appears here. BOM creation becomes available only after Engineering approval reaches Engineering Work.
+          </Typography>
+        </Box>
+
+        {!pendingBomFiles.length ? (
+          <EmptyState>Every active Production File already has a current BOM.</EmptyState>
+        ) : (
+          pendingBomFiles.slice(0, 40).map((file) => {
+            const eligible =
+              file.stage === "ENGINEERING_WORK" &&
+              file.engineeringDecision === "APPROVED";
+            return (
+              <Box
+                key={file.id}
+                sx={{
+                  px: 1.5,
+                  py: 1.05,
+                  borderBottom: "1px solid var(--mf-border)",
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "1.25fr .8fr .7fr 1.1fr auto" },
+                  gap: 1,
+                  alignItems: "center",
+                  "&:last-child": { borderBottom: 0 },
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
+                    {file.projectCode} · {file.productName}
+                  </Typography>
+                  <Typography sx={{ mt: 0.15, fontSize: 9.5, color: "var(--mf-text-muted)" }}>
+                    {file.productionFileNo} · {file.drawingNo}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: 10.2, fontWeight: 800, color: "var(--mf-text-secondary)" }}>
+                  {readable(file.stage)}
+                </Typography>
+                <MatFlowStatusChip status={file.releaseHealth} />
+                <Typography
+                  sx={{
+                    fontSize: 9.8,
+                    fontWeight: 800,
+                    color: eligible ? "var(--mf-success-text)" : "var(--mf-text-muted)",
+                  }}
+                >
+                  {eligible ? "Ready to start BOM" : "Not yet BOM eligible"}
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => nav(`/matflow/work?fileId=${file.id}`)}
+                  sx={secondaryBtnSx}
+                >
+                  Open File
+                </Button>
+              </Box>
+            );
+          })
+        )}
+      </Card>
+
       <Dialog
         open={open}
         onClose={() => !working && setOpen(false)}
@@ -374,7 +458,7 @@ export function MatFlowBomListPage() {
                 color: "var(--mf-text-muted)",
               }}
             >
-              Only Engineering-approved files currently in Engineering Work and without an active BOM are shown.
+              Only Engineering-approved files currently in Engineering Work and without an active BOM are selectable. Earlier-stage Production Files remain visible in the BOM Readiness list above.
             </Typography>
 
             {!availableFiles.length && (

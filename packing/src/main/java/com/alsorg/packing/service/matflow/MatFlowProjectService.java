@@ -2,6 +2,9 @@ package com.alsorg.packing.service.matflow;
 
 import static com.alsorg.packing.controller.dto.matflow.MatFlowProjectDtos.*;
 
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.EngineeringDecision;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ProductionFileStage;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ReleaseHealth;
 import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
 import com.alsorg.packing.domain.matflow.MatFlowProject;
 import com.alsorg.packing.domain.matflow.MatFlowProjectDrawing;
@@ -16,8 +19,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -30,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MatFlowProjectService {
     private static final long IMAGE_MAX_BYTES = 8L * 1024L * 1024L;
+    private static final String LEGACY_MIGRATION_ACTOR = "SYSTEM_MATFLOW_MIGRATION";
     private final MatFlowProjectRepository projectRepository;
     private final MatFlowProjectDrawingRepository productRepository;
     private final MatFlowProductionFileRepository productionFileRepository;
@@ -57,27 +64,48 @@ public class MatFlowProjectService {
         catch (IOException ex) { throw new IllegalStateException("Unable to initialize MatFlow product-image directory", ex); }
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Backfills the new Production File identity for project/product rows created
+     * by the previous MatFlow design. This runs once after startup so Dashboard,
+     * Production Control and the later Engineering/BOM flow can see legacy data
+     * without requiring users to edit or recreate projects.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void reconcileLegacyProductionFilesOnStartup() {
+        reconcileLegacyProductionFilesInternal(LEGACY_MIGRATION_ACTOR, null);
+    }
+
+    @Transactional
     public List<ProjectResponse> list(String search, Boolean active, String plantCode) {
         accessService.requireRead();
         String rawSearch = clean(search);
         final String q = rawSearch == null ? "" : rawSearch.toLowerCase(Locale.ROOT);
         String plant = upperOrNull(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
-        return projectRepository.findAllByOrderByUpdatedAtDesc().stream()
+        List<MatFlowProject> visibleProjects = projectRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(p -> accessService.canAccessPlant(p.getPlantCode()))
                 .filter(p -> plant == null || plant.equalsIgnoreCase(p.getPlantCode()))
+                .toList();
+
+        String actor = accessService.actor();
+        for (MatFlowProject project : visibleProjects) {
+            ensureProjectProductionFiles(project, actor);
+        }
+
+        return visibleProjects.stream()
                 .filter(p -> active == null || p.isActive() == active)
                 .filter(p -> q.isBlank() || contains(p.getProjectCode(), q) || contains(p.getProjectName(), q)
                         || contains(p.getClientName(), q) || productsOf(p.getId()).stream().anyMatch(x -> contains(x.getProductName(), q) || contains(x.getDrawingNo(), q)))
                 .map(this::toProject).toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ProjectResponse get(UUID projectId) {
         accessService.requireRead();
         MatFlowProject project = requireProject(projectId);
         accessService.requirePlantAccess(project.getPlantCode());
+        ensureProjectProductionFiles(project, accessService.actor());
         return toProject(project);
     }
 
@@ -231,13 +259,27 @@ public class MatFlowProjectService {
     }
 
     private MatFlowProductionFile createProductionFile(MatFlowProject project, MatFlowProjectDrawing product) {
+        return createProductionFile(project, product, accessService.actor());
+    }
+
+    private MatFlowProductionFile createProductionFile(MatFlowProject project, MatFlowProjectDrawing product, String actor) {
+        String effectiveActor = actor == null || actor.isBlank() ? LEGACY_MIGRATION_ACTOR : actor.trim();
         MatFlowProductionFile file = new MatFlowProductionFile();
-        file.setProductionFileNo(buildFileNo(project.getProjectCode(), product.getDrawingNo()));
-        file.setProject(project); file.setProduct(product); syncSnapshots(file, project, product);
+        file.setProductionFileNo(buildUniqueFileNo(project.getProjectCode(), product.getDrawingNo(), product.getId()));
+        file.setProject(project);
+        file.setProduct(product);
+        syncSnapshots(file, project, product);
+        file.setStage(ProductionFileStage.DESIGN_DRAFT);
+        file.setReleaseHealth(ReleaseHealth.RED);
+        file.setEngineeringDecision(EngineeringDecision.PENDING);
+        file.setCurrentDepartment("DESIGN");
+        file.setCurrentOwner(null);
+        file.setActive(project.isActive() && product.isActive());
         file.setPlannedDispatchDate(product.getRequiredDate() != null ? product.getRequiredDate() : project.getRequiredDate());
-        file.setCreatedBy(accessService.actor()); file.setUpdatedBy(accessService.actor());
+        file.setCreatedBy(effectiveActor);
+        file.setUpdatedBy(effectiveActor);
         file = productionFileRepository.save(file);
-        templateService.seedDesignChecklist(file);
+        templateService.seedDesignChecklist(file, effectiveActor);
         return file;
     }
 
@@ -246,9 +288,93 @@ public class MatFlowProjectService {
         file.setClientName(project.getClientName()); file.setProductName(product.getProductName()); file.setDrawingNo(product.getDrawingNo()); file.setPlantCode(project.getPlantCode());
     }
 
-    private String buildFileNo(String projectCode, String drawingNo) {
-        String raw = "PF-" + upper(projectCode) + "-" + upper(drawingNo);
-        return raw.replaceAll("[^A-Z0-9._-]+", "-").replaceAll("-+", "-");
+    private String buildUniqueFileNo(String projectCode, String drawingNo, UUID productId) {
+        String projectPart = upper(projectCode);
+        if (projectPart.isBlank()) projectPart = "PROJECT";
+        String drawingPart = upper(drawingNo);
+        if (drawingPart.isBlank()) {
+            drawingPart = "PRODUCT-" + String.valueOf(productId).replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        }
+        String base = ("PF-" + projectPart + "-" + drawingPart)
+                .replaceAll("[^A-Z0-9._-]+", "-")
+                .replaceAll("-+", "-");
+        return productionFileRepository.findByProductionFileNoIgnoreCase(base)
+                .filter(existing -> productId == null || existing.getProduct() == null
+                        || !productId.equals(existing.getProduct().getId()))
+                .map(existing -> base + "-" + String.valueOf(productId).replace("-", "").substring(0, 6).toUpperCase(Locale.ROOT))
+                .orElse(base);
+    }
+
+    private int reconcileLegacyProductionFilesInternal(String actor, String plantCode) {
+        String plant = upperOrNull(plantCode);
+        int created = 0;
+        for (MatFlowProject project : projectRepository.findAllByOrderByUpdatedAtDesc()) {
+            if (plant != null && !plant.equalsIgnoreCase(project.getPlantCode())) continue;
+            created += ensureProjectProductionFiles(project, actor);
+        }
+        return created;
+    }
+
+    /**
+     * Idempotent bridge from the previous Project/Product model to the new
+     * Production File model. Existing workflow rows are preserved; only missing
+     * Production Files/checklist templates are created.
+     */
+    private int ensureProjectProductionFiles(MatFlowProject project, String actor) {
+        if (project == null || project.getId() == null) return 0;
+        String effectiveActor = actor == null || actor.isBlank() ? LEGACY_MIGRATION_ACTOR : actor.trim();
+        int created = 0;
+
+        for (MatFlowProjectDrawing product : productsOf(project.getId())) {
+            MatFlowProductionFile existing = productionFileRepository.findByProduct_Id(product.getId()).orElse(null);
+            if (existing == null) {
+                MatFlowProductionFile file = createProductionFile(project, product, effectiveActor);
+                auditService.logAsActor(effectiveActor, "PRODUCTION_FILE", file.getId(), "LEGACY_PRODUCTION_FILE_BACKFILLED", file,
+                        auditService.details("source", "LEGACY_PROJECT_PRODUCT", "projectId", project.getId(),
+                                "productId", product.getId(), "productionFileNo", file.getProductionFileNo()));
+                created++;
+                continue;
+            }
+
+            boolean changed = synchronizeExistingProductionFile(existing, project, product, effectiveActor);
+            templateService.seedDesignChecklist(existing, effectiveActor);
+            if (changed) productionFileRepository.save(existing);
+        }
+        return created;
+    }
+
+    private boolean synchronizeExistingProductionFile(MatFlowProductionFile file, MatFlowProject project,
+            MatFlowProjectDrawing product, String actor) {
+        boolean changed = false;
+
+        if (!Objects.equals(file.getProject(), project)) { file.setProject(project); changed = true; }
+        if (!Objects.equals(file.getProduct(), product)) { file.setProduct(product); changed = true; }
+        if (!Objects.equals(file.getProjectCode(), upper(project.getProjectCode()))) { file.setProjectCode(project.getProjectCode()); changed = true; }
+        if (!Objects.equals(file.getProjectName(), clean(project.getProjectName()))) { file.setProjectName(project.getProjectName()); changed = true; }
+        if (!Objects.equals(file.getClientName(), clean(project.getClientName()))) { file.setClientName(project.getClientName()); changed = true; }
+        if (!Objects.equals(file.getProductName(), clean(product.getProductName()))) { file.setProductName(product.getProductName()); changed = true; }
+        if (!Objects.equals(file.getDrawingNo(), upper(product.getDrawingNo()))) { file.setDrawingNo(product.getDrawingNo()); changed = true; }
+        if (!Objects.equals(file.getPlantCode(), upper(project.getPlantCode()))) { file.setPlantCode(project.getPlantCode()); changed = true; }
+
+        if (clean(file.getProductionFileNo()) == null) {
+            file.setProductionFileNo(buildUniqueFileNo(project.getProjectCode(), product.getDrawingNo(), product.getId()));
+            changed = true;
+        }
+        if (file.getStage() == null) { file.setStage(ProductionFileStage.DESIGN_DRAFT); changed = true; }
+        if (file.getReleaseHealth() == null) { file.setReleaseHealth(ReleaseHealth.RED); changed = true; }
+        if (file.getEngineeringDecision() == null) { file.setEngineeringDecision(EngineeringDecision.PENDING); changed = true; }
+        if (clean(file.getCurrentDepartment()) == null) { file.setCurrentDepartment("DESIGN"); changed = true; }
+
+        boolean shouldBeActive = project.isActive() && product.isActive();
+        if (file.isActive() != shouldBeActive) { file.setActive(shouldBeActive); changed = true; }
+
+        if (file.getPlannedDispatchDate() == null) {
+            java.time.LocalDate planned = product.getRequiredDate() != null ? product.getRequiredDate() : project.getRequiredDate();
+            if (planned != null) { file.setPlannedDispatchDate(planned); changed = true; }
+        }
+
+        if (changed) file.setUpdatedBy(actor);
+        return changed;
     }
 
     private void applyProject(MatFlowProject row, ProjectRequest request) {

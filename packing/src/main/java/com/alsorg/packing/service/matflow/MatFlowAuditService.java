@@ -26,11 +26,22 @@ public class MatFlowAuditService {
 
     @Transactional
     public void log(String entityType, UUID entityId, String action, MatFlowProductionFile file, Map<String, ?> details) {
+        logAsActor(accessService.actor(), entityType, entityId, action, file, details);
+    }
+
+    /**
+     * System-safe audit entry used by controlled migration/backfill work where no
+     * authenticated request exists yet (for example ApplicationReadyEvent).
+     */
+    @Transactional
+    public void logAsActor(String actor, String entityType, UUID entityId, String action,
+            MatFlowProductionFile file, Map<String, ?> details) {
+        String auditActor = actor == null || actor.isBlank() ? "SYSTEM" : actor.trim();
         MatFlowAuditLog row = new MatFlowAuditLog();
         row.setEntityType(entityType);
         row.setEntityId(entityId);
         row.setAction(action);
-        row.setActor(accessService.actor());
+        row.setActor(auditActor);
         if (file != null) {
             row.setProductionFileId(file.getId());
             row.setPlantCode(file.getPlantCode());
@@ -38,8 +49,8 @@ public class MatFlowAuditService {
             row.setDrawingNo(file.getDrawingNo());
         }
         row.setDetailsJson(toJson(details));
-        row.setCreatedBy(accessService.actor());
-        row.setUpdatedBy(accessService.actor());
+        row.setCreatedBy(auditActor);
+        row.setUpdatedBy(auditActor);
         repository.save(row);
     }
 
