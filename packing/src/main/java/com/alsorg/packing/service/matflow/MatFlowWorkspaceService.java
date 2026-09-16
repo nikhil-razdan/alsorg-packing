@@ -5,8 +5,11 @@ import static com.alsorg.packing.controller.dto.matflow.MatFlowWorkspaceDtos.*;
 import com.alsorg.packing.config.TimeZoneConfig;
 import com.alsorg.packing.domain.matflow.MatFlowAuditLog;
 import com.alsorg.packing.domain.matflow.MatFlowBom;
+import com.alsorg.packing.domain.matflow.MatFlowDesignTask;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.BomStatus;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.Criticality;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.DesignTaskStatus;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.DesignTaskType;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.EngineeringDecision;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ProductionFileStage;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ReleaseHealth;
@@ -18,6 +21,7 @@ import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
 import com.alsorg.packing.domain.matflow.MatFlowRevision;
 import com.alsorg.packing.domain.matflow.MatFlowWorkItem;
 import com.alsorg.packing.repository.matflow.MatFlowBomRepository;
+import com.alsorg.packing.repository.matflow.MatFlowDesignTaskRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
 import com.alsorg.packing.repository.matflow.MatFlowRevisionRepository;
 import com.alsorg.packing.repository.matflow.MatFlowWorkItemRepository;
@@ -59,6 +63,7 @@ public class MatFlowWorkspaceService {
     private final MatFlowWorkItemRepository workRepository;
     private final MatFlowRevisionRepository revisionRepository;
     private final MatFlowBomRepository bomRepository;
+    private final MatFlowDesignTaskRepository designTaskRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
     private final MatFlowWorkflowTemplateService templateService;
@@ -69,6 +74,7 @@ public class MatFlowWorkspaceService {
             MatFlowWorkItemRepository workRepository,
             MatFlowRevisionRepository revisionRepository,
             MatFlowBomRepository bomRepository,
+            MatFlowDesignTaskRepository designTaskRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
             MatFlowWorkflowTemplateService templateService,
@@ -77,6 +83,7 @@ public class MatFlowWorkspaceService {
         this.workRepository = workRepository;
         this.revisionRepository = revisionRepository;
         this.bomRepository = bomRepository;
+        this.designTaskRepository = designTaskRepository;
         this.accessService = accessService;
         this.auditService = auditService;
         this.templateService = templateService;
@@ -113,21 +120,68 @@ public class MatFlowWorkspaceService {
         return toDetail(file);
     }
 
+    @Transactional(readOnly = true)
+    public List<DesignTaskQueueResponse> listDesignTasks(String plantCode, String assignee, String status, String search) {
+        accessService.requireRead();
+        String plant = upperOrNull(plantCode);
+        if (plant != null) accessService.requirePlantAccess(plant);
+        DesignTaskStatus statusFilter = enumOrNull(DesignTaskStatus.class, status);
+        String assigned = clean(assignee);
+        String term = clean(search);
+        term = term == null ? "" : term.toLowerCase(Locale.ROOT);
+        final String q = term;
+        return designTaskRepository.findAllForQueue().stream()
+                .filter(task -> task.getProductionFile() != null && task.getProductionFile().isActive())
+                .filter(task -> accessService.canAccessPlant(task.getProductionFile().getPlantCode()))
+                .filter(task -> plant == null || plant.equalsIgnoreCase(task.getProductionFile().getPlantCode()))
+                .filter(task -> statusFilter == null || task.getStatus() == statusFilter)
+                .filter(task -> assigned == null || task.getAssignees().stream().anyMatch(value -> value.equalsIgnoreCase(assigned)))
+                .filter(task -> q.isBlank() || designTaskContains(task, q))
+                .sorted(Comparator
+                        .comparing((MatFlowDesignTask task) -> Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                        .thenComparing(MatFlowDesignTask::getDueAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(MatFlowDesignTask::getReceivedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::toDesignTaskQueue)
+                .toList();
+    }
+
     @Transactional
     public ProductionFileDetailResponse updateSetup(UUID fileId, ProductionFileSetupRequest request) {
         accessService.requireDesignerWrite();
-        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
-        if (request.designer() != null) file.setDesigner(request.designer());
+        MatFlowProductionFile file = requireFile(fileId);
+        requireVersion(file.getRowVersion(), request.rowVersion());
+
+        boolean designIdentityChanged = false;
+        if (request.designer() != null && !Objects.equals(clean(file.getDesigner()), clean(request.designer()))) {
+            file.setDesigner(request.designer());
+            designIdentityChanged = true;
+        }
+        if (request.designHead() != null && !Objects.equals(clean(file.getDesignHead()), clean(request.designHead()))) {
+            file.setDesignHead(request.designHead());
+            designIdentityChanged = true;
+        }
         if (request.ppcOwner() != null) file.setPpcOwner(request.ppcOwner());
         if (request.engineeringHead() != null) file.setEngineeringHead(request.engineeringHead());
         if (request.assignedEngineer() != null) file.setAssignedEngineer(request.assignedEngineer());
         file.setPlannedProductionReleaseDate(request.plannedProductionReleaseDate());
         file.setPlannedDispatchDate(request.plannedDispatchDate());
         if (request.remarks() != null) file.setRemarks(request.remarks());
-        if (file.getCurrentOwner() == null) file.setCurrentOwner(file.getDesigner());
-        file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
+
+        if (isDesignStage(file)) {
+            file.setCurrentDepartment("DESIGN");
+            file.setCurrentOwner(clean(file.getDesignHead()) != null ? file.getDesignHead() : file.getDesigner());
+            if (designIdentityChanged) invalidateDesignHeadApproval(file);
+        } else if (file.getCurrentOwner() == null) {
+            file.setCurrentOwner(file.getDesigner());
+        }
+
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
         auditService.log("PRODUCTION_FILE", file.getId(), "FILE_SETUP_UPDATED", file,
-                auditService.details("designer", file.getDesigner(), "ppcOwner", file.getPpcOwner(), "engineeringHead", file.getEngineeringHead(), "assignedEngineer", file.getAssignedEngineer()));
+                auditService.details("designer1", file.getDesigner(), "designHead", file.getDesignHead(),
+                        "ppcOwner", file.getPpcOwner(), "engineeringHead", file.getEngineeringHead(),
+                        "assignedEngineer", file.getAssignedEngineer()));
         return toDetail(file);
     }
 
@@ -152,6 +206,10 @@ public class MatFlowWorkspaceService {
         if (next == WorkItemStatus.NOT_APPLICABLE && item.getCriticality() == Criticality.CRITICAL) {
             throw conflict("Critical checklist item cannot be marked Not Applicable");
         }
+        if (type == WorkItemType.DESIGN_CHECK && next == WorkItemStatus.NOT_APPLICABLE && clean(request.remarks()) == null) {
+            throw badRequest("Reason is required when a Design checklist item is Not Applicable");
+        }
+        if (type == WorkItemType.DESIGN_CHECK) invalidateDesignHeadApproval(file);
         item.setStatus(next); item.setRemarks(request.remarks()); item.setUpdatedBy(accessService.actor());
         if (next == WorkItemStatus.COMPLETE || next == WorkItemStatus.NOT_APPLICABLE) {
             item.setCompletedBy(accessService.actor()); item.setCompletedAt(now());
@@ -163,24 +221,197 @@ public class MatFlowWorkspaceService {
     }
 
     @Transactional
+    public ProductionFileDetailResponse createDesignTask(UUID fileId, DesignTaskCreateRequest request) {
+        accessService.requireDesignHeadWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        requireDesignStage(file);
+        if (clean(file.getDesigner()) == null) throw conflict("Assign Designer-1 before delegating Design tasks");
+        if (clean(file.getDesignHead()) == null) throw conflict("Assign the Design Head before delegating Design tasks");
+
+        List<String> assignees = normalizeAssignees(request.assignees());
+        if (assignees.isEmpty()) throw badRequest("Assign at least one Designer-2 / Design team member");
+        LocalDateTime received = request.receivedAt() == null ? now() : request.receivedAt();
+        if (request.dueAt() != null && request.dueAt().isBefore(received)) throw badRequest("Due date cannot be before received date");
+
+        MatFlowDesignTask row = new MatFlowDesignTask();
+        row.setProductionFile(file);
+        row.setTaskNo(nextDesignTaskNo(file));
+        row.setTaskType(enumValue(DesignTaskType.class, request.taskType(), "Invalid Design task type"));
+        row.setTitle(request.title());
+        row.setDescription(request.description());
+        row.setDesigner1(file.getDesigner());
+        row.setAssignedBy(accessService.actor());
+        row.setAssignees(assignees);
+        row.setStatus(DesignTaskStatus.ASSIGNED);
+        row.setPriority(request.priority());
+        row.setBlocking(request.blocking() == null || request.blocking());
+        row.setReceivedAt(received);
+        row.setDueAt(request.dueAt());
+        row.setRemarks(request.remarks());
+        row.setCreatedBy(accessService.actor());
+        row.setUpdatedBy(accessService.actor());
+        designTaskRepository.save(row);
+
+        invalidateDesignHeadApproval(file);
+        file.setCurrentDepartment("DESIGN");
+        file.setCurrentOwner(file.getDesignHead());
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
+        auditService.log("DESIGN_TASK", row.getId(), "DESIGN_TASK_CREATED", file,
+                auditService.details("taskNo", row.getTaskNo(), "taskType", row.getTaskType().name(),
+                        "designer1", row.getDesigner1(), "assignees", row.getAssignees(), "dueAt", row.getDueAt()));
+        return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse updateDesignTask(UUID fileId, UUID taskId, DesignTaskUpdateRequest request) {
+        accessService.requireDesignHeadWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        requireDesignStage(file);
+        MatFlowDesignTask row = requireDesignTask(fileId, taskId);
+        requireVersion(row.getRowVersion(), request.rowVersion());
+        if (Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(row.getStatus())) {
+            throw conflict("Completed/Cancelled Design tasks are historical. Create a follow-up or Revision task instead.");
+        }
+
+        if (request.taskType() != null) row.setTaskType(enumValue(DesignTaskType.class, request.taskType(), "Invalid Design task type"));
+        if (request.title() != null) {
+            if (clean(request.title()) == null) throw badRequest("Design task title cannot be blank");
+            row.setTitle(request.title());
+        }
+        if (request.description() != null) row.setDescription(request.description());
+        if (request.assignees() != null) {
+            List<String> assignees = normalizeAssignees(request.assignees());
+            row.setAssignees(assignees);
+            if (assignees.isEmpty() && row.getStatus() != DesignTaskStatus.DONE && row.getStatus() != DesignTaskStatus.CANCELLED) row.setStatus(DesignTaskStatus.NEED_TO_START);
+            else if (!assignees.isEmpty() && row.getStatus() == DesignTaskStatus.NEED_TO_START) row.setStatus(DesignTaskStatus.ASSIGNED);
+        }
+        if (request.receivedAt() != null) row.setReceivedAt(request.receivedAt());
+        if (request.dueAt() != null || request.receivedAt() != null) row.setDueAt(request.dueAt());
+        if (row.getDueAt() != null && row.getReceivedAt() != null && row.getDueAt().isBefore(row.getReceivedAt())) throw badRequest("Due date cannot be before received date");
+        if (request.priority() != null) row.setPriority(request.priority());
+        if (request.blocking() != null) row.setBlocking(request.blocking());
+        if (request.remarks() != null) row.setRemarks(request.remarks());
+        row.setUpdatedBy(accessService.actor());
+        designTaskRepository.save(row);
+
+        invalidateDesignHeadApproval(file);
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
+        auditService.log("DESIGN_TASK", row.getId(), "DESIGN_TASK_UPDATED", file,
+                auditService.details("taskNo", row.getTaskNo(), "assignees", row.getAssignees(), "blocking", row.isBlocking()));
+        return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse setDesignTaskStatus(UUID fileId, UUID taskId, DesignTaskStatusRequest request) {
+        accessService.requireDesignTaskWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        requireDesignStage(file);
+        MatFlowDesignTask row = requireDesignTask(fileId, taskId);
+        requireVersion(row.getRowVersion(), request.rowVersion());
+        DesignTaskStatus next = enumValue(DesignTaskStatus.class, request.status(), "Invalid Design task status");
+        requireDesignTaskTransition(row.getStatus(), next);
+        if (next == DesignTaskStatus.CANCELLED) accessService.requireDesignHeadWrite();
+        String note = clean(request.note());
+        if ((next == DesignTaskStatus.HOLD || next == DesignTaskStatus.CANCELLED) && note == null) {
+            throw badRequest("Reason is required for Hold or Cancelled Design tasks");
+        }
+        if (next != DesignTaskStatus.NEED_TO_START && next != DesignTaskStatus.CANCELLED && row.getAssignees().isEmpty()) {
+            throw conflict("Assign at least one Designer-2 before starting this task");
+        }
+
+        if ((next == DesignTaskStatus.WORKING || next == DesignTaskStatus.DONE) && row.getStartedAt() == null) row.setStartedAt(now());
+        row.setStatus(next);
+        if (next == DesignTaskStatus.HOLD) row.setHoldReason(note);
+        else if (next != DesignTaskStatus.HOLD) row.setHoldReason(null);
+        if (next == DesignTaskStatus.DONE || next == DesignTaskStatus.CANCELLED) {
+            if (next == DesignTaskStatus.CANCELLED) row.setBlocking(false);
+            row.setCompletedAt(now());
+            row.setCompletedBy(accessService.actor());
+            if (note != null) row.setRemarks(note);
+        } else {
+            row.setCompletedAt(null);
+            row.setCompletedBy(null);
+        }
+        if (next == DesignTaskStatus.NEED_TO_START) row.setStartedAt(null);
+        row.setUpdatedBy(accessService.actor());
+        designTaskRepository.save(row);
+
+        invalidateDesignHeadApproval(file);
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
+        auditService.log("DESIGN_TASK", row.getId(), "DESIGN_TASK_STATUS_CHANGED", file,
+                auditService.details("taskNo", row.getTaskNo(), "status", next.name(), "note", note));
+        return toDetail(file);
+    }
+
+    @Transactional
+    public ProductionFileDetailResponse designHeadReview(UUID fileId, DesignHeadReviewRequest request) {
+        accessService.requireDesignHeadWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        requireVersion(file.getRowVersion(), request.rowVersion());
+        requireDesignStage(file);
+        String decision = upper(request.decision());
+        if (!Set.of("APPROVE", "RETURN").contains(decision)) throw badRequest("Design Head decision must be APPROVE or RETURN");
+
+        if ("RETURN".equals(decision)) {
+            if (clean(request.remarks()) == null) throw badRequest("Return remarks are required");
+            file.setDesignHeadDecision("RETURNED");
+        } else {
+            List<String> blockers = designReviewBlockers(file);
+            if (!blockers.isEmpty()) throw conflict("Design Head approval is blocked: " + String.join("; ", blockers));
+            ChecklistProgress checklist = progress(fileId, WorkItemType.DESIGN_CHECK);
+            if (checklist.requiredPending() > 0 && clean(request.remarks()) == null) {
+                throw badRequest("Review remarks are required when Design checklist items remain pending");
+            }
+            file.setDesignHeadDecision("APPROVED");
+        }
+        file.setDesignHeadReviewedBy(accessService.actor());
+        file.setDesignHeadReviewedAt(now());
+        file.setDesignHeadRemarks(request.remarks());
+        file.setCurrentDepartment("DESIGN");
+        file.setCurrentOwner(file.getDesignHead());
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
+        auditService.log("PRODUCTION_FILE", file.getId(), "DESIGN_HEAD_" + decision, file,
+                auditService.details("remarks", request.remarks(), "designHead", file.getDesignHead()));
+        return toDetail(file);
+    }
+
+    @Transactional
     public ProductionFileDetailResponse submitDesign(UUID fileId, DesignSubmitRequest request) {
-        accessService.requireDesignerWrite();
-        MatFlowProductionFile file = requireFile(fileId); requireVersion(file.getRowVersion(), request.rowVersion());
-        requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
+        accessService.requireDesignHeadWrite();
+        MatFlowProductionFile file = requireFile(fileId);
+        requireVersion(file.getRowVersion(), request.rowVersion());
+        requireDesignStage(file);
+        List<String> handoffBlockers = designHandoffBlockers(file);
+        if (!handoffBlockers.isEmpty()) throw conflict("Design handoff is blocked: " + String.join("; ", handoffBlockers));
+
         ChecklistProgress progress = progress(fileId, WorkItemType.DESIGN_CHECK);
         ReleaseHealth health = releaseHealth(progress);
         if (health == ReleaseHealth.RED) throw conflict("Design cannot be submitted: critical information is still pending");
         if (health == ReleaseHealth.AMBER && clean(request.controlledReleaseReason()) == null) {
             throw badRequest("Controlled Release reason is mandatory for AMBER submission");
         }
-        if (activeRevision(fileId, RevisionType.DESIGN_DRAWING) == null) throw conflict("Upload an active Design Drawing revision before submission");
         if (clean(file.getPpcOwner()) == null) throw conflict("Assign the PPC owner before Designer submission");
+
         file.setControlledReleaseReason(health == ReleaseHealth.AMBER ? request.controlledReleaseReason() : null);
-        file.setReleaseHealth(health); file.setStage(ProductionFileStage.PPC_GATE_1); file.setCurrentDepartment("PPC");
-        file.setCurrentOwner(file.getPpcOwner()); file.setDesignSubmittedBy(accessService.actor()); file.setDesignSubmittedAt(now());
-        file.setUpdatedBy(accessService.actor()); fileRepository.save(file);
+        file.setReleaseHealth(health);
+        file.setStage(ProductionFileStage.PPC_GATE_1);
+        file.setCurrentDepartment("PPC");
+        file.setCurrentOwner(file.getPpcOwner());
+        file.setDesignSubmittedBy(accessService.actor());
+        file.setDesignSubmittedAt(now());
+        file.setUpdatedBy(accessService.actor());
+        fileRepository.save(file);
         auditService.log("PRODUCTION_FILE", file.getId(), "DESIGN_SUBMITTED", file,
-                auditService.details("health", health.name(), "controlledReleaseReason", file.getControlledReleaseReason()));
+                auditService.details("health", health.name(), "controlledReleaseReason", file.getControlledReleaseReason(),
+                        "designHeadReviewedBy", file.getDesignHeadReviewedBy()));
         return toDetail(file);
     }
 
@@ -194,7 +425,9 @@ public class MatFlowWorkspaceService {
         file.setPpcGate1Decision(decision); file.setPpcGate1By(accessService.actor()); file.setPpcGate1At(now()); file.setPpcGate1Remarks(request.remarks());
         if ("RETURN".equals(decision)) {
             if (clean(request.remarks()) == null) throw badRequest("Return remarks are required");
-            file.setStage(ProductionFileStage.DESIGN_CLARIFICATION); file.setCurrentDepartment("DESIGN"); file.setCurrentOwner(file.getDesigner());
+            file.setStage(ProductionFileStage.DESIGN_CLARIFICATION); file.setCurrentDepartment("DESIGN");
+            file.setCurrentOwner(clean(file.getDesignHead()) != null ? file.getDesignHead() : file.getDesigner());
+            invalidateDesignHeadApproval(file);
         } else {
             if (file.getReleaseHealth() == ReleaseHealth.RED) throw conflict("RED file cannot pass PPC Gate 1");
             if (clean(request.assignedTo()) != null) file.setAssignedEngineer(request.assignedTo());
@@ -329,7 +562,10 @@ public class MatFlowWorkspaceService {
         MatFlowRevision row=new MatFlowRevision(); row.setProductionFile(file); row.setRevisionType(type); row.setRevisionNo(rev); row.setOriginalFileName(original); row.setContentType(content); row.setStoragePath(target.toString()); row.setSizeBytes(upload.getSize()); row.setChangeSummary(changeSummary); row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor());
         boolean impact=requiresImpactReview(file,type); row.setRevisionStatus(impact?RevisionStatus.PENDING_IMPACT_REVIEW:RevisionStatus.ACTIVE); if(!impact)row.setActivatedAt(now()); revisionRepository.save(row);
         if(impact){ file.setRevisionReviewRequired(true); file.setStage(ProductionFileStage.REVISION_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getEngineeringHead()); }
-        else activateRevision(file,row,false);
+        else {
+            activateRevision(file,row,false);
+            if (type == RevisionType.DESIGN_DRAWING && isDesignStage(file)) invalidateDesignHeadApproval(file);
+        }
         file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file); auditService.log("REVISION",row.getId(),impact?"REVISION_IMPACT_REVIEW_REQUIRED":"REVISION_ACTIVATED",file,auditService.details("type",type.name(),"revisionNo",rev,"changeSummary",changeSummary)); return toDetail(file);
     }
 
@@ -410,7 +646,7 @@ public class MatFlowWorkspaceService {
         if(file.getProductionReleasedAt()!=null){ file.setStage(ProductionFileStage.PRODUCTION_RELEASED); file.setCurrentDepartment("PRODUCTION RELEASE"); file.setCurrentOwner(null); }
         else if(file.getEngineeringDecision()==EngineeringDecision.APPROVED){ file.setStage(allBlockingTasksDone(file.getId())?ProductionFileStage.PPC_GATE_2:ProductionFileStage.ENGINEERING_WORK); file.setCurrentDepartment(allBlockingTasksDone(file.getId())?"PPC":"ENGINEERING"); file.setCurrentOwner(allBlockingTasksDone(file.getId())?file.getPpcOwner():file.getAssignedEngineer()); }
         else if("ACCEPT".equalsIgnoreCase(file.getPpcGate1Decision())){ file.setStage(ProductionFileStage.ENGINEERING_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getAssignedEngineer()); }
-        else { file.setStage(ProductionFileStage.DESIGN_DRAFT); file.setCurrentDepartment("DESIGN"); file.setCurrentOwner(file.getDesigner()); }
+        else { file.setStage(ProductionFileStage.DESIGN_DRAFT); file.setCurrentDepartment("DESIGN"); file.setCurrentOwner(clean(file.getDesignHead()) != null ? file.getDesignHead() : file.getDesigner()); }
     }
 
     private void activateRevision(MatFlowProductionFile file, MatFlowRevision row, boolean keepRowStatus) {
@@ -436,10 +672,38 @@ public class MatFlowWorkspaceService {
     private long openQueryCount(UUID fileId){ return workRepository.countByProductionFile_IdAndItemTypeAndStatusIn(fileId,WorkItemType.ENGINEERING_QUERY,OPEN_QUERY_STATUSES); }
 
     private void refreshHealth(MatFlowProductionFile file){
-        ChecklistProgress dp=progress(file.getId(),WorkItemType.DESIGN_CHECK); ReleaseHealth health=releaseHealth(dp);
-        if(file.isRevisionReviewRequired()||openQueryCount(file.getId())>0)health=ReleaseHealth.RED;
-        else if(file.getEngineeringDecision()==EngineeringDecision.APPROVED && !gate2BlockersWithoutRecursion(file).isEmpty() && health==ReleaseHealth.GREEN)health=ReleaseHealth.AMBER;
-        if(file.getStage()==ProductionFileStage.PRODUCTION_RELEASED && !file.isRevisionReviewRequired())health=ReleaseHealth.GREEN; file.setReleaseHealth(health);
+        ChecklistProgress dp = progress(file.getId(), WorkItemType.DESIGN_CHECK);
+        ReleaseHealth health = releaseHealth(dp);
+        if (isDesignStage(file) && !designHandoffBlockers(file).isEmpty()) {
+            health = ReleaseHealth.RED;
+        } else if(file.isRevisionReviewRequired()||openQueryCount(file.getId())>0) {
+            health=ReleaseHealth.RED;
+        } else if(file.getEngineeringDecision()==EngineeringDecision.APPROVED && !gate2BlockersWithoutRecursion(file).isEmpty() && health==ReleaseHealth.GREEN) {
+            health=ReleaseHealth.AMBER;
+        }
+        if(file.getStage()==ProductionFileStage.PRODUCTION_RELEASED && !file.isRevisionReviewRequired()) health=ReleaseHealth.GREEN;
+        file.setReleaseHealth(health);
+    }
+
+    private List<String> designReviewBlockers(MatFlowProductionFile file) {
+        List<String> blockers = new ArrayList<>();
+        if (clean(file.getDesigner()) == null) blockers.add("Designer-1 is not assigned");
+        if (clean(file.getDesignHead()) == null) blockers.add("Design Head is not assigned");
+        List<MatFlowDesignTask> tasks = designTasks(file.getId());
+        if (tasks.isEmpty()) blockers.add("No Design task has been delegated");
+        List<MatFlowDesignTask> pending = tasks.stream().filter(MatFlowDesignTask::isBlocking)
+                .filter(task -> task.getStatus() != DesignTaskStatus.DONE).toList();
+        if (!pending.isEmpty()) blockers.add("Blocking Design tasks pending: " + pending.stream().map(MatFlowDesignTask::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
+        ChecklistProgress checklist = progress(file.getId(), WorkItemType.DESIGN_CHECK);
+        if (checklist.criticalPending() > 0) blockers.add("Critical Design checklist items are pending");
+        if (activeRevision(file.getId(), RevisionType.DESIGN_DRAWING) == null) blockers.add("Active Design Drawing revision is missing");
+        return blockers;
+    }
+
+    private List<String> designHandoffBlockers(MatFlowProductionFile file) {
+        List<String> blockers = new ArrayList<>(designReviewBlockers(file));
+        if (!"APPROVED".equalsIgnoreCase(file.getDesignHeadDecision())) blockers.add("Design Head approval is pending");
+        return blockers;
     }
 
     private List<String> gate2BlockersWithoutRecursion(MatFlowProductionFile file){
@@ -449,23 +713,143 @@ public class MatFlowWorkspaceService {
 
     private ReleaseHealth releaseHealth(ChecklistProgress p){ if(p.criticalPending()>0)return ReleaseHealth.RED; if(p.requiredPending()>0)return ReleaseHealth.AMBER; return ReleaseHealth.GREEN; }
     private ChecklistProgress progress(UUID fileId, WorkItemType type){
-        List<MatFlowWorkItem> rows=items(fileId,type); int complete=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.COMPLETE).count(); int na=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.NOT_APPLICABLE).count(); int pending=rows.size()-complete-na;
+        List<MatFlowWorkItem> rows=items(fileId,type).stream().filter(x->x.getStatus()!=WorkItemStatus.CANCELLED).toList(); int complete=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.COMPLETE).count(); int na=(int)rows.stream().filter(x->x.getStatus()==WorkItemStatus.NOT_APPLICABLE).count(); int pending=rows.size()-complete-na;
         int critical=(int)rows.stream().filter(x->x.getCriticality()==Criticality.CRITICAL&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int required=(int)rows.stream().filter(x->x.getCriticality()==Criticality.REQUIRED&&!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int percent=rows.isEmpty()?0:(int)Math.round(((complete+na)*100.0)/rows.size()); return new ChecklistProgress(rows.size(),complete,na,pending,critical,required,percent);
     }
 
     private ProductionFileDetailResponse toDetail(MatFlowProductionFile file){
-        List<String> blockers=gate2Blockers(file); return new ProductionFileDetailResponse(toFileResponse(file),mapItems(items(file.getId(),WorkItemType.DESIGN_CHECK)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_CHECK)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY)),mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK)),revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream().map(this::toRevision).toList(),auditService.timeline(file.getId()).stream().map(this::toAudit).toList(),blockers.isEmpty(),blockers);
+        List<String> designBlockers = designHandoffBlockers(file);
+        List<String> gate2 = gate2Blockers(file);
+        return new ProductionFileDetailResponse(
+                toFileResponse(file),
+                mapItems(items(file.getId(),WorkItemType.DESIGN_CHECK).stream().filter(x->x.getStatus()!=WorkItemStatus.CANCELLED).toList()),
+                designTasks(file.getId()).stream().map(this::toDesignTask).toList(),
+                mapItems(items(file.getId(),WorkItemType.ENGINEERING_CHECK)),
+                mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY)),
+                mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK)),
+                revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream().map(this::toRevision).toList(),
+                auditService.timeline(file.getId()).stream().map(this::toAudit).toList(),
+                designBlockers.isEmpty(), designBlockers, gate2.isEmpty(), gate2);
     }
 
     private ProductionFileResponse toFileResponse(MatFlowProductionFile file){
-        List<MatFlowWorkItem> tasks=items(file.getId(),WorkItemType.ENGINEERING_TASK); int completed=(int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count(); int pending=tasks.size()-completed; MatFlowBom bom=latestBom(file.getId());
-        return new ProductionFileResponse(file.getId(),file.getProductionFileNo(),file.getProject().getId(),file.getProduct().getId(),file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProductName(),file.getDrawingNo(),file.getPlantCode(),file.getStage().name(),file.getReleaseHealth().name(),file.getEngineeringDecision().name(),file.getCurrentDepartment(),file.getCurrentOwner(),file.getDesigner(),file.getPpcOwner(),file.getEngineeringHead(),file.getAssignedEngineer(),file.getControlledReleaseReason(),file.getPlannedProductionReleaseDate(),file.getPlannedDispatchDate(),file.getPpcGate1Decision(),file.getPpcGate2Decision(),file.isRevisionReviewRequired(),file.getDownstreamWorkflowKey(),file.getDownstreamWorkflowStatus(),file.getProductionReleasedAt(),file.getProjectCode(),progress(file.getId(),WorkItemType.DESIGN_CHECK),progress(file.getId(),WorkItemType.ENGINEERING_CHECK),(int)openQueryCount(file.getId()),pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
+        List<MatFlowWorkItem> tasks=items(file.getId(),WorkItemType.ENGINEERING_TASK);
+        int completed=(int)tasks.stream().filter(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).count();
+        int pending=tasks.size()-completed;
+        MatFlowBom bom=latestBom(file.getId());
+        return new ProductionFileResponse(
+                file.getId(),file.getProductionFileNo(),file.getProject().getId(),file.getProduct().getId(),file.getProjectCode(),file.getProjectName(),file.getClientName(),file.getProductName(),file.getDrawingNo(),file.getPlantCode(),
+                file.getStage().name(),file.getReleaseHealth().name(),file.getEngineeringDecision().name(),file.getCurrentDepartment(),file.getCurrentOwner(),
+                file.getDesigner(),file.getDesignHead(),file.getDesignHeadDecision(),file.getDesignHeadReviewedBy(),file.getDesignHeadReviewedAt(),file.getDesignHeadRemarks(),
+                file.getPpcOwner(),file.getEngineeringHead(),file.getAssignedEngineer(),file.getControlledReleaseReason(),file.getPlannedProductionReleaseDate(),file.getPlannedDispatchDate(),
+                file.getPpcGate1Decision(),file.getPpcGate2Decision(),file.isRevisionReviewRequired(),file.getDownstreamWorkflowKey(),file.getDownstreamWorkflowStatus(),file.getProductionReleasedAt(),file.getProjectCode(),
+                progress(file.getId(),WorkItemType.DESIGN_CHECK),designTaskProgress(file.getId()),progress(file.getId(),WorkItemType.ENGINEERING_CHECK),
+                (int)openQueryCount(file.getId()),pending,completed,bom==null?null:bom.getId(),bom==null?null:bom.getStatus().name(),file.getRowVersion(),file.getUpdatedAt());
+    }
+
+    private DesignTaskResponse toDesignTask(MatFlowDesignTask x) {
+        return new DesignTaskResponse(x.getId(),x.getTaskNo(),x.getTaskType().name(),x.getTitle(),x.getDescription(),x.getDesigner1(),x.getAssignedBy(),
+                List.copyOf(x.getAssignees()),x.getStatus().name(),x.getPriority(),x.isBlocking(),x.getReceivedAt(),x.getDueAt(),x.getStartedAt(),x.getCompletedAt(),
+                x.getCompletedBy(),x.getHoldReason(),x.getRemarks(),x.getRowVersion(),x.getCreatedAt(),x.getUpdatedAt());
+    }
+
+    private DesignTaskQueueResponse toDesignTaskQueue(MatFlowDesignTask task) {
+        MatFlowProductionFile file = task.getProductionFile();
+        return new DesignTaskQueueResponse(toDesignTask(task), file.getId(), file.getProductionFileNo(),
+                file.getProjectCode(), file.getProjectName(), file.getClientName(), file.getProductName(),
+                file.getDrawingNo(), file.getStage().name(), file.getReleaseHealth().name(), file.getDesignHead());
+    }
+
+    private boolean designTaskContains(MatFlowDesignTask task, String q) {
+        MatFlowProductionFile file = task.getProductionFile();
+        return contains(task.getTaskNo(), q) || contains(task.getTitle(), q) || contains(task.getDescription(), q)
+                || contains(task.getDesigner1(), q) || task.getAssignees().stream().anyMatch(value -> contains(value, q))
+                || contains(file.getProjectCode(), q) || contains(file.getProjectName(), q) || contains(file.getClientName(), q)
+                || contains(file.getProductName(), q) || contains(file.getDrawingNo(), q);
+    }
+
+    private DesignTaskProgress designTaskProgress(UUID fileId) {
+        List<MatFlowDesignTask> rows = designTasks(fileId);
+        int need=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.NEED_TO_START).count();
+        int assigned=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.ASSIGNED).count();
+        int working=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.WORKING).count();
+        int hold=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.HOLD).count();
+        int done=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.DONE).count();
+        int cancelled=(int)rows.stream().filter(x->x.getStatus()==DesignTaskStatus.CANCELLED).count();
+        int overdue=(int)rows.stream().filter(x->x.getDueAt()!=null&&x.getDueAt().isBefore(now())&&!Set.of(DesignTaskStatus.DONE,DesignTaskStatus.CANCELLED).contains(x.getStatus())).count();
+        int denominator=Math.max(0,rows.size()-cancelled);
+        int percent=denominator==0?0:(int)Math.round(done*100.0/denominator);
+        return new DesignTaskProgress(rows.size(),need,assigned,working,hold,done,cancelled,overdue,percent);
     }
 
     private List<WorkItemResponse> mapItems(List<MatFlowWorkItem> rows){ return rows.stream().map(this::toWork).toList(); }
     private WorkItemResponse toWork(MatFlowWorkItem x){ return new WorkItemResponse(x.getId(),x.getItemType().name(),x.getItemKey(),x.getSection(),x.getTitle(),x.getDescription(),x.getCriticality().name(),x.isBlocking(),x.getDisplayOrder(),x.getStatus().name(),x.getAssignedTo(),x.getDueAt(),x.getStartedAt(),x.getRevisionContext(),x.getPriority(),x.getResponseText(),x.getRemarks(),x.getCompletionNote(),x.getCompletedBy(),x.getCompletedAt(),x.getRespondedBy(),x.getRespondedAt(),x.getClosedBy(),x.getClosedAt(),x.getRowVersion(),x.getUpdatedAt()); }
     private RevisionResponse toRevision(MatFlowRevision x){ return new RevisionResponse(x.getId(),x.getRevisionType().name(),x.getRevisionNo(),x.getRevisionStatus().name(),x.getOriginalFileName(),x.getContentType(),x.getSizeBytes()==null?0:x.getSizeBytes(),x.getChangeSummary(),x.getImpactNote(),x.getImpactReviewedBy(),x.getImpactReviewedAt(),x.getActivatedAt(),x.getRowVersion(),x.getCreatedAt()); }
     private AuditEventResponse toAudit(MatFlowAuditLog x){ return new AuditEventResponse(x.getEntityType(),x.getEntityId(),x.getAction(),x.getActor(),x.getActionAt(),x.getDetailsJson()); }
+
+    private List<MatFlowDesignTask> designTasks(UUID fileId) {
+        return designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(fileId);
+    }
+
+    private MatFlowDesignTask requireDesignTask(UUID fileId, UUID taskId) {
+        MatFlowDesignTask row = designTaskRepository.findById(taskId).orElseThrow(() -> notFound("Design task not found"));
+        if (row.getProductionFile() == null || !fileId.equals(row.getProductionFile().getId())) throw notFound("Design task not found in this Production File");
+        return row;
+    }
+
+    private List<String> normalizeAssignees(Collection<String> values) {
+        if (values == null) return List.of();
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        for (String value : values) {
+            String clean = clean(value);
+            if (clean == null) continue;
+            String key = clean.toLowerCase(Locale.ROOT);
+            if (seen.add(key)) result.add(clean);
+            if (result.size() >= 12) break;
+        }
+        return List.copyOf(result);
+    }
+
+    private String nextDesignTaskNo(MatFlowProductionFile file) {
+        long next = designTaskRepository.countByProductionFile_Id(file.getId()) + 1;
+        String base = ("DT-" + file.getProductionFileNo()).toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9._-]+", "-");
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 4).toUpperCase(Locale.ROOT);
+        return base + "-" + String.format("%03d", next) + "-" + suffix;
+    }
+
+    private void requireDesignTaskTransition(DesignTaskStatus current, DesignTaskStatus next) {
+        if (current == next) return;
+        if (Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(current)) {
+            throw conflict("Completed/Cancelled Design task cannot be reopened. Create a follow-up or Revision task.");
+        }
+        boolean allowed = switch (current) {
+            case NEED_TO_START -> Set.of(DesignTaskStatus.ASSIGNED, DesignTaskStatus.CANCELLED).contains(next);
+            case ASSIGNED -> Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.HOLD, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
+            case WORKING -> Set.of(DesignTaskStatus.HOLD, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
+            case HOLD -> Set.of(DesignTaskStatus.WORKING, DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(next);
+            case DONE, CANCELLED -> false;
+        };
+        if (!allowed) throw conflict("Design task cannot move from " + current + " to " + next);
+    }
+
+    private boolean isDesignStage(MatFlowProductionFile file) {
+        return file != null && Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage());
+    }
+
+    private void requireDesignStage(MatFlowProductionFile file) {
+        requireStage(file, ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION);
+    }
+
+    private void invalidateDesignHeadApproval(MatFlowProductionFile file) {
+        if (!isDesignStage(file)) return;
+        if (!"PENDING".equalsIgnoreCase(file.getDesignHeadDecision())) {
+            file.setDesignHeadDecision("PENDING");
+            file.setDesignHeadReviewedBy(null);
+            file.setDesignHeadReviewedAt(null);
+            file.setDesignHeadRemarks(null);
+        }
+    }
 
     private MatFlowProductionFile requireFile(UUID id){ MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found")); accessService.requirePlantAccess(file.getPlantCode()); return file; }
     private MatFlowWorkItem requireWork(UUID fileId,UUID id,WorkItemType type){ MatFlowWorkItem x=workRepository.findById(id).orElseThrow(()->notFound("Work item not found")); if(!fileId.equals(x.getProductionFile().getId())||x.getItemType()!=type)throw notFound("Work item not found"); return x; }

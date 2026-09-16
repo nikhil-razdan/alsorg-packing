@@ -3,13 +3,16 @@ package com.alsorg.packing.service.matflow;
 import static com.alsorg.packing.controller.dto.matflow.MatFlowInsightDtos.*;
 
 import com.alsorg.packing.config.TimeZoneConfig;
+import com.alsorg.packing.domain.matflow.MatFlowControlTypes.DesignTaskStatus;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.EngineeringDecision;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ProductionFileStage;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.ReleaseHealth;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemStatus;
 import com.alsorg.packing.domain.matflow.MatFlowControlTypes.WorkItemType;
+import com.alsorg.packing.domain.matflow.MatFlowDesignTask;
 import com.alsorg.packing.domain.matflow.MatFlowProductionFile;
 import com.alsorg.packing.domain.matflow.MatFlowWorkItem;
+import com.alsorg.packing.repository.matflow.MatFlowDesignTaskRepository;
 import com.alsorg.packing.repository.matflow.MatFlowProductionFileRepository;
 import com.alsorg.packing.repository.matflow.MatFlowWorkItemRepository;
 import java.time.Duration;
@@ -34,16 +37,19 @@ public class MatFlowInsightService {
             WorkItemStatus.CANCELLED);
 
     private final MatFlowProductionFileRepository fileRepository;
+    private final MatFlowDesignTaskRepository designTaskRepository;
     private final MatFlowWorkItemRepository workRepository;
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
 
     public MatFlowInsightService(
             MatFlowProductionFileRepository fileRepository,
+            MatFlowDesignTaskRepository designTaskRepository,
             MatFlowWorkItemRepository workRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService) {
         this.fileRepository = fileRepository;
+        this.designTaskRepository = designTaskRepository;
         this.workRepository = workRepository;
         this.accessService = accessService;
         this.auditService = auditService;
@@ -79,21 +85,34 @@ public class MatFlowInsightService {
                     .filter(item -> item.getDueAt() != null && item.getDueAt().isBefore(now()))
                     .filter(item -> !CLOSED_WORK_STATUSES.contains(item.getStatus()))
                     .count();
+            List<MatFlowDesignTask> designTasks = designTaskRepository.findByProductionFile_IdOrderByReceivedAtAscCreatedAtAsc(file.getId());
+            long pendingDesignTasks = designTasks.stream()
+                    .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                    .count();
+            long designHolds = designTasks.stream().filter(task -> task.getStatus() == DesignTaskStatus.HOLD).count();
+            long overdueDesignTasks = designTasks.stream()
+                    .filter(task -> task.getDueAt() != null && task.getDueAt().isBefore(now()))
+                    .filter(task -> !Set.of(DesignTaskStatus.DONE, DesignTaskStatus.CANCELLED).contains(task.getStatus()))
+                    .count();
+            long totalOverdue = overdueItems + overdueDesignTasks;
 
             openQueries += queries;
-            overdue += overdueItems;
+            overdue += totalOverdue;
 
             boolean needsAttention = file.getReleaseHealth() != ReleaseHealth.GREEN
                     || file.isRevisionReviewRequired()
                     || queries > 0
-                    || overdueItems > 0;
+                    || totalOverdue > 0
+                    || designHolds > 0;
             if (!needsAttention) continue;
 
             List<String> blockers = new ArrayList<>();
             if (file.isRevisionReviewRequired()) blockers.add("Revision review");
+            if (pendingDesignTasks > 0 && Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) blockers.add(pendingDesignTasks + " Design task" + (pendingDesignTasks == 1 ? "" : "s") + " pending");
+            if (designHolds > 0) blockers.add(designHolds + " Design task" + (designHolds == 1 ? "" : "s") + " on hold");
             if (queries > 0) blockers.add(queries + " open quer" + (queries == 1 ? "y" : "ies"));
             if (pendingTasks > 0) blockers.add(pendingTasks + " engineering task" + (pendingTasks == 1 ? "" : "s"));
-            if (overdueItems > 0) blockers.add(overdueItems + " overdue work item" + (overdueItems == 1 ? "" : "s"));
+            if (totalOverdue > 0) blockers.add(totalOverdue + " overdue work item" + (totalOverdue == 1 ? "" : "s"));
             if (blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.RED) blockers.add("Critical release information pending");
             if (blockers.isEmpty() && file.getReleaseHealth() == ReleaseHealth.AMBER) blockers.add("Controlled release limitation");
 
@@ -112,7 +131,7 @@ public class MatFlowInsightService {
                     file.getPlannedDispatchDate(),
                     (int) queries,
                     (int) pendingTasks,
-                    (int) overdueItems,
+                    (int) totalOverdue,
                     blockers,
                     file.getUpdatedAt()));
         }

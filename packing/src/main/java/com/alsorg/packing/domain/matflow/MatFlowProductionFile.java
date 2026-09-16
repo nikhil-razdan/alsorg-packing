@@ -74,8 +74,22 @@ public class MatFlowProductionFile extends MatFlowBaseEntity {
     @Column(name = "current_owner", length = 150)
     private String currentOwner;
 
+    /** Designer-1: upstream/client/project designer. */
     @Column(name = "designer", length = 150)
     private String designer;
+
+    /** Design Department head who owns delegation and final design review. */
+    @Column(name = "design_head", length = 150)
+    private String designHead;
+    @Column(name = "design_head_decision", length = 30)
+    private String designHeadDecision = "PENDING";
+    @Column(name = "design_head_reviewed_by", length = 150)
+    private String designHeadReviewedBy;
+    @Column(name = "design_head_reviewed_at")
+    private LocalDateTime designHeadReviewedAt;
+    @Column(name = "design_head_remarks", columnDefinition = "text")
+    private String designHeadRemarks;
+
     @Column(name = "ppc_owner", length = 150)
     private String ppcOwner;
     @Column(name = "engineering_head", length = 150)
@@ -169,6 +183,16 @@ public class MatFlowProductionFile extends MatFlowBaseEntity {
     public void setCurrentOwner(String value) { currentOwner = clean(value); }
     public String getDesigner() { return designer; }
     public void setDesigner(String value) { designer = clean(value); }
+    public String getDesignHead() { return designHead; }
+    public void setDesignHead(String value) { designHead = clean(value); }
+    public String getDesignHeadDecision() { return designHeadDecision; }
+    public void setDesignHeadDecision(String value) { String next = cleanUpper(value); designHeadDecision = next == null ? "PENDING" : next; }
+    public String getDesignHeadReviewedBy() { return designHeadReviewedBy; }
+    public void setDesignHeadReviewedBy(String value) { designHeadReviewedBy = clean(value); }
+    public LocalDateTime getDesignHeadReviewedAt() { return designHeadReviewedAt; }
+    public void setDesignHeadReviewedAt(LocalDateTime value) { designHeadReviewedAt = value; }
+    public String getDesignHeadRemarks() { return designHeadRemarks; }
+    public void setDesignHeadRemarks(String value) { designHeadRemarks = clean(value); }
     public String getPpcOwner() { return ppcOwner; }
     public void setPpcOwner(String value) { ppcOwner = clean(value); }
     public String getEngineeringHead() { return engineeringHead; }

@@ -1,7 +1,7 @@
 package com.alsorg.packing.controller.dto.matflow;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,6 +13,7 @@ public final class MatFlowWorkspaceDtos {
 
     public record ProductionFileSetupRequest(
             @Size(max = 150) String designer,
+            @Size(max = 150) String designHead,
             @Size(max = 150) String ppcOwner,
             @Size(max = 150) String engineeringHead,
             @Size(max = 150) String assignedEngineer,
@@ -24,6 +25,39 @@ public final class MatFlowWorkspaceDtos {
     public record ChecklistUpdateRequest(
             @NotBlank String status,
             @Size(max = 2000) String remarks,
+            Long rowVersion) {}
+
+    public record DesignTaskCreateRequest(
+            @NotBlank @Size(max = 40) String taskType,
+            @NotBlank @Size(max = 300) String title,
+            @Size(max = 6000) String description,
+            @NotEmpty @Size(max = 12) List<@NotBlank @Size(max = 150) String> assignees,
+            LocalDateTime receivedAt,
+            LocalDateTime dueAt,
+            @Size(max = 20) String priority,
+            Boolean blocking,
+            @Size(max = 3000) String remarks) {}
+
+    public record DesignTaskUpdateRequest(
+            @Size(max = 40) String taskType,
+            @Size(max = 300) String title,
+            @Size(max = 6000) String description,
+            @Size(max = 12) List<@NotBlank @Size(max = 150) String> assignees,
+            LocalDateTime receivedAt,
+            LocalDateTime dueAt,
+            @Size(max = 20) String priority,
+            Boolean blocking,
+            @Size(max = 3000) String remarks,
+            Long rowVersion) {}
+
+    public record DesignTaskStatusRequest(
+            @NotBlank String status,
+            @Size(max = 3000) String note,
+            Long rowVersion) {}
+
+    public record DesignHeadReviewRequest(
+            @NotBlank String decision,
+            @Size(max = 4000) String remarks,
             Long rowVersion) {}
 
     public record DesignSubmitRequest(
@@ -110,6 +144,53 @@ public final class MatFlowWorkspaceDtos {
             Long rowVersion,
             LocalDateTime updatedAt) {}
 
+    public record DesignTaskResponse(
+            UUID id,
+            String taskNo,
+            String taskType,
+            String title,
+            String description,
+            String designer1,
+            String assignedBy,
+            List<String> assignees,
+            String status,
+            String priority,
+            boolean blocking,
+            LocalDateTime receivedAt,
+            LocalDateTime dueAt,
+            LocalDateTime startedAt,
+            LocalDateTime completedAt,
+            String completedBy,
+            String holdReason,
+            String remarks,
+            Long rowVersion,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {}
+
+    public record DesignTaskQueueResponse(
+            DesignTaskResponse task,
+            UUID productionFileId,
+            String productionFileNo,
+            String projectCode,
+            String projectName,
+            String clientName,
+            String productName,
+            String drawingNo,
+            String stage,
+            String releaseHealth,
+            String designHead) {}
+
+    public record DesignTaskProgress(
+            int total,
+            int needToStart,
+            int assigned,
+            int working,
+            int hold,
+            int done,
+            int cancelled,
+            int overdue,
+            int percent) {}
+
     public record ChecklistProgress(
             int total,
             int complete,
@@ -160,6 +241,11 @@ public final class MatFlowWorkspaceDtos {
             String currentDepartment,
             String currentOwner,
             String designer,
+            String designHead,
+            String designHeadDecision,
+            String designHeadReviewedBy,
+            LocalDateTime designHeadReviewedAt,
+            String designHeadRemarks,
             String ppcOwner,
             String engineeringHead,
             String assignedEngineer,
@@ -174,6 +260,7 @@ public final class MatFlowWorkspaceDtos {
             LocalDateTime productionReleasedAt,
             String packFlowProjectKey,
             ChecklistProgress designChecklistProgress,
+            DesignTaskProgress designTaskProgress,
             ChecklistProgress engineeringChecklistProgress,
             int openQueryCount,
             int pendingTaskCount,
@@ -186,11 +273,14 @@ public final class MatFlowWorkspaceDtos {
     public record ProductionFileDetailResponse(
             ProductionFileResponse productionFile,
             List<WorkItemResponse> designChecklist,
+            List<DesignTaskResponse> designTasks,
             List<WorkItemResponse> engineeringChecklist,
             List<WorkItemResponse> queries,
             List<WorkItemResponse> engineeringTasks,
             List<RevisionResponse> revisions,
             List<AuditEventResponse> timeline,
+            boolean designHandoffReady,
+            List<String> designHandoffBlockers,
             boolean ppcGate2Ready,
             List<String> ppcGate2Blockers) {}
 

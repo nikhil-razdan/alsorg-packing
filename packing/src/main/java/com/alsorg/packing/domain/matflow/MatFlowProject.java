@@ -40,6 +40,14 @@ public class MatFlowProject extends MatFlowBaseEntity {
     @Column(name = "project_manager", length = 150)
     private String projectManager;
 
+    /** Designer-1 from the upstream/client-facing design team. */
+    @Column(name = "designer_1", length = 150)
+    private String designer1;
+
+    /** Head of the execution Design Department who delegates Designer-2 tasks. */
+    @Column(name = "design_head", length = 150)
+    private String designHead;
+
     @Column(name = "remarks", columnDefinition = "text")
     private String remarks;
 
@@ -60,6 +68,10 @@ public class MatFlowProject extends MatFlowBaseEntity {
     public void setPriority(String value) { String next = cleanUpper(value); priority = next == null ? "NORMAL" : next; }
     public String getProjectManager() { return projectManager; }
     public void setProjectManager(String value) { projectManager = clean(value); }
+    public String getDesigner1() { return designer1; }
+    public void setDesigner1(String value) { designer1 = clean(value); }
+    public String getDesignHead() { return designHead; }
+    public void setDesignHead(String value) { designHead = clean(value); }
     public String getRemarks() { return remarks; }
     public void setRemarks(String value) { remarks = clean(value); }
     public boolean isActive() { return active; }

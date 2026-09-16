@@ -40,9 +40,14 @@ export const matflowApi = {
 
   // Production control workspace
   listProductionFiles: (params = {}) => API.get(`${BASE}/workspace/files`, { params: cleanParams(params) }),
+  listDesignTasks: (params = {}) => API.get(`${BASE}/workspace/design-tasks`, { params: cleanParams(params) }),
   getProductionFile: (fileId) => API.get(`${BASE}/workspace/files/${id(fileId, "Production File ID")}`),
   updateProductionFileSetup: (fileId, body) => API.put(`${BASE}/workspace/files/${id(fileId)}/setup`, body),
   updateChecklist: (fileId, area, itemKey, body) => API.put(`${BASE}/workspace/files/${id(fileId)}/checklists/${encodeURIComponent(area)}/${encodeURIComponent(itemKey)}`, body),
+  createDesignTask: (fileId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/design-tasks`, body),
+  updateDesignTask: (fileId, taskId, body) => API.put(`${BASE}/workspace/files/${id(fileId)}/design-tasks/${id(taskId)}`, body),
+  setDesignTaskStatus: (fileId, taskId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/design-tasks/${id(taskId)}/status`, body),
+  reviewDesignHead: (fileId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/design-head-review`, body),
   submitDesign: (fileId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/designer-submit`, body),
   ppcGate1: (fileId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/ppc-gate-1`, body),
   engineeringDecision: (fileId, body) => API.post(`${BASE}/workspace/files/${id(fileId)}/engineering-decision`, body),

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -275,7 +276,7 @@ public class MatFlowProjectService {
         file.setReleaseHealth(ReleaseHealth.RED);
         file.setEngineeringDecision(EngineeringDecision.PENDING);
         file.setCurrentDepartment("DESIGN");
-        file.setCurrentOwner(null);
+        file.setCurrentOwner(clean(project.getDesignHead()) != null ? project.getDesignHead() : project.getDesigner1());
         file.setActive(project.isActive() && product.isActive());
         file.setPlannedDispatchDate(product.getRequiredDate() != null ? product.getRequiredDate() : project.getRequiredDate());
         file.setCreatedBy(effectiveActor);
@@ -286,8 +287,22 @@ public class MatFlowProjectService {
     }
 
     private void syncSnapshots(MatFlowProductionFile file, MatFlowProject project, MatFlowProjectDrawing product) {
+        String previousDesigner = file.getDesigner();
+        String previousHead = file.getDesignHead();
         file.setProject(project); file.setProduct(product); file.setProjectCode(project.getProjectCode()); file.setProjectName(project.getProjectName());
         file.setClientName(project.getClientName()); file.setProductName(product.getProductName()); file.setDrawingNo(product.getDrawingNo()); file.setPlantCode(project.getPlantCode());
+        file.setDesigner(project.getDesigner1());
+        file.setDesignHead(project.getDesignHead());
+        if (Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) {
+            file.setCurrentDepartment("DESIGN");
+            file.setCurrentOwner(clean(project.getDesignHead()) != null ? project.getDesignHead() : project.getDesigner1());
+            if (!Objects.equals(clean(previousDesigner), clean(project.getDesigner1())) || !Objects.equals(clean(previousHead), clean(project.getDesignHead()))) {
+                file.setDesignHeadDecision("PENDING");
+                file.setDesignHeadReviewedBy(null);
+                file.setDesignHeadReviewedAt(null);
+                file.setDesignHeadRemarks(null);
+            }
+        }
     }
 
     private String buildUniqueFileNo(String projectCode, String drawingNo, UUID productId) {
@@ -357,6 +372,8 @@ public class MatFlowProjectService {
         if (!Objects.equals(file.getProductName(), clean(product.getProductName()))) { file.setProductName(product.getProductName()); changed = true; }
         if (!Objects.equals(file.getDrawingNo(), upper(product.getDrawingNo()))) { file.setDrawingNo(product.getDrawingNo()); changed = true; }
         if (!Objects.equals(file.getPlantCode(), upper(project.getPlantCode()))) { file.setPlantCode(project.getPlantCode()); changed = true; }
+        if (!Objects.equals(clean(file.getDesigner()), clean(project.getDesigner1()))) { file.setDesigner(project.getDesigner1()); changed = true; }
+        if (!Objects.equals(clean(file.getDesignHead()), clean(project.getDesignHead()))) { file.setDesignHead(project.getDesignHead()); changed = true; }
 
         if (clean(file.getProductionFileNo()) == null) {
             file.setProductionFileNo(buildUniqueFileNo(project.getProjectCode(), product.getDrawingNo(), product.getId()));
@@ -366,6 +383,11 @@ public class MatFlowProjectService {
         if (file.getReleaseHealth() == null) { file.setReleaseHealth(ReleaseHealth.RED); changed = true; }
         if (file.getEngineeringDecision() == null) { file.setEngineeringDecision(EngineeringDecision.PENDING); changed = true; }
         if (clean(file.getCurrentDepartment()) == null) { file.setCurrentDepartment("DESIGN"); changed = true; }
+        if (Set.of(ProductionFileStage.DESIGN_DRAFT, ProductionFileStage.DESIGN_CLARIFICATION).contains(file.getStage())) {
+            String expectedOwner = clean(project.getDesignHead()) != null ? project.getDesignHead() : project.getDesigner1();
+            if (!Objects.equals(clean(file.getCurrentOwner()), clean(expectedOwner))) { file.setCurrentOwner(expectedOwner); changed = true; }
+            if (clean(file.getDesignHeadDecision()) == null) { file.setDesignHeadDecision("PENDING"); changed = true; }
+        }
 
         boolean shouldBeActive = project.isActive() && product.isActive();
         if (file.isActive() != shouldBeActive) { file.setActive(shouldBeActive); changed = true; }
@@ -381,7 +403,8 @@ public class MatFlowProjectService {
 
     private void applyProject(MatFlowProject row, ProjectRequest request) {
         row.setProjectCode(request.projectCode()); row.setProjectName(request.projectName()); row.setClientName(request.clientName()); row.setPlantCode(request.plantCode());
-        row.setRequiredDate(request.requiredDate()); row.setPriority(request.priority()); row.setProjectManager(request.projectManager()); row.setRemarks(request.remarks());
+        row.setRequiredDate(request.requiredDate()); row.setPriority(request.priority()); row.setProjectManager(request.projectManager());
+        row.setDesigner1(request.designer1()); row.setDesignHead(request.designHead()); row.setRemarks(request.remarks());
         if (request.active() != null) row.setActive(request.active());
     }
 
@@ -394,7 +417,7 @@ public class MatFlowProjectService {
     private ProjectResponse toProject(MatFlowProject project) {
         List<ProductResponse> products = productsOf(project.getId()).stream().map(this::toProduct).toList();
         return new ProjectResponse(project.getId(), project.getProjectCode(), project.getProjectName(), project.getClientName(), project.getPlantCode(), project.getRequiredDate(),
-                project.getPriority(), project.getProjectManager(), project.getRemarks(), project.isActive(), products.size(), project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
+                project.getPriority(), project.getProjectManager(), project.getDesigner1(), project.getDesignHead(), project.getRemarks(), project.isActive(), products.size(), project.getRowVersion(), project.getCreatedAt(), project.getUpdatedAt(), products);
     }
 
     private ProductResponse toProduct(MatFlowProjectDrawing product) {

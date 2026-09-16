@@ -33,8 +33,11 @@ public class MatFlowAccessService {
         throw new AccessDeniedException("MatFlow access required");
     }
 
-    /** Current role model: MATFLOW_ENGINEERING covers Designer + Engineer. */
+    /** Current role model: MATFLOW_ENGINEERING covers Designer-1 / Designer-2 / Engineer. */
     public void requireDesignerWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
+    /** Design Head control is intentionally restricted to manager/admin until dedicated roles are introduced. */
+    public void requireDesignHeadWrite() { requireAny("ADMIN", "MATFLOW_MANAGER"); }
+    public void requireDesignTaskWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
     public void requireEngineeringWrite() { requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING"); }
     /** Current role model: MATFLOW_MANAGER is the PPC / Engineering Head control role. */
     public void requirePpcWrite() { requireAny("ADMIN", "MATFLOW_MANAGER"); }

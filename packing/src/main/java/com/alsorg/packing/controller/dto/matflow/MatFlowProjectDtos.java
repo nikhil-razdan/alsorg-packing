@@ -24,6 +24,8 @@ public final class MatFlowProjectDtos {
             LocalDate requiredDate,
             @Size(max = 30) String priority,
             @Size(max = 150) String projectManager,
+            @Size(max = 150) String designer1,
+            @Size(max = 150) String designHead,
             @Size(max = 4000) String remarks,
             Boolean active,
             Long rowVersion) {}
@@ -79,6 +81,8 @@ public final class MatFlowProjectDtos {
             LocalDate requiredDate,
             String priority,
             String projectManager,
+            String designer1,
+            String designHead,
             String remarks,
             boolean active,
             int productCount,

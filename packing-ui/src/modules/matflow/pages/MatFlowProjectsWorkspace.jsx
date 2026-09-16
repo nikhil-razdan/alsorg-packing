@@ -52,6 +52,8 @@ const projectBlank = {
   requiredDate: "",
   priority: "NORMAL",
   projectManager: "",
+  designer1: "",
+  designHead: "",
   remarks: "",
   active: true,
   rowVersion: null,
@@ -354,6 +356,8 @@ export function MatFlowProjectsPage() {
         project.clientName,
         project.plantCode,
         project.projectManager,
+        project.designer1,
+        project.designHead,
       ];
       if (projectValues.some((value) => String(value || "").toLowerCase().includes(query))) return true;
 
@@ -416,6 +420,8 @@ export function MatFlowProjectsPage() {
       requiredDate: project.requiredDate || "",
       priority: project.priority || "NORMAL",
       projectManager: project.projectManager || "",
+      designer1: project.designer1 || "",
+      designHead: project.designHead || "",
       remarks: project.remarks || "",
       active: project.active !== false,
       rowVersion: project.rowVersion,
@@ -591,6 +597,8 @@ export function MatFlowProjectsPage() {
                       <Meta label="Priority" value={project.priority || "NORMAL"} />
                       <Meta label="Required Date" value={formatDate(project.requiredDate)} />
                       <Meta label="Project Manager" value={project.projectManager || "—"} />
+                      <Meta label="Designer-1" value={project.designer1 || "—"} />
+                      <Meta label="Design Head" value={project.designHead || "—"} />
                     </Box>
                     {project.remarks && (
                       <Typography sx={{ mt: 0.8, fontSize: 9.8, color: "var(--mf-text-muted)" }}>
@@ -662,6 +670,8 @@ export function MatFlowProjectsPage() {
             </TextField>
             <TextField type="date" InputLabelProps={{ shrink: true }} label="Required Date" value={projectForm.requiredDate || ""} onChange={(e) => setProjectForm({ ...projectForm, requiredDate: e.target.value })} sx={fieldSx} />
             <TextField label="Project Manager" value={projectForm.projectManager || ""} onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })} sx={fieldSx} />
+            <TextField label="Designer-1 / Client Project Designer" value={projectForm.designer1 || ""} onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })} sx={fieldSx} />
+            <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />
             <TextField label="Remarks" multiline minRows={2} value={projectForm.remarks || ""} onChange={(e) => setProjectForm({ ...projectForm, remarks: e.target.value })} sx={{ ...fieldSx, gridColumn: { md: "1/-1" } }} />
           </Box>
         </DialogContent>

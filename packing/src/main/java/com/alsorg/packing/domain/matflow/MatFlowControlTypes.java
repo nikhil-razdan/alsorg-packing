@@ -1,11 +1,6 @@
 package com.alsorg.packing.domain.matflow;
 
-/**
- * MatFlow's compact control vocabulary. Keeping the state machine in one file
- * makes the Designer -> PPC -> Engineering contract explicit and keeps the
- * later Production execution route replaceable without changing historical
- * design/engineering records.
- */
+/** Compact MatFlow control vocabulary. */
 public final class MatFlowControlTypes {
     private MatFlowControlTypes() {}
 
@@ -24,7 +19,6 @@ public final class MatFlowControlTypes {
     }
 
     public enum ReleaseHealth { GREEN, AMBER, RED }
-
     public enum EngineeringDecision { PENDING, APPROVED, QUERY_RAISED, RETURNED }
 
     public enum WorkItemType {
@@ -50,17 +44,32 @@ public final class MatFlowControlTypes {
     }
 
     public enum Criticality { CRITICAL, REQUIRED, OPTIONAL }
-
     public enum RevisionType { DESIGN_DRAWING, ENGINEERING_DRAWING, OTHER }
-
     public enum RevisionStatus { DRAFT, PENDING_IMPACT_REVIEW, ACTIVE, SUPERSEDED, REJECTED }
 
-    /**
-     * Persisted status vocabulary for the rebuilt MatFlow control BOM. Historical
-     * statuses from the previous mf_boms table are surfaced by MatFlowBomService
-     * as compatibility metadata; they are deliberately not written into this enum
-     * or the mf_control_boms.status column.
-     */
+    /** Design Department task vocabulary derived from the working tracker. */
+    public enum DesignTaskType {
+        NEW_PROJECT,
+        INITIAL_DRAWING,
+        REVISION,
+        PD_FILE,
+        AS_PER_MEASUREMENT,
+        COMMENTS,
+        ADDITIONAL,
+        SAMPLE,
+        UN_HOLD,
+        OTHER
+    }
+
+    public enum DesignTaskStatus {
+        NEED_TO_START,
+        ASSIGNED,
+        WORKING,
+        HOLD,
+        DONE,
+        CANCELLED
+    }
+
     public enum BomStatus {
         DRAFT,
         READY_FOR_RELEASE,
