@@ -20,9 +20,11 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import { useNavigate, useParams } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { downloadMatFlowBomExcel } from "../api/matflowBomExcel";
 import {
   ErrorBox,
   LoadingBlock,
@@ -514,6 +516,7 @@ export function MatFlowBomDetailPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [lineDialog, setLineDialog] = useState({ open: false, mode: "add" });
   const [line, setLine] = useState(lineBlank);
   const [deleteLine, setDeleteLine] = useState(null);
@@ -689,6 +692,19 @@ export function MatFlowBomDetailPage() {
     }
   };
 
+  const downloadBom = async () => {
+    if (!bom) return;
+    setExporting(true);
+    setError("");
+    try {
+      await downloadMatFlowBomExcel(bom);
+    } catch (requestError) {
+      setError(requestError?.message || "Unable to download BOM workbook.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const submit = async () => {
     if (!bom) return;
     setWorking(true);
@@ -755,6 +771,14 @@ export function MatFlowBomDetailPage() {
               sx={secondaryBtnSx}
             >
               Refresh
+            </Button>
+            <Button
+              startIcon={<FileDownloadOutlinedIcon />}
+              onClick={downloadBom}
+              disabled={exporting}
+              sx={secondaryBtnSx}
+            >
+              {exporting ? "Preparing…" : "Download BOM"}
             </Button>
             {editable && (
               <Button
