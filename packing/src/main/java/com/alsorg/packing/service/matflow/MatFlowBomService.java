@@ -33,7 +33,10 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Engineering BOM/documentation service. Production routing is intentionally absent from V1. */
@@ -51,6 +54,7 @@ public class MatFlowBomService {
     private final MatFlowAccessService accessService;
     private final MatFlowAuditService auditService;
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionTemplate legacyMigrationTx;
 
     public MatFlowBomService(
             MatFlowBomRepository bomRepository,
@@ -60,7 +64,8 @@ public class MatFlowBomService {
             MatFlowWorkItemRepository workRepository,
             MatFlowAccessService accessService,
             MatFlowAuditService auditService,
-            JdbcTemplate jdbcTemplate) {
+            JdbcTemplate jdbcTemplate,
+            PlatformTransactionManager transactionManager) {
         this.bomRepository = bomRepository;
         this.lineRepository = lineRepository;
         this.materialRepository = materialRepository;
@@ -69,11 +74,13 @@ public class MatFlowBomService {
         this.accessService = accessService;
         this.auditService = auditService;
         this.jdbcTemplate = jdbcTemplate;
+        this.legacyMigrationTx = new TransactionTemplate(transactionManager);
+        this.legacyMigrationTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.legacyMigrationTx.setName("matflowLegacyBomMigration");
     }
 
     @Order(200)
     @EventListener(ApplicationReadyEvent.class)
-    @Transactional
     public void reconcileLegacyBomsOnStartup() {
         reconcileLegacyBoms();
     }
@@ -85,143 +92,170 @@ public class MatFlowBomService {
      *
      * This bridge is deliberately idempotent and non-destructive:
      * - the legacy tables are never updated or deleted;
-     * - the original BOM UUID, BOM number, revision, status, line UUIDs and quantities
-     *   are retained in the control copy whenever there is no conflicting control BOM;
+     * - the original BOM UUID, BOM number, revision, line UUIDs and quantities are
+     *   retained in the control copy whenever there is no conflicting control BOM;
+     * - the historical status stays authoritative in mf_boms and is surfaced in API
+     *   responses without violating the new mf_control_boms status constraint;
      * - a migrated Project/Product must already have its Production File before the BOM
      *   is copied, so the existing Project migration remains the source of identity;
      * - rerunning this method is safe.
      */
-    @Transactional
+    /**
+     * Runs the compatibility import in an isolated transaction. PostgreSQL marks a
+     * transaction unusable after any SQL error, so the bridge must never execute in
+     * the caller's read transaction. If a legacy database is incomplete/corrupt, the
+     * migration rolls back independently and the current MatFlow BOM API can still
+     * continue.
+     */
     public int reconcileLegacyBoms() {
+        try {
+            Integer imported = legacyMigrationTx.execute(status -> doReconcileLegacyBoms());
+            return imported == null ? 0 : imported;
+        } catch (DataAccessException ex) {
+            log.warn("MatFlow legacy BOM bridge could not run; current BOM workflow remains available", ex);
+            return 0;
+        }
+    }
+
+    private int doReconcileLegacyBoms() {
         if (!legacyTableExists(LEGACY_BOM_TABLE) || !legacyTableExists(LEGACY_BOM_LINE_TABLE)) {
             return 0;
         }
 
-        try {
-            int importedBoms = jdbcTemplate.update("""
-                    insert into mf_control_boms (
-                        id,
-                        bom_number,
-                        production_file_id,
-                        project_drawing_id,
-                        revision_no,
-                        status,
-                        latest_revision,
-                        remarks,
-                        submitted_by,
-                        submitted_at,
-                        released_by,
-                        released_at,
-                        row_version,
-                        created_at,
-                        created_by,
-                        updated_at,
-                        updated_by
-                    )
-                    select
-                        b.id,
-                        b.bom_number,
-                        pf.id,
-                        b.project_drawing_id,
-                        b.revision_no,
-                        b.status,
-                        b.latest_revision,
-                        b.remarks,
-                        b.submitted_by,
-                        b.submitted_at,
-                        null,
-                        null,
-                        coalesce(b.row_version, 0),
-                        b.created_at,
-                        coalesce(nullif(b.created_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION'),
-                        b.updated_at,
-                        coalesce(nullif(b.updated_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION')
-                    from mf_boms b
-                    join mf_production_files pf
-                      on pf.product_id = b.project_drawing_id
-                    where not exists (
-                        select 1
-                        from mf_control_boms current_bom
-                        where current_bom.id = b.id
-                    )
-                    and not exists (
-                        select 1
-                        from mf_control_boms current_bom
-                        where current_bom.production_file_id = pf.id
-                          and current_bom.revision_no = b.revision_no
-                    )
-                    """);
+        /*
+         * IMPORTANT: mf_control_boms is the NEW workflow table and its database
+         * check constraint accepts only the new control vocabulary. Old mf_boms
+         * statuses (SUBMITTED / APPROVED / RETURNED / etc.) must therefore never be
+         * copied into this column. Historical status is read from mf_boms at response
+         * time, while the control copy uses DRAFT (or SUPERSEDED for archived old
+         * revisions). This also guarantees that an imported historical APPROVED BOM
+         * cannot silently satisfy the new PPC Gate 2; Engineering must create a current
+         * revision first.
+         */
+        int importedBoms = jdbcTemplate.update("""
+                insert into mf_control_boms (
+                    id,
+                    bom_number,
+                    production_file_id,
+                    project_drawing_id,
+                    revision_no,
+                    status,
+                    latest_revision,
+                    remarks,
+                    submitted_by,
+                    submitted_at,
+                    released_by,
+                    released_at,
+                    row_version,
+                    created_at,
+                    created_by,
+                    updated_at,
+                    updated_by
+                )
+                select
+                    b.id,
+                    b.bom_number,
+                    pf.id,
+                    b.project_drawing_id,
+                    b.revision_no,
+                    case
+                        when upper(coalesce(b.status::text, '')) = 'SUPERSEDED' then 'SUPERSEDED'
+                        else 'DRAFT'
+                    end,
+                    coalesce(b.latest_revision, true),
+                    b.remarks,
+                    b.submitted_by,
+                    b.submitted_at,
+                    null,
+                    null,
+                    coalesce(b.row_version, 0),
+                    b.created_at,
+                    coalesce(nullif(b.created_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION'),
+                    b.updated_at,
+                    coalesce(nullif(b.updated_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION')
+                from mf_boms b
+                join mf_production_files pf
+                  on pf.product_id = b.project_drawing_id
+                where not exists (
+                    select 1
+                    from mf_control_boms current_bom
+                    where current_bom.id = b.id
+                )
+                and not exists (
+                    select 1
+                    from mf_control_boms current_bom
+                    where current_bom.production_file_id = pf.id
+                      and current_bom.revision_no = b.revision_no
+                )
+                on conflict do nothing
+                """);
 
-            int importedLines = jdbcTemplate.update("""
-                    insert into mf_control_bom_lines (
-                        id,
-                        bom_id,
-                        material_id,
-                        line_no,
-                        material_code_snapshot,
-                        material_name_snapshot,
-                        material_category_snapshot,
-                        specification_snapshot,
-                        uom_snapshot,
-                        required_qty,
-                        wastage_percent,
-                        net_required_qty,
-                        remarks,
-                        row_version,
-                        created_at,
-                        created_by,
-                        updated_at,
-                        updated_by
-                    )
-                    select
-                        legacy_line.id,
-                        legacy_line.bom_id,
-                        legacy_line.material_id,
-                        legacy_line.line_no,
-                        legacy_line.material_code_snapshot,
-                        legacy_line.material_name_snapshot,
-                        legacy_line.material_category_snapshot,
-                        legacy_line.specification_snapshot,
-                        legacy_line.uom_snapshot,
-                        legacy_line.required_qty,
-                        coalesce(legacy_line.wastage_percent, 0),
-                        legacy_line.net_required_qty,
-                        legacy_line.remarks,
-                        coalesce(legacy_line.row_version, 0),
-                        legacy_line.created_at,
-                        coalesce(nullif(legacy_line.created_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION'),
-                        legacy_line.updated_at,
-                        coalesce(nullif(legacy_line.updated_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION')
-                    from mf_bom_lines legacy_line
-                    join mf_control_boms current_bom
-                      on current_bom.id = legacy_line.bom_id
-                    where exists (
-                        select 1
-                        from mf_boms legacy_bom
-                        where legacy_bom.id = legacy_line.bom_id
-                    )
-                    and not exists (
-                        select 1
-                        from mf_control_bom_lines current_line
-                        where current_line.id = legacy_line.id
-                    )
-                    and not exists (
-                        select 1
-                        from mf_control_bom_lines current_line
-                        where current_line.bom_id = legacy_line.bom_id
-                          and current_line.line_no = legacy_line.line_no
-                    )
-                    """);
+        int importedLines = jdbcTemplate.update("""
+                insert into mf_control_bom_lines (
+                    id,
+                    bom_id,
+                    material_id,
+                    line_no,
+                    material_code_snapshot,
+                    material_name_snapshot,
+                    material_category_snapshot,
+                    specification_snapshot,
+                    uom_snapshot,
+                    required_qty,
+                    wastage_percent,
+                    net_required_qty,
+                    remarks,
+                    row_version,
+                    created_at,
+                    created_by,
+                    updated_at,
+                    updated_by
+                )
+                select
+                    legacy_line.id,
+                    legacy_line.bom_id,
+                    legacy_line.material_id,
+                    legacy_line.line_no,
+                    legacy_line.material_code_snapshot,
+                    legacy_line.material_name_snapshot,
+                    legacy_line.material_category_snapshot,
+                    legacy_line.specification_snapshot,
+                    legacy_line.uom_snapshot,
+                    legacy_line.required_qty,
+                    coalesce(legacy_line.wastage_percent, 0),
+                    legacy_line.net_required_qty,
+                    legacy_line.remarks,
+                    coalesce(legacy_line.row_version, 0),
+                    legacy_line.created_at,
+                    coalesce(nullif(legacy_line.created_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION'),
+                    legacy_line.updated_at,
+                    coalesce(nullif(legacy_line.updated_by, ''), 'SYSTEM_MATFLOW_BOM_MIGRATION')
+                from mf_bom_lines legacy_line
+                join mf_control_boms current_bom
+                  on current_bom.id = legacy_line.bom_id
+                where exists (
+                    select 1
+                    from mf_boms legacy_bom
+                    where legacy_bom.id = legacy_line.bom_id
+                )
+                and not exists (
+                    select 1
+                    from mf_control_bom_lines current_line
+                    where current_line.id = legacy_line.id
+                )
+                and not exists (
+                    select 1
+                    from mf_control_bom_lines current_line
+                    where current_line.bom_id = legacy_line.bom_id
+                      and current_line.line_no = legacy_line.line_no
+                )
+                on conflict do nothing
+                """);
 
-            if (importedBoms > 0 || importedLines > 0) {
-                log.info("MatFlow legacy BOM bridge imported {} BOM(s) and {} BOM line(s)", importedBoms, importedLines);
-            }
-            return importedBoms;
-        } catch (DataAccessException ex) {
-            // Legacy compatibility must never make a fresh/current-only installation fail.
-            log.warn("MatFlow legacy BOM bridge could not run; current BOM workflow remains available", ex);
-            return 0;
+        if (importedBoms > 0 || importedLines > 0) {
+            log.info("MatFlow legacy BOM bridge imported {} BOM(s) and {} BOM line(s)", importedBoms, importedLines);
         }
+        return importedBoms;
     }
 
     @Transactional
@@ -231,17 +265,18 @@ public class MatFlowBomService {
         String q = clean(search);
         q = q == null ? "" : q.toLowerCase(Locale.ROOT);
         final String term = q;
-        BomStatus filter = status == null || status.isBlank() ? null : parseStatus(status);
+        String requestedStatus = clean(status);
+        final String statusFilter = requestedStatus == null ? "" : requestedStatus.toUpperCase(Locale.ROOT);
         return bomRepository.findAllByOrderByUpdatedAtDesc().stream()
                 .filter(b -> accessService.canAccessPlant(b.getProductionFile().getPlantCode()))
                 .filter(b -> productionFileId == null || productionFileId.equals(b.getProductionFile().getId()))
-                .filter(b -> filter == null || b.getStatus() == filter)
                 .filter(b -> term.isBlank()
                         || contains(b.getBomNumber(), term)
                         || contains(b.getProductionFile().getProjectCode(), term)
                         || contains(b.getProductionFile().getProductName(), term)
                         || contains(b.getProductionFile().getDrawingNo(), term))
                 .map(this::toResponse)
+                .filter(response -> statusFilter.isBlank() || statusFilter.equalsIgnoreCase(response.status()))
                 .toList();
     }
 
@@ -458,7 +493,9 @@ public class MatFlowBomService {
                 .map(this::toLine)
                 .toList();
         MatFlowProductionFile f = bom.getProductionFile();
-        boolean legacy = isLegacyBom(bom.getId());
+        String historicalStatus = legacyBomStatus(bom.getId());
+        boolean legacy = historicalStatus != null;
+        String responseStatus = legacy ? historicalStatus : bom.getStatus().name();
         return new BomResponse(
                 bom.getId(),
                 bom.getBomNumber(),
@@ -468,7 +505,7 @@ public class MatFlowBomService {
                 f.getProductName(),
                 f.getDrawingNo(),
                 bom.getRevisionNo(),
-                bom.getStatus().name(),
+                responseStatus,
                 bom.isLatestRevision(),
                 bom.getRemarks(),
                 bom.getSubmittedBy(),
@@ -572,15 +609,27 @@ public class MatFlowBomService {
     }
 
     private boolean isLegacyBom(UUID bomId) {
-        if (bomId == null || !legacyTableExists(LEGACY_BOM_TABLE)) return false;
+        return legacyBomStatus(bomId) != null;
+    }
+
+    /**
+     * Exact old workflow status is intentionally read from the untouched legacy
+     * table. The control copy stores only the new workflow vocabulary so database
+     * constraints and PPC release rules remain correct.
+     */
+    private String legacyBomStatus(UUID bomId) {
+        if (bomId == null || !legacyTableExists(LEGACY_BOM_TABLE)) return null;
         try {
-            Boolean exists = jdbcTemplate.queryForObject(
-                    "select exists (select 1 from mf_boms where id = ?)",
-                    Boolean.class,
+            List<String> values = jdbcTemplate.query(
+                    "select cast(status as text) from mf_boms where id = ?",
+                    (rs, rowNum) -> rs.getString(1),
                     bomId);
-            return Boolean.TRUE.equals(exists);
+            if (values.isEmpty()) return null;
+            String value = clean(values.get(0));
+            return value == null ? "DRAFT" : value.toUpperCase(Locale.ROOT);
         } catch (DataAccessException ex) {
-            return false;
+            log.debug("Unable to read legacy BOM status for {}", bomId, ex);
+            return null;
         }
     }
 
@@ -605,13 +654,6 @@ public class MatFlowBomService {
                 .replaceAll("[^A-Z0-9._-]+", "-");
     }
 
-    private BomStatus parseStatus(String value) {
-        try {
-            return BomStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
-        } catch (Exception ex) {
-            throw badRequest("Invalid BOM status: " + value);
-        }
-    }
 
     private void requireVersion(Long actual, Long supplied) {
         if (supplied == null || !supplied.equals(actual)) throw conflict("Record changed. Refresh and retry.");
