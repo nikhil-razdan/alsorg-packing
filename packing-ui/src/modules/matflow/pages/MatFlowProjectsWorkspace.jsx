@@ -316,10 +316,6 @@ export function MatFlowProjectsPage() {
       const bomRows = Array.isArray(bomsResponse?.data) ? bomsResponse.data : [];
       setRows(projects);
       setBoms(bomRows);
-      setExpanded((current) => {
-        if (Object.keys(current).length || projects.length === 0) return current;
-        return { [projects[0].id]: true };
-      });
     } catch (requestError) {
       setError(readMatFlowError(requestError, "Unable to load MatFlow Projects."));
     } finally {
@@ -552,7 +548,7 @@ export function MatFlowProjectsPage() {
             const productsWithBom = products.filter(
               (product) => (bomsByFile.get(product.productionFileId) || []).length > 0
             ).length;
-            const isOpen = expanded[project.id] !== false;
+            const isOpen = expanded[project.id] === true;
 
             return (
               <Card key={project.id} sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
