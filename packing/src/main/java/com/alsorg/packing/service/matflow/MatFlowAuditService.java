@@ -37,6 +37,11 @@ public class MatFlowAuditService {
     public void logAsActor(String actor, String entityType, UUID entityId, String action,
             MatFlowProductionFile file, Map<String, ?> details) {
         String auditActor = actor == null || actor.isBlank() ? "SYSTEM" : actor.trim();
+        if (entityId == null) {
+            throw new IllegalStateException("MatFlow audit requires a persisted entity ID for "
+                    + (entityType == null ? "UNKNOWN" : entityType) + " / "
+                    + (action == null ? "UNKNOWN_ACTION" : action));
+        }
         MatFlowAuditLog row = new MatFlowAuditLog();
         row.setEntityType(entityType);
         row.setEntityId(entityId);

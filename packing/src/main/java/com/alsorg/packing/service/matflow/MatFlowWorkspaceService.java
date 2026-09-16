@@ -250,7 +250,7 @@ public class MatFlowWorkspaceService {
         row.setRemarks(request.remarks());
         row.setCreatedBy(accessService.actor());
         row.setUpdatedBy(accessService.actor());
-        designTaskRepository.save(row);
+        row = designTaskRepository.save(row);
 
         invalidateDesignHeadApproval(file);
         file.setCurrentDepartment("DESIGN");
@@ -475,7 +475,7 @@ public class MatFlowWorkspaceService {
         MatFlowWorkItem item = new MatFlowWorkItem(); item.setProductionFile(file); item.setItemType(WorkItemType.ENGINEERING_QUERY);
         item.setItemKey("Q-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT)); item.setSection("Engineering Query"); item.setTitle(request.title()); item.setDescription(request.description());
         item.setCriticality(Criticality.REQUIRED); item.setBlocking(true); item.setStatus(WorkItemStatus.OPEN); item.setAssignedTo(request.assignedTo()); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
-        item.setDisplayOrder((int) (openQueryCount(fileId) + 1)); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        item.setDisplayOrder((int) (openQueryCount(fileId) + 1)); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); item = workRepository.save(item);
         file.setEngineeringDecision(EngineeringDecision.QUERY_RAISED); file.setStage(ProductionFileStage.ENGINEERING_QUERY); file.setCurrentDepartment("DESIGN / ENGINEERING QUERY"); file.setCurrentOwner(request.assignedTo()); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
         auditService.log("WORK_ITEM", item.getId(), "ENGINEERING_QUERY_RAISED", file, auditService.details("title", item.getTitle(), "assignedTo", item.getAssignedTo(), "dueAt", item.getDueAt()));
         return toDetail(file);
@@ -515,7 +515,7 @@ public class MatFlowWorkspaceService {
         item.setCriticality(Criticality.REQUIRED); item.setBlocking(request.blocking()==null || request.blocking()); item.setDisplayOrder(tasks.size()+1);
         String taskOwner = clean(request.assignedTo()) == null ? file.getAssignedEngineer() : request.assignedTo();
         item.setAssignedTo(taskOwner); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
-        item.setStatus(clean(taskOwner)==null?WorkItemStatus.TODO:WorkItemStatus.ASSIGNED); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); workRepository.save(item);
+        item.setStatus(clean(taskOwner)==null?WorkItemStatus.TODO:WorkItemStatus.ASSIGNED); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); item = workRepository.save(item);
         refreshHealth(file); file.setUpdatedBy(accessService.actor()); fileRepository.save(file); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_CREATED",file,auditService.details("key",key,"title",item.getTitle())); return toDetail(file);
     }
 
@@ -560,7 +560,7 @@ public class MatFlowWorkspaceService {
         Path folder=revisionRoot.resolve(fileId.toString()).resolve(type.name()).normalize(); Path target=folder.resolve(UUID.randomUUID()+"-"+original).normalize(); if(!target.startsWith(revisionRoot))throw badRequest("Invalid revision path");
         try { Files.createDirectories(folder); Files.copy(upload.getInputStream(),target,StandardCopyOption.REPLACE_EXISTING); } catch(IOException ex){ throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Unable to save revision file"); }
         MatFlowRevision row=new MatFlowRevision(); row.setProductionFile(file); row.setRevisionType(type); row.setRevisionNo(rev); row.setOriginalFileName(original); row.setContentType(content); row.setStoragePath(target.toString()); row.setSizeBytes(upload.getSize()); row.setChangeSummary(changeSummary); row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor());
-        boolean impact=requiresImpactReview(file,type); row.setRevisionStatus(impact?RevisionStatus.PENDING_IMPACT_REVIEW:RevisionStatus.ACTIVE); if(!impact)row.setActivatedAt(now()); revisionRepository.save(row);
+        boolean impact=requiresImpactReview(file,type); row.setRevisionStatus(impact?RevisionStatus.PENDING_IMPACT_REVIEW:RevisionStatus.ACTIVE); if(!impact)row.setActivatedAt(now()); row = revisionRepository.save(row);
         if(impact){ file.setRevisionReviewRequired(true); file.setStage(ProductionFileStage.REVISION_REVIEW); file.setCurrentDepartment("ENGINEERING"); file.setCurrentOwner(file.getEngineeringHead()); }
         else {
             activateRevision(file,row,false);

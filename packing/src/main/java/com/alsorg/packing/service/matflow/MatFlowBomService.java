@@ -311,7 +311,7 @@ public class MatFlowBomService {
         row.setRemarks(request.remarks());
         row.setCreatedBy(accessService.actor());
         row.setUpdatedBy(accessService.actor());
-        bomRepository.save(row);
+        row = bomRepository.save(row);
         auditService.log("BOM", row.getId(), "BOM_CREATED", file,
                 auditService.details("bomNumber", row.getBomNumber(), "revision", revision));
         return toResponse(row);
@@ -435,7 +435,7 @@ public class MatFlowBomService {
         next.setRemarks(request.remarks());
         next.setCreatedBy(accessService.actor());
         next.setUpdatedBy(accessService.actor());
-        bomRepository.save(next);
+        next = bomRepository.save(next);
 
         int no = 0;
         for (MatFlowBomLine old : lineRepository.findByBom_IdOrderByLineNoAsc(source.getId())) {

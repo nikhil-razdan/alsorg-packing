@@ -124,7 +124,7 @@ public class MatFlowProjectService {
         MatFlowProject row = new MatFlowProject();
         applyProject(row, request);
         row.setCreatedBy(accessService.actor()); row.setUpdatedBy(accessService.actor());
-        projectRepository.save(row);
+        row = projectRepository.save(row);
         auditService.log("PROJECT", row.getId(), "PROJECT_CREATED", null,
                 auditService.details("projectCode", row.getProjectCode(), "plantCode", row.getPlantCode()));
         return toProject(row);
@@ -183,7 +183,7 @@ public class MatFlowProjectService {
             MatFlowProjectDrawing product = new MatFlowProjectDrawing();
             product.setProject(project); applyProduct(product, item);
             product.setCreatedBy(accessService.actor()); product.setUpdatedBy(accessService.actor());
-            productRepository.save(product);
+            product = productRepository.save(product);
             MatFlowProductionFile file = createProductionFile(project, product);
             auditService.log("PRODUCTION_FILE", file.getId(), "PRODUCTION_FILE_CREATED", file,
                     auditService.details("source", "PRODUCT_CREATED", "productionFileNo", file.getProductionFileNo()));
