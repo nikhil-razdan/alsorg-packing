@@ -67,6 +67,9 @@ public final class MatFlowBomDtos {
             LocalDateTime releasedAt,
             Long rowVersion,
             LocalDateTime updatedAt,
+            boolean legacyImported,
+            boolean editable,
+            boolean canCreateRevision,
             List<BomLineResponse> lines) {}
 
     public record BomActionRequest(

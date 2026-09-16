@@ -24,6 +24,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -70,6 +71,7 @@ public class MatFlowProjectService {
      * Production Control and the later Engineering/BOM flow can see legacy data
      * without requiring users to edit or recreate projects.
      */
+    @Order(100)
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void reconcileLegacyProductionFilesOnStartup() {

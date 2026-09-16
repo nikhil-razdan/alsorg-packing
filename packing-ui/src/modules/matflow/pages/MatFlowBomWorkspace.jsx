@@ -308,7 +308,16 @@ export function MatFlowBomListPage() {
             sx={fieldSx}
           >
             <MenuItem value="">All statuses</MenuItem>
-            {["DRAFT", "READY_FOR_RELEASE", "SUPERSEDED"].map((value) => (
+            {[
+              "DRAFT",
+              "SUBMITTED",
+              "PRODUCTION_REVIEW_PENDING",
+              "RETURNED",
+              "APPROVED",
+              "READY_FOR_RELEASE",
+              "RELEASED",
+              "SUPERSEDED",
+            ].map((value) => (
               <MenuItem key={value} value={value}>
                 {readable(value)}
               </MenuItem>
@@ -542,7 +551,8 @@ export function MatFlowBomDetailPage() {
     load();
   }, [load]);
 
-  const editable = bom?.status === "DRAFT";
+  const editable = bom?.editable === true;
+  const canCreateRevision = bom?.canCreateRevision === true;
 
   const groupedSections = useMemo(() => {
     const groups = new Map();
@@ -765,9 +775,9 @@ export function MatFlowBomDetailPage() {
                 Ready for Release
               </Button>
             )}
-            {!editable && bom.status !== "SUPERSEDED" && (
+            {canCreateRevision && (
               <Button onClick={createRevision} disabled={working} sx={primaryBtnSx}>
-                Create Revision
+                {bom.legacyImported ? "Create Current Revision" : "Create Revision"}
               </Button>
             )}
           </Box>
@@ -796,9 +806,16 @@ export function MatFlowBomDetailPage() {
             {bom.latestRevision && (
               <Chip label="Current revision" size="small" sx={softChipSx} />
             )}
+            {bom.legacyImported && (
+              <Chip label="Legacy BOM · preserved" size="small" sx={softChipSx} />
+            )}
           </Box>
           <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>
-            Engineering material structure only · No costing/procurement workflow in this phase
+            {bom.legacyImported
+              ? canCreateRevision
+                ? "Historical BOM preserved exactly · Engineering is approved, so a current editable revision can now be created"
+                : "Historical BOM preserved exactly · Read-only until this Production File reaches approved Engineering Work"
+              : "Engineering material structure only · No costing/procurement workflow in this phase"}
           </Typography>
         </Box>
       </Card>

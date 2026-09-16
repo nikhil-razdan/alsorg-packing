@@ -55,5 +55,20 @@ public final class MatFlowControlTypes {
 
     public enum RevisionStatus { DRAFT, PENDING_IMPACT_REVIEW, ACTIVE, SUPERSEDED, REJECTED }
 
-    public enum BomStatus { DRAFT, READY_FOR_RELEASE, RELEASED, SUPERSEDED }
+    /**
+     * Current BOM workflow uses DRAFT -> READY_FOR_RELEASE -> RELEASED.
+     * The additional values are retained so BOMs created by the previous
+     * MatFlow design can be imported and opened without rewriting their
+     * historical workflow state.
+     */
+    public enum BomStatus {
+        DRAFT,
+        SUBMITTED,
+        PRODUCTION_REVIEW_PENDING,
+        RETURNED,
+        APPROVED,
+        READY_FOR_RELEASE,
+        RELEASED,
+        SUPERSEDED
+    }
 }
