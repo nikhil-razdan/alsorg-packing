@@ -21,6 +21,8 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import { useSearchParams } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
@@ -91,7 +93,7 @@ const TABS_BY_FOCUS = Object.freeze({
     ["overview", "Overview"],
     ["designChecklist", "Checklist"],
     ["designTasks", "Tasks"],
-    ["drawings", "Drawings"],
+    ["drawings", "References"],
     ["queries", "Queries / Issues"],
     ["timeline", "Timeline"],
   ],
@@ -99,7 +101,7 @@ const TABS_BY_FOCUS = Object.freeze({
     ["overview", "Overview"],
     ["engineeringChecklist", "Checklist"],
     ["engineeringTasks", "Tasks"],
-    ["drawings", "Drawings"],
+    ["drawings", "References"],
     ["queries", "Queries / Issues"],
     ["timeline", "Timeline"],
   ],
@@ -152,29 +154,6 @@ const healthVisual = (health) => {
   return { label: "", accent: "var(--mf-border-strong)", border: "var(--mf-border)", soft: "transparent" };
 };
 
-const productionFileListRowSx = (health, selected) => {
-  const visual = healthVisual(health);
-  return {
-    position: "relative",
-    p: 1.35,
-    pl: 1.65,
-    borderBottom: "1px solid var(--mf-border)",
-    cursor: "pointer",
-    background: selected ? "var(--mf-primary-soft)" : "transparent",
-    transition: "background .15s ease, box-shadow .15s ease",
-    "&::before": {
-      content: '""',
-      position: "absolute",
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 3,
-      background: visual.accent,
-    },
-    "&:hover": { background: selected ? "var(--mf-primary-soft)" : visual.soft },
-  };
-};
-
 const productionFileHeaderSx = (health) => {
   const visual = healthVisual(health);
   return {
@@ -184,6 +163,93 @@ const productionFileHeaderSx = (health) => {
     borderLeft: `3px solid ${visual.accent}`,
     boxShadow: `inset 18px 0 28px -30px ${visual.accent}, var(--mf-card-shadow)`,
   };
+};
+
+const HEALTH_RANK = Object.freeze({ RED: 3, AMBER: 2, GREEN: 1 });
+
+const compactDate = (value) => {
+  if (!value) return "—";
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(parsed);
+};
+
+const fileAttention = (row, focus) => {
+  const health = String(row?.releaseHealth || "").toUpperCase();
+  if (["RED", "AMBER"].includes(health)) return true;
+  if (focus === "DESIGN") {
+    return Number(row?.openQueries || 0) > 0
+      || Number(row?.designTaskProgress?.overdue || 0) > 0
+      || Number(row?.designTaskProgress?.hold || 0) > 0;
+  }
+  if (focus === "ENGINEERING") {
+    return Number(row?.openQueries || 0) > 0
+      || Number(row?.engineeringTaskPending || 0) > 0
+      || Boolean(row?.revisionReviewRequired);
+  }
+  if (focus === "PPC") {
+    return ["PPC_GATE_1", "PPC_GATE_2"].includes(String(row?.stage || "").toUpperCase());
+  }
+  return Number(row?.openQueries || 0) > 0;
+};
+
+const worstHealth = (rows) => {
+  const values = (Array.isArray(rows) ? rows : []).map((row) => String(row?.releaseHealth || "").toUpperCase());
+  if (values.includes("RED")) return "RED";
+  if (values.includes("AMBER")) return "AMBER";
+  if (values.includes("GREEN")) return "GREEN";
+  return "";
+};
+
+const buildWorkQueueGroups = (rows, groupBy, focus) => {
+  const groups = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const clientName = clean(row?.clientName) || "Client not assigned";
+    const projectCode = clean(row?.projectCode) || "PD not assigned";
+    const projectName = clean(row?.projectName) || "";
+    const key = groupBy === "CLIENT"
+      ? `CLIENT:${clientName.toUpperCase()}`
+      : `PD:${clientName.toUpperCase()}::${projectCode.toUpperCase()}`;
+    if (!groups.has(key)) {
+      groups.set(key, { key, clientName, projectCode, projectName, rows: [] });
+    }
+    groups.get(key).rows.push(row);
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    const orderedRows = group.rows.slice().sort((left, right) => {
+      const healthDiff = (HEALTH_RANK[String(right?.releaseHealth || "").toUpperCase()] || 0)
+        - (HEALTH_RANK[String(left?.releaseHealth || "").toUpperCase()] || 0);
+      if (healthDiff) return healthDiff;
+      const leftDue = String(left?.plannedProductionReleaseDate || left?.plannedDispatchDate || "9999-12-31");
+      const rightDue = String(right?.plannedProductionReleaseDate || right?.plannedDispatchDate || "9999-12-31");
+      if (leftDue !== rightDue) return leftDue.localeCompare(rightDue);
+      return String(left?.productName || "").localeCompare(String(right?.productName || ""));
+    });
+    const dueDates = orderedRows
+      .map((row) => row?.plannedProductionReleaseDate || row?.plannedDispatchDate)
+      .filter(Boolean)
+      .sort();
+    return {
+      ...group,
+      rows: orderedRows,
+      health: worstHealth(orderedRows),
+      attentionCount: orderedRows.filter((row) => fileAttention(row, focus)).length,
+      fileCount: orderedRows.length,
+      pdCount: new Set(orderedRows.map((row) => clean(row?.projectCode)).filter(Boolean)).size,
+      dueDate: dueDates[0] || null,
+    };
+  }).sort((left, right) => {
+    const healthDiff = (HEALTH_RANK[right.health] || 0) - (HEALTH_RANK[left.health] || 0);
+    if (healthDiff) return healthDiff;
+    if (right.attentionCount !== left.attentionCount) return right.attentionCount - left.attentionCount;
+    const leftDue = left.dueDate || "9999-12-31";
+    const rightDue = right.dueDate || "9999-12-31";
+    if (leftDue !== rightDue) return leftDue.localeCompare(rightDue);
+    const leftName = groupBy === "CLIENT" ? left.clientName : left.projectCode;
+    const rightName = groupBy === "CLIENT" ? right.clientName : right.projectCode;
+    return String(leftName || "").localeCompare(String(rightName || ""));
+  });
 };
 
 const statusSx = {
@@ -224,6 +290,7 @@ const EMPTY_ACTION = {
   blocking: true,
   item: null,
   revision: null,
+  selfTask: false,
 };
 
 const EMPTY_DESIGN_TASK = {
@@ -280,6 +347,9 @@ export function MatFlowWorkWorkspacePage() {
     MATFLOW_ROLES.ENGINEERING,
     MATFLOW_ROLES.ENGINEERING_JUNIOR
   );
+  const juniorEngineerOnly = hasRole(MATFLOW_ROLES.ENGINEERING_JUNIOR)
+    && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING);
+  const canCreateEngineeringTask = canEngineeringReview || juniorEngineerOnly;
   const canSharedQueryWrite = hasRole(
     MATFLOW_ROLES.ADMIN,
     MATFLOW_ROLES.MANAGER,
@@ -322,6 +392,8 @@ export function MatFlowWorkWorkspacePage() {
   const [tab, setTab] = useState("overview");
   const [workspaceView, setWorkspaceView] = useState("FILES");
   const [workspaceFocus, setWorkspaceFocus] = useState(resolvedInitialFocus);
+  const [groupBy, setGroupBy] = useState("PD");
+  const [expandedGroupKey, setExpandedGroupKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -371,7 +443,6 @@ export function MatFlowWorkWorkspacePage() {
           ? rows
           : rows.filter((row) => visibleInFocus(row, workspaceFocus) || row.id === selectedId);
         setFiles(scopedRows);
-        if (!selectedId && scopedRows.length) setSelectedId(scopedRows[0].id);
       } catch (requestError) {
         if (!quiet) setError(readMatFlowError(requestError, "Unable to load Production Files."));
       } finally {
@@ -394,6 +465,29 @@ export function MatFlowWorkWorkspacePage() {
     }
   }, []);
 
+  const queueGroups = useMemo(
+    () => buildWorkQueueGroups(files, groupBy, workspaceFocus),
+    [files, groupBy, workspaceFocus]
+  );
+
+  const queueSummary = useMemo(() => ({
+    clients: new Set(files.map((row) => clean(row?.clientName)).filter(Boolean)).size,
+    pds: new Set(files.map((row) => clean(row?.projectCode)).filter(Boolean)).size,
+    products: files.length,
+    attention: files.filter((row) => fileAttention(row, workspaceFocus)).length,
+  }), [files, workspaceFocus]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const ownerGroup = queueGroups.find((group) => group.rows.some((row) => row.id === selectedId));
+    if (ownerGroup) setExpandedGroupKey(ownerGroup.key);
+  }, [selectedId, queueGroups]);
+
+  useEffect(() => {
+    if (!expandedGroupKey) return;
+    if (!queueGroups.some((group) => group.key === expandedGroupKey)) setExpandedGroupKey("");
+  }, [queueGroups, expandedGroupKey]);
+
   useEffect(() => {
     loadList();
   }, [selectedPlantParam, health, stage, workspaceFocus]);
@@ -410,10 +504,6 @@ export function MatFlowWorkWorkspacePage() {
   };
 
   const file = detail?.productionFile;
-  const designDrawing = useMemo(
-    () => (detail?.revisions || []).find((row) => row.type === "DESIGN_DRAWING" && row.status === "ACTIVE"),
-    [detail?.revisions]
-  );
 
   const execute = async (fn, fallback) => {
     setWorking(true);
@@ -591,7 +681,15 @@ export function MatFlowWorkWorkspacePage() {
       );
     if (a.kind === "TASK_CREATE")
       return execute(
-        () => matflowApi.createEngineeringTask(file.id, { taskKey: a.taskKey, title: a.queryTitle, assignedTo: a.assignedTo, dueAt: a.dueAt || null, priority: a.priority, blocking: a.blocking, description: a.description }),
+        () => matflowApi.createEngineeringTask(file.id, {
+          taskKey: clean(a.taskKey) || `AUTO-${Date.now()}`,
+          title: a.queryTitle,
+          assignedTo: a.selfTask ? null : (clean(a.assignedTo) || null),
+          dueAt: a.dueAt || null,
+          priority: a.priority,
+          blocking: a.selfTask ? false : a.blocking,
+          description: clean(a.description) || null,
+        }),
         "Unable to create Engineering task."
       );
     if (a.kind === "TASK_STATUS")
@@ -612,7 +710,7 @@ export function MatFlowWorkWorkspacePage() {
   };
 
   const uploadRevision = async () => {
-    if (!revisionFile || !revisionNo) return setError("Revision number and file are required.");
+    if (!revisionFile || !revisionNo) return setError("Choose a file and revision number only when you want to add an optional reference.");
     await execute(
       () => matflowApi.uploadRevision(file.id, { type: revisionType, revisionNo, changeSummary: revisionSummary, file: revisionFile }),
       "Unable to upload revision."
@@ -642,12 +740,12 @@ export function MatFlowWorkWorkspacePage() {
         title={workspaceFocus === "DESIGN" ? "Design Work" : workspaceFocus === "ENGINEERING" ? "Engineering Work" : workspaceFocus === "PPC" ? "PPC Control" : "Work"}
         subtitle={
           workspaceFocus === "DESIGN"
-            ? "Checklist, assigned tasks, drawings and shared queries for the selected Product / PD."
+            ? "Start with Client / PD, then open the Product that needs Design action."
             : workspaceFocus === "ENGINEERING"
-              ? "Technical checklist, engineering tasks, drawings and shared queries for the selected Product / PD."
+              ? "Start with Client / PD, then open the Product that needs Engineering action."
               : workspaceFocus === "PPC"
-                ? "Gate decisions and handoff status for the selected Product / PD."
-                : "Switch department focus while keeping one Product / PD Production File."
+                ? "Review Client / PD queues first, then open the Product for the required gate decision."
+                : "Client / PD-first work queue with one controlled Production File per Product / Drawing."
         }
         actions={(
           <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
@@ -671,9 +769,20 @@ export function MatFlowWorkWorkspacePage() {
         <DesignTaskDesk selectedPlantParam={selectedPlantParam} onOpenFile={(fileId) => { setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
       ) : (
       <>
-      <Card sx={{ ...panelSx, p: 1.35 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1.3fr auto" }, gap: 1 }}>
-          <TextField size="small" label="Search Product Name / PD No. / File / Drawing" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadList()} sx={fieldSx} />
+      <Card sx={{ ...panelSx, p: 1.2 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "minmax(260px,2fr) 135px 165px minmax(180px,1fr) auto" }, gap: 0.8 }}>
+          <TextField
+            size="small"
+            label="Search PD No. / Client / Project / Product / Drawing"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && loadList()}
+            sx={fieldSx}
+          />
+          <TextField select size="small" label="View by" value={groupBy} onChange={(e) => { setGroupBy(e.target.value); setExpandedGroupKey(""); }} sx={fieldSx}>
+            <MenuItem value="PD">PD No.</MenuItem>
+            <MenuItem value="CLIENT">Client</MenuItem>
+          </TextField>
           <TextField select size="small" label="Health" value={health} onChange={(e) => setHealth(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {HEALTH_FILTERS.map((option) => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -688,48 +797,177 @@ export function MatFlowWorkWorkspacePage() {
         </Box>
       </Card>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "360px minmax(0,1fr)" }, gap: 1.3, alignItems: "start" }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "430px minmax(0,1fr)" }, gap: 1.2, alignItems: "start" }}>
         <Card sx={{ ...panelSx, p: 0, maxHeight: { xl: "calc(100vh - 210px)" }, overflow: "auto" }}>
-          {files.length === 0 ? (
-            <Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No Production Files found.</Box>
-          ) : files.map((row) => (
-            <Box key={row.id} onClick={() => setSelectedId(row.id)} sx={productionFileListRowSx(row.releaseHealth, selectedId === row.id)}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
-                <MatFlowProductIdentity
-                  productName={row.productName}
-                  projectCode={row.projectCode}
-                  productionFileNo={row.productionFileNo}
-                  drawingNo={row.drawingNo}
-                  size="md"
-                  sx={{ flex: 1 }}
-                />
-                {healthVisual(row.releaseHealth).label && (
-                  <Typography sx={{ color: healthVisual(row.releaseHealth).accent, fontWeight: 900, fontSize: 9.4, whiteSpace: "nowrap" }}>
-                    {healthVisual(row.releaseHealth).label}
-                  </Typography>
+          <Box sx={{ px: 1.25, py: 1.05, borderBottom: "1px solid var(--mf-border)", display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+            <Box>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>
+                {groupBy === "PD" ? "PD Work Queue" : "Client Work Queue"}
+              </Typography>
+              <Typography sx={{ mt: 0.1, fontSize: 9.3, color: "var(--mf-text-muted)" }}>
+                {queueGroups.length} group{queueGroups.length === 1 ? "" : "s"} · attention first
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: 9.3, fontWeight: 800, color: "var(--mf-text-muted)" }}>
+              {queueSummary.products} product{queueSummary.products === 1 ? "" : "s"}
+            </Typography>
+          </Box>
+
+          {queueGroups.length === 0 ? (
+            <Box sx={{ p: 3, color: "var(--mf-text-muted)", textAlign: "center" }}>No work matches the current filters.</Box>
+          ) : queueGroups.map((group) => {
+            const visual = healthVisual(group.health);
+            const expanded = expandedGroupKey === group.key;
+            return (
+              <Box key={group.key} sx={{ borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedGroupKey(expanded ? "" : group.key)}
+                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); setExpandedGroupKey(expanded ? "" : group.key); } }}
+                  sx={{
+                    position: "relative",
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0,1fr) auto",
+                    gap: 1,
+                    px: 1.25,
+                    py: 1.05,
+                    pl: 1.55,
+                    cursor: "pointer",
+                    background: expanded ? "var(--mf-surface)" : "var(--mf-panel-solid)",
+                    "&:hover": { background: "var(--mf-hover)" },
+                    "&::before": { content: '""', position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: visual.accent },
+                  }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 9, fontWeight: 850, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                      {groupBy === "PD" ? group.clientName : `${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                    </Typography>
+                    <Typography noWrap sx={{ mt: 0.15, fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>
+                      {groupBy === "PD" ? group.projectCode : group.clientName}
+                    </Typography>
+                    <Typography noWrap sx={{ mt: 0.12, fontSize: 9.6, color: "var(--mf-text-secondary)" }}>
+                      {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.65, textAlign: "right" }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 9.2, fontWeight: 900, color: group.attentionCount ? visual.accent : "var(--mf-success-text)" }}>
+                        {group.attentionCount ? `${group.attentionCount} need action` : "On track"}
+                      </Typography>
+                      <Typography sx={{ mt: 0.18, fontSize: 8.8, color: "var(--mf-text-muted)" }}>
+                        {group.fileCount} product{group.fileCount === 1 ? "" : "s"} · due {compactDate(group.dueDate)}
+                      </Typography>
+                    </Box>
+                    {expanded ? <ExpandMoreRoundedIcon sx={{ fontSize: 18, color: "var(--mf-text-muted)" }} /> : <ChevronRightRoundedIcon sx={{ fontSize: 18, color: "var(--mf-text-muted)" }} />}
+                  </Box>
+                </Box>
+
+                {expanded && (
+                  <Box sx={{ background: "var(--mf-panel-solid)" }}>
+                    {group.rows.map((row) => {
+                      const rowVisual = healthVisual(row.releaseHealth);
+                      const selected = selectedId === row.id;
+                      return (
+                        <Box
+                          key={row.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedId(row.id)}
+                          onKeyDown={(event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); setSelectedId(row.id); } }}
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: "9px minmax(0,1fr) auto",
+                            gap: 0.75,
+                            alignItems: "center",
+                            px: 1.2,
+                            py: 0.85,
+                            borderTop: "1px solid var(--mf-border)",
+                            cursor: "pointer",
+                            background: selected ? "var(--mf-primary-soft)" : "transparent",
+                            "&:hover": { background: selected ? "var(--mf-primary-soft)" : "var(--mf-hover)" },
+                          }}
+                        >
+                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: rowVisual.accent }} />
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography noWrap sx={{ fontSize: 10.8, fontWeight: selected ? 950 : 850, color: "var(--mf-text)" }}>
+                              {row.productName || "Unnamed Product"}
+                            </Typography>
+                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+                              {groupBy === "CLIENT" ? `${row.projectCode || "No PD"} · ` : ""}{row.drawingNo || "No drawing"} · {row.productionFileNo}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ textAlign: "right", minWidth: 90 }}>
+                            <Typography sx={{ fontSize: 8.9, fontWeight: 850, color: rowVisual.accent }}>{readable(row.stage)}</Typography>
+                            <Typography sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography>
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
                 )}
               </Box>
-              <Typography sx={{ mt: 0.28, color: "var(--mf-text-muted)", fontSize: 9.7 }}>{readable(row.stage)}</Typography>
-              {row.currentOwner && <Typography sx={{ mt: 0.28, color: "var(--mf-text-muted)", fontSize: 9.7 }}>Owner: {row.currentOwner}</Typography>}
-            </Box>
-          ))}
+            );
+          })}
         </Card>
 
         {!detail ? (
-          <Card sx={{ ...panelSx, p: 4, textAlign: "center", color: "var(--mf-text-muted)" }}>Select a Production File.</Card>
+          <Card sx={{ ...panelSx, p: { xs: 2.2, md: 3 }, minHeight: 270 }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 950, color: "var(--mf-text)" }}>Choose a Product from the work queue</Typography>
+            <Typography sx={{ mt: 0.35, maxWidth: 650, fontSize: 10.5, lineHeight: 1.55, color: "var(--mf-text-muted)" }}>
+              Work now starts from Client / PD context. Expand the relevant group, then open only the Product / Drawing you want to work on. Direct links from Projects, notifications and reports still open the exact Production File.
+            </Typography>
+            <Box sx={{ mt: 2, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.75 }}>
+              {[
+                ["Clients", queueSummary.clients],
+                ["PDs", queueSummary.pds],
+                ["Products", queueSummary.products],
+                ["Need action", queueSummary.attention],
+              ].map(([label, value]) => (
+                <Box key={label} sx={{ py: 1, borderTop: "1px solid var(--mf-border)" }}>
+                  <Typography sx={{ fontSize: 17, fontWeight: 950, color: label === "Need action" && Number(value) ? "var(--mf-warning-text)" : "var(--mf-text)" }}>{value}</Typography>
+                  <Typography sx={{ mt: 0.15, fontSize: 9.2, fontWeight: 800, color: "var(--mf-text-muted)" }}>{label}</Typography>
+                </Box>
+              ))}
+            </Box>
+            {queueGroups.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography sx={{ fontSize: 9.2, fontWeight: 900, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>Attention order</Typography>
+                <Box sx={{ mt: 0.6, display: "grid", gap: 0.45 }}>
+                  {queueGroups.slice(0, 4).map((group) => {
+                    const visual = healthVisual(group.health);
+                    return (
+                      <Box key={group.key} sx={{ display: "flex", alignItems: "center", gap: 0.7, py: 0.45 }}>
+                        <Box sx={{ width: 7, height: 7, borderRadius: "50%", background: visual.accent }} />
+                        <Typography sx={{ minWidth: 0, flex: 1, fontSize: 10.2, fontWeight: 850, color: "var(--mf-text)" }}>
+                          {groupBy === "PD" ? `${group.projectCode} · ${group.clientName}` : group.clientName}
+                        </Typography>
+                        <Typography sx={{ fontSize: 9, color: "var(--mf-text-muted)" }}>{group.attentionCount ? `${group.attentionCount} need action` : "On track"}</Typography>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+          </Card>
         ) : (
           <Box sx={{ minWidth: 0 }}>
             <Card sx={productionFileHeaderSx(file.releaseHealth)}>
               <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1.2 }}>
-                <MatFlowProductIdentity
-                  productName={file.productName}
-                  projectCode={file.projectCode}
-                  productionFileNo={file.productionFileNo}
-                  drawingNo={file.drawingNo}
-                  projectName={file.projectName}
-                  showProjectName
-                  size="hero"
-                />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ mb: 0.35, fontSize: 9.2, fontWeight: 900, letterSpacing: ".045em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                    {file.clientName || "Client not assigned"}
+                  </Typography>
+                  <MatFlowProductIdentity
+                    productName={file.productName}
+                    projectCode={file.projectCode}
+                    productionFileNo={file.productionFileNo}
+                    drawingNo={file.drawingNo}
+                    projectName={file.projectName}
+                    showProjectName
+                    size="hero"
+                  />
+                </Box>
                 <Box sx={{ display: "flex", gap: 0.7, alignItems: "center", flexWrap: "wrap" }}>
                   {healthVisual(file.releaseHealth).label && (
                     <Typography sx={{ color: healthVisual(file.releaseHealth).accent, fontSize: 10, fontWeight: 900 }}>
@@ -794,7 +1032,7 @@ export function MatFlowWorkWorkspacePage() {
                   canClose={canSharedQueryClose}
                   setAction={setAction}
                 />}
-                {tab === "engineeringTasks" && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canWork={canEngineeringTask} setAction={setAction} />}
+                {tab === "engineeringTasks" && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canCreateSelf={juniorEngineerOnly} canCreate={canCreateEngineeringTask} canWork={canEngineeringTask} setAction={setAction} />}
                 {tab === "timeline" && <Timeline rows={timelineForFocus(detail.timeline, workspaceFocus)} />}
               </Box>
             </Card>
@@ -1254,13 +1492,111 @@ function Queries({ items, canCreate, canRespond, canClose, setAction }) {
   return <Box><Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Design ↔ Engineering Queries / Issues</Typography>{canCreate && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Query / Issue to Design" })}>New Query / Issue</Button>}</Box>{items.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No shared queries or issues.</Box> : items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.3, mb: 0.8 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--mf-text-muted)" }}>{item.description}</Typography></Box><Chip label={item.status} sx={statusSx} /></Box><Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 1, fontSize: 10, color: "var(--mf-text-muted)" }}><span>Assigned: {item.assignedTo || "—"}</span><span>Due: {toDateTime(item.dueAt)}</span><span>Priority: {item.priority}</span></Box>{item.responseText && <Alert severity="info" sx={{ mt: 0.8 }}>Response: {item.responseText}</Alert>}<Box sx={{ mt: 0.8, display: "flex", gap: 0.6 }}>{canRespond && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_RESPOND", title: "Respond to Query", item })}>Respond</Button>}{canClose && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CLOSE", title: "Close Query", item })}>Close</Button>}</Box></Card>)}</Box>;
 }
 
-function Tasks({ items, canManage, canWork, setAction }) {
-  return <Box><Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Documentation Tasks</Typography>{canManage && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_CREATE", title: "Add Engineering Task" })}>Add Task</Button>}</Box><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 0.8 }}>{items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.2 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{item.key} · {item.blocking ? "Release blocking" : "Non-blocking"}</Typography></Box><Chip label={readable(item.status)} sx={statusSx} /></Box><Typography sx={{ mt: 0.7, fontSize: 10, color: "var(--mf-text-muted)" }}>Owner: {item.assignedTo || "Unassigned"} · Due: {toDateTime(item.dueAt)}</Typography><Typography sx={{ mt: 0.25, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Started: {toDateTime(item.startedAt)} · Revision: {item.revisionContext || "—"} · Completed: {toDateTime(item.completedAt)}</Typography>{canWork && !["COMPLETE", "NOT_APPLICABLE", "CANCELLED"].includes(item.status) && <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, flexWrap: "wrap" }}>{["IN_PROGRESS", "BLOCKED", "COMPLETE", "NOT_APPLICABLE"].map((status) => <Button key={status} size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: ${readable(status)}`, decision: status, item })}>{readable(status)}</Button>)}</Box>}</Card>)}</Box></Box>;
+function Tasks({ items, canManage, canCreateSelf, canCreate, canWork, setAction }) {
+  const openCreate = () => setAction({
+    ...EMPTY_ACTION,
+    kind: "TASK_CREATE",
+    title: canCreateSelf && !canManage ? "Add My Engineering Task" : "Add Engineering Task",
+    selfTask: canCreateSelf && !canManage,
+    blocking: canCreateSelf && !canManage ? false : true,
+    priority: "NORMAL",
+  });
+
+  return (
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, mb: 1 }}>
+        <Box>
+          <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Tasks</Typography>
+          <Typography sx={{ mt: 0.15, fontSize: 9.7, color: "var(--mf-text-muted)" }}>
+            {canCreateSelf && !canManage
+              ? "Add your own non-blocking work items; senior Engineering users control delegated/release-blocking tasks."
+              : "Engineering Head / Engineer can delegate work; Junior Engineers can maintain their own tasks."}
+          </Typography>
+        </Box>
+        {canCreate && (
+          <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={openCreate}>
+            {canCreateSelf && !canManage ? "Add My Task" : "Add Task"}
+          </Button>
+        )}
+      </Box>
+      {!items.length ? (
+        <Box sx={{ p: 2.2, textAlign: "center", color: "var(--mf-text-muted)", fontSize: 10.5 }}>No Engineering tasks yet.</Box>
+      ) : (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 0.8 }}>
+          {items.map((item) => (
+            <Card key={item.id} sx={{ ...panelSx, p: 1.2, boxShadow: "none" }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+                <Box>
+                  <Typography sx={{ fontSize: 11.5, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography>
+                  <Typography sx={{ fontSize: 9.5, color: "var(--mf-text-muted)" }}>{item.key} · {item.blocking ? "Release blocking" : "Personal / non-blocking"}</Typography>
+                </Box>
+                <Chip label={readable(item.status)} sx={statusSx} />
+              </Box>
+              <Typography sx={{ mt: 0.7, fontSize: 10, color: "var(--mf-text-muted)" }}>Owner: {item.assignedTo || "Unassigned"} · Due: {toDateTime(item.dueAt)}</Typography>
+              <Typography sx={{ mt: 0.25, fontSize: 9.5, color: "var(--mf-text-muted)" }}>Started: {toDateTime(item.startedAt)} · Completed: {toDateTime(item.completedAt)}</Typography>
+              {canWork && !["COMPLETE", "NOT_APPLICABLE", "CANCELLED"].includes(item.status) && (
+                <Box sx={{ mt: 0.8, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                  {["IN_PROGRESS", "BLOCKED", "COMPLETE", "NOT_APPLICABLE"].map((status) => (
+                    <Button key={status} size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "TASK_STATUS", title: `Set ${item.title}: ${readable(status)}`, decision: status, item })}>
+                      {readable(status)}
+                    </Button>
+                  ))}
+                </Box>
+              )}
+            </Card>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 function Revisions({ file, rows, canUploadDesign, canUploadEngineering, revisionType, setRevisionType, revisionNo, setRevisionNo, summary, setSummary, setFile, upload, openRevision, canReview, setAction, working }) {
   const canUpload = canUploadDesign || canUploadEngineering;
-  return <Box><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Immutable Drawing Revisions</Typography><Typography sx={{ mt: 0.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>Drawing revisions stay attached to this Product / PD Production File. Previous revisions remain available for traceability.</Typography>{canUpload && <Card sx={{ ...panelSx, p: 1.2, mt: 1.1 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "180px 130px 1fr auto auto" }, gap: 0.8, alignItems: "center" }}><TextField select size="small" label="Type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}>{canUploadDesign && <MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem>}{canUploadEngineering && <MenuItem value="ENGINEERING_DRAWING">Production / Engineering Drawing</MenuItem>}</TextField><TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} /><TextField size="small" label="Change summary" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} /><Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button><Button disabled={working} onClick={upload} sx={primaryBtnSx}>Upload</Button></Box></Card>}<Box sx={{ mt: 1 }}>{rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No revisions uploaded.</Box> : rows.map((row) => <Box key={row.id} sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 160px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.type)}</Typography><Typography sx={{ fontSize: 11, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography><Typography sx={{ fontSize: 10, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography><Chip label={readable(row.status)} sx={statusSx} /><Box sx={{ display: "flex", gap: 0.5 }}><Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>{canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}</Box></Box>)}</Box>{file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>The previous Production Release is invalidated by an accepted revision. Engineering and PPC Gate 2 must run again.</Alert>}</Box>;
+  return (
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <Box>
+          <Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Optional References</Typography>
+          <Typography sx={{ mt: 0.2, fontSize: 10.3, color: "var(--mf-text-muted)" }}>
+            Drawings and attachments are optional supporting references. They are not required to complete Design, Engineering or Production Release gates.
+          </Typography>
+        </Box>
+      </Box>
+      {canUpload && (
+        <Card sx={{ ...panelSx, p: 1.1, mt: 1, boxShadow: "none" }}>
+          <Typography sx={{ mb: 0.75, fontSize: 9.5, fontWeight: 850, color: "var(--mf-text-muted)" }}>Add a reference only when it is useful</Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "170px 120px 1fr auto auto" }, gap: 0.7, alignItems: "center" }}>
+            <TextField select size="small" label="Reference type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}>
+              {canUploadDesign && <MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem>}
+              {canUploadEngineering && <MenuItem value="ENGINEERING_DRAWING">Engineering Drawing</MenuItem>}
+            </TextField>
+            <TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} />
+            <TextField size="small" label="Reference note" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} />
+            <Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose File<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button>
+            <Button disabled={working} onClick={upload} sx={secondaryBtnSx}>Add</Button>
+          </Box>
+        </Card>
+      )}
+      <Box sx={{ mt: 1 }}>
+        {rows.length === 0 ? (
+          <Box sx={{ p: 2.2, textAlign: "center", color: "var(--mf-text-muted)", fontSize: 10.5 }}>No optional references added.</Box>
+        ) : rows.map((row) => (
+          <Box key={row.id} sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 150px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}>
+            <Typography sx={{ fontSize: 10.5, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row.type)}</Typography>
+            <Typography sx={{ fontSize: 10.5, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography>
+            <Typography sx={{ fontSize: 9.8, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography>
+            <Chip label={readable(row.status)} sx={statusSx} />
+            <Box sx={{ display: "flex", gap: 0.5 }}>
+              <Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>
+              {canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+      {file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>An optional reference revision changed after release and its accepted impact invalidated the previous Production Release. Engineering and PPC Gate 2 must revalidate it.</Alert>}
+    </Box>
+  );
 }
 
 function Timeline({ rows }) {
@@ -1270,7 +1606,7 @@ function Timeline({ rows }) {
 function DesignTaskDialog({ value, setValue, working, onSave }) {
   const open = Boolean(value);
   if (!value) return null;
-  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / exact drawing work" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Junior Designer / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
+  return <Dialog open={open} onClose={() => !working && setValue(null)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{value.mode === "edit" ? "Edit Design Task" : "Delegate Design Task"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.1, mt: 0.5 }}><TextField select label="Task Type" value={value.taskType} onChange={(e) => setValue((row) => ({ ...row, taskType: e.target.value }))} sx={fieldSx}>{DESIGN_TASK_TYPES.map((type) => <MenuItem key={type} value={type}>{readable(type)}</MenuItem>)}</TextField><TextField select label="Priority" value={value.priority} onChange={(e) => setValue((row) => ({ ...row, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField label="Task Title *" value={value.title} onChange={(e) => setValue((row) => ({ ...row, title: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Description / task details" multiline minRows={3} value={value.description} onChange={(e) => setValue((row) => ({ ...row, description: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField label="Junior Designer / Design team assignees *" multiline minRows={2} helperText="Comma separated. One task may be shared by multiple members." value={value.assigneesText} onChange={(e) => setValue((row) => ({ ...row, assigneesText: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} /><TextField type="datetime-local" label="Received Date / Time" InputLabelProps={{ shrink: true }} value={value.receivedAt} onChange={(e) => setValue((row) => ({ ...row, receivedAt: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={value.dueAt} onChange={(e) => setValue((row) => ({ ...row, dueAt: e.target.value }))} sx={fieldSx} /><TextField select label="Blocks Design Handoff?" value={value.blocking} onChange={(e) => setValue((row) => ({ ...row, blocking: e.target.value }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField><TextField label="Remarks" value={value.remarks} onChange={(e) => setValue((row) => ({ ...row, remarks: e.target.value }))} sx={fieldSx} /></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={() => setValue(null)} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working} onClick={onSave} sx={primaryBtnSx}>{value.mode === "edit" ? "Save Task" : "Delegate Task"}</Button></DialogActions></Dialog>;
 }
 
 function DesignTaskStatusDialog({ value, setValue, working, onSave }) {
@@ -1282,5 +1618,5 @@ function ActionDialog({ action, setAction, working, submit }) {
   const open = Boolean(action.kind);
   const close = () => !working && setAction(EMPTY_ACTION);
   const needsDecision = ["DESIGN_HEAD_REVIEW", "PPC1", "ENG_DECISION", "TASK_STATUS", "REVISION_IMPACT", "PPC2"].includes(action.kind);
-  return <Dialog open={open} onClose={close} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action.title || "MatFlow Action"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.1, mt: 0.5 }}>{action.kind === "DESIGN_HEAD_REVIEW" && <TextField label={action.decision === "RETURN" ? "Return reason *" : "Design Head review remarks"} multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "DESIGN_SUBMIT" && <TextField label="Controlled Release reason (mandatory when the checklist requires attention)" multiline minRows={3} value={action.controlledReleaseReason} onChange={(e) => setAction((value) => ({ ...value, controlledReleaseReason: e.target.value }))} sx={fieldSx} />}{action.kind === "PPC1" && action.decision === "ACCEPT" && <TextField label="Assign Engineer / username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} />}{["PPC1", "ENG_DECISION", "PPC2"].includes(action.kind) && <TextField label="Remarks" multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CREATE" && <><TextField label="Query title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Detail" multiline minRows={3} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to / Designer username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due" InputLabelProps={{ shrink: true }} value={action.dueAt} onChange={(e) => setAction((value) => ({ ...value, dueAt: e.target.value }))} sx={fieldSx} /></>}{action.kind === "QUERY_RESPOND" && <TextField label="Response" multiline minRows={4} value={action.response} onChange={(e) => setAction((value) => ({ ...value, response: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CLOSE" && <TextField label="Closure note" multiline minRows={3} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "TASK_CREATE" && <><TextField label="Task key" value={action.taskKey} onChange={(e) => setAction((value) => ({ ...value, taskKey: e.target.value }))} sx={fieldSx} /><TextField label="Task title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField label="Description" multiline minRows={2} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /></>}{action.kind === "TASK_STATUS" && <TextField label="Note / reason" multiline minRows={2} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "REVISION_IMPACT" && <><TextField select label="Decision" value={action.decision} onChange={(e) => setAction((value) => ({ ...value, decision: e.target.value }))} sx={fieldSx}><MenuItem value="ACCEPT">Accept and revalidate</MenuItem><MenuItem value="REJECT">Reject revision</MenuItem></TextField><TextField label="Impact assessment / note" multiline minRows={4} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} /></>}{needsDecision && action.kind !== "REVISION_IMPACT" && <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>Decision: <b>{readable(action.decision)}</b></Typography>}</Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={close} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || (action.kind === "DESIGN_HEAD_REVIEW" && action.decision === "RETURN" && !String(action.remarks || "").trim())} onClick={submit} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>;
+  return <Dialog open={open} onClose={close} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}><DialogTitle sx={dialogTitleSx}>{action.title || "MatFlow Action"}</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{ display: "grid", gap: 1.1, mt: 0.5 }}>{action.kind === "DESIGN_HEAD_REVIEW" && <TextField label={action.decision === "RETURN" ? "Return reason *" : "Design Head review remarks"} multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "DESIGN_SUBMIT" && <TextField label="Controlled Release reason (mandatory when the checklist requires attention)" multiline minRows={3} value={action.controlledReleaseReason} onChange={(e) => setAction((value) => ({ ...value, controlledReleaseReason: e.target.value }))} sx={fieldSx} />}{action.kind === "PPC1" && action.decision === "ACCEPT" && <TextField label="Assign Engineer / username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} />}{["PPC1", "ENG_DECISION", "PPC2"].includes(action.kind) && <TextField label="Remarks" multiline minRows={3} value={action.remarks} onChange={(e) => setAction((value) => ({ ...value, remarks: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CREATE" && <><TextField label="Query title" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} /><TextField label="Detail" multiline minRows={3} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /><TextField label="Assigned to / Designer username" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} /><TextField type="datetime-local" label="Due" InputLabelProps={{ shrink: true }} value={action.dueAt} onChange={(e) => setAction((value) => ({ ...value, dueAt: e.target.value }))} sx={fieldSx} /></>}{action.kind === "QUERY_RESPOND" && <TextField label="Response" multiline minRows={4} value={action.response} onChange={(e) => setAction((value) => ({ ...value, response: e.target.value }))} sx={fieldSx} />}{action.kind === "QUERY_CLOSE" && <TextField label="Closure note" multiline minRows={3} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "TASK_CREATE" && <><TextField label="Task title *" value={action.queryTitle} onChange={(e) => setAction((value) => ({ ...value, queryTitle: e.target.value }))} sx={fieldSx} />{action.selfTask ? <Box sx={{ px: 1.1, py: 0.9, border: "1px solid var(--mf-border)", borderRadius: 1.1, background: "var(--mf-surface)" }}><Typography sx={{ fontSize: 9.2, fontWeight: 850, color: "var(--mf-text-muted)" }}>ASSIGNEE</Typography><Typography sx={{ mt: 0.15, fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>You</Typography><Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>Junior Engineer self-created tasks are non-blocking.</Typography></Box> : <TextField label="Assign to Engineer / Junior Engineer" value={action.assignedTo} onChange={(e) => setAction((value) => ({ ...value, assignedTo: e.target.value }))} sx={fieldSx} />}<TextField select label="Priority" value={action.priority} onChange={(e) => setAction((value) => ({ ...value, priority: e.target.value }))} sx={fieldSx}><MenuItem value="LOW">Low</MenuItem><MenuItem value="NORMAL">Normal</MenuItem><MenuItem value="HIGH">High</MenuItem><MenuItem value="URGENT">Urgent</MenuItem></TextField><TextField type="datetime-local" label="Due Date / Time" InputLabelProps={{ shrink: true }} value={action.dueAt} onChange={(e) => setAction((value) => ({ ...value, dueAt: e.target.value }))} sx={fieldSx} />{!action.selfTask && <TextField select label="Blocks Engineering Handoff?" value={String(action.blocking)} onChange={(e) => setAction((value) => ({ ...value, blocking: e.target.value === "true" }))} sx={fieldSx}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField>}<TextField label="Description" multiline minRows={2} value={action.description} onChange={(e) => setAction((value) => ({ ...value, description: e.target.value }))} sx={fieldSx} /></>}{action.kind === "TASK_STATUS" && <TextField label="Note / reason" multiline minRows={2} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} />}{action.kind === "REVISION_IMPACT" && <><TextField select label="Decision" value={action.decision} onChange={(e) => setAction((value) => ({ ...value, decision: e.target.value }))} sx={fieldSx}><MenuItem value="ACCEPT">Accept and revalidate</MenuItem><MenuItem value="REJECT">Reject revision</MenuItem></TextField><TextField label="Impact assessment / note" multiline minRows={4} value={action.note} onChange={(e) => setAction((value) => ({ ...value, note: e.target.value }))} sx={fieldSx} /></>}{needsDecision && action.kind !== "REVISION_IMPACT" && <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>Decision: <b>{readable(action.decision)}</b></Typography>}</Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={close} sx={secondaryBtnSx}>Cancel</Button><Button disabled={working || (action.kind === "DESIGN_HEAD_REVIEW" && action.decision === "RETURN" && !String(action.remarks || "").trim())} onClick={submit} sx={primaryBtnSx}>Confirm</Button></DialogActions></Dialog>;
 }

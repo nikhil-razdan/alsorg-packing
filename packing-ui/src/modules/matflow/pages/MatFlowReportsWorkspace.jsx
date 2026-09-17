@@ -10,8 +10,6 @@ import {
   EmptyState,
   ErrorBox,
   LoadingBlock,
-  MATFLOW_ROLES,
-  MatFlowProductIdentity,
   PageHero,
   fieldSx,
   getMatFlowDepartmentAccess,
@@ -133,8 +131,96 @@ function reportTitle(type) {
   }[type] || "MatFlow Department Report";
 }
 
+
+const pageColumns = (type) => {
+  const identity = [
+    { key: "productName", label: "Product", width: "190px" },
+    { key: "projectCode", label: "PD No.", width: "120px" },
+    { key: "clientName", label: "Client", width: "170px" },
+    { key: "projectName", label: "Project", width: "180px" },
+  ];
+  if (type === REPORTS.DESIGN) return [
+    ...identity,
+    { key: "task", label: "Task", width: "240px" },
+    { key: "assignedBy", label: "Assigned By", width: "150px" },
+    { key: "assignee", label: "Assigned To", width: "190px" },
+    { key: "status", label: "Status", width: "115px" },
+    { key: "receivedAt", label: "Received", width: "165px" },
+    { key: "dueAt", label: "Due", width: "165px" },
+    { key: "completedAt", label: "Completed", width: "165px" },
+    { key: "action", label: "", width: "82px" },
+  ];
+  if (type === REPORTS.ENGINEERING) return [
+    ...identity,
+    { key: "task", label: "Engineering Task", width: "240px" },
+    { key: "assignee", label: "Assigned Engineer", width: "180px" },
+    { key: "status", label: "Status", width: "115px" },
+    { key: "priority", label: "Priority", width: "105px" },
+    { key: "dueAt", label: "Due", width: "165px" },
+    { key: "startedAt", label: "Started", width: "165px" },
+    { key: "completedAt", label: "Completed", width: "165px" },
+    { key: "action", label: "", width: "82px" },
+  ];
+  if (type === REPORTS.QUERIES) return [
+    ...identity,
+    { key: "task", label: "Query / Issue", width: "260px" },
+    { key: "assignee", label: "Assigned To", width: "180px" },
+    { key: "status", label: "Status", width: "115px" },
+    { key: "priority", label: "Priority", width: "105px" },
+    { key: "dueAt", label: "Due", width: "165px" },
+    { key: "updatedAt", label: "Last Updated", width: "165px" },
+    { key: "action", label: "", width: "82px" },
+  ];
+  return [
+    ...identity,
+    { key: "stage", label: "Stage", width: "165px" },
+    { key: "ppcOwner", label: "PPC Owner", width: "160px" },
+    { key: "ppcGate1Decision", label: "Gate 1", width: "115px" },
+    { key: "ppcGate2Decision", label: "Gate 2", width: "115px" },
+    { key: "plannedProductionReleaseDate", label: "Planned Release", width: "145px" },
+    { key: "productionReleasedAt", label: "Released At", width: "165px" },
+    { key: "action", label: "", width: "82px" },
+  ];
+};
+
+const reportStatusColor = (row) => {
+  const status = String(row?.status || row?.stage || "").toUpperCase();
+  const due = safeDate(row?.dueAt);
+  const overdue = due && due < new Date() && !CLOSED.has(status);
+  if (overdue || ["BLOCKED", "HOLD", "CANCELLED"].includes(status)) return "var(--mf-danger-text)";
+  if (["DONE", "COMPLETE", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  if (["IN_PROGRESS", "WORKING", "ASSIGNED", "RESPONDED"].includes(status)) return "var(--mf-primary-text)";
+  return "var(--mf-text-secondary)";
+};
+
+const reportRowAccent = (row) => {
+  const due = safeDate(row?.dueAt);
+  if (due && due < new Date() && !CLOSED.has(String(row?.status || "").toUpperCase())) return "var(--mf-danger-text)";
+  const status = String(row?.status || row?.stage || "").toUpperCase();
+  if (["BLOCKED", "HOLD"].includes(status)) return "var(--mf-warning-text)";
+  if (["DONE", "COMPLETE", "CLOSED", "PRODUCTION_RELEASED"].includes(status)) return "var(--mf-success-text)";
+  return "transparent";
+};
+
+const pageCellValue = (row, key, type) => {
+  if (key === "task") return (
+    <Box>
+      <Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{row.taskTitle || "—"}</Typography>
+      <Typography sx={{ mt: 0.1, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.taskNo || row.taskKey || readable(row.taskType || "")}</Typography>
+    </Box>
+  );
+  if (key === "status") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{readable(row.status || "—")}</Typography>;
+  if (key === "stage") return <Typography sx={{ fontSize: 10, fontWeight: 900, color: reportStatusColor(row) }}>{readable(row.stage || "—")}</Typography>;
+  if (["receivedAt", "dueAt", "startedAt", "completedAt", "updatedAt", "productionReleasedAt"].includes(key)) {
+    return <Typography sx={{ fontSize: 9.6, color: "var(--mf-text-secondary)", whiteSpace: "nowrap" }}>{toDateTime(row[key])}</Typography>;
+  }
+  if (key === "plannedProductionReleaseDate") return <Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{row[key] || "—"}</Typography>;
+  if (["ppcGate1Decision", "ppcGate2Decision", "priority"].includes(key)) return <Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row[key] || "—")}</Typography>;
+  return <Typography sx={{ fontSize: 10, fontWeight: ["productName", "projectCode"].includes(key) ? 900 : 750, color: ["productName", "projectCode"].includes(key) ? "var(--mf-text)" : "var(--mf-text-secondary)" }}>{row[key] || "—"}</Typography>;
+};
+
 export function MatFlowReportsPage() {
-  const { selectedPlantParam, roles, hasRole } = useMatFlow();
+  const { selectedPlantParam, roles } = useMatFlow();
   const navigate = useNavigate();
   const access = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
   const primary = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
@@ -350,7 +436,8 @@ export function MatFlowReportsPage() {
   };
 
   const reportLabel = availableReports.find((item) => item.value === reportType)?.label || "Report";
-  const isSupervisor = hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.ENGINEERING_HEAD);
+  const visibleColumns = useMemo(() => pageColumns(reportType), [reportType]);
+  const tableTemplate = useMemo(() => visibleColumns.map((column) => column.width).join(" "), [visibleColumns]);
 
   if (loading && !rows.length) return <LoadingBlock />;
 
@@ -415,48 +502,60 @@ export function MatFlowReportsPage() {
         </Box>
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        {!filtered.length ? <EmptyState>No rows match the current report filters.</EmptyState> : filtered.map((row, index) => (
-          <Box
-            key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
-            sx={{
-              px: 1.2,
-              py: 0.95,
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: reportType === REPORTS.PPC ? "1.25fr 1fr .8fr .85fr .9fr auto" : "1.2fr 1fr 1.25fr .9fr .85fr auto" },
-              gap: 0.9,
-              alignItems: "center",
-              borderBottom: "1px solid var(--mf-border)",
-              "&:last-child": { borderBottom: 0 },
-            }}
-          >
-            <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
-            <Box>
-              <Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "—"}</Typography>
-              <Typography sx={{ mt: 0.1, fontSize: 9.1, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography>
-            </Box>
-            {reportType === REPORTS.PPC ? (
-              <Box>
-                <Typography sx={{ fontSize: 10.3, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.stage)}</Typography>
-                <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>Gate 1: {readable(row.ppcGate1Decision || "PENDING")} · Gate 2: {readable(row.ppcGate2Decision || "PENDING")}</Typography>
+      <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
+        {!filtered.length ? <EmptyState>No rows match the current report filters.</EmptyState> : (
+          <Box sx={{ overflowX: "auto" }}>
+            <Box sx={{ minWidth: "max-content" }}>
+              <Box
+                sx={{
+                  px: 1.1,
+                  py: 0.75,
+                  display: "grid",
+                  gridTemplateColumns: tableTemplate,
+                  gap: 0.9,
+                  alignItems: "center",
+                  background: "var(--mf-table-head)",
+                  borderBottom: "1px solid var(--mf-border-strong)",
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 1,
+                }}
+              >
+                {visibleColumns.map((column) => (
+                  <Typography key={column.key} sx={{ fontSize: 8.6, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                    {column.label}
+                  </Typography>
+                ))}
               </Box>
-            ) : (
-              <Box>
-                <Typography sx={{ fontSize: 10.5, fontWeight: 900, color: "var(--mf-text)" }}>{row.taskTitle || "—"}</Typography>
-                <Typography sx={{ mt: 0.1, fontSize: 9, color: "var(--mf-text-muted)" }}>{row.taskNo || row.taskKey || readable(row.taskType || "")}</Typography>
-              </Box>
-            )}
-            <Box>
-              <Typography sx={{ fontSize: 9.8, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.assignee || row.ppcOwner || "Unassigned"}</Typography>
-              {isSupervisor && <Typography sx={{ mt: 0.1, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{reportType === REPORTS.DESIGN ? `Assigned by ${row.assignedBy || row.designer1 || "—"}` : row.currentOwner ? `Current ${row.currentOwner}` : ""}</Typography>}
+              {filtered.map((row, index) => (
+                <Box
+                  key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
+                  sx={{
+                    px: 1.1,
+                    py: 0.85,
+                    display: "grid",
+                    gridTemplateColumns: tableTemplate,
+                    gap: 0.9,
+                    alignItems: "center",
+                    borderBottom: "1px solid var(--mf-border)",
+                    borderLeft: `3px solid ${reportRowAccent(row)}`,
+                    background: "var(--mf-panel-solid)",
+                    "&:last-child": { borderBottom: 0 },
+                    "&:hover": { background: "var(--mf-table-hover)" },
+                  }}
+                >
+                  {visibleColumns.map((column) => column.key === "action" ? (
+                    <Button key={column.key} size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>Open</Button>
+                  ) : (
+                    <Box key={column.key} sx={{ minWidth: 0 }}>
+                      {pageCellValue(row, column.key, reportType)}
+                    </Box>
+                  ))}
+                </Box>
+              ))}
             </Box>
-            <Box>
-              <Typography sx={{ fontSize: 9.7, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{readable(row.status)}</Typography>
-              <Typography sx={{ mt: 0.1, fontSize: 8.8, color: "var(--mf-text-muted)" }}>{row.dueAt ? `Due ${toDateTime(row.dueAt)}` : row.plannedProductionReleaseDate ? `Planned ${row.plannedProductionReleaseDate}` : ""}</Typography>
-            </Box>
-            <Button size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => navigate(`/matflow/work?fileId=${row.productionFileId}`)} sx={secondaryBtnSx}>Open</Button>
           </Box>
-        ))}
+        )}
       </Card>
     </Box>
   );

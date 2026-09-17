@@ -87,6 +87,15 @@ public class MatFlowAccessService {
     }
 
     /**
+     * Junior Engineers may create personal Engineering tasks. The workspace service
+     * still enforces self-assignment and makes Junior-created tasks non-blocking;
+     * Engineering Head / Engineer retain normal delegation authority.
+     */
+    public void requireEngineeringTaskCreate() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+    }
+
+    /**
      * Queries/issues are the controlled communication bridge between Design and
      * Engineering. Either department may raise/respond; department heads and
      * full contributors may close once the point is resolved.

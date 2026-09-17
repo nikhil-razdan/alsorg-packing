@@ -108,7 +108,8 @@ public class MatFlowWorkspaceService {
                 .filter(f -> stageFilter == null || f.getStage() == stageFilter)
                 .filter(f -> healthFilter == null || f.getReleaseHealth() == healthFilter)
                 .filter(f -> term.isBlank() || contains(f.getProductionFileNo(), term) || contains(f.getProjectCode(), term)
-                        || contains(f.getProjectName(), term) || contains(f.getProductName(), term) || contains(f.getDrawingNo(), term)
+                        || contains(f.getProjectName(), term) || contains(f.getClientName(), term)
+                        || contains(f.getProductName(), term) || contains(f.getDrawingNo(), term)
                         || contains(f.getCurrentOwner(), term))
                 .map(this::toFileResponse).toList();
     }
@@ -276,7 +277,7 @@ public class MatFlowWorkspaceService {
         if (clean(file.getDesignHead()) == null) throw conflict("Assign the Design Head before delegating Design tasks");
 
         List<String> assignees = normalizeAssignees(request.assignees());
-        if (assignees.isEmpty()) throw badRequest("Assign at least one Designer-2 / Design team member");
+        if (assignees.isEmpty()) throw badRequest("Assign at least one Junior Designer / Design team member");
         LocalDateTime received = request.receivedAt() == null ? now() : request.receivedAt();
         if (request.dueAt() != null && request.dueAt().isBefore(received)) throw badRequest("Due date cannot be before received date");
 
@@ -559,24 +560,87 @@ public class MatFlowWorkspaceService {
 
     @Transactional
     public ProductionFileDetailResponse createTask(UUID fileId, TaskCreateRequest request) {
-        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId);
-        if (file.getEngineeringDecision() != EngineeringDecision.APPROVED) throw conflict("Engineering must be approved before documentation tasks are added");
-        String key=upper(request.taskKey());
-        if (workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, WorkItemType.ENGINEERING_TASK, key).isPresent()) throw conflict("Engineering task key already exists: " + key);
+        accessService.requireEngineeringTaskCreate();
+        MatFlowProductionFile file=requireFile(fileId);
+        if (file.getEngineeringDecision() != EngineeringDecision.APPROVED) throw conflict("Engineering must be approved before tasks are added");
+
+        boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")
+                && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
         List<MatFlowWorkItem> tasks=items(fileId, WorkItemType.ENGINEERING_TASK);
-        MatFlowWorkItem item=new MatFlowWorkItem(); item.setProductionFile(file); item.setItemType(WorkItemType.ENGINEERING_TASK); item.setItemKey(key); item.setSection("Engineering documentation"); item.setTitle(request.title()); item.setDescription(request.description());
-        item.setCriticality(Criticality.REQUIRED); item.setBlocking(request.blocking()==null || request.blocking()); item.setDisplayOrder(tasks.size()+1);
-        String taskOwner = clean(request.assignedTo()) == null ? file.getAssignedEngineer() : request.assignedTo();
-        item.setAssignedTo(taskOwner); item.setDueAt(request.dueAt()); item.setPriority(request.priority());
-        item.setStatus(clean(taskOwner)==null?WorkItemStatus.TODO:WorkItemStatus.ASSIGNED); item.setCreatedBy(accessService.actor()); item.setUpdatedBy(accessService.actor()); item = workRepository.save(item);
-        refreshHealth(file); file.setUpdatedBy(accessService.actor()); fileRepository.save(file); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_CREATED",file,auditService.details("key",key,"title",item.getTitle())); return toDetail(file);
+        String requestedKey = clean(request.taskKey());
+        String key = requestedKey == null || requestedKey.toUpperCase(Locale.ROOT).startsWith("AUTO-")
+                ? nextEngineeringTaskKey(fileId) : upper(requestedKey);
+        if (workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(fileId, WorkItemType.ENGINEERING_TASK, key).isPresent()) {
+            throw conflict("Engineering task key already exists: " + key);
+        }
+
+        String taskOwner;
+        boolean blocking;
+        if (juniorEngineerOnly) {
+            // A Junior Engineer can add their own personal work item, never assign another user
+            // or independently introduce a new release blocker.
+            taskOwner = accessService.actor();
+            blocking = false;
+        } else {
+            taskOwner = clean(request.assignedTo()) == null ? file.getAssignedEngineer() : clean(request.assignedTo());
+            blocking = request.blocking()==null || request.blocking();
+        }
+
+        MatFlowWorkItem item=new MatFlowWorkItem();
+        item.setProductionFile(file);
+        item.setItemType(WorkItemType.ENGINEERING_TASK);
+        item.setItemKey(key);
+        item.setSection(juniorEngineerOnly ? "Engineering personal task" : "Engineering documentation");
+        item.setTitle(request.title());
+        item.setDescription(request.description());
+        item.setCriticality(Criticality.REQUIRED);
+        item.setBlocking(blocking);
+        item.setDisplayOrder(tasks.size()+1);
+        item.setAssignedTo(taskOwner);
+        item.setDueAt(request.dueAt());
+        item.setPriority(request.priority());
+        item.setStatus(clean(taskOwner)==null?WorkItemStatus.TODO:WorkItemStatus.ASSIGNED);
+        item.setCreatedBy(accessService.actor());
+        item.setUpdatedBy(accessService.actor());
+        item = workRepository.save(item);
+
+        refreshHealth(file);
+        file.setUpdatedBy(accessService.actor());
+        fileRepository.save(file);
+        auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_CREATED",file,
+                auditService.details("key",key,"title",item.getTitle(),"assignedTo",item.getAssignedTo(),
+                        "selfCreated",juniorEngineerOnly,"blocking",item.isBlocking()));
+        return toDetail(file);
     }
 
     @Transactional
     public ProductionFileDetailResponse updateTask(UUID fileId, UUID taskId, TaskUpdateRequest request) {
-        accessService.requireEngineeringReviewWrite(); MatFlowProductionFile file=requireFile(fileId); MatFlowWorkItem item=requireWork(fileId, taskId, WorkItemType.ENGINEERING_TASK); requireVersion(item.getRowVersion(),request.rowVersion());
-        if (request.assignedTo()!=null) item.setAssignedTo(request.assignedTo()); if (request.dueAt()!=null) item.setDueAt(request.dueAt()); if (request.priority()!=null) item.setPriority(request.priority()); if (request.remarks()!=null) item.setRemarks(request.remarks());
-        if (item.getStatus()==WorkItemStatus.TODO && clean(item.getAssignedTo())!=null) item.setStatus(WorkItemStatus.ASSIGNED); item.setUpdatedBy(accessService.actor()); workRepository.save(item); auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_UPDATED",file,auditService.details("assignedTo",item.getAssignedTo(),"dueAt",item.getDueAt())); return toDetail(file);
+        accessService.requireEngineeringTaskWrite();
+        MatFlowProductionFile file=requireFile(fileId);
+        MatFlowWorkItem item=requireWork(fileId, taskId, WorkItemType.ENGINEERING_TASK);
+        requireVersion(item.getRowVersion(),request.rowVersion());
+        boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")
+                && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
+        if (juniorEngineerOnly) {
+            String owner = clean(item.getAssignedTo());
+            if (owner == null || !accessService.actor().equalsIgnoreCase(owner)) {
+                throw conflict("Junior Engineer can edit only an Engineering task assigned to their username");
+            }
+            if (request.assignedTo()!=null && !accessService.actor().equalsIgnoreCase(request.assignedTo().trim())) {
+                throw conflict("Junior Engineer cannot reassign their Engineering task");
+            }
+        } else if (request.assignedTo()!=null) {
+            item.setAssignedTo(request.assignedTo());
+        }
+        if (request.dueAt()!=null) item.setDueAt(request.dueAt());
+        if (request.priority()!=null) item.setPriority(request.priority());
+        if (request.remarks()!=null) item.setRemarks(request.remarks());
+        if (item.getStatus()==WorkItemStatus.TODO && clean(item.getAssignedTo())!=null) item.setStatus(WorkItemStatus.ASSIGNED);
+        item.setUpdatedBy(accessService.actor());
+        workRepository.save(item);
+        auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_UPDATED",file,
+                auditService.details("assignedTo",item.getAssignedTo(),"dueAt",item.getDueAt()));
+        return toDetail(file);
     }
 
     @Transactional
@@ -648,7 +712,7 @@ public class MatFlowWorkspaceService {
         MatFlowProductionFile file=requireFile(fileId); RevisionType type=enumValue(RevisionType.class,typeValue,"Invalid revision type");
         if (type==RevisionType.ENGINEERING_DRAWING) accessService.requireEngineeringReviewWrite();
         else accessService.requireDesignerWrite();
-        if (upload==null || upload.isEmpty()) throw badRequest("Revision file is required"); if (upload.getSize()>REVISION_MAX_BYTES) throw badRequest("Revision file cannot exceed 30 MB");
+        if (upload==null || upload.isEmpty()) throw badRequest("Choose a file when adding an optional reference"); if (upload.getSize()>REVISION_MAX_BYTES) throw badRequest("Revision file cannot exceed 30 MB");
         String rev=upper(revisionNo); if (rev.isBlank()) throw badRequest("Revision number is required"); if (revisionRepository.existsByProductionFile_IdAndRevisionTypeAndRevisionNoIgnoreCase(fileId,type,rev)) throw conflict("Revision already exists: "+rev);
         String original=safeFileName(upload.getOriginalFilename(), type.name()+"-"+rev); String content=clean(upload.getContentType()); if(content==null)content="application/octet-stream";
         Path folder=revisionRoot.resolve(fileId.toString()).resolve(type.name()).normalize(); Path target=folder.resolve(UUID.randomUUID()+"-"+original).normalize(); if(!target.startsWith(revisionRoot))throw badRequest("Invalid revision path");
@@ -763,10 +827,13 @@ public class MatFlowWorkspaceService {
         List<String> blockers=new ArrayList<>(); if(file.isRevisionReviewRequired())blockers.add("Revision impact review is pending"); if(file.getEngineeringDecision()!=EngineeringDecision.APPROVED)blockers.add("Engineering is not approved");
         ChecklistProgress ep=progress(file.getId(),WorkItemType.ENGINEERING_CHECK); if(ep.criticalPending()>0||ep.requiredPending()>0)blockers.add("Engineering checklist is incomplete"); if(openQueryCount(file.getId())>0)blockers.add("Engineering Queries are still open");
         List<MatFlowWorkItem> pending=items(file.getId(),WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).filter(x->!Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())).toList(); if(!pending.isEmpty())blockers.add("Engineering documentation tasks pending: "+pending.stream().map(MatFlowWorkItem::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
-        MatFlowBom bom=latestBom(file.getId()); if(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE)blockers.add("BOM is not Ready for Release"); if(activeRevision(file.getId(),RevisionType.ENGINEERING_DRAWING)==null)blockers.add("Active Production/Engineering Drawing revision is missing"); return blockers;
+        MatFlowBom bom=latestBom(file.getId()); if(bom==null||bom.getStatus()!=BomStatus.READY_FOR_RELEASE)blockers.add("BOM is not Ready for Release"); return blockers;
     }
 
-    private boolean allBlockingTasksDone(UUID fileId){ List<MatFlowWorkItem> rows=items(fileId,WorkItemType.ENGINEERING_TASK); return !rows.isEmpty() && rows.stream().filter(MatFlowWorkItem::isBlocking).allMatch(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus())); }
+    private boolean allBlockingTasksDone(UUID fileId){
+        List<MatFlowWorkItem> blocking = items(fileId,WorkItemType.ENGINEERING_TASK).stream().filter(MatFlowWorkItem::isBlocking).toList();
+        return !blocking.isEmpty() && blocking.stream().allMatch(x->Set.of(WorkItemStatus.COMPLETE,WorkItemStatus.NOT_APPLICABLE).contains(x.getStatus()));
+    }
     private long openQueryCount(UUID fileId){ return workRepository.countByProductionFile_IdAndItemTypeAndStatusIn(fileId,WorkItemType.ENGINEERING_QUERY,OPEN_QUERY_STATUSES); }
 
     private void refreshHealth(MatFlowProductionFile file){
@@ -794,7 +861,7 @@ public class MatFlowWorkspaceService {
         if (!pending.isEmpty()) blockers.add("Blocking Design tasks pending: " + pending.stream().map(MatFlowDesignTask::getTitle).limit(4).reduce((a,b)->a+", "+b).orElse("pending"));
         ChecklistProgress checklist = progress(file.getId(), WorkItemType.DESIGN_CHECK);
         if (checklist.criticalPending() > 0) blockers.add("Critical Design checklist items are pending");
-        if (activeRevision(file.getId(), RevisionType.DESIGN_DRAWING) == null) blockers.add("Active Design Drawing revision is missing");
+        // Drawing/reference uploads are optional supporting evidence, not a Design gate.
         return blockers;
     }
 
@@ -836,8 +903,13 @@ public class MatFlowWorkspaceService {
         List<WorkItemResponse> sharedQueries = (design || engineering)
                 ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_QUERY))
                 : List.of();
+        boolean juniorEngineerOnly = accessService.hasAnyRole("MATFLOW_ENGINEERING_JUNIOR")
+                && !accessService.hasAnyRole("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
         List<WorkItemResponse> engineeringTasks = engineering
-                ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK))
+                ? mapItems(items(file.getId(),WorkItemType.ENGINEERING_TASK).stream()
+                        .filter(item -> !juniorEngineerOnly || (clean(item.getAssignedTo()) != null
+                                && accessService.actor().equalsIgnoreCase(item.getAssignedTo())))
+                        .toList())
                 : List.of();
         List<RevisionResponse> revisions = revisionRepository.findByProductionFile_IdOrderByCreatedAtDesc(file.getId()).stream()
                 .filter(row -> management
@@ -980,6 +1052,17 @@ public class MatFlowWorkspaceService {
     private MatFlowProductionFile requireFile(UUID id){ MatFlowProductionFile file=fileRepository.findById(id).orElseThrow(()->notFound("Production File not found")); accessService.requirePlantAccess(file.getPlantCode()); return file; }
     private MatFlowWorkItem requireWork(UUID fileId,UUID id,WorkItemType type){ MatFlowWorkItem x=workRepository.findById(id).orElseThrow(()->notFound("Work item not found")); if(!fileId.equals(x.getProductionFile().getId())||x.getItemType()!=type)throw notFound("Work item not found"); return x; }
     private List<MatFlowWorkItem> items(UUID fileId,WorkItemType type){ return workRepository.findByProductionFile_IdAndItemTypeOrderByDisplayOrderAscCreatedAtAsc(fileId,type); }
+    private String nextEngineeringTaskKey(UUID fileId) {
+        int sequence = Math.max(1, items(fileId, WorkItemType.ENGINEERING_TASK).size() + 1);
+        while (sequence < 10000) {
+            String candidate = "ENG-" + String.format(Locale.ROOT, "%03d", sequence);
+            if (workRepository.findByProductionFile_IdAndItemTypeAndItemKeyIgnoreCase(
+                    fileId, WorkItemType.ENGINEERING_TASK, candidate).isEmpty()) return candidate;
+            sequence++;
+        }
+        return "ENG-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+    }
+
     private MatFlowRevision activeRevision(UUID fileId,RevisionType type){ return revisionRepository.findFirstByProductionFile_IdAndRevisionTypeAndRevisionStatusOrderByActivatedAtDesc(fileId,type,RevisionStatus.ACTIVE).orElse(null); }
     private MatFlowBom latestBom(UUID fileId){ return bomRepository.findFirstByProductionFile_IdAndLatestRevisionTrue(fileId).orElse(null); }
     private void requireStage(MatFlowProductionFile file,ProductionFileStage...allowed){ if(java.util.Arrays.stream(allowed).noneMatch(x->x==file.getStage()))throw conflict("Action is not allowed while file is at stage "+file.getStage()); }
