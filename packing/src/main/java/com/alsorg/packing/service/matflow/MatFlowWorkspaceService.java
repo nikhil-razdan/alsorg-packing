@@ -606,8 +606,40 @@ public class MatFlowWorkspaceService {
         item.setStatus(next); item.setCompletionNote(request.note()); item.setUpdatedBy(accessService.actor());
         if (next==WorkItemStatus.COMPLETE || next==WorkItemStatus.NOT_APPLICABLE) { item.setCompletedBy(accessService.actor()); item.setCompletedAt(now()); }
         else { item.setCompletedBy(null); item.setCompletedAt(null); }
-        workRepository.save(item); if (allBlockingTasksDone(fileId)) file.setStage(ProductionFileStage.PPC_GATE_2); else file.setStage(ProductionFileStage.ENGINEERING_WORK); file.setUpdatedBy(accessService.actor()); refreshHealth(file); fileRepository.save(file);
-        auditService.log("WORK_ITEM",item.getId(),"ENGINEERING_TASK_STATUS_CHANGED",file,auditService.details("status",next.name(),"note",request.note())); return toDetail(file);
+        ProductionFileStage previousStage = file.getStage();
+        workRepository.save(item);
+
+        boolean engineeringHandoffReady = allBlockingTasksDone(fileId);
+        if (engineeringHandoffReady) {
+            file.setStage(ProductionFileStage.PPC_GATE_2);
+            file.setCurrentDepartment("PPC");
+            file.setCurrentOwner(file.getPpcOwner());
+        } else {
+            file.setStage(ProductionFileStage.ENGINEERING_WORK);
+            file.setCurrentDepartment("ENGINEERING");
+            file.setCurrentOwner(file.getAssignedEngineer());
+        }
+
+        file.setUpdatedBy(accessService.actor());
+        refreshHealth(file);
+        fileRepository.save(file);
+
+        auditService.log("WORK_ITEM", item.getId(), "ENGINEERING_TASK_STATUS_CHANGED", file,
+                auditService.details("status", next.name(), "note", request.note()));
+
+        /*
+         * Semantic handoff event for the digital File Tracking Sheet. The ordinary
+         * task audit above remains intact; this event is emitted only when the file
+         * actually crosses from Engineering into PPC Gate 2.
+         */
+        if (engineeringHandoffReady && previousStage != ProductionFileStage.PPC_GATE_2) {
+            auditService.log("PRODUCTION_FILE", file.getId(), "ENGINEERING_TO_PPC", file,
+                    auditService.details(
+                            "source", "BLOCKING_ENGINEERING_TASKS_COMPLETE",
+                            "ppcOwner", file.getPpcOwner(),
+                            "completedBy", accessService.actor()));
+        }
+        return toDetail(file);
     }
 
     @Transactional

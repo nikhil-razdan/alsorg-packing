@@ -144,11 +144,22 @@ public class MatFlowProjectService {
         }
         applyProject(row, request); row.setUpdatedBy(accessService.actor());
         projectRepository.save(row);
-        for (MatFlowProjectDrawing product : productsOf(row.getId())) {
-            product.setProject(row); product.setUpdatedBy(accessService.actor()); productRepository.save(product);
-            productionFileRepository.findByProduct_Id(product.getId()).ifPresent(file -> {
-                syncSnapshots(file, row, product); file.setUpdatedBy(accessService.actor()); productionFileRepository.save(file);
-            });
+        List<MatFlowProjectDrawing> projectProducts = productsOf(row.getId());
+        for (int index = 0; index < projectProducts.size(); index++) {
+            MatFlowProjectDrawing product = projectProducts.get(index);
+            product.setProject(row);
+            product.setUpdatedBy(accessService.actor());
+            productRepository.save(product);
+
+            int ordinal = index + 1;
+            MatFlowProductionFile file = productionFileRepository.findByProduct_Id(product.getId()).orElse(null);
+            if (file == null) file = createProductionFile(row, product, accessService.actor(), ordinal);
+            String previousFileNo = file.getProductionFileNo();
+            syncSnapshots(file, row, product);
+            syncOrdinalProductionFileNo(file, row, product, ordinal, true);
+            file.setUpdatedBy(accessService.actor());
+            productionFileRepository.save(file);
+            auditFileRenumber(previousFileNo, file, accessService.actor());
         }
         auditService.log("PROJECT", row.getId(), "PROJECT_UPDATED", null, auditService.details("projectCode", row.getProjectCode()));
         return toProject(row);
@@ -179,14 +190,20 @@ public class MatFlowProjectService {
                 throw conflict("Drawing No. already exists in this project: " + drawingNo);
             }
         }
+        int nextOrdinal = productsOf(projectId).size();
         for (ProductRequest item : request.products()) {
             MatFlowProjectDrawing product = new MatFlowProjectDrawing();
             product.setProject(project); applyProduct(product, item);
             product.setCreatedBy(accessService.actor()); product.setUpdatedBy(accessService.actor());
             product = productRepository.save(product);
-            MatFlowProductionFile file = createProductionFile(project, product);
+
+            nextOrdinal++;
+            MatFlowProductionFile file = createProductionFile(project, product, accessService.actor(), nextOrdinal);
             auditService.log("PRODUCTION_FILE", file.getId(), "PRODUCTION_FILE_CREATED", file,
-                    auditService.details("source", "PRODUCT_CREATED", "productionFileNo", file.getProductionFileNo()));
+                    auditService.details(
+                            "source", "PRODUCT_CREATED",
+                            "productOrdinal", nextOrdinal,
+                            "productionFileNo", file.getProductionFileNo()));
         }
         return toProject(project);
     }
@@ -262,13 +279,24 @@ public class MatFlowProjectService {
     }
 
     private MatFlowProductionFile createProductionFile(MatFlowProject project, MatFlowProjectDrawing product) {
-        return createProductionFile(project, product, accessService.actor());
+        return createProductionFile(project, product, accessService.actor(), productOrdinal(project.getId(), product.getId()));
     }
 
     private MatFlowProductionFile createProductionFile(MatFlowProject project, MatFlowProjectDrawing product, String actor) {
+        return createProductionFile(project, product, actor, productOrdinal(project.getId(), product.getId()));
+    }
+
+    private MatFlowProductionFile createProductionFile(
+            MatFlowProject project,
+            MatFlowProjectDrawing product,
+            String actor,
+            int ordinal) {
         String effectiveActor = actor == null || actor.isBlank() ? LEGACY_MIGRATION_ACTOR : actor.trim();
+        String productionFileNo = buildOrdinalFileNo(project.getProjectCode(), ordinal);
+        requireProductionFileNoAvailable(productionFileNo, product.getId(), null);
+
         MatFlowProductionFile file = new MatFlowProductionFile();
-        file.setProductionFileNo(buildUniqueFileNo(project.getProjectCode(), product.getDrawingNo(), product.getId()));
+        file.setProductionFileNo(productionFileNo);
         file.setProject(project);
         file.setProduct(product);
         syncSnapshots(file, project, product);
@@ -305,21 +333,78 @@ public class MatFlowProjectService {
         }
     }
 
-    private String buildUniqueFileNo(String projectCode, String drawingNo, UUID productId) {
+    /**
+     * Business identity requested by the physical PD-file practice:
+     * first Product in PD-54 => PD-54/01, tenth Product => PD-54/10.
+     *
+     * The ordinal is based on Product creation order and inactive Products remain
+     * in that order, so deactivation never renumbers another Production File.
+     */
+    private String buildOrdinalFileNo(String projectCode, int ordinal) {
         String projectPart = upper(projectCode);
         if (projectPart.isBlank()) projectPart = "PROJECT";
-        String drawingPart = upper(drawingNo);
-        if (drawingPart.isBlank()) {
-            drawingPart = "PRODUCT-" + String.valueOf(productId).replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+        projectPart = projectPart.replaceAll("/+$", "");
+        int safeOrdinal = Math.max(1, ordinal);
+        return projectPart + "/" + String.format(Locale.ROOT, "%02d", safeOrdinal);
+    }
+
+    private int productOrdinal(UUID projectId, UUID productId) {
+        List<MatFlowProjectDrawing> products = productsOf(projectId);
+        for (int index = 0; index < products.size(); index++) {
+            if (Objects.equals(productId, products.get(index).getId())) return index + 1;
         }
-        String base = ("PF-" + projectPart + "-" + drawingPart)
-                .replaceAll("[^A-Z0-9._-]+", "-")
-                .replaceAll("-+", "-");
-        return productionFileRepository.findByProductionFileNoIgnoreCase(base)
-                .filter(existing -> productId == null || existing.getProduct() == null
-                        || !productId.equals(existing.getProduct().getId()))
-                .map(existing -> base + "-" + String.valueOf(productId).replace("-", "").substring(0, 6).toUpperCase(Locale.ROOT))
-                .orElse(base);
+        throw new IllegalStateException("Unable to resolve Product sequence inside Project " + projectId);
+    }
+
+    private void requireProductionFileNoAvailable(String productionFileNo, UUID productId, UUID fileId) {
+        productionFileRepository.findByProductionFileNoIgnoreCase(productionFileNo).ifPresent(existing -> {
+            boolean sameFile = fileId != null && Objects.equals(fileId, existing.getId());
+            boolean sameProduct = productId != null && existing.getProduct() != null
+                    && Objects.equals(productId, existing.getProduct().getId());
+            if (!sameFile && !sameProduct) {
+                throw conflict("Production File No. already exists: " + productionFileNo
+                        + ". PD / Project numbers must remain unique across MatFlow when using PD/NN file numbering.");
+            }
+        });
+    }
+
+    /**
+     * Reconciles old PF-PD-DRAWING identities to the new PD/NN business identity.
+     * strict=true is used for an explicit user edit; migration/list reconciliation
+     * is non-strict so an old cross-plant collision can never prevent application
+     * startup. The collision can then be corrected by fixing the duplicate PD No.
+     */
+    private boolean syncOrdinalProductionFileNo(
+            MatFlowProductionFile file,
+            MatFlowProject project,
+            MatFlowProjectDrawing product,
+            int ordinal,
+            boolean strict) {
+        String desired = buildOrdinalFileNo(project.getProjectCode(), ordinal);
+        if (Objects.equals(clean(file.getProductionFileNo()), desired)) return false;
+
+        MatFlowProductionFile owner = productionFileRepository.findByProductionFileNoIgnoreCase(desired).orElse(null);
+        boolean numberConflict = owner != null && !Objects.equals(owner.getId(), file.getId())
+                && (owner.getProduct() == null || !Objects.equals(owner.getProduct().getId(), product.getId()));
+        if (numberConflict) {
+            if (strict) {
+                throw conflict("Production File No. already exists: " + desired
+                        + ". Correct the duplicate PD / Project number before saving.");
+            }
+            return false;
+        }
+
+        file.setProductionFileNo(desired);
+        return true;
+    }
+
+    private void auditFileRenumber(String previousFileNo, MatFlowProductionFile file, String actor) {
+        if (Objects.equals(clean(previousFileNo), clean(file.getProductionFileNo()))) return;
+        auditService.logAsActor(actor, "PRODUCTION_FILE", file.getId(), "PRODUCTION_FILE_RENUMBERED", file,
+                auditService.details(
+                        "previousProductionFileNo", previousFileNo,
+                        "productionFileNo", file.getProductionFileNo(),
+                        "reason", "PD_PRODUCT_SEQUENCE_STANDARD"));
     }
 
     private int reconcileLegacyProductionFilesInternal(String actor, String plantCode) {
@@ -342,31 +427,40 @@ public class MatFlowProjectService {
         String effectiveActor = actor == null || actor.isBlank() ? LEGACY_MIGRATION_ACTOR : actor.trim();
         int created = 0;
 
-        for (MatFlowProjectDrawing product : productsOf(project.getId())) {
+        List<MatFlowProjectDrawing> projectProducts = productsOf(project.getId());
+        for (int index = 0; index < projectProducts.size(); index++) {
+            MatFlowProjectDrawing product = projectProducts.get(index);
+            int ordinal = index + 1;
             MatFlowProductionFile existing = productionFileRepository.findByProduct_Id(product.getId()).orElse(null);
             if (existing == null) {
-                MatFlowProductionFile file = createProductionFile(project, product, effectiveActor);
+                MatFlowProductionFile file = createProductionFile(project, product, effectiveActor, ordinal);
                 auditService.logAsActor(effectiveActor, "PRODUCTION_FILE", file.getId(), "LEGACY_PRODUCTION_FILE_BACKFILLED", file,
-                        auditService.details("source", "LEGACY_PROJECT_PRODUCT", "projectId", project.getId(),
-                                "productId", product.getId(), "productionFileNo", file.getProductionFileNo()));
+                        auditService.details(
+                                "source", "LEGACY_PROJECT_PRODUCT",
+                                "projectId", project.getId(),
+                                "productId", product.getId(),
+                                "productOrdinal", ordinal,
+                                "productionFileNo", file.getProductionFileNo()));
                 created++;
                 continue;
             }
 
-            boolean changed = synchronizeExistingProductionFile(existing, project, product, effectiveActor);
+            String previousFileNo = existing.getProductionFileNo();
+            boolean changed = synchronizeExistingProductionFile(existing, project, product, effectiveActor, ordinal);
             templateService.seedDesignChecklist(existing, effectiveActor);
             if (changed) productionFileRepository.save(existing);
+            auditFileRenumber(previousFileNo, existing, effectiveActor);
         }
         return created;
     }
 
     private boolean synchronizeExistingProductionFile(MatFlowProductionFile file, MatFlowProject project,
-            MatFlowProjectDrawing product, String actor) {
+            MatFlowProjectDrawing product, String actor, int ordinal) {
         boolean changed = false;
 
         if (!Objects.equals(file.getProject(), project)) { file.setProject(project); changed = true; }
         if (!Objects.equals(file.getProduct(), product)) { file.setProduct(product); changed = true; }
-        if (!Objects.equals(file.getProjectCode(), upper(project.getProjectCode()))) { file.setProjectCode(project.getProjectCode()); changed = true; }
+        if (!Objects.equals(clean(file.getProjectCode()), clean(project.getProjectCode()))) { file.setProjectCode(project.getProjectCode()); changed = true; }
         if (!Objects.equals(file.getProjectName(), clean(project.getProjectName()))) { file.setProjectName(project.getProjectName()); changed = true; }
         if (!Objects.equals(file.getClientName(), clean(project.getClientName()))) { file.setClientName(project.getClientName()); changed = true; }
         if (!Objects.equals(file.getProductName(), clean(product.getProductName()))) { file.setProductName(product.getProductName()); changed = true; }
@@ -375,10 +469,7 @@ public class MatFlowProjectService {
         if (!Objects.equals(clean(file.getDesigner()), clean(project.getDesigner1()))) { file.setDesigner(project.getDesigner1()); changed = true; }
         if (!Objects.equals(clean(file.getDesignHead()), clean(project.getDesignHead()))) { file.setDesignHead(project.getDesignHead()); changed = true; }
 
-        if (clean(file.getProductionFileNo()) == null) {
-            file.setProductionFileNo(buildUniqueFileNo(project.getProjectCode(), product.getDrawingNo(), product.getId()));
-            changed = true;
-        }
+        if (syncOrdinalProductionFileNo(file, project, product, ordinal, false)) changed = true;
         if (file.getStage() == null) { file.setStage(ProductionFileStage.DESIGN_DRAFT); changed = true; }
         if (file.getReleaseHealth() == null) { file.setReleaseHealth(ReleaseHealth.RED); changed = true; }
         if (file.getEngineeringDecision() == null) { file.setEngineeringDecision(EngineeringDecision.PENDING); changed = true; }

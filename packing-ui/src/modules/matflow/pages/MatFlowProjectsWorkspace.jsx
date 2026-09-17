@@ -15,14 +15,17 @@ import {
   Typography,
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUncheckedOutlined";
 import { useNavigate } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
 import {
@@ -110,6 +113,96 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString();
 };
 
+const FILE_TRACK_STAGE_RANK = {
+  DESIGN_DRAFT: 0,
+  DESIGN_CLARIFICATION: 0,
+  DESIGN_SUBMITTED: 1,
+  PPC_GATE_1: 1,
+  ENGINEERING_REVIEW: 2,
+  ENGINEERING_QUERY: 2,
+  ENGINEERING_WORK: 2,
+  REVISION_REVIEW: 2,
+  PPC_GATE_2: 3,
+  PRODUCTION_RELEASED: 4,
+};
+
+const latestAudit = (timeline, actions) => {
+  const wanted = new Set(actions);
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    if (wanted.has(String(timeline[index]?.action || "").toUpperCase())) return timeline[index];
+  }
+  return null;
+};
+
+const auditDetails = (event) => {
+  if (!event?.detailsJson) return {};
+  if (typeof event.detailsJson === "object") return event.detailsJson;
+  try {
+    return JSON.parse(event.detailsJson);
+  } catch {
+    return {};
+  }
+};
+
+const buildTrackingRows = (detail, product) => {
+  const timeline = Array.isArray(detail?.timeline) ? detail.timeline : [];
+  const file = detail?.productionFile || {};
+  const currentRank = FILE_TRACK_STAGE_RANK[String(file.stage || product.stage || "").toUpperCase()] ?? 0;
+
+  const row = ({ key, label, actions, targetRank, fallbackAt = null, fallbackActor = "" }) => {
+    const event = latestAudit(timeline, actions);
+    const details = auditDetails(event);
+    const at = event?.at || fallbackAt || null;
+    const reachedWithoutTimestamp = !at && currentRank >= targetRank;
+    const remark = details.remarks || details.controlledReleaseReason || details.note || "";
+    return {
+      key,
+      label,
+      at,
+      actor: event?.actor || fallbackActor || "",
+      remark,
+      state: at ? "complete" : reachedWithoutTimestamp ? "historical" : "pending",
+    };
+  };
+
+  return [
+    row({
+      key: "DESIGN_OPENED",
+      label: "Design file opened",
+      actions: ["PRODUCTION_FILE_CREATED", "LEGACY_PRODUCTION_FILE_BACKFILLED"],
+      targetRank: 0,
+      fallbackAt: product.createdAt || null,
+      fallbackActor: product.createdAt ? "Project record" : "",
+    }),
+    row({
+      key: "DESIGN_TO_PPC",
+      label: "Design → PPC",
+      actions: ["DESIGN_SUBMITTED"],
+      targetRank: 1,
+    }),
+    row({
+      key: "PPC_TO_ENGINEERING",
+      label: "PPC → Engineering",
+      actions: ["PPC_GATE_1_ACCEPT"],
+      targetRank: 2,
+    }),
+    row({
+      key: "ENGINEERING_TO_PPC",
+      label: "Engineering → PPC",
+      actions: ["ENGINEERING_TO_PPC"],
+      targetRank: 3,
+    }),
+    row({
+      key: "PPC_TO_PRODUCTION",
+      label: "PPC → Production Release",
+      actions: ["PPC_GATE_2_RELEASE"],
+      targetRank: 4,
+      fallbackAt: file.productionReleasedAt || null,
+      fallbackActor: file.productionReleasedAt ? "Release record" : "",
+    }),
+  ];
+};
+
 function ProductFields({ value, onChange, compact = false }) {
   const set = (key, next) => onChange({ ...value, [key]: next });
   return (
@@ -179,6 +272,110 @@ function BomRevisionRow({ bom, onOpen }) {
   );
 }
 
+function ProductionFileTrackingSheet({ product }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(Boolean(product.productionFileId));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!product.productionFileId) {
+      setLoading(false);
+      setDetail(null);
+      return undefined;
+    }
+
+    setLoading(true);
+    setError("");
+    matflowApi
+      .getProductionFile(product.productionFileId)
+      .then((response) => {
+        if (active) setDetail(response?.data || null);
+      })
+      .catch((requestError) => {
+        if (active) setError(readMatFlowError(requestError, "Unable to load File Tracking history."));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [product.productionFileId, product.stage, product.updatedAt]);
+
+  const trackingRows = useMemo(() => buildTrackingRows(detail, product), [detail, product]);
+
+  return (
+    <Box sx={trackingSheetSx}>
+      <Box sx={trackingHeaderSx}>
+        <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.55 }}>
+            <HistoryOutlinedIcon sx={{ fontSize: 15, color: "var(--mf-primary-text)" }} />
+            <Typography sx={{ fontSize: 10.8, fontWeight: 950, color: "var(--mf-text)" }}>
+              File Tracking
+            </Typography>
+          </Box>
+          <Typography sx={{ mt: 0.15, fontSize: 8.9, color: "var(--mf-text-muted)" }}>
+            Digital handoff register for {product.productionFileNo || "this Production File"} · latest successful handoff is shown.
+          </Typography>
+        </Box>
+      </Box>
+
+      {loading ? (
+        <Box sx={{ px: 1, py: 1.2, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Loading handoff history…</Box>
+      ) : error ? (
+        <Box sx={{ px: 1, py: 1.1, fontSize: 9.2, color: "var(--mf-danger-text)" }}>{error}</Box>
+      ) : (
+        <>
+          <Box sx={trackingColumnHeaderSx}>
+            <Typography sx={trackingColumnLabelSx}>Department / Handoff</Typography>
+            <Typography sx={trackingColumnLabelSx}>Receiving / Completed</Typography>
+            <Typography sx={trackingColumnLabelSx}>Remark / Digital Sign-off</Typography>
+          </Box>
+          {trackingRows.map((row) => {
+            const complete = row.state === "complete";
+            const historical = row.state === "historical";
+            return (
+              <Box key={row.key} sx={trackingRowSx(row.state)}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.55, minWidth: 0 }}>
+                  {complete ? (
+                    <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14, color: "var(--mf-success-text)", flex: "0 0 auto" }} />
+                  ) : historical ? (
+                    <HistoryOutlinedIcon sx={{ fontSize: 14, color: "var(--mf-warning-text)", flex: "0 0 auto" }} />
+                  ) : (
+                    <RadioButtonUncheckedOutlinedIcon sx={{ fontSize: 13, color: "var(--mf-text-muted)", flex: "0 0 auto" }} />
+                  )}
+                  <Typography sx={{ fontSize: 9.7, fontWeight: 900, color: complete ? "var(--mf-text)" : "var(--mf-text-secondary)" }}>
+                    {row.label}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: 9.2, fontWeight: complete ? 850 : 700, color: complete ? "var(--mf-text-secondary)" : historical ? "var(--mf-warning-text)" : "var(--mf-text-muted)" }}>
+                  {row.at ? formatDateTime(row.at) : historical ? "Completed · earlier timestamp unavailable" : "Awaiting handoff"}
+                </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 9.2, fontWeight: row.actor ? 850 : 700, color: row.actor ? "var(--mf-text-secondary)" : "var(--mf-text-muted)" }}>
+                    {row.actor || "—"}
+                  </Typography>
+                  {row.remark && (
+                    <Typography sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                      {row.remark}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+        </>
+      )}
+
+      <Typography sx={trackingFootnoteSx}>
+        This tracker follows the validated MatFlow boundary through Production Release. Machine/Dispatch execution is not created here; later factory execution remains an extension point and Packing → Delivery stays with PackFlow.
+      </Typography>
+    </Box>
+  );
+}
+
 function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, onOpenFile, onOpenBom }) {
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
@@ -223,7 +420,10 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
             <Box>
               <Typography sx={panelEyebrowSx}>PRODUCTION FILE</Typography>
               <Typography sx={{ mt: 0.25, fontSize: 12.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                {product.productionFileNo || "Migration pending"}
+                {product.productName || "Unnamed Product"}
+              </Typography>
+              <Typography sx={{ mt: 0.12, fontSize: 9.1, fontWeight: 850, color: "var(--mf-text-muted)" }}>
+                File No. {product.productionFileNo || "Identity pending"}
               </Typography>
             </Box>
           </Box>
@@ -271,6 +471,8 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
           )}
         </Box>
       </Box>
+
+      <ProductionFileTrackingSheet product={product} />
 
       {boms.length > 0 && (
         <Box sx={bomHistorySx}>
@@ -624,7 +826,7 @@ export function MatFlowProjectsPage() {
                 <Box sx={{ px: 1.05, pb: 0.8, display: "flex", flexDirection: "column", flex: 1 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 0.7, mb: 0.55 }}>
                     <Box>
-                      <Typography sx={{ fontSize: 9.3, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTION FILES</Typography>
+                      <Typography sx={{ fontSize: 9.3, fontWeight: 950, color: "var(--mf-text)" }}>PRODUCTS / PRODUCTION FILES</Typography>
                       <Typography sx={{ mt: 0.08, fontSize: 8.2, color: "var(--mf-text-muted)" }}>
                         One Product / Drawing = one controlled Production File
                       </Typography>
@@ -651,10 +853,10 @@ export function MatFlowProjectsPage() {
                         >
                           <Box sx={{ minWidth: 0 }}>
                             <Typography noWrap sx={{ fontSize: 9.8, fontWeight: 950, color: "var(--mf-text)" }}>
-                              {product.productionFileNo}
+                              {product.productName || "Unnamed Product"}
                             </Typography>
                             <Typography noWrap sx={{ mt: 0.08, fontSize: 8.4, color: "var(--mf-text-muted)" }}>
-                              {product.productName} · Drawing {product.drawingNo || "—"}
+                              {product.productionFileNo || "File identity pending"} · Drawing {product.drawingNo || "—"}
                             </Typography>
                           </Box>
                           <Box sx={{ display: "flex", gap: 0.45, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
@@ -701,7 +903,7 @@ export function MatFlowProjectsPage() {
                   </Button>
                 </Box>
 
-                <Collapse in={isOpen}>
+                <Collapse in={isOpen} unmountOnExit>
                   <Box sx={{ px: 1.4, py: 1.25, borderTop: "1px dashed var(--mf-border-strong)", background: "var(--mf-surface)" }}>
                     <Box sx={projectMetaGridSx}>
                       <Meta label="Plant" value={project.plantCode} />
@@ -805,7 +1007,7 @@ export function MatFlowProjectsPage() {
         </DialogTitle>
         <DialogContent sx={dialogContentSx}>
           <Typography sx={{ mb: 1.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>
-            Each Product / Drawing creates its own Production File automatically but remains inside this one Project master record.
+            Each Product / Drawing creates its own Production File automatically and remains inside this one Project master record. File identity follows PD sequence automatically — for example {activeProject?.projectCode || "PD-54"}/01, /02 … /09, /10.
           </Typography>
           <Box sx={{ display: "grid", gap: 1 }}>
             {productForms.map((row, index) => (
@@ -1145,6 +1347,77 @@ const bomHistorySx = {
   borderRadius: 1.3,
   overflow: "hidden",
   background: "var(--mf-surface)",
+};
+
+const trackingSheetSx = {
+  mx: 1.15,
+  mb: 1.05,
+  border: "1px solid var(--mf-border)",
+  borderRadius: 1.3,
+  overflow: "hidden",
+  background: "var(--mf-surface)",
+};
+
+const trackingHeaderSx = {
+  px: 1,
+  py: 0.8,
+  borderBottom: "1px solid var(--mf-border)",
+  background: "var(--mf-panel-solid)",
+};
+
+const trackingColumnHeaderSx = {
+  display: { xs: "none", md: "grid" },
+  gridTemplateColumns: "minmax(180px,1.15fr) minmax(180px,.9fr) minmax(140px,.75fr)",
+  gap: 0.8,
+  px: 1,
+  py: 0.55,
+  background: "var(--mf-table-head)",
+  borderBottom: "1px solid var(--mf-border)",
+};
+
+const trackingColumnLabelSx = {
+  fontSize: 8.2,
+  fontWeight: 950,
+  letterSpacing: ".045em",
+  textTransform: "uppercase",
+  color: "var(--mf-text-muted)",
+};
+
+const trackingRowSx = (state) => {
+  const accent = state === "complete"
+    ? "var(--mf-success-text)"
+    : state === "historical"
+      ? "var(--mf-warning-text)"
+      : "var(--mf-border-strong)";
+  return {
+    position: "relative",
+    display: "grid",
+    gridTemplateColumns: { xs: "1fr", md: "minmax(180px,1.15fr) minmax(180px,.9fr) minmax(140px,.75fr)" },
+    gap: { xs: 0.25, md: 0.8 },
+    alignItems: "center",
+    px: 1,
+    py: 0.72,
+    pl: 1.2,
+    borderBottom: "1px solid var(--mf-border)",
+    "&::before": {
+      content: '""',
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 3,
+      background: accent,
+    },
+  };
+};
+
+const trackingFootnoteSx = {
+  px: 1,
+  py: 0.75,
+  fontSize: 8.6,
+  lineHeight: 1.45,
+  color: "var(--mf-text-muted)",
+  background: "var(--mf-panel-solid)",
 };
 
 const softChipSx = {
