@@ -38,7 +38,9 @@ import {
   ErrorBox,
   LoadingBlock,
   MATFLOW_ROLES,
+  MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
+  MatFlowViewToggle,
   PageHero,
   getMatFlowDepartmentAccess,
   primaryMatFlowDepartment,
@@ -55,6 +57,7 @@ import {
   readable,
   secondaryBtnSx,
   useMatFlow,
+  useMatFlowViewMode,
 } from "../matflowUi";
 
 const DESIGN_STAGES = ["DESIGN_DRAFT", "DESIGN_CLARIFICATION"];
@@ -656,6 +659,7 @@ export function MatFlowWorkWorkspacePage() {
   const [tab, setTab] = useState(searchParams.get("tab") || (juniorDesignerOnly ? "designTasks" : "overview"));
   const [selectedQueryId, setSelectedQueryId] = useState(searchParams.get("queryId") || "");
   const [workspaceView, setWorkspaceView] = useState(juniorDesignerOnly ? "TASKS" : "FILES");
+  const [viewMode, setViewMode] = useMatFlowViewMode("work", "LIST");
   const [workspaceFocus, setWorkspaceFocus] = useState(resolvedInitialFocus);
   const [groupBy, setGroupBy] = useState("PD");
   const [expandedGroupKey, setExpandedGroupKey] = useState("");
@@ -1094,7 +1098,8 @@ export function MatFlowWorkWorkspacePage() {
                 : "Client / PD-first work queue with one controlled Production File per Product / Drawing."
         }
         actions={(
-          <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", alignItems: "center" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             {focusOptions.length > 1 && focusOptions.map((item) => (
               <Button key={item.value} onClick={() => { setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab(juniorDesignerOnly && item.value === "DESIGN" ? "designTasks" : "overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
                 {item.label}
@@ -1112,7 +1117,7 @@ export function MatFlowWorkWorkspacePage() {
       {error && <ErrorBox>{error}</ErrorBox>}
 
       {workspaceView === "TASKS" ? (
-        <DesignTaskDesk selectedPlantParam={selectedPlantParam} juniorDesignerOnly={juniorDesignerOnly} currentUsername={currentUsername} onOpenFile={(fileId) => { setSelectedQueryId(""); setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
+        <DesignTaskDesk viewMode={viewMode} selectedPlantParam={selectedPlantParam} juniorDesignerOnly={juniorDesignerOnly} currentUsername={currentUsername} onOpenFile={(fileId) => { setSelectedQueryId(""); setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
       ) : (
       <>
       <Card sx={{ ...panelSx, p: 1.2 }}>
@@ -1165,7 +1170,7 @@ export function MatFlowWorkWorkspacePage() {
             const visual = healthVisual(group.health);
             const expanded = expandedGroupKey === group.key;
             return (
-              <Box key={group.key} sx={{ borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+              <Box key={group.key} sx={{ borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.6 : 0, m: viewMode === "CARD" ? 0.8 : 0, overflow: "hidden", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
                 <Box
                   role="button"
                   tabIndex={0}
@@ -1459,7 +1464,7 @@ export function MatFlowWorkWorkspacePage() {
   );
 }
 
-function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = false, currentUsername = "" }) {
+function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = false, currentUsername = "", viewMode = "LIST" }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1576,13 +1581,13 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile, juniorDesignerOnly = f
       </Card>
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        <Box sx={{ display: { xs: "none", lg: "grid" }, gridTemplateColumns: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
+        <Box sx={{ display: viewMode === "CARD" ? "none" : { xs: "none", lg: "grid" }, gridTemplateColumns: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
           {["Product / PD", "Project / Client", "Task", "Received / Due", "Assigned User(s)", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
         </Box>
         {loading ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Design tasks…</Box> : rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks match the current filters.</Box> : rows.map((row) => {
           const task = row.task || {};
           return (
-            <Box key={task.id} sx={{ px: 1.3, py: 1.05, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}>
+            <Box key={task.id} sx={{ px: 1.3, py: 1.05, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", lg: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto" }, gap: 1, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, m: viewMode === "CARD" ? 0.8 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent" }}>
               <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
               <Box><Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>
               <Box><Typography sx={{ fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>

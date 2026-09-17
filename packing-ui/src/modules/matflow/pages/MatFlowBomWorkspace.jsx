@@ -30,7 +30,9 @@ import {
   LoadingBlock,
   PageHero,
   EmptyState,
+  MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
+  MatFlowViewToggle,
   MatFlowStatusChip,
   pageSx,
   panelSx,
@@ -42,6 +44,7 @@ import {
   dialogContentSx,
   dialogActionsSx,
   useMatFlow,
+  useMatFlowViewMode,
   readable,
 } from "../matflowUi";
 
@@ -120,6 +123,7 @@ const validateLine = (line) => {
 
 export function MatFlowBomListPage() {
   const { selectedPlantParam } = useMatFlow();
+  const [viewMode, setViewMode] = useMatFlowViewMode("boms", "LIST");
   const nav = useNavigate();
 
   const [rows, setRows] = useState([]);
@@ -249,7 +253,8 @@ export function MatFlowBomListPage() {
         title="BOM Builder"
         subtitle="Engineering BOMs linked to the same Product Name + PD No. Production File."
         actions={
-          <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             <Button
               startIcon={<RefreshOutlinedIcon />}
               onClick={load}
@@ -329,49 +334,38 @@ export function MatFlowBomListPage() {
         </Box>
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
-        {!filteredRows.length ? (
-          <EmptyState>No BOMs found.</EmptyState>
-        ) : (
-          <>
-            <Box sx={listHeadSx}>
-              <div>Product / PD</div>
-              <div>BOM / Drawing</div>
-              <div>Revision</div>
-              <div>Status</div>
-              <div>Updated</div>
-            </Box>
-            {filteredRows.map((row) => (
-              <Box
-                key={row.id}
-                component="button"
-                type="button"
-                onClick={() => nav(`/matflow/boms/${row.id}`)}
-                sx={listRowSx}
-              >
-                <MatFlowProductIdentity
-                  productName={row.productName}
-                  projectCode={row.projectCode}
-                  productionFileNo={row.productionFileNo}
-                  drawingNo={row.drawingNo}
-                  size="sm"
-                />
-
-                <Box>
-                  <Typography sx={rowPrimarySx}>{row.bomNumber}</Typography>
-                  <Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography>
-                </Box>
-
-                <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>
+      {!filteredRows.length ? (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}><EmptyState>No BOMs found.</EmptyState></Card>
+      ) : viewMode === "CARD" ? (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
+          {filteredRows.map((row) => (
+            <Card key={row.id} component="button" type="button" onClick={() => nav(`/matflow/boms/${row.id}`)} sx={{ ...panelSx, p: 1.2, textAlign: "left", cursor: "pointer", display: "grid", gap: 0.8, boxShadow: "none", '&:hover': { background: 'var(--mf-table-hover)' } }}>
+              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "center" }}>
+                <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>
                 <MatFlowStatusChip status={row.status} />
-                <Typography sx={rowMutedSx}>
-                  {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}
-                </Typography>
               </Box>
-            ))}
-          </>
-        )}
-      </Card>
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+                <Typography sx={rowSecondarySx}>Revision {row.revisionNo}</Typography>
+                <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>
+              </Box>
+            </Card>
+          ))}
+        </Box>
+      ) : (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+          <Box sx={listHeadSx}><div>Product / PD</div><div>BOM / Drawing</div><div>Revision</div><div>Status</div><div>Updated</div></Box>
+          {filteredRows.map((row) => (
+            <Box key={row.id} component="button" type="button" onClick={() => nav(`/matflow/boms/${row.id}`)} sx={listRowSx}>
+              <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
+              <Box><Typography sx={rowPrimarySx}>{row.bomNumber}</Typography><Typography sx={rowMutedSx}>{row.drawingNo ? `Drawing ${row.drawingNo}` : "Drawing —"}</Typography></Box>
+              <Typography sx={rowSecondarySx}>Rev {row.revisionNo}</Typography>
+              <MatFlowStatusChip status={row.status} />
+              <Typography sx={rowMutedSx}>{row.updatedAt ? new Date(row.updatedAt).toLocaleString() : "—"}</Typography>
+            </Box>
+          ))}
+        </Card>
+      )}
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
         <Box sx={{ px: 1.5, py: 1.25, borderBottom: "1px solid var(--mf-border)" }}>
@@ -386,7 +380,8 @@ export function MatFlowBomListPage() {
         {!pendingBomFiles.length ? (
           <EmptyState>Every active Production File already has a current BOM.</EmptyState>
         ) : (
-          pendingBomFiles.slice(0, 40).map((file) => {
+          <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
+          {pendingBomFiles.slice(0, 40).map((file) => {
             const eligible =
               file.stage === "ENGINEERING_WORK" &&
               file.engineeringDecision === "APPROVED";
@@ -396,9 +391,11 @@ export function MatFlowBomListPage() {
                 sx={{
                   px: 1.5,
                   py: 1.05,
-                  borderBottom: "1px solid var(--mf-border)",
+                  borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)",
+                  border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined,
+                  borderRadius: viewMode === "CARD" ? 1.5 : 0,
                   display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1.25fr .8fr .7fr 1.1fr auto" },
+                  gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.25fr .8fr .7fr 1.1fr auto" },
                   gap: 1,
                   alignItems: "center",
                   "&:last-child": { borderBottom: 0 },
@@ -433,7 +430,8 @@ export function MatFlowBomListPage() {
                 </Button>
               </Box>
             );
-          })
+          })}
+          </Box>
         )}
       </Card>
 
@@ -510,6 +508,7 @@ export function MatFlowBomListPage() {
 
 export function MatFlowBomDetailPage() {
   const { bomId } = useParams();
+  const [viewMode, setViewMode] = useMatFlowViewMode("bom-detail", "LIST");
   const nav = useNavigate();
 
   const [bom, setBom] = useState(null);
@@ -757,7 +756,8 @@ export function MatFlowBomDetailPage() {
         title={bom.productName || bom.bomNumber}
         subtitle={`PD No. ${bom.projectCode || "—"} · File ${bom.productionFileNo || "—"} · Drawing ${bom.drawingNo || "—"} · ${bom.bomNumber}`}
         actions={
-          <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap", alignItems: "center" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             <Button
               startIcon={<ArrowBackOutlinedIcon />}
               onClick={() => nav("/matflow/boms")}
@@ -951,6 +951,7 @@ export function MatFlowBomDetailPage() {
                       editable={editable}
                       onEdit={openEdit}
                       onDelete={setDeleteLine}
+                      viewMode={viewMode}
                     />
                   </Collapse>
                 </Box>
@@ -1127,57 +1128,49 @@ export function MatFlowBomDetailPage() {
   );
 }
 
-function SectionTable({ rows, editable, onEdit, onDelete }) {
+function SectionTable({ rows, editable, onEdit, onDelete, viewMode = "LIST" }) {
+  if (viewMode === "CARD") {
+    return (
+      <Box sx={{ p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+        {rows.map((row) => (
+          <Card key={row.id} sx={{ ...panelSx, p: 1.05, boxShadow: "none", display: "grid", gap: 0.7 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={tableStrongSx}>{row.materialName || "Unnamed material"}</Typography>
+                <Typography sx={tableMutedSx}>#{row.lineNo} · {row.materialCode || "No material code"}</Typography>
+              </Box>
+              <Typography sx={tableStrongSx}>{row.uom || "—"}</Typography>
+            </Box>
+            <Typography sx={tableTextSx}>{row.specification || "—"}</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 0.6 }}>
+              <Box><Typography sx={tableMutedSx}>Required</Typography><Typography sx={tableNumberSx}>{number(row.requiredQty)}</Typography></Box>
+              <Box><Typography sx={tableMutedSx}>Wastage</Typography><Typography sx={tableNumberSx}>{number(row.wastagePercent, 2)}%</Typography></Box>
+              <Box><Typography sx={tableMutedSx}>Net Qty</Typography><Typography sx={tableNumberSx}>{number(row.netRequiredQty)}</Typography></Box>
+            </Box>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.3 }}>
+              <IconButton size="small" disabled={!editable} onClick={() => onEdit(row)} sx={tableActionSx} aria-label={`Edit ${row.materialName || "BOM material"}`}><EditOutlinedIcon fontSize="small" /></IconButton>
+              <IconButton size="small" disabled={!editable} onClick={() => onDelete(row)} sx={{ ...tableActionSx, "&:hover": { color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)" } }} aria-label={`Delete ${row.materialName || "BOM material"}`}><DeleteOutlineOutlinedIcon fontSize="small" /></IconButton>
+            </Box>
+          </Card>
+        ))}
+      </Box>
+    );
+  }
   return (
     <Box sx={tableScrollSx}>
-      <Box sx={tableHeadSx}>
-        <div>#</div>
-        <div>Material</div>
-        <div>Specification</div>
-        <div>UOM</div>
-        <div>Required</div>
-        <div>Wastage</div>
-        <div>Net Qty</div>
-        <div />
-      </Box>
-
+      <Box sx={tableHeadSx}><div>#</div><div>Material</div><div>Specification</div><div>UOM</div><div>Required</div><div>Wastage</div><div>Net Qty</div><div /></Box>
       {rows.map((row) => (
         <Box key={row.id} sx={tableRowSx}>
           <Typography sx={tableMutedSx}>{row.lineNo}</Typography>
-
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={tableStrongSx}>{row.materialName || "Unnamed material"}</Typography>
-            <Typography sx={tableMutedSx}>{row.materialCode || "No material code"}</Typography>
-          </Box>
-
+          <Box sx={{ minWidth: 0 }}><Typography sx={tableStrongSx}>{row.materialName || "Unnamed material"}</Typography><Typography sx={tableMutedSx}>{row.materialCode || "No material code"}</Typography></Box>
           <Typography sx={tableTextSx}>{row.specification || "—"}</Typography>
           <Typography sx={tableStrongSx}>{row.uom || "—"}</Typography>
           <Typography sx={tableNumberSx}>{number(row.requiredQty)}</Typography>
           <Typography sx={tableMutedSx}>{number(row.wastagePercent, 2)}%</Typography>
           <Typography sx={tableNumberSx}>{number(row.netRequiredQty)}</Typography>
-
           <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.3 }}>
-            <IconButton
-              size="small"
-              disabled={!editable}
-              onClick={() => onEdit(row)}
-              sx={tableActionSx}
-              aria-label={`Edit ${row.materialName || "BOM material"}`}
-            >
-              <EditOutlinedIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              size="small"
-              disabled={!editable}
-              onClick={() => onDelete(row)}
-              sx={{
-                ...tableActionSx,
-                "&:hover": { color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)" },
-              }}
-              aria-label={`Delete ${row.materialName || "BOM material"}`}
-            >
-              <DeleteOutlineOutlinedIcon fontSize="small" />
-            </IconButton>
+            <IconButton size="small" disabled={!editable} onClick={() => onEdit(row)} sx={tableActionSx} aria-label={`Edit ${row.materialName || "BOM material"}`}><EditOutlinedIcon fontSize="small" /></IconButton>
+            <IconButton size="small" disabled={!editable} onClick={() => onDelete(row)} sx={{ ...tableActionSx, "&:hover": { color: "var(--mf-danger-text)", background: "var(--mf-danger-soft)" } }} aria-label={`Delete ${row.materialName || "BOM material"}`}><DeleteOutlineOutlinedIcon fontSize="small" /></IconButton>
           </Box>
         </Box>
       ))}

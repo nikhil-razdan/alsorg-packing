@@ -3,16 +3,141 @@ import { Box, Button, Card, Dialog, DialogActions, DialogContent, DialogTitle, T
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
-import { ErrorBox, LoadingBlock, PageHero, EmptyState, pageSx, panelSx, fieldSx, primaryBtnSx, secondaryBtnSx, dialogPaperSx, dialogTitleSx, dialogContentSx, dialogActionsSx } from "../matflowUi";
-const blank={materialCode:"",materialName:"",category:"",specification:"",uom:"NOS",active:true};
-export function MatFlowMaterialsPage(){
- const [rows,setRows]=useState([]),[search,setSearch]=useState(""),[loading,setLoading]=useState(true),[error,setError]=useState(""),[open,setOpen]=useState(false),[form,setForm]=useState(blank);
- const load=useCallback(async()=>{setLoading(true);setError("");try{const r=await matflowApi.listMaterials({search,active:true});setRows(r.data||[]);}catch(e){setError(readMatFlowError(e));}finally{setLoading(false);}},[search]); useEffect(()=>{load();},[load]);
- const save=async()=>{try{await matflowApi.createMaterial(form);setOpen(false);setForm(blank);await load();}catch(e){setError(readMatFlowError(e));}};
- if(loading&&!rows.length)return <LoadingBlock/>;
- return <Box sx={pageSx}><PageHero badge="ENGINEERING MASTER" title="Materials" subtitle="Lean engineering material master for BOM preparation. Inventory/procurement movement is intentionally outside this rebuild." actions={<Box sx={{display:"flex",gap:1}}><Button startIcon={<RefreshOutlinedIcon/>} onClick={load} sx={secondaryBtnSx}>Refresh</Button><Button startIcon={<AddOutlinedIcon/>} onClick={()=>setOpen(true)} sx={primaryBtnSx}>New Material</Button></Box>}/>{error&&<ErrorBox>{error}</ErrorBox>}
- <Card sx={{...panelSx,p:1.4}}><TextField fullWidth size="small" label="Search code, material or category" value={search} onChange={e=>setSearch(e.target.value)} sx={fieldSx}/></Card>
- <Card sx={{...panelSx,p:0,overflow:"hidden"}}>{!rows.length?<EmptyState>No materials found.</EmptyState>:rows.map(r=><Box key={r.id} sx={{px:1.5,py:1.15,borderBottom:"1px solid var(--mf-border)",display:"grid",gridTemplateColumns:{xs:"1fr",md:".8fr 1.4fr 1fr 1.5fr .6fr"},gap:1,alignItems:"center"}}><Typography sx={{fontSize:11,fontWeight:900,color:"var(--mf-text)"}}>{r.materialCode}</Typography><Typography sx={{fontSize:11.5,fontWeight:850,color:"var(--mf-text)"}}>{r.materialName}</Typography><Typography sx={{fontSize:10.5,color:"var(--mf-text-secondary)"}}>{r.category}</Typography><Typography sx={{fontSize:10.5,color:"var(--mf-text-muted)"}}>{r.specification||"—"}</Typography><Typography sx={{fontSize:10.5,fontWeight:850,color:"var(--mf-text)"}}>{r.uom}</Typography></Box>)}</Card>
- <Dialog open={open} onClose={()=>setOpen(false)} fullWidth maxWidth="sm" PaperProps={{sx:dialogPaperSx}}><DialogTitle sx={dialogTitleSx}>Create Material</DialogTitle><DialogContent sx={dialogContentSx}><Box sx={{pt:.5,display:"grid",gap:1.2}}><TextField label="Material Code" value={form.materialCode} onChange={e=>setForm({...form,materialCode:e.target.value})} sx={fieldSx}/><TextField label="Material Name" value={form.materialName} onChange={e=>setForm({...form,materialName:e.target.value})} sx={fieldSx}/><TextField label="Category" value={form.category} onChange={e=>setForm({...form,category:e.target.value})} sx={fieldSx}/><TextField label="Specification" multiline minRows={2} value={form.specification} onChange={e=>setForm({...form,specification:e.target.value})} sx={fieldSx}/><TextField label="UOM" value={form.uom} onChange={e=>setForm({...form,uom:e.target.value})} sx={fieldSx}/></Box></DialogContent><DialogActions sx={dialogActionsSx}><Button onClick={()=>setOpen(false)} sx={secondaryBtnSx}>Cancel</Button><Button onClick={save} sx={primaryBtnSx}>Save</Button></DialogActions></Dialog>
- </Box>;
+import {
+  ErrorBox,
+  LoadingBlock,
+  PageHero,
+  EmptyState,
+  MATFLOW_LIST_CARD_OPTIONS,
+  MatFlowViewToggle,
+  pageSx,
+  panelSx,
+  fieldSx,
+  primaryBtnSx,
+  secondaryBtnSx,
+  dialogPaperSx,
+  dialogTitleSx,
+  dialogContentSx,
+  dialogActionsSx,
+  useMatFlowViewMode,
+} from "../matflowUi";
+
+const blank = { materialCode: "", materialName: "", category: "", specification: "", uom: "NOS", active: true };
+
+export function MatFlowMaterialsPage() {
+  const [viewMode, setViewMode] = useMatFlowViewMode("materials", "LIST");
+  const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(blank);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await matflowApi.listMaterials({ search, active: true });
+      setRows(response.data || []);
+    } catch (requestError) {
+      setError(readMatFlowError(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    try {
+      await matflowApi.createMaterial(form);
+      setOpen(false);
+      setForm(blank);
+      await load();
+    } catch (requestError) {
+      setError(readMatFlowError(requestError));
+    }
+  };
+
+  if (loading && !rows.length) return <LoadingBlock />;
+
+  return (
+    <Box sx={pageSx}>
+      <PageHero
+        badge="ENGINEERING MASTER"
+        title="Materials"
+        subtitle="Lean engineering material master for BOM preparation. Inventory/procurement movement is intentionally outside this rebuild."
+        actions={(
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
+            <Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>Refresh</Button>
+            <Button startIcon={<AddOutlinedIcon />} onClick={() => setOpen(true)} sx={primaryBtnSx}>New Material</Button>
+          </Box>
+        )}
+      />
+
+      {error && <ErrorBox>{error}</ErrorBox>}
+
+      <Card sx={{ ...panelSx, p: 1.4 }}>
+        <TextField fullWidth size="small" label="Search code, material or category" value={search} onChange={(e) => setSearch(e.target.value)} sx={fieldSx} />
+      </Card>
+
+      {!rows.length ? (
+        <Card sx={{ ...panelSx, p: 0 }}><EmptyState>No materials found.</EmptyState></Card>
+      ) : viewMode === "CARD" ? (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }, gap: 1 }}>
+          {rows.map((row) => (
+            <Card key={row.id} sx={{ ...panelSx, p: 1.35, display: "grid", gap: 0.8, boxShadow: "none" }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1, alignItems: "flex-start" }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 9.2, fontWeight: 900, color: "var(--mf-primary-text)", letterSpacing: ".04em" }}>{row.materialCode}</Typography>
+                  <Typography sx={{ mt: 0.15, fontSize: 13, fontWeight: 950, color: "var(--mf-text)" }}>{row.materialName}</Typography>
+                </Box>
+                <Typography sx={{ fontSize: 9.5, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.uom}</Typography>
+              </Box>
+              <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0,.75fr) minmax(0,1.25fr)", gap: 0.75 }}>
+                <Box>
+                  <Typography sx={{ fontSize: 8.5, color: "var(--mf-text-muted)" }}>CATEGORY</Typography>
+                  <Typography sx={{ mt: 0.1, fontSize: 10.2, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{row.category || "—"}</Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: 8.5, color: "var(--mf-text-muted)" }}>SPECIFICATION</Typography>
+                  <Typography sx={{ mt: 0.1, fontSize: 10.2, color: "var(--mf-text-secondary)" }}>{row.specification || "—"}</Typography>
+                </Box>
+              </Box>
+            </Card>
+          ))}
+        </Box>
+      ) : (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
+          {rows.map((row) => (
+            <Box key={row.id} sx={{ px: 1.5, py: 1.15, borderBottom: "1px solid var(--mf-border)", display: "grid", gridTemplateColumns: { xs: "1fr", md: ".8fr 1.4fr 1fr 1.5fr .6fr" }, gap: 1, alignItems: "center", "&:last-child": { borderBottom: 0 } }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{row.materialCode}</Typography>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 850, color: "var(--mf-text)" }}>{row.materialName}</Typography>
+              <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-secondary)" }}>{row.category}</Typography>
+              <Typography sx={{ fontSize: 10.5, color: "var(--mf-text-muted)" }}>{row.specification || "—"}</Typography>
+              <Typography sx={{ fontSize: 10.5, fontWeight: 850, color: "var(--mf-text)" }}>{row.uom}</Typography>
+            </Box>
+          ))}
+        </Card>
+      )}
+
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm" PaperProps={{ sx: dialogPaperSx }}>
+        <DialogTitle sx={dialogTitleSx}>Create Material</DialogTitle>
+        <DialogContent sx={dialogContentSx}>
+          <Box sx={{ pt: .5, display: "grid", gap: 1.2 }}>
+            <TextField label="Material Code" value={form.materialCode} onChange={(e) => setForm({ ...form, materialCode: e.target.value })} sx={fieldSx} />
+            <TextField label="Material Name" value={form.materialName} onChange={(e) => setForm({ ...form, materialName: e.target.value })} sx={fieldSx} />
+            <TextField label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} sx={fieldSx} />
+            <TextField label="Specification" multiline minRows={2} value={form.specification} onChange={(e) => setForm({ ...form, specification: e.target.value })} sx={fieldSx} />
+            <TextField label="UOM" value={form.uom} onChange={(e) => setForm({ ...form, uom: e.target.value })} sx={fieldSx} />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={dialogActionsSx}>
+          <Button onClick={() => setOpen(false)} sx={secondaryBtnSx}>Cancel</Button>
+          <Button onClick={save} sx={primaryBtnSx}>Save</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
 }

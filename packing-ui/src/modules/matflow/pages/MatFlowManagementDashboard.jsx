@@ -8,6 +8,8 @@ import {
   ErrorBox,
   LoadingBlock,
   MatFlowProductIdentity,
+  MatFlowViewToggle,
+  MATFLOW_LIST_CARD_OPTIONS,
   MATFLOW_ROLES,
   getMatFlowDepartmentAccess,
   pageSx,
@@ -17,6 +19,7 @@ import {
   readable,
   secondaryBtnSx,
   useMatFlow,
+  useMatFlowViewMode,
 } from "../matflowUi";
 
 const DESIGN_STAGES = new Set(["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"]);
@@ -90,6 +93,7 @@ export function MatFlowDashboardPage() {
   }, [access]);
   const initialFocus = focusOptions.includes(preferred) ? preferred : (focusOptions[0] || "MANAGEMENT");
 
+  const [viewMode, setViewMode] = useMatFlowViewMode("dashboard", "LIST");
   const [focus, setFocus] = useState(initialFocus);
   const [data, setData] = useState(null);
   const [engineering, setEngineering] = useState(null);
@@ -215,7 +219,8 @@ export function MatFlowDashboardPage() {
             {juniorDesignerOnly ? "Only your assigned tasks and their related Product / PD information are shown." : "Product Name + PD No. first. Only the department information needed for this view is shown."}
           </Typography>
         </Box>
-        <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap", alignItems: "center" }}>
+          <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
           {focusOptions.length > 1 && focusOptions.map((value) => (
             <Button key={value} onClick={() => setFocus(value)} sx={focus === value ? primaryBtnSx : secondaryBtnSx}>{focusLabel(value)}</Button>
           ))}
@@ -246,10 +251,12 @@ export function MatFlowDashboardPage() {
           </Box>
           {!juniorTaskRows.length ? (
             <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No assigned Design tasks match the current search.</Box>
-          ) : juniorTaskRows.map((row) => {
+          ) : (
+          <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
+          {juniorTaskRows.map((row) => {
             const task = row.task || {};
             return (
-              <Box key={task.id || `${row.productionFileId}-${task.taskNo}`} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.35fr .95fr 1.3fr .8fr auto" }, gap: 0.9, alignItems: "center", borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+              <Box key={task.id || `${row.productionFileId}-${task.taskNo}`} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.35fr .95fr 1.3fr .8fr auto" }, gap: 0.9, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
                 <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
                 <Box><Typography sx={{ fontSize: 10.1, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || "Client not assigned"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{row.projectName || "—"}</Typography></Box>
                 <Box><Typography sx={{ fontSize: 10.4, fontWeight: 900, color: "var(--mf-text)" }}>{task.title || "Assigned task"}</Typography><Typography sx={{ mt: 0.08, fontSize: 8.9, color: "var(--mf-text-muted)" }}>{task.taskNo || "—"} · {readable(task.taskType || "OTHER")}</Typography></Box>
@@ -258,6 +265,8 @@ export function MatFlowDashboardPage() {
               </Box>
             );
           })}
+          </Box>
+          )}
         </Card>
       ) : (
         <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
@@ -267,8 +276,10 @@ export function MatFlowDashboardPage() {
         </Box>
         {!attention.length ? (
           <Box sx={{ p: 2.5, textAlign: "center", fontSize: 10.5, color: "var(--mf-text-muted)" }}>No matching attention items.</Box>
-        ) : attention.map((row) => (
-          <Box key={row.productionFileId || row.productionFileNo} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.4fr .9fr .7fr 1.3fr auto" }, gap: 0.9, alignItems: "center", borderBottom: "1px solid var(--mf-border)", "&:last-child": { borderBottom: 0 } }}>
+        ) : (
+        <Box sx={viewMode === "CARD" ? { p: 1, display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 0.8 } : {}}>
+        {attention.map((row) => (
+          <Box key={row.productionFileId || row.productionFileNo} sx={{ px: 1.25, py: 0.95, display: "grid", gridTemplateColumns: viewMode === "CARD" ? "1fr" : { xs: "1fr", md: "1.4fr .9fr .7fr 1.3fr auto" }, gap: 0.9, alignItems: "center", borderBottom: viewMode === "CARD" ? 0 : "1px solid var(--mf-border)", border: viewMode === "CARD" ? "1px solid var(--mf-border)" : undefined, borderRadius: viewMode === "CARD" ? 1.5 : 0, background: viewMode === "CARD" ? "var(--mf-panel-solid)" : "transparent", "&:last-child": { borderBottom: viewMode === "CARD" ? undefined : 0 } }}>
             <MatFlowProductIdentity productName={row.productName} projectCode={row.projectCode} productionFileNo={row.productionFileNo} drawingNo={row.drawingNo} size="sm" />
             <Box>
               <Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.clientName || row.projectName || "—"}</Typography>
@@ -294,6 +305,8 @@ export function MatFlowDashboardPage() {
             </Button>
           </Box>
         ))}
+        </Box>
+        )}
         </Card>
       )}
     </Box>

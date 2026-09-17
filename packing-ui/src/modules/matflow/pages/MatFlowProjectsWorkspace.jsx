@@ -32,7 +32,9 @@ import {
   ErrorBox,
   LoadingBlock,
   MATFLOW_ROLES,
+  MATFLOW_LIST_CARD_OPTIONS,
   MatFlowProductIdentity,
+  MatFlowViewToggle,
   PageHero,
   EmptyState,
   MatFlowStatusChip,
@@ -46,6 +48,7 @@ import {
   dialogContentSx,
   dialogActionsSx,
   useMatFlow,
+  useMatFlowViewMode,
   readable,
 } from "../matflowUi";
 
@@ -523,6 +526,7 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.ENGINEERING
   );
 
+  const [viewMode, setViewMode] = useMatFlowViewMode("projects", "CARD");
   const [rows, setRows] = useState([]);
   const [boms, setBoms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -742,7 +746,8 @@ export function MatFlowProjectsPage() {
         title={juniorDesignerOnly ? "My Assigned Products" : "Projects"}
         subtitle={juniorDesignerOnly ? "Only PDs and Products connected to your assigned Design tasks are visible." : (canSeeEngineeringReference ? "Product Name + PD No. with one Production File per Product / Drawing." : "Product Name + PD No., drawing ownership and file tracking.")}
         actions={
-          <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
               Refresh
             </Button>
@@ -784,7 +789,14 @@ export function MatFlowProjectsPage() {
           <EmptyState>No projects found.</EmptyState>
         </Card>
       ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }, gap: 1, alignItems: "stretch" }}>
+        <Box sx={{
+          display: "grid",
+          gridTemplateColumns: viewMode === "CARD"
+            ? { xs: "1fr", md: "repeat(2,minmax(0,1fr))", xl: "repeat(3,minmax(0,1fr))" }
+            : "1fr",
+          gap: viewMode === "CARD" ? 1 : 0.75,
+          alignItems: "stretch",
+        }}>
           {filteredRows.map((project) => {
             const products = project.products || [];
             const bomCount = products.reduce(
@@ -848,7 +860,7 @@ export function MatFlowProjectsPage() {
                 <Box sx={ticketPerforationSx} />
 
                 <Box sx={ticketMetaGridSx}>
-                  <TicketMeta label="Required" value={formatDate(project.requiredDate)} />
+                  <TicketMeta label="Tentative Completion" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
                   <TicketMeta label="Priority" value={readable(project.priority || "NORMAL")} />
                   {juniorDesignerOnly ? <TicketMeta label="Assigned Products" value={products.length} /> : <TicketMeta label="Manager" value={project.projectManager || "—"} />}
                   {juniorDesignerOnly ? <TicketMeta label="Client" value={project.clientName || "—"} /> : <TicketMeta label="Designer" value={project.designer1 || "—"} />}
@@ -949,7 +961,7 @@ export function MatFlowProjectsPage() {
                     <Box sx={projectMetaGridSx}>
                       <Meta label="Plant" value={project.plantCode} />
                       <Meta label="Priority" value={project.priority || "NORMAL"} />
-                      <Meta label="Required Date" value={formatDate(project.requiredDate)} />
+                      <Meta label="Tentative Completion" value={project.requiredDate ? formatDate(project.requiredDate) : "Not set"} />
                       {juniorDesignerOnly ? <Meta label="Client" value={project.clientName || "—"} /> : <Meta label="Project Manager" value={project.projectManager || "—"} />}
                       {!juniorDesignerOnly && <Meta label="Designer" value={project.designer1 || "—"} />}
                       {!juniorDesignerOnly && <Meta label="Design Head" value={project.designHead || "—"} />}
@@ -1031,7 +1043,15 @@ export function MatFlowProjectsPage() {
                 <MenuItem key={plant} value={plant}>{plant}</MenuItem>
               ))}
             </TextField>
-            <TextField type="date" InputLabelProps={{ shrink: true }} label="Required Date" value={projectForm.requiredDate || ""} onChange={(e) => setProjectForm({ ...projectForm, requiredDate: e.target.value })} sx={fieldSx} />
+            <TextField
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              label="Tentative Completion Date (Optional)"
+              value={projectForm.requiredDate || ""}
+              onChange={(e) => setProjectForm({ ...projectForm, requiredDate: e.target.value })}
+              helperText="Optional — leave blank if the Project completion date is not yet committed."
+              sx={fieldSx}
+            />
             <TextField label="Project Manager" value={projectForm.projectManager || ""} onChange={(e) => setProjectForm({ ...projectForm, projectManager: e.target.value })} sx={fieldSx} />
             <TextField label="Designer-1 / Client Project Designer" value={projectForm.designer1 || ""} onChange={(e) => setProjectForm({ ...projectForm, designer1: e.target.value })} sx={fieldSx} />
             <TextField label="Design Head" value={projectForm.designHead || ""} onChange={(e) => setProjectForm({ ...projectForm, designHead: e.target.value })} sx={fieldSx} />

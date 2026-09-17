@@ -11,6 +11,8 @@ import {
   ErrorBox,
   LoadingBlock,
   PageHero,
+  MATFLOW_LIST_CARD_OPTIONS,
+  MatFlowViewToggle,
   MATFLOW_ROLES,
   fieldSx,
   getMatFlowDepartmentAccess,
@@ -20,6 +22,7 @@ import {
   readable,
   secondaryBtnSx,
   useMatFlow,
+  useMatFlowViewMode,
 } from "../matflowUi";
 
 const REPORTS = Object.freeze({
@@ -256,6 +259,7 @@ export function MatFlowReportsPage() {
     return availableReports[0]?.value || REPORTS.DESIGN;
   }, [primary, access, availableReports]);
 
+  const [viewMode, setViewMode] = useMatFlowViewMode("reports", "LIST");
   const [reportType, setReportType] = useState(initialType);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -462,7 +466,8 @@ export function MatFlowReportsPage() {
         title={juniorDesignerOnly ? "My Reports" : "Reports"}
         subtitle={juniorDesignerOnly ? "Only your assigned Design tasks and their related Product / PD information." : "Department task and handoff reports with Product Name + PD No. as the common reference."}
         actions={(
-          <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap" }}>
+          <Box sx={{ display: "flex", gap: 0.7, flexWrap: "wrap", alignItems: "center" }}>
+            <MatFlowViewToggle value={viewMode} onChange={setViewMode} options={MATFLOW_LIST_CARD_OPTIONS} />
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>Refresh</Button>
             <Button startIcon={<FileDownloadOutlinedIcon />} onClick={exportReport} disabled={!filtered.length} sx={secondaryBtnSx}>Download Excel</Button>
           </Box>
@@ -516,8 +521,44 @@ export function MatFlowReportsPage() {
         </Box>
       </Card>
 
-      <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
-        {!filtered.length ? <EmptyState>No rows match the current report filters.</EmptyState> : (
+      {!filtered.length ? (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
+          <EmptyState>No rows match the current report filters.</EmptyState>
+        </Card>
+      ) : viewMode === "CARD" ? (
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "repeat(2,minmax(0,1fr))" }, gap: 1 }}>
+          {filtered.map((row, index) => (
+            <Card
+              key={`${row.productionFileId || "file"}-${row.taskNo || row.taskKey || row.stage}-${index}`}
+              sx={{ ...panelSx, p: 1.2, borderTop: `3px solid ${reportRowAccent(row)}`, display: "grid", gap: 0.9, boxShadow: "none" }}
+            >
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2,minmax(0,1fr))" }, gap: 0.8 }}>
+                {visibleColumns.filter((column) => column.key !== "action").map((column) => (
+                  <Box key={column.key} sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 8.3, fontWeight: 900, letterSpacing: ".035em", textTransform: "uppercase", color: "var(--mf-text-muted)" }}>
+                      {column.label}
+                    </Typography>
+                    <Box sx={{ mt: 0.18, minWidth: 0 }}>{pageCellValue(row, column.key, reportType)}</Box>
+                  </Box>
+                ))}
+              </Box>
+              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  size="small"
+                  endIcon={<OpenInNewOutlinedIcon />}
+                  onClick={() => navigate(reportType === REPORTS.QUERIES && row.queryId
+                    ? `/matflow/work?fileId=${row.productionFileId}&tab=queries&queryId=${row.queryId}`
+                    : `/matflow/work?fileId=${row.productionFileId}`)}
+                  sx={secondaryBtnSx}
+                >
+                  {reportType === REPORTS.QUERIES ? "Open chat" : "Open"}
+                </Button>
+              </Box>
+            </Card>
+          ))}
+        </Box>
+      ) : (
+        <Card sx={{ ...panelSx, p: 0, overflow: "hidden", boxShadow: "none" }}>
           <Box sx={{ overflowX: "auto" }}>
             <Box sx={{ minWidth: "max-content" }}>
               <Box
@@ -579,8 +620,8 @@ export function MatFlowReportsPage() {
               ))}
             </Box>
           </Box>
-        )}
-      </Card>
+        </Card>
+      )}
     </Box>
   );
 }

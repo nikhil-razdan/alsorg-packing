@@ -1513,6 +1513,43 @@ export function SummaryCard({ label, value, helper, tone }) {
   );
 }
 
+export const MATFLOW_LIST_CARD_OPTIONS = Object.freeze([
+  { value: "LIST", label: "List" },
+  { value: "CARD", label: "Card" },
+]);
+
+const normalizeViewMode = (value, fallback = "LIST") => {
+  const next = String(value || "").trim().toUpperCase();
+  return next === "CARD" || next === "LIST" ? next : fallback;
+};
+
+/**
+ * Small persistent presentation preference. It changes layout only; no workflow,
+ * permission or API behavior depends on it. Each page gets its own saved mode.
+ */
+export function useMatFlowViewMode(pageKey, initialMode = "LIST") {
+  const storageKey = `matflow-view-mode:${String(pageKey || "page").trim().toLowerCase()}`;
+  const fallback = normalizeViewMode(initialMode);
+  const [viewMode, setViewModeState] = useState(() => {
+    if (typeof window === "undefined") return fallback;
+    try {
+      return normalizeViewMode(window.localStorage.getItem(storageKey), fallback);
+    } catch {
+      return fallback;
+    }
+  });
+
+  const setViewMode = useCallback((nextValue) => {
+    const next = normalizeViewMode(nextValue, fallback);
+    setViewModeState(next);
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(storageKey, next); } catch { /* preference persistence is optional */ }
+    }
+  }, [storageKey, fallback]);
+
+  return [viewMode, setViewMode];
+}
+
 export function MatFlowViewToggle({ value, onChange, options = [] }) {
   const safeOptions = Array.isArray(options) ? options : [];
   return (
