@@ -242,6 +242,91 @@ const JUNIOR_DESIGN_TABS = Object.freeze([
   ["queries", "Related Issues"],
 ]);
 
+/*
+ * Design oversight is PD-based, not only Product-stage based.
+ *
+ * A Design Head / Admin / Director must not lose the PD context as individual
+ * Products cross PPC Gate 1 and move into Engineering. While at least one Product
+ * under a PD is still actively inside Engineering, the Design workspace keeps the
+ * complete PD visible and shows every Product with its own real workflow state.
+ * Ordinary Designer / Junior Designer queues remain task/stage focused.
+ */
+const DESIGN_PD_ENGINEERING_STAGES = new Set([
+  "ENGINEERING_REVIEW",
+  "ENGINEERING_QUERY",
+  "ENGINEERING_WORK",
+  "REVISION_REVIEW",
+]);
+
+const productionFilePdKey = (row) => {
+  const projectId = clean(row?.projectId);
+  if (projectId) return `PROJECT:${projectId}`;
+  const plant = clean(row?.plantCode).toUpperCase();
+  const projectCode = clean(row?.projectCode).toUpperCase();
+  if (projectCode) return `PD:${plant}::${projectCode}`;
+  return `FILE:${clean(row?.id)}`;
+};
+
+const productionFileMatchesSearch = (row, term) => {
+  const q = clean(term).toLowerCase();
+  if (!q) return true;
+  return [
+    row?.productName,
+    row?.projectCode,
+    row?.projectName,
+    row?.clientName,
+    row?.productionFileNo,
+    row?.drawingNo,
+    row?.currentDepartment,
+    row?.currentOwner,
+    row?.designer,
+    row?.designHead,
+    row?.engineeringHead,
+    row?.assignedEngineer,
+  ].some((value) => String(value || "").toLowerCase().includes(q));
+};
+
+const designWorkflowBucket = (row) => {
+  const stage = String(row?.stage || "").toUpperCase();
+  if (["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"].includes(stage)) return "Design";
+  if (stage === "PPC_GATE_1") return "PPC Gate 1";
+  if (DESIGN_PD_ENGINEERING_STAGES.has(stage)) return "Engineering";
+  if (stage === "PPC_GATE_2") return "PPC Gate 2";
+  if (stage === "PRODUCTION_RELEASED") return "Released";
+  return readable(stage || "Unknown");
+};
+
+const designPdWorkflowSummary = (rows) => {
+  const counts = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const bucket = designWorkflowBucket(row);
+    counts.set(bucket, (counts.get(bucket) || 0) + 1);
+  });
+  const order = ["Design", "PPC Gate 1", "Engineering", "PPC Gate 2", "Released"];
+  const parts = order
+    .filter((key) => counts.has(key))
+    .map((key) => `${counts.get(key)} ${key}`);
+  for (const [key, value] of counts.entries()) {
+    if (!order.includes(key)) parts.push(`${value} ${key}`);
+  }
+  return parts.join(" · ");
+};
+
+const designProductWorkflowNote = (row) => {
+  const stage = String(row?.stage || "").toUpperCase();
+  if (DESIGN_PD_ENGINEERING_STAGES.has(stage)) {
+    const decision = row?.engineeringDecision ? readable(row.engineeringDecision) : "In progress";
+    return `Engineering · ${decision}`;
+  }
+  if (stage === "PPC_GATE_2") return "Engineering complete · PPC Gate 2";
+  if (stage === "PRODUCTION_RELEASED") return "Production Released";
+  if (stage === "PPC_GATE_1") return "Design handed over · PPC Gate 1";
+  if (["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"].includes(stage)) {
+    return `Design · ${readable(row?.designHeadDecision || "PENDING")}`;
+  }
+  return row?.currentDepartment ? readable(row.currentDepartment) : "Workflow status";
+};
+
 const visibleInFocus = (row, focus) => {
   const stage = String(row?.stage || "").toUpperCase();
   if (focus === "DESIGN") {
@@ -251,6 +336,49 @@ const visibleInFocus = (row, focus) => {
   if (focus === "ENGINEERING") return ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2"].includes(stage);
   if (focus === "PPC") return ["PPC_GATE_1", "PPC_GATE_2", "PRODUCTION_RELEASED"].includes(stage) || (stage === "ENGINEERING_QUERY" && Number(row?.openQueries || 0) > 0);
   return true;
+};
+
+const scopeDesignOversightRows = (rows, { search, health, stage, selectedId }) => {
+  const source = Array.isArray(rows) ? rows : [];
+  const engineeringPdKeys = new Set(
+    source
+      .filter((row) => DESIGN_PD_ENGINEERING_STAGES.has(String(row?.stage || "").toUpperCase()))
+      .map(productionFilePdKey)
+  );
+
+  /*
+   * Start from the normal Design queue, then expand only Engineering-active PDs
+   * to every Product in that PD. This is deliberately narrower than making all
+   * historical PDs permanent in Design Work.
+   */
+  const candidateRows = source.filter((row) => {
+    const directSearchMatch = clean(search) && productionFileMatchesSearch(row, search);
+    return visibleInFocus(row, "DESIGN")
+      || engineeringPdKeys.has(productionFilePdKey(row))
+      || row?.id === selectedId
+      || directSearchMatch;
+  });
+
+  const rowsByPd = new Map();
+  candidateRows.forEach((row) => {
+    const key = productionFilePdKey(row);
+    if (!rowsByPd.has(key)) rowsByPd.set(key, []);
+    rowsByPd.get(key).push(row);
+  });
+
+  const q = clean(search);
+  return candidateRows.filter((row) => {
+    if (row?.id === selectedId) return true;
+    const pdKey = productionFilePdKey(row);
+    const continuityPd = engineeringPdKeys.has(pdKey);
+    const contextRows = continuityPd ? (rowsByPd.get(pdKey) || [row]) : [row];
+
+    const searchMatches = !q || contextRows.some((item) => productionFileMatchesSearch(item, q));
+    const healthMatches = !health || contextRows.some((item) => String(item?.releaseHealth || "").toUpperCase() === String(health).toUpperCase());
+    const stageMatches = !stage || contextRows.some((item) => String(item?.stage || "").toUpperCase() === String(stage).toUpperCase());
+
+    return searchMatches && healthMatches && stageMatches;
+  });
 };
 
 const timelineForFocus = (rows, focus) => {
@@ -480,6 +608,11 @@ export function MatFlowWorkWorkspacePage() {
     && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR, MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER);
   const juniorEngineerOnly = hasRole(MATFLOW_ROLES.ENGINEERING_JUNIOR)
     && !hasRole(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING);
+  const retainWholePdInDesign = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DIRECTOR
+  );
   const canCreateEngineeringTask = canEngineeringReview || juniorEngineerOnly;
   const canSharedQueryWrite = hasRole(
     MATFLOW_ROLES.ADMIN,
@@ -573,29 +706,42 @@ export function MatFlowWorkWorkspacePage() {
     [juniorDesignerOnly, workspaceFocus]
   );
 
+  const visibleStageOptions = useMemo(
+    () => workspaceFocus === "DESIGN" && retainWholePdInDesign
+      ? STAGES_BY_FOCUS.MANAGEMENT
+      : (STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT),
+    [workspaceFocus, retainWholePdInDesign]
+  );
+
   useEffect(() => {
     const tabs = visibleTabs;
     if (!tabs.some(([value]) => value === tab)) setTab(tabs[0]?.[0] || "overview");
     if (workspaceFocus !== "DESIGN" && workspaceView === "TASKS") setWorkspaceView("FILES");
-    const allowedStages = STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT;
-    if (stage && !allowedStages.includes(stage)) setStage("");
-  }, [workspaceFocus, tab, workspaceView, stage, visibleTabs]);
+    if (stage && !visibleStageOptions.includes(stage)) setStage("");
+  }, [workspaceFocus, tab, workspaceView, stage, visibleTabs, visibleStageOptions]);
 
   const loadList = useCallback(
     async ({ quiet = false } = {}) => {
       if (!quiet) setLoading(true);
       try {
+        const designPdOversight = workspaceFocus === "DESIGN" && retainWholePdInDesign;
         const response = await matflowApi.listProductionFiles({
           plantCode: selectedPlantParam,
-          search: clean(search) || undefined,
-          health: health || undefined,
-          stage: stage || undefined,
+          /*
+           * PD continuity needs the sibling Products before local filtering. Do not
+           * let server-side search / health / stage filters remove those siblings.
+           */
+          search: designPdOversight ? undefined : (clean(search) || undefined),
+          health: designPdOversight ? undefined : (health || undefined),
+          stage: designPdOversight ? undefined : (stage || undefined),
         });
         const rows = Array.isArray(response?.data) ? response.data : [];
         const hasIdentitySearch = Boolean(clean(search));
-        const scopedRows = hasIdentitySearch
-          ? rows
-          : rows.filter((row) => visibleInFocus(row, workspaceFocus) || row.id === selectedId);
+        const scopedRows = designPdOversight
+          ? scopeDesignOversightRows(rows, { search, health, stage, selectedId })
+          : hasIdentitySearch
+            ? rows
+            : rows.filter((row) => visibleInFocus(row, workspaceFocus) || row.id === selectedId);
         setFiles(scopedRows);
       } catch (requestError) {
         if (!quiet) setError(readMatFlowError(requestError, "Unable to load Production Files."));
@@ -603,7 +749,7 @@ export function MatFlowWorkWorkspacePage() {
         if (!quiet) setLoading(false);
       }
     },
-    [selectedPlantParam, search, health, stage, selectedId, workspaceFocus]
+    [selectedPlantParam, search, health, stage, selectedId, workspaceFocus, retainWholePdInDesign]
   );
 
   const loadDetail = useCallback(async (id, { quiet = false } = {}) => {
@@ -938,7 +1084,9 @@ export function MatFlowWorkWorkspacePage() {
           workspaceFocus === "DESIGN"
             ? juniorDesignerOnly
               ? "Only your assigned Design tasks and their related Product / PD information are shown."
-              : "Start with Client / PD, then open the Product that needs Design action."
+              : retainWholePdInDesign
+                ? "PD-level Design oversight: while any Product in a PD is still in Engineering, the complete PD remains visible with each Product's live workflow status."
+                : "Start with Client / PD, then open the Product that needs Design action."
             : workspaceFocus === "ENGINEERING"
               ? "Start with Client / PD, then open the Product that needs Engineering action."
               : workspaceFocus === "PPC"
@@ -987,7 +1135,7 @@ export function MatFlowWorkWorkspacePage() {
           </TextField>}
           {!juniorDesignerOnly && <TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All stages</MenuItem>
-            {(STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT).map((value) => (
+            {visibleStageOptions.map((value) => (
               <MenuItem key={value} value={value}>{readable(value)}</MenuItem>
             ))}
           </TextField>}
@@ -1047,6 +1195,11 @@ export function MatFlowWorkWorkspacePage() {
                     <Typography noWrap sx={{ mt: 0.12, fontSize: 9.6, color: "var(--mf-text-secondary)" }}>
                       {groupBy === "PD" ? (group.projectName || "Project") : `${group.fileCount} products across ${group.pdCount} PD${group.pdCount === 1 ? "" : "s"}`}
                     </Typography>
+                    {workspaceFocus === "DESIGN" && retainWholePdInDesign && (
+                      <Typography noWrap sx={{ mt: 0.16, fontSize: 8.7, fontWeight: 780, color: "var(--mf-text-muted)" }}>
+                        {designPdWorkflowSummary(group.rows)}
+                      </Typography>
+                    )}
                   </Box>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.65, textAlign: "right" }}>
                     <Box>
@@ -1095,9 +1248,16 @@ export function MatFlowWorkWorkspacePage() {
                               {groupBy === "CLIENT" ? `${row.projectCode || "No PD"} · ` : ""}{row.drawingNo || "No drawing"} · {row.productionFileNo}
                             </Typography>
                           </Box>
-                          <Box sx={{ textAlign: "right", minWidth: 90 }}>
+                          <Box sx={{ textAlign: "right", minWidth: workspaceFocus === "DESIGN" && retainWholePdInDesign ? 138 : 90 }}>
                             <Typography sx={{ fontSize: 8.9, fontWeight: 850, color: rowVisual.accent }}>{readable(row.stage)}</Typography>
-                            <Typography sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>{row.currentOwner || "Unassigned"}</Typography>
+                            <Typography noWrap sx={{ mt: 0.08, fontSize: 8.5, color: "var(--mf-text-muted)" }}>
+                              {[row.currentDepartment, row.currentOwner].filter(Boolean).join(" · ") || "Unassigned"}
+                            </Typography>
+                            {workspaceFocus === "DESIGN" && retainWholePdInDesign && (
+                              <Typography noWrap sx={{ mt: 0.08, fontSize: 8.15, fontWeight: 760, color: "var(--mf-text-secondary)" }}>
+                                {designProductWorkflowNote(row)}
+                              </Typography>
+                            )}
                           </Box>
                         </Box>
                       );
