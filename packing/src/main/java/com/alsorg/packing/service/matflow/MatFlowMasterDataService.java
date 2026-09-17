@@ -24,7 +24,7 @@ public class MatFlowMasterDataService {
 
     @Transactional(readOnly = true)
     public List<MaterialResponse> materials(String search, Boolean active) {
-        accessService.requireRead();
+        accessService.requireEngineeringRead();
         String q = clean(search).toLowerCase(Locale.ROOT);
         return materialRepository.findAllByOrderByMaterialNameAsc().stream()
                 .filter(row -> active == null || row.isActive() == active)

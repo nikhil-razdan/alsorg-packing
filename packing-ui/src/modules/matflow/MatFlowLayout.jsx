@@ -53,11 +53,12 @@ import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
 const NAV = [
     ["Dashboard", "/matflow/dashboard", "dashboard", <DashboardOutlinedIcon />],
-    ["Production Control", "/matflow/work", "work", <AssignmentTurnedInOutlinedIcon />],
+    ["Work", "/matflow/work", "work", <AssignmentTurnedInOutlinedIcon />],
     ["Projects", "/matflow/projects", "projects", <FolderOutlinedIcon />],
     ["BOMs", "/matflow/boms", "boms", <AccountTreeOutlinedIcon />],
     ["Materials", "/matflow/materials", "materials", <Inventory2OutlinedIcon />],
     ["Production Release", "/matflow/release", "release", <EngineeringOutlinedIcon />],
+    ["Reports", "/matflow/reports", "reports", <AssessmentOutlinedIcon />],
 ].map(([label, path, screen, icon]) => ({ label, path, screen, icon }));
 
 const PRIMARY_SCREENS = Object.freeze({
@@ -67,23 +68,24 @@ const PRIMARY_SCREENS = Object.freeze({
     [MATFLOW_ROLES.DESIGNER]: new Set(["work", "projects"]),
     [MATFLOW_ROLES.DESIGNER_JUNIOR]: new Set(["work", "projects"]),
     [MATFLOW_ROLES.PPC]: new Set(["work", "projects", "release"]),
-    [MATFLOW_ROLES.ENGINEERING_HEAD]: new Set(["work", "projects", "boms", "materials", "release"]),
-    [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "materials", "release"]),
+    [MATFLOW_ROLES.ENGINEERING_HEAD]: new Set(["work", "projects", "boms", "materials"]),
+    [MATFLOW_ROLES.ENGINEERING]: new Set(["work", "projects", "boms", "materials"]),
     [MATFLOW_ROLES.ENGINEERING_JUNIOR]: new Set(["work", "projects"]),
     [MATFLOW_ROLES.PRODUCTION]: new Set(["release"]),
-    [MATFLOW_ROLES.DIRECTOR]: new Set([]),
+    [MATFLOW_ROLES.DIRECTOR]: new Set(["projects", "release"]),
 });
 
-const CONTROL_SCREENS = new Set(["release"]);
+const CONTROL_SCREENS = new Set(["release", "reports"]);
 const REFERENCE_SCREENS = new Set(["projects", "materials", "boms"]);
 
 const HEADER = [
-    ["/matflow/dashboard", "MatFlow Dashboard", "Director-level view of design, PPC and engineering control."],
-    ["/matflow/work", "Production Control", "Designer submission, PPC gates, engineering queries, revisions and documentation."],
+    ["/matflow/dashboard", "Dashboard", "A quiet, role-focused view of the work that needs attention."],
+    ["/matflow/work", "Work", "Department work stays focused while Product Name + PD No. remain the common identity."],
     ["/matflow/projects", "Projects & Products", "PD / Project and Product / Drawing master."],
-    ["/matflow/boms", "Engineering BOM", "BOM authoring and readiness before PPC Production Release."],
+    ["/matflow/boms", "Engineering BOM", "Engineering-only material documentation for the Production File."],
     ["/matflow/materials", "Material Reference", "Engineering material catalogue used by BOM."],
-    ["/matflow/release", "Production Release", "Validated handoff boundary. Downstream production execution is intentionally not configured yet."],
+    ["/matflow/release", "Production Release", "PPC-controlled handoff boundary before the future validated production workflow."],
+    ["/matflow/reports", "Reports", "Department-focused operational reports with Product Name + PD No. as the common reference."],
 ];
 
 const sectionLabel = (section) => ({
@@ -213,14 +215,29 @@ export default function MatFlowLayout() {
         }
     };
 
-    const renderNavItem = (item) => (
-        <Tooltip key={item.path} title={collapsed ? item.label : ""} placement="right">
-            <NavLink to={item.path} end={item.path === "/matflow/dashboard"} style={({ isActive }) => linkStyle(isActive, collapsed)}>
-                <span style={{ display: "grid", placeItems: "center" }}>{item.icon}</span>
-                {!collapsed && <span>{item.label}</span>}
-            </NavLink>
-        </Tooltip>
+    const workLabel = (
+        [MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER, MATFLOW_ROLES.DESIGNER_JUNIOR].includes(role)
+            ? "Design Work"
+            : [MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.ENGINEERING_JUNIOR].includes(role)
+                ? "Engineering Work"
+                : role === MATFLOW_ROLES.PPC ? "PPC Control" : "Work"
     );
+    const displayNavLabel = (item) => item.screen === "work" ? workLabel : item.label;
+    const effectiveHeader = location.pathname.startsWith("/matflow/work")
+        ? ["", workLabel, "Department work on the shared Product / PD Production File."]
+        : header;
+
+    const renderNavItem = (item) => {
+        const label = displayNavLabel(item);
+        return (
+            <Tooltip key={item.path} title={collapsed ? label : ""} placement="right">
+                <NavLink to={item.path} end={item.path === "/matflow/dashboard"} style={({ isActive }) => linkStyle(isActive, collapsed)}>
+                    <span style={{ display: "grid", placeItems: "center" }}>{item.icon}</span>
+                    {!collapsed && <span>{label}</span>}
+                </NavLink>
+            </Tooltip>
+        );
+    };
 
     return (
         <Box sx={shellSx}>
@@ -274,8 +291,8 @@ export default function MatFlowLayout() {
             <Box sx={mainSx(collapsed)}>
                 <Box component="header" sx={headerSx}>
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ color: "var(--mf-text)", fontWeight: 950, fontSize: 17 }}>{header[1]}</Typography>
-                        <Typography sx={mutedSx}>{header[2]}</Typography>
+                        <Typography sx={{ color: "var(--mf-text)", fontWeight: 950, fontSize: 17 }}>{effectiveHeader[1]}</Typography>
+                        <Typography sx={mutedSx}>{effectiveHeader[2]}</Typography>
                     </Box>
 
                     <Box sx={{ display: "flex", gap: .7, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -328,13 +345,6 @@ export default function MatFlowLayout() {
                                 </Badge>
                             </Button>
                         </Tooltip>
-                        <Button
-                            startIcon={<WarningAmberOutlinedIcon />}
-                            onClick={() => navigate(`/matflow/exceptions?new=1&from=${encodeURIComponent(location.pathname)}`)}
-                            sx={secondaryBtnSx}
-                        >
-                            Report Issue
-                        </Button>
                         <Tooltip title={isDark ? "Light mode" : "Dark mode"}>
                             <Button onClick={toggleMode} sx={{ ...secondaryBtnSx, minWidth: 38, px: .8 }}>
                                 {isDark ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
@@ -374,7 +384,7 @@ export default function MatFlowLayout() {
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                         <Box>
                             <Typography sx={{ fontSize: 14, fontWeight: 950, color: "var(--mf-text)" }}>Notifications</Typography>
-                            <Typography sx={mutedSx}>{notificationFeed?.unreadCount || 0} unread · near-real-time refresh every 10s + on focus</Typography>
+                            <Typography sx={mutedSx}>{notificationFeed?.unreadCount || 0} unread · updates automatically</Typography>
                         </Box>
                         <Button
                             startIcon={<DoneAllOutlinedIcon />}

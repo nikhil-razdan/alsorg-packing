@@ -168,7 +168,7 @@ public class MatFlowInsightService {
 
     @Transactional(readOnly = true)
     public EngineeringKpis engineeringKpis(String plantCode) {
-        accessService.requireRead();
+        accessService.requireEngineeringRead();
         String plant = cleanUpper(plantCode);
         if (plant != null) accessService.requirePlantAccess(plant);
 

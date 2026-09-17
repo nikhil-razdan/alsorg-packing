@@ -67,7 +67,7 @@ export function MatFlowReleasePage() {
       <PageHero
         badge="STABLE HANDOFF BOUNDARY"
         title="Production Release"
-        subtitle="Product Name and PD No. remain the primary identity from PPC Gate 2 through the Production Release handoff. No Cutting, CNC, Drilling, Assembly or Final-QC workflow is created until that factory process is validated."
+        subtitle="PPC Gate 2 and released Products, identified by Product Name + PD No."
         actions={(
           <Button startIcon={<RefreshOutlinedIcon />} onClick={load} sx={secondaryBtnSx}>
             Refresh
@@ -86,15 +86,6 @@ export function MatFlowReleasePage() {
           onChange={(event) => setSearch(event.target.value)}
           sx={fieldSx}
         />
-      </Card>
-
-      <Card sx={{ ...panelSx, p: 1.6, borderColor: "var(--mf-warning-border)", background: "var(--mf-warning-soft)" }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-warning-text)" }}>
-          Architecture guardrail
-        </Typography>
-        <Typography sx={{ mt: 0.35, fontSize: 11, color: "var(--mf-text-secondary)" }}>
-          PRODUCTION_RELEASED is an extension point, not a production-execution implementation. Later, the validated factory workflow will consume this released package. After Final QC, PackFlow will be linked by PD No./Project without duplicating Packing → Delivery.
-        </Typography>
       </Card>
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>

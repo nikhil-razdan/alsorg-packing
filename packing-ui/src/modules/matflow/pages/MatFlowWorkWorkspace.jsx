@@ -24,12 +24,15 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import { useSearchParams } from "react-router-dom";
 import { matflowApi, readMatFlowError } from "../api/matflowApi";
+import { downloadMatFlowExcel } from "../api/matflowReportsExcel";
 import {
   ErrorBox,
   LoadingBlock,
   MATFLOW_ROLES,
   MatFlowProductIdentity,
   PageHero,
+  getMatFlowDepartmentAccess,
+  primaryMatFlowDepartment,
   SummaryCard,
   clean,
   dialogActionsSx,
@@ -75,6 +78,65 @@ const HEALTH_FILTERS = [
   { value: "AMBER", label: "Needs attention" },
   { value: "GREEN", label: "On track" },
 ];
+
+const STAGES_BY_FOCUS = Object.freeze({
+  DESIGN: ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED", "PPC_GATE_1"],
+  ENGINEERING: ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2"],
+  PPC: ["PPC_GATE_1", "PPC_GATE_2", "PRODUCTION_RELEASED"],
+  MANAGEMENT: ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED", "PPC_GATE_1", "ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2", "PRODUCTION_RELEASED"],
+});
+
+const TABS_BY_FOCUS = Object.freeze({
+  DESIGN: [
+    ["overview", "Overview"],
+    ["designChecklist", "Checklist"],
+    ["designTasks", "Tasks"],
+    ["drawings", "Drawings"],
+    ["queries", "Queries / Issues"],
+    ["timeline", "Timeline"],
+  ],
+  ENGINEERING: [
+    ["overview", "Overview"],
+    ["engineeringChecklist", "Checklist"],
+    ["engineeringTasks", "Tasks"],
+    ["drawings", "Drawings"],
+    ["queries", "Queries / Issues"],
+    ["timeline", "Timeline"],
+  ],
+  PPC: [
+    ["overview", "Overview"],
+    ["timeline", "Timeline"],
+  ],
+  MANAGEMENT: [
+    ["overview", "Overview"],
+    ["queries", "Queries / Issues"],
+    ["timeline", "Timeline"],
+  ],
+});
+
+const visibleInFocus = (row, focus) => {
+  const stage = String(row?.stage || "").toUpperCase();
+  if (focus === "DESIGN") {
+    return ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED", "PPC_GATE_1"].includes(stage)
+      || (stage === "ENGINEERING_QUERY" && Number(row?.openQueries || 0) > 0);
+  }
+  if (focus === "ENGINEERING") return ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2"].includes(stage);
+  if (focus === "PPC") return ["PPC_GATE_1", "PPC_GATE_2", "PRODUCTION_RELEASED"].includes(stage);
+  return true;
+};
+
+const timelineForFocus = (rows, focus) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (focus === "MANAGEMENT") return list;
+  return list.filter((row) => {
+    const action = String(row?.action || "").toUpperCase();
+    if (action.includes("QUERY") || action.includes("PRODUCTION_FILE") || action === "FILE_SETUP_UPDATED") return true;
+    if (focus === "DESIGN") return action.includes("DESIGN") || action.includes("PPC_GATE_1");
+    if (focus === "ENGINEERING") return action.includes("ENGINEERING") || action.includes("BOM") || action.includes("REVISION") || action.includes("PPC_GATE_2");
+    if (focus === "PPC") return action.includes("PPC") || action.includes("SUBMITTED") || action.includes("RELEASE");
+    return true;
+  });
+};
 
 const healthVisual = (health) => {
   const value = String(health || "").toUpperCase();
@@ -181,7 +243,9 @@ const EMPTY_DESIGN_TASK = {
 
 export function MatFlowWorkWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { selectedPlantParam, hasRole } = useMatFlow();
+  const { selectedPlantParam, hasRole, roles } = useMatFlow();
+  const departmentAccess = useMemo(() => getMatFlowDepartmentAccess(roles), [roles]);
+  const preferredDepartment = useMemo(() => primaryMatFlowDepartment(roles), [roles]);
   const canSetup = hasRole(
     MATFLOW_ROLES.ADMIN,
     MATFLOW_ROLES.MANAGER,
@@ -216,6 +280,38 @@ export function MatFlowWorkWorkspacePage() {
     MATFLOW_ROLES.ENGINEERING,
     MATFLOW_ROLES.ENGINEERING_JUNIOR
   );
+  const canSharedQueryWrite = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.DESIGNER_JUNIOR,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING,
+    MATFLOW_ROLES.ENGINEERING_JUNIOR
+  );
+  const canSharedQueryClose = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING
+  );
+
+  const focusOptions = useMemo(() => {
+    const values = [];
+    if (departmentAccess.design) values.push({ value: "DESIGN", label: "Design" });
+    if (departmentAccess.engineering) values.push({ value: "ENGINEERING", label: "Engineering" });
+    if (departmentAccess.ppc) values.push({ value: "PPC", label: "PPC" });
+    if (departmentAccess.management && values.length > 1) values.unshift({ value: "MANAGEMENT", label: "Overview" });
+    return values;
+  }, [departmentAccess]);
+
+  const resolvedInitialFocus = useMemo(() => {
+    if (focusOptions.some((item) => item.value === preferredDepartment)) return preferredDepartment;
+    return focusOptions[0]?.value || "MANAGEMENT";
+  }, [focusOptions, preferredDepartment]);
 
   const [files, setFiles] = useState([]);
   const [detail, setDetail] = useState(null);
@@ -223,8 +319,9 @@ export function MatFlowWorkWorkspacePage() {
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [health, setHealth] = useState("");
   const [stage, setStage] = useState("");
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState("overview");
   const [workspaceView, setWorkspaceView] = useState("FILES");
+  const [workspaceFocus, setWorkspaceFocus] = useState(resolvedInitialFocus);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -246,6 +343,18 @@ export function MatFlowWorkWorkspacePage() {
     }
   }, [canDesignTeam, canEngineeringReview, revisionType]);
 
+  useEffect(() => {
+    if (!focusOptions.some((item) => item.value === workspaceFocus)) setWorkspaceFocus(resolvedInitialFocus);
+  }, [focusOptions, workspaceFocus, resolvedInitialFocus]);
+
+  useEffect(() => {
+    const tabs = TABS_BY_FOCUS[workspaceFocus] || TABS_BY_FOCUS.MANAGEMENT;
+    if (!tabs.some(([value]) => value === tab)) setTab("overview");
+    if (workspaceFocus !== "DESIGN" && workspaceView === "TASKS") setWorkspaceView("FILES");
+    const allowedStages = STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT;
+    if (stage && !allowedStages.includes(stage)) setStage("");
+  }, [workspaceFocus, tab, workspaceView, stage]);
+
   const loadList = useCallback(
     async ({ quiet = false } = {}) => {
       if (!quiet) setLoading(true);
@@ -257,15 +366,19 @@ export function MatFlowWorkWorkspacePage() {
           stage: stage || undefined,
         });
         const rows = Array.isArray(response?.data) ? response.data : [];
-        setFiles(rows);
-        if (!selectedId && rows.length) setSelectedId(rows[0].id);
+        const hasIdentitySearch = Boolean(clean(search));
+        const scopedRows = hasIdentitySearch
+          ? rows
+          : rows.filter((row) => visibleInFocus(row, workspaceFocus) || row.id === selectedId);
+        setFiles(scopedRows);
+        if (!selectedId && scopedRows.length) setSelectedId(scopedRows[0].id);
       } catch (requestError) {
         if (!quiet) setError(readMatFlowError(requestError, "Unable to load Production Files."));
       } finally {
         if (!quiet) setLoading(false);
       }
     },
-    [selectedPlantParam, search, health, stage, selectedId]
+    [selectedPlantParam, search, health, stage, selectedId, workspaceFocus]
   );
 
   const loadDetail = useCallback(async (id, { quiet = false } = {}) => {
@@ -283,7 +396,7 @@ export function MatFlowWorkWorkspacePage() {
 
   useEffect(() => {
     loadList();
-  }, [selectedPlantParam, health, stage]);
+  }, [selectedPlantParam, health, stage, workspaceFocus]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -525,15 +638,37 @@ export function MatFlowWorkWorkspacePage() {
   return (
     <Box sx={pageSx}>
       <PageHero
-        badge="PRODUCTION CONTROL"
-        title="Products"
-        subtitle="Product Name + PD No. are the primary MatFlow identity. Design work, tasks, checklists, revisions, Engineering and PPC gates stay attached to that same controlled Production File."
-        actions={<Box sx={{ display: "flex", gap: 0.6, flexWrap: "wrap" }}><Button onClick={() => setWorkspaceView("FILES")} sx={workspaceView === "FILES" ? primaryBtnSx : secondaryBtnSx}>Production Files</Button><Button onClick={() => setWorkspaceView("TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>Design Task Desk</Button><Button startIcon={<RefreshOutlinedIcon />} onClick={workspaceView === "FILES" ? refresh : undefined} sx={secondaryBtnSx}>Refresh</Button></Box>}
+        badge={workspaceFocus === "DESIGN" ? "DESIGN" : workspaceFocus === "ENGINEERING" ? "ENGINEERING" : workspaceFocus === "PPC" ? "PPC" : "CONTROL"}
+        title={workspaceFocus === "DESIGN" ? "Design Work" : workspaceFocus === "ENGINEERING" ? "Engineering Work" : workspaceFocus === "PPC" ? "PPC Control" : "Work"}
+        subtitle={
+          workspaceFocus === "DESIGN"
+            ? "Checklist, assigned tasks, drawings and shared queries for the selected Product / PD."
+            : workspaceFocus === "ENGINEERING"
+              ? "Technical checklist, engineering tasks, drawings and shared queries for the selected Product / PD."
+              : workspaceFocus === "PPC"
+                ? "Gate decisions and handoff status for the selected Product / PD."
+                : "Switch department focus while keeping one Product / PD Production File."
+        }
+        actions={(
+          <Box sx={{ display: "flex", gap: 0.55, flexWrap: "wrap" }}>
+            {focusOptions.length > 1 && focusOptions.map((item) => (
+              <Button key={item.value} onClick={() => { setWorkspaceFocus(item.value); setWorkspaceView("FILES"); setTab("overview"); }} sx={workspaceFocus === item.value ? primaryBtnSx : secondaryBtnSx}>
+                {item.label}
+              </Button>
+            ))}
+            {workspaceFocus === "DESIGN" && departmentAccess.design && (
+              <Button onClick={() => setWorkspaceView(workspaceView === "TASKS" ? "FILES" : "TASKS")} sx={workspaceView === "TASKS" ? primaryBtnSx : secondaryBtnSx}>
+                {workspaceView === "TASKS" ? "Products" : "Task Desk"}
+              </Button>
+            )}
+            {workspaceView === "FILES" && <Button startIcon={<RefreshOutlinedIcon />} onClick={refresh} sx={secondaryBtnSx}>Refresh</Button>}
+          </Box>
+        )}
       />
       {error && <ErrorBox>{error}</ErrorBox>}
 
       {workspaceView === "TASKS" ? (
-        <DesignTaskDesk selectedPlantParam={selectedPlantParam} onOpenFile={(fileId) => { setSelectedId(fileId); setWorkspaceView("FILES"); setTab(2); }} />
+        <DesignTaskDesk selectedPlantParam={selectedPlantParam} onOpenFile={(fileId) => { setSelectedId(fileId); setWorkspaceView("FILES"); setWorkspaceFocus("DESIGN"); setTab("designTasks"); }} />
       ) : (
       <>
       <Card sx={{ ...panelSx, p: 1.35 }}>
@@ -545,7 +680,7 @@ export function MatFlowWorkWorkspacePage() {
           </TextField>
           <TextField select size="small" label="Stage" value={stage} onChange={(e) => setStage(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All stages</MenuItem>
-            {["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "PPC_GATE_1", "ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW", "PPC_GATE_2", "PRODUCTION_RELEASED"].map((value) => (
+            {(STAGES_BY_FOCUS[workspaceFocus] || STAGES_BY_FOCUS.MANAGEMENT).map((value) => (
               <MenuItem key={value} value={value}>{readable(value)}</MenuItem>
             ))}
           </TextField>
@@ -606,28 +741,61 @@ export function MatFlowWorkWorkspacePage() {
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 1.4, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5,1fr)" }, gap: 0.8 }}>
-                <SummaryCard label="Checklist" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designChecklistProgress?.pending || 0} pending`} />
-                <SummaryCard label="Design Tasks" value={`${file.designTaskProgress?.done || 0}/${file.designTaskProgress?.total || 0}`} helper={`${file.designTaskProgress?.hold || 0} hold · ${file.designTaskProgress?.overdue || 0} overdue`} tone={file.designTaskProgress?.hold || file.designTaskProgress?.overdue ? "warning" : "success"} />
-                <SummaryCard label="Design Head" value={readable(file.designHeadDecision || "PENDING")} helper={file.designHead || "Not assigned"} tone={file.designHeadDecision === "APPROVED" ? "success" : "warning"} />
-                <SummaryCard label="Design Drawing" value={designDrawing ? `REV ${designDrawing.revisionNo}` : "MISSING"} helper={designDrawing?.originalFileName || "Active drawing required"} tone={designDrawing ? "success" : "danger"} />
-                <SummaryCard label="Design Handoff" value={detail.designHandoffReady ? "READY" : "BLOCKED"} helper={detail.designHandoffReady ? "Ready for PPC" : `${detail.designHandoffBlockers?.length || 0} blocker(s)`} tone={detail.designHandoffReady ? "success" : "warning"} />
+              <Box sx={{ mt: 1.2, display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.75 }}>
+                {workspaceFocus === "DESIGN" && (
+                  <>
+                    <SummaryCard label="Checklist" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designChecklistProgress?.pending || 0} pending`} />
+                    <SummaryCard label="Tasks" value={`${file.designTaskProgress?.done || 0}/${file.designTaskProgress?.total || 0}`} helper={`${file.designTaskProgress?.hold || 0} hold · ${file.designTaskProgress?.overdue || 0} overdue`} tone={file.designTaskProgress?.hold || file.designTaskProgress?.overdue ? "warning" : "success"} />
+                    <SummaryCard label="Design Head" value={readable(file.designHeadDecision || "PENDING")} helper={file.designHead || "Not assigned"} tone={file.designHeadDecision === "APPROVED" ? "success" : "warning"} />
+                    <SummaryCard label="Handoff" value={detail.designHandoffReady ? "READY" : "BLOCKED"} helper={detail.designHandoffReady ? "Ready for PPC" : `${detail.designHandoffBlockers?.length || 0} blocker(s)`} tone={detail.designHandoffReady ? "success" : "warning"} />
+                  </>
+                )}
+                {workspaceFocus === "ENGINEERING" && (
+                  <>
+                    <SummaryCard label="Checklist" value={`${file.engineeringChecklistProgress?.percent || 0}%`} helper={`${file.engineeringChecklistProgress?.pending || 0} pending`} />
+                    <SummaryCard label="Tasks" value={`${file.engineeringTaskCompleted || 0}/${Number(file.engineeringTaskPending || 0) + Number(file.engineeringTaskCompleted || 0)}`} helper={`${file.engineeringTaskPending || 0} pending`} tone={file.engineeringTaskPending ? "warning" : "success"} />
+                    <SummaryCard label="Queries" value={file.openQueries || 0} helper={file.openQueries ? "Needs response / closure" : "No open query"} tone={file.openQueries ? "warning" : "success"} />
+                    <SummaryCard label="BOM" value={readable(file.latestBomStatus || "NOT_STARTED")} helper={file.assignedEngineer || "Engineer not assigned"} tone={file.latestBomStatus === "READY_FOR_RELEASE" || file.latestBomStatus === "RELEASED" ? "success" : "default"} />
+                  </>
+                )}
+                {workspaceFocus === "PPC" && (
+                  <>
+                    <SummaryCard label="Stage" value={readable(file.stage)} helper={file.currentOwner || "No current owner"} />
+                    <SummaryCard label="Gate 1" value={readable(file.ppcGate1Decision || "PENDING")} helper={file.ppcOwner || "PPC owner not assigned"} />
+                    <SummaryCard label="Gate 2" value={readable(file.ppcGate2Decision || "PENDING")} helper={detail.ppcGate2Ready ? "Ready" : `${detail.ppcGate2Blockers?.length || 0} blocker(s)`} tone={detail.ppcGate2Ready ? "success" : "warning"} />
+                    <SummaryCard label="Release" value={file.productionReleasedAt ? "RELEASED" : (file.plannedProductionReleaseDate || "NOT PLANNED")} helper={file.productionReleasedAt ? toDateTime(file.productionReleasedAt) : "Planned production release"} tone={file.productionReleasedAt ? "success" : "default"} />
+                  </>
+                )}
+                {workspaceFocus === "MANAGEMENT" && (
+                  <>
+                    <SummaryCard label="Department" value={file.currentDepartment || "—"} helper={file.currentOwner || "No current owner"} />
+                    <SummaryCard label="Design" value={`${file.designChecklistProgress?.percent || 0}%`} helper={`${file.designTaskProgress?.overdue || 0} overdue task(s)`} tone={file.designTaskProgress?.overdue ? "warning" : "default"} />
+                    <SummaryCard label="Queries" value={file.openQueries || 0} helper={file.openQueries ? "Open communication" : "No open query"} tone={file.openQueries ? "warning" : "success"} />
+                    <SummaryCard label="Release" value={file.stage === "PRODUCTION_RELEASED" ? "RELEASED" : readable(file.stage)} helper={file.plannedProductionReleaseDate || "No release date"} tone={file.stage === "PRODUCTION_RELEASED" ? "success" : "default"} />
+                  </>
+                )}
               </Box>
             </Card>
 
             <Card sx={{ ...panelSx, p: 0 }}>
-              <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1 }}>
-                {["Overview", "Designer Checklist", "Design Tasks", "Drawings / Revisions", "Engineering", "Queries", "Engineering Tasks", "Timeline"].map((label) => <Tab key={label} label={label} />)}
+              <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto" sx={{ borderBottom: "1px solid var(--mf-border)", px: 1, minHeight: 42 }}>
+                {(TABS_BY_FOCUS[workspaceFocus] || TABS_BY_FOCUS.MANAGEMENT).map(([value, label]) => <Tab key={value} value={value} label={label} sx={{ minHeight: 42, py: 0.6 }} />)}
               </Tabs>
-              <Box sx={{ p: 1.7 }}>
-                {tab === 0 && <Overview file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
-                {tab === 1 && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
-                {tab === 2 && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
-                {tab === 3 && <Revisions file={file} rows={detail.revisions || []} canUploadDesign={canDesignTeam} canUploadEngineering={canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={canEngineeringDecision} setAction={setAction} working={working} />}
-                {tab === 4 && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
-                {tab === 5 && <Queries items={detail.queries || []} canCreate={canEngineeringReview} canRespond={canDesignTeam} canClose={canEngineeringReview} setAction={setAction} />}
-                {tab === 6 && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canWork={canEngineeringTask} setAction={setAction} />}
-                {tab === 7 && <Timeline rows={detail.timeline || []} />}
+              <Box sx={{ p: 1.45 }}>
+                {tab === "overview" && <Overview focus={workspaceFocus} file={file} detail={detail} canDesignHead={canDesignHead} canPpc={canPpc} canEngineeringReview={canEngineeringReview} canEngineeringDecision={canEngineeringDecision} setAction={setAction} />}
+                {tab === "designChecklist" && <Checklist title="Designer Checklist" area="DESIGN" items={detail.designChecklist || []} progress={file.designChecklistProgress} canEdit={canDesignTeam && DESIGN_STAGES.includes(file.stage)} working={working} onSave={saveChecklist} />}
+                {tab === "designTasks" && <DesignTasks items={detail.designTasks || []} progress={file.designTaskProgress} canHead={canDesignHead && DESIGN_STAGES.includes(file.stage)} canWork={canDesignTeam && DESIGN_STAGES.includes(file.stage)} onCreate={openNewDesignTask} onEdit={openEditDesignTask} onStatus={requestDesignTaskStatus} />}
+                {tab === "drawings" && <Revisions file={file} rows={(detail.revisions || []).filter((row) => workspaceFocus === "DESIGN" ? row.type === "DESIGN_DRAWING" : workspaceFocus === "ENGINEERING" ? row.type === "ENGINEERING_DRAWING" : true)} canUploadDesign={workspaceFocus === "DESIGN" && canDesignTeam} canUploadEngineering={workspaceFocus === "ENGINEERING" && canEngineeringReview} revisionType={revisionType} setRevisionType={setRevisionType} revisionNo={revisionNo} setRevisionNo={setRevisionNo} summary={revisionSummary} setSummary={setRevisionSummary} setFile={setRevisionFile} upload={uploadRevision} openRevision={openRevision} canReview={workspaceFocus === "ENGINEERING" && canEngineeringDecision} setAction={setAction} working={working} />}
+                {tab === "engineeringChecklist" && <Checklist title="Engineering Technical Checklist" area="ENGINEERING" items={detail.engineeringChecklist || []} progress={file.engineeringChecklistProgress} canEdit={canEngineeringReview && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage)} working={working} onSave={saveChecklist} />}
+                {tab === "queries" && <Queries
+                  items={detail.queries || []}
+                  canCreate={canSharedQueryWrite && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY", "ENGINEERING_WORK", "REVISION_REVIEW"].includes(file.stage)}
+                  canRespond={canSharedQueryWrite}
+                  canClose={canSharedQueryClose}
+                  setAction={setAction}
+                />}
+                {tab === "engineeringTasks" && <Tasks items={detail.engineeringTasks || []} canManage={canEngineeringReview} canWork={canEngineeringTask} setAction={setAction} />}
+                {tab === "timeline" && <Timeline rows={timelineForFocus(detail.timeline, workspaceFocus)} />}
               </Box>
             </Card>
           </Box>
@@ -639,14 +807,28 @@ export function MatFlowWorkWorkspacePage() {
       <Dialog open={setupOpen} onClose={() => !working && setSetupOpen(false)} fullWidth maxWidth="md" PaperProps={{ sx: dialogPaperSx }}>
         <DialogTitle sx={dialogTitleSx}>Production File Responsibility & Dates</DialogTitle>
         <DialogContent sx={dialogContentSx}>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1.2, mt: 0.5 }}>
-            <TextField label="Designer-1 / Project Designer" value={setup.designer} onChange={(e) => setSetup((value) => ({ ...value, designer: e.target.value }))} sx={fieldSx} />
-            <TextField label="Design Head" value={setup.designHead} onChange={(e) => setSetup((value) => ({ ...value, designHead: e.target.value }))} sx={fieldSx} />
-            <TextField label="PPC Owner" value={setup.ppcOwner} onChange={(e) => setSetup((value) => ({ ...value, ppcOwner: e.target.value }))} sx={fieldSx} />
-            <TextField label="Engineering Head" value={setup.engineeringHead} onChange={(e) => setSetup((value) => ({ ...value, engineeringHead: e.target.value }))} sx={fieldSx} />
-            <TextField label="Assigned Engineer" value={setup.assignedEngineer} onChange={(e) => setSetup((value) => ({ ...value, assignedEngineer: e.target.value }))} sx={fieldSx} />
-            <TextField type="date" label="Planned Production Release" InputLabelProps={{ shrink: true }} value={setup.plannedProductionReleaseDate} onChange={(e) => setSetup((value) => ({ ...value, plannedProductionReleaseDate: e.target.value }))} sx={fieldSx} />
-            <TextField type="date" label="Planned Dispatch" InputLabelProps={{ shrink: true }} value={setup.plannedDispatchDate} onChange={(e) => setSetup((value) => ({ ...value, plannedDispatchDate: e.target.value }))} sx={fieldSx} />
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1, mt: 0.4 }}>
+            {(workspaceFocus === "DESIGN" || workspaceFocus === "MANAGEMENT") && (
+              <>
+                <TextField label="Designer / Project Designer" value={setup.designer} onChange={(e) => setSetup((value) => ({ ...value, designer: e.target.value }))} sx={fieldSx} />
+                <TextField label="Design Head" value={setup.designHead} onChange={(e) => setSetup((value) => ({ ...value, designHead: e.target.value }))} sx={fieldSx} />
+              </>
+            )}
+            {(workspaceFocus === "PPC" || workspaceFocus === "MANAGEMENT") && (
+              <TextField label="PPC Owner" value={setup.ppcOwner} onChange={(e) => setSetup((value) => ({ ...value, ppcOwner: e.target.value }))} sx={fieldSx} />
+            )}
+            {(workspaceFocus === "ENGINEERING" || workspaceFocus === "MANAGEMENT") && (
+              <>
+                <TextField label="Engineering Head" value={setup.engineeringHead} onChange={(e) => setSetup((value) => ({ ...value, engineeringHead: e.target.value }))} sx={fieldSx} />
+                <TextField label="Assigned Engineer" value={setup.assignedEngineer} onChange={(e) => setSetup((value) => ({ ...value, assignedEngineer: e.target.value }))} sx={fieldSx} />
+              </>
+            )}
+            {(workspaceFocus === "PPC" || workspaceFocus === "MANAGEMENT" || workspaceFocus === "DESIGN") && (
+              <TextField type="date" label="Planned Production Release" InputLabelProps={{ shrink: true }} value={setup.plannedProductionReleaseDate} onChange={(e) => setSetup((value) => ({ ...value, plannedProductionReleaseDate: e.target.value }))} sx={fieldSx} />
+            )}
+            {(workspaceFocus === "PPC" || workspaceFocus === "MANAGEMENT") && (
+              <TextField type="date" label="Planned Dispatch" InputLabelProps={{ shrink: true }} value={setup.plannedDispatchDate} onChange={(e) => setSetup((value) => ({ ...value, plannedDispatchDate: e.target.value }))} sx={fieldSx} />
+            )}
             <TextField label="Remarks" multiline minRows={2} value={setup.remarks} onChange={(e) => setSetup((value) => ({ ...value, remarks: e.target.value }))} sx={{ ...fieldSx, gridColumn: { md: "1 / -1" } }} />
           </Box>
         </DialogContent>
@@ -700,32 +882,90 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
     return { total: tasks.length, active, working, hold, overdue };
   }, [rows]);
 
+  const exportExcel = async () => {
+    const exportRows = rows.map((row) => {
+      const task = row.task || {};
+      return {
+        productName: row.productName,
+        projectCode: row.projectCode,
+        productionFileNo: row.productionFileNo,
+        drawingNo: row.drawingNo,
+        clientName: row.clientName,
+        projectName: row.projectName,
+        taskNo: task.taskNo,
+        taskTitle: task.title,
+        taskType: readable(task.taskType),
+        designer: task.designer1,
+        assignedBy: task.assignedBy,
+        assignedUsers: (task.assignees || []).join(", "),
+        status: readable(task.status),
+        priority: task.priority,
+        receivedAt: toDateTime(task.receivedAt),
+        dueAt: toDateTime(task.dueAt),
+        startedAt: toDateTime(task.startedAt),
+        completedAt: toDateTime(task.completedAt),
+        holdReason: task.holdReason,
+        remarks: task.remarks,
+      };
+    });
+    await downloadMatFlowExcel({
+      fileName: `MatFlow_Design_Task_Report_${new Date().toISOString().slice(0, 10)}`,
+      sheetName: "Design Tasks",
+      title: "Design Department · Task Assignment Report",
+      subtitle: "Product Name + PD No. identify every assignment.",
+      rows: exportRows,
+      metadata: [selectedPlantParam ? `Plant ${selectedPlantParam}` : "All permitted plants", assignee ? `User ${assignee}` : "All users", status ? `Status ${readable(status)}` : "All statuses", `${rows.length} row(s)`],
+      columns: [
+        { key: "productName", label: "Product Name" },
+        { key: "projectCode", label: "PD No." },
+        { key: "productionFileNo", label: "Production File" },
+        { key: "drawingNo", label: "Drawing No." },
+        { key: "clientName", label: "Client" },
+        { key: "projectName", label: "Project" },
+        { key: "taskNo", label: "Task No." },
+        { key: "taskTitle", label: "Task" },
+        { key: "taskType", label: "Type" },
+        { key: "designer", label: "Designer / Originator" },
+        { key: "assignedBy", label: "Assigned By" },
+        { key: "assignedUsers", label: "Assigned User(s)" },
+        { key: "status", label: "Status" },
+        { key: "priority", label: "Priority" },
+        { key: "receivedAt", label: "Received At" },
+        { key: "dueAt", label: "Due At" },
+        { key: "startedAt", label: "Started At" },
+        { key: "completedAt", label: "Completed At" },
+        { key: "holdReason", label: "Hold Reason" },
+        { key: "remarks", label: "Remarks" },
+      ],
+    });
+  };
+
   return (
     <Box sx={{ display: "grid", gap: 1 }}>
       {error && <ErrorBox>{error}</ErrorBox>}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5,1fr)" }, gap: 0.8 }}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.7 }}>
         <SummaryCard label="Tasks" value={stats.total} />
         <SummaryCard label="Active" value={stats.active} />
-        <SummaryCard label="Working" value={stats.working} />
         <SummaryCard label="On Hold" value={stats.hold} tone={stats.hold ? "warning" : "success"} />
         <SummaryCard label="Overdue" value={stats.overdue} tone={stats.overdue ? "danger" : "success"} />
       </Box>
 
-      <Card sx={{ ...panelSx, p: 1.2 }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 170px auto" }, gap: 0.8 }}>
-          <TextField size="small" label="Search Product Name, PD No., drawing, client or task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
-          <TextField size="small" label="Designer-2 / team member" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+      <Card sx={{ ...panelSx, p: 1.1 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 170px auto auto" }, gap: 0.7 }}>
+          <TextField size="small" label="Search Product / PD / client / project / task" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
+          <TextField size="small" label="Assigned user" value={assignee} onChange={(e) => setAssignee(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} sx={fieldSx} />
           <TextField select size="small" label="Status" value={status} onChange={(e) => setStatus(e.target.value)} sx={fieldSx}>
             <MenuItem value="">All</MenuItem>
             {["NEED_TO_START", "ASSIGNED", "WORKING", "HOLD", "DONE", "CANCELLED"].map((value) => <MenuItem key={value} value={value}>{readable(value)}</MenuItem>)}
           </TextField>
           <Button disabled={loading} onClick={load} sx={secondaryBtnSx}>Search</Button>
+          <Button disabled={!rows.length} onClick={exportExcel} sx={secondaryBtnSx}>Excel</Button>
         </Box>
       </Card>
 
       <Card sx={{ ...panelSx, p: 0, overflow: "hidden" }}>
         <Box sx={{ display: { xs: "none", lg: "grid" }, gridTemplateColumns: "1.2fr .9fr 1.35fr .95fr 1fr .8fr auto", gap: 1, px: 1.3, py: 0.9, background: "var(--mf-table-head)", borderBottom: "1px solid var(--mf-border)" }}>
-          {["Product / PD", "Project / Client", "Task", "Received / Due", "Designer → Team", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
+          {["Product / PD", "Project / Client", "Task", "Received / Due", "Assigned User(s)", "Status", ""].map((label, index) => <Typography key={`${label}-${index}`} sx={{ fontSize: 9, fontWeight: 900, color: "var(--mf-text-muted)" }}>{label}</Typography>)}
         </Box>
         {loading ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>Loading Design tasks…</Box> : rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Design tasks match the current filters.</Box> : rows.map((row) => {
           const task = row.task || {};
@@ -735,7 +975,7 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
               <Box><Typography sx={{ fontSize: 10.2, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{row.projectName || "—"}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{row.clientName || "Client not assigned"}</Typography></Box>
               <Box><Typography sx={{ fontSize: 10.8, fontWeight: 900, color: "var(--mf-text)" }}>{task.title}</Typography><Typography sx={{ fontSize: 9.2, color: "var(--mf-text-muted)" }}>{task.taskNo} · {readable(task.taskType)}</Typography></Box>
               <Box><Typography sx={{ fontSize: 9.8, color: "var(--mf-text-secondary)" }}>{toDateTime(task.receivedAt)}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Due {toDateTime(task.dueAt)}</Typography></Box>
-              <Box><Typography sx={{ fontSize: 9.8, fontWeight: 800, color: "var(--mf-text-secondary)" }}>{task.designer1 || "—"}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>→ {(task.assignees || []).join(", ") || "Unassigned"}</Typography></Box>
+              <Box><Typography sx={{ fontSize: 9.8, fontWeight: 850, color: "var(--mf-text-secondary)" }}>{(task.assignees || []).join(", ") || "Unassigned"}</Typography><Typography sx={{ mt: 0.15, fontSize: 9.2, color: "var(--mf-text-muted)" }}>Assigned by {task.assignedBy || task.designer1 || "—"}</Typography></Box>
               <Box><Chip label={readable(task.status)} sx={{ ...statusSx, color: task.status === "HOLD" ? "var(--mf-warning-text)" : task.status === "DONE" ? "var(--mf-success-text)" : "var(--mf-text-secondary)" }} />{task.holdReason && <Typography sx={{ mt: 0.2, fontSize: 8.8, color: "var(--mf-warning-text)" }}>{task.holdReason}</Typography>}</Box>
               <Button size="small" onClick={() => onOpenFile(row.productionFileId)} sx={secondaryBtnSx}>Open File</Button>
             </Box>
@@ -746,63 +986,102 @@ function DesignTaskDesk({ selectedPlantParam, onOpenFile }) {
   );
 }
 
-function Overview({ file, detail, canDesignHead, canPpc, canEngineeringReview, canEngineeringDecision, setAction }) {
+function Overview({ focus, file, detail, canDesignHead, canPpc, canEngineeringReview, canEngineeringDecision, setAction }) {
   const designStage = DESIGN_STAGES.includes(file.stage);
-  return (
-    <Box>
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(4,1fr)" }, gap: 1 }}>
-        {[
-          ["Current Department", file.currentDepartment],
+  const meta = focus === "DESIGN"
+    ? [
+        ["Current Owner", file.currentOwner || "—"],
+        ["Designer", file.designer || "—"],
+        ["Design Head", file.designHead || "—"],
+        ["Planned Handoff", file.plannedProductionReleaseDate || "—"],
+      ]
+    : focus === "ENGINEERING"
+      ? [
           ["Current Owner", file.currentOwner || "—"],
-          ["Designer-1", file.designer || "—"],
-          ["Design Head", file.designHead || "—"],
-          ["PPC Owner", file.ppcOwner || "—"],
+          ["Engineering Head", file.engineeringHead || "—"],
           ["Assigned Engineer", file.assignedEngineer || "—"],
           ["Planned Release", file.plannedProductionReleaseDate || "—"],
-          ["Planned Dispatch", file.plannedDispatchDate || "—"],
-        ].map(([label, value]) => (
-          <Box key={label} sx={{ p: 1.2, border: "1px solid var(--mf-border)", borderRadius: 1.6, background: "var(--mf-surface)" }}>
-            <Typography sx={{ fontSize: 9.5, fontWeight: 850, color: "var(--mf-text-muted)" }}>{label}</Typography>
-            <Typography sx={{ mt: 0.35, fontSize: 11.5, fontWeight: 900, color: "var(--mf-text)" }}>{value}</Typography>
+        ]
+      : focus === "PPC"
+        ? [
+            ["Current Department", file.currentDepartment || "—"],
+            ["Current Owner", file.currentOwner || "—"],
+            ["PPC Owner", file.ppcOwner || "—"],
+            ["Planned Release", file.plannedProductionReleaseDate || "—"],
+          ]
+        : [
+            ["Current Department", file.currentDepartment || "—"],
+            ["Current Owner", file.currentOwner || "—"],
+            ["Planned Release", file.plannedProductionReleaseDate || "—"],
+            ["Planned Dispatch", file.plannedDispatchDate || "—"],
+          ];
+
+  return (
+    <Box>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 0.8 }}>
+        {meta.map(([label, value]) => (
+          <Box key={label} sx={{ px: 1.05, py: 0.9, borderBottom: "1px solid var(--mf-border)" }}>
+            <Typography sx={{ fontSize: 8.9, fontWeight: 850, color: "var(--mf-text-muted)" }}>{label}</Typography>
+            <Typography sx={{ mt: 0.25, fontSize: 11.2, fontWeight: 900, color: "var(--mf-text)" }}>{value}</Typography>
           </Box>
         ))}
       </Box>
 
-      {file.designHeadRemarks && <Alert severity={file.designHeadDecision === "RETURNED" ? "warning" : "info"} sx={{ mt: 1.2 }}>Design Head: {file.designHeadRemarks}</Alert>}
-      {file.controlledReleaseReason && <Alert severity="warning" sx={{ mt: 1.2 }}>Controlled release: {file.controlledReleaseReason}</Alert>}
-      {file.revisionReviewRequired && <Alert severity="error" sx={{ mt: 1.2 }}>A revision impact review is required before this file can continue.</Alert>}
-      {designStage && (detail.designHandoffBlockers || []).length > 0 && <Alert severity="info" sx={{ mt: 1.2 }}>Design handoff blockers: {(detail.designHandoffBlockers || []).join(" · ")}</Alert>}
-      {!designStage && (detail.ppcGate2Blockers || []).length > 0 && <Alert severity="info" sx={{ mt: 1.2 }}>PPC Gate 2 blockers: {(detail.ppcGate2Blockers || []).join(" · ")}</Alert>}
+      {focus === "DESIGN" && file.designHeadRemarks && (
+        <Alert severity={file.designHeadDecision === "RETURNED" ? "warning" : "info"} sx={{ mt: 1 }}>
+          Design Head: {file.designHeadRemarks}
+        </Alert>
+      )}
+      {focus === "DESIGN" && designStage && (detail.designHandoffBlockers || []).length > 0 && (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          Design handoff: {(detail.designHandoffBlockers || []).join(" · ")}
+        </Alert>
+      )}
+      {focus === "ENGINEERING" && file.revisionReviewRequired && (
+        <Alert severity="warning" sx={{ mt: 1 }}>Revision impact review is pending.</Alert>
+      )}
+      {focus === "ENGINEERING" && file.openQueries > 0 && (
+        <Alert severity="info" sx={{ mt: 1 }}>{file.openQueries} open Design ↔ Engineering query{file.openQueries === 1 ? "" : "ies"}.</Alert>
+      )}
+      {focus === "PPC" && (detail.ppcGate2Blockers || []).length > 0 && ["ENGINEERING_WORK", "PPC_GATE_2"].includes(file.stage) && (
+        <Alert severity="info" sx={{ mt: 1 }}>Release blockers: {(detail.ppcGate2Blockers || []).join(" · ")}</Alert>
+      )}
+      {focus === "MANAGEMENT" && file.controlledReleaseReason && (
+        <Alert severity="warning" sx={{ mt: 1 }}>Controlled release: {file.controlledReleaseReason}</Alert>
+      )}
 
-      <Divider sx={{ my: 1.6, borderColor: "var(--mf-border)" }} />
-      <Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>Controlled actions</Typography>
-      <Box sx={{ mt: 1, display: "flex", flexWrap: "wrap", gap: 0.8 }}>
-        {canDesignHead && designStage && (
+      <Divider sx={{ my: 1.25, borderColor: "var(--mf-border)" }} />
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.65 }}>
+        {focus === "DESIGN" && canDesignHead && designStage && (
           <>
-            <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_HEAD_REVIEW", title: "Design Head Review — Approve", decision: "APPROVE" })}>Design Head Approve</Button>
-            <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_HEAD_REVIEW", title: "Design Head Review — Return", decision: "RETURN" })}>Return for Correction</Button>
-            <Button disabled={!detail.designHandoffReady} sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_SUBMIT", title: "Submit Design to PPC Gate 1" })}>Submit to PPC Gate 1</Button>
+            <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_HEAD_REVIEW", title: "Design Head Review — Approve", decision: "APPROVE" })}>Approve Design</Button>
+            <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_HEAD_REVIEW", title: "Design Head Review — Return", decision: "RETURN" })}>Return</Button>
+            <Button disabled={!detail.designHandoffReady} sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "DESIGN_SUBMIT", title: "Submit Design to PPC Gate 1" })}>Send to PPC</Button>
           </>
         )}
-        {canPpc && ["DESIGN_SUBMITTED", "PPC_GATE_1"].includes(file.stage) && (
+        {focus === "PPC" && canPpc && ["DESIGN_SUBMITTED", "PPC_GATE_1"].includes(file.stage) && (
           <>
-            <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC1", title: "PPC Gate 1 — Accept", decision: "ACCEPT" })}>PPC Gate 1: Accept</Button>
+            <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC1", title: "PPC Gate 1 — Accept", decision: "ACCEPT" })}>Accept Gate 1</Button>
             <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC1", title: "PPC Gate 1 — Return", decision: "RETURN" })}>Return to Design</Button>
           </>
         )}
-        {["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage) && (
+        {focus === "ENGINEERING" && ["ENGINEERING_REVIEW", "ENGINEERING_QUERY"].includes(file.stage) && (
           <>
-            {canEngineeringDecision && <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "ENG_DECISION", title: "Engineering Decision — Approve", decision: "APPROVED" })}>Engineering Approved</Button>}
-            {canEngineeringReview && <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Engineering Query" })}>Raise Query</Button>}
+            {canEngineeringDecision && <Button sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "ENG_DECISION", title: "Engineering Decision — Approve", decision: "APPROVED" })}>Approve Engineering</Button>}
+            {canEngineeringReview && <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Query to Design" })}>Raise Query</Button>}
           </>
         )}
-        {canPpc && ["ENGINEERING_WORK", "PPC_GATE_2"].includes(file.stage) && (
+        {focus === "PPC" && canPpc && ["ENGINEERING_WORK", "PPC_GATE_2"].includes(file.stage) && (
           <>
-            <Button disabled={!detail.ppcGate2Ready} sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC2", title: "PPC Gate 2 — Production Release", decision: "RELEASE" })}>Release to Production</Button>
+            <Button disabled={!detail.ppcGate2Ready} sx={primaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC2", title: "PPC Gate 2 — Production Release", decision: "RELEASE" })}>Release</Button>
             <Button sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "PPC2", title: "PPC Gate 2 — Return", decision: "RETURN" })}>Return to Engineering</Button>
           </>
         )}
-        {file.stage === "PRODUCTION_RELEASED" && <Chip label="PRODUCTION RELEASED — downstream workflow pending validation" sx={{ ...statusSx, height: 30, color: "var(--mf-success-text)", background: "var(--mf-success-soft)", borderColor: "var(--mf-success-border)" }} />}
+        {file.stage === "PRODUCTION_RELEASED" && (
+          <Typography sx={{ px: 0.3, py: 0.7, fontSize: 10.2, fontWeight: 900, color: "var(--mf-success-text)" }}>
+            Production Released
+          </Typography>
+        )}
       </Box>
     </Box>
   );
@@ -972,7 +1251,7 @@ function Mini({ label, value }) {
 }
 
 function Queries({ items, canCreate, canRespond, canClose, setAction }) {
-  return <Box><Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Engineering Queries</Typography>{canCreate && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Engineering Query" })}>New Query</Button>}</Box>{items.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No Engineering Queries.</Box> : items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.3, mb: 0.8 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--mf-text-muted)" }}>{item.description}</Typography></Box><Chip label={item.status} sx={statusSx} /></Box><Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 1, fontSize: 10, color: "var(--mf-text-muted)" }}><span>Assigned: {item.assignedTo || "—"}</span><span>Due: {toDateTime(item.dueAt)}</span><span>Priority: {item.priority}</span></Box>{item.responseText && <Alert severity="info" sx={{ mt: 0.8 }}>Response: {item.responseText}</Alert>}<Box sx={{ mt: 0.8, display: "flex", gap: 0.6 }}>{canRespond && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_RESPOND", title: "Respond to Query", item })}>Respond</Button>}{canClose && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CLOSE", title: "Close Query", item })}>Close</Button>}</Box></Card>)}</Box>;
+  return <Box><Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Design ↔ Engineering Queries / Issues</Typography>{canCreate && <Button startIcon={<AddOutlinedIcon />} sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CREATE", title: "Raise Query / Issue to Design" })}>New Query / Issue</Button>}</Box>{items.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No shared queries or issues.</Box> : items.map((item) => <Card key={item.id} sx={{ ...panelSx, p: 1.3, mb: 0.8 }}><Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}><Box><Typography sx={{ fontSize: 12, fontWeight: 950, color: "var(--mf-text)" }}>{item.title}</Typography><Typography sx={{ mt: 0.25, fontSize: 10, color: "var(--mf-text-muted)" }}>{item.description}</Typography></Box><Chip label={item.status} sx={statusSx} /></Box><Box sx={{ mt: 0.8, display: "flex", flexWrap: "wrap", gap: 1, fontSize: 10, color: "var(--mf-text-muted)" }}><span>Assigned: {item.assignedTo || "—"}</span><span>Due: {toDateTime(item.dueAt)}</span><span>Priority: {item.priority}</span></Box>{item.responseText && <Alert severity="info" sx={{ mt: 0.8 }}>Response: {item.responseText}</Alert>}<Box sx={{ mt: 0.8, display: "flex", gap: 0.6 }}>{canRespond && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_RESPOND", title: "Respond to Query", item })}>Respond</Button>}{canClose && item.status !== "CLOSED" && <Button size="small" sx={secondaryBtnSx} onClick={() => setAction({ ...EMPTY_ACTION, kind: "QUERY_CLOSE", title: "Close Query", item })}>Close</Button>}</Box></Card>)}</Box>;
 }
 
 function Tasks({ items, canManage, canWork, setAction }) {
@@ -981,7 +1260,7 @@ function Tasks({ items, canManage, canWork, setAction }) {
 
 function Revisions({ file, rows, canUploadDesign, canUploadEngineering, revisionType, setRevisionType, revisionNo, setRevisionNo, summary, setSummary, setFile, upload, openRevision, canReview, setAction, working }) {
   const canUpload = canUploadDesign || canUploadEngineering;
-  return <Box><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Immutable Drawing Revisions</Typography><Typography sx={{ mt: 0.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>The Design drawing produced by the Design Department is attached to this same Production File. Old drawings are never deleted.</Typography>{canUpload && <Card sx={{ ...panelSx, p: 1.2, mt: 1.1 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "180px 130px 1fr auto auto" }, gap: 0.8, alignItems: "center" }}><TextField select size="small" label="Type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}>{canUploadDesign && <MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem>}{canUploadEngineering && <MenuItem value="ENGINEERING_DRAWING">Production / Engineering Drawing</MenuItem>}</TextField><TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} /><TextField size="small" label="Change summary" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} /><Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button><Button disabled={working} onClick={upload} sx={primaryBtnSx}>Upload</Button></Box></Card>}<Box sx={{ mt: 1 }}>{rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No revisions uploaded.</Box> : rows.map((row) => <Box key={row.id} sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 160px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.type)}</Typography><Typography sx={{ fontSize: 11, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography><Typography sx={{ fontSize: 10, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography><Chip label={readable(row.status)} sx={statusSx} /><Box sx={{ display: "flex", gap: 0.5 }}><Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>{canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}</Box></Box>)}</Box>{file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>The previous Production Release is invalidated by an accepted revision. Engineering and PPC Gate 2 must run again.</Alert>}</Box>;
+  return <Box><Typography sx={{ fontWeight: 950, color: "var(--mf-text)" }}>Immutable Drawing Revisions</Typography><Typography sx={{ mt: 0.2, fontSize: 10.5, color: "var(--mf-text-muted)" }}>Drawing revisions stay attached to this Product / PD Production File. Previous revisions remain available for traceability.</Typography>{canUpload && <Card sx={{ ...panelSx, p: 1.2, mt: 1.1 }}><Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "180px 130px 1fr auto auto" }, gap: 0.8, alignItems: "center" }}><TextField select size="small" label="Type" value={revisionType} onChange={(e) => setRevisionType(e.target.value)} sx={fieldSx}>{canUploadDesign && <MenuItem value="DESIGN_DRAWING">Design Drawing</MenuItem>}{canUploadEngineering && <MenuItem value="ENGINEERING_DRAWING">Production / Engineering Drawing</MenuItem>}</TextField><TextField size="small" label="Revision" value={revisionNo} onChange={(e) => setRevisionNo(e.target.value)} sx={fieldSx} /><TextField size="small" label="Change summary" value={summary} onChange={(e) => setSummary(e.target.value)} sx={fieldSx} /><Button component="label" startIcon={<UploadFileOutlinedIcon />} sx={secondaryBtnSx}>Choose<input hidden type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></Button><Button disabled={working} onClick={upload} sx={primaryBtnSx}>Upload</Button></Box></Card>}<Box sx={{ mt: 1 }}>{rows.length === 0 ? <Box sx={{ p: 3, textAlign: "center", color: "var(--mf-text-muted)" }}>No revisions uploaded.</Box> : rows.map((row) => <Box key={row.id} sx={{ p: 1.1, display: "grid", gridTemplateColumns: { xs: "1fr", md: "120px 100px 1fr 160px auto" }, gap: 1, alignItems: "center", borderBottom: "1px solid var(--mf-border)" }}><Typography sx={{ fontSize: 11, fontWeight: 900, color: "var(--mf-text)" }}>{readable(row.type)}</Typography><Typography sx={{ fontSize: 11, fontWeight: 950, color: "var(--mf-text)" }}>Rev {row.revisionNo}</Typography><Typography sx={{ fontSize: 10, color: "var(--mf-text-muted)" }}>{row.changeSummary || row.originalFileName}</Typography><Chip label={readable(row.status)} sx={statusSx} /><Box sx={{ display: "flex", gap: 0.5 }}><Button size="small" startIcon={<LaunchOutlinedIcon />} onClick={() => openRevision(row)} sx={secondaryBtnSx}>Open</Button>{canReview && row.status === "PENDING_IMPACT_REVIEW" && <Button size="small" onClick={() => setAction({ ...EMPTY_ACTION, kind: "REVISION_IMPACT", title: `Revision Impact — ${row.revisionNo}`, revision: row, decision: "ACCEPT" })} sx={primaryBtnSx}>Review</Button>}</Box></Box>)}</Box>{file.downstreamWorkflowStatus === "RELEASE_INVALIDATED_BY_REVISION" && <Alert severity="error" sx={{ mt: 1 }}>The previous Production Release is invalidated by an accepted revision. Engineering and PPC Gate 2 must run again.</Alert>}</Box>;
 }
 
 function Timeline({ rows }) {

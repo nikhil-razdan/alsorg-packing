@@ -247,7 +247,7 @@ export function MatFlowBomListPage() {
       <PageHero
         badge="ENGINEERING BOM"
         title="BOM Builder"
-        subtitle="Product Name + PD No. stay visible throughout BOM work so Engineering, PPC and management always know exactly which product the material structure belongs to. Costing and procurement remain outside this phase."
+        subtitle="Engineering BOMs linked to the same Product Name + PD No. Production File."
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
             <Button

@@ -260,7 +260,7 @@ public class MatFlowBomService {
 
     @Transactional
     public List<BomResponse> list(String search, String status, UUID productionFileId) {
-        accessService.requireRead();
+        accessService.requireEngineeringRead();
         reconcileLegacyBoms();
         String q = clean(search);
         q = q == null ? "" : q.toLowerCase(Locale.ROOT);
@@ -283,7 +283,7 @@ public class MatFlowBomService {
 
     @Transactional
     public BomResponse get(UUID id) {
-        accessService.requireRead();
+        accessService.requireEngineeringRead();
         reconcileLegacyBoms();
         MatFlowBom b = requireBom(id);
         return toResponse(b);

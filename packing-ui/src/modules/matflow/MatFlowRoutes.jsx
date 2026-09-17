@@ -17,6 +17,7 @@ import { MatFlowProjectsPage } from "./pages/MatFlowProjectsWorkspace";
 import { MatFlowBomListPage, MatFlowBomDetailPage } from "./pages/MatFlowBomWorkspace";
 import { MatFlowMaterialsPage } from "./pages/MatFlowMaterialsWorkspace";
 import { MatFlowReleasePage } from "./pages/MatFlowReleaseWorkspace";
+import { MatFlowReportsPage } from "./pages/MatFlowReportsWorkspace";
 
 function Guard({ screen, children }) {
   const location = useLocation();
@@ -57,6 +58,7 @@ export default function MatFlowRoutes() {
             <Route path="boms/:bomId" element={guarded("boms", <MatFlowBomDetailPage />)} />
             <Route path="materials" element={guarded("materials", <MatFlowMaterialsPage />)} />
             <Route path="release" element={guarded("release", <MatFlowReleasePage />)} />
+            <Route path="reports" element={guarded("reports", <MatFlowReportsPage />)} />
 
             {/* Safe redirects for old MatFlow URLs. They do not recreate the retired workflow. */}
             <Route path="production" element={<Navigate to="/matflow/release" replace />} />

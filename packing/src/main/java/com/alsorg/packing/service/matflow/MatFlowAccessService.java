@@ -33,6 +33,24 @@ public class MatFlowAccessService {
         throw new AccessDeniedException("MatFlow access required");
     }
 
+    /**
+     * Department-scoped read gates keep the shared Production File architecture
+     * without exposing irrelevant departmental work surfaces.
+     */
+    public void requireDesignRead() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR",
+                "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR");
+    }
+
+    public void requireEngineeringRead() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR",
+                "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+    }
+
+    public void requirePpcRead() {
+        requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_DIRECTOR", "MATFLOW_PPC", "MATFLOW_PRODUCTION");
+    }
+
     /*
      * MatFlow responsibility model.
      *
@@ -66,6 +84,23 @@ public class MatFlowAccessService {
 
     public void requireEngineeringTaskWrite() {
         requireAny("ADMIN", "MATFLOW_MANAGER", "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+    }
+
+    /**
+     * Queries/issues are the controlled communication bridge between Design and
+     * Engineering. Either department may raise/respond; department heads and
+     * full contributors may close once the point is resolved.
+     */
+    public void requireSharedQueryWrite() {
+        requireAny("ADMIN", "MATFLOW_MANAGER",
+                "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER", "MATFLOW_DESIGNER_JUNIOR",
+                "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING", "MATFLOW_ENGINEERING_JUNIOR");
+    }
+
+    public void requireSharedQueryClose() {
+        requireAny("ADMIN", "MATFLOW_MANAGER",
+                "MATFLOW_DESIGN_HEAD", "MATFLOW_DESIGNER",
+                "MATFLOW_ENGINEERING_HEAD", "MATFLOW_ENGINEERING");
     }
 
     /** Compatibility alias used by BOM/master services: authoring is Engineer-level, not Junior-level. */

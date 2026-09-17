@@ -371,13 +371,13 @@ function ProductionFileTrackingSheet({ product }) {
       )}
 
       <Typography sx={trackingFootnoteSx}>
-        This tracker follows the validated MatFlow boundary through Production Release. Machine/Dispatch execution is not created here; later factory execution remains an extension point and Packing → Delivery stays with PackFlow.
+        File tracking ends at Production Release.
       </Typography>
     </Box>
   );
 }
 
-function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, onOpenFile, onOpenBom }) {
+function ProductMasterRow({ project, product, boms, canEdit, showEngineering, onEdit, onImage, onOpenFile, onOpenBom }) {
   const currentBom = boms.find((bom) => bom.latestRevision) || boms[0] || null;
 
   return (
@@ -421,7 +421,7 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
         <Meta label="Product Remarks" value={product.remarks || "—"} />
       </Box>
 
-      <Box sx={identityGridSx}>
+      <Box sx={{ ...identityGridSx, gridTemplateColumns: showEngineering ? { xs: "1fr", lg: "1fr 1fr" } : "1fr" }}>
         <Box sx={productionFilePanelSx(product.releaseHealth)}>
           <Box sx={panelTopRowSx}>
             <Box>
@@ -452,38 +452,38 @@ function ProductMasterRow({ project, product, boms, canEdit, onEdit, onImage, on
           </Button>
         </Box>
 
-        <Box sx={bomPanelSx}>
-          <Box sx={panelTopRowSx}>
-            <Box>
-              <Typography sx={panelEyebrowSx}>BOM</Typography>
-              <Typography sx={{ mt: 0.25, fontSize: 12.2, fontWeight: 950, color: "var(--mf-text)" }}>
-                {currentBom ? currentBom.bomNumber : "No BOM yet"}
-              </Typography>
-            </Box>
-            {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : <Chip label="PENDING" size="small" sx={softChipSx} />}
-          </Box>
-
-          {currentBom ? (
-            <>
-              <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
-                <Meta label="Current Revision" value={`Rev ${currentBom.revisionNo}`} />
-                <Meta label="BOM Revisions" value={boms.length} />
+        {showEngineering && (
+          <Box sx={bomPanelSx}>
+            <Box sx={panelTopRowSx}>
+              <Box>
+                <Typography sx={panelEyebrowSx}>ENGINEERING BOM</Typography>
+                <Typography sx={{ mt: 0.25, fontSize: 12.2, fontWeight: 950, color: "var(--mf-text)" }}>
+                  {currentBom ? currentBom.bomNumber : "No BOM yet"}
+                </Typography>
               </Box>
-              <Button fullWidth size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...primaryBtnSx, mt: 0.9 }}>
-                Open Current BOM
-              </Button>
-            </>
-          ) : (
-            <Box sx={emptyBomSx}>
-              BOM stays attached to this Product / Production File. It becomes available through Engineering Work after the required gates are completed.
+              {currentBom ? <MatFlowStatusChip status={currentBom.status} /> : null}
             </Box>
-          )}
-        </Box>
+
+            {currentBom ? (
+              <>
+                <Box sx={{ mt: 0.9, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.7 }}>
+                  <Meta label="Current Revision" value={`Rev ${currentBom.revisionNo}`} />
+                  <Meta label="BOM Revisions" value={boms.length} />
+                </Box>
+                <Button fullWidth size="small" endIcon={<OpenInNewOutlinedIcon />} onClick={() => onOpenBom(currentBom)} sx={{ ...secondaryBtnSx, mt: 0.9 }}>
+                  Open BOM
+                </Button>
+              </>
+            ) : (
+              <Box sx={emptyBomSx}>No Engineering BOM has been created for this Production File.</Box>
+            )}
+          </Box>
+        )}
       </Box>
 
       <ProductionFileTrackingSheet product={product} />
 
-      {boms.length > 0 && (
+      {showEngineering && boms.length > 0 && (
         <Box sx={bomHistorySx}>
           <Box sx={{ px: 1.05, py: 0.8, display: "flex", justifyContent: "space-between", gap: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontSize: 10.5, fontWeight: 900, color: "var(--mf-text-secondary)" }}>
@@ -513,6 +513,13 @@ export function MatFlowProjectsPage() {
     MATFLOW_ROLES.ENGINEERING_HEAD,
     MATFLOW_ROLES.ENGINEERING
   );
+  const canSeeEngineeringReference = hasRole(
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DIRECTOR,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING
+  );
 
   const [rows, setRows] = useState([]);
   const [boms, setBoms] = useState([]);
@@ -531,12 +538,11 @@ export function MatFlowProjectsPage() {
     setLoading(true);
     setError("");
     try {
-      const [projectsResponse, bomsResponse] = await Promise.all([
-        matflowApi.listProjects({ active: true, plantCode: selectedPlantParam }),
-        matflowApi.listBoms(),
-      ]);
+      const projectsPromise = matflowApi.listProjects({ active: true, plantCode: selectedPlantParam });
+      const bomsPromise = canSeeEngineeringReference ? matflowApi.listBoms() : Promise.resolve({ data: [] });
+      const [projectsResponse, bomsResponse] = await Promise.all([projectsPromise, bomsPromise]);
       const projects = Array.isArray(projectsResponse?.data) ? projectsResponse.data : [];
-      const bomRows = Array.isArray(bomsResponse?.data) ? bomsResponse.data : [];
+      const bomRows = canSeeEngineeringReference && Array.isArray(bomsResponse?.data) ? bomsResponse.data : [];
       setRows(projects);
       setBoms(bomRows);
     } catch (requestError) {
@@ -544,7 +550,7 @@ export function MatFlowProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlantParam]);
+  }, [selectedPlantParam, canSeeEngineeringReference]);
 
   useEffect(() => {
     load();
@@ -592,24 +598,28 @@ export function MatFlowProjectsPage() {
           product.productionFileNo,
           product.stage,
           product.releaseHealth,
-          ...productBoms.flatMap((bom) => [bom.bomNumber, bom.status, bom.revisionNo]),
+          ...(canSeeEngineeringReference ? productBoms.flatMap((bom) => [bom.bomNumber, bom.status, bom.revisionNo]) : []),
         ];
         return values.some((value) => String(value || "").toLowerCase().includes(query));
       });
     });
-  }, [rows, search, bomsByFile]);
+  }, [rows, search, bomsByFile, canSeeEngineeringReference]);
 
   const summary = useMemo(() => {
     const products = filteredRows.flatMap((project) => project.products || []);
     const productionFiles = products.filter((product) => product.productionFileId).length;
-    const productsWithBom = products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length;
+    const productsWithBom = canSeeEngineeringReference
+      ? products.filter((product) => (bomsByFile.get(product.productionFileId) || []).length > 0).length
+      : 0;
+    const inDesign = products.filter((product) => ["DESIGN_DRAFT", "DESIGN_CLARIFICATION", "DESIGN_SUBMITTED"].includes(product.stage)).length;
     return {
       projects: filteredRows.length,
       products: products.length,
       productionFiles,
       productsWithBom,
+      inDesign,
     };
-  }, [filteredRows, bomsByFile]);
+  }, [filteredRows, bomsByFile, canSeeEngineeringReference]);
 
   const run = async (fn) => {
     setWorking(true);
@@ -727,7 +737,7 @@ export function MatFlowProjectsPage() {
       <PageHero
         badge="MASTER PRODUCTION FILE"
         title="Projects"
-        subtitle="PD No. is the Project identity and Product Name is the primary working identity. Every Drawing, Production File, tracker event and BOM revision remains attached to that same Product inside the PD—no parallel departmental record."
+        subtitle={canSeeEngineeringReference ? "Product Name + PD No. with one Production File per Product / Drawing." : "Product Name + PD No., drawing ownership and file tracking."}
         actions={
           <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
             <Button startIcon={<RefreshOutlinedIcon />} onClick={load} disabled={loading} sx={secondaryBtnSx}>
@@ -748,7 +758,7 @@ export function MatFlowProjectsPage() {
         <TextField
           size="small"
           fullWidth
-          label="Search Product Name / PD No. / project / drawing / Production File / BOM"
+          label={canSeeEngineeringReference ? "Search Product Name / PD No. / project / drawing / Production File / BOM" : "Search Product Name / PD No. / client / project / drawing"}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           sx={fieldSx}
@@ -759,7 +769,7 @@ export function MatFlowProjectsPage() {
         <Summary label="Projects" value={summary.projects} />
         <Summary label="Products / Drawings" value={summary.products} />
         <Summary label="Production Files" value={summary.productionFiles} />
-        <Summary label="Products with BOM" value={`${summary.productsWithBom}/${summary.products}`} />
+        {canSeeEngineeringReference ? <Summary label="Products with BOM" value={`${summary.productsWithBom}/${summary.products}`} /> : <Summary label="In Design" value={summary.inDesign} />}
       </Box>
 
       {!filteredRows.length ? (
@@ -846,7 +856,9 @@ export function MatFlowProjectsPage() {
                       </Typography>
                     </Box>
                     <Typography sx={{ fontSize: 8.5, fontWeight: 850, color: "var(--mf-text-muted)", whiteSpace: "nowrap" }}>
-                      {productsWithBom}/{products.length || 0} with BOM · {bomCount} revisions
+                      {canSeeEngineeringReference
+                        ? `${productsWithBom}/${products.length || 0} with BOM · ${bomCount} revisions`
+                        : `${productionFiles.length} controlled file${productionFiles.length === 1 ? "" : "s"}`}
                     </Typography>
                   </Box>
 
@@ -941,7 +953,7 @@ export function MatFlowProjectsPage() {
                           Product / Production File detail
                         </Typography>
                         <Typography sx={{ mt: 0.15, fontSize: 9.4, color: "var(--mf-text-muted)" }}>
-                          Drawing, image, Production File and BOM history stay under this Project / PD ticket.
+                          {canSeeEngineeringReference ? "Drawing, image, Production File and Engineering BOM history stay under this Project / PD ticket." : "Drawing, image and Production File tracking stay under this Project / PD ticket."}
                         </Typography>
                       </Box>
                     </Box>
@@ -957,6 +969,7 @@ export function MatFlowProjectsPage() {
                             product={product}
                             boms={bomsByFile.get(product.productionFileId) || []}
                             canEdit={canProjectWrite}
+                            showEngineering={canSeeEngineeringReference}
                             onEdit={openProductEdit}
                             onImage={uploadImage}
                             onOpenFile={openProductionFile}

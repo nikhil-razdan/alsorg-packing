@@ -179,9 +179,7 @@ const buildTheme = (mode) => {
             backgroundColor: dark ? "#0d1b2e" : "#ffffff",
             backgroundImage: "none",
             border: `1px solid ${dark ? "rgba(148,163,184,.18)" : "#d7e2ef"}`,
-            boxShadow: dark
-              ? "0 12px 28px rgba(2,6,23,.32),0 2px 7px rgba(2,6,23,.18)"
-              : "0 10px 26px rgba(15,23,42,.075),0 2px 7px rgba(15,23,42,.035)",
+            boxShadow: "none",
             opacity: 1,
           },
         },
@@ -517,6 +515,30 @@ export const getMatFlowRole = (roleOrRoles, extraRoles = []) => {
   return ROLE_PRIORITY.find((role) => roles.includes(role)) || "";
 };
 
+export const getMatFlowDepartmentAccess = (roleOrRoles) => {
+  const roles = getMatFlowRoles(roleOrRoles);
+  const has = (...values) => values.some((value) => roles.includes(value));
+  const management = has(MATFLOW_ROLES.ADMIN, MATFLOW_ROLES.MANAGER, MATFLOW_ROLES.DIRECTOR);
+  return Object.freeze({
+    management,
+    design: management || has(MATFLOW_ROLES.DESIGN_HEAD, MATFLOW_ROLES.DESIGNER, MATFLOW_ROLES.DESIGNER_JUNIOR),
+    engineering: management || has(MATFLOW_ROLES.ENGINEERING_HEAD, MATFLOW_ROLES.ENGINEERING, MATFLOW_ROLES.ENGINEERING_JUNIOR),
+    ppc: management || has(MATFLOW_ROLES.PPC),
+    production: management || has(MATFLOW_ROLES.PRODUCTION),
+  });
+};
+
+export const primaryMatFlowDepartment = (roleOrRoles) => {
+  const access = getMatFlowDepartmentAccess(roleOrRoles);
+  const role = getMatFlowRole(roleOrRoles);
+  if (role === MATFLOW_ROLES.DESIGN_HEAD || role === MATFLOW_ROLES.DESIGNER || role === MATFLOW_ROLES.DESIGNER_JUNIOR) return "DESIGN";
+  if (role === MATFLOW_ROLES.ENGINEERING_HEAD || role === MATFLOW_ROLES.ENGINEERING || role === MATFLOW_ROLES.ENGINEERING_JUNIOR) return "ENGINEERING";
+  if (role === MATFLOW_ROLES.PPC) return "PPC";
+  if (role === MATFLOW_ROLES.PRODUCTION) return "PRODUCTION";
+  if (access.management) return "MANAGEMENT";
+  return "MANAGEMENT";
+};
+
 const CONTROL_WORK_ROLES = Object.freeze([
   MATFLOW_ROLES.ADMIN,
   MATFLOW_ROLES.MANAGER,
@@ -555,10 +577,21 @@ const MATFLOW_SCREEN_ROLES = Object.freeze({
     MATFLOW_ROLES.ADMIN,
     MATFLOW_ROLES.MANAGER,
     MATFLOW_ROLES.PPC,
-    MATFLOW_ROLES.ENGINEERING_HEAD,
-    MATFLOW_ROLES.ENGINEERING,
     MATFLOW_ROLES.PRODUCTION,
     MATFLOW_ROLES.DIRECTOR,
+  ],
+  reports: [
+    MATFLOW_ROLES.ADMIN,
+    MATFLOW_ROLES.MANAGER,
+    MATFLOW_ROLES.DIRECTOR,
+    MATFLOW_ROLES.DESIGN_HEAD,
+    MATFLOW_ROLES.DESIGNER,
+    MATFLOW_ROLES.DESIGNER_JUNIOR,
+    MATFLOW_ROLES.PPC,
+    MATFLOW_ROLES.ENGINEERING_HEAD,
+    MATFLOW_ROLES.ENGINEERING,
+    MATFLOW_ROLES.ENGINEERING_JUNIOR,
+    MATFLOW_ROLES.PRODUCTION,
   ],
 });
 
@@ -1265,7 +1298,7 @@ export function PageHero({ badge, title, subtitle, actions }) {
     <Box sx={heroSx}>
       <Box sx={{ display: "flex", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
         <Box>
-          {badge && <Chip label={badge} sx={heroBadgeSx} />}
+          {badge && <Typography sx={heroBadgeSx}>{badge}</Typography>}
           <Typography sx={heroTitleSx}>{title}</Typography>
           {subtitle && <Typography sx={heroSubSx}>{subtitle}</Typography>}
         </Box>
@@ -1431,8 +1464,7 @@ const summaryToneFor = (label, requestedTone) => {
   return SUMMARY_TONES[key] || SUMMARY_TONES.blue;
 };
 
-export function SummaryCard({ label, value, helper, tone, colorful = false }) {
-  const { isDark } = useMatFlowTheme();
+export function SummaryCard({ label, value, helper, tone }) {
   const meta = summaryToneFor(label, tone);
 
   return (
@@ -1440,79 +1472,46 @@ export function SummaryCard({ label, value, helper, tone, colorful = false }) {
       sx={{
         ...panelSx,
         position: "relative",
-        isolation: "isolate",
-        overflow: "hidden",
-        minHeight: colorful ? 108 : 96,
-        px: colorful ? 1.75 : 1.55,
-        py: colorful ? 1.55 : 1.35,
-        border: `1px solid ${isDark ? meta.darkBorder : meta.lightBorder}`,
-        borderTop: `3px solid ${meta.accent}`,
-        background: isDark ? meta.darkBg : meta.lightBg,
-        boxShadow: isDark
-          ? `0 12px 28px rgba(2,6,23,.30),0 0 0 1px ${meta.glow}`
-          : "0 10px 24px rgba(15,23,42,.065),0 2px 6px rgba(15,23,42,.035)",
-        transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          borderColor: meta.accent,
-          boxShadow: isDark
-            ? `0 16px 34px rgba(2,6,23,.38),0 0 0 1px ${meta.glow}`
-            : "0 14px 30px rgba(15,23,42,.09),0 3px 8px rgba(15,23,42,.045)",
-        },
-        "&::after": colorful ? {
-          content: '""',
-          position: "absolute",
-          width: 108,
-          height: 108,
-          borderRadius: "50%",
-          right: -38,
-          top: -48,
-          background: isDark ? meta.glow : `${meta.accent}12`,
-          zIndex: -1,
-          pointerEvents: "none",
-        } : undefined,
+        minHeight: 82,
+        px: 1.35,
+        py: 1.15,
+        border: "1px solid var(--mf-border)",
+        borderLeft: `3px solid ${meta.accent}`,
+        background: "var(--mf-panel-solid)",
+        boxShadow: "none",
       }}
     >
       <Typography
         sx={{
           ...detailLabelSx,
-          color: isDark ? meta.darkLabel : meta.lightLabel,
-          fontSize: 9.5,
-          letterSpacing: ".075em",
+          color: "var(--mf-text-muted)",
+          fontSize: 8.9,
+          letterSpacing: ".055em",
         }}
       >
         {label}
       </Typography>
-      <Box
+      <Typography
         sx={{
-          mt: .72,
-          fontSize: colorful ? { xs: 21, md: 23 } : { xs: 18, md: 20 },
-          fontWeight: 950,
+          mt: .55,
           color: "var(--mf-text)",
-          lineHeight: 1.12,
-          letterSpacing: "-.018em",
-          minWidth: 0,
+          fontSize: 22,
+          lineHeight: 1.05,
+          fontWeight: 920,
+          letterSpacing: "-.025em",
           overflowWrap: "anywhere",
         }}
       >
-        {value ?? "-"}
-      </Box>
+        {value ?? "—"}
+      </Typography>
       {helper && (
-        <Typography
-          sx={{
-            ...subTextSx,
-            mt: .55,
-            color: "var(--mf-text-secondary)",
-            lineHeight: 1.4,
-          }}
-        >
+        <Typography sx={{ mt: .45, color: "var(--mf-text-muted)", fontSize: 9.2, lineHeight: 1.35 }}>
           {helper}
         </Typography>
       )}
     </Card>
   );
 }
-
 
 export function MatFlowViewToggle({ value, onChange, options = [] }) {
   const safeOptions = Array.isArray(options) ? options : [];
@@ -1992,21 +1991,19 @@ export const pageSx = {
   color: "var(--mf-text)",
 };
 export const heroSx = {
-  p: { xs: "13px 14px", md: "15px 17px" },
-  borderRadius: "12px",
-  background: "var(--mf-hero-bg)",
+  p: { xs: "11px 12px", md: "12px 14px" },
+  borderRadius: "10px",
+  background: "var(--mf-panel-solid)",
   border: "1px solid var(--mf-border)",
-  boxShadow: "var(--mf-shadow)",
+  boxShadow: "none",
 };
 export const heroBadgeSx = {
-  height: 24,
-  borderRadius: 999,
-  background: "var(--mf-primary-soft)",
   color: "var(--mf-primary-text)",
-  border: "1px solid var(--mf-primary-border)",
   fontWeight: 900,
-  fontSize: 9.5,
-  letterSpacing: ".08em",
+  fontSize: 9,
+  lineHeight: 1.1,
+  letterSpacing: ".09em",
+  textTransform: "uppercase",
 };
 export const heroTitleSx = {
   mt: .75,
@@ -2031,7 +2028,7 @@ export const panelSx = {
   backgroundColor: "var(--mf-card-bg)",
   backgroundImage: "none",
   border: "1px solid var(--mf-card-border)",
-  boxShadow: "var(--mf-card-shadow)",
+  boxShadow: "none",
   opacity: 1,
 };
 export const panelTitleSx = { color: "var(--mf-text)", fontSize: 17, fontWeight: 950 };
